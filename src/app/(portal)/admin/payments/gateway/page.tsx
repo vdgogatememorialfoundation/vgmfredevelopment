@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Payments"
-      title="Payment Gateway"
-      description="Configure payment gateway integrations."
-    />
-  );
+  return <ModulePage moduleKey="settings-gateway" />;
 }

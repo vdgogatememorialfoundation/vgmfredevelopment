@@ -1,3 +1,4 @@
+import { submitPublic } from "@/lib/public-submit";
 import type {
   Book,
   CartItem,
@@ -227,6 +228,19 @@ export function saveOrder(order: Order) {
   const orders = getOrders();
   orders.unshift(order);
   window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+  const address = order.deliveryAddress;
+  void submitPublic("orders", {
+    orderNumber: order.id,
+    customerName: address?.fullName ?? "",
+    email: address?.email ?? "",
+    phone: address?.phone ?? "",
+    total: order.total,
+    paymentMethod: `${order.deliveryMode === "store_pickup" ? "Store pickup" : "Delivery"} · ${order.paymentStatus}`,
+    address: address
+      ? [address.line1, address.landmark, address.city, address.state, address.pincode].filter(Boolean).join(", ")
+      : "",
+    items: order.items,
+  });
 }
 
 export function getOrdersByEmail(email?: string) {

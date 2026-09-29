@@ -1,13 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import AccountsManager from "@/components/portal/AccountsManager";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Accounts"
-      title="Staff Accounts"
-      description="Manage Foundation administrators and staff accounts."
-      action="Create Staff"
-      actionHref="/admin/accounts/staff"
-    />
-  );
+  return <AccountsManager role="staff" />;
 }

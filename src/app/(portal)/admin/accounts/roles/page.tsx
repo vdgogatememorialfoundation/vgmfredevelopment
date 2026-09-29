@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import RolesMatrix from "@/components/portal/RolesMatrix";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Accounts"
-      title="Roles & Permissions"
-      description="Manage staff roles and permissions."
-    />
-  );
+  return <RolesMatrix />;
 }

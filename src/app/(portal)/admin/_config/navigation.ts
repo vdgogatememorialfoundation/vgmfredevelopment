@@ -1,4 +1,4 @@
-﻿export type AdminNavItem = {
+export type AdminNavItem = {
   label: string
   href: string
 }
@@ -31,6 +31,8 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Accounts",
     items: [
+      { label: "All Accounts", href: "/admin/accounts" },
+      { label: "Administrators", href: "/admin/accounts/admins" },
       { label: "Staff Accounts", href: "/admin/accounts/staff" },
       { label: "Customers", href: "/admin/accounts/customers" },
       { label: "Seller Accounts", href: "/admin/accounts/sellers" },
@@ -42,14 +44,19 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Website & CMS",
     items: [
-      { label: "Homepage", href: "/admin/website/homepage" },
+      { label: "Homepage Sections", href: "/admin/website/homepage" },
+      { label: "Banners & Slideshow", href: "/admin/website/banners" },
       { label: "Announcements", href: "/admin/website/announcements" },
       { label: "Notice Board", href: "/admin/website/notices" },
       { label: "Flyers", href: "/admin/website/flyers" },
-      { label: "Banners", href: "/admin/website/banners" },
       { label: "Media Library", href: "/admin/website/media" },
       { label: "Articles", href: "/admin/articles" },
       { label: "Videos", href: "/admin/website/videos" },
+      { label: "Gallery", href: "/admin/website/gallery" },
+      { label: "Clinics", href: "/admin/website/clinics" },
+      { label: "Testimonials", href: "/admin/website/testimonials" },
+      { label: "Partners", href: "/admin/website/partners" },
+      { label: "FAQs", href: "/admin/website/faqs" },
     ],
   },
 
@@ -88,6 +95,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Failed", href: "/admin/payments/failed" },
       { label: "Pending", href: "/admin/payments/pending" },
       { label: "Refunds", href: "/admin/payments/refunds" },
+      { label: "Donations", href: "/admin/payments/donations" },
       { label: "Reconciliation", href: "/admin/payments/reconciliation" },
     ],
   },
@@ -97,6 +105,7 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Support Tickets", href: "/admin/support/tickets" },
       { label: "Contact Enquiries", href: "/admin/support/contact" },
+      { label: "Newsletter Subscribers", href: "/admin/support/subscribers" },
     ],
   },
 
@@ -115,7 +124,7 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Communication",
     items: [
-      { label: "Email", href: "/admin/email" },
+      { label: "Email Campaigns", href: "/admin/email" },
     ],
   },
 

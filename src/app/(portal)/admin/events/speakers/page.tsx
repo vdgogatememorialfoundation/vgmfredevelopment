@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Events"
-      title="Speakers"
-      description="Manage speakers and speaker information."
-    />
-  );
+  return <ModulePage moduleKey="speakers" />;
 }

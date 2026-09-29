@@ -1,3 +1,4 @@
+import { submitPublic } from "@/lib/public-submit";
 import type { Application } from "@/types";
 
 const APPLICATIONS_KEY = "vgmf_applications";
@@ -26,4 +27,12 @@ export function saveApplication(application: Application) {
   const current = getAllApplications();
   current.unshift(application);
   window.localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(current));
+  void submitPublic("applications", {
+    applicationId: application.applicationId,
+    eventName: application.eventName,
+    name: application.name,
+    email: application.email,
+    phone: application.phone ?? "",
+    appliedAt: application.appliedAt.slice(0, 10),
+  });
 }

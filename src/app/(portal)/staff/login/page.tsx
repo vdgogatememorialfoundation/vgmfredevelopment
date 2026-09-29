@@ -1,7 +1,10 @@
-"use client";
-
-import { PortalLogin } from "@/components/admin/PortalLogin";
+import { Suspense } from "react";
+import PortalSignIn from "@/components/portal/PortalSignIn";
 
 export default function StaffLoginPage() {
-  return <PortalLogin portal="staff" />;
+  return (
+    <Suspense>
+      <PortalSignIn portal="staff" />
+    </Suspense>
+  );
 }

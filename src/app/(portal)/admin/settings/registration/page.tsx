@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="Registration"
-      description="Configure registration settings."
-    />
-  );
+  return <ModulePage moduleKey="settings-registration" />;
 }

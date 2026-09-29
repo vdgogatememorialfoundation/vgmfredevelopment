@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Commerce"
-      title="Create Order"
-      description="Create an order manually."
-    />
-  );
+  return <ModulePage moduleKey="orders-create" />;
 }

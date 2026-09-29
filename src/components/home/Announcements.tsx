@@ -3,10 +3,10 @@ import { ArrowRight, Bell, FileText, Megaphone } from "lucide-react";
 import SectionHeading from "@/components/common/SectionHeading";
 import Badge from "@/components/common/Badge";
 import Reveal from "@/components/common/Reveal";
-import { announcements, notices } from "@/data/content";
+import { announcements as defaultAnnouncements, notices as defaultNotices } from "@/data/content";
 import { formatDate } from "@/lib/utils";
 
-export default function AnnouncementsSection() {
+export default function AnnouncementsSection({ announcements = defaultAnnouncements, notices = defaultNotices }: { announcements?: typeof defaultAnnouncements; notices?: typeof defaultNotices }) {
   const lead = announcements.find((item) => item.priority === "high") ?? announcements[0];
   const rest = announcements.filter((item) => item.id !== lead?.id);
 

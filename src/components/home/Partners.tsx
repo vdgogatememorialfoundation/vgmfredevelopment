@@ -1,7 +1,7 @@
 import { Landmark } from "lucide-react";
-import { partners } from "@/data/site";
+import { partners as defaultPartners } from "@/data/site";
 
-export default function Partners() {
+export default function Partners({ partners = defaultPartners }: { partners?: typeof defaultPartners }) {
   const row = [...partners, ...partners];
 
   return (

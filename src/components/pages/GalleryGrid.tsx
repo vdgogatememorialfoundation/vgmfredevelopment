@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, ImageIcon, X } from "lucide-react";
 import Mandala from "@/components/graphics/Mandala";
-import { galleryItems } from "@/data/site";
+import { galleryItems as defaultGalleryItems } from "@/data/site";
 import { classNames } from "@/lib/utils";
 
-const categories = ["All", ...Array.from(new Set(galleryItems.map((item) => item.category)))];
-
-export default function GalleryGrid() {
+export default function GalleryGrid({
+  galleryItems = defaultGalleryItems,
+}: {
+  galleryItems?: typeof defaultGalleryItems;
+}) {
+  const categories = ["All", ...Array.from(new Set(galleryItems.map((item) => item.category)))];
   const [filter, setFilter] = useState("All");
   const [lightbox, setLightbox] = useState<number | null>(null);
   const items = filter === "All" ? galleryItems : galleryItems.filter((item) => item.category === filter);

@@ -3,9 +3,9 @@ import { ArrowRight, MessageCircle } from "lucide-react";
 import Accordion from "@/components/common/Accordion";
 import SectionHeading from "@/components/common/SectionHeading";
 import Reveal from "@/components/common/Reveal";
-import { homeFaqs } from "@/data/site";
+import { homeFaqs as defaultHomeFaqs } from "@/data/site";
 
-export default function FaqSection() {
+export default function FaqSection({ homeFaqs = defaultHomeFaqs }: { homeFaqs?: typeof defaultHomeFaqs }) {
   return (
     <section className="section bg-white" aria-labelledby="faq-heading">
       <div className="container grid gap-12 lg:grid-cols-[1fr_1.4fr]">

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, Mail } from "lucide-react";
+import { submitPublic } from "@/lib/public-submit";
 
 export default function NewsletterForm() {
   const [email, setEmail] = useState("");
@@ -13,6 +14,7 @@ export default function NewsletterForm() {
       setStatus("error");
       return;
     }
+    void submitPublic("subscribers", { email, source: "Website footer" });
     setStatus("done");
     setEmail("");
   };

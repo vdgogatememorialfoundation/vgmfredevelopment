@@ -3,10 +3,14 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import Accordion from "@/components/common/Accordion";
-import { faqCategories } from "@/data/site";
+import { faqCategories as defaultFaqCategories } from "@/data/site";
 import { classNames } from "@/lib/utils";
 
-export default function FaqBrowser() {
+export default function FaqBrowser({
+  faqCategories = defaultFaqCategories,
+}: {
+  faqCategories?: { title: string; items: { question: string; answer: string }[] }[];
+}) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
 
@@ -19,7 +23,7 @@ export default function FaqBrowser() {
         items: group.items.filter((item) => !q || `${item.question} ${item.answer}`.toLowerCase().includes(q)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [query, category]);
+  }, [query, category, faqCategories]);
 
   return (
     <div className="grid grid-cols-1 gap-10 lg:grid-cols-[260px_1fr]">

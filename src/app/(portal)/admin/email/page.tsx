@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Communication"
-      title="Email"
-      description="Manage Foundation transactional email and campaigns."
-    />
-  );
+  return <ModulePage moduleKey="email-campaigns" />;
 }

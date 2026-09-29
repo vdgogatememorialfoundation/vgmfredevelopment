@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/common/PageHeader";
 import GalleryGrid from "@/components/pages/GalleryGrid";
+import { getGallery } from "@/lib/server/content";
 
 export const metadata: Metadata = {
   title: "Gallery",
   description: "Moments from seminars, workshops, clinics and community programmes of the Vaidya Gogate Memorial Foundation.",
 };
 
-export default function GalleryPage() {
+export default async function GalleryPage() {
   return (
     <>
       <PageHeader
@@ -18,7 +19,7 @@ export default function GalleryPage() {
       />
       <section className="section bg-warm-cream">
         <div className="container">
-          <GalleryGrid />
+          <GalleryGrid galleryItems={await getGallery()} />
         </div>
       </section>
     </>

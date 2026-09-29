@@ -1,13 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Flyers"
-      description="Manage promotional and event flyers."
-      action="Add Flyer"
-      actionHref="/admin/website/flyers"
-    />
-  );
+  return <ModulePage moduleKey="flyers" />;
 }

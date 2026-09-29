@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Payments"
-      title="Reconciliation"
-      description="Reconcile payment gateway transactions."
-    />
-  );
+  return <ModulePage moduleKey="reconciliation" />;
 }

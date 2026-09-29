@@ -3,9 +3,9 @@ import { ArrowRight } from "lucide-react";
 import SectionHeading from "@/components/common/SectionHeading";
 import EventCard from "@/components/events/EventCard";
 import Reveal from "@/components/common/Reveal";
-import { events } from "@/data/events";
+import { events as defaultEvents } from "@/data/events";
 
-export default function UpcomingEvents() {
+export default function UpcomingEvents({ events = defaultEvents }: { events?: typeof defaultEvents }) {
   const upcoming = [...events].sort((a, b) => a.startDate.localeCompare(b.startDate)).slice(0, 6);
 
   return (

@@ -5,19 +5,21 @@ import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import ClinicCard from "@/components/clinics/ClinicCard";
 import RequireAuth from "@/components/auth/RequireAuth";
-import { clinics } from "@/data/clinics";
+import { getClinics } from "@/lib/server/content";
 
 interface ClinicDetailPageProps {
   params: Promise<{ slug: string }>;
 }
 
 export async function generateStaticParams() {
+  const clinics = await getClinics();
   return clinics.map((clinic) => ({ slug: clinic.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: ClinicDetailPageProps): Promise<Metadata> {
+  const clinics = await getClinics();
   const { slug } = await params;
   const clinic = clinics.find((item) => item.slug === slug);
 
@@ -32,6 +34,7 @@ export async function generateMetadata({
 export default async function ClinicDetailPage({
   params,
 }: ClinicDetailPageProps) {
+  const clinics = await getClinics();
   const { slug } = await params;
   const clinic = clinics.find((item) => item.slug === slug);
 

@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Events"
-      title="Create Event"
-      description="Create an event with dates, venue, fees, capacity and registration settings."
-    />
-  );
+  return <ModulePage moduleKey="events-create" />;
 }

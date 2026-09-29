@@ -7,7 +7,7 @@ import BookCard from "@/components/books/BookCard";
 import ProductBuyBox from "@/components/store/ProductBuyBox";
 import MediaGallery from "@/components/store/MediaGallery";
 import Stars from "@/components/store/Stars";
-import { books } from "@/data/books";
+import { getProducts } from "@/lib/server/content";
 import { storeConfig } from "@/lib/constants";
 import { formatDate } from "@/lib/utils";
 import { getDiscountPercent } from "@/lib/store";
@@ -17,12 +17,14 @@ interface ProductDetailPageProps {
 }
 
 export async function generateStaticParams() {
+  const books = await getProducts();
   return books.map((book) => ({ slug: book.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: ProductDetailPageProps): Promise<Metadata> {
+  const books = await getProducts();
   const { slug } = await params;
   const book = books.find((item) => item.slug === slug);
 
@@ -37,6 +39,7 @@ export async function generateMetadata({
 export default async function ProductDetailPage({
   params,
 }: ProductDetailPageProps) {
+  const books = await getProducts();
   const { slug } = await params;
   const book = books.find((item) => item.slug === slug);
 
@@ -267,7 +270,7 @@ export default async function ProductDetailPage({
           <section className="section bg-background">
             <div className="container">
               <h2 className="heading-3 mb-8">Related Products</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
                 {related.map((item) => (
                   <BookCard key={item.id} book={item} />
                 ))}

@@ -5,6 +5,7 @@ import { useState } from "react";
 import OtpForm from "@/components/account/OtpForm";
 import { useAuth } from "@/components/auth/AuthContext";
 import { findAccountByIdentifier, setSession } from "@/lib/auth";
+import type { User } from "@/types";
 
 type Step = "identifier" | "otp" | "complete";
 
@@ -13,14 +14,52 @@ export default function SignInFlow() {
   const { signIn } = useAuth();
   const [step, setStep] = useState<Step>("identifier");
   const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const handleIdentifier = (event: React.FormEvent) => {
+  const handleIdentifier = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (password) {
+      setBusy(true);
+      setError("");
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ identifier, password, portal: "customer" }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          account?: { id: string; accountId: string; firstName: string; lastName: string; email: string; phone: string; role: User["role"] | "delivery" };
+        };
+        if (!res.ok || !body.account) {
+          setError(body.error ?? "Could not sign in.");
+          return;
+        }
+        const a = body.account;
+        const user: User = {
+          id: a.id,
+          accountId: a.accountId,
+          firstName: a.firstName,
+          lastName: a.lastName,
+          email: a.email,
+          phone: a.phone,
+          whatsapp: a.phone,
+          role: a.role === "delivery" ? "customer" : a.role,
+        };
+        setSession(user);
+        signIn(user);
+        setStep("complete");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const account = findAccountByIdentifier(identifier);
     if (!account) {
       setError(
-        "No account found with these details. Please create an account first."
+        "No account found with these details. Enter the password issued by the Foundation office, or contact us for access."
       );
       return;
     }
@@ -112,14 +151,32 @@ export default function SignInFlow() {
           />
         </div>
 
+        <div>
+          <label
+            className="mb-2 block text-sm font-semibold text-text-primary"
+            htmlFor="signin-password"
+          >
+            Password <span className="font-normal text-text-muted">(accounts issued by the Foundation)</span>
+          </label>
+          <input
+            id="signin-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="input-field"
+            placeholder="Leave blank to receive a one-time code"
+            autoComplete="current-password"
+          />
+        </div>
+
         {error && (
           <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </p>
         )}
 
-        <button type="submit" className="btn-primary w-full">
-          Send Codes to Email & WhatsApp
+        <button type="submit" disabled={busy} className="btn-primary w-full disabled:opacity-60">
+          {busy ? "Signing in…" : password ? "Sign In" : "Send Codes to Email & WhatsApp"}
         </button>
       </form>
     </div>

@@ -3,7 +3,7 @@ import { ArrowRight, CalendarDays } from "lucide-react";
 import SectionHeading from "@/components/common/SectionHeading";
 import Reveal from "@/components/common/Reveal";
 import Mandala from "@/components/graphics/Mandala";
-import { flyers } from "@/data/content";
+import { flyers as defaultFlyers } from "@/data/content";
 import { formatDate } from "@/lib/utils";
 
 const tones = [
@@ -12,7 +12,7 @@ const tones = [
   "from-[#e0457b] via-[#f06292] to-[#f97316]",
 ];
 
-export default function FlyerSection() {
+export default function FlyerSection({ flyers = defaultFlyers }: { flyers?: typeof defaultFlyers }) {
   return (
     <section className="section bg-warm-cream" aria-labelledby="flyers-heading">
       <div className="container">

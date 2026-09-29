@@ -1,9 +1,9 @@
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import ClinicCard from "@/components/clinics/ClinicCard";
-import { clinics } from "@/data/clinics";
+import { clinics as defaultClinics } from "@/data/clinics";
 
-export default function ClinicsSection() {
+export default function ClinicsSection({ clinics = defaultClinics }: { clinics?: typeof defaultClinics }) {
   const shown = clinics.slice(0, 3);
 
   return (

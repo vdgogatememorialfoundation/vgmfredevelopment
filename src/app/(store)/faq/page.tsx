@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Mail, MessageCircle } from "lucide-react";
 import PageHeader from "@/components/common/PageHeader";
 import FaqBrowser from "@/components/pages/FaqBrowser";
+import { getFaqCategories } from "@/lib/server/content";
 import { siteConfig } from "@/lib/constants";
 
 export const metadata: Metadata = {
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   description: "Answers to common questions about events, certificates, clinics, orders and supporting the Foundation.",
 };
 
-export default function FaqPage() {
+export default async function FaqPage() {
   return (
     <>
       <PageHeader
@@ -21,7 +22,7 @@ export default function FaqPage() {
       />
       <section className="section bg-warm-cream">
         <div className="container">
-          <FaqBrowser />
+          <FaqBrowser faqCategories={await getFaqCategories()} />
           <div className="mt-16 flex flex-col items-center justify-between gap-6 rounded-3xl bg-saffron p-8 text-white sm:flex-row sm:p-10">
             <div>
               <h2 className="font-display text-2xl font-semibold">Didn&apos;t find your answer?</h2>

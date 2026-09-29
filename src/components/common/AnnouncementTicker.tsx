@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Megaphone } from "lucide-react";
-import { announcements } from "@/data/content";
+import { getAnnouncements } from "@/lib/server/content";
 import { formatDate } from "@/lib/utils";
 
-export default function AnnouncementTicker() {
+export default async function AnnouncementTicker() {
+  const announcements = await getAnnouncements();
   const row = [...announcements, ...announcements];
 
   return (

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/common/PageHeader";
 import VideosGrid from "@/components/videos/VideosGrid";
-import { getYouTubeId, videos } from "@/data/videos";
+import { getYouTubeId } from "@/data/videos";
+import { getVideos } from "@/lib/server/content";
 
 export const metadata: Metadata = {
   title: "Videos",
@@ -9,7 +10,8 @@ export const metadata: Metadata = {
     "Watch lectures, seminar recordings and documentaries from Vaidya Gogate Memorial Foundation, streamed directly or hosted on our official YouTube channel.",
 };
 
-export default function VideosPage() {
+export default async function VideosPage() {
+  const videos = await getVideos();
   const featured = videos.find((video) => video.featured);
 
   return (

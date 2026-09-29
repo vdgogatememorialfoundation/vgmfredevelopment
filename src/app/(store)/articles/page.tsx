@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/common/PageHeader";
 import ArticleCard from "@/components/articles/ArticleCard";
 import RequireAuth from "@/components/auth/RequireAuth";
-import { articles } from "@/data/articles";
+import { getArticles } from "@/lib/server/content";
 
 export const metadata: Metadata = {
   title: "Articles",
@@ -10,7 +10,8 @@ export const metadata: Metadata = {
     "Articles and perspectives on Ayurveda, research, education and the legacy of Vaidya R. B. Gogate.",
 };
 
-export default function ArticlesPage() {
+export default async function ArticlesPage() {
+  const articles = await getArticles();
   const featured = articles.filter((article) => article.featured);
   const rest = articles.filter((article) => !article.featured);
 

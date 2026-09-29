@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Events"
-      title="Applications"
-      description="Review and manage event applications."
-    />
-  );
+  return <ModulePage moduleKey="applications" />;
 }

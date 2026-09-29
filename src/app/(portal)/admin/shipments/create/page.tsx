@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Shipments"
-      title="Create Shipment"
-      description="Create a shipment."
-    />
-  );
+  return <ModulePage moduleKey="shipments-create" />;
 }

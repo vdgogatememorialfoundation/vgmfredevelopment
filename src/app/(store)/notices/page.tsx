@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import Badge from "@/components/common/Badge";
-import { notices } from "@/data/content";
+import { getNotices } from "@/lib/server/content";
 import { formatDate } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -11,7 +11,8 @@ export const metadata: Metadata = {
     "Official notices, deadlines, results and updates from the Vaidya Gogate Memorial Foundation.",
 };
 
-export default function NoticesPage() {
+export default async function NoticesPage() {
+  const notices = await getNotices();
   const sorted = [...notices].sort((a, b) => b.date.localeCompare(a.date));
 
   return (

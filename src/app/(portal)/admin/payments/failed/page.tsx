@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Payments"
-      title="Failed Payments"
-      description="Review failed payment transactions."
-    />
-  );
+  return <ModulePage moduleKey="payments-failed" />;
 }

@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Quote, Star } from "lucide-react";
 import SectionHeading from "@/components/common/SectionHeading";
-import { testimonials } from "@/data/site";
+import { testimonials as defaultTestimonials } from "@/data/site";
 import { classNames } from "@/lib/utils";
 
-export default function Testimonials() {
+export default function Testimonials({ testimonials = defaultTestimonials }: { testimonials?: typeof defaultTestimonials }) {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const total = testimonials.length;

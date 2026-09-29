@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addSupportQuery, addTicket } from "@/lib/admin-store";
+import { submitPublic } from "@/lib/public-submit";
 
 export default function ContactForm() {
   const [form, setForm] = useState({
@@ -23,6 +24,12 @@ export default function ContactForm() {
       message: form.message,
     });
     addTicket({ name, email: form.email, subject: form.subject, body: form.message });
+    void submitPublic("contact-enquiries", {
+      name,
+      email: form.email,
+      subject: form.subject,
+      message: form.message,
+    });
     setSent(true);
   };
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SignupFlow from "@/components/account/SignupFlow";
 import SignInFlow from "@/components/account/SignInFlow";
+import { getRegistrationSettings } from "@/lib/server/content";
 
 export const metadata: Metadata = {
   title: "Login / Create Account",
@@ -14,8 +15,9 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ mode?: string }>;
 }) {
-  const { mode } = await searchParams;
-  const signInMode = mode === "signin";
+  const [{ mode }, registration] = await Promise.all([searchParams, getRegistrationSettings()]);
+  const allowSignup = registration.allowSelfSignup;
+  const signInMode = mode === "signin" || !allowSignup;
 
   return (
     <main className="border-t border-border bg-background">
@@ -67,7 +69,7 @@ export default async function LoginPage({
               />
             </div>
 
-            {signInMode && (
+            {signInMode && allowSignup && (
               <p className="mt-10 rounded-xl border border-white/20 bg-white/5 p-4 text-sm text-white/70">
                 <strong className="text-white">Demo tip:</strong> sign up
                 once using the Create Account tab, then you can sign in
@@ -87,6 +89,7 @@ export default async function LoginPage({
               ← Back to website
             </Link>
 
+            {allowSignup ? (
             <div className="mb-8 grid grid-cols-2 gap-2 rounded-xl border border-border bg-white p-1.5">
               <Link
                 href="/login"
@@ -109,6 +112,11 @@ export default async function LoginPage({
                 Sign In
               </Link>
             </div>
+            ) : (
+              <p className="mb-8 rounded-xl border border-gold/40 bg-gold-light p-4 text-sm text-text-primary">
+                {registration.registrationNote}
+              </p>
+            )}
 
             {signInMode ? <SignInFlow /> : <SignupFlow />}
           </div>

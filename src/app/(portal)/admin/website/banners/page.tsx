@@ -1,13 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Banners"
-      description="Manage website banners."
-      action="Add Banner"
-      actionHref="/admin/website/banners"
-    />
-  );
+  return <ModulePage moduleKey="banners" />;
 }

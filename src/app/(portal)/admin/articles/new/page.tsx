@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Articles"
-      title="Create Article"
-      description="Create a new article with title, description, content, images and SEO."
-    />
-  );
+  return <ModulePage moduleKey="articles" create />;
 }

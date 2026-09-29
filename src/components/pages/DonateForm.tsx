@@ -5,6 +5,7 @@ import { CheckCircle2, HeartHandshake, Lock, Repeat } from "lucide-react";
 import DynamicIcon from "@/components/common/DynamicIcon";
 import { donationCauses, donationTiers } from "@/data/site";
 import { classNames, formatCurrency } from "@/lib/utils";
+import { submitPublic } from "@/lib/public-submit";
 
 export default function DonateForm() {
   const [amount, setAmount] = useState<number>(donationTiers[1].amount);
@@ -30,6 +31,7 @@ export default function DonateForm() {
       return;
     }
     setError("");
+    void submitPublic("donations", { name, email, amount: finalAmount, cause, frequency });
     setSubmitted(true);
   };
 
