@@ -1,0 +1,125 @@
+@import "tailwindcss";
+
+@theme {
+  --color-burgundy: #0284C7;
+  --color-burgundy-dark: #0369A1;
+  --color-warm-cream: #EFF6FF;
+  --color-background: #FFFFFF;
+  --color-text-primary: #0F172A;
+  --color-text-muted: #5B6B7B;
+  --color-border: #DBEAFE;
+  --color-white: #FFFFFF;
+}
+
+:root {
+  --font-sans: var(--font-baloo), "Baloo 2", "Inter", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-marquee {
+    animation: marquee 38s linear infinite;
+  }
+
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@layer components {
+  .container {
+    @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .section {
+    @apply py-16 sm:py-20 lg:py-24;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-6 py-3 font-semibold text-white transition hover:bg-burgundy-dark;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-lg border border-border px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy hover:bg-burgundy/5;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-burgundy focus:ring-2 focus:ring-burgundy/10;
+  }
+
+  .card {
+    @apply rounded-2xl border border-border bg-white shadow-sm transition hover:shadow-md;
+  }
+
+  .heading-1 {
+    @apply text-4xl font-bold tracking-tight text-text-primary sm:text-5xl lg:text-6xl;
+  }
+
+  .heading-2 {
+    @apply text-3xl font-bold tracking-tight text-text-primary sm:text-4xl;
+  }
+
+  .heading-3 {
+    @apply text-2xl font-bold tracking-tight text-text-primary sm:text-3xl;
+  }
+
+  .heading-4 {
+    @apply text-xl font-bold tracking-tight text-text-primary;
+  }
+
+  .eyebrow {
+    @apply mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy;
+  }
+
+  .text-body {
+    @apply text-base leading-7 text-text-muted;
+  }
+
+  .text-body-lg {
+    @apply text-lg leading-8 text-text-muted;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:focus-visible {
+  @apply outline-none ring-2 ring-burgundy ring-offset-2 ring-offset-background;
+}
