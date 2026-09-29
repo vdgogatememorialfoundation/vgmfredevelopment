@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { Fraunces, Inter, Tiro_Devanagari_Sanskrit } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -13,6 +13,13 @@ const fraunces = Fraunces({
   subsets: ["latin"],
   display: "swap",
   axes: ["opsz"],
+});
+
+const sanskrit = Tiro_Devanagari_Sanskrit({
+  variable: "--font-tiro",
+  subsets: ["devanagari", "latin"],
+  weight: "400",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -55,7 +62,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0A1A33",
+  themeColor: "#C2410C",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -69,7 +76,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${inter.variable} ${fraunces.variable} scroll-smooth`}
+      className={`${inter.variable} ${fraunces.variable} ${sanskrit.variable} scroll-smooth`}
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">

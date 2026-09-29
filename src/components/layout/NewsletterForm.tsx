@@ -19,8 +19,8 @@ export default function NewsletterForm() {
 
   if (status === "done") {
     return (
-      <p className="flex items-center gap-2 rounded-xl border border-sage/40 bg-sage/15 px-4 py-3 text-sm text-white">
-        <CheckCircle2 size={18} className="text-emerald-300" />
+      <p className="flex items-center gap-2 rounded-xl border border-white/40 bg-white/20 px-4 py-3 text-sm text-white">
+        <CheckCircle2 size={18} className="text-white" />
         Thank you — you&apos;re subscribed to Foundation updates.
       </p>
     );
@@ -31,8 +31,8 @@ export default function NewsletterForm() {
       <label htmlFor="newsletter-email" className="sr-only">
         Email address
       </label>
-      <div className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 p-1.5 pl-4 backdrop-blur focus-within:border-gold">
-        <Mail size={16} className="shrink-0 text-white/50" />
+      <div className="flex items-center gap-2 rounded-full border border-white bg-white p-1.5 pl-4 shadow-lg focus-within:ring-4 focus-within:ring-white/30">
+        <Mail size={16} className="shrink-0 text-burgundy" />
         <input
           id="newsletter-email"
           type="email"
@@ -42,15 +42,15 @@ export default function NewsletterForm() {
             setStatus("idle");
           }}
           placeholder="Your email address"
-          className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
+          className="min-w-0 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
         />
-        <button type="submit" className="btn-gold shrink-0 px-4 py-2 text-sm">
+        <button type="submit" className="btn-primary shrink-0 px-4 py-2 text-sm">
           Subscribe
           <ArrowRight size={15} />
         </button>
       </div>
       {status === "error" && (
-        <p className="mt-2 pl-4 text-xs text-red-300">Please enter a valid email address.</p>
+        <p className="mt-2 pl-4 text-xs font-semibold text-white">Please enter a valid email address.</p>
       )}
     </form>
   );

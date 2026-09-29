@@ -72,11 +72,11 @@ export default function ProgrammesPage() {
         </div>
       </section>
 
-      <section className="section relative overflow-hidden bg-navy text-white">
-        <div className="pointer-events-none absolute inset-0 bg-grid opacity-50" />
+      <section className="section relative overflow-hidden bg-sage-light text-text-primary">
+        <div className="pointer-events-none absolute inset-0 bg-rangoli opacity-60" />
         <div className="container relative">
           <SectionHeading
-            tone="dark"
+            
             eyebrow="Your journey"
             title="From interest to certification"
             description="A simple, transparent path for every student and practitioner."
@@ -84,19 +84,19 @@ export default function ProgrammesPage() {
           <ol className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {journey.map((item, index) => (
               <Reveal as="li" key={item.step} delay={index * 100} className="glass relative rounded-3xl p-7">
-                <span className="font-display text-5xl font-semibold text-gold/40">{item.step}</span>
+                <span className="font-display text-5xl font-semibold text-burgundy/40">{item.step}</span>
                 <h3 className="mt-4 font-display text-xl font-semibold">{item.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-white/70">{item.description}</p>
+                <p className="mt-2 text-sm leading-6 text-text-muted">{item.description}</p>
               </Reveal>
             ))}
           </ol>
-          <div className="mt-14 grid gap-6 border-t border-white/10 pt-12 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-14 grid gap-6 border-t border-sage/20 pt-12 sm:grid-cols-2 lg:grid-cols-4">
             {impactStats.map((stat) => (
               <div key={stat.label} className="text-center">
-                <p className="font-display text-4xl font-semibold text-gold">
+                <p className="font-display text-4xl font-semibold text-burgundy">
                   <CountUp end={stat.value} suffix={stat.suffix} />
                 </p>
-                <p className="mt-1 text-sm text-white/70">{stat.label}</p>
+                <p className="mt-1 text-sm text-text-muted">{stat.label}</p>
               </div>
             ))}
           </div>

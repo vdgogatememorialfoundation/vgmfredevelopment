@@ -35,7 +35,7 @@ export default function SocialIcons({
             target="_blank"
             rel="noopener noreferrer"
             className={classNames(
-              "flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/70 transition duration-300 hover:-translate-y-0.5 hover:border-gold hover:bg-gold hover:text-navy",
+              "flex h-9 w-9 items-center justify-center rounded-full border border-border bg-white text-burgundy transition duration-300 hover:-translate-y-0.5 hover:border-burgundy hover:bg-burgundy hover:text-white",
               itemClassName
             )}
           >

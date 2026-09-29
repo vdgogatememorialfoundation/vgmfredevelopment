@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { ChevronRight, Home } from "lucide-react";
+import FallingPetals from "@/components/graphics/FallingPetals";
+import LeafSprig from "@/components/graphics/LeafSprig";
+import Lotus from "@/components/graphics/Lotus";
 import Mandala from "@/components/graphics/Mandala";
+import Toran from "@/components/graphics/Toran";
 import Wave from "@/components/graphics/Wave";
 
 interface PageHeaderProps {
@@ -17,16 +21,19 @@ export default function PageHeader({
   breadcrumb,
 }: PageHeaderProps) {
   return (
-    <section className="relative overflow-hidden bg-hero text-white">
-      <div className="absolute inset-0 bg-grid opacity-60" aria-hidden="true" />
-      <Mandala className="absolute -right-24 -top-24 h-[420px] w-[420px] text-gold/20 animate-spin-slow" />
-      <Mandala className="absolute -bottom-40 -left-32 h-[360px] w-[360px] text-white/5" />
+    <section className="relative overflow-hidden bg-hero text-text-primary">
+      <Toran className="absolute inset-x-0 top-0 z-10" />
+      <div className="absolute inset-0 bg-rangoli opacity-70" aria-hidden="true" />
+      <Mandala className="absolute -right-24 -top-24 h-[420px] w-[420px] text-burgundy/20 animate-spin-slow" />
+      <Lotus className="absolute bottom-10 right-8 hidden h-32 w-44 opacity-90 animate-float lg:block" />
+      <LeafSprig className="absolute bottom-12 right-56 hidden h-28 w-14 origin-bottom animate-sway lg:block" />
+      <FallingPetals />
 
-      <div className="container relative pb-20 pt-14 sm:pb-24 sm:pt-20">
+      <div className="container relative pb-20 pt-20 sm:pb-24 sm:pt-24">
         <nav aria-label="Breadcrumb" className="mb-6 animate-fade-up">
-          <ol className="flex flex-wrap items-center gap-1.5 text-sm text-white/60">
+          <ol className="flex flex-wrap items-center gap-1.5 text-sm text-text-muted">
             <li>
-              <Link href="/" className="flex items-center gap-1.5 transition hover:text-gold">
+              <Link href="/" className="flex items-center gap-1.5 transition hover:text-burgundy">
                 <Home size={14} />
                 Home
               </Link>
@@ -34,14 +41,14 @@ export default function PageHeader({
             {breadcrumb?.map((item) => (
               <li key={item.href} className="flex items-center gap-1.5">
                 <ChevronRight size={14} aria-hidden="true" />
-                <Link href={item.href} className="transition hover:text-gold">
+                <Link href={item.href} className="transition hover:text-burgundy">
                   {item.name}
                 </Link>
               </li>
             ))}
             <li className="flex items-center gap-1.5">
               <ChevronRight size={14} aria-hidden="true" />
-              <span className="font-medium text-white" aria-current="page">
+              <span className="font-medium text-burgundy" aria-current="page">
                 {title}
               </span>
             </li>
@@ -49,8 +56,8 @@ export default function PageHeader({
         </nav>
 
         {eyebrow && (
-          <p className="eyebrow text-gold animate-fade-up [animation-delay:80ms]">
-            <span className="h-px w-6 bg-gold/60" />
+          <p className="eyebrow animate-fade-up [animation-delay:80ms]">
+            <span className="h-px w-6 bg-burgundy/50" />
             {eyebrow}
           </p>
         )}
@@ -60,7 +67,7 @@ export default function PageHeader({
         </h1>
 
         {description && (
-          <p className="mt-6 max-w-3xl text-lg leading-8 text-white/70 animate-fade-up [animation-delay:220ms]">
+          <p className="mt-6 max-w-3xl text-lg leading-8 text-text-muted animate-fade-up [animation-delay:220ms]">
             {description}
           </p>
         )}

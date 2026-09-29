@@ -28,7 +28,7 @@ export default function Accordion({
             key={item.question}
             className={classNames(
               "overflow-hidden rounded-2xl border bg-white transition-all duration-300",
-              isOpen ? "border-burgundy/30 shadow-[0_20px_40px_-24px_rgb(15_95_168/0.45)]" : "border-border"
+              isOpen ? "border-burgundy/30 shadow-[0_20px_40px_-24px_rgb(194_65_12/0.35)]" : "border-border"
             )}
           >
             <button

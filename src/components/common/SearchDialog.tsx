@@ -148,7 +148,7 @@ export default function SearchDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-start justify-center bg-navy/60 p-4 pt-[10vh] backdrop-blur-sm animate-[fade-up_0.25s_ease_both]"
+      className="fixed inset-0 z-[70] flex items-start justify-center bg-[#3b1f0e]/30 p-4 pt-[10vh] backdrop-blur-sm animate-[fade-up_0.25s_ease_both]"
       role="dialog"
       aria-modal="true"
       aria-label="Search the site"

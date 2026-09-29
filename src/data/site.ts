@@ -176,15 +176,15 @@ export const donationCauses = [
 ];
 
 export const galleryItems = [
-  { id: "g1", title: "National Seminar 2025 — Inaugural session", category: "Seminars", tone: "from-navy to-burgundy", span: "lg:col-span-2 lg:row-span-2" },
-  { id: "g2", title: "Panchakarma demonstration", category: "Education", tone: "from-sage to-navy", span: "" },
-  { id: "g3", title: "Community health camp, Nashik", category: "Outreach", tone: "from-gold to-[#7a4f1f]", span: "" },
-  { id: "g4", title: "Research methodology workshop", category: "Research", tone: "from-burgundy to-sage", span: "lg:row-span-2" },
-  { id: "g5", title: "Library & manuscript archive", category: "Heritage", tone: "from-[#3a2410] to-gold", span: "" },
-  { id: "g6", title: "Fellowship cohort 2025-26", category: "Education", tone: "from-navy-light to-burgundy-dark", span: "" },
-  { id: "g7", title: "Herbal garden walk", category: "Heritage", tone: "from-sage to-[#1d4d38]", span: "lg:col-span-2" },
-  { id: "g8", title: "Award ceremony", category: "Seminars", tone: "from-gold to-burgundy", span: "" },
-  { id: "g9", title: "Women's health webinar", category: "Outreach", tone: "from-burgundy-dark to-navy", span: "" },
+  { id: "g1", title: "National Seminar 2025 — Inaugural session", category: "Seminars", tone: "from-[#c2410c] to-[#f2a516]", span: "lg:col-span-2 lg:row-span-2" },
+  { id: "g2", title: "Panchakarma demonstration", category: "Education", tone: "from-[#2f8a3e] to-[#0f8b8d]", span: "" },
+  { id: "g3", title: "Community health camp, Nashik", category: "Outreach", tone: "from-[#f2a516] to-[#f97316]", span: "" },
+  { id: "g4", title: "Research methodology workshop", category: "Research", tone: "from-[#e0457b] to-[#f97316]", span: "lg:row-span-2" },
+  { id: "g5", title: "Library & manuscript archive", category: "Heritage", tone: "from-[#0f8b8d] to-[#7cc576]", span: "" },
+  { id: "g6", title: "Fellowship cohort 2025-26", category: "Education", tone: "from-[#f97316] to-[#e0457b]", span: "" },
+  { id: "g7", title: "Herbal garden walk", category: "Heritage", tone: "from-[#43a047] to-[#c0ca33]", span: "lg:col-span-2" },
+  { id: "g8", title: "Award ceremony", category: "Seminars", tone: "from-[#f2a516] to-[#e0457b]", span: "" },
+  { id: "g9", title: "Women's health webinar", category: "Outreach", tone: "from-[#c2185b] to-[#f2a516]", span: "" },
 ];
 
 export const coreValues = [
@@ -193,3 +193,49 @@ export const coreValues = [
   { icon: "HeartHandshake", title: "Compassion", description: "Care for every patient, student and community we serve." },
   { icon: "Sprout", title: "Continuity", description: "Passing living knowledge to the next generation." },
 ];
+
+export const doshas = [
+  {
+    name: "Vata",
+    sanskrit: "वात",
+    elements: "Akasha + Vayu · Space & Air",
+    qualities: ["Movement", "Creativity", "Circulation"],
+    description: "Governs all movement in the body — breath, nerve impulses and circulation. Balanced Vata brings energy and inspiration.",
+    icon: "wind",
+    tone: "peacock",
+  },
+  {
+    name: "Pitta",
+    sanskrit: "पित्त",
+    elements: "Agni + Jala · Fire & Water",
+    qualities: ["Digestion", "Metabolism", "Intellect"],
+    description: "Rules transformation — digestion, metabolism and perception. Balanced Pitta brings clarity, warmth and sharp focus.",
+    icon: "flame",
+    tone: "saffron",
+  },
+  {
+    name: "Kapha",
+    sanskrit: "कफ",
+    elements: "Prithvi + Jala · Earth & Water",
+    qualities: ["Strength", "Immunity", "Stability"],
+    description: "Provides structure, lubrication and immunity. Balanced Kapha brings calm, compassion and lasting strength.",
+    icon: "mountain",
+    tone: "green",
+  },
+] as const;
+
+export const herbs = [
+  { name: "Tulsi", sanskrit: "तुलसी", latin: "Ocimum sanctum", benefit: "Holy basil for respiratory health, immunity and a calm mind.", color: "#2f8a3e", bg: "#e7f6df" },
+  { name: "Ashwagandha", sanskrit: "अश्वगन्धा", latin: "Withania somnifera", benefit: "Classic rasayana for strength, stamina and stress resilience.", color: "#c2410c", bg: "#fff1cc" },
+  { name: "Haridra", sanskrit: "हरिद्रा", latin: "Curcuma longa", benefit: "Golden turmeric — anti-inflammatory, purifying and healing.", color: "#d97706", bg: "#fef3c7" },
+  { name: "Amalaki", sanskrit: "आमलकी", latin: "Emblica officinalis", benefit: "Indian gooseberry, richest source of vitality and Vitamin C.", color: "#65a30d", bg: "#ecfccb" },
+  { name: "Nimba", sanskrit: "निम्ब", latin: "Azadirachta indica", benefit: "Neem — the village pharmacy for skin, blood and immunity.", color: "#0f8b8d", bg: "#dcf4f3" },
+  { name: "Brahmi", sanskrit: "ब्राह्मी", latin: "Bacopa monnieri", benefit: "Medhya rasayana that nourishes memory, focus and intellect.", color: "#e0457b", bg: "#fde6ee" },
+] as const;
+
+export const shloka = {
+  sanskrit: "स्वस्थस्य स्वास्थ्य रक्षणम् । आतुरस्य विकार प्रशमनम् च ॥",
+  transliteration: "Svasthasya svāsthya rakṣaṇam, āturasya vikāra praśamanam ca",
+  meaning: "The purpose of Ayurveda is to protect the health of the healthy and to relieve the illness of the sick.",
+  source: "Charaka Samhita, Sutrasthana 30.26",
+};

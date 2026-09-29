@@ -145,7 +145,7 @@ export default function Header() {
         {/* Utility bar */}
         <div
           className={classNames(
-            "overflow-hidden bg-navy text-white transition-all duration-300",
+            "overflow-hidden bg-gold-light text-text-primary transition-all duration-300",
             scrolled ? "max-h-0" : "max-h-12"
           )}
         >
@@ -153,19 +153,19 @@ export default function Header() {
             <div className="hidden items-center gap-5 sm:flex">
               <a
                 href={`mailto:${siteConfig.email}`}
-                className="flex items-center gap-1.5 text-white/75 transition hover:text-gold"
+                className="flex items-center gap-1.5 text-text-muted transition hover:text-burgundy"
               >
                 <Mail size={13} />
                 {siteConfig.email}
               </a>
               <a
                 href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}
-                className="flex items-center gap-1.5 text-white/75 transition hover:text-gold"
+                className="flex items-center gap-1.5 text-text-muted transition hover:text-burgundy"
               >
                 <Phone size={13} />
                 {siteConfig.phone}
               </a>
-              <span className="hidden items-center gap-1.5 text-white/50 lg:flex">
+              <span className="hidden items-center gap-1.5 text-text-muted/80 lg:flex">
                 <MapPin size={13} />
                 Pune, Maharashtra
               </span>
@@ -174,17 +174,17 @@ export default function Header() {
             <div className="ml-auto flex items-center gap-4">
               <Link
                 href="/certificate-verification"
-                className="hidden items-center gap-1.5 text-white/75 transition hover:text-gold md:flex"
+                className="hidden items-center gap-1.5 text-text-muted transition hover:text-burgundy md:flex"
               >
                 <BadgeCheck size={13} />
                 Verify Certificate
               </Link>
               {isAuthenticated ? (
-                <span className="hidden font-mono text-white/70 md:inline">
+                <span className="hidden font-mono text-text-muted md:inline">
                   {user?.accountId}
                 </span>
               ) : (
-                <Link href="/login" className="text-white/75 transition hover:text-gold">
+                <Link href="/login" className="text-text-muted transition hover:text-burgundy">
                   Sign in · Create account
                 </Link>
               )}
@@ -196,12 +196,14 @@ export default function Header() {
           </div>
         </div>
 
+        <div className="bg-toran-stripe h-1" aria-hidden="true" />
+
         {/* Main bar */}
         <div
           className={classNames(
             "border-b transition-all duration-300",
             scrolled
-              ? "border-border/80 bg-white/85 shadow-[0_10px_30px_-18px_rgb(10_26_51/0.35)] backdrop-blur-xl"
+              ? "border-border/80 bg-white/90 shadow-[0_10px_30px_-18px_rgb(154_52_18/0.35)] backdrop-blur-xl"
               : "border-border bg-white"
           )}
         >
@@ -285,7 +287,7 @@ export default function Header() {
                           open ? "visible translate-y-0 opacity-100" : "invisible translate-y-2 opacity-0"
                         )}
                       >
-                        <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-[0_30px_60px_-20px_rgb(10_26_51/0.35)]">
+                        <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-[0_30px_60px_-20px_rgb(154_52_18/0.3)]">
                           <div className="grid grid-cols-2 gap-1 p-3">
                             {item.children.map((child) => (
                               <Link
@@ -309,7 +311,7 @@ export default function Header() {
                           </div>
                           <Link
                             href={item.href}
-                            className="flex items-center justify-between bg-navy px-5 py-3 text-xs font-semibold text-white transition hover:bg-burgundy-dark"
+                            className="flex items-center justify-between bg-gold-light px-5 py-3 text-xs font-semibold text-burgundy transition hover:bg-burgundy hover:text-white"
                           >
                             Explore {item.name.toLowerCase()}
                             <span aria-hidden="true">→</span>
@@ -366,7 +368,7 @@ export default function Header() {
                       aria-haspopup="menu"
                       className="flex items-center gap-2 rounded-full border border-border py-1.5 pl-1.5 pr-3 transition hover:border-burgundy"
                     >
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-burgundy to-navy text-xs font-bold text-white">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-burgundy to-gold text-xs font-bold text-white">
                         {initials}
                       </span>
                       <span className="max-w-[100px] truncate text-sm font-medium text-text-primary">
@@ -380,12 +382,12 @@ export default function Header() {
                         role="menu"
                         className="absolute right-0 top-full z-50 mt-3 w-72 overflow-hidden rounded-2xl border border-border bg-white shadow-2xl animate-[fade-up_0.25s_ease_both]"
                       >
-                        <div className="bg-hero px-5 py-4 text-white">
+                        <div className="bg-saffron px-5 py-4 text-white">
                           <p className="font-semibold">
                             {user.firstName} {user.lastName}
                           </p>
                           <p className="mt-0.5 text-xs text-white/70">{user.email}</p>
-                          <p className="mt-1 font-mono text-xs tracking-[0.08em] text-gold">
+                          <p className="mt-1 font-mono text-xs tracking-[0.08em] text-gold-light">
                             {user.accountId}
                           </p>
                         </div>
@@ -475,7 +477,7 @@ export default function Header() {
       >
         <div
           className={classNames(
-            "absolute inset-0 bg-navy/60 backdrop-blur-sm transition-opacity duration-300",
+            "absolute inset-0 bg-[#3b1f0e]/30 backdrop-blur-sm transition-opacity duration-300",
             mobileMenuOpen ? "opacity-100" : "opacity-0"
           )}
           onClick={() => setMobileMenuOpen(false)}

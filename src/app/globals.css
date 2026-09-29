@@ -1,23 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #0f5fa8;
-  --color-burgundy-dark: #0b3d73;
-  --color-navy: #0a1a33;
-  --color-navy-light: #13284a;
-  --color-gold: #c9953c;
-  --color-gold-light: #f6ecd8;
-  --color-sage: #2f7d5b;
-  --color-sage-light: #e6f2ec;
-  --color-warm-cream: #f5f8fc;
-  --color-background: #ffffff;
-  --color-text-primary: #0b1726;
-  --color-text-muted: #5a6b80;
-  --color-border: #e2e8f0;
+  --color-burgundy: #c2410c;
+  --color-burgundy-dark: #9a3412;
+  --color-navy: #4a2410;
+  --color-navy-light: #6b3a1d;
+  --color-gold: #f2a516;
+  --color-gold-light: #fff1cc;
+  --color-sage: #2f8a3e;
+  --color-sage-light: #e7f6df;
+  --color-lotus: #e0457b;
+  --color-lotus-light: #fde6ee;
+  --color-peacock: #0f8b8d;
+  --color-peacock-light: #dcf4f3;
+  --color-marigold: #f97316;
+  --color-warm-cream: #fff8ec;
+  --color-background: #fffcf6;
+  --color-text-primary: #3b1f0e;
+  --color-text-muted: #7a5a44;
+  --color-border: #f1dfc2;
   --color-white: #ffffff;
 
-  --font-sans: var(--font-inter), "Inter", system-ui, sans-serif;
-  --font-display: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --font-sans: var(--font-inter), "Inter", var(--font-tiro), system-ui, sans-serif;
+  --font-display: var(--font-fraunces), "Fraunces", var(--font-tiro), Georgia, serif;
+  --font-sanskrit: var(--font-tiro), "Tiro Devanagari Sanskrit", serif;
 
   --animate-float: float 7s ease-in-out infinite;
   --animate-spin-slow: spin 60s linear infinite;
@@ -25,6 +31,8 @@
   --animate-fade-up: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-shimmer: shimmer 2.5s linear infinite;
   --animate-gradient: gradient-shift 12s ease infinite;
+  --animate-flicker: flicker 2.2s ease-in-out infinite;
+  --animate-sway: sway 6s ease-in-out infinite;
 }
 
 * {
@@ -66,34 +74,48 @@ body {
   }
 
   .bg-grid {
-    background-image:
-      linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
-    background-size: 48px 48px;
+    background-image: radial-gradient(rgb(194 65 12 / 0.12) 1.2px, transparent 1.6px);
+    background-size: 26px 26px;
   }
 
   .bg-grid-light {
     background-image:
-      linear-gradient(to right, rgb(15 95 168 / 0.06) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(15 95 168 / 0.06) 1px, transparent 1px);
+      linear-gradient(to right, rgb(194 65 12 / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(194 65 12 / 0.05) 1px, transparent 1px);
     background-size: 40px 40px;
   }
 
   .bg-dots {
-    background-image: radial-gradient(rgb(15 95 168 / 0.14) 1px, transparent 1px);
+    background-image: radial-gradient(rgb(194 65 12 / 0.16) 1px, transparent 1px);
     background-size: 18px 18px;
+  }
+
+  .bg-rangoli {
+    background-image:
+      radial-gradient(circle at 50% 50%, rgb(242 165 22 / 0.22) 2px, transparent 2.5px),
+      radial-gradient(circle at 0 0, rgb(224 69 123 / 0.14) 1.5px, transparent 2px),
+      radial-gradient(circle at 100% 100%, rgb(47 138 62 / 0.14) 1.5px, transparent 2px);
+    background-size: 36px 36px;
   }
 
   .bg-hero {
     background:
-      radial-gradient(60% 80% at 85% 10%, rgb(201 149 60 / 0.22), transparent 60%),
-      radial-gradient(50% 60% at 10% 90%, rgb(47 125 91 / 0.25), transparent 60%),
-      radial-gradient(70% 70% at 50% 50%, rgb(15 95 168 / 0.35), transparent 70%),
-      var(--color-navy);
+      radial-gradient(55% 70% at 88% 12%, rgb(242 165 22 / 0.35), transparent 60%),
+      radial-gradient(45% 55% at 8% 88%, rgb(47 138 62 / 0.18), transparent 60%),
+      radial-gradient(40% 50% at 55% 100%, rgb(224 69 123 / 0.14), transparent 70%),
+      linear-gradient(180deg, #fff6e2 0%, #fffcf6 100%);
+  }
+
+  .bg-saffron {
+    background: linear-gradient(120deg, #c2410c 0%, #ea580c 45%, #f2a516 100%);
+  }
+
+  .bg-toran-stripe {
+    background: repeating-linear-gradient(90deg, #f97316 0 24px, #f2a516 24px 48px, #2f8a3e 48px 60px, #e0457b 60px 72px);
   }
 
   .text-gradient-gold {
-    background: linear-gradient(90deg, #f3d9a4, #c9953c 45%, #f3d9a4);
+    background: linear-gradient(90deg, #c2410c, #f2a516 40%, #e0457b 70%, #c2410c);
     background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
@@ -169,6 +191,52 @@ body {
   }
 }
 
+@keyframes flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(-2deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12, 0.92) rotate(2deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes petal-fall {
+  0% {
+    transform: translate3d(0, -10vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(60px, 110vh, 0) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+.petal {
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 10px;
+  border-radius: 80% 0 80% 0;
+  animation: petal-fall linear infinite;
+  pointer-events: none;
+}
+
 @keyframes draw {
   to {
     stroke-dashoffset: 0;
@@ -223,11 +291,11 @@ body {
   }
 
   .btn-gold {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-gold px-6 py-3 font-semibold text-navy shadow-lg shadow-gold/25 transition duration-300 hover:-translate-y-0.5 hover:bg-[#d9a84f] active:translate-y-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-gold px-6 py-3 font-semibold text-text-primary shadow-lg shadow-gold/30 transition duration-300 hover:-translate-y-0.5 hover:bg-[#f7b83a] active:translate-y-0;
   }
 
   .btn-ghost-light {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/25 bg-white/5 px-6 py-3 font-semibold text-white backdrop-blur transition duration-300 hover:-translate-y-0.5 hover:border-white/50 hover:bg-white/10;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-burgundy/30 bg-white/80 px-6 py-3 font-semibold text-burgundy backdrop-blur transition duration-300 hover:-translate-y-0.5 hover:border-burgundy hover:bg-white;
   }
 
   .input-field {
@@ -235,15 +303,15 @@ body {
   }
 
   .card {
-    @apply rounded-2xl border border-border bg-white shadow-[0_1px_2px_rgb(10_26_51/0.04)] transition duration-300 hover:-translate-y-1 hover:border-burgundy/20 hover:shadow-[0_20px_40px_-20px_rgb(10_26_51/0.25)];
+    @apply rounded-2xl border border-border bg-white shadow-[0_1px_2px_rgb(120_53_15/0.05)] transition duration-300 hover:-translate-y-1 hover:border-burgundy/20 hover:shadow-[0_20px_40px_-20px_rgb(154_52_18/0.28)];
   }
 
   .card-static {
-    @apply rounded-2xl border border-border bg-white shadow-[0_1px_2px_rgb(10_26_51/0.04)];
+    @apply rounded-2xl border border-border bg-white shadow-[0_1px_2px_rgb(120_53_15/0.05)];
   }
 
   .glass {
-    @apply border border-white/15 bg-white/10 backdrop-blur-xl;
+    @apply border border-white bg-white/80 shadow-[0_20px_40px_-24px_rgb(154_52_18/0.35)] backdrop-blur-xl;
   }
 
   .heading-1 {

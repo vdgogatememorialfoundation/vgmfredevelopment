@@ -41,7 +41,7 @@ export default function Testimonials() {
                 key={item.name}
                 aria-hidden={index !== active}
                 className={classNames(
-                  "absolute inset-0 rounded-3xl border border-border bg-white p-8 shadow-[0_30px_60px_-35px_rgb(10_26_51/0.4)] transition-all duration-700 sm:p-12",
+                  "absolute inset-0 rounded-3xl border border-border bg-white p-8 shadow-[0_30px_60px_-35px_rgb(194_65_12/0.35)] transition-all duration-700 sm:p-12",
                   index === active ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"
                 )}
               >
@@ -55,7 +55,7 @@ export default function Testimonials() {
                   “{item.quote}”
                 </blockquote>
                 <figcaption className="mt-7 flex items-center gap-4">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-burgundy to-navy font-semibold text-white">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-burgundy to-gold font-semibold text-white">
                     {item.name
                       .replace(/^(Dr\.|Vaidya)\s/, "")
                       .split(" ")

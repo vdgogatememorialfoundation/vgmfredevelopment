@@ -12,6 +12,9 @@ import Testimonials from "@/components/home/Testimonials";
 import Partners from "@/components/home/Partners";
 import FaqSection from "@/components/home/FaqSection";
 import SupportCta from "@/components/home/SupportCta";
+import DoshaSection from "@/components/home/DoshaSection";
+import HerbsSection from "@/components/home/HerbsSection";
+import ShlokaBand from "@/components/home/ShlokaBand";
 
 export default function HomePage() {
   return (
@@ -19,9 +22,12 @@ export default function HomePage() {
       <HeroSection />
       <ImpactStats />
       <ProgrammesSection />
+      <DoshaSection />
       <FlyerSection />
       <UpcomingEvents />
+      <HerbsSection />
       <LegacySection />
+      <ShlokaBand />
       <Announcements />
       <FeaturedBooks />
       <ClinicsSection />

@@ -7,9 +7,9 @@ import { flyers } from "@/data/content";
 import { formatDate } from "@/lib/utils";
 
 const tones = [
-  "from-navy via-burgundy-dark to-burgundy",
-  "from-sage via-[#1f5a41] to-navy",
-  "from-[#7a4f1f] via-gold to-burgundy-dark",
+  "from-[#c2410c] via-[#ea580c] to-[#f2a516]",
+  "from-[#2f8a3e] via-[#43a047] to-[#0f8b8d]",
+  "from-[#e0457b] via-[#f06292] to-[#f97316]",
 ];
 
 export default function FlyerSection() {
@@ -28,23 +28,23 @@ export default function FlyerSection() {
             <Reveal key={flyer.id} delay={index * 100} variant="zoom">
               <Link
                 href={flyer.href}
-                className={`group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-3xl bg-gradient-to-br p-7 text-white shadow-[0_30px_60px_-30px_rgb(10_26_51/0.6)] ${tones[index % tones.length]}`}
+                className={`group relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-3xl bg-gradient-to-br p-7 text-white shadow-[0_30px_60px_-30px_rgb(194_65_12/0.55)] ${tones[index % tones.length]}`}
               >
-                <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
-                <Mandala className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 text-white/15 transition duration-[1.5s] group-hover:rotate-90" />
+                <div className="pointer-events-none absolute inset-0 bg-rangoli opacity-50" />
+                <Mandala className="pointer-events-none absolute -right-16 -top-16 h-72 w-72 text-white/30 transition duration-[1.5s] group-hover:rotate-90" />
                 <span className="absolute left-7 top-7 rounded-full bg-white/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] backdrop-blur">
                   Featured
                 </span>
                 <div className="relative">
-                  <p className="flex items-center gap-2 text-xs font-medium text-gold-light">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-white">
                     <CalendarDays size={14} />
                     <time dateTime={flyer.date}>{formatDate(flyer.date)}</time>
                   </p>
                   <h3 className="mt-3 font-display text-2xl font-semibold leading-tight sm:text-3xl">
                     {flyer.title}
                   </h3>
-                  <p className="mt-2 text-sm text-white/75">{flyer.event}</p>
-                  <span className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-navy transition group-hover:gap-3 group-hover:bg-gold">
+                  <p className="mt-2 text-sm text-white/90">{flyer.event}</p>
+                  <span className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-burgundy shadow-md transition group-hover:gap-3 group-hover:bg-gold-light">
                     {flyer.cta}
                     <ArrowRight size={16} />
                   </span>

@@ -54,11 +54,11 @@ export default function DonateForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="card-static overflow-hidden">
-      <div className="bg-hero px-6 py-5 text-white sm:px-8">
+      <div className="bg-saffron px-6 py-5 text-white sm:px-8">
         <p className="flex items-center gap-2 font-display text-xl font-semibold">
           <HeartHandshake size={20} className="text-gold" /> Make a contribution
         </p>
-        <p className="mt-1 text-sm text-white/70">Every rupee directly supports Foundation programmes.</p>
+        <p className="mt-1 text-sm text-white/90">Every rupee directly supports Foundation programmes.</p>
       </div>
 
       <div className="space-y-7 p-6 sm:p-8">

@@ -21,15 +21,15 @@ const variants: Record<
   { bg: string; icon: LucideIcon; mandala: string; text: string }
 > = {
   event: {
-    bg: "from-navy via-burgundy-dark to-burgundy",
+    bg: "from-[#f97316] via-[#f2a516] to-[#fb923c]",
     icon: CalendarDays,
-    mandala: "text-gold/30",
+    mandala: "text-white/40",
     text: "text-white",
   },
   book: {
-    bg: "from-[#3a2410] via-[#7a4f1f] to-gold",
+    bg: "from-[#e0457b] via-[#f472a0] to-[#f472a0]",
     icon: BookOpen,
-    mandala: "text-white/20",
+    mandala: "text-white/40",
     text: "text-white",
   },
   article: {
@@ -39,9 +39,9 @@ const variants: Record<
     text: "text-text-primary",
   },
   clinic: {
-    bg: "from-sage via-[#276a4d] to-navy",
+    bg: "from-[#2f8a3e] via-[#4caf50] to-[#43a047]",
     icon: Stethoscope,
-    mandala: "text-white/15",
+    mandala: "text-white/35",
     text: "text-white",
   },
 };

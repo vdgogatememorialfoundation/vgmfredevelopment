@@ -26,23 +26,23 @@ export default function AnnouncementsSection() {
               <Reveal variant="left">
                 <Link
                   href={lead.href}
-                  className="group relative block overflow-hidden rounded-3xl bg-hero p-8 text-white sm:p-10"
+                  className="group relative block overflow-hidden rounded-3xl bg-saffron p-8 text-white shadow-[0_30px_60px_-30px_rgb(194_65_12/0.55)] sm:p-10"
                 >
-                  <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
-                  <Megaphone className="pointer-events-none absolute -bottom-6 -right-6 h-40 w-40 rotate-[-12deg] text-white/5" />
+                  <div className="pointer-events-none absolute inset-0 bg-rangoli opacity-40" />
+                  <Megaphone className="pointer-events-none absolute -bottom-6 -right-6 h-40 w-40 rotate-[-12deg] text-white/15" />
                   <div className="relative flex items-center gap-3">
                     <Badge tone="gold">{lead.category}</Badge>
-                    <time className="text-sm text-white/60" dateTime={lead.date}>
+                    <time className="text-sm text-white/85" dateTime={lead.date}>
                       {formatDate(lead.date)}
                     </time>
                   </div>
                   <h3 className="relative mt-5 font-display text-2xl font-semibold leading-tight sm:text-3xl">
                     {lead.title}
                   </h3>
-                  <p className="relative mt-3 max-w-lg text-sm leading-7 text-white/70">
+                  <p className="relative mt-3 max-w-lg text-sm leading-7 text-white/90">
                     {lead.description}
                   </p>
-                  <span className="relative mt-6 inline-flex items-center gap-2 text-sm font-semibold text-gold transition group-hover:gap-3">
+                  <span className="relative mt-6 inline-flex items-center gap-2 text-sm font-semibold text-white underline-offset-4 transition group-hover:gap-3 group-hover:underline">
                     Read announcement <ArrowRight size={16} />
                   </span>
                 </Link>

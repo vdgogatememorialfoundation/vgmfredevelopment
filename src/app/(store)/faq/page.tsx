@@ -22,13 +22,13 @@ export default function FaqPage() {
       <section className="section bg-warm-cream">
         <div className="container">
           <FaqBrowser />
-          <div className="mt-16 flex flex-col items-center justify-between gap-6 rounded-3xl bg-hero p-8 text-white sm:flex-row sm:p-10">
+          <div className="mt-16 flex flex-col items-center justify-between gap-6 rounded-3xl bg-saffron p-8 text-white sm:flex-row sm:p-10">
             <div>
               <h2 className="font-display text-2xl font-semibold">Didn&apos;t find your answer?</h2>
-              <p className="mt-1 text-white/70">Write to us and we&apos;ll respond within one working day.</p>
+              <p className="mt-1 text-white/90">Write to us and we&apos;ll respond within one working day.</p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link href="/contact" className="btn-gold">
+              <Link href="/contact" className="btn-secondary">
                 <MessageCircle size={16} /> Contact us
               </Link>
               <a href={`mailto:${siteConfig.email}`} className="btn-ghost-light">

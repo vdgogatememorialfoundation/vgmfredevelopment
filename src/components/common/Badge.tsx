@@ -12,7 +12,7 @@ const tones: Record<NonNullable<BadgeProps["tone"]>, string> = {
   success: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   warning: "bg-amber-50 text-amber-700 ring-amber-200",
   gold: "bg-gold-light text-[#8a6320] ring-gold/30",
-  dark: "bg-navy/80 text-white ring-white/10 backdrop-blur",
+  dark: "bg-white/90 text-burgundy ring-burgundy/15 backdrop-blur",
 };
 
 export default function Badge({
