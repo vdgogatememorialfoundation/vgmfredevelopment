@@ -7,7 +7,7 @@ export default function FeaturedBooks() {
   const featured = books.slice(0, 3);
 
   return (
-    <section className="section bg-background" aria-labelledby="books-heading">
+    <section className="section bg-white" aria-labelledby="books-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Shop"

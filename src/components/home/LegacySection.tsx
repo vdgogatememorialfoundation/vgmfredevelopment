@@ -1,81 +1,57 @@
 import Link from "next/link";
+import { ArrowRight, Quote } from "lucide-react";
 import SectionHeading from "@/components/common/SectionHeading";
-
-const pillars = [
-  {
-    title: "Ayurveda",
-    description:
-      "Preserving and advancing classical Ayurveda knowledge and practice.",
-  },
-  {
-    title: "Education",
-    description:
-      "Training the next generation of Ayurveda physicians and scholars.",
-  },
-  {
-    title: "Research",
-    description:
-      "Strengthening evidence and scholarship for the science of Ayurveda.",
-  },
-];
+import Reveal from "@/components/common/Reveal";
+import Mandala from "@/components/graphics/Mandala";
+import { legacyTimeline } from "@/data/site";
 
 export default function LegacySection() {
   return (
-    <section className="section bg-warm-cream" aria-labelledby="legacy-heading">
-      <div className="container">
-        <div className="grid items-center gap-12 lg:grid-cols-2">
-          <div>
-            <SectionHeading
-              align="left"
-              eyebrow="Our Legacy"
-              title="The Legacy of Vaidya R. B. Gogate"
-              description="Vaidya R. B. Gogate devoted his life to the study, practice and teaching of Ayurveda. The Foundation built in his memory carries this work forward — through clinical care, education, research and publications."
-            />
+    <section className="section relative overflow-hidden bg-navy text-white" aria-labelledby="legacy-heading">
+      <div className="pointer-events-none absolute inset-0 bg-grid opacity-50" />
+      <Mandala className="pointer-events-none absolute -left-40 top-1/2 h-[640px] w-[640px] -translate-y-1/2 text-gold/10 animate-spin-slow" />
 
-            <ul className="grid gap-4 sm:grid-cols-3" role="list">
-              {pillars.map((pillar) => (
-                <li
-                  key={pillar.title}
-                  className="rounded-2xl border border-border bg-white p-5"
-                >
-                  <p className="font-semibold text-burgundy">
-                    {pillar.title}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-text-muted">
-                    {pillar.description}
-                  </p>
-                </li>
-              ))}
-            </ul>
+      <div className="container relative grid items-start gap-14 lg:grid-cols-[1fr_1.1fr]">
+        <div className="lg:sticky lg:top-32">
+          <SectionHeading
+            id="legacy-heading"
+            tone="dark"
+            align="left"
+            eyebrow="Our legacy"
+            title="The life and work of Vaidya R. B. Gogate"
+            description="Physician, teacher and scholar — Vaidya Gogate devoted his life to the study, practice and teaching of Ayurveda. The Foundation built in his memory carries this work forward."
+          />
 
-            <Link
-              href="/about/legacy-of-vaidya-rb-gogate"
-              className="btn-primary mt-8"
-            >
-              Discover Our Legacy
-            </Link>
-          </div>
+          <Reveal>
+            <figure className="glass relative rounded-3xl p-7">
+              <Quote className="absolute -top-4 left-6 h-9 w-9 rounded-full bg-gold p-2 text-navy" />
+              <blockquote className="font-display text-xl italic leading-relaxed text-white/90">
+                “Knowledge that is not shared is knowledge half-lived. Teach, heal, and write — so that
+                Ayurveda remains a living science.”
+              </blockquote>
+              <figcaption className="mt-4 text-sm font-semibold text-gold">— Vaidya R. B. Gogate</figcaption>
+            </figure>
+          </Reveal>
 
-          <div className="relative">
-            <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-              <div className="flex h-full items-center justify-center bg-gradient-to-br from-warm-cream to-[#E9DDD0] p-8 text-center">
-                <div>
-                  <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full border-2 border-burgundy">
-                    <span className="font-bold text-burgundy">
-                      VGMF
-                    </span>
-                  </div>
-                  <h2 className="text-xl font-bold text-text-primary">
-                    Vaidya R. B. Gogate
-                  </h2>
-                  <p className="mt-2 text-sm text-text-muted">
-                    Physician • Teacher • Scholar
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-gold mt-8">
+            Read the full story
+            <ArrowRight size={18} />
+          </Link>
         </div>
+
+        <ol className="relative space-y-6 before:absolute before:bottom-0 before:left-[27px] before:top-0 before:w-px before:bg-gradient-to-b before:from-gold/0 before:via-gold/60 before:to-gold/0">
+          {legacyTimeline.map((item, index) => (
+            <Reveal as="li" key={item.year} delay={index * 90} variant="right" className="relative flex gap-6">
+              <span className="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-gold/40 bg-navy-light text-xs font-bold text-gold shadow-[0_0_0_6px_rgb(10_26_51)]">
+                {item.year}
+              </span>
+              <div className="glass flex-1 rounded-2xl p-6 transition duration-300 hover:border-gold/40 hover:bg-white/10">
+                <h3 className="font-display text-lg font-semibold">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-white/70">{item.description}</p>
+              </div>
+            </Reveal>
+          ))}
+        </ol>
       </div>
     </section>
   );

@@ -1,11 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Baloo_2 } from "next/font/google";
+import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 
-const baloo = Baloo_2({
-  variable: "--font-baloo",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
+});
+
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  display: "swap",
+  axes: ["opsz"],
 });
 
 export const metadata: Metadata = {
@@ -48,7 +55,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#651C1C",
+  themeColor: "#0A1A33",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -62,7 +69,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${baloo.variable} scroll-smooth`}
+      className={`${inter.variable} ${fraunces.variable} scroll-smooth`}
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">

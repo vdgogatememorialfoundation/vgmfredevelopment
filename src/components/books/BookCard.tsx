@@ -5,8 +5,8 @@ import { formatCurrency } from "@/lib/utils";
 
 export default function BookCard({ book }: { book: Book }) {
   return (
-    <article className="card flex flex-col overflow-hidden">
-      <Link href={`/shop/${book.slug}`} className="block">
+    <article className="card group flex h-full flex-col overflow-hidden">
+      <Link href={`/shop/${book.slug}`} className="block overflow-hidden [&>div]:transition [&>div]:duration-700 group-hover:[&>div]:scale-105">
         <MediaPlaceholder
           variant="book"
           label={book.title}

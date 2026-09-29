@@ -1,3 +1,11 @@
+import {
+  BookOpen,
+  CalendarDays,
+  Newspaper,
+  Stethoscope,
+  type LucideIcon,
+} from "lucide-react";
+import Mandala from "@/components/graphics/Mandala";
 import { classNames } from "@/lib/utils";
 
 interface MediaPlaceholderProps {
@@ -8,68 +16,78 @@ interface MediaPlaceholderProps {
   variant?: "event" | "book" | "article" | "clinic";
 }
 
-const variants = {
-  event: "from-burgundy/20 via-warm-cream to-[#EFE4D8]",
-  book: "from-[#4F1414] via-[#7a2a2a] to-[#b0704a]",
-  article: "from-[#EDE4D6] via-warm-cream to-[#F7F1E6]",
-  clinic: "from-[#E7E2DA] via-warm-cream to-[#F2EBDF]",
-};
-
-const labelGlyphs = {
-  event: "EV",
-  book: "BK",
-  article: "AR",
-  clinic: "CL",
+const variants: Record<
+  NonNullable<MediaPlaceholderProps["variant"]>,
+  { bg: string; icon: LucideIcon; mandala: string; text: string }
+> = {
+  event: {
+    bg: "from-navy via-burgundy-dark to-burgundy",
+    icon: CalendarDays,
+    mandala: "text-gold/30",
+    text: "text-white",
+  },
+  book: {
+    bg: "from-[#3a2410] via-[#7a4f1f] to-gold",
+    icon: BookOpen,
+    mandala: "text-white/20",
+    text: "text-white",
+  },
+  article: {
+    bg: "from-sage-light via-warm-cream to-gold-light",
+    icon: Newspaper,
+    mandala: "text-sage/25",
+    text: "text-text-primary",
+  },
+  clinic: {
+    bg: "from-sage via-[#276a4d] to-navy",
+    icon: Stethoscope,
+    mandala: "text-white/15",
+    text: "text-white",
+  },
 };
 
 export default function MediaPlaceholder({
   label,
-  src,
   aspectClassName = "aspect-[16/9]",
   className,
   variant = "event",
 }: MediaPlaceholderProps) {
-  const glyph = labelGlyphs[variant];
+  const config = variants[variant];
+  const Icon = config.icon;
 
   return (
     <div
       className={classNames(
-        "relative flex items-center justify-center overflow-hidden bg-gradient-to-br",
-        variants[variant],
+        "group/media @container relative flex items-center justify-center overflow-hidden bg-gradient-to-br",
+        config.bg,
         aspectClassName,
         className
       )}
+      role={label ? "img" : undefined}
+      aria-label={label}
       aria-hidden={label ? undefined : true}
     >
-      <div
-        className="absolute inset-0 opacity-[0.06]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 20% 20%, #651C1C 0, transparent 40%), radial-gradient(circle at 80% 80%, #651C1C 0, transparent 40%)",
-        }}
+      <Mandala
+        className={classNames(
+          "absolute -right-10 -top-10 hidden h-56 w-56 transition @[8rem]:block duration-700 group-hover/media:rotate-45 group-hover/media:scale-110",
+          config.mandala
+        )}
       />
+      <div className="absolute inset-0 bg-dots opacity-30" aria-hidden="true" />
 
-      <div className="relative z-10 text-center px-6">
+      <div className={classNames("relative z-10 px-6 text-center", config.text)}>
         <div
           className={classNames(
-            "mx-auto mb-4 flex items-center justify-center rounded-full border-2 border-burgundy/30 bg-white/70",
-            variant === "book" ? "h-20 w-20" : "h-16 w-16"
+            "mx-auto flex scale-50 items-center justify-center rounded-2xl @[8rem]:scale-100 border border-white/30 bg-white/15 shadow-lg backdrop-blur transition duration-500 group-hover/media:scale-110",
+            variant === "book" ? "h-16 w-16" : "h-14 w-14"
           )}
         >
-          <span className="text-sm font-bold tracking-wide text-burgundy">
-            {glyph}
-          </span>
+          <Icon size={variant === "book" ? 28 : 24} strokeWidth={1.6} />
         </div>
 
         {label && (
-          <p className="text-sm font-medium text-text-primary">
+          <p className="mx-auto mt-4 hidden max-w-[16rem] @[10rem]:block font-display text-base font-semibold leading-snug line-clamp-2">
             {label}
-          </p>
-        )}
-
-        {src && (
-          <p className="mt-1 text-[11px] text-text-muted">
-            {src}
           </p>
         )}
       </div>

@@ -1,3 +1,5 @@
+import Ornament from "@/components/graphics/Ornament";
+import Reveal from "@/components/common/Reveal";
 import { classNames } from "@/lib/utils";
 
 interface SectionHeadingProps {
@@ -5,6 +7,8 @@ interface SectionHeadingProps {
   title: string;
   description?: string;
   align?: "center" | "left";
+  tone?: "light" | "dark";
+  id?: string;
 }
 
 export default function SectionHeading({
@@ -12,27 +16,50 @@ export default function SectionHeading({
   title,
   description,
   align = "center",
+  tone = "light",
+  id,
 }: SectionHeadingProps) {
   const alignCenter = align === "center";
+  const dark = tone === "dark";
 
   return (
-    <div
+    <Reveal
       className={classNames(
-        "mb-10 max-w-3xl",
+        "mb-12 max-w-3xl",
         alignCenter && "mx-auto text-center"
       )}
     >
       {eyebrow && (
-        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy">
+        <p
+          className={classNames(
+            "eyebrow",
+            alignCenter && "justify-center",
+            dark && "text-gold"
+          )}
+        >
+          <span className={classNames("h-px w-6", dark ? "bg-gold/60" : "bg-burgundy/40")} />
           {eyebrow}
+          <span className={classNames("h-px w-6", dark ? "bg-gold/60" : "bg-burgundy/40")} />
         </p>
       )}
 
-      <h2 className="heading-2">{title}</h2>
+      <h2 id={id} className={classNames("heading-2 text-balance", dark && "text-white")}>
+        {title}
+      </h2>
+
+      <Ornament
+        className={classNames(
+          "mt-5",
+          alignCenter && "mx-auto",
+          dark ? "text-gold" : "text-gold"
+        )}
+      />
 
       {description && (
-        <p className="mt-4 text-body-lg">{description}</p>
+        <p className={classNames("mt-5 text-body-lg", dark && "text-white/70")}>
+          {description}
+        </p>
       )}
-    </div>
+    </Reveal>
   );
 }

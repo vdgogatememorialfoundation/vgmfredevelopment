@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Event } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
+import { ArrowRight, CalendarDays, ExternalLink, MapPin } from "lucide-react";
 import { formatDateRange } from "@/lib/utils";
 
 const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral"> = {
@@ -13,8 +14,8 @@ const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral">
 
 export default function EventCard({ event }: { event: Event }) {
   return (
-    <article className="card flex flex-col overflow-hidden">
-      <div className="relative">
+    <article className="card group flex h-full flex-col overflow-hidden">
+      <div className="relative overflow-hidden [&>div:first-child]:transition [&>div:first-child]:duration-700 group-hover:[&>div:first-child]:scale-105">
         <MediaPlaceholder
           variant="event"
           label={event.name}
@@ -34,8 +35,9 @@ export default function EventCard({ event }: { event: Event }) {
       <div className="flex flex-1 flex-col p-6">
         <time
           dateTime={event.startDate}
-          className="text-sm font-semibold text-burgundy"
+          className="flex items-center gap-2 text-sm font-semibold text-burgundy"
         >
+          <CalendarDays size={15} />
           {formatDateRange(event.startDate, event.endDate)}
         </time>
 
@@ -52,12 +54,9 @@ export default function EventCard({ event }: { event: Event }) {
           {event.shortDescription}
         </p>
 
-        <div className="mt-4 flex items-center gap-2 text-sm text-text-muted">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
+        <div className="mb-6 mt-4 flex items-center gap-2 text-sm text-text-muted">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-warm-cream text-burgundy">
+            <MapPin size={14} />
           </span>
           <span className="line-clamp-1">
             {event.mode === "Online" ? "Online" : event.venue}
@@ -66,9 +65,10 @@ export default function EventCard({ event }: { event: Event }) {
 
         <Link
           href={`/events/${event.slug}`}
-          className="btn-primary mt-6 w-full"
+          className="btn-primary mt-auto w-full"
         >
           View Event
+          <ArrowRight size={16} />
         </Link>
 
         <Link
@@ -78,6 +78,7 @@ export default function EventCard({ event }: { event: Event }) {
           className="btn-outline mt-3 w-full"
         >
           Register on Seminar Website
+          <ExternalLink size={14} />
         </Link>
       </div>
     </article>
