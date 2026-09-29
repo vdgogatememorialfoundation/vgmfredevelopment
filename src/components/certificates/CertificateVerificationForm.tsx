@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { getCertificate } from "@/data/content";
+import { useRouter } from "next/navigation";
 
 type Result = {
   status: "idle" | "verified" | "not-found";
@@ -10,6 +10,7 @@ type Result = {
 };
 
 export default function CertificateVerificationForm() {
+  const router = useRouter();
   const [value, setValue] = useState("");
   const [result, setResult] = useState<Result>({
     status: "idle",
@@ -22,11 +23,7 @@ export default function CertificateVerificationForm() {
 
     if (!certificateNumber) return;
 
-    const certificate = getCertificate(certificateNumber);
-    setResult({
-      status: certificate ? "verified" : "not-found",
-      certificateNumber,
-    });
+    router.push(`/certificate-verification/${encodeURIComponent(certificateNumber)}`);
   };
 
   return (

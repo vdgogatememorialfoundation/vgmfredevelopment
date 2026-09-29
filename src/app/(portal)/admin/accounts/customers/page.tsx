@@ -1,13 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import AccountsManager from "@/components/portal/AccountsManager";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Accounts"
-      title="Customers"
-      description="Manage customer accounts, profiles and 12-digit account IDs."
-      action="Create Customer"
-      actionHref="/admin/accounts/customers"
-    />
-  );
+  return <AccountsManager role="customer" />;
 }

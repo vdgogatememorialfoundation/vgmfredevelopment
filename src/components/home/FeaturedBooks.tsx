@@ -1,13 +1,13 @@
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import BookCard from "@/components/books/BookCard";
-import { books } from "@/data/books";
+import { books as defaultBooks } from "@/data/books";
 
-export default function FeaturedBooks() {
-  const featured = books.slice(0, 3);
+export default function FeaturedBooks({ books = defaultBooks }: { books?: typeof defaultBooks }) {
+  const featured = books.slice(0, 5);
 
   return (
-    <section className="section bg-background" aria-labelledby="books-heading">
+    <section className="section bg-white" aria-labelledby="books-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Shop"
@@ -15,7 +15,7 @@ export default function FeaturedBooks() {
           description="Clinical references, scholarly works and the writings of Vaidya R. B. Gogate. Order online with secure payments."
         />
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
           {featured.map((book) => (
             <BookCard key={book.id} book={book} />
           ))}

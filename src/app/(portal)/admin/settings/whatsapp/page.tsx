@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="WhatsApp"
-      description="Configure WhatsApp messaging."
-    />
-  );
+  return <ModulePage moduleKey="settings-whatsapp" />;
 }

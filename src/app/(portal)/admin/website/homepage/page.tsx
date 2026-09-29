@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Homepage"
-      description="Manage homepage sections, hero content, featured events and articles."
-    />
-  );
+  return <ModulePage moduleKey="settings-homepage" />;
 }

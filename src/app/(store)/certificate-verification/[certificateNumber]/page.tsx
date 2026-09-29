@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getCertificate } from "@/data/content";
+import { getCertificateByNumber } from "@/lib/server/content";
 import { formatDate } from "@/lib/utils";
 
 interface CertificatePageProps {
@@ -12,7 +12,7 @@ export async function generateMetadata({
   params,
 }: CertificatePageProps): Promise<Metadata> {
   const { certificateNumber } = await params;
-  const certificate = getCertificate(certificateNumber);
+  const certificate = await getCertificateByNumber(decodeURIComponent(certificateNumber));
 
   if (!certificate) return {};
 
@@ -30,7 +30,7 @@ export default async function CertificateNumberPage({
   params,
 }: CertificatePageProps) {
   const { certificateNumber: rawNumber } = await params;
-  const certificate = getCertificate(rawNumber);
+  const certificate = await getCertificateByNumber(decodeURIComponent(rawNumber));
 
   if (!certificate) {
     notFound();

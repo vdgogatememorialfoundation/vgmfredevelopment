@@ -5,7 +5,7 @@ import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { seminarSiteUrl } from "@/lib/constants";
-import { events } from "@/data/events";
+import { getEvents } from "@/lib/server/content";
 import {
   eventDays,
   formatCurrency,
@@ -18,12 +18,14 @@ interface EventDetailPageProps {
 }
 
 export async function generateStaticParams() {
+  const events = await getEvents();
   return events.map((event) => ({ slug: event.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: EventDetailPageProps): Promise<Metadata> {
+  const events = await getEvents();
   const { slug } = await params;
   const event = events.find((item) => item.slug === slug);
 
@@ -38,6 +40,7 @@ export async function generateMetadata({
 export default async function EventDetailPage({
   params,
 }: EventDetailPageProps) {
+  const events = await getEvents();
   const { slug } = await params;
   const event = events.find((item) => item.slug === slug);
 

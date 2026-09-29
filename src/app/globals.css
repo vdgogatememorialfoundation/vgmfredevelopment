@@ -1,18 +1,38 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #0284C7;
-  --color-burgundy-dark: #0369A1;
-  --color-warm-cream: #EFF6FF;
-  --color-background: #FFFFFF;
-  --color-text-primary: #0F172A;
-  --color-text-muted: #5B6B7B;
-  --color-border: #DBEAFE;
-  --color-white: #FFFFFF;
-}
+  --color-burgundy: #c2410c;
+  --color-burgundy-dark: #9a3412;
+  --color-navy: #4a2410;
+  --color-navy-light: #6b3a1d;
+  --color-gold: #f2a516;
+  --color-gold-light: #fff1cc;
+  --color-sage: #2f8a3e;
+  --color-sage-light: #e7f6df;
+  --color-lotus: #e0457b;
+  --color-lotus-light: #fde6ee;
+  --color-peacock: #0f8b8d;
+  --color-peacock-light: #dcf4f3;
+  --color-marigold: #f97316;
+  --color-warm-cream: #fff8ec;
+  --color-background: #fffcf6;
+  --color-text-primary: #3b1f0e;
+  --color-text-muted: #7a5a44;
+  --color-border: #f1dfc2;
+  --color-white: #ffffff;
 
-:root {
-  --font-sans: var(--font-baloo), "Baloo 2", "Inter", system-ui, sans-serif;
+  --font-sans: var(--font-inter), "Inter", var(--font-tiro), system-ui, sans-serif;
+  --font-display: var(--font-fraunces), "Fraunces", var(--font-tiro), Georgia, serif;
+  --font-sanskrit: var(--font-tiro), "Tiro Devanagari Sanskrit", serif;
+
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-spin-slow: spin 60s linear infinite;
+  --animate-pulse-soft: pulse-soft 3s ease-in-out infinite;
+  --animate-fade-up: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-shimmer: shimmer 2.5s linear infinite;
+  --animate-gradient: gradient-shift 12s ease infinite;
+  --animate-flicker: flicker 2.2s ease-in-out infinite;
+  --animate-sway: sway 6s ease-in-out infinite;
 }
 
 * {
@@ -31,6 +51,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+::selection {
+  background: color-mix(in oklab, var(--color-burgundy) 20%, transparent);
+  color: var(--color-text-primary);
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -43,6 +68,72 @@ body {
   .animate-marquee:hover {
     animation-play-state: paused;
   }
+
+  .animate-marquee-slow {
+    animation: marquee 60s linear infinite;
+  }
+
+  .bg-grid {
+    background-image: radial-gradient(rgb(194 65 12 / 0.12) 1.2px, transparent 1.6px);
+    background-size: 26px 26px;
+  }
+
+  .bg-grid-light {
+    background-image:
+      linear-gradient(to right, rgb(194 65 12 / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(194 65 12 / 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .bg-dots {
+    background-image: radial-gradient(rgb(194 65 12 / 0.16) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+
+  .bg-rangoli {
+    background-image:
+      radial-gradient(circle at 50% 50%, rgb(242 165 22 / 0.22) 2px, transparent 2.5px),
+      radial-gradient(circle at 0 0, rgb(224 69 123 / 0.14) 1.5px, transparent 2px),
+      radial-gradient(circle at 100% 100%, rgb(47 138 62 / 0.14) 1.5px, transparent 2px);
+    background-size: 36px 36px;
+  }
+
+  .bg-hero {
+    background:
+      radial-gradient(55% 70% at 88% 12%, rgb(242 165 22 / 0.35), transparent 60%),
+      radial-gradient(45% 55% at 8% 88%, rgb(47 138 62 / 0.18), transparent 60%),
+      radial-gradient(40% 50% at 55% 100%, rgb(224 69 123 / 0.14), transparent 70%),
+      linear-gradient(180deg, #fff6e2 0%, #fffcf6 100%);
+  }
+
+  .bg-saffron {
+    background: linear-gradient(120deg, #c2410c 0%, #ea580c 45%, #f2a516 100%);
+  }
+
+  .bg-toran-stripe {
+    background: repeating-linear-gradient(90deg, #f97316 0 24px, #f2a516 24px 48px, #2f8a3e 48px 60px, #e0457b 60px 72px);
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(90deg, #c2410c, #f2a516 40%, #e0457b 70%, #c2410c);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 6s linear infinite;
+  }
+
+  .mask-fade-x {
+    mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
 }
 
 @keyframes marquee {
@@ -51,45 +142,188 @@ body {
   }
 }
 
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+
+@keyframes gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(-2deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12, 0.92) rotate(2deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
+}
+
+@keyframes petal-fall {
+  0% {
+    transform: translate3d(0, -10vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(60px, 110vh, 0) rotate(540deg);
+    opacity: 0;
+  }
+}
+
+.petal {
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 10px;
+  border-radius: 80% 0 80% 0;
+  animation: petal-fall linear infinite;
+  pointer-events: none;
+}
+
+@keyframes draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+
+.reveal[data-variant="left"] {
+  transform: translateX(-32px);
+}
+
+.reveal[data-variant="right"] {
+  transform: translateX(32px);
+}
+
+.reveal[data-variant="zoom"] {
+  transform: scale(0.94);
+}
+
+.reveal[data-visible="true"] {
+  opacity: 1;
+  transform: none;
+}
+
 @layer components {
   .container {
     @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
   }
 
   .section {
-    @apply py-16 sm:py-20 lg:py-24;
+    @apply py-16 sm:py-20 lg:py-28;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-6 py-3 font-semibold text-white transition hover:bg-burgundy-dark;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-burgundy px-6 py-3 font-semibold text-white shadow-lg shadow-burgundy/20 transition duration-300 hover:-translate-y-0.5 hover:bg-burgundy-dark hover:shadow-xl hover:shadow-burgundy/25 active:translate-y-0;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-border bg-white px-6 py-3 font-semibold text-text-primary transition duration-300 hover:-translate-y-0.5 hover:border-burgundy hover:text-burgundy;
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center rounded-lg border border-border px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy hover:bg-burgundy/5;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-border px-6 py-3 font-semibold text-text-primary transition duration-300 hover:border-burgundy hover:bg-burgundy/5 hover:text-burgundy;
+  }
+
+  .btn-gold {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-gold px-6 py-3 font-semibold text-text-primary shadow-lg shadow-gold/30 transition duration-300 hover:-translate-y-0.5 hover:bg-[#f7b83a] active:translate-y-0;
+  }
+
+  .btn-ghost-light {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-burgundy/30 bg-white/80 px-6 py-3 font-semibold text-burgundy backdrop-blur transition duration-300 hover:-translate-y-0.5 hover:border-burgundy hover:bg-white;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-burgundy focus:ring-2 focus:ring-burgundy/10;
+    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-burgundy focus:ring-4 focus:ring-burgundy/10;
   }
 
   .card {
-    @apply rounded-2xl border border-border bg-white shadow-sm transition hover:shadow-md;
+    @apply rounded-2xl border border-border bg-white shadow-[0_1px_2px_rgb(120_53_15/0.05)] transition duration-300 hover:-translate-y-1 hover:border-burgundy/20 hover:shadow-[0_20px_40px_-20px_rgb(154_52_18/0.28)];
+  }
+
+  .card-static {
+    @apply rounded-2xl border border-border bg-white shadow-[0_1px_2px_rgb(120_53_15/0.05)];
+  }
+
+  .glass {
+    @apply border border-white bg-white/80 shadow-[0_20px_40px_-24px_rgb(154_52_18/0.35)] backdrop-blur-xl;
   }
 
   .heading-1 {
-    @apply text-4xl font-bold tracking-tight text-text-primary sm:text-5xl lg:text-6xl;
+    @apply font-display text-4xl font-semibold tracking-tight text-text-primary sm:text-5xl lg:text-6xl;
   }
 
   .heading-2 {
-    @apply text-3xl font-bold tracking-tight text-text-primary sm:text-4xl;
+    @apply font-display text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl lg:text-[2.75rem] lg:leading-[1.15];
   }
 
   .heading-3 {
-    @apply text-2xl font-bold tracking-tight text-text-primary sm:text-3xl;
+    @apply font-display text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl;
   }
 
   .heading-4 {
@@ -97,7 +331,7 @@ body {
   }
 
   .eyebrow {
-    @apply mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy;
+    @apply mb-3 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-burgundy;
   }
 
   .text-body {
@@ -106,6 +340,10 @@ body {
 
   .text-body-lg {
     @apply text-lg leading-8 text-text-muted;
+  }
+
+  .icon-tile {
+    @apply flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-burgundy/10 text-burgundy transition duration-300;
   }
 }
 
@@ -117,6 +355,11 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
   }
 }
 

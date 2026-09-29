@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Sellers"
-      title="Seller Orders"
-      description="Manage seller orders."
-    />
-  );
+  return <ModulePage moduleKey="orders" />;
 }

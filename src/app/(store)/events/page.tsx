@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/common/PageHeader";
 import EventCard from "@/components/events/EventCard";
 import RequireAuth from "@/components/auth/RequireAuth";
-import { events } from "@/data/events";
+import { getEvents } from "@/lib/server/content";
 
 export const metadata: Metadata = {
   title: "Events",
@@ -10,7 +10,8 @@ export const metadata: Metadata = {
     "Seminars, conferences, workshops, webinars, fellowships and training programmes from Vaidya Gogate Memorial Foundation.",
 };
 
-export default function EventsPage() {
+export default async function EventsPage() {
+  const events = await getEvents();
   const upcoming = events
     .filter((event) => event.registrationStatus !== "Closed")
     .sort((a, b) => a.startDate.localeCompare(b.startDate));

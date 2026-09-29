@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="API Keys"
-      description="Manage API keys."
-    />
-  );
+  return <ModulePage moduleKey="settings-api-keys" />;
 }

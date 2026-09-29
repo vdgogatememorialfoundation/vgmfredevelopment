@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Events"
-      title="Payments"
-      description="Manage event registration payments."
-    />
-  );
+  return <ModulePage moduleKey="event-payments" />;
 }

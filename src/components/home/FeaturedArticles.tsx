@@ -1,9 +1,9 @@
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import ArticleCard from "@/components/articles/ArticleCard";
-import { articles } from "@/data/articles";
+import { articles as defaultArticles } from "@/data/articles";
 
-export default function FeaturedArticles() {
+export default function FeaturedArticles({ articles = defaultArticles }: { articles?: typeof defaultArticles }) {
   const featured = articles.slice(0, 3);
 
   return (

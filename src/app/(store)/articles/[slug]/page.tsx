@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import Badge from "@/components/common/Badge";
 import ArticleCard from "@/components/articles/ArticleCard";
 import RequireAuth from "@/components/auth/RequireAuth";
-import { articles } from "@/data/articles";
+import { getArticles } from "@/lib/server/content";
 import { formatDate } from "@/lib/utils";
 
 interface ArticleDetailPageProps {
@@ -12,12 +12,14 @@ interface ArticleDetailPageProps {
 }
 
 export async function generateStaticParams() {
+  const articles = await getArticles();
   return articles.map((article) => ({ slug: article.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: ArticleDetailPageProps): Promise<Metadata> {
+  const articles = await getArticles();
   const { slug } = await params;
   const article = articles.find((item) => item.slug === slug);
 
@@ -32,6 +34,7 @@ export async function generateMetadata({
 export default async function ArticleDetailPage({
   params,
 }: ArticleDetailPageProps) {
+  const articles = await getArticles();
   const { slug } = await params;
   const article = articles.find((item) => item.slug === slug);
 

@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Support"
-      title="Support Tickets"
-      description="Manage customer support tickets."
-    />
-  );
+  return <ModulePage moduleKey="support-tickets" />;
 }

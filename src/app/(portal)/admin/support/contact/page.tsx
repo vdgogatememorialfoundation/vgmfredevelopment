@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Support"
-      title="Contact Enquiries"
-      description="Manage enquiries submitted through the website."
-    />
-  );
+  return <ModulePage moduleKey="contact-enquiries" />;
 }

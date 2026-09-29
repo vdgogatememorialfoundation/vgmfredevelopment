@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="Processing Timelines"
-      description="Configure processing timelines."
-    />
-  );
+  return <ModulePage moduleKey="settings-timelines" />;
 }

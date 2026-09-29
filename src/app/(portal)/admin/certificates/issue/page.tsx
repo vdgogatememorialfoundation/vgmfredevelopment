@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Certificates"
-      title="Issue Certificate"
-      description="Generate and issue certificates."
-    />
-  );
+  return <ModulePage moduleKey="certificates-issue" />;
 }

@@ -1,13 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Videos"
-      description="Manage Foundation video content."
-      action="Add Video"
-      actionHref="/admin/website/videos"
-    />
-  );
+  return <ModulePage moduleKey="videos" />;
 }

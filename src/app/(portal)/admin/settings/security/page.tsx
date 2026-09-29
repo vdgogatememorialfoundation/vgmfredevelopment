@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="Security"
-      description="Configure administrator security."
-    />
-  );
+  return <ModulePage moduleKey="settings-security" />;
 }

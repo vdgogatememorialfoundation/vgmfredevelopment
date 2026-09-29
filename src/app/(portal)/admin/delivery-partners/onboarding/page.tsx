@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Delivery Partners"
-      title="Onboarding"
-      description="Onboard delivery providers."
-    />
-  );
+  return <ModulePage moduleKey="delivery-onboarding" />;
 }

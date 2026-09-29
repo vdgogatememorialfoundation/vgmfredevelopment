@@ -1,13 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Notice Board"
-      description="Manage official notices."
-      action="Add Notice"
-      actionHref="/admin/website/notices"
-    />
-  );
+  return <ModulePage moduleKey="notices" />;
 }

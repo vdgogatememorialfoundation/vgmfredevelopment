@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import PageHeader from "@/components/common/PageHeader";
 import ClinicCard from "@/components/clinics/ClinicCard";
 import RequireAuth from "@/components/auth/RequireAuth";
-import { clinics } from "@/data/clinics";
+import { getClinics } from "@/lib/server/content";
 
 export const metadata: Metadata = {
   title: "Clinics",
@@ -10,7 +10,8 @@ export const metadata: Metadata = {
     "Vaidya Gogate Memorial Foundation clinics providing authentic Ayurveda consultation, therapy and community care across Maharashtra.",
 };
 
-export default function ClinicsPage() {
+export default async function ClinicsPage() {
+  const clinics = await getClinics();
   return (
     <RequireAuth message="Sign in to view clinic details and book consultations.">
       <main>

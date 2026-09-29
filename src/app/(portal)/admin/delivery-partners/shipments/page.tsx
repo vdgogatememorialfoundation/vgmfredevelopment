@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Delivery Partners"
-      title="Shipments"
-      description="View provider shipments."
-    />
-  );
+  return <ModulePage moduleKey="delivery-shipments" />;
 }

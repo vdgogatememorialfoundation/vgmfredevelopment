@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Shipments"
-      title="Manifests"
-      description="Manage shipment manifests."
-    />
-  );
+  return <ModulePage moduleKey="manifests" />;
 }

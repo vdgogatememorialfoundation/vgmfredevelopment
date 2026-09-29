@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Events"
-      title="Certificates"
-      description="Manage certificates associated with events."
-    />
-  );
+  return <ModulePage moduleKey="event-certificates" />;
 }

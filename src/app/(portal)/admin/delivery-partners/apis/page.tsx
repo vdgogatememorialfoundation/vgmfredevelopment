@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import ModulePage from "@/components/portal/ModulePage";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Delivery Partners"
-      title="APIs"
-      description="Manage courier APIs, credentials and webhooks."
-    />
-  );
+  return <ModulePage moduleKey="delivery-apis" />;
 }

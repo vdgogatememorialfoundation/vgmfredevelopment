@@ -2,11 +2,12 @@ import Link from "next/link";
 import type { Article } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
+import { ArrowRight, UserRound } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 export default function ArticleCard({ article }: { article: Article }) {
   return (
-    <article className="card flex flex-col overflow-hidden">
+    <article className="card group flex h-full flex-col overflow-hidden">
       {article.featured && (
         <MediaPlaceholder
           variant="article"
@@ -24,7 +25,7 @@ export default function ArticleCard({ article }: { article: Article }) {
           </time>
         </div>
 
-        <h3 className="mt-3 text-lg font-semibold text-text-primary leading-snug">
+        <h3 className="mt-3 font-display text-xl font-semibold text-text-primary leading-snug">
           <Link
             href={`/articles/${article.slug}`}
             className="transition hover:text-burgundy"
@@ -39,17 +40,17 @@ export default function ArticleCard({ article }: { article: Article }) {
 
         <div className="mt-auto pt-4 flex items-center justify-between text-sm">
           {article.author && (
-            <span className="text-text-muted">{article.author}</span>
+            <span className="flex items-center gap-1.5 text-text-muted">
+              <UserRound size={14} />
+              {article.author}
+            </span>
           )}
           <Link
             href={`/articles/${article.slug}`}
             className="inline-flex items-center gap-1.5 font-semibold text-burgundy transition hover:text-burgundy-dark"
           >
             Read
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14" />
-              <path d="M12 5l7 7-7 7" />
-            </svg>
+            <ArrowRight size={16} className="transition group-hover:translate-x-1" />
           </Link>
         </div>
       </div>

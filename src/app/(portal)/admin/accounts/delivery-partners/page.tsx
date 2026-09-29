@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+import AccountsManager from "@/components/portal/AccountsManager";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Accounts"
-      title="Delivery Partner Accounts"
-      description="Manage delivery partner accounts."
-    />
-  );
+  return <AccountsManager role="delivery" />;
 }
