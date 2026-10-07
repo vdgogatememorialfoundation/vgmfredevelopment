@@ -1,13 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { SiteCatalog } from "@/components/admin/SiteModules";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Videos"
-      description="Manage Foundation video content."
-      action="Add Video"
-      actionHref="/admin/website/videos"
-    />
-  );
+  return <SiteCatalog moduleId="videos" />;
 }

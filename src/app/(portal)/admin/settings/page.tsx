@@ -1,11 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { SettingsSection } from "@/components/admin/AdminSettings";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="General Settings"
-      description="Manage general Foundation settings."
-    />
-  );
+  return <SettingsSection />;
 }

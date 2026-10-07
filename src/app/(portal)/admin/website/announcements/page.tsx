@@ -1,13 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { SiteCatalog } from "@/components/admin/SiteModules";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Announcements"
-      description="Create and publish Foundation announcements."
-      action="Add Announcement"
-      actionHref="/admin/website/announcements"
-    />
-  );
+  return <SiteCatalog moduleId="announcements" />;
 }

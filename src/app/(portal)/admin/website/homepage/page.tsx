@@ -1,11 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { SiteModuleHub } from "@/components/admin/SiteModules";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Homepage"
-      description="Manage homepage sections, hero content, featured events and articles."
-    />
-  );
+  return <SiteModuleHub />;
 }

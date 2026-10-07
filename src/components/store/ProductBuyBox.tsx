@@ -6,12 +6,10 @@ import { useState } from "react";
 import {
   addToCart,
   getEstimatedDeliveryDate,
-  getDeliveryEstimateForPincode,
-  daysFromNow,
   isInWishlist,
   toggleWishlist,
 } from "@/lib/store";
-import { formatDate } from "@/lib/utils";
+import { checkPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
 import type { Book } from "@/types";
 
 export default function ProductBuyBox({ book }: { book: Book }) {
@@ -20,13 +18,12 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const [added, setAdded] = useState(false);
   const [wishlisted, setWishlisted] = useState(false);
   const [pincode, setPincode] = useState("");
-  const [estimate, setEstimate] = useState<
-    ReturnType<typeof getDeliveryEstimateForPincode> | null
-  >(null);
+  const [estimate, setEstimate] = useState<DeliveryQuote | null>(null);
   const [checked, setChecked] = useState(false);
 
-  const stock = book.stock ?? 0;
+  const stock = estimate?.stock ?? book.stock ?? 0;
   const inStock = stock > 0;
+  const pickup = getPickupLocation();
 
   const handleAddToCart = () => {
     addToCart(book.id, quantity);
@@ -39,9 +36,8 @@ export default function ProductBuyBox({ book }: { book: Book }) {
     router.push(`/checkout?buyNow=${book.id}&qty=${quantity}`);
   };
 
-  const checkPincode = () => {
-    const result = getDeliveryEstimateForPincode(pincode);
-    setEstimate(result);
+  const checkDelivery = () => {
+    setEstimate(checkPincode(pincode, book.id, quantity));
     setChecked(true);
   };
 
@@ -82,11 +78,10 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         <span className={inStock ? "text-emerald-700" : "text-red-600"}>
           {book.availability}
         </span>
-        <span className="text-text-muted">· {book.stock} copies available</span>
+        <span className="text-text-muted">· {stock} in stock at {estimate?.stockingLocation ?? "the Foundation store"}</span>
       </p>
 
-      {/* Delivery */}
-      <div className="mt-4 rounded-xl border border-border bg-warm-cream p-4 text-sm">
+      <div className="mt-4 rounded-xl border border-gold/40 bg-warm-cream p-4 text-sm">
         <div className="flex items-center gap-2 font-medium text-text-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 17h14V7H5z" />
@@ -95,33 +90,31 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             <circle cx="7" cy="17" r="1.5" />
             <circle cx="17" cy="17" r="1.5" />
           </svg>
-          Estimated delivery:
+          Expected delivery:
           <span className="font-semibold">
-            {estimate?.serviceable
-              ? `by ${estimate.to}`
-              : getEstimatedDeliveryDate(6)}
+            {estimate?.serviceable ? estimate.deliverBy : "Check your pincode"}
           </span>
         </div>
 
-        {/* Pincode checker */}
         <div className="mt-3 flex gap-2">
           <input
             type="text"
             inputMode="numeric"
             aria-label="Delivery pincode"
-            placeholder="Enter pincode for exact delivery dates"
+            placeholder="Enter pincode"
             value={pincode}
-            onChange={(e) =>
-              setPincode(e.target.value.replace(/\D/g, "").slice(0, 6))
-            }
+            onChange={(e) => {
+              setPincode(e.target.value.replace(/\D/g, "").slice(0, 6));
+              setChecked(false);
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") checkPincode();
+              if (e.key === "Enter") checkDelivery();
             }}
             className="input-field py-2.5"
           />
           <button
             type="button"
-            onClick={checkPincode}
+            onClick={checkDelivery}
             className="btn-secondary shrink-0 px-4 py-2.5 text-xs"
           >
             Check
@@ -129,54 +122,48 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         </div>
 
         {checked && estimate?.serviceable && (
-          <div className="mt-2 rounded-lg bg-white p-3 text-xs">
+          <div className="mt-3 rounded-lg bg-white p-3 text-xs">
             <p className="font-semibold text-text-primary">
-              Deliverable to {estimate.pincode} · arrives{" "}
-              {estimate.to}
+              Deliverable to {estimate.pincode} by {estimate.deliverBy} via {estimate.courier}
             </p>
-            <ul className="mt-1.5 space-y-1 text-text-muted">
+            <ul className="mt-2 space-y-1 text-text-muted">
+              <li>Order date: {estimate.orderDate}</li>
               <li>
-                Order placed today, {formatDate(daysFromNow(0))}
+                Processing and packing: {estimate.processingDays} business day
+                {estimate.processingDays === 1 ? "" : "s"} · dispatch {estimate.dispatchBy}
               </li>
               <li>
-                Order processing (packing & dispatch):{" "}
-                {estimate.processingDays} business day
-                {estimate.processingDays === 1 ? "" : "s"}
-              </li>
-              <li>
-                Shipping timeline: {estimate.transitDays} business day
+                {estimate.courier} transit: {estimate.transitDays} business day
                 {estimate.transitDays === 1 ? "" : "s"}
               </li>
             </ul>
+            {estimate.offers.length > 1 && (
+              <ul className="mt-2 space-y-1 border-t border-border pt-2 text-text-muted">
+                {estimate.offers.slice(0, 4).map((offer) => (
+                  <li key={offer.id}>
+                    {offer.name}: {offer.deliverBy}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {estimate.note && <p className="mt-2 text-text-muted">{estimate.note}</p>}
           </div>
         )}
         {checked && estimate && !estimate.serviceable && (
-          <p className="mt-2 text-xs text-red-600">{estimate.note}</p>
+          <p className="mt-2 text-xs text-red-700">{estimate.note}</p>
         )}
 
-        <p className="mt-3 text-xs text-text-muted">
-          {book.expectedDelivery} · Estimate calculated from order processing
-          time + shipping timeline.
-        </p>
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          <span className="font-medium text-text-primary">Availability:</span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            {book.deliveryAvailable ? "Home delivery" : "Delivery unavailable"}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-burgundy" />
-            {book.storePickupAvailable
-              ? "Store pickup available"
-              : "Store pickup unavailable"}
-          </span>
+        <div className="mt-3 rounded-lg border border-border bg-white p-3 text-xs">
+          <p className="font-semibold text-text-primary">Pickup from store</p>
+          {(estimate ? estimate.pickupAvailable : book.storePickupAvailable !== false) ? (
+            <p className="mt-1 text-text-muted">
+              Collect from {pickup.name}, {pickup.address}
+              {estimate ? ` · ready ${estimate.pickupReadyBy}, held until ${estimate.pickupHoldUntil}` : ""}.
+            </p>
+          ) : (
+            <p className="mt-1 text-text-muted">Store pickup is not offered for this product.</p>
+          )}
         </div>
-        {book.storePickupAvailable && (
-          <p className="mt-1 text-xs text-text-muted">
-            Pick up from Vaidya Gogate Memorial Foundation, Pune within 2–3
-            business days of order confirmation.
-          </p>
-        )}
       </div>
 
       {/* Quantity + actions */}

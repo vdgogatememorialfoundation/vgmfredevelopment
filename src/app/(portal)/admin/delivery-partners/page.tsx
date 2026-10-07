@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿import { CarrierDesk } from "@/components/admin/FulfillmentDesk";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Delivery Partners"
-      title="Partners"
-      description="Manage delivery and courier providers."
-    />
-  );
+  return <CarrierDesk mode="partners" />;
 }

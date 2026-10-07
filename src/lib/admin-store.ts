@@ -64,8 +64,11 @@ function defaultSettings(): SiteSettings {
     },
     processing: {
       daysToPack: 1,
-      daysToPickup: 2,
+      daysToPickup: 1,
       daysInTransit: 4,
+      orderCutoffHour: 14,
+      storePickupEnabled: true,
+      pickupHoldingDays: 3,
     },
     packagingOptions: [
       {

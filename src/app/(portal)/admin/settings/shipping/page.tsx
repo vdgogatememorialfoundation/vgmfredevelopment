@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿import { ShippingDesk } from "@/components/admin/FulfillmentDesk";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="Shipping"
-      description="Configure shipping settings."
-    />
-  );
+  return <ShippingDesk />;
 }

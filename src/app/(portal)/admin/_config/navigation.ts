@@ -23,6 +23,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Shipment Management", href: "/admin/commerce/shipments" },
       { label: "Inventory Management", href: "/admin/commerce/inventory" },
       { label: "Product Management", href: "/admin/commerce/products" },
+      { label: "Serviceability", href: "/admin/commerce/serviceability" },
       { label: "Sellers", href: "/admin/commerce/sellers" },
       { label: "Payments", href: "/admin/commerce/payments" },
     ],
@@ -50,6 +51,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Media Library", href: "/admin/website/media" },
       { label: "Articles", href: "/admin/articles" },
       { label: "Videos", href: "/admin/website/videos" },
+      { label: "Clinics", href: "/admin/website/clinics" },
     ],
   },
 

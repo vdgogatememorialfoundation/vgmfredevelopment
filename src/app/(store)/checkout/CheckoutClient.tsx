@@ -22,6 +22,7 @@ import {
   clearCart,
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
+import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
 import type { DeliveryAddress, OrderItem } from "@/types";
 
 type Step = "address" | "review" | "payment" | "success";
@@ -55,6 +56,7 @@ export default function CheckoutClient() {
     fullName: user ? `${user.firstName} ${user.lastName}`.trim() : "",
     email: user?.email ?? "",
   });
+  const [courierId, setCourierId] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
   const [orderId, setOrderId] = useState("");
@@ -83,6 +85,16 @@ export default function CheckoutClient() {
   const openBoxSupported =
     rows.length > 0 && rowBooksOpenBox.every(Boolean);
 
+  const quote: DeliveryQuote = checkCart(
+    rows.map(({ item }) => ({ bookId: item.bookId, quantity: item.quantity })),
+    address.pincode
+  );
+  const activeCourierId = quote.offers.some((offer) => offer.id === courierId)
+    ? courierId
+    : quote.offers[0]?.id ?? "";
+  const selectedOffer = quote.offers.find((offer) => offer.id === activeCourierId);
+  const pickupLocation = getPickupLocation();
+
   const orderItems: OrderItem[] = rows.map(({ item, book }) => ({
     bookId: book.id,
     title: book.title,
@@ -92,7 +104,13 @@ export default function CheckoutClient() {
     currency: "INR",
   }));
 
-  const totals = computeTotals(orderItems);
+  const priced = computeTotals(orderItems);
+  const shipping = deliveryMode === "store_pickup" ? 0 : priced.shipping;
+  const totals = {
+    ...priced,
+    shipping,
+    total: priced.subtotal + priced.gst + shipping,
+  };
 
   const update = (field: keyof DeliveryAddress, value: string) =>
     setAddress((prev) => ({ ...prev, [field]: value }));
@@ -111,6 +129,8 @@ export default function CheckoutClient() {
     }
     if (!/^\d{6}$/.test(address.pincode.trim()))
       return "Pincode must be a valid 6-digit number.";
+    if (quote && !quote.serviceable)
+      return quote.note || "Delivery is not available for this pincode.";
     if (!/^[+\d][\d\s-]{9,}$/.test(address.phone.trim()))
       return "Please enter a valid phone number.";
     return "";
@@ -121,7 +141,7 @@ export default function CheckoutClient() {
     setError("");
     window.setTimeout(() => {
       const id = generateOrderId();
-      const courierName = pickCourier(id);
+      const courierName = selectedOffer?.name ?? pickCourier(id);
       saveOrder({
         id,
         userId: user?.id ?? "guest",
@@ -140,7 +160,10 @@ export default function CheckoutClient() {
           deliveryMode === "delivery"
             ? { ...address, fullName: address.fullName.trim() }
             : { ...address, fullName: "Store pickup" },
-        eta: getEstimatedDeliveryDate(6),
+        eta:
+          deliveryMode === "store_pickup"
+            ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
+            : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
         trackingId:
           deliveryMode === "delivery"
             ? generateTrackingId(courierName)
@@ -221,19 +244,22 @@ export default function CheckoutClient() {
               </button>
               <button
                 type="button"
+                disabled={quote ? !quote.pickupAvailable : false}
                 onClick={() => setDeliveryMode("store_pickup")}
-                className={`rounded-xl border-2 p-4 text-left transition ${
+                className={`rounded-xl border-2 p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
                   deliveryMode === "store_pickup"
                     ? "border-burgundy bg-burgundy/5"
                     : "border-border hover:border-burgundy/40"
                 }`}
               >
                 <p className="text-sm font-semibold text-text-primary">
-                  🏬 Store Pickup
+                  Pickup from store
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
-                  Free • collect within 2–3 business days from the Foundation
-                  office, Pune
+                  Free
+                  {quote?.pickupAvailable
+                    ? ` · ready ${quote.pickupReadyBy}`
+                    : " · unavailable for this cart"}
                 </p>
               </button>
             </div>
@@ -340,6 +366,48 @@ export default function CheckoutClient() {
                   </div>
                 </div>
 
+                {quote && quote.offers.length > 0 && (
+                  <fieldset className="mt-5">
+                    <legend className="mb-2 text-sm font-semibold text-text-primary">
+                      Delivery partner
+                    </legend>
+                    <div className="grid gap-2">
+                      {quote.offers.map((offer) => (
+                        <label
+                          key={offer.id}
+                          className={`flex cursor-pointer items-start justify-between gap-3 rounded-xl border px-3 py-3 text-sm ${
+                            activeCourierId === offer.id
+                              ? "border-burgundy bg-burgundy/5"
+                              : "border-border"
+                          }`}
+                        >
+                          <span className="flex items-start gap-2">
+                            <input
+                              type="radio"
+                              name="courier"
+                              className="mt-1 accent-burgundy"
+                              checked={activeCourierId === offer.id}
+                              onChange={() => setCourierId(offer.id)}
+                            />
+                            <span>
+                              <span className="font-semibold text-text-primary">{offer.name}</span>
+                              <span className="mt-0.5 block text-xs text-text-muted">
+                                {offer.transitDays === 0 ? "Same day after dispatch" : `${offer.transitDays} business day transit`}
+                              </span>
+                            </span>
+                          </span>
+                          <span className="text-right text-xs font-semibold text-emerald-700">
+                            by {offer.deliverBy}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
+                {quote && !quote.serviceable && /^\d{6}$/.test(address.pincode) && (
+                  <p className="mt-3 text-sm text-red-700">{quote.note}</p>
+                )}
+
                 {openBoxSupported && (
                   <label className="mt-5 flex items-start gap-3 text-sm">
                     <input
@@ -361,14 +429,16 @@ export default function CheckoutClient() {
             )}
 
             {deliveryMode === "store_pickup" && (
-              <div className="rounded-xl border border-border bg-warm-cream p-5 text-sm">
-                <p className="font-semibold text-text-primary">
-                  Vaidya Gogate Memorial Foundation Office
-                </p>
-                <p className="mt-1 text-text-muted">
-                  Pune, Maharashtra · get directions via WhatsApp when your
-                  order is ready for pickup.
-                </p>
+              <div className="rounded-xl border border-gold/40 bg-warm-cream p-5 text-sm">
+                <p className="font-semibold text-text-primary">Pickup from store</p>
+                <p className="mt-1 text-text-primary">{pickupLocation.name}</p>
+                <p className="mt-1 text-text-muted">{pickupLocation.address}</p>
+                <p className="mt-1 text-text-muted">{pickupLocation.phone}</p>
+                {quote?.pickupAvailable && (
+                  <p className="mt-2 font-medium text-emerald-700">
+                    Ready {quote.pickupReadyBy} · held until {quote.pickupHoldUntil}
+                  </p>
+                )}
               </div>
             )}
 
@@ -519,14 +589,14 @@ export default function CheckoutClient() {
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-muted">Expected delivery</dt>
                     <dd className="text-right font-medium text-emerald-700">
-                      {getEstimatedDeliveryDate(6)}
+                      {selectedOffer?.deliverBy ?? quote?.deliverBy} via {selectedOffer?.name ?? quote?.courier}
                     </dd>
                   </div>
                 </dl>
               ) : (
                 <p className="text-sm text-text-muted">
-                  Store pickup at the Foundation office, Pune. You will be
-                  notified via WhatsApp when your order is ready.
+                  Pickup from store at {pickupLocation.name}. Ready {quote?.pickupReadyBy}. We will
+                  notify you when the order can be collected.
                 </p>
               )}
             </div>

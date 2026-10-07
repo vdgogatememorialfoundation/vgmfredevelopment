@@ -1,13 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { SiteCatalog } from "@/components/admin/SiteModules";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Notice Board"
-      description="Manage official notices."
-      action="Add Notice"
-      actionHref="/admin/website/notices"
-    />
-  );
+  return <SiteCatalog moduleId="notices" />;
 }

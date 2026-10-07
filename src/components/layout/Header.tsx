@@ -124,7 +124,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-white/95 backdrop-blur">
       {/* Top bar */}
-      <div className="bg-burgundy text-white">
+      <div className="border-b-2 border-gold bg-burgundy text-white">
         <div className="container flex items-center justify-between py-2 text-xs">
           <p className="hidden gap-4 sm:flex">
             <a

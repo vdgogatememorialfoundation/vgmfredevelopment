@@ -1,14 +1,17 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #0284C7;
-  --color-burgundy-dark: #0369A1;
-  --color-warm-cream: #EFF6FF;
-  --color-background: #FFFFFF;
-  --color-text-primary: #0F172A;
-  --color-text-muted: #5B6B7B;
-  --color-border: #DBEAFE;
-  --color-white: #FFFFFF;
+  --color-burgundy: #1E4636;
+  --color-burgundy-dark: #143328;
+  --color-gold: #A6843D;
+  --color-saffron: #C47B2B;
+  --color-warm-cream: #F4EFE4;
+  --color-background: #FBF8F2;
+  --color-text-primary: #1C1712;
+  --color-text-muted: #6A5E52;
+  --color-border: #E4D8C4;
+  --color-white: #FFFcf7;
+  --font-serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, "Times New Roman", serif;
 }
 
 :root {
@@ -61,7 +64,7 @@ body {
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-6 py-3 font-semibold text-white transition hover:bg-burgundy-dark;
+    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-burgundy-dark;
   }
 
   .btn-secondary {
@@ -81,19 +84,19 @@ body {
   }
 
   .heading-1 {
-    @apply text-4xl font-bold tracking-tight text-text-primary sm:text-5xl lg:text-6xl;
+    @apply font-serif text-4xl font-bold tracking-tight text-text-primary sm:text-5xl lg:text-6xl;
   }
 
   .heading-2 {
-    @apply text-3xl font-bold tracking-tight text-text-primary sm:text-4xl;
+    @apply font-serif text-3xl font-bold tracking-tight text-text-primary sm:text-4xl;
   }
 
   .heading-3 {
-    @apply text-2xl font-bold tracking-tight text-text-primary sm:text-3xl;
+    @apply font-serif text-2xl font-bold tracking-tight text-text-primary sm:text-3xl;
   }
 
   .heading-4 {
-    @apply text-xl font-bold tracking-tight text-text-primary;
+    @apply font-serif text-xl font-bold tracking-tight text-text-primary;
   }
 
   .eyebrow {

@@ -1,13 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { SiteCatalog } from "@/components/admin/SiteModules";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Media Library"
-      description="Manage website images, PDFs and documents."
-      action="Upload Media"
-      actionHref="/admin/website/media"
-    />
-  );
+  return <SiteCatalog moduleId="flyers" />;
 }

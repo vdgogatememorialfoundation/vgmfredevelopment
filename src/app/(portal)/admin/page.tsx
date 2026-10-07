@@ -33,6 +33,21 @@ const cards = [
     description: "Support tickets and contact enquiries.",
     href: "/admin/support",
   },
+  {
+    title: "Delivery partners",
+    description: "Shiprocket, Nimbuspost, iThink, Tookan, Pidge, Shadowfax and store pickup.",
+    href: "/admin/delivery-partners",
+  },
+  {
+    title: "Serviceability",
+    description: "Per-product delivery, stocking and pincode rules used on the shop.",
+    href: "/admin/commerce/serviceability",
+  },
+  {
+    title: "Processing timelines",
+    description: "Order cutoff, packing and courier handoff that set the delivery date.",
+    href: "/admin/settings/timelines",
+  },
 ]
 
 export default function AdminDashboard() {

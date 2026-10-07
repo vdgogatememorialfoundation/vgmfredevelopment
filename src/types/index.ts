@@ -370,6 +370,10 @@ export interface ProcessingTimeline {
   daysToPack: number;
   daysToPickup: number;
   daysInTransit: number;
+  /** Hour (0–23) after which a new order starts processing the next business day. */
+  orderCutoffHour?: number;
+  storePickupEnabled?: boolean;
+  pickupHoldingDays?: number;
 }
 
 export interface PackagingOption {

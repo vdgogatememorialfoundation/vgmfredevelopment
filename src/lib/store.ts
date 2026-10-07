@@ -10,6 +10,7 @@ import { storeConfig } from "@/lib/constants";
 import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";
 import { getLiveBook } from "@/lib/product-data";
+import { checkPincode } from "@/lib/fulfillment";
 
 const CART_KEY = "vgmf_cart";
 const ORDERS_KEY = "vgmf_orders";
@@ -145,64 +146,26 @@ export interface DeliveryEstimate {
 }
 
 /**
- * Simulates Shiprocket serviceability + transit lookup for a pincode.
- * Transit is derived from the postal zone of the pincode's first digit.
+ * Expected delivery from the admin processing timeline, product rules,
+ * and the courier partners enabled for this pincode.
  */
 export function getDeliveryEstimateForPincode(
-  pincode: string
+  pincode: string,
+  bookId?: string
 ): DeliveryEstimate {
-  const normalized = pincode.replace(/\D/g, "");
-  const processingDays = storeConfig.orderPreparationDays;
-
-  if (!/^\d{6}$/.test(normalized)) {
-    return {
-      serviceable: false,
-      pincode: normalized,
-      processingDays,
-      transitDays: 0,
-      totalDaysMin: 0,
-      totalDaysMax: 0,
-      from: "",
-      to: "",
-      courier: storeConfig.shippingGateway,
-      note: "Enter a valid 6-digit pincode to check delivery dates.",
-    };
-  }
-
-  const zone = Number(normalized[0]);
-  if (zone === 0 || zone === 9) {
-    return {
-      serviceable: false,
-      pincode: normalized,
-      processingDays,
-      transitDays: 0,
-      totalDaysMin: 0,
-      totalDaysMax: 0,
-      from: "",
-      to: "",
-      courier: storeConfig.shippingGateway,
-      note: "Shipping to this pincode is currently unavailable.",
-    };
-  }
-
-  // Simulated Shiprocket transit (business days) by postal zone.
-  const transit =
-    zone === 1 ? 2 : zone === 2 ? 3 : zone <= 4 ? 4 : zone <= 6 ? 5 : 6;
-
-  const totalDaysMin = processingDays + transit;
-  const totalDaysMax = totalDaysMin + 2;
-
+  const quote = checkPincode(pincode, bookId);
+  const processingDays = quote.processingDays + quote.handoffDays;
   return {
-    serviceable: true,
-    pincode: normalized,
-    processingDays,
-    transitDays: transit,
-    totalDaysMin,
-    totalDaysMax,
-    from: formatDate(daysFromNow(totalDaysMin)),
-    to: formatDate(daysFromNow(totalDaysMax)),
-    courier: storeConfig.shippingGateway,
-    note: "Deliveries originate from our Pune facility.",
+    serviceable: quote.serviceable,
+    pincode: quote.pincode,
+    processingDays: quote.processingDays,
+    transitDays: quote.transitDays,
+    totalDaysMin: processingDays + quote.transitDays,
+    totalDaysMax: processingDays + quote.transitDays + (quote.serviceable ? 1 : 0),
+    from: quote.deliverFrom,
+    to: quote.deliverBy,
+    courier: quote.courier ?? storeConfig.shippingGateway,
+    note: quote.note,
   };
 }
 

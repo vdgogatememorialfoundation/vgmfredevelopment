@@ -1,13 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { SiteCatalog } from "@/components/admin/SiteModules";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Website & CMS"
-      title="Banners"
-      description="Manage website banners."
-      action="Add Banner"
-      actionHref="/admin/website/banners"
-    />
-  );
+  return <SiteCatalog moduleId="flyers" />;
 }
