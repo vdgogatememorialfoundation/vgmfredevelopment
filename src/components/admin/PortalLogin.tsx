@@ -1,5 +1,6 @@
 "use client";
 
+import SiteLogo from "@/components/common/SiteLogo";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
@@ -140,8 +141,8 @@ function Card({
     <main className="flex min-h-screen items-center justify-center bg-warm-cream/40 px-5">
       <div className="w-full max-w-md">
         <div className="rounded-3xl border border-border bg-white p-8 shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-burgundy text-xs font-bold text-white">
-            VGMF
+          <div className="flex justify-center">
+            <SiteLogo size={56} />
           </div>
           <p className="mt-4 text-center text-xs font-bold uppercase tracking-[0.18em] text-burgundy">
             {portal === "admin" ? "Admin console" : portal === "staff" ? "Staff console" : "Seller portal"}

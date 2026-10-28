@@ -14,6 +14,7 @@ import {
   getEstimatedDeliveryDate,
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
+import { useOrderSettings } from "@/lib/use-cms";
 
 export default function CartPage() {
   const { items } = useCart();
@@ -31,7 +32,8 @@ export default function CartPage() {
     }))
   );
 
-  const shippingFree = totals.subtotal >= storeConfig.freeShippingThreshold;
+  const orderSettings = useOrderSettings();
+  const shippingFree = orderSettings.shippingFeeMode !== "free_above" || totals.subtotal >= orderSettings.freeAbove;
 
   return (
     <main>
@@ -157,10 +159,12 @@ export default function CartPage() {
                 Returns & cancellation
               </p>
               <p className="mt-1">
-                You can cancel within {storeConfig.cancellationWindowDays} day
-                of placing your order. Returnable within{" "}
-                {storeConfig.returnDays} days of delivery for a refund or
-                replacement.
+                {orderSettings.cancellation.enabled
+                  ? `You can cancel until the order is ${orderSettings.cancellation.allowedUntil.toLowerCase()}. `
+                  : "Orders cannot be cancelled once placed. "}
+                {orderSettings.returns.enabled
+                  ? `Returnable within ${orderSettings.returns.windowDays} days of delivery for a refund${orderSettings.returns.replacementAllowed ? " or replacement" : ""}.`
+                  : "Returns are not accepted."}
               </p>
             </div>
           </div>
@@ -211,7 +215,7 @@ export default function CartPage() {
 
               {!shippingFree && totals.subtotal > 0 && (
                 <p className="mt-3 rounded-lg bg-warm-cream p-3 text-xs text-text-muted">
-                  Add {formatPrice(storeConfig.freeShippingThreshold - totals.subtotal)}{" "}
+                  Add {formatPrice(orderSettings.freeAbove - totals.subtotal)}{" "}
                   more to get FREE shipping.
                 </p>
               )}

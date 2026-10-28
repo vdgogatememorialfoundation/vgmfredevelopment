@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { defaultOrderSettings, getOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { articles as seededArticles } from "@/data/articles";
 import { announcements as seededAnnouncements } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
@@ -129,5 +130,22 @@ export function useSiteSettings(): SiteSettings | null {
       return settingsValue;
     },
     () => null
+  );
+}
+
+let orderSettingsRaw: string | null | undefined;
+let orderSettingsValue: OrderSettings = defaultOrderSettings;
+
+export function useOrderSettings(): OrderSettings {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = window.localStorage.getItem("vgmf_order_settings");
+      if (raw === orderSettingsRaw) return orderSettingsValue;
+      orderSettingsRaw = raw;
+      orderSettingsValue = getOrderSettings();
+      return orderSettingsValue;
+    },
+    () => defaultOrderSettings
   );
 }

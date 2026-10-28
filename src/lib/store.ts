@@ -11,7 +11,7 @@ import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";
 import { getLiveBook } from "@/lib/product-data";
 import { checkPincode } from "@/lib/fulfillment";
-import { getOrderSettings } from "@/lib/integrations";
+import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 
 const CART_KEY = "vgmf_cart";
 const ORDERS_KEY = "vgmf_orders";
@@ -105,10 +105,8 @@ export function computeTotals(
   );
   const discount = Math.max(0, mrp - subtotal);
   const gst = Math.round(subtotal * storeConfig.gstRate);
-  const shipping =
-    subtotal === 0 || subtotal >= storeConfig.freeShippingThreshold
-      ? 0
-      : storeConfig.shippingFee;
+  const units = items.reduce((sum, item) => sum + item.quantity, 0);
+  const shipping = subtotal === 0 ? 0 : shippingFeeFor(subtotal, units, undefined, getOrderSettings());
   const total = subtotal + gst + shipping;
   return { mrp, subtotal, discount, gst, shipping, total };
 }

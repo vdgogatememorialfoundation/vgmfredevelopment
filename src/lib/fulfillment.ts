@@ -1,4 +1,5 @@
 import { books } from "@/data/books";
+import { getIntegrations } from "@/lib/integrations";
 import type { Book, ProcessingTimeline, ProductOverride, SiteSettings } from "@/types";
 import { formatDate } from "@/lib/utils";
 
@@ -413,6 +414,10 @@ export function saveProductFulfillment(profile: ProductFulfillment) {
 }
 
 export function getOriginPincode() {
+  if (typeof window !== "undefined" && window.localStorage.getItem("vgmf_integrations")) {
+    const pickup = getIntegrations().shipping.pickup.pincode.replace(/\D/g, "");
+    if (pickup.length === 6) return pickup;
+  }
   const settings = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
   const active = settings?.fulfillmentLocations?.find((location) => location.active && location.pincode);
   return (active?.pincode || "411005").replace(/\D/g, "").slice(0, 6);

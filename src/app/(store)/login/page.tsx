@@ -1,3 +1,4 @@
+import SiteLogo from "@/components/common/SiteLogo";
 import type { Metadata } from "next";
 import Link from "next/link";
 import SignupFlow from "@/components/account/SignupFlow";
@@ -23,9 +24,7 @@ export default async function LoginPage({
         {/* Left panel */}
         <section className="hidden flex-col justify-center border-r border-border bg-warm-cream px-10 py-16 text-text-primary lg:flex xl:px-20">
           <div className="max-w-lg">
-            <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full border border-burgundy/30 bg-white">
-              <span className="text-xs font-bold text-burgundy">VGMF</span>
-            </div>
+            <SiteLogo size={64} className="mb-8" />
 
             <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy">
               Vaidya Gogate Memorial Foundation

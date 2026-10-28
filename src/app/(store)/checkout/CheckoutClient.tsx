@@ -23,7 +23,14 @@ import {
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
 import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
-import type { DeliveryAddress, OrderItem } from "@/types";
+import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
+import { fetchCourierRates } from "@/lib/shipping-client";
+import { payWithRazorpay, paymentNotice } from "@/lib/payments-client";
+import { sendEmail } from "@/lib/admin-store";
+import { useOrderSettings } from "@/lib/use-cms";
+import type { CourierRate, DeliveryAddress, OrderItem } from "@/types";
+
+type CourierOption = CourierRate & { key: string; deliverBy: string };
 
 type Step = "address" | "review" | "payment" | "success";
 
@@ -46,10 +53,19 @@ export default function CheckoutClient() {
   const { user } = useAuth();
   const { items } = useCart();
 
+  const orderSettings = useOrderSettings();
   const [step, setStep] = useState<Step>("address");
-  const [deliveryMode, setDeliveryMode] = useState<"delivery" | "store_pickup">(
+  const [chosenMode, setDeliveryMode] = useState<"delivery" | "store_pickup">(
     "delivery"
   );
+  const deliveryMode = !orderSettings.deliveryEnabled
+    ? "store_pickup"
+    : !orderSettings.pickupEnabled
+      ? "delivery"
+      : chosenMode;
+  const [payMethod, setPayMethod] = useState<"online" | "cod">("online");
+  const [liveRates, setLiveRates] = useState<{ pincode: string; rates: CourierRate[] } | null>(null);
+  const [loadingRates, setLoadingRates] = useState(false);
   const [openBox, setOpenBox] = useState(true);
   const [address, setAddress] = useState<DeliveryAddress>({
     ...EMPTY_ADDRESS,
@@ -89,10 +105,59 @@ export default function CheckoutClient() {
     rows.map(({ item }) => ({ bookId: item.bookId, quantity: item.quantity })),
     address.pincode
   );
-  const activeCourierId = quote.offers.some((offer) => offer.id === courierId)
-    ? courierId
-    : quote.offers[0]?.id ?? "";
-  const selectedOffer = quote.offers.find((offer) => offer.id === activeCourierId);
+  const pincodeValid = /^\d{6}$/.test(address.pincode);
+  const cartKey = rows.map(({ item }) => `${item.bookId}x${item.quantity}`).join(",");
+  const cartValue = rows.reduce((sum, { item, book }) => sum + book.price * item.quantity, 0);
+  const cartUnits = rows.reduce((sum, { item }) => sum + item.quantity, 0);
+
+  useEffect(() => {
+    if (deliveryMode !== "delivery" || !pincodeValid || !orderSettings.showCourierChoice) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setLoadingRates(true);
+      try {
+        const result = await fetchCourierRates({
+          deliveryPincode: address.pincode,
+          weightKg: Math.max(0.5, cartUnits * 0.5),
+          declaredValue: cartValue,
+          bookIds: cartKey.split(",").map((part) => part.split("x")[0]),
+        });
+        if (!cancelled) setLiveRates(result.live ? { pincode: address.pincode, rates: result.rates } : null);
+      } catch {
+        if (!cancelled) setLiveRates(null);
+      } finally {
+        if (!cancelled) setLoadingRates(false);
+      }
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [address.pincode, pincodeValid, deliveryMode, orderSettings.showCourierChoice, cartKey, cartValue, cartUnits]);
+
+  const courierOptions: CourierOption[] =
+    liveRates && liveRates.pincode === address.pincode && liveRates.rates.length
+      ? liveRates.rates.map((rate) => ({
+          ...rate,
+          key: `${rate.provider}:${rate.courierId}`,
+          deliverBy: getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
+        }))
+      : quote.offers.map((offer) => ({
+          provider: "local",
+          courierId: offer.id,
+          courierName: offer.name,
+          rate: offer.charge,
+          etaDays: offer.transitDays,
+          live: false,
+          key: `local:${offer.id}`,
+          deliverBy: offer.deliverBy,
+        }));
+  const selectedCourier =
+    courierOptions.find((option) => option.key === courierId) ?? courierOptions[0];
+  const activeCourierId = selectedCourier?.key ?? "";
+  const selectedOffer = selectedCourier
+    ? { name: selectedCourier.courierName, deliverBy: selectedCourier.deliverBy }
+    : undefined;
   const pickupLocation = getPickupLocation();
 
   const orderItems: OrderItem[] = rows.map(({ item, book }) => ({
@@ -105,11 +170,17 @@ export default function CheckoutClient() {
   }));
 
   const priced = computeTotals(orderItems);
-  const shipping = deliveryMode === "store_pickup" ? 0 : priced.shipping;
+  const itemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
+  const codSelected = payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery";
+  const codFee = codSelected ? orderSettings.codFee : 0;
+  const shipping =
+    deliveryMode === "store_pickup"
+      ? 0
+      : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
   const totals = {
     ...priced,
-    shipping,
-    total: priced.subtotal + priced.gst + shipping,
+    shipping: shipping + codFee,
+    total: priced.subtotal + priced.gst + shipping + codFee,
   };
 
   const update = (field: keyof DeliveryAddress, value: string) =>
@@ -136,48 +207,103 @@ export default function CheckoutClient() {
     return "";
   };
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     setProcessing(true);
     setError("");
-    window.setTimeout(() => {
-      const id = generateOrderId();
-      const courierName = selectedOffer?.name ?? pickCourier(id);
-      saveOrder({
-        id,
-        userId: user?.id ?? "guest",
-        date: new Date().toISOString(),
-        items: orderItems,
-        subtotal: totals.subtotal,
-        discount: totals.discount,
-        gst: totals.gst,
-        shipping: totals.shipping,
-        total: totals.total,
-        currency: "INR",
-        paymentStatus: "Paid",
-        status: "Ordered",
-        deliveryMode,
-        deliveryAddress:
-          deliveryMode === "delivery"
-            ? { ...address, fullName: address.fullName.trim() }
-            : { ...address, fullName: "Store pickup" },
-        eta:
-          deliveryMode === "store_pickup"
-            ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
-            : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
-        trackingId:
-          deliveryMode === "delivery"
-            ? generateTrackingId(courierName)
-            : undefined,
-        courierName: deliveryMode === "delivery" ? courierName : undefined,
-        openBoxDelivery:
-          deliveryMode === "delivery" && openBoxSupported ? openBox : false,
-        returnableDays: storeConfig.returnDays,
+    const id = generateOrderId();
+    let payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean };
+    if (codSelected) {
+      payment = { method: "Cash on delivery", paid: false };
+    } else {
+      try {
+        const outcome = await payWithRazorpay({
+          amount: totals.total,
+          receipt: id,
+          name: address.fullName || (user ? `${user.firstName} ${user.lastName}` : "Customer"),
+          email: address.email || user?.email,
+          phone: address.phone,
+          description: `VGMF order ${id}`,
+        });
+        payment = {
+          paymentId: outcome.paymentId,
+          razorpayOrderId: outcome.kind === "paid" ? outcome.razorpayOrderId : undefined,
+          method: outcome.live ? "Razorpay" : "Razorpay (demo)",
+          paid: true,
+        };
+      } catch (problem) {
+        setError(problem instanceof Error ? problem.message : "Payment did not complete.");
+        setProcessing(false);
+        return;
+      }
+    }
+    const courierName = selectedCourier?.courierName ?? pickCourier(id);
+    const now = new Date().toISOString();
+    const deliveryAddress =
+      deliveryMode === "delivery"
+        ? { ...address, fullName: address.fullName.trim() }
+        : { ...address, fullName: address.fullName.trim() || "Store pickup" };
+    saveOrder({
+      id,
+      userId: user?.id ?? "guest",
+      date: now,
+      items: orderItems,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      gst: totals.gst,
+      shipping: totals.shipping,
+      total: totals.total,
+      currency: "INR",
+      paymentStatus: payment.paid ? "Paid" : "Pending",
+      paymentMethod: payment.method,
+      paidAt: payment.paid ? now : undefined,
+      razorpayPaymentId: payment.paymentId,
+      razorpayOrderId: payment.razorpayOrderId,
+      status: "Ordered",
+      deliveryMode,
+      deliveryAddress,
+      eta:
+        deliveryMode === "store_pickup"
+          ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
+          : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
+      trackingId:
+        deliveryMode === "delivery"
+          ? generateTrackingId(courierName)
+          : undefined,
+      courierName: deliveryMode === "delivery" ? courierName : undefined,
+      courierChoice:
+        deliveryMode === "delivery" && selectedCourier
+          ? {
+              provider: selectedCourier.provider,
+              courierId: selectedCourier.courierId,
+              courierName: selectedCourier.courierName,
+              rate: selectedCourier.rate,
+              etaDays: selectedCourier.etaDays,
+              live: selectedCourier.live,
+            }
+          : undefined,
+      openBoxDelivery:
+        deliveryMode === "delivery" && openBoxSupported ? openBox : false,
+      returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
+      createdBy: user?.email ?? "guest checkout",
+      history: [
+        { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
+      ],
+    });
+    if (deliveryAddress.email) {
+      sendEmail({
+        to: deliveryAddress.email,
+        phone: deliveryAddress.phone,
+        name: deliveryAddress.fullName,
+        params: [deliveryAddress.fullName, id, `₹${totals.total}`],
+        subject: `Order ${id} placed`,
+        template: "order-placed",
+        body: `Thank you for your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${deliveryMode === "delivery" ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""} via ${courierName}.` : `Pickup from ${pickupLocation.name}.`}\n\n– VGMF Store`,
       });
-      setOrderId(id);
-      clearCart();
-      setStep("success");
-      setProcessing(false);
-    }, 1400);
+    }
+    setOrderId(id);
+    clearCart();
+    setStep("success");
+    setProcessing(false);
   };
 
   const canReview = rows.length > 0;
@@ -224,6 +350,7 @@ export default function CheckoutClient() {
             <h2 className="heading-3 mb-5">Delivery Details</h2>
 
             <div className="mb-6 grid gap-3 sm:grid-cols-2">
+              {orderSettings.deliveryEnabled && (
               <button
                 type="button"
                 onClick={() => setDeliveryMode("delivery")}
@@ -237,11 +364,11 @@ export default function CheckoutClient() {
                   📦 Home Delivery
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
-                  {storeConfig.shippingFee === 0
-                    ? "Free shipping"
-                    : `Shipping ${formatPrice(storeConfig.shippingFee)} · free above ${formatPrice(storeConfig.freeShippingThreshold)}`}
+                  {shippingFeeSummary(orderSettings)}
                 </p>
               </button>
+              )}
+              {orderSettings.pickupEnabled && (
               <button
                 type="button"
                 disabled={quote ? !quote.pickupAvailable : false}
@@ -262,6 +389,7 @@ export default function CheckoutClient() {
                     : " · unavailable for this cart"}
                 </p>
               </button>
+              )}
             </div>
 
             {deliveryMode === "delivery" && (
@@ -366,17 +494,17 @@ export default function CheckoutClient() {
                   </div>
                 </div>
 
-                {quote && quote.offers.length > 0 && (
+                {orderSettings.showCourierChoice && courierOptions.length > 0 && (
                   <fieldset className="mt-5">
                     <legend className="mb-2 text-sm font-semibold text-text-primary">
-                      Delivery partner
+                      Choose your delivery partner {loadingRates && <span className="text-xs font-normal text-text-muted">· checking live rates…</span>}
                     </legend>
                     <div className="grid gap-2">
-                      {quote.offers.map((offer) => (
+                      {courierOptions.map((offer) => (
                         <label
-                          key={offer.id}
+                          key={offer.key}
                           className={`flex cursor-pointer items-start justify-between gap-3 rounded-xl border px-3 py-3 text-sm ${
-                            activeCourierId === offer.id
+                            activeCourierId === offer.key
                               ? "border-burgundy bg-burgundy/5"
                               : "border-border"
                           }`}
@@ -386,18 +514,21 @@ export default function CheckoutClient() {
                               type="radio"
                               name="courier"
                               className="mt-1 accent-burgundy"
-                              checked={activeCourierId === offer.id}
-                              onChange={() => setCourierId(offer.id)}
+                              checked={activeCourierId === offer.key}
+                              onChange={() => setCourierId(offer.key)}
                             />
                             <span>
-                              <span className="font-semibold text-text-primary">{offer.name}</span>
+                              <span className="font-semibold text-text-primary">{offer.courierName}</span>
                               <span className="mt-0.5 block text-xs text-text-muted">
-                                {offer.transitDays === 0 ? "Same day after dispatch" : `${offer.transitDays} business day transit`}
+                                {offer.etaDays === 0 ? "Same day after dispatch" : `${offer.etaDays} business day transit`}
                               </span>
                             </span>
                           </span>
-                          <span className="text-right text-xs font-semibold text-emerald-700">
-                            by {offer.deliverBy}
+                          <span className="text-right text-xs">
+                            <span className="block font-semibold text-emerald-700">by {offer.deliverBy}</span>
+                            {orderSettings.shippingFeeMode === "courier_rate" && (
+                              <span className="block font-semibold text-text-primary">{formatPrice(Math.round(offer.rate))}</span>
+                            )}
                           </span>
                         </label>
                       ))}
@@ -606,9 +737,12 @@ export default function CheckoutClient() {
                 Returns & cancellation
               </p>
               <p className="mt-1">
-                You can cancel this order within {storeConfig.cancellationWindowDays} day
-                of placing it. Returnable within {storeConfig.returnDays} days of
-                delivery for a refund or replacement.
+                {orderSettings.cancellation.enabled
+                  ? `You can cancel until the order is ${orderSettings.cancellation.allowedUntil.toLowerCase()}${orderSettings.cancellation.windowHours > 0 ? ` (within ${orderSettings.cancellation.windowHours} hours)` : ""}${orderSettings.cancellation.fee ? `, cancellation fee ${formatPrice(orderSettings.cancellation.fee)}` : ""}. `
+                  : "Orders cannot be cancelled once placed. "}
+                {orderSettings.returns.enabled
+                  ? `Returnable within ${orderSettings.returns.windowDays} days of delivery for a refund${orderSettings.returns.replacementAllowed ? " or replacement" : ""}${orderSettings.returns.pickupCharge ? ` (return pickup ${formatPrice(orderSettings.returns.pickupCharge)})` : ""}.`
+                  : "Returns are not accepted for this store."}
                 {openBoxSupported &&
                   " Open-box delivery confirmation is required for returns."}
               </p>
@@ -657,21 +791,22 @@ export default function CheckoutClient() {
             </div>
 
             <div className="mt-5 grid gap-3">
-              {["upi", "card", "netbanking"].map((method) => (
-                <label
-                  key={method}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm"
-                >
-                  <input type="radio" name="payment-method" defaultChecked={method === "upi"} className="accent-burgundy" />
-                  <span className="font-medium capitalize text-text-primary">
-                    {method === "upi"
-                      ? "UPI / GPay / PhonePe"
-                      : method === "card"
-                        ? "Credit / Debit Card"
-                        : "Net Banking"}
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${payMethod === "online" || !codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
+                <input type="radio" name="payment-method" checked={!codSelected} onChange={() => setPayMethod("online")} className="mt-1 accent-burgundy" />
+                <span>
+                  <span className="block font-semibold text-text-primary">Pay online</span>
+                  <span className="block text-xs text-text-muted">UPI, cards, net banking and wallets through Razorpay</span>
+                </span>
+              </label>
+              {orderSettings.codEnabled && deliveryMode === "delivery" && (
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
+                  <input type="radio" name="payment-method" checked={codSelected} onChange={() => setPayMethod("cod")} className="mt-1 accent-burgundy" />
+                  <span>
+                    <span className="block font-semibold text-text-primary">Cash on delivery</span>
+                    <span className="block text-xs text-text-muted">{orderSettings.codFee ? `${formatPrice(orderSettings.codFee)} COD fee` : "No extra fee"}</span>
                   </span>
                 </label>
-              ))}
+              )}
             </div>
 
             {error && (
@@ -686,13 +821,14 @@ export default function CheckoutClient() {
               disabled={processing}
               className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {processing ? "Processing payment via Razorpay…" : `Pay ${formatPrice(totals.total)} via Razorpay`}
+              {processing
+                ? codSelected ? "Placing order…" : "Waiting for Razorpay…"
+                : codSelected ? `Place order · pay ${formatPrice(totals.total)} on delivery` : `Pay ${formatPrice(totals.total)} via Razorpay`}
             </button>
 
-            <p className="mt-4 text-center text-xs text-text-muted">
-              Demo payment simulation — Razorpay live keys will be connected
-              at launch. You will receive an order ID once payment succeeds.
-            </p>
+            {paymentNotice() && !codSelected && (
+              <p className="mt-4 text-center text-xs text-text-muted">{paymentNotice()}</p>
+            )}
 
             <button
               type="button"
@@ -715,7 +851,7 @@ export default function CheckoutClient() {
             </div>
             <h2 className="heading-2 mt-5">Order placed successfully!</h2>
             <p className="mt-2 text-sm text-text-muted">
-              Your payment was received. Track your order anytime from My Orders.
+              {codSelected ? "Pay in cash when the order arrives." : "Your payment was received."} Track your order anytime from My Orders.
             </p>
             <div className="mx-auto mt-6 inline-flex flex-col items-center rounded-2xl border border-emerald-200 bg-white px-8 py-5">
               <p className="text-xs uppercase tracking-[0.14em] text-text-muted">
@@ -793,9 +929,9 @@ export default function CheckoutClient() {
               </div>
             </dl>
 
-            {deliveryMode === "delivery" && step === "review" && totals.subtotal < storeConfig.freeShippingThreshold && totals.shipping > 0 && (
+            {deliveryMode === "delivery" && step === "review" && orderSettings.shippingFeeMode === "free_above" && totals.subtotal < orderSettings.freeAbove && totals.shipping > 0 && (
               <p className="mt-3 rounded-lg bg-warm-cream p-3 text-xs text-text-muted">
-                Add {formatPrice(storeConfig.freeShippingThreshold - totals.subtotal)}{" "}
+                Add {formatPrice(orderSettings.freeAbove - totals.subtotal)}{" "}
                 more for FREE shipping.
               </p>
             )}

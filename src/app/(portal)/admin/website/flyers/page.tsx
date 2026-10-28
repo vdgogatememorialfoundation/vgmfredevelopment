@@ -10,7 +10,7 @@ export default function Page() {
   return (
     <RecordDesk<Flyer>
       heading="Flyers and banners"
-      description="Flyers saved here are the promotional banners on the homepage."
+      description="Flyers with an image play as the slideshow at the top of the homepage and also appear under Featured Events."
       publicHref="/"
       records={records}
       label={(record) => record.title}
@@ -20,7 +20,7 @@ export default function Page() {
         { key: "date", label: "Date" },
         { key: "cta", label: "Button label" },
         { key: "href", label: "Link" },
-        { key: "image", label: "Image address" },
+        { key: "image", label: "Banner image (wide, about 1600 × 700)", kind: "image" },
       ]}
       blank={() => ({
         id: `fly-${Date.now()}`,

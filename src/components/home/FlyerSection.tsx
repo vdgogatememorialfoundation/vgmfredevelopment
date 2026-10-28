@@ -20,6 +20,10 @@ export default function FlyerSection() {
           {flyers.map((flyer) => (
             <article key={flyer.id} className="card overflow-hidden">
               <div className="relative aspect-[16/9] overflow-hidden bg-gradient-to-br from-burgundy/10 to-warm-cream">
+                {/^(https?:|data:image)/.test(flyer.image) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={flyer.image} alt={flyer.title} className="absolute inset-0 h-full w-full object-cover" />
+                ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="px-6 text-center">
                     <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border-2 border-burgundy/30 bg-white/90">
@@ -31,6 +35,7 @@ export default function FlyerSection() {
                     <p className="text-sm text-text-muted">{flyer.event}</p>
                   </div>
                 </div>
+                )}
               </div>
 
               <div className="p-6">

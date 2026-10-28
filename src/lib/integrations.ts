@@ -298,12 +298,12 @@ export function shippingFeeSummary(settings = getOrderSettings()) {
 
 const cancellableOrder: Order["status"][] = ["Pending", "Paid", "Processing", "Ordered", "Packed", "Shipped"];
 
-export function canCustomerCancel(order: Order, settings = getOrderSettings()) {
+export function canCustomerCancel(order: Order, settings = getOrderSettings(), now = Date.now()) {
   if (!settings.cancellation.enabled) return false;
   const limit = cancellableOrder.indexOf(settings.cancellation.allowedUntil);
   const at = cancellableOrder.indexOf(order.status);
   if (at === -1 || at > limit) return false;
-  const hours = (Date.now() - Date.parse(order.date)) / 36e5;
+  const hours = (now - Date.parse(order.date)) / 36e5;
   return settings.cancellation.windowHours <= 0 || hours <= settings.cancellation.windowHours;
 }
 

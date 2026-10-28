@@ -4,17 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { classNames } from "@/lib/utils";
 import { initiateReturn, getReturnRequest } from "@/lib/store";
-import { storeConfig } from "@/lib/constants";
+import { cancelOrder } from "@/lib/admin-store";
+import { canCustomerCancel } from "@/lib/integrations";
+import { useOrderSettings } from "@/lib/use-cms";
 import type { Order, ReturnKind, ReturnRequest } from "@/types";
 
-const RETURN_REASONS = [
-  "Damaged or defective item",
-  "Wrong item delivered",
-  "Edition or size mismatch",
-  "No longer needed",
-];
-
 export default function ReturnSection({ order }: { order: Order }) {
+  const settings = useOrderSettings();
+  const RETURN_REASONS = settings.returns.reasons.length ? settings.returns.reasons : ["Other"];
+  const windowDays = order.returnableDays || settings.returns.windowDays;
+  const [now] = useState(() => Date.now());
   const [, setReturnTick] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [kind, setKind] = useState<ReturnKind>("return");
@@ -36,25 +35,32 @@ export default function ReturnSection({ order }: { order: Order }) {
   const policyBullets = (
     <ul className="mt-2 list-inside list-disc space-y-1.5">
       <li>
-        Cancellable within {storeConfig.cancellationWindowDays} day of placing
-        the order before dispatch.
+        {settings.cancellation.enabled
+          ? `Cancellable until the order is ${settings.cancellation.allowedUntil.toLowerCase()}${settings.cancellation.windowHours > 0 ? `, within ${settings.cancellation.windowHours} hours of ordering` : ""}.`
+          : "Orders cannot be cancelled once placed."}
       </li>
       <li>
-        Returnable within {order.returnableDays ?? storeConfig.returnDays} days
-        of delivery for a refund or replacement.
+        {settings.returns.enabled
+          ? `Returnable within ${windowDays} days of delivery for a refund${settings.returns.replacementAllowed ? " or replacement" : ""}.`
+          : "Returns are not accepted."}
       </li>
+      {settings.returns.enabled && (
+        <li>
+          Return pickup charges of ₹{settings.returns.pickupCharge} are
+          deducted from your refund{settings.returns.replacementAllowed ? " — replacements are free" : ""}.
+        </li>
+      )}
       <li>
-        Return pickup charges of ₹{storeConfig.returnPickupCharges} are
-        deducted from your refund — replacements are free.
-      </li>
-      <li>
-        Refunds are processed to the original payment method within 5–7
-        business days of pickup.
+        Refunds are processed {settings.refunds.method === "original" ? "to the original payment method" : "by the store"} within{" "}
+        {settings.refunds.processingDays} business days of pickup.
       </li>
     </ul>
   );
 
-  const canInitiate = order.status === "Delivered";
+  const deliveredAt = order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
+  const withinWindow = (now - Date.parse(deliveredAt)) / 864e5 <= windowDays;
+  const cancellable = canCustomerCancel(order, settings, now);
+  const canInitiate = order.status === "Delivered" && settings.returns.enabled && withinWindow;
 
   return (
     <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
@@ -62,6 +68,27 @@ export default function ReturnSection({ order }: { order: Order }) {
         Return, replacement & refund
       </p>
 
+      {cancellable && order.status !== "Cancelled" && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-red-100 bg-red-50/50 p-3">
+          <p className="flex-1">
+            Changed your mind? You can cancel this order now
+            {settings.cancellation.fee ? ` (cancellation fee ₹${settings.cancellation.fee})` : ""}.
+            {order.paymentStatus === "Paid" ? " The refund goes back to your payment method." : ""}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm(`Cancel order ${order.id}?`)) return;
+              cancelOrder(order.id, "Cancelled by customer");
+              setReturnTick((value) => value + 1);
+              window.location.reload();
+            }}
+            className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700"
+          >
+            Cancel order
+          </button>
+        </div>
+      )}
       {request ? (
         <ReturnRequestStatus request={request} />
       ) : canInitiate ? (
@@ -107,7 +134,7 @@ export default function ReturnSection({ order }: { order: Order }) {
                       {
                         value: "return",
                         title: "Return · Refund",
-                        desc: "Pickup the item, refund minus ₹50 pickup charge",
+                        desc: `Pickup the item, refund minus ₹${settings.returns.pickupCharge} pickup charge`,
                       },
                       {
                         value: "replacement",
@@ -115,7 +142,7 @@ export default function ReturnSection({ order }: { order: Order }) {
                         desc: "New order created for the same item — no extra charge",
                       },
                     ] as const
-                  ).map((option) => (
+                  ).filter((option) => option.value === "return" || settings.returns.replacementAllowed).map((option) => (
                     <button
                       key={option.value}
                       type="button"
@@ -183,8 +210,11 @@ export default function ReturnSection({ order }: { order: Order }) {
         </>
       ) : (
         <p className="mt-2">
-          You can request a return or replacement after delivery, within{" "}
-          {order.returnableDays ?? storeConfig.returnDays} days.
+          {settings.returns.enabled
+            ? order.status === "Delivered"
+              ? "The return window for this order has closed."
+              : `You can request a return after delivery, within ${windowDays} days.`
+            : "This store does not accept returns."}
         </p>
       )}
 

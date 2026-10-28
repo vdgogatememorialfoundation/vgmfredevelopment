@@ -24,6 +24,15 @@ export function paymentMode() {
   return getIntegrations().razorpay.mode;
 }
 
+/** Mode note for screens a customer sees; visitors without saved settings follow the host keys, so no note. */
+export function paymentNotice() {
+  if (typeof window === "undefined" || !window.localStorage.getItem("vgmf_integrations")) return "";
+  const mode = paymentMode();
+  if (mode === "demo") return "Demo mode: the payment is simulated and no money is charged.";
+  if (mode === "test") return "Razorpay test mode: use Razorpay test cards or UPI test IDs.";
+  return "";
+}
+
 function loadCheckoutScript() {
   return new Promise<void>((resolve, reject) => {
     if (window.Razorpay) return resolve();
@@ -48,11 +57,15 @@ export async function payWithRazorpay(input: {
   phone?: string;
   description: string;
 }): Promise<CheckoutOutcome> {
-  if (paymentMode() === "demo") {
+  const simulate = async (): Promise<CheckoutOutcome> => {
     await new Promise((resolve) => setTimeout(resolve, 900));
     return { kind: "demo", paymentId: `pay_demo_${Date.now()}`, live: false };
-  }
+  };
+  // A visitor's browser has no saved admin settings; the host's env keys decide whether checkout is live.
+  const hasLocalSettings = Boolean(window.localStorage.getItem("vgmf_integrations"));
+  if (paymentMode() === "demo" && hasLocalSettings) return simulate();
   const order = await api<{ orderId: string; keyId: string }>({ action: "order", amount: input.amount, receipt: input.receipt });
+  if (!order.ok && !hasLocalSettings && order.configured === false) return simulate();
   if (!order.ok) {
     if (order.configured === false) {
       throw new Error("Razorpay keys are missing for this mode. Add them in Settings → Payments, or switch to demo mode.");

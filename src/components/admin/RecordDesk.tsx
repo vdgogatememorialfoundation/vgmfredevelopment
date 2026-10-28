@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ImageField } from "@/components/admin/ImageField";
 
 type Field = {
   key: string;
   label: string;
-  kind?: "text" | "textarea" | "select";
+  kind?: "text" | "textarea" | "select" | "image";
   options?: string[];
 };
 
@@ -48,7 +49,12 @@ export default function RecordDesk<T extends { id: string }>({
       setMessage(`Add a ${required.label.toLowerCase()} before saving.`);
       return;
     }
-    onSave(draft);
+    try {
+      onSave(draft);
+    } catch {
+      setMessage("The browser storage is full. Use a smaller image or an image URL.");
+      return;
+    }
     setMessage("Published. Open the site page to see it.");
     setDraft(blank());
     setEditing(false);
@@ -81,6 +87,13 @@ export default function RecordDesk<T extends { id: string }>({
                 ))}
               </select>
             </label>
+          ) : field.kind === "image" ? (
+            <ImageField
+              key={field.key}
+              label={field.label}
+              value={String((draft as Record<string, unknown>)[field.key] ?? "")}
+              onChange={(value) => update(field.key, value)}
+            />
           ) : field.kind === "textarea" ? (
             <textarea
               key={field.key}

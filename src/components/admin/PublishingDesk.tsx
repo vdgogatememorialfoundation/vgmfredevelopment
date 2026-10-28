@@ -582,8 +582,8 @@ export function ModuleAccessDesk() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Module access</h1>
-        <p className="mt-1 text-sm text-slate-500">admin@vaidyagogate.org can publish every module. Tick the staff addresses allowed to create and edit each one.</p>
+        <h1 className="text-2xl font-bold text-slate-900">Extra publishing access</h1>
+        <p className="mt-1 text-sm text-slate-500">Staff already get the modules of their role. Tick a staff address here to let them publish in a module outside their role as well.</p>
       </div>
       {staff.length === 0 && (
         <p className="text-sm text-slate-500">Create a staff account first, then assign modules here.</p>
