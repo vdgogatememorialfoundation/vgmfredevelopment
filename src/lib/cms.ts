@@ -1,7 +1,9 @@
 import { articles as seededArticles } from "@/data/articles";
-import { announcements as seededAnnouncements } from "@/data/content";
+import { clinics as seededClinics } from "@/data/clinics";
+import { announcements as seededAnnouncements, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
-import type { Announcement, Article, Event, EventMode, EventType, RegistrationStatus } from "@/types";
+import { videos as seededVideos } from "@/data/videos";
+import type { Announcement, Article, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, Video } from "@/types";
 
 const ARTICLES_KEY = "vgmf_article_edits";
 const CUSTOM_ARTICLES_KEY = "vgmf_custom_articles";
@@ -251,3 +253,59 @@ export function editorsFor(moduleId: ContentModuleId) {
 export function canEdit(moduleId: ContentModuleId, email: string) {
   return editorsFor(moduleId).some((item) => item.toLowerCase() === email.trim().toLowerCase());
 }
+
+type Identified = { id: string };
+
+export function liveRecords<T extends Identified>(seed: T[], editsKey: string, customKey: string): T[] {
+  const edits = readJSON<(Partial<T> & { id: string; hidden?: boolean })[]>(editsKey, []);
+  const custom = readJSON<T[]>(customKey, []);
+  if (!edits.length && !custom.length) return seed;
+  const byId = new Map(edits.map((edit) => [edit.id, edit]));
+  const fromSeed = seed
+    .map((item) => ({ ...item, ...byId.get(item.id) }))
+    .filter((item) => !byId.get(item.id)?.hidden);
+  const seedIds = new Set(seed.map((item) => item.id));
+  return [...custom.filter((item) => !seedIds.has(item.id) && !byId.get(item.id)?.hidden), ...fromSeed];
+}
+
+export function saveRecord<T extends Identified>(seed: T[], editsKey: string, customKey: string, record: T) {
+  const isSeed = seed.some((item) => item.id === record.id);
+  if (isSeed) {
+    const edits = readJSON<(Partial<T> & { id: string; hidden?: boolean })[]>(editsKey, []).filter((edit) => edit.id !== record.id);
+    edits.push({ ...record, hidden: false });
+    writeJSON(editsKey, edits);
+    return;
+  }
+  const custom = readJSON<T[]>(customKey, []).filter((item) => item.id !== record.id);
+  custom.unshift(record);
+  writeJSON(customKey, custom);
+}
+
+export function hideRecord(editsKey: string, customKey: string, id: string) {
+  const edits = readJSON<{ id: string; hidden?: boolean }[]>(editsKey, []).filter((edit) => edit.id !== id);
+  edits.push({ id, hidden: true });
+  writeJSON(editsKey, edits);
+  const custom = readJSON<Identified[]>(customKey, []).filter((item) => item.id !== id);
+  writeJSON(customKey, custom);
+}
+
+export const noticeKeys = { edits: "vgmf_notice_edits", custom: "vgmf_custom_notices" };
+export const flyerKeys = { edits: "vgmf_flyer_edits", custom: "vgmf_custom_flyers" };
+export const videoKeys = { edits: "vgmf_video_edits", custom: "vgmf_custom_videos" };
+export const clinicKeys = { edits: "vgmf_clinic_edits", custom: "vgmf_custom_clinics" };
+
+export const getLiveNotices = () => liveRecords(seededNotices, noticeKeys.edits, noticeKeys.custom);
+export const saveNotice = (record: Notice) => saveRecord(seededNotices, noticeKeys.edits, noticeKeys.custom, record);
+export const hideNotice = (id: string) => hideRecord(noticeKeys.edits, noticeKeys.custom, id);
+
+export const getLiveFlyers = () => liveRecords(seededFlyers, flyerKeys.edits, flyerKeys.custom);
+export const saveFlyer = (record: Flyer) => saveRecord(seededFlyers, flyerKeys.edits, flyerKeys.custom, record);
+export const hideFlyer = (id: string) => hideRecord(flyerKeys.edits, flyerKeys.custom, id);
+
+export const getLiveVideos = () => liveRecords(seededVideos, videoKeys.edits, videoKeys.custom);
+export const saveVideo = (record: Video) => saveRecord(seededVideos, videoKeys.edits, videoKeys.custom, record);
+export const hideVideo = (id: string) => hideRecord(videoKeys.edits, videoKeys.custom, id);
+
+export const getLiveClinics = () => liveRecords(seededClinics, clinicKeys.edits, clinicKeys.custom);
+export const saveClinic = (record: Clinic) => saveRecord(seededClinics, clinicKeys.edits, clinicKeys.custom, record);
+export const hideClinic = (id: string) => hideRecord(clinicKeys.edits, clinicKeys.custom, id);

@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
-import { flyers } from "@/data/content";
+import { useLiveFlyers } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 
 export default function FlyerSection() {
+  const flyers = useLiveFlyers();
   return (
     <section className="section bg-warm-cream" aria-labelledby="flyers-heading">
       <div className="container">

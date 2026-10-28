@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import Badge from "@/components/common/Badge";
-import { notices } from "@/data/content";
+import { useLiveNotices } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 
 export default function NoticeBoard() {
+  const notices = useLiveNotices();
   return (
     <section className="section bg-background py-10" aria-labelledby="notices-heading">
       <div className="container">

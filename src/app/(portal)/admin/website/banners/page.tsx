@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { SiteCatalog } from "@/components/admin/SiteModules";
+import FlyersPage from "../flyers/page";
 
 export default function Page() {
-  return <SiteCatalog moduleId="flyers" />;
+  return <FlyersPage />;
 }

@@ -7,7 +7,8 @@ import ClientOnly from "@/components/common/ClientOnly";
 
 function Editor() {
   const id = useSearchParams().get("id");
-  return <ArticleEditor key={id ?? "new"} articleId={id} />;
+  const editor = <ArticleEditor key={id ?? "new"} articleId={id} />;
+  return id ? <ClientOnly>{editor}</ClientOnly> : editor;
 }
 
 export default function Page() {

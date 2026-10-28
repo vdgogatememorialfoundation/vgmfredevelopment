@@ -4,16 +4,27 @@ import { useSyncExternalStore } from "react";
 import { articles as seededArticles } from "@/data/articles";
 import { announcements as seededAnnouncements } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
+import { clinics as seededClinics } from "@/data/clinics";
+import { flyers as seededFlyers, notices as seededNotices } from "@/data/content";
+import { videos as seededVideos } from "@/data/videos";
 import {
+  clinicKeys,
   defaultFlags,
+  flyerKeys,
   getLiveAnnouncements,
   getLiveArticles,
+  getLiveClinics,
   getLiveEvents,
+  getLiveFlyers,
+  getLiveNotices,
+  getLiveVideos,
   getSiteFlags,
+  noticeKeys,
   subscribeCms,
+  videoKeys,
   type SiteFlags,
 } from "@/lib/cms";
-import type { Announcement, Article, Event } from "@/types";
+import type { Announcement, Article, Clinic, Event, Flyer, Notice, Video } from "@/types";
 
 let articleRaw = "\0";
 let articleList: Article[] = seededArticles;
@@ -65,6 +76,29 @@ export function useLiveEvents() {
     () => seededEvents
   );
 }
+
+function collectionHook<T>(editsKey: string, customKey: string, seed: T[], read: () => T[]) {
+  let rawCache = "\0";
+  let valueCache = seed;
+  return function useCollection() {
+    return useSyncExternalStore(
+      subscribeCms,
+      () => {
+        const raw = `${window.localStorage.getItem(editsKey) ?? ""}|${window.localStorage.getItem(customKey) ?? ""}`;
+        if (raw === rawCache) return valueCache;
+        rawCache = raw;
+        valueCache = raw === "|" ? seed : read();
+        return valueCache;
+      },
+      () => seed
+    );
+  };
+}
+
+export const useLiveNotices = collectionHook<Notice>(noticeKeys.edits, noticeKeys.custom, seededNotices, getLiveNotices);
+export const useLiveFlyers = collectionHook<Flyer>(flyerKeys.edits, flyerKeys.custom, seededFlyers, getLiveFlyers);
+export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos);
+export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics);
 
 export function useSiteFlags() {
   return useSyncExternalStore(

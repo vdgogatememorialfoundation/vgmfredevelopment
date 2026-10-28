@@ -83,8 +83,18 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const [featured, setFeatured] = useState(Boolean(existing?.featured));
   const [saved, setSaved] = useState("");
 
+  const [error, setError] = useState("");
+
   const publish = () => {
-    if (!canEdit("articles", email) || !title.trim() || !content.trim()) return;
+    if (!title.trim() || !content.trim()) {
+      setError("Add a title and the article text, then save.");
+      return;
+    }
+    if (!canEdit("articles", email)) {
+      setError("This address cannot publish articles. Use admin@vaidyagogate.org or assign the address under Roles.");
+      return;
+    }
+    setError("");
     const article: Article = {
       id: existing?.id ?? `art-${Date.now()}`,
       title: title.trim(),
@@ -119,7 +129,8 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
           <input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />
           Feature on the homepage
         </label>
-        <button type="button" className={button} onClick={publish}>Save article</button>
+        <button type="button" className={button} onClick={publish}>Save and publish on the site</button>
+        {error && <p className="text-sm text-red-700">{error}</p>}
         {saved && (
           <p className="text-sm text-emerald-700">
             Published. <Link className="underline" href={`/articles/${saved}`}>View on the site</Link>

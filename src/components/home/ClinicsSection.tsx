@@ -1,10 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import ClinicCard from "@/components/clinics/ClinicCard";
-import { clinics } from "@/data/clinics";
+import { useLiveClinics } from "@/lib/use-cms";
 
 export default function ClinicsSection() {
-  const shown = clinics.slice(0, 3);
+  const shown = useLiveClinics().slice(0, 3);
 
   return (
     <section className="section bg-warm-cream" aria-labelledby="clinics-heading">
