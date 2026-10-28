@@ -10,7 +10,7 @@ interface MediaPlaceholderProps {
 
 const variants = {
   event: "from-burgundy/20 via-warm-cream to-[#EFE4D8]",
-  book: "from-[#4F1414] via-[#7a2a2a] to-[#b0704a]",
+  book: "from-[#E4EFE8] via-warm-cream to-[#F3EBDC]",
   article: "from-[#EDE4D6] via-warm-cream to-[#F7F1E6]",
   clinic: "from-[#E7E2DA] via-warm-cream to-[#F2EBDF]",
 };
@@ -31,6 +31,15 @@ export default function MediaPlaceholder({
 }: MediaPlaceholderProps) {
   const glyph = labelGlyphs[variant];
 
+  if (src && /^(https?:|data:image)/.test(src)) {
+    return (
+      <div className={classNames("relative overflow-hidden bg-warm-cream", aspectClassName, className)}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={label ?? ""} className="absolute inset-0 h-full w-full object-cover" />
+      </div>
+    );
+  }
+
   return (
     <div
       className={classNames(
@@ -45,7 +54,7 @@ export default function MediaPlaceholder({
         className="absolute inset-0 opacity-[0.06]"
         style={{
           backgroundImage:
-            "radial-gradient(circle at 20% 20%, #651C1C 0, transparent 40%), radial-gradient(circle at 80% 80%, #651C1C 0, transparent 40%)",
+            "radial-gradient(circle at 20% 20%, #2F7A57 0, transparent 40%), radial-gradient(circle at 80% 80%, #2F7A57 0, transparent 40%)",
         }}
       />
 
@@ -67,11 +76,6 @@ export default function MediaPlaceholder({
           </p>
         )}
 
-        {src && (
-          <p className="mt-1 text-[11px] text-text-muted">
-            {src}
-          </p>
-        )}
       </div>
     </div>
   );

@@ -7,13 +7,13 @@ import { formatDate } from "@/lib/utils";
 export default function ArticleCard({ article }: { article: Article }) {
   return (
     <article className="card flex flex-col overflow-hidden">
-      {article.featured && (
-        <MediaPlaceholder
-          variant="article"
-          label={article.title}
-          src={article.coverImage}
-          aspectClassName="aspect-[16/9]"
-        />
+      {article.coverImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={article.coverImage} alt="" className="aspect-[16/9] w-full object-cover" />
+      ) : (
+        article.featured && (
+          <MediaPlaceholder variant="article" label={article.title} aspectClassName="aspect-[16/9]" />
+        )
       )}
 
       <div className="flex flex-1 flex-col p-6">

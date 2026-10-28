@@ -6,6 +6,53 @@ import ArticleCard from "@/components/articles/ArticleCard";
 import Badge from "@/components/common/Badge";
 import { useLiveArticles } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
+import type { Article, CaptionedImage } from "@/types";
+
+function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
+  return (
+    <figure className="mb-8">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={image.src} alt={image.caption || alt} className="w-full rounded-xl border border-border object-cover" />
+      {image.caption && <figcaption className="mt-2 text-center text-sm text-text-muted">{image.caption}</figcaption>}
+    </figure>
+  );
+}
+
+function ArticleBody({ article }: { article: Article }) {
+  const images = article.images ?? [];
+  const placed = new Set<number>();
+  const blocks = article.content.split(/\n\s*\n/).map((block, index) => {
+    const text = block.trim();
+    const token = text.match(/^\[\[image:(\d+)\]\]$/);
+    if (token) {
+      const position = Number(token[1]) - 1;
+      const image = images[position];
+      if (!image) return null;
+      placed.add(position);
+      return <Figure key={index} image={image} alt={article.title} />;
+    }
+    if (text.startsWith("## ")) {
+      return <h2 key={index} className="heading-3 mb-4 mt-8">{text.slice(3)}</h2>;
+    }
+    return <p key={index} className="text-body mb-6 whitespace-pre-line">{text}</p>;
+  });
+  const remaining = images.filter((_, index) => !placed.has(index));
+  return (
+    <>
+      {blocks}
+      {remaining.length > 0 && (
+        <div className="mt-10 border-t border-border pt-8">
+          <h2 className="heading-3 mb-5">Gallery</h2>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {remaining.map((image, index) => (
+              <Figure key={index} image={image} alt={article.title} />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 export function ArticlesIndex() {
   const articles = useLiveArticles();
@@ -80,9 +127,11 @@ export function ArticleView({ slug }: { slug: string }) {
       <section className="section bg-background">
         <div className="container grid gap-12 lg:grid-cols-3">
           <article className="lg:col-span-2">
-            {article.content.split("\n\n").map((paragraph, index) => (
-              <p key={index} className="text-body mb-6">{paragraph}</p>
-            ))}
+            {article.coverImage && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={article.coverImage} alt={article.title} className="mb-8 aspect-[16/9] w-full rounded-2xl border border-border object-cover" />
+            )}
+            <ArticleBody article={article} />
           </article>
           <aside className="space-y-6">
             <h2 className="heading-3">Related Articles</h2>

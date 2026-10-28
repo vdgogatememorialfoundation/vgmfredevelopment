@@ -12,13 +12,13 @@ const speakerKeys = eventRecordKeys("speakers");
 const scheduleKeys = eventRecordKeys("schedule");
 const useSpeakerRecords = collectionHook<EventRecord>(speakerKeys.edits, speakerKeys.custom, [], () => getEventRecords("speakers"));
 const useScheduleRecords = collectionHook<EventRecord>(scheduleKeys.edits, scheduleKeys.custom, [], () => getEventRecords("schedule"));
-import { formatCurrency, formatDateRange } from "@/lib/utils";
+import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, eventTimeText } from "@/lib/event-display";
 
 export function EventsIndex() {
   const events = useLiveEvents();
   const upcoming = events
     .filter((event) => event.registrationStatus !== "Closed")
-    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    .sort(compareEventDates);
   const past = events
     .filter((event) => event.registrationStatus === "Closed")
     .sort((a, b) => b.startDate.localeCompare(a.startDate));
@@ -96,11 +96,15 @@ export function LiveEventPage({ slug }: { slug: string }) {
             <Badge tone="neutral">{event.registrationStatus}</Badge>
           </div>
           <h1 className="heading-1 mt-4">{event.name}</h1>
+          {event.bannerUrl && /^(https?:|data:image)/.test(event.bannerUrl) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={event.bannerUrl} alt="" className="mt-6 aspect-[21/9] w-full max-w-5xl rounded-2xl border border-border object-cover" />
+          )}
           <p className="mt-4 max-w-3xl text-body">{event.shortDescription}</p>
           <p className="mt-4 text-sm font-semibold text-burgundy">
-            {formatDateRange(event.startDate, event.endDate)}
-            {event.city ? ` · ${event.city}` : ""}
-            {event.venue ? ` · ${event.venue}` : ""}
+            {eventDateText(event)}
+            {eventTimeText(event) ? ` · ${eventTimeText(event)}` : ""}
+            {` · ${eventPlaceText(event)}`}
           </p>
         </div>
       </section>
@@ -108,7 +112,12 @@ export function LiveEventPage({ slug }: { slug: string }) {
         <div className="container grid gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
             <p className="text-body whitespace-pre-line">{event.description}</p>
-            {event.schedule.length > 0 && (
+            {event.tbd?.schedule ? (
+              <div>
+                <h2 className="heading-3">Schedule</h2>
+                <p className="mt-3 rounded-xl border border-dashed border-border bg-warm-cream p-4 text-sm text-text-muted">The programme schedule is {TBA.toLowerCase()}.</p>
+              </div>
+            ) : event.schedule.length > 0 && (
               <div>
                 <h2 className="heading-3">Schedule</h2>
                 <ul className="mt-4 space-y-3">
@@ -122,7 +131,12 @@ export function LiveEventPage({ slug }: { slug: string }) {
                 </ul>
               </div>
             )}
-            {event.speakers.length > 0 && (
+            {event.tbd?.speakers ? (
+              <div>
+                <h2 className="heading-3">Speakers</h2>
+                <p className="mt-3 rounded-xl border border-dashed border-border bg-warm-cream p-4 text-sm text-text-muted">Speakers will be announced soon.</p>
+              </div>
+            ) : event.speakers.length > 0 && (
               <div>
                 <h2 className="heading-3">Speakers</h2>
                 <ul className="mt-4 space-y-3">
@@ -138,7 +152,13 @@ export function LiveEventPage({ slug }: { slug: string }) {
           </div>
           <aside className="rounded-2xl border border-border bg-white p-6">
             <p className="text-sm text-text-muted">Registration fee</p>
-            <p className="mt-1 text-2xl font-semibold text-text-primary">{formatCurrency(event.fee, event.currency)}</p>
+            <p className="mt-1 text-2xl font-semibold text-text-primary">{eventFeeText(event)}</p>
+            <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
+              <div className="flex justify-between gap-3"><dt className="text-text-muted">Dates</dt><dd className="text-right font-medium">{eventDateText(event)}</dd></div>
+              {eventTimeText(event) && <div className="flex justify-between gap-3"><dt className="text-text-muted">Time</dt><dd className="text-right font-medium">{eventTimeText(event)}</dd></div>}
+              <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
+            </dl>
             <a href={seminarSiteUrl} target="_blank" rel="noopener noreferrer" className="btn-primary mt-5 w-full">
               Register on the seminar site
             </a>

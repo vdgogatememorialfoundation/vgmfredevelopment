@@ -38,7 +38,9 @@ import {
 } from "@/lib/admin-store";
 import { getOrders } from "@/lib/store";
 import { useLiveAnnouncements, useLiveArticles, useLiveEvents } from "@/lib/use-cms";
-import type { Announcement, Article, Event, Order } from "@/types";
+import type { Announcement, Article, CaptionedImage, Event, EventTbd, Order, ScheduleItem, Speaker } from "@/types";
+import { getSession } from "@/lib/auth";
+import { GalleryField, ImageField } from "@/components/admin/ImageField";
 import type { OrderStatus } from "@/lib/admin-store";
 
 ensureBootstrapped();
@@ -66,7 +68,7 @@ function EditorGate({
       <p className="mt-2 text-xs text-slate-500">
         {allowed
           ? "This address can publish in this module."
-          : `Assign this address under Roles, or use ${editorsFor(moduleId)[0]}.`}
+          : `Give this account a staff role with this module, or sign in as ${editorsFor(moduleId)[0]}.`}
       </p>
     </div>
   );
@@ -74,16 +76,21 @@ function EditorGate({
 
 export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const existing = articleId ? getArticle(articleId) : undefined;
-  const [email, setEmail] = useState("admin@vaidyagogate.org");
+  const [email, setEmail] = useState(() => getSession()?.email ?? "admin@vaidyagogate.org");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [excerpt, setExcerpt] = useState(existing?.excerpt ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
   const [author, setAuthor] = useState(existing?.author ?? "");
   const [category, setCategory] = useState(existing?.category ?? "Ayurveda");
+  const [tags, setTags] = useState((existing?.tags ?? []).join(", "));
+  const [coverImage, setCoverImage] = useState(existing?.coverImage ?? "");
+  const [images, setImages] = useState<CaptionedImage[]>(existing?.images ?? []);
   const [featured, setFeatured] = useState(Boolean(existing?.featured));
   const [saved, setSaved] = useState("");
-
   const [error, setError] = useState("");
+
+  const insertImage = (index: number) =>
+    setContent((current) => `${current.trimEnd()}${current.trim() ? "\n\n" : ""}[[image:${index + 1}]]\n\n`);
 
   const publish = () => {
     if (!title.trim() || !content.trim()) {
@@ -91,25 +98,33 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       return;
     }
     if (!canEdit("articles", email)) {
-      setError("This address cannot publish articles. Use admin@vaidyagogate.org or assign the address under Roles.");
+      setError("This account cannot publish articles. Give its staff role the Articles module, or use an admin account.");
       return;
     }
     setError("");
+    const words = content.trim().split(/\s+/).length;
     const article: Article = {
       id: existing?.id ?? `art-${Date.now()}`,
       title: title.trim(),
       slug: existing?.slug ?? slugify(title),
-      excerpt: excerpt.trim() || content.trim().slice(0, 160),
+      excerpt: excerpt.trim() || content.replace(/\[\[image:\d+\]\]/g, "").trim().slice(0, 160),
       content: content.trim(),
       author: author.trim() || "VGMF",
       category: category.trim() || "Ayurveda",
       date: existing?.date ?? new Date().toISOString().slice(0, 10),
       featured,
-      readingTime: existing?.readingTime ?? "4 min",
-      tags: existing?.tags ?? [category.trim() || "Ayurveda"],
+      coverImage: coverImage || undefined,
+      images: images.filter((image) => image.src),
+      readingTime: `${Math.max(1, Math.round(words / 200))} min`,
+      tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
     };
-    saveArticle(article);
-    setSaved(article.slug);
+    if (!article.tags?.length) article.tags = [article.category];
+    try {
+      saveArticle(article);
+      setSaved(article.slug);
+    } catch {
+      setError("The browser storage is full. Use smaller images or image URLs instead of uploads.");
+    }
   };
 
   return (
@@ -119,23 +134,45 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
         <Link href="/admin/articles" className={ghost}>Back to articles</Link>
       </div>
       <EditorGate moduleId="articles" email={email} onEmail={setEmail} />
-      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-        <input className={field} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
-        <input className={field} placeholder="Author" value={author} onChange={(event) => setAuthor(event.target.value)} />
-        <input className={field} placeholder="Category" value={category} onChange={(event) => setCategory(event.target.value)} />
-        <textarea className={field} rows={3} placeholder="Excerpt" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} />
-        <textarea className={field} rows={10} placeholder="Article body" value={content} onChange={(event) => setContent(event.target.value)} />
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />
-          Feature on the homepage
-        </label>
-        <button type="button" className={button} onClick={publish}>Save and publish on the site</button>
-        {error && <p className="text-sm text-red-700">{error}</p>}
-        {saved && (
-          <p className="text-sm text-emerald-700">
-            Published. <Link className="underline" href={`/articles/${saved}`}>View on the site</Link>
+      <div className="grid gap-5 lg:grid-cols-3">
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
+          <input className={field} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input className={field} placeholder="Author" value={author} onChange={(event) => setAuthor(event.target.value)} />
+            <input className={field} placeholder="Category" value={category} onChange={(event) => setCategory(event.target.value)} />
+          </div>
+          <input className={field} placeholder="Tags, separated by commas" value={tags} onChange={(event) => setTags(event.target.value)} />
+          <textarea className={field} rows={3} placeholder="Excerpt shown on article cards" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} />
+          <textarea className={`${field} font-mono`} rows={14} placeholder="Article body. Leave a blank line between paragraphs." value={content} onChange={(event) => setContent(event.target.value)} />
+          <p className="text-xs text-slate-500">
+            Start a line with <code>## </code> for a sub-heading. <code>[[image:2]]</code> on its own line places gallery image 2 inside the article;
+            images not placed in the text are shown as a gallery at the end.
           </p>
-        )}
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />
+            Feature on the homepage and at the top of Articles
+          </label>
+          <button type="button" className={button} onClick={publish}>Save and publish on the site</button>
+          {error && <p className="text-sm text-red-700">{error}</p>}
+          {saved && (
+            <p className="text-sm text-emerald-700">
+              Published. <Link className="underline" href={`/articles/${saved}`}>View on the site</Link>
+            </p>
+          )}
+        </div>
+        <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-5">
+          <ImageField label="Cover image" value={coverImage} onChange={setCoverImage} hint="Shown on the article card and at the top of the article." />
+          <GalleryField label="Article images" images={images} onChange={setImages} />
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {images.map((_, index) => (
+                <button key={index} type="button" className="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700" onClick={() => insertImage(index)}>
+                  Insert image {index + 1} in text
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -183,7 +220,7 @@ function AnnouncementForm({
   current?: Announcement;
   items: Announcement[];
 }) {
-  const [email, setEmail] = useState("admin@vaidyagogate.org");
+  const [email, setEmail] = useState(() => getSession()?.email ?? "admin@vaidyagogate.org");
   const [title, setTitle] = useState(current?.title ?? "");
   const [description, setDescription] = useState(current?.description ?? "");
   const [href, setHref] = useState(current?.href ?? "/announcements");
@@ -242,20 +279,65 @@ function AnnouncementForm({
   );
 }
 
+const tbdFields: { key: keyof EventTbd; label: string }[] = [
+  { key: "dates", label: "Dates" },
+  { key: "time", label: "Timings" },
+  { key: "venue", label: "Venue" },
+  { key: "city", label: "City" },
+  { key: "fee", label: "Fee" },
+  { key: "speakers", label: "Speakers" },
+  { key: "schedule", label: "Schedule" },
+];
+
 export function EventEditor({ eventId }: { eventId?: string | null }) {
   const existing = eventId ? getLiveEvents().find((event) => event.id === eventId) : undefined;
-  const [email, setEmail] = useState("admin@vaidyagogate.org");
+  const [email, setEmail] = useState(() => getSession()?.email ?? "admin@vaidyagogate.org");
   const [draft, setDraft] = useState<Event>(existing ?? blankEvent(""));
   const [saved, setSaved] = useState("");
+  const [error, setError] = useState("");
 
   const set = (patch: Partial<Event>) => setDraft((current) => ({ ...current, ...patch }));
+  const tbd = draft.tbd ?? {};
+  const toggleTbd = (key: keyof EventTbd, value: boolean) => set({ tbd: { ...tbd, [key]: value } });
+  const speakers = draft.speakers ?? [];
+  const schedule = draft.schedule ?? [];
+  const setSpeaker = (index: number, patch: Partial<Speaker>) =>
+    set({ speakers: speakers.map((item, i) => (i === index ? { ...item, ...patch } : item)) });
+  const setSlot = (index: number, patch: Partial<ScheduleItem>) =>
+    set({ schedule: schedule.map((item, i) => (i === index ? { ...item, ...patch } : item)) });
 
   const publish = () => {
-    if (!canEdit("events", email) || !draft.name.trim()) return;
-    const event = { ...draft, slug: draft.slug || slugify(draft.name), name: draft.name.trim() };
-    saveEvent(event);
-    setSaved(event.slug);
+    if (!draft.name.trim()) {
+      setError("Add the event name.");
+      return;
+    }
+    if (!canEdit("events", email)) {
+      setError("This account cannot publish events. Give its staff role the Events module.");
+      return;
+    }
+    if (!tbd.dates && !draft.startDate) {
+      setError("Pick a start date, or tick Dates as to be announced.");
+      return;
+    }
+    setError("");
+    const event: Event = {
+      ...draft,
+      slug: draft.slug || slugify(draft.name),
+      name: draft.name.trim(),
+      endDate: draft.endDate || draft.startDate,
+      speakers: speakers.filter((item) => item.name.trim()),
+      schedule: schedule.filter((item) => item.title.trim()),
+    };
+    try {
+      saveEvent(event);
+      setSaved(event.slug);
+    } catch {
+      setError("The browser storage is full. Use a smaller banner or an image URL.");
+    }
   };
+
+  const tbdNote = (key: keyof EventTbd) =>
+    tbd[key] ? <span className="text-[11px] font-semibold uppercase text-amber-700">Shown as “To be announced”</span> : null;
 
   return (
     <div className="space-y-5">
@@ -264,43 +346,125 @@ export function EventEditor({ eventId }: { eventId?: string | null }) {
         <Link href="/admin/events" className={ghost}>All events</Link>
       </div>
       <EditorGate moduleId="events" email={email} onEmail={setEmail} />
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <p className="text-sm font-semibold text-amber-900">Not finalised yet?</p>
+        <p className="mt-1 text-xs text-amber-800">Tick anything still being decided. The site shows it as “To be announced” until you untick it.</p>
+        <div className="mt-3 flex flex-wrap gap-4">
+          {tbdFields.map((item) => (
+            <label key={item.key} className="flex items-center gap-2 text-sm text-amber-900">
+              <input type="checkbox" checked={Boolean(tbd[item.key])} onChange={(event) => toggleTbd(item.key, event.target.checked)} />
+              {item.label} TBD
+            </label>
+          ))}
+        </div>
+      </div>
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-5 sm:grid-cols-2">
         <input className={`${field} sm:col-span-2`} placeholder="Event name" value={draft.name} onChange={(event) => set({ name: event.target.value, slug: existing ? draft.slug : slugify(event.target.value) })} />
-        <input className={field} type="date" value={draft.startDate} onChange={(event) => set({ startDate: event.target.value })} />
-        <input className={field} type="date" value={draft.endDate} onChange={(event) => set({ endDate: event.target.value })} />
-        <input className={field} placeholder="City" value={draft.city ?? ""} onChange={(event) => set({ city: event.target.value })} />
-        <input className={field} placeholder="Venue" value={draft.venue ?? ""} onChange={(event) => set({ venue: event.target.value })} />
-        <select className={field} value={draft.mode} onChange={(event) => set({ mode: event.target.value as Event["mode"] })}>
-          <option>Offline</option>
-          <option>Online</option>
-          <option>Hybrid</option>
-        </select>
-        <select className={field} value={draft.eventType} onChange={(event) => set({ eventType: event.target.value as Event["eventType"] })}>
-          <option>Seminar</option>
-          <option>Conference</option>
-          <option>Workshop</option>
-          <option>Webinar</option>
-          <option>Fellowship</option>
-          <option>Training</option>
-          <option>Other Foundation Events</option>
-        </select>
-        <input className={field} type="number" min={0} value={draft.fee} onChange={(event) => set({ fee: Number(event.target.value) })} />
-        <select className={field} value={draft.registrationStatus} onChange={(event) => set({ registrationStatus: event.target.value as Event["registrationStatus"] })}>
-          <option>Open</option>
-          <option>Closing Soon</option>
-          <option>Waitlist</option>
-          <option>Closed</option>
-        </select>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          <span className="flex justify-between">Start date {tbdNote("dates")}</span>
+          <input className={field} type="date" value={draft.startDate} onChange={(event) => set({ startDate: event.target.value })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          End date
+          <input className={field} type="date" value={draft.endDate} onChange={(event) => set({ endDate: event.target.value })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          <span className="flex justify-between">Timings {tbdNote("time")}</span>
+          <input className={field} placeholder="e.g. 10:00 AM – 5:00 PM IST" value={draft.timeText ?? ""} onChange={(event) => set({ timeText: event.target.value })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Mode
+          <select className={field} value={draft.mode} onChange={(event) => set({ mode: event.target.value as Event["mode"] })}>
+            <option>Offline</option>
+            <option>Online</option>
+            <option>Hybrid</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          <span className="flex justify-between">Venue {tbdNote("venue")}</span>
+          <input className={field} placeholder="Venue" value={draft.venue ?? ""} onChange={(event) => set({ venue: event.target.value })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          <span className="flex justify-between">City {tbdNote("city")}</span>
+          <input className={field} placeholder="City" value={draft.city ?? ""} onChange={(event) => set({ city: event.target.value })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Event type
+          <select className={field} value={draft.eventType} onChange={(event) => set({ eventType: event.target.value as Event["eventType"] })}>
+            <option>Seminar</option>
+            <option>Conference</option>
+            <option>Workshop</option>
+            <option>Webinar</option>
+            <option>Fellowship</option>
+            <option>Training</option>
+            <option>Other Foundation Events</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          <span className="flex justify-between">Fee (₹) {tbdNote("fee")}</span>
+          <input className={field} type="number" min={0} value={draft.fee} onChange={(event) => set({ fee: Number(event.target.value) })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Registration
+          <select className={field} value={draft.registrationStatus} onChange={(event) => set({ registrationStatus: event.target.value as Event["registrationStatus"] })}>
+            <option>Open</option>
+            <option>Closing Soon</option>
+            <option>Waitlist</option>
+            <option>Closed</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Capacity
+          <input className={field} type="number" min={0} value={draft.capacity ?? ""} onChange={(event) => set({ capacity: event.target.value ? Number(event.target.value) : undefined })} />
+        </label>
         <textarea className={`${field} sm:col-span-2`} rows={3} placeholder="Short description" value={draft.shortDescription} onChange={(event) => set({ shortDescription: event.target.value })} />
         <textarea className={`${field} sm:col-span-2`} rows={6} placeholder="Full description" value={draft.description} onChange={(event) => set({ description: event.target.value })} />
         <div className="sm:col-span-2">
-          <button type="button" className={button} onClick={publish}>Save event</button>
-          {saved && (
-            <p className="mt-3 text-sm text-emerald-700">
-              Published. <Link className="underline" href={`/events/${saved}`}>View on the site</Link>
-            </p>
-          )}
+          <ImageField label="Event banner" value={draft.bannerUrl} onChange={(value) => set({ bannerUrl: value })} hint="Wide image, about 1600 × 700." />
         </div>
+      </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-semibold text-slate-900">Speakers {tbdNote("speakers")}</p>
+            <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => set({ speakers: [...speakers, { id: `spk-${Date.now()}`, name: "", designation: "", topic: "" }] })}>+ Add speaker</button>
+          </div>
+          {speakers.map((speaker, index) => (
+            <div key={speaker.id} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-3">
+              <input className={field} placeholder="Name" value={speaker.name} onChange={(event) => setSpeaker(index, { name: event.target.value })} />
+              <input className={field} placeholder="Designation" value={speaker.designation} onChange={(event) => setSpeaker(index, { designation: event.target.value })} />
+              <div className="flex gap-2">
+                <input className={field} placeholder="Topic" value={speaker.topic} onChange={(event) => setSpeaker(index, { topic: event.target.value })} />
+                <button type="button" className="text-xs font-semibold text-red-600" onClick={() => set({ speakers: speakers.filter((_, i) => i !== index) })}>Remove</button>
+              </div>
+            </div>
+          ))}
+          {speakers.length === 0 && <p className="text-xs text-slate-500">No speakers added.</p>}
+        </div>
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="flex items-center justify-between">
+            <p className="font-semibold text-slate-900">Schedule {tbdNote("schedule")}</p>
+            <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => set({ schedule: [...schedule, { id: `sch-${Date.now()}`, time: "", title: "" }] })}>+ Add slot</button>
+          </div>
+          {schedule.map((slot, index) => (
+            <div key={slot.id} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-3">
+              <input className={field} placeholder="Time" value={slot.time} onChange={(event) => setSlot(index, { time: event.target.value })} />
+              <input className={`${field} sm:col-span-2`} placeholder="Session title" value={slot.title} onChange={(event) => setSlot(index, { title: event.target.value })} />
+              <input className={`${field} sm:col-span-2`} placeholder="Details (optional)" value={slot.description ?? ""} onChange={(event) => setSlot(index, { description: event.target.value })} />
+              <button type="button" className="text-xs font-semibold text-red-600" onClick={() => set({ schedule: schedule.filter((_, i) => i !== index) })}>Remove</button>
+            </div>
+          ))}
+          {schedule.length === 0 && <p className="text-xs text-slate-500">No sessions added.</p>}
+        </div>
+      </div>
+      <div>
+        <button type="button" className={button} onClick={publish}>Save event</button>
+        {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+        {saved && (
+          <p className="mt-3 text-sm text-emerald-700">
+            Published. <Link className="underline" href={`/events/${saved}`}>View on the site</Link>
+          </p>
+        )}
       </div>
     </div>
   );
@@ -318,7 +482,10 @@ export function EventAdminList() {
           <li key={event.id} className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-semibold text-slate-900">{event.name}</p>
-              <p className="text-xs text-slate-500">{event.startDate} · {event.registrationStatus}</p>
+              <p className="text-xs text-slate-500">
+                {event.tbd?.dates || !event.startDate ? "Dates TBD" : event.startDate} · {event.registrationStatus}
+                {event.tbd && Object.values(event.tbd).some(Boolean) && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">Has TBD items</span>}
+              </p>
             </div>
             <div className="flex gap-3 text-sm font-semibold">
               <Link className="text-burgundy" href={`/admin/events/create?id=${event.id}`}>Edit</Link>

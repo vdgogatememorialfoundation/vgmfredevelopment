@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Event } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
-import { formatDateRange } from "@/lib/utils";
+import { eventDateText, eventPlaceText, eventTimeText } from "@/lib/event-display";
 
 const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral"> = {
   Open: "success",
@@ -36,7 +36,8 @@ export default function EventCard({ event }: { event: Event }) {
           dateTime={event.startDate}
           className="text-sm font-semibold text-burgundy"
         >
-          {formatDateRange(event.startDate, event.endDate)}
+          {eventDateText(event)}
+          {eventTimeText(event) ? ` · ${eventTimeText(event)}` : ""}
         </time>
 
         <h3 className="mt-2 text-lg font-semibold text-text-primary leading-snug">
@@ -60,7 +61,7 @@ export default function EventCard({ event }: { event: Event }) {
             </svg>
           </span>
           <span className="line-clamp-1">
-            {event.mode === "Online" ? "Online" : event.venue}
+            {eventPlaceText(event)}
           </span>
         </div>
 

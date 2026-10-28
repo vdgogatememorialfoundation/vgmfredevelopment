@@ -4,12 +4,14 @@ import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import EventCard from "@/components/events/EventCard";
 import { useLiveEvents } from "@/lib/use-cms";
+import { compareEventDates } from "@/lib/event-display";
 
 export default function UpcomingEvents() {
   const events = useLiveEvents();
-  const upcoming = [...events].sort((a, b) =>
-    a.startDate.localeCompare(b.startDate)
-  );
+  const upcoming = events
+    .filter((event) => event.registrationStatus !== "Closed")
+    .sort(compareEventDates)
+    .slice(0, 6);
 
   return (
     <section

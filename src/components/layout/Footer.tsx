@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteLogo from "@/components/common/SiteLogo";
 
 const quickLinks = [
   { name: "About", href: "/about" },
@@ -25,17 +26,15 @@ const portalLinks = [
 
 export default function Footer() {
   return (
-    <footer className="bg-text-primary text-white">
+    <footer className="border-t border-border bg-warm-cream text-text-primary">
       <div className="container py-10">
         <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
           {/* Brand */}
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-burgundy/40 bg-burgundy/10">
-              <span className="text-[9px] font-bold text-burgundy">VGMF</span>
-            </div>
+            <SiteLogo size={40} />
             <div>
               <p className="font-semibold leading-tight">Vaidya Gogate</p>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-white/50">
+              <p className="text-[11px] uppercase tracking-[0.12em] text-text-muted">
                 Memorial Foundation
               </p>
             </div>
@@ -47,7 +46,7 @@ export default function Footer() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm text-white/60 transition hover:text-white"
+                className="text-sm text-text-muted transition hover:text-burgundy"
               >
                 {link.name}
               </Link>
@@ -55,15 +54,15 @@ export default function Footer() {
           </nav>
 
           {/* Contact */}
-          <div className="flex flex-col items-center gap-1 text-sm text-white/60 md:items-end">
-            <a href="mailto:info@vaidyagogate.org" className="transition hover:text-white">
+          <div className="flex flex-col items-center gap-1 text-sm text-text-muted md:items-end">
+            <a href="mailto:info@vaidyagogate.org" className="transition hover:text-burgundy">
               info@vaidyagogate.org
             </a>
             <span>+91 20 1234 5678</span>
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-white/40 md:flex-row">
+        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-text-muted md:flex-row">
           <p>
             © {new Date().getFullYear()} Vaidya Gogate Memorial Foundation.
             All rights reserved.
@@ -74,7 +73,7 @@ export default function Footer() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="transition hover:text-white/80"
+                className="transition hover:text-burgundy"
               >
                 {link.name}
               </Link>
@@ -86,7 +85,7 @@ export default function Footer() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="font-medium text-burgundy transition hover:text-white"
+                className="font-medium text-burgundy transition hover:text-burgundy"
               >
                 {link.name}
               </Link>

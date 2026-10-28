@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import SiteLogo from "@/components/common/SiteLogo";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -124,7 +125,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-white/95 backdrop-blur">
       {/* Top bar */}
-      <div className="border-b-2 border-gold bg-burgundy text-white">
+      <div className="border-b border-border bg-warm-cream text-text-muted">
         <div className="container flex items-center justify-between py-2 text-xs">
           <p className="hidden gap-4 sm:flex">
             <a
@@ -150,7 +151,7 @@ export default function Header() {
 
           <div className="ml-auto flex items-center gap-4">
             {isAuthenticated ? (
-              <span className="hidden text-white/80 md:inline">
+              <span className="hidden text-text-primary md:inline">
                 {user?.accountId}
               </span>
             ) : (
@@ -174,11 +175,7 @@ export default function Header() {
             className="flex min-w-0 items-center gap-3"
             aria-label="Vaidya Gogate Memorial Foundation — Home"
           >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-burgundy/20 bg-burgundy/5">
-              <span className="text-[10px] font-bold tracking-tight text-burgundy">
-                VGMF
-              </span>
-            </div>
+            <SiteLogo size={48} />
 
             <div className="min-w-0">
               <div className="truncate text-[17px] font-bold leading-tight text-text-primary sm:text-[19px]">
