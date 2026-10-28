@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { CourierPerformanceDesk } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Delivery Partners"
-      title="Performance"
-      description="Monitor delivery partner performance."
-    />
+    <ClientOnly>
+      <CourierPerformanceDesk />
+    </ClientOnly>
   );
 }

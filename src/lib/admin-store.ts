@@ -365,6 +365,12 @@ export function refundOrder(orderId: string) {
   });
 }
 
+export function setPaymentStatus(orderId: string, paymentStatus: Order["paymentStatus"]) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  updateOrderInStore({ ...order, paymentStatus });
+}
+
 export function createReplacement(orderId: string) {
   const order = getOrder(orderId);
   if (!order) return;

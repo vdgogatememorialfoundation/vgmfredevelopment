@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { SellersSection } from "@/components/admin/AdminSellers";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Accounts"
-      title="Seller Accounts"
-      description="Manage seller accounts."
-    />
+    <ClientOnly>
+      <SellersSection />
+    </ClientOnly>
   );
 }

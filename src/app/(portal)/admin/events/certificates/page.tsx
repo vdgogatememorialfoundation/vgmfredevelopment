@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { CertificateRegistry } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Events"
-      title="Certificates"
-      description="Manage certificates associated with events."
-    />
+    <ClientOnly>
+      <CertificateRegistry mode="issue" />
+    </ClientOnly>
   );
 }

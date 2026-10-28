@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { SupportSection } from "@/components/admin/AdminSupport";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Support"
-      title="Contact Enquiries"
-      description="Manage enquiries submitted through the website."
-    />
+    <ClientOnly>
+      <SupportSection />
+    </ClientOnly>
   );
 }

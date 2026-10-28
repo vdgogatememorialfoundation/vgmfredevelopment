@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { EventRecordsDesk } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Events"
-      title="Tickets"
-      description="Manage participant tickets and QR codes."
-    />
+    <ClientOnly>
+      <EventRecordsDesk kind="tickets" />
+    </ClientOnly>
   );
 }

@@ -1,9 +1,9 @@
 import { articles as seededArticles } from "@/data/articles";
 import { clinics as seededClinics } from "@/data/clinics";
-import { announcements as seededAnnouncements, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
+import { announcements as seededAnnouncements, certificates as baseCertificates, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
-import type { Announcement, Article, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, Video } from "@/types";
+import type { Announcement, Article, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, Video } from "@/types";
 
 const ARTICLES_KEY = "vgmf_article_edits";
 const CUSTOM_ARTICLES_KEY = "vgmf_custom_articles";
@@ -309,3 +309,88 @@ export const hideVideo = (id: string) => hideRecord(videoKeys.edits, videoKeys.c
 export const getLiveClinics = () => liveRecords(seededClinics, clinicKeys.edits, clinicKeys.custom);
 export const saveClinic = (record: Clinic) => saveRecord(seededClinics, clinicKeys.edits, clinicKeys.custom, record);
 export const hideClinic = (id: string) => hideRecord(clinicKeys.edits, clinicKeys.custom, id);
+
+export const certificateKeys = { edits: "vgmf_certificate_edits", custom: "vgmf_custom_certificates" };
+
+export type IssuedCertificate = Certificate & { id: string; reissuedAt?: string; status?: "Valid" | "Revoked" };
+
+const seededCertificates: IssuedCertificate[] = baseCertificates.map((certificate) => ({
+  ...certificate,
+  id: certificate.certificateNumber,
+  status: "Valid",
+}));
+
+export const getIssuedCertificates = () =>
+  liveRecords(seededCertificates, certificateKeys.edits, certificateKeys.custom);
+
+export function saveIssuedCertificate(record: IssuedCertificate) {
+  const certificateNumber = record.certificateNumber.trim().toUpperCase();
+  saveRecord(seededCertificates, certificateKeys.edits, certificateKeys.custom, {
+    ...record,
+    certificateNumber,
+    id: record.id || certificateNumber,
+  });
+}
+
+export const revokeCertificate = (id: string) => hideRecord(certificateKeys.edits, certificateKeys.custom, id);
+
+export function findIssuedCertificate(number: string) {
+  const normalized = number.trim().toUpperCase();
+  return getIssuedCertificates().find(
+    (certificate) => certificate.certificateNumber.toUpperCase() === normalized && certificate.status !== "Revoked"
+  );
+}
+
+export function nextCertificateNumber() {
+  const year = new Date().getFullYear();
+  const used = getIssuedCertificates()
+    .map((certificate) => Number(certificate.certificateNumber.split("-").pop()))
+    .filter((value) => Number.isFinite(value));
+  const next = (used.length ? Math.max(...used) : 0) + 1;
+  return `VGMF-CERT-${year}-${String(next).padStart(4, "0")}`;
+}
+
+export type EventRecord = {
+  id: string;
+  eventSlug: string;
+  [field: string]: string;
+};
+
+export const eventRecordKinds = [
+  "speakers",
+  "schedule",
+  "registrations",
+  "applications",
+  "tickets",
+  "attendance",
+  "payments",
+] as const;
+
+export type EventRecordKind = (typeof eventRecordKinds)[number];
+
+export function eventRecordKeys(kind: EventRecordKind) {
+  return { edits: `vgmf_event_${kind}_edits`, custom: `vgmf_event_${kind}` };
+}
+
+export function getEventRecords(kind: EventRecordKind): EventRecord[] {
+  const keys = eventRecordKeys(kind);
+  return liveRecords<EventRecord>([], keys.edits, keys.custom);
+}
+
+export function saveEventRecord(kind: EventRecordKind, record: EventRecord) {
+  const keys = eventRecordKeys(kind);
+  saveRecord<EventRecord>([], keys.edits, keys.custom, record);
+}
+
+export function hideEventRecord(kind: EventRecordKind, id: string) {
+  const keys = eventRecordKeys(kind);
+  hideRecord(keys.edits, keys.custom, id);
+}
+
+export function getSectionSettings(section: string): Record<string, string> {
+  return readJSON<Record<string, string>>(`vgmf_settings_${section}`, {});
+}
+
+export function saveSectionSettings(section: string, values: Record<string, string>) {
+  writeJSON(`vgmf_settings_${section}`, values);
+}

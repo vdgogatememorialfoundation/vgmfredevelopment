@@ -77,7 +77,7 @@ export function useLiveEvents() {
   );
 }
 
-function collectionHook<T>(editsKey: string, customKey: string, seed: T[], read: () => T[]) {
+export function collectionHook<T>(editsKey: string, customKey: string, seed: T[], read: () => T[]) {
   let rawCache = "\0";
   let valueCache = seed;
   return function useCollection() {

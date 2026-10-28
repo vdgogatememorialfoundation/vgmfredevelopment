@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { ShipmentsSection } from "@/components/admin/AdminShipments";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Delivery Partners"
-      title="Shipments"
-      description="View provider shipments."
-    />
+    <ClientOnly>
+      <ShipmentsSection />
+    </ClientOnly>
   );
 }

@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { CertificateRegistry } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Certificates"
-      title="Reissue Certificate"
-      description="Reissue previously issued certificates."
-    />
+    <ClientOnly>
+      <CertificateRegistry mode="reissue" />
+    </ClientOnly>
   );
 }

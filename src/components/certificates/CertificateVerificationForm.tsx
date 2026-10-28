@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { getCertificate } from "@/data/content";
+import { findIssuedCertificate, type IssuedCertificate } from "@/lib/cms";
 
 type Result = {
   status: "idle" | "verified" | "not-found";
   certificateNumber: string;
+  certificate?: IssuedCertificate;
 };
 
 export default function CertificateVerificationForm() {
@@ -22,10 +23,11 @@ export default function CertificateVerificationForm() {
 
     if (!certificateNumber) return;
 
-    const certificate = getCertificate(certificateNumber);
+    const certificate = findIssuedCertificate(certificateNumber);
     setResult({
       status: certificate ? "verified" : "not-found",
       certificateNumber,
+      certificate,
     });
   };
 
@@ -82,7 +84,14 @@ export default function CertificateVerificationForm() {
               label="Certificate Number"
               value={result.certificateNumber.toUpperCase()}
             />
-            <CertificateRow label="Certificate Type" value="Participation" />
+            {result.certificate && (
+              <>
+                <CertificateRow label="Name" value={result.certificate.name} />
+                <CertificateRow label="Event" value={result.certificate.event} />
+                <CertificateRow label="Certificate Type" value={result.certificate.certificateType} />
+                <CertificateRow label="Issued On" value={result.certificate.issueDate} />
+              </>
+            )}
             <CertificateRow label="Issued By" value="Vaidya Gogate Memorial Foundation" />
           </dl>
         </div>

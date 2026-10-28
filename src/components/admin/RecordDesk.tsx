@@ -6,7 +6,8 @@ import Link from "next/link";
 type Field = {
   key: string;
   label: string;
-  kind?: "text" | "textarea";
+  kind?: "text" | "textarea" | "select";
+  options?: string[];
 };
 
 const fieldClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -67,7 +68,20 @@ export default function RecordDesk<T extends { id: string }>({
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <p className="text-sm font-semibold text-slate-800">{editing ? "Edit record" : "Add to the site"}</p>
         {fields.map((field) =>
-          field.kind === "textarea" ? (
+          field.kind === "select" ? (
+            <label key={field.key} className="block text-xs font-semibold text-slate-500">
+              {field.label}
+              <select
+                className={`${fieldClass} mt-1`}
+                value={String((draft as Record<string, unknown>)[field.key] ?? "")}
+                onChange={(event) => update(field.key, event.target.value)}
+              >
+                {(field.options ?? []).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+          ) : field.kind === "textarea" ? (
             <textarea
               key={field.key}
               className={fieldClass}

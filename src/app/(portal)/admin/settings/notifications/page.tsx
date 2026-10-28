@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { SectionSettingsDesk } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Settings"
-      title="Notifications"
-      description="Configure notifications."
-    />
+    <ClientOnly>
+      <SectionSettingsDesk section="notifications" />
+    </ClientOnly>
   );
 }

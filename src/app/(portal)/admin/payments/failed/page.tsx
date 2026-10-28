@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { PaymentsDesk } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Payments"
-      title="Failed Payments"
-      description="Review failed payment transactions."
-    />
+    <ClientOnly>
+      <PaymentsDesk filter="Failed" />
+    </ClientOnly>
   );
 }

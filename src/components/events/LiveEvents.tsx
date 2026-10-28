@@ -5,7 +5,13 @@ import PageHeader from "@/components/common/PageHeader";
 import EventCard from "@/components/events/EventCard";
 import Badge from "@/components/common/Badge";
 import { seminarSiteUrl } from "@/lib/constants";
-import { useLiveEvents } from "@/lib/use-cms";
+import { collectionHook, useLiveEvents } from "@/lib/use-cms";
+import { eventRecordKeys, getEventRecords, type EventRecord } from "@/lib/cms";
+
+const speakerKeys = eventRecordKeys("speakers");
+const scheduleKeys = eventRecordKeys("schedule");
+const useSpeakerRecords = collectionHook<EventRecord>(speakerKeys.edits, speakerKeys.custom, [], () => getEventRecords("speakers"));
+const useScheduleRecords = collectionHook<EventRecord>(scheduleKeys.edits, scheduleKeys.custom, [], () => getEventRecords("schedule"));
 import { formatCurrency, formatDateRange } from "@/lib/utils";
 
 export function EventsIndex() {
@@ -52,8 +58,10 @@ export function EventsIndex() {
 
 export function LiveEventPage({ slug }: { slug: string }) {
   const events = useLiveEvents();
-  const event = events.find((item) => item.slug === slug);
-  if (!event) {
+  const speakerRecords = useSpeakerRecords();
+  const scheduleRecords = useScheduleRecords();
+  const found = events.find((item) => item.slug === slug);
+  if (!found) {
     return (
       <main className="container py-20">
         <h1 className="heading-2">Event not published</h1>
@@ -61,6 +69,22 @@ export function LiveEventPage({ slug }: { slug: string }) {
       </main>
     );
   }
+
+  const event = {
+    ...found,
+    speakers: [
+      ...(found.speakers ?? []),
+      ...speakerRecords
+        .filter((record) => record.eventSlug === slug)
+        .map((record) => ({ id: record.id, name: record.name, designation: record.designation, topic: record.topic })),
+    ],
+    schedule: [
+      ...(found.schedule ?? []),
+      ...scheduleRecords
+        .filter((record) => record.eventSlug === slug)
+        .map((record) => ({ id: record.id, time: record.time, title: record.title, description: record.description })),
+    ],
+  };
 
   return (
     <main>
@@ -84,7 +108,21 @@ export function LiveEventPage({ slug }: { slug: string }) {
         <div className="container grid gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
             <p className="text-body whitespace-pre-line">{event.description}</p>
-            {event.speakers && event.speakers.length > 0 && (
+            {event.schedule.length > 0 && (
+              <div>
+                <h2 className="heading-3">Schedule</h2>
+                <ul className="mt-4 space-y-3">
+                  {event.schedule.map((item) => (
+                    <li key={item.id} className="rounded-xl border border-border bg-white p-4">
+                      <p className="text-sm font-semibold text-burgundy">{item.time}</p>
+                      <p className="font-semibold">{item.title}</p>
+                      {item.description && <p className="text-sm text-text-muted">{item.description}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {event.speakers.length > 0 && (
               <div>
                 <h2 className="heading-3">Speakers</h2>
                 <ul className="mt-4 space-y-3">

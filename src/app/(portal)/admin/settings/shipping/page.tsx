@@ -1,5 +1,12 @@
-﻿import { ShippingDesk } from "@/components/admin/FulfillmentDesk";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { ShippingDesk } from "@/components/admin/FulfillmentDesk";
 
 export default function Page() {
-  return <ShippingDesk />;
+  return (
+    <ClientOnly>
+      <ShippingDesk />
+    </ClientOnly>
+  );
 }

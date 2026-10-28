@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { SectionSettingsDesk } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Settings"
-      title="Orders"
-      description="Configure order processing."
-    />
+    <ClientOnly>
+      <SectionSettingsDesk section="orders" />
+    </ClientOnly>
   );
 }

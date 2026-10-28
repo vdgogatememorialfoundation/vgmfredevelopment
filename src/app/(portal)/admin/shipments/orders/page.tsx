@@ -1,13 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { OrdersDashboard } from "@/components/admin/AdminOrders";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Commerce"
-      title="Orders"
-      description="Manage Foundation ecommerce orders."
-      action="Create Order"
-      actionHref="/admin/shipments/orders/create"
-    />
+    <ClientOnly>
+      <OrdersDashboard />
+    </ClientOnly>
   );
 }
