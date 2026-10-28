@@ -1,13 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import {
-  getSettings,
-  saveSettings,
-  setMaintenanceMode,
-} from "@/lib/admin-store";
+import { getSettings, saveSettings } from "@/lib/admin-store";
 import type { SiteSettings } from "@/types";
-import { Button, Field, Panel, TextArea, TextInput } from "@/components/admin/AdminUI";
+import { Button, Field, Panel, TextInput } from "@/components/admin/AdminUI";
 import { classNames } from "@/lib/utils";
 
 export function SettingsSection() {
@@ -18,9 +14,8 @@ export function SettingsSection() {
     setSettings((s) => ({ ...s, ...patch }));
 
   const save = () => {
-    saveSettings(settings);
-    if (settings.maintenanceMode) setMaintenanceMode(true, settings.maintenanceMessage);
-    else setMaintenanceMode(false);
+    const { processing, fulfillmentLocations, pickupTimeslots } = settings;
+    saveSettings({ ...getSettings(), processing, fulfillmentLocations, pickupTimeslots });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
   };
@@ -29,58 +24,13 @@ export function SettingsSection() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Site & System Settings</h1>
+          <h2 className="text-2xl font-bold text-text-primary">Locations & processing</h2>
           <p className="text-sm text-text-muted">
-            Branding, maintenance mode, processing timeline, API keys, locations and couriers.
+            Processing timeline, warehouse and store pickup locations, and pickup timeslots.
           </p>
         </div>
-        <Button onClick={save}>{saved ? "Saved ✓" : "Save all settings"}</Button>
+        <Button onClick={save}>{saved ? "Saved" : "Save locations"}</Button>
       </div>
-
-      <Panel title="Branding & identity">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Site name">
-            <TextInput value={settings.siteName} onChange={(e) => update({ siteName: e.target.value })} />
-          </Field>
-          <Field label="Logo text">
-            <TextInput value={settings.logoText} onChange={(e) => update({ logoText: e.target.value })} />
-          </Field>
-          <Field label="Tagline">
-            <TextInput value={settings.tagline} onChange={(e) => update({ tagline: e.target.value })} />
-          </Field>
-          <Field label="Logo image URL">
-            <TextInput value={settings.logoUrl ?? ""} onChange={(e) => update({ logoUrl: e.target.value })} placeholder="https://..." />
-          </Field>
-          <Field label="Support email">
-            <TextInput value={settings.supportEmail} onChange={(e) => update({ supportEmail: e.target.value })} />
-          </Field>
-          <Field label="Support phone">
-            <TextInput value={settings.supportPhone} onChange={(e) => update({ supportPhone: e.target.value })} />
-          </Field>
-        </div>
-      </Panel>
-
-      <Panel title="Maintenance mode">
-        <label className="flex items-start gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={settings.maintenanceMode}
-            onChange={(e) => update({ maintenanceMode: e.target.checked })}
-            className="mt-0.5 h-5 w-5 accent-burgundy"
-          />
-          <span>
-            <span className="font-semibold text-text-primary">Enable maintenance mode</span>
-            <span className="block text-text-muted">
-              Visitors see a maintenance page; admins can still access the site.
-            </span>
-          </span>
-        </label>
-        <div className="mt-3">
-          <Field label="Maintenance message">
-            <TextArea rows={2} value={settings.maintenanceMessage} onChange={(e) => update({ maintenanceMessage: e.target.value })} />
-          </Field>
-        </div>
-      </Panel>
 
       <Panel title="Order processing timeline" description="Auto-computes pack → pick → ship → deliver dates for every new order.">
         <div className="grid gap-4 sm:grid-cols-3">
@@ -92,23 +42,6 @@ export function SettingsSection() {
           </Field>
           <Field label="Days in transit">
             <TextInput type="number" value={settings.processing.daysInTransit} onChange={(e) => update({ processing: { ...settings.processing, daysInTransit: Number(e.target.value) } })} />
-          </Field>
-        </div>
-      </Panel>
-
-      <Panel title="API keys" description="Gateways are simulated in this demo — keys are stored for integration.">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Google Maps API key">
-            <TextInput type="password" value={settings.apiKeys.googleMaps} onChange={(e) => update({ apiKeys: { ...settings.apiKeys, googleMaps: e.target.value } })} placeholder="AIza..." />
-          </Field>
-          <Field label="Shiprocket API key">
-            <TextInput type="password" value={settings.apiKeys.shiprocket} onChange={(e) => update({ apiKeys: { ...settings.apiKeys, shiprocket: e.target.value } })} placeholder="Shiprocket token" />
-          </Field>
-          <Field label="Razorpay key id">
-            <TextInput type="password" value={settings.apiKeys.razorpay} onChange={(e) => update({ apiKeys: { ...settings.apiKeys, razorpay: e.target.value } })} placeholder="rzp_live_..." />
-          </Field>
-          <Field label="ZeptoMail API token">
-            <TextInput type="password" value={settings.apiKeys.zeptomail} onChange={(e) => update({ apiKeys: { ...settings.apiKeys, zeptomail: e.target.value } })} placeholder="ZeptoMail API key" />
           </Field>
         </div>
       </Panel>

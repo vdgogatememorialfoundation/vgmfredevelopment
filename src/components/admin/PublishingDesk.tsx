@@ -44,7 +44,7 @@ import type { OrderStatus } from "@/lib/admin-store";
 ensureBootstrapped();
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
-const button = "rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white";
+const button = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white";
 const ghost = "rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700";
 
 function EditorGate({
@@ -157,7 +157,7 @@ export function ArticleAdmin() {
                 <p className="text-xs text-slate-500">{article.category} · {article.author}</p>
               </div>
               <div className="flex gap-3 text-sm font-semibold">
-                <Link className="text-[#651C1C]" href={`/admin/articles/new?id=${article.id}`}>Edit</Link>
+                <Link className="text-burgundy" href={`/admin/articles/new?id=${article.id}`}>Edit</Link>
                 <Link className="text-slate-500" href={`/articles/${article.slug}`}>View</Link>
                 <button type="button" className="text-slate-400" onClick={() => hideArticle(article.id)}>Hide</button>
               </div>
@@ -232,7 +232,7 @@ function AnnouncementForm({
               <p className="text-xs text-slate-500">{item.priority} · {item.category}</p>
             </div>
             <div className="flex gap-3 text-sm font-semibold">
-              <Link className="text-[#651C1C]" href={`/admin/website/announcements?id=${item.id}`}>Edit</Link>
+              <Link className="text-burgundy" href={`/admin/website/announcements?id=${item.id}`}>Edit</Link>
               <button type="button" className="text-slate-400" onClick={() => hideAnnouncement(item.id)}>Hide</button>
             </div>
           </li>
@@ -321,7 +321,7 @@ export function EventAdminList() {
               <p className="text-xs text-slate-500">{event.startDate} · {event.registrationStatus}</p>
             </div>
             <div className="flex gap-3 text-sm font-semibold">
-              <Link className="text-[#651C1C]" href={`/admin/events/create?id=${event.id}`}>Edit</Link>
+              <Link className="text-burgundy" href={`/admin/events/create?id=${event.id}`}>Edit</Link>
               <Link className="text-slate-500" href={`/events/${event.slug}`}>View</Link>
             </div>
           </li>
@@ -506,7 +506,7 @@ export function CertificateApiDesk() {
           <div key={site.id} className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{site.name}</p>
             <p className="mt-1 text-sm text-slate-700">{site.origin}</p>
-            <p className="mt-2 font-mono text-sm text-[#651C1C]">{site.apiKey}</p>
+            <p className="mt-2 font-mono text-sm text-burgundy">{site.apiKey}</p>
           </div>
         ))}
       </div>

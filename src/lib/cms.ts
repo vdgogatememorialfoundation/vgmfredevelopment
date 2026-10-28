@@ -3,7 +3,8 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { announcements as seededAnnouncements, certificates as baseCertificates, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
-import type { Announcement, Article, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, Video } from "@/types";
+import type { Announcement, Article, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, User, Video } from "@/types";
+import { modulesFor, type StaffModuleId } from "@/lib/roles";
 
 const ARTICLES_KEY = "vgmf_article_edits";
 const CUSTOM_ARTICLES_KEY = "vgmf_custom_articles";
@@ -113,6 +114,9 @@ export function saveArticle(article: Article) {
       author: article.author,
       category: article.category,
       featured: article.featured,
+      coverImage: article.coverImage,
+      images: article.images,
+      readingTime: article.readingTime,
       hidden: false,
     });
     writeJSON(ARTICLES_KEY, edits);
@@ -184,20 +188,7 @@ export function saveEvent(event: Event) {
   const isSeed = seededEvents.some((item) => item.id === event.id);
   if (isSeed) {
     const edits = readJSON<EventEdit[]>(EVENTS_KEY, []).filter((edit) => edit.id !== event.id);
-    edits.push({
-      id: event.id,
-      name: event.name,
-      slug: event.slug,
-      shortDescription: event.shortDescription,
-      description: event.description,
-      fee: event.fee,
-      registrationStatus: event.registrationStatus,
-      startDate: event.startDate,
-      endDate: event.endDate,
-      city: event.city,
-      venue: event.venue,
-      hidden: false,
-    });
+    edits.push({ ...event, hidden: false });
     writeJSON(EVENTS_KEY, edits);
     return;
   }
@@ -250,8 +241,22 @@ export function editorsFor(moduleId: ContentModuleId) {
   return [ADMIN_EMAIL, ...extras.filter((email) => email.toLowerCase() !== ADMIN_EMAIL)];
 }
 
+const roleModuleFor: Record<ContentModuleId, StaffModuleId> = {
+  articles: "articles",
+  events: "events",
+  announcements: "website",
+  orders: "orders",
+  certificates: "certificates",
+  clinic: "clinics",
+};
+
 export function canEdit(moduleId: ContentModuleId, email: string) {
-  return editorsFor(moduleId).some((item) => item.toLowerCase() === email.trim().toLowerCase());
+  const value = email.trim().toLowerCase();
+  if (editorsFor(moduleId).some((item) => item.toLowerCase() === value)) return true;
+  const account = readJSON<User[]>("vgmf_accounts", []).find((item) => item.email.toLowerCase() === value);
+  if (!account) return false;
+  const allowed = modulesFor(account);
+  return allowed === "all" || allowed.includes(roleModuleFor[moduleId]);
 }
 
 type Identified = { id: string };

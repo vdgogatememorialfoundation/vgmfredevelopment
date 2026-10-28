@@ -41,6 +41,19 @@ export interface Event {
   highlights?: string[];
   terms?: string[];
   flyers?: string[];
+  /** Fields not finalised yet are shown publicly as "To be announced". */
+  tbd?: EventTbd;
+  timeText?: string;
+}
+
+export interface EventTbd {
+  dates?: boolean;
+  time?: boolean;
+  venue?: boolean;
+  city?: boolean;
+  fee?: boolean;
+  speakers?: boolean;
+  schedule?: boolean;
 }
 
 export interface Speaker {
@@ -81,6 +94,12 @@ export interface Article {
   featured?: boolean;
   readingTime?: string;
   tags?: string[];
+  images?: CaptionedImage[];
+}
+
+export interface CaptionedImage {
+  src: string;
+  caption?: string;
 }
 
 export interface Review {
@@ -156,6 +175,22 @@ export interface Clinic {
   about?: string;
   coordinates?: { lat: number; lng: number };
   services?: string[];
+  photos?: CaptionedImage[];
+  operatedBy?: string;
+  mapLink?: string;
+  email?: string;
+  doctors?: ClinicDoctor[];
+}
+
+export interface ClinicDoctor {
+  id: string;
+  name: string;
+  qualification: string;
+  specialization: string;
+  experience?: string;
+  timings?: string;
+  photo?: string;
+  bio?: string;
 }
 
 export interface Announcement {
@@ -201,6 +236,7 @@ export interface User {
   role?: UserRole;
   sellerId?: string;
   password?: string;
+  staffRoleId?: string;
 }
 
 export interface Certificate {
@@ -304,6 +340,28 @@ export interface Order {
   sellerId?: string;
   plan?: OrderPlan;
   shipmentId?: string;
+  paymentMethod?: string;
+  paymentRef?: string;
+  paidAt?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
+  courierChoice?: CourierRate;
+  weightKg?: number;
+  createdBy?: string;
+  cancelReason?: string;
+  refundAmount?: number;
+  history?: { at: string; status: string; note?: string; by?: string }[];
+}
+
+export interface CourierRate {
+  provider: "shiprocket" | "nimbuspost" | "shipyaari" | "tookan" | "shipday" | "local";
+  courierId: string;
+  courierName: string;
+  rate: number;
+  etaDays: number;
+  live: boolean;
+  cod?: boolean;
 }
 
 export type ReturnKind = "return" | "replacement";
@@ -391,6 +449,9 @@ export interface SiteSettings {
   supportPhone: string;
   maintenanceMode: boolean;
   maintenanceMessage: string;
+  /** ISO time when maintenance ends automatically; empty keeps it on until switched off. */
+  maintenanceUntil?: string;
+  faviconUrl?: string;
   apiKeys: ApiKeys;
   processing: ProcessingTimeline;
   packagingOptions: PackagingOption[];
@@ -437,6 +498,18 @@ export interface ShipmentRecord {
   status: "Booked" | "Picked Up" | "In Transit" | "Out for Delivery" | "Delivered";
   generatedAt: string;
   pickedUpAt?: string;
+  provider?: CourierRate["provider"];
+  live?: boolean;
+  providerOrderId?: string;
+  providerShipmentId?: string;
+  labelUrl?: string;
+  pickupScheduledFor?: string;
+  pickupSlot?: string;
+  pickupReference?: string;
+  courierCost?: number;
+  customerPaid?: number;
+  tracking?: { at: string; status: string; location?: string }[];
+  note?: string;
 }
 
 export interface SellerKyc {
@@ -516,8 +589,14 @@ export interface OutboxEmail {
   subject: string;
   body: string;
   template: string;
-  status: "Sent";
+  status: "Queued" | "Sent" | "Delivered" | "Failed";
   sentAt: string;
+  channel?: "email" | "whatsapp";
+  provider?: string;
+  live?: boolean;
+  error?: string;
+  providerMessageId?: string;
+  updatedAt?: string;
 }
 
 export interface OrderPlan {

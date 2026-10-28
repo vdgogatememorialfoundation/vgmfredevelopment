@@ -21,21 +21,21 @@ export default async function LoginPage({
     <main className="border-t border-border bg-background">
       <div className="mx-auto grid max-w-7xl lg:grid-cols-2">
         {/* Left panel */}
-        <section className="hidden flex-col justify-center bg-burgundy px-10 py-16 text-white lg:flex xl:px-20">
+        <section className="hidden flex-col justify-center border-r border-border bg-warm-cream px-10 py-16 text-text-primary lg:flex xl:px-20">
           <div className="max-w-lg">
-            <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full border border-white/30 bg-white/10">
-              <span className="text-xs font-bold">VGMF</span>
+            <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-full border border-burgundy/30 bg-white">
+              <span className="text-xs font-bold text-burgundy">VGMF</span>
             </div>
 
-            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-white/70">
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy">
               Vaidya Gogate Memorial Foundation
             </p>
 
-            <h1 className="text-4xl font-bold leading-tight xl:text-5xl">
+            <h1 className="font-serif text-4xl font-bold leading-tight xl:text-5xl">
               One account for the whole Foundation.
             </h1>
 
-            <p className="mt-6 text-base leading-7 text-white/75">
+            <p className="mt-6 text-base leading-7 text-text-muted">
               Register once and use your account for events, seminar
               registrations, tickets, certificates, shop purchases and
               other foundation services.
@@ -68,8 +68,8 @@ export default async function LoginPage({
             </div>
 
             {signInMode && (
-              <p className="mt-10 rounded-xl border border-white/20 bg-white/5 p-4 text-sm text-white/70">
-                <strong className="text-white">Demo tip:</strong> sign up
+              <p className="mt-10 rounded-xl border border-border bg-white p-4 text-sm text-text-muted">
+                <strong className="text-text-primary">Demo tip:</strong> sign up
                 once using the Create Account tab, then you can sign in
                 here with the same email or Account ID.
               </p>
@@ -129,12 +129,12 @@ function Step({
 }) {
   return (
     <div className="flex gap-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/30">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-burgundy/30 bg-white text-burgundy">
         {number}
       </div>
       <div>
         <p className="font-semibold">{title}</p>
-        <p className="mt-1 text-sm text-white/60">{text}</p>
+        <p className="mt-1 text-sm text-text-muted">{text}</p>
       </div>
     </div>
   );

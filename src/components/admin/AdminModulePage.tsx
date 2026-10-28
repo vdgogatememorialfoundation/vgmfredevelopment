@@ -29,7 +29,7 @@ export default function AdminModulePage({
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">
             {section}
           </p>
 
@@ -45,7 +45,7 @@ export default function AdminModulePage({
         {action && actionHref && (
           <Link
             href={actionHref}
-            className="inline-flex items-center justify-center rounded-xl bg-[#651C1C] px-5 py-3 text-sm font-bold text-white hover:bg-[#4F1414]"
+            className="inline-flex items-center justify-center rounded-xl bg-burgundy px-5 py-3 text-sm font-bold text-white hover:bg-burgundy-dark"
           >
             + {action}
           </Link>
@@ -86,7 +86,7 @@ export default function AdminModulePage({
 
           <input
             placeholder="Search..."
-            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-[#651C1C]"
+            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-burgundy"
           />
         </div>
 
@@ -112,7 +112,7 @@ export default function AdminModulePage({
                   className="px-5 py-16 text-center"
                 >
                   <div className="mx-auto max-w-md">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#F8F3ED] text-xl text-[#651C1C]">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#F8F3ED] text-xl text-burgundy">
                       +
                     </div>
 
@@ -127,7 +127,7 @@ export default function AdminModulePage({
                     {action && actionHref && (
                       <Link
                         href={actionHref}
-                        className="mt-5 inline-flex rounded-xl border border-[#651C1C] px-4 py-2 text-sm font-semibold text-[#651C1C]"
+                        className="mt-5 inline-flex rounded-xl border border-burgundy px-4 py-2 text-sm font-semibold text-burgundy"
                       >
                         Create {action}
                       </Link>

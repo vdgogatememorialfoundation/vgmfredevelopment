@@ -35,7 +35,7 @@ export function CarrierDesk({ mode = "partners" }: { mode?: "partners" | "apis" 
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">Delivery partners</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Delivery partners</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">
           {mode === "apis" ? "Partner APIs" : "Courier partners"}
         </h1>
@@ -144,7 +144,7 @@ function CarrierCard({
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="submit" className="rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white">
+        <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
           Save {draft.name}
         </button>
         <button
@@ -174,7 +174,7 @@ export function TimelineDesk() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">Settings</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Settings</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">Processing timelines</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
           The product page adds these deadlines to the courier transit time. An order placed
@@ -204,7 +204,7 @@ export function TimelineDesk() {
           Pickup from store
         </label>
         <div className="sm:col-span-2">
-          <button type="submit" className="rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white">
+          <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
             {saved ? "Timeline saved" : "Save timeline"}
           </button>
         </div>
@@ -248,7 +248,7 @@ export function ShippingDesk() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">Settings</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Settings</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">Shipping & store pickup</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
           Pickup from store is offered on the product page and at checkout when the product
@@ -282,7 +282,7 @@ export function ShippingDesk() {
           <p className="mt-1">{location.address}</p>
           <p className="mt-1">{location.phone}</p>
         </div>
-        <button type="submit" className="rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white">
+        <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
           {saved ? "Shipping settings saved" : "Save shipping settings"}
         </button>
       </form>
@@ -297,7 +297,7 @@ export function InventoryDesk() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">Commerce</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Commerce</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">Inventory & stocking</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
           On-hand quantity, reorder level and the location that feeds delivery dates.
@@ -362,7 +362,7 @@ export function InventoryDesk() {
                 <td className="px-4 py-3 text-right">
                   <button
                     type="button"
-                    className="rounded-lg bg-[#651C1C] px-3 py-1.5 text-xs font-semibold text-white"
+                    className="rounded-lg bg-burgundy px-3 py-1.5 text-xs font-semibold text-white"
                     onClick={() => {
                       updateStock(row.book.id, row.stock);
                       saveProductFulfillment(row.profile);
@@ -401,7 +401,7 @@ export function ProductServiceabilityDesk() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">Commerce</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Commerce</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">Product serviceability</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
           For each product, choose home delivery, pickup from store, where it is stocked,
@@ -425,7 +425,7 @@ export function ProductServiceabilityDesk() {
                 setNotice("");
               }}
               className={`block w-full rounded-xl px-3 py-2 text-left text-sm ${
-                book.id === bookId ? "bg-[#651C1C] text-white" : "text-slate-700 hover:bg-slate-50"
+                book.id === bookId ? "bg-burgundy text-white" : "text-slate-700 hover:bg-slate-50"
               }`}
             >
               {book.title}
@@ -520,7 +520,7 @@ export function ProductServiceabilityDesk() {
               ))}
             </select>
           </label>
-          <button type="submit" className="rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white">
+          <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
             Save product delivery
           </button>
           {notice && <p className="text-sm text-emerald-700">{notice}</p>}

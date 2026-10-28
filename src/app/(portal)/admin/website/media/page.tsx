@@ -19,7 +19,7 @@ export default function Page() {
           <div key={adminHref} className="rounded-xl border border-slate-200 bg-white p-5">
             <p className="font-semibold text-slate-900">{label}</p>
             <div className="mt-3 flex gap-4 text-sm font-semibold">
-              <Link href={adminHref} className="text-[#651C1C]">Manage</Link>
+              <Link href={adminHref} className="text-burgundy">Manage</Link>
               <Link href={publicHref} className="text-slate-500">View on the site</Link>
             </div>
           </div>

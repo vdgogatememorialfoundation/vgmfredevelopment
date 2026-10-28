@@ -23,9 +23,9 @@ export default function EventsAdmin() {
           <Link
             key={href}
             href={href}
-            className="rounded-xl border bg-white p-5 hover:border-[#651C1C] hover:shadow-sm"
+            className="rounded-xl border bg-white p-5 hover:border-burgundy hover:shadow-sm"
           >
-            <div className="font-semibold text-[#4F1414]">{label}</div>
+            <div className="font-semibold text-burgundy-dark">{label}</div>
             <div className="mt-2 text-sm text-gray-500">Open {label}</div>
           </Link>
         ))}

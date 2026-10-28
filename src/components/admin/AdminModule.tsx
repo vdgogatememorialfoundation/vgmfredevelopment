@@ -24,7 +24,7 @@ export default function AdminModule({
 
         <div>
 
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#651C1C]">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-burgundy">
             {section}
           </p>
 
@@ -41,7 +41,7 @@ export default function AdminModule({
         {action && actionHref ? (
           <Link
             href={actionHref}
-            className="inline-flex items-center justify-center rounded-xl bg-[#651C1C] px-5 py-3 text-sm font-bold text-white hover:bg-[#4F1414]"
+            className="inline-flex items-center justify-center rounded-xl bg-burgundy px-5 py-3 text-sm font-bold text-white hover:bg-burgundy-dark"
           >
             + {action}
           </Link>
@@ -82,7 +82,7 @@ export default function AdminModule({
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
             This Month
           </p>
-          <p className="mt-3 text-3xl font-bold text-[#651C1C]">
+          <p className="mt-3 text-3xl font-bold text-burgundy">
             0
           </p>
         </div>
@@ -108,7 +108,7 @@ export default function AdminModule({
             <input
               type="search"
               placeholder="Search..."
-              className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-[#651C1C]"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-burgundy"
             />
 
             <button
@@ -124,7 +124,7 @@ export default function AdminModule({
 
         <div className="px-6 py-20 text-center">
 
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F8F1EA] text-2xl text-[#651C1C]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F8F1EA] text-2xl text-burgundy">
             +
           </div>
 
@@ -139,7 +139,7 @@ export default function AdminModule({
           {action && actionHref ? (
             <Link
               href={actionHref}
-              className="mt-5 inline-flex rounded-xl bg-[#651C1C] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#4F1414]"
+              className="mt-5 inline-flex rounded-xl bg-burgundy px-5 py-2.5 text-sm font-bold text-white hover:bg-burgundy-dark"
             >
               + {action}
             </Link>

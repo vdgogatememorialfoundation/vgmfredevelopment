@@ -14,7 +14,7 @@ function PaymentsSummary() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-[#4F1414]">Commerce payments</h1>
+        <h1 className="text-2xl font-semibold text-burgundy-dark">Commerce payments</h1>
         <p className="mt-1 text-sm text-gray-600">Order payments from the store, with refunds issued from the refunds desk.</p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
@@ -34,7 +34,7 @@ function PaymentsSummary() {
       <div className="rounded-xl border bg-white p-6">
         <p className="text-sm text-gray-600">{refunded} refunded.</p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link href="/admin/commerce/orders" className="rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white">
+          <Link href="/admin/commerce/orders" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
             Process orders
           </Link>
           <Link href="/admin/payments/refunds" className="rounded-lg border px-4 py-2 text-sm font-semibold">

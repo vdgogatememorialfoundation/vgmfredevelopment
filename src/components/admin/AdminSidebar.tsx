@@ -139,7 +139,7 @@ export default function AdminSidebar() {
 
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-6 py-6">
 
-        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#651C1C]">
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-burgundy">
           VGMF
         </p>
 
@@ -178,8 +178,8 @@ export default function AdminSidebar() {
                     href={href}
                     className={
                       active
-                        ? "block rounded-xl bg-[#651C1C] px-3 py-2.5 text-sm font-bold text-white"
-                        : "block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-[#F8F1EA] hover:text-[#651C1C]"
+                        ? "block rounded-xl bg-burgundy px-3 py-2.5 text-sm font-bold text-white"
+                        : "block rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-[#F8F1EA] hover:text-burgundy"
                     }
                   >
                     {label}

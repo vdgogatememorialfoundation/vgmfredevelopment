@@ -1,12 +1,12 @@
 "use client";
 
+import { NotificationsDesk } from "@/components/admin/SettingsDesks";
 import ClientOnly from "@/components/common/ClientOnly";
-import { SectionSettingsDesk } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
     <ClientOnly>
-      <SectionSettingsDesk section="notifications" />
+      <NotificationsDesk />
     </ClientOnly>
   );
 }

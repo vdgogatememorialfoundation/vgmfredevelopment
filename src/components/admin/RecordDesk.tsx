@@ -100,7 +100,7 @@ export default function RecordDesk<T extends { id: string }>({
             />
           )
         )}
-        <button type="button" className="rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white" onClick={save}>
+        <button type="button" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white" onClick={save}>
           Save and publish
         </button>
         {message && <p className="text-sm text-emerald-700">{message}</p>}
@@ -112,7 +112,7 @@ export default function RecordDesk<T extends { id: string }>({
             <div className="flex gap-3 text-sm font-semibold">
               <button
                 type="button"
-                className="text-[#651C1C]"
+                className="text-burgundy"
                 onClick={() => {
                   setDraft(record);
                   setEditing(true);

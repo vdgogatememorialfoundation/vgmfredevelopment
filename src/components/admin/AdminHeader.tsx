@@ -10,7 +10,7 @@ export default function AdminHeader() {
 
         <div>
 
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#651C1C]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-burgundy">
             VGMF
           </p>
 
@@ -34,7 +34,7 @@ export default function AdminHeader() {
             View Website
           </Link>
 
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#651C1C] text-sm font-bold text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-burgundy text-sm font-bold text-white">
             A
           </div>
 

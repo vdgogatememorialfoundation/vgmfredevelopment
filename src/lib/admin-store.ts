@@ -17,6 +17,8 @@ import { generateOrderId, getOrders, saveOrder } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { findAccountByIdentifier, saveAccount } from "@/lib/auth";
 import { getLiveBooks } from "@/lib/product-data";
+import { getNotifications, queueNotification } from "@/lib/notify";
+import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 
 export type OrderStatus = Order["status"];
 
@@ -27,7 +29,6 @@ const SELLER_ORDERS_KEY = "vgmf_seller_orders";
 const SUPPORT_KEY = "vgmf_support";
 const TICKETS_KEY = "vgmf_tickets";
 const FAQS_KEY = "vgmf_faqs";
-const OUTBOX_KEY = "vgmf_outbox";
 const BOOT_KEY = "vgmf_booted";
 
 function readJSON<T>(key: string, fallback: T): T {
@@ -182,6 +183,22 @@ export function seedAccounts() {
   if (!findAccountByIdentifier(staff.email)) saveAccount(staff);
 }
 
+export function updateAccount(email: string, update: Partial<User>) {
+  const accounts = getAccounts();
+  const index = accounts.findIndex((account) => account.email.toLowerCase() === email.toLowerCase());
+  if (index === -1) return;
+  accounts[index] = { ...accounts[index], ...update };
+  writeJSON("vgmf_accounts", accounts);
+  if (typeof window !== "undefined") {
+    const session = readJSON<User | null>("vgmf_session", null);
+    if (session?.email.toLowerCase() === email.toLowerCase()) writeJSON("vgmf_session", { ...session, ...update });
+  }
+}
+
+export function removeAccount(email: string) {
+  writeJSON("vgmf_accounts", getAccounts().filter((account) => account.email.toLowerCase() !== email.toLowerCase()));
+}
+
 export function getAccounts(): User[] {
   if (typeof window === "undefined") return [];
   return readJSON<User[]>("vgmf_accounts", []);
@@ -193,6 +210,8 @@ export function createUserAccount(input: {
   email: string;
   phone: string;
   role: "customer" | "admin" | "staff";
+  password?: string;
+  staffRoleId?: string;
 }) {
   const account: User = {
     id: `usr-${Date.now()}`,
@@ -203,12 +222,14 @@ export function createUserAccount(input: {
     whatsapp: input.phone,
     accountId: String(Math.floor(100000000000 + Math.random() * 900000000000)),
     role: input.role,
+    staffRoleId: input.role === "staff" ? input.staffRoleId ?? "general-staff" : undefined,
     password:
-      input.role === "admin"
+      input.password?.trim() ||
+      (input.role === "admin"
         ? ADMIN_PASSWORD
         : input.role === "staff"
           ? STAFF_PASSWORD
-          : undefined,
+          : undefined),
   };
   saveAccount(account);
   sendEmail({
@@ -254,10 +275,16 @@ export function computeOrderPlan(order: Order): OrderPlan {
 
 export function createAdminOrder(input: {
   userEmail?: string;
+  userId?: string;
   deliverTo: DeliveryAddress;
   items: { bookId: string; quantity: number }[];
   deliveryMode?: "delivery" | "store_pickup";
   sellerId?: string;
+  payment?: "collect" | "link" | "cod" | "paid";
+  paymentMethod?: string;
+  paymentRef?: string;
+  courierChoice?: Order["courierChoice"];
+  shippingOverride?: number;
 }) {
   const live = getLiveBooks();
   const orderItems: OrderItem[] = input.items
@@ -283,20 +310,35 @@ export function createAdminOrder(input: {
     0
   );
   const gst = Math.round(subtotal * storeConfig.gstRate);
-  const shipping = input.deliveryMode === "store_pickup" ? 0 : storeConfig.shippingFee;
+  const settings = getOrderSettings();
+  const itemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
+  const shipping =
+    input.deliveryMode === "store_pickup"
+      ? 0
+      : input.shippingOverride ?? shippingFeeFor(subtotal, itemCount, input.courierChoice?.rate, settings);
+  const cod = input.payment === "cod";
+  const codFee = cod && settings.codEnabled ? settings.codFee : 0;
+  const paid = input.payment === "paid";
   const order: Order = {
     id: generateOrderId(),
-    userId: "admin",
+    userId: input.userId ?? "admin",
     date: new Date().toISOString(),
     items: orderItems,
     subtotal,
     discount,
     gst,
-    shipping,
-    total: subtotal + gst + shipping,
+    shipping: shipping + codFee,
+    total: subtotal + gst + shipping + codFee,
     currency: storeConfig.currency,
-    paymentStatus: "Paid",
-    status: "Ordered",
+    paymentStatus: paid ? "Paid" : "Pending",
+    paymentMethod: paid ? input.paymentMethod ?? "Recorded by admin" : cod ? "Cash on delivery" : undefined,
+    paymentRef: input.paymentRef,
+    paidAt: paid ? new Date().toISOString() : undefined,
+    status: paid || cod ? "Ordered" : "Pending",
+    courierChoice: input.courierChoice,
+    courierName: input.courierChoice?.courierName,
+    createdBy: currentActor(),
+    history: [{ at: new Date().toISOString(), status: "Created", note: "Created from admin", by: currentActor() }],
     deliveryMode: input.deliveryMode ?? "delivery",
     deliveryAddress: {
       ...input.deliverTo,
@@ -308,9 +350,12 @@ export function createAdminOrder(input: {
   saveOrder(order);
   sendEmail({
     to: order.deliveryAddress?.email || input.userEmail || "",
+    phone: order.deliveryAddress?.phone,
+    name: order.deliveryAddress?.fullName,
+    params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`],
     subject: `Order ${order.id} placed`,
     template: "order-placed",
-    body: `Your order ${order.id} is confirmed.\n\nExpected delivery: ${formatDate(order.plan.deliveredBy)}\nPackaging: ${order.plan.packagingLabel}\n\n– VGMF Store`,
+    body: `Your order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\nExpected delivery: ${formatDate(order.plan.deliveredBy)}\n\n– VGMF Store`,
   });
   return order;
 }
@@ -333,42 +378,72 @@ export function getOrder(orderId: string) {
 export function setOrderStatus(orderId: string, status: OrderStatus) {
   const order = getOrder(orderId);
   if (!order) return;
-  const next: Order = { ...order, status };
-  if (status === "Out for Delivery" && order.deliveryMode === "delivery") {
-    next.paymentStatus = "Paid";
-  }
-  if (status === "Delivered") {
+  const next: Order = withHistory({ ...order, status }, status);
+  if (status === "Delivered" && order.paymentMethod === "Cash on delivery") {
     next.paymentStatus = "Paid";
   }
   updateOrderInStore(next);
   sendOrderStatusEmail(next, status);
 }
 
-export function cancelOrder(orderId: string) {
+export function cancelOrder(orderId: string, reason?: string) {
   const order = getOrder(orderId);
   if (!order) return;
-  const next: Order = { ...order, status: "Cancelled" };
+  const next: Order = withHistory({ ...order, status: "Cancelled", cancelReason: reason }, "Cancelled", reason);
   updateOrderInStore(next);
   sendOrderStatusEmail(next, "Cancelled");
 }
 
-export function refundOrder(orderId: string) {
+export function refundOrder(orderId: string, amount?: number, note?: string) {
   const order = getOrder(orderId);
   if (!order) return;
-  const next: Order = { ...order, paymentStatus: "Refunded" };
+  const refundAmount = amount ?? order.total;
+  const next: Order = withHistory({ ...order, paymentStatus: "Refunded", refundAmount }, "Refunded", note ?? `₹${refundAmount}`);
   updateOrderInStore(next);
+  const days = getOrderSettings().refunds.processingDays;
   sendEmail({
     to: order.deliveryAddress?.email || "",
+    phone: order.deliveryAddress?.phone,
+    name: order.deliveryAddress?.fullName,
+    params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${refundAmount}`],
     subject: `Refund initiated for order ${order.id}`,
     template: "refund",
-    body: `A refund of ₹${order.total.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within 5–7 business days.\n\n– VGMF Store`,
+    body: `A refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\n– VGMF Store`,
   });
 }
 
 export function setPaymentStatus(orderId: string, paymentStatus: Order["paymentStatus"]) {
   const order = getOrder(orderId);
   if (!order) return;
-  updateOrderInStore({ ...order, paymentStatus });
+  updateOrderInStore(withHistory({ ...order, paymentStatus }, `Payment ${paymentStatus}`));
+}
+
+export function recordPayment(orderId: string, input: { method: string; reference?: string; razorpayPaymentId?: string }) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  const next = withHistory(
+    {
+      ...order,
+      paymentStatus: "Paid",
+      paymentMethod: input.method,
+      paymentRef: input.reference,
+      razorpayPaymentId: input.razorpayPaymentId ?? order.razorpayPaymentId,
+      paidAt: new Date().toISOString(),
+      status: order.status === "Pending" ? "Ordered" : order.status,
+    },
+    "Payment received",
+    `${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
+}
+
+export function patchOrder(orderId: string, update: Partial<Order>, note?: string) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  const next = note ? withHistory({ ...order, ...update }, note) : { ...order, ...update };
+  updateOrderInStore(next);
+  return next;
 }
 
 export function createReplacement(orderId: string) {
@@ -446,6 +521,25 @@ export function createShipment(input: {
   updateOrderInStore(next);
   sendOrderStatusEmail(next, "Shipped");
   return shipment;
+}
+
+export function saveShipmentRecord(shipment: ShipmentRecord) {
+  const list = getShipments().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
+  list.push(shipment);
+  writeJSON(SHIPMENTS_KEY, list);
+}
+
+export function patchShipment(shipmentId: string, update: Partial<ShipmentRecord>) {
+  const list = getShipments();
+  const index = list.findIndex((item) => item.id === shipmentId);
+  if (index === -1) return;
+  list[index] = { ...list[index], ...update };
+  writeJSON(SHIPMENTS_KEY, list);
+  return list[index];
+}
+
+export function removeShipment(shipmentId: string) {
+  writeJSON(SHIPMENTS_KEY, getShipments().filter((item) => item.id !== shipmentId));
 }
 
 export function updateShipmentStatus(shipmentId: string, status: ShipmentRecord["status"]) {
@@ -593,10 +687,10 @@ export function printPackagingSlip(order: Order) {
   printHtml(title, html);
 }
 
-/* ---------------- Email (ZeptoMail mock) ---------------- */
+/* ---------------- Notifications ---------------- */
 
 export function getOutbox(): OutboxEmail[] {
-  return readJSON<OutboxEmail[]>(OUTBOX_KEY, []);
+  return getNotifications();
 }
 
 export function sendEmail(input: {
@@ -604,31 +698,44 @@ export function sendEmail(input: {
   subject: string;
   template: string;
   body: string;
+  phone?: string;
+  name?: string;
+  params?: string[];
 }) {
-  const mail: OutboxEmail = {
-    id: `MAIL${Date.now()}`,
-    to: input.to,
-    subject: input.subject,
-    template: input.template,
-    body: input.body,
-    status: "Sent",
-    sentAt: new Date().toISOString(),
-  };
-  const list = getOutbox();
-  list.unshift(mail);
-  writeJSON(OUTBOX_KEY, list);
-  return mail;
+  return queueNotification(input);
 }
 
 export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
   const to = order.deliveryAddress?.email || "";
-  if (!to) return;
+  const phone = order.deliveryAddress?.phone;
+  if (!to && !phone) return;
+  const name = order.deliveryAddress?.fullName ?? "Customer";
   sendEmail({
     to,
+    phone,
+    name,
+    params: [name, order.id, status],
     subject: `Order ${order.id} — ${status}`,
     template: "order-status",
-    body: `Your order ${order.id} is now ${status}.\n\n`,
+    body: `Hi ${name},\n\nYour order ${order.id} is now ${status}.${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\n– VGMF Store`,
   });
+}
+
+function withHistory(order: Order, status: string, note?: string): Order {
+  return {
+    ...order,
+    history: [...(order.history ?? []), { at: new Date().toISOString(), status, note, by: currentActor() }],
+  };
+}
+
+function currentActor() {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const session = JSON.parse(window.localStorage.getItem("vgmf_session") ?? "null") as User | null;
+    return session?.email;
+  } catch {
+    return undefined;
+  }
 }
 
 export function triggerOutOfStockEmails() {

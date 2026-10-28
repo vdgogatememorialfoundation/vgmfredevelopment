@@ -1,12 +1,12 @@
 "use client";
 
+import { PaymentSettingsDesk } from "@/components/admin/SettingsDesks";
 import ClientOnly from "@/components/common/ClientOnly";
-import { GatewayDesk } from "@/components/admin/OperationsDesk";
 
 export default function Page() {
   return (
     <ClientOnly>
-      <GatewayDesk />
+      <PaymentSettingsDesk />
     </ClientOnly>
   );
 }

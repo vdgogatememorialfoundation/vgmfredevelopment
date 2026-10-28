@@ -137,7 +137,7 @@ export function SiteModuleHub() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">Storefront</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Storefront</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900">Website modules</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
           Every public section of the Foundation site, with the admin screen that manages it
@@ -150,7 +150,7 @@ export function SiteModuleHub() {
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{item.count} live</p>
             <h2 className="mt-1 text-lg font-bold text-slate-900">{item.label}</h2>
             <div className="mt-4 flex flex-wrap gap-3 text-sm font-semibold">
-              <Link href={item.adminHref} className="text-[#651C1C]">
+              <Link href={item.adminHref} className="text-burgundy">
                 Manage
               </Link>
               <Link href={item.publicHref} className="text-slate-500">
@@ -172,7 +172,7 @@ export function SiteCatalog({ moduleId }: { moduleId: string }) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#651C1C]">Linked to the website</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Linked to the website</p>
           <h1 className="mt-2 text-3xl font-bold text-slate-900">{entry.label}</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
             {entry.count} records currently published on the public site.
@@ -193,7 +193,7 @@ export function SiteCatalog({ moduleId }: { moduleId: string }) {
                 <p className="font-semibold text-slate-900">{record.title}</p>
                 <p className="text-xs text-slate-500">{record.meta}</p>
               </div>
-              <Link href={record.href} className="text-sm font-semibold text-[#651C1C]">
+              <Link href={record.href} className="text-sm font-semibold text-burgundy">
                 View
               </Link>
             </li>

@@ -32,7 +32,7 @@ import { certificates as seededCertificates } from "@/data/content";
 import type { Order } from "@/types";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
-const button = "rounded-lg bg-[#651C1C] px-4 py-2 text-sm font-semibold text-white";
+const button = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white";
 const ghost = "rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700";
 
 function money(value: number) {
@@ -73,7 +73,7 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
       {shown.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
           No payments in this list yet. Orders from checkout or{" "}
-          <Link href="/admin/commerce/orders" className="font-semibold text-[#651C1C]">Create order</Link> appear here.
+          <Link href="/admin/commerce/orders" className="font-semibold text-burgundy">Create order</Link> appear here.
         </div>
       ) : (
         <ul className="space-y-3">
@@ -356,7 +356,7 @@ export function CourierPerformanceDesk() {
       {couriers.length === 0 ? (
         <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
           Book a shipment from an order to start measuring partners.{" "}
-          <Link href="/admin/commerce/orders" className="font-semibold text-[#651C1C]">Open orders</Link>
+          <Link href="/admin/commerce/orders" className="font-semibold text-burgundy">Open orders</Link>
         </p>
       ) : (
         <div className="grid gap-4 md:grid-cols-3">

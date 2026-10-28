@@ -14,7 +14,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }
   const [error, setError] = useState("");
 
   const label = portal === "admin" ? "Admin" : portal === "staff" ? "Staff" : "Seller";
-  const target = `/${portal}`;
+  const target = portal === "staff" ? "/admin" : `/${portal}`;
   const signedIn =
     user?.role === portal || (portal === "seller" && user?.role === "seller");
 

@@ -24,7 +24,8 @@ import {
   videoKeys,
   type SiteFlags,
 } from "@/lib/cms";
-import type { Announcement, Article, Clinic, Event, Flyer, Notice, Video } from "@/types";
+import type { Announcement, Article, Clinic, Event, Flyer, Notice, SiteSettings, Video } from "@/types";
+import { getSettings } from "@/lib/admin-store";
 
 let articleRaw = "\0";
 let articleList: Article[] = seededArticles;
@@ -111,5 +112,22 @@ export function useSiteFlags() {
       return flagValue;
     },
     () => defaultFlags
+  );
+}
+
+let settingsRaw = "\0";
+let settingsValue: SiteSettings | null = null;
+
+export function useSiteSettings(): SiteSettings | null {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = window.localStorage.getItem("vgmf_settings") ?? "";
+      if (raw === settingsRaw) return settingsValue;
+      settingsRaw = raw;
+      settingsValue = getSettings();
+      return settingsValue;
+    },
+    () => null
   );
 }
