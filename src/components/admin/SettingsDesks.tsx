@@ -118,6 +118,10 @@ function toLocalInput(iso?: string) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
+function minutesFromNow(minutes: number) {
+  return new Date(Date.now() + minutes * 60000).toISOString();
+}
+
 export function GeneralSettingsDesk() {
   const [settings, setSettings] = useState<SiteSettings>(() => getSettings());
   const [note, setNote] = useState("");
@@ -134,7 +138,7 @@ export function GeneralSettingsDesk() {
   };
 
   const until = settings.maintenanceUntil ? Date.parse(settings.maintenanceUntil) : NaN;
-  const preset = (minutes: number) => set({ maintenanceMode: true, maintenanceUntil: new Date(Date.now() + minutes * 60000).toISOString() });
+  const preset = (minutes: number) => set({ maintenanceMode: true, maintenanceUntil: minutesFromNow(minutes) });
 
   return (
     <div className="space-y-5">
