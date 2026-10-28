@@ -174,7 +174,7 @@ export default function CheckoutClient() {
   const codSelected = payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery";
   const codFee = codSelected ? orderSettings.codFee : 0;
   const shipping =
-    deliveryMode === "store_pickup"
+    deliveryMode === "store_pickup" || orderItems.length === 0
       ? 0
       : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
   const totals = {
