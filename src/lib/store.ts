@@ -11,6 +11,7 @@ import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";
 import { getLiveBook } from "@/lib/product-data";
 import { checkPincode } from "@/lib/fulfillment";
+import { getOrderSettings } from "@/lib/integrations";
 
 const CART_KEY = "vgmf_cart";
 const ORDERS_KEY = "vgmf_orders";
@@ -577,6 +578,14 @@ export function getReturnRequest(orderId: string): ReturnRequest | undefined {
   return getReturnRequests()[orderId];
 }
 
+export function updateReturnRequest(orderId: string, update: Partial<ReturnRequest>) {
+  const current = getReturnRequest(orderId);
+  if (!current) return undefined;
+  const next = { ...current, ...update };
+  persistReturnRequest(orderId, next);
+  return next;
+}
+
 function persistReturnRequest(orderId: string, request: ReturnRequest) {
   if (typeof window === "undefined") return;
   const map = getReturnRequests();
@@ -613,7 +622,7 @@ export function initiateReturn(
   const requestedAt = new Date().toISOString();
   const id = returnRequestId();
   const charges =
-    input.kind === "return" ? storeConfig.returnPickupCharges : 0;
+    input.kind === "return" ? getOrderSettings().returns.pickupCharge : 0;
   const at = (hours: number) =>
     new Date(new Date(requestedAt).getTime() + hours * 3600000).toISOString();
 
