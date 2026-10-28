@@ -9,7 +9,7 @@ export default function ClinicCard({ clinic }: { clinic: Clinic }) {
       <MediaPlaceholder
         variant="clinic"
         label={clinic.name}
-        src={undefined}
+        src={clinic.photos?.[0]?.src}
         aspectClassName="aspect-[16/7]"
       />
 
