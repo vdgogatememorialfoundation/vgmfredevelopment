@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { RefundsDesk } from "@/components/admin/PublishingDesk";
+import ClientOnly from "@/components/common/ClientOnly";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Payments"
-      title="Refunds"
-      description="Manage refunds."
-    />
+    <ClientOnly>
+      <RefundsDesk />
+    </ClientOnly>
   );
 }

@@ -27,14 +27,18 @@ const ROLE_TONES: Record<string, string> = {
   seller: "bg-emerald-50 text-emerald-700",
 };
 
-export function AccountsSection() {
+export function AccountsSection({
+  fixedRole,
+}: {
+  fixedRole?: "customer" | "admin" | "staff";
+} = {}) {
   const [accounts, setAccounts] = useState<User[]>(() => getAccounts());
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
     email: "",
     phone: "",
-    role: "customer" as "customer" | "admin" | "staff",
+    role: (fixedRole ?? "customer") as "customer" | "admin" | "staff",
   });
   const [added, setAdded] = useState("");
   const refresh = () => setAccounts(getAccounts());
@@ -45,7 +49,7 @@ export function AccountsSection() {
     const created = createUserAccount(form);
     setAdded(`${created.accountId} (${created.role})`);
     refresh();
-    setForm({ firstName: "", lastName: "", email: "", phone: "", role: "customer" });
+    setForm({ firstName: "", lastName: "", email: "", phone: "", role: fixedRole ?? "customer" });
   };
 
   return (
@@ -63,21 +67,23 @@ export function AccountsSection() {
           <Field label="Last name"><TextInput value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></Field>
           <Field label="Email"><TextInput value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
           <Field label="Phone"><TextInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
-          <Field label="Role">
-            <SelectInput value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as typeof form.role })}>
-              <option value="customer">Customer</option>
-              <option value="staff">Staff</option>
-              <option value="admin">Admin</option>
-            </SelectInput>
-          </Field>
+          {!fixedRole && (
+            <Field label="Role">
+              <SelectInput value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as typeof form.role })}>
+                <option value="customer">Customer</option>
+                <option value="staff">Staff</option>
+                <option value="admin">Admin</option>
+              </SelectInput>
+            </Field>
+          )}
         </div>
         <div className="mt-4">
           <Button onClick={submit}>Create account</Button>
         </div>
       </Panel>
 
-      <Panel title={`Accounts (${accounts.length})`}>
-        {accounts.length === 0 ? (
+      <Panel title={`Accounts (${(fixedRole ? accounts.filter((account) => account.role === fixedRole) : accounts).length})`}>
+        {(fixedRole ? accounts.filter((account) => account.role === fixedRole) : accounts).length === 0 ? (
           <EmptyState text="No accounts yet." />
         ) : (
           <div className="overflow-x-auto">
@@ -91,7 +97,7 @@ export function AccountsSection() {
                 </tr>
               </thead>
               <tbody>
-                {accounts.map((account) => (
+                {(fixedRole ? accounts.filter((account) => account.role === fixedRole) : accounts).map((account) => (
                   <tr key={account.id || account.email} className="border-b border-border/60">
                     <td className="py-2.5 pr-3 font-medium text-text-primary">{account.firstName} {account.lastName}</td>
                     <td className="px-3 text-text-muted">{account.email}<br /><span className="text-xs">{account.phone}</span></td>

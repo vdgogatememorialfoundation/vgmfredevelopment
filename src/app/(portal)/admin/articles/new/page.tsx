@@ -1,11 +1,21 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArticleEditor } from "@/components/admin/PublishingDesk";
+import ClientOnly from "@/components/common/ClientOnly";
+
+function Editor() {
+  const id = useSearchParams().get("id");
+  return <ArticleEditor key={id ?? "new"} articleId={id} />;
+}
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Articles"
-      title="Create Article"
-      description="Create a new article with title, description, content, images and SEO."
-    />
+    <Suspense fallback={null}>
+      <ClientOnly>
+        <Editor />
+      </ClientOnly>
+    </Suspense>
   );
 }

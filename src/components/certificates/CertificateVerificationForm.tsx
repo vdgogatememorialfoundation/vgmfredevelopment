@@ -53,8 +53,8 @@ export default function CertificateVerificationForm() {
         />
 
         <p id="certificate-help" className="mt-3 text-center text-sm text-text-muted">
-          Enter the certificate number printed on your certificate, or scan
-          the QR code on the certificate.
+          Enter the certificate number printed on your certificate. seminar.vaidyagogate.org
+          and autism.vaidyagogate.org confirm the same record through GET /api/certificates/verify.
         </p>
 
         <button type="submit" className="btn-primary mt-6 w-full">

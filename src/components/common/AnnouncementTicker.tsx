@@ -1,8 +1,11 @@
+"use client";
+
 import Link from "next/link";
-import { announcements } from "@/data/content";
+import { useLiveAnnouncements } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 
 export default function AnnouncementTicker() {
+  const announcements = useLiveAnnouncements();
   const row = [...announcements, ...announcements];
 
   return (

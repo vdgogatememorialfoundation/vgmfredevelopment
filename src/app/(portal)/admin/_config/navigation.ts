@@ -132,7 +132,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Processing Timelines", href: "/admin/settings/timelines" },
       { label: "Payments", href: "/admin/settings/payments" },
       { label: "Email", href: "/admin/settings/email" },
-      { label: "WhatsApp", href: "/admin/settings/whatsapp" },
+      { label: "ZeptoMail", href: "/admin/settings/email" },
       { label: "API Keys", href: "/admin/settings/api-keys" },
       { label: "Notifications", href: "/admin/settings/notifications" },
       { label: "Security", href: "/admin/settings/security" },

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import PageHeader from "@/components/common/PageHeader";
 import ClinicCard from "@/components/clinics/ClinicCard";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { clinics } from "@/data/clinics";
 
 export const metadata: Metadata = {
@@ -12,8 +11,7 @@ export const metadata: Metadata = {
 
 export default function ClinicsPage() {
   return (
-    <RequireAuth message="Sign in to view clinic details and book consultations.">
-      <main>
+    <main>
         <PageHeader
           eyebrow="Clinics"
           title="Our Clinics"
@@ -30,6 +28,5 @@ export default function ClinicsPage() {
           </div>
         </section>
       </main>
-    </RequireAuth>
   );
 }

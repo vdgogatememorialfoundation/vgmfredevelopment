@@ -1,10 +1,13 @@
+"use client";
+
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import Badge from "@/components/common/Badge";
-import { announcements } from "@/data/content";
+import { useLiveAnnouncements } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 
 export default function AnnouncementsSection() {
+  const announcements = useLiveAnnouncements();
   const shown = announcements.filter(
     (announcement) => announcement.priority === "high"
   );

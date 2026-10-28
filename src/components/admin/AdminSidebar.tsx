@@ -123,7 +123,7 @@ const groups = [
       ["Processing Timelines", "/admin/settings/timelines"],
       ["Payments", "/admin/settings/payments"],
       ["Email", "/admin/settings/email"],
-      ["WhatsApp", "/admin/settings/whatsapp"],
+      ["ZeptoMail", "/admin/settings/email"],
       ["API Keys", "/admin/settings/api-keys"],
       ["Notifications", "/admin/settings/notifications"],
       ["Security", "/admin/settings/security"],

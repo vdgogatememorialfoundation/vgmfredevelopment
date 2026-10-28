@@ -1,13 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { CustomerDesk } from "@/components/admin/PublishingDesk";
+import ClientOnly from "@/components/common/ClientOnly";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Accounts"
-      title="Customers"
-      description="Manage customer accounts, profiles and 12-digit account IDs."
-      action="Create Customer"
-      actionHref="/admin/accounts/customers"
-    />
+    <ClientOnly>
+      <CustomerDesk />
+    </ClientOnly>
   );
 }

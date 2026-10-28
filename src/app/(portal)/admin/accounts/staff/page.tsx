@@ -1,13 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { StaffDesk } from "@/components/admin/PublishingDesk";
+import ClientOnly from "@/components/common/ClientOnly";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Accounts"
-      title="Staff Accounts"
-      description="Manage Foundation administrators and staff accounts."
-      action="Create Staff"
-      actionHref="/admin/accounts/staff"
-    />
+    <ClientOnly>
+      <StaffDesk />
+    </ClientOnly>
   );
 }

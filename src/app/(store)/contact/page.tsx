@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import { siteConfig } from "@/lib/constants";
 import ContactForm from "@/components/store/ContactForm";
@@ -6,7 +7,7 @@ import ContactForm from "@/components/store/ContactForm";
 export const metadata: Metadata = {
   title: "Contact",
   description:
-    "Contact the Vaidya Gogate Memorial Foundation — by email, phone, WhatsApp or by visiting our office in Pune.",
+    "Contact the Vaidya Gogate Memorial Foundation by email, phone, or by visiting our office in Pune.",
 };
 
 export default function ContactPage() {
@@ -15,7 +16,7 @@ export default function ContactPage() {
       <PageHeader
         eyebrow="Contact"
         title="Get in Touch"
-        description="Reach the Foundation by phone, email, WhatsApp or by visiting our office. We welcome enquiries about events, publications, clinics and the Foundation's programmes."
+        description="Reach the Foundation by phone, email, or by visiting our office. We welcome enquiries about events, publications, clinics and the Foundation's programmes."
       />
 
       <section className="section bg-background">
@@ -56,16 +57,14 @@ export default function ContactPage() {
 
             <div className="card p-6">
               <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-text-muted">
-                WhatsApp
+                Certificates
               </h2>
-              <a
-                href={`https://wa.me/${siteConfig.whatsapp.replace(/\D/g, "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Link
+                href="/certificate-verification"
                 className="mt-3 inline-block text-sm font-medium text-burgundy hover:underline"
               >
-                {siteConfig.whatsapp}
-              </a>
+                Verify a certificate
+              </Link>
             </div>
           </div>
 

@@ -1,9 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import EventCard from "@/components/events/EventCard";
-import { events } from "@/data/events";
+import { useLiveEvents } from "@/lib/use-cms";
 
 export default function UpcomingEvents() {
+  const events = useLiveEvents();
   const upcoming = [...events].sort((a, b) =>
     a.startDate.localeCompare(b.startDate)
   );

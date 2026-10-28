@@ -1,11 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { CertificateApiDesk } from "@/components/admin/PublishingDesk";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Certificates"
-      title="Verification"
-      description="Search and verify Foundation certificates."
-    />
-  );
+  return <CertificateApiDesk />;
 }

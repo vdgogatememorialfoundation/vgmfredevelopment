@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { events } from "@/data/events";
+import { getLiveEvents, getSiteFlags } from "@/lib/cms";
 import { announcements } from "@/data/content";
 import { books } from "@/data/books";
 import { addToCart, buildTrackingStages, formatPrice, getOrders } from "@/lib/store";
@@ -31,7 +31,7 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["next", "upcoming", "event", "seminar", "workshop", "happen"],
     answer: () => {
-      const upcoming = events.filter(
+      const upcoming = getLiveEvents().filter(
         (event) => event.registrationStatus !== "Closed"
       );
       if (upcoming.length === 0) {
@@ -47,17 +47,22 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["register", "registration", "fee", "book", "seat", "attend"],
     answer: () =>
-      "To register for an event, visit the event detail page and click 'Register for this event', or create an account and register from the Events page. Registration verifies your email and WhatsApp before completion.",
+      "To register for an event, open the event and continue on seminar.vaidyagogate.org. Certificate checks from that site use the Foundation verification API.",
   },
   {
     keywords: ["certificate", "verify", "verification"],
     answer: () =>
-      "Certificates can be verified on the Certificate Verification page by entering the 12-character certificate number found on the certificate, or by scanning its QR code.",
+      "Certificates are verified on the Certificate Verification page. seminar.vaidyagogate.org and autism.vaidyagogate.org use GET /api/certificates/verify with their API key.",
   },
   {
     keywords: ["support", "donate", "contribute", "donation", "help"],
-    answer: () =>
-      "Thank you for your support. You can contribute through the Donate section on the homepage, sponsor an event, or volunteer your expertise. Contact us for details.",
+    answer: () => {
+      const flags = getSiteFlags();
+      if (!flags.supportUs) {
+        return "Support for the Foundation is not open on the website right now. You can still write to us from the Contact page.";
+      }
+      return `${flags.supportUsTitle}. ${flags.supportUsText}`;
+    },
   },
   {
     keywords: ["account", "login", "register", "create"],

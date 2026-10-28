@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { ZeptoDesk } from "@/components/admin/PublishingDesk";
+import ClientOnly from "@/components/common/ClientOnly";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Settings"
-      title="Email"
-      description="Configure email settings."
-    />
+    <ClientOnly>
+      <ZeptoDesk />
+    </ClientOnly>
   );
 }

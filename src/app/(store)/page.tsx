@@ -7,11 +7,13 @@ import LegacySection from "@/components/home/LegacySection";
 import FeaturedArticles from "@/components/home/FeaturedArticles";
 import FeaturedBooks from "@/components/home/FeaturedBooks";
 import ClinicsSection from "@/components/home/ClinicsSection";
+import SupportUs from "@/components/home/SupportUs";
 
 export default function HomePage() {
   return (
     <>
       <HeroSection />
+      <SupportUs />
       <Announcements />
       <FlyerSection />
       <NoticeBoard />

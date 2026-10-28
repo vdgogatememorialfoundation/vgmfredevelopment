@@ -1,11 +1,7 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { OrdersDashboard } from "@/components/admin/AdminOrders";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Commerce"
-      title="Create Order"
-      description="Create an order manually."
-    />
-  );
+  return <OrdersDashboard />;
 }

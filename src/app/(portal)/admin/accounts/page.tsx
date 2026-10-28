@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { AccountsSection } from "@/components/admin/AdminAccounts";
+import ClientOnly from "@/components/common/ClientOnly";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Accounts"
-      title="Accounts"
-      description="Central account management for the Foundation."
-    />
+    <ClientOnly>
+      <AccountsSection />
+    </ClientOnly>
   );
 }

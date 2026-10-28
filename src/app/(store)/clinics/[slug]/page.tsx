@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import ClinicCard from "@/components/clinics/ClinicCard";
-import RequireAuth from "@/components/auth/RequireAuth";
 import { clinics } from "@/data/clinics";
 
 interface ClinicDetailPageProps {
@@ -44,7 +43,6 @@ export default async function ClinicDetailPage({
     .slice(0, 3);
 
   return (
-    <RequireAuth message="Sign in to view clinic details and book consultations.">
       <main>
       <section className="border-b border-border bg-warm-cream">
         <div className="container py-10 sm:py-14">
@@ -222,6 +220,5 @@ export default async function ClinicDetailPage({
         </section>
       )}
     </main>
-    </RequireAuth>
   );
 }

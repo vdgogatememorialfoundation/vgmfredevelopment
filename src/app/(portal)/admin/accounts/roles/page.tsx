@@ -1,11 +1,12 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿"use client";
+
+import { ModuleAccessDesk } from "@/components/admin/PublishingDesk";
+import ClientOnly from "@/components/common/ClientOnly";
 
 export default function Page() {
   return (
-    <AdminModule
-      section="Accounts"
-      title="Roles & Permissions"
-      description="Manage staff roles and permissions."
-    />
+    <ClientOnly>
+      <ModuleAccessDesk />
+    </ClientOnly>
   );
 }

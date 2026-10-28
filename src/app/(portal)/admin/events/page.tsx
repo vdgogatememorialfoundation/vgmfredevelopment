@@ -1,10 +1,9 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { SiteCatalog } from "@/components/admin/SiteModules";
+import { EventAdminList } from "@/components/admin/PublishingDesk";
 
 const modules = [
-  ["Create Event", "/admin/events/create"],
   ["Registrations", "/admin/events/registrations"],
   ["Applications", "/admin/events/applications"],
   ["Speakers", "/admin/events/speakers"],
@@ -18,7 +17,7 @@ const modules = [
 export default function EventsAdmin() {
   return (
     <div className="space-y-8">
-      <SiteCatalog moduleId="events" />
+      <EventAdminList />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {modules.map(([label, href]) => (
           <Link

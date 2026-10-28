@@ -1,10 +1,14 @@
+"use client";
+
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import ArticleCard from "@/components/articles/ArticleCard";
-import { articles } from "@/data/articles";
+import { useLiveArticles } from "@/lib/use-cms";
 
 export default function FeaturedArticles() {
-  const featured = articles.slice(0, 3);
+  const articles = useLiveArticles();
+  const featured = articles.filter((article) => article.featured);
+  const shown = (featured.length > 0 ? featured : articles).slice(0, 3);
 
   return (
     <section className="section bg-white" aria-labelledby="articles-heading">
@@ -16,7 +20,7 @@ export default function FeaturedArticles() {
         />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {featured.map((article) => (
+          {shown.map((article) => (
             <ArticleCard key={article.id} article={article} />
           ))}
         </div>

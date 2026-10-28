@@ -1,11 +1,5 @@
-﻿import AdminModule from "@/components/admin/AdminModule";
+﻿import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <AdminModule
-      section="Settings"
-      title="WhatsApp"
-      description="Configure WhatsApp messaging."
-    />
-  );
+  redirect("/admin/settings/email");
 }
