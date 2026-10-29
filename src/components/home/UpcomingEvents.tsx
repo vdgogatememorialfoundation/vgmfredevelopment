@@ -11,11 +11,11 @@ export default function UpcomingEvents() {
   const upcoming = events
     .filter((event) => event.registrationStatus !== "Closed")
     .sort(compareEventDates)
-    .slice(0, 6);
+    .slice(0, 3);
 
   return (
     <section
-      className="section bg-background"
+      className="section bg-background py-10"
       aria-labelledby="upcoming-events-heading"
     >
       <div className="container">

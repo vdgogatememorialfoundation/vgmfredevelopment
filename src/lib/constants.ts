@@ -30,11 +30,11 @@ export const storeConfig = {
   cancellationWindowDays: 1,
   defaultDeliveryDays: 4,
   orderPreparationDays: 1,
-  sellerName: "Vaidya Gogate Memorial Foundation Publications",
+  publisherName: "Vaidya Gogate Memorial Foundation Publications",
   paymentGateway: "Razorpay",
   shippingGateway: "Shiprocket",
-  courierName: "Ekart Logistics",
-  courierPrefix: "EK",
+  courierName: "Shiprocket Surface",
+  courierPrefix: "SR",
   orderPrefix: "VGMF",
 };
 

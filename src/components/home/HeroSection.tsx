@@ -11,7 +11,7 @@ function StaticHero({ tagline }: { tagline?: string }) {
   const lines = (tagline || "Preserving Ayurveda. Advancing Knowledge. Serving Society.").split(/(?<=\.)\s+/);
   return (
     <section className="relative overflow-hidden bg-warm-cream">
-      <div className="container grid items-center gap-10 py-16 lg:grid-cols-2 lg:py-24">
+      <div className="container grid items-center gap-8 py-10 lg:grid-cols-2 lg:py-14">
         <div>
           <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy">Vaidya Gogate Memorial Foundation</p>
           <h1 className="heading-1 max-w-3xl">
@@ -19,7 +19,7 @@ function StaticHero({ tagline }: { tagline?: string }) {
               <span key={index} className="block">{line}</span>
             ))}
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-text-muted">
+          <p className="mt-4 max-w-2xl text-base leading-7 text-text-muted">
             A foundation dedicated to Ayurveda, education, research, professional development and the enduring legacy of Vaidya R. B. Gogate.
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
@@ -68,7 +68,7 @@ export default function HeroSection() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="relative aspect-[16/10] w-full sm:aspect-[21/9] lg:max-h-[560px]">
+      <div className="relative aspect-[16/9] w-full sm:aspect-[21/8] lg:max-h-[380px]">
         {slides.map((slide, slideIndex) => (
           <div
             key={slide.id}

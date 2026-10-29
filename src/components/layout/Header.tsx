@@ -303,9 +303,6 @@ export default function Header() {
                       {user.role === "staff" && (
                         <ConsoleLink href="/staff" pathname={pathname} label="Staff console" icon="dashboard" />
                       )}
-                      {user.role === "seller" && (
-                        <ConsoleLink href="/seller" pathname={pathname} label="Seller portal" icon="orders" />
-                      )}
                     </nav>
 
                     <div className="border-t border-border p-2">

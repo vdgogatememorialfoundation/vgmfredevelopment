@@ -4,39 +4,47 @@ import { useState } from "react";
 import type { Book, ProductMedia } from "@/types";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 
+function youtubeId(src?: string) {
+  if (!src) return "";
+  const match = src.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,})/);
+  return match?.[1] ?? "";
+}
+
 export default function MediaGallery({ book }: { book: Book }) {
   const media: ProductMedia[] = book.media?.length
     ? book.media
-    : [{ type: "image", label: "Book cover" }];
+    : [{ type: "image", src: book.coverImage, label: "Book cover" }];
   const [active, setActive] = useState(0);
-
-  const current = media[active];
+  const current = media[active] ?? media[0];
+  const embed = current?.type === "video" ? youtubeId(current.src) : "";
 
   return (
     <div>
       <div className="relative overflow-hidden rounded-3xl border border-border bg-white shadow-sm">
-        {current.type === "video" ? (
+        {embed ? (
           <div className="relative aspect-[4/3] w-full">
-            <MediaPlaceholder
-              variant="book"
-              label={current.label}
-              src={current.src}
-              aspectClassName="aspect-[4/3]"
+            <iframe
+              title={current.label}
+              src={`https://www.youtube.com/embed/${embed}`}
+              className="absolute inset-0 h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
             />
+          </div>
+        ) : current?.type === "video" ? (
+          <div className="relative aspect-[4/3] w-full">
+            <MediaPlaceholder variant="book" label={current.label} src={current.src} aspectClassName="aspect-[4/3]" />
             <span className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-burgundy/90 text-white shadow-lg">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M8 5v14l11-7z" />
               </svg>
             </span>
-            <span className="absolute bottom-3 right-3 rounded-md bg-black/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">
-              Video
-            </span>
           </div>
         ) : (
           <MediaPlaceholder
             variant="book"
-            label={current.label}
-            src={current.src}
+            label={current?.label}
+            src={current?.src ?? book.coverImage}
             aspectClassName="aspect-[4/3]"
           />
         )}
@@ -51,27 +59,15 @@ export default function MediaGallery({ book }: { book: Book }) {
               aria-label={`View ${item.label}`}
               onClick={() => setActive(index)}
               className={`relative overflow-hidden rounded-xl border-2 transition ${
-                active === index
-                  ? "border-burgundy"
-                  : "border-border hover:border-burgundy/40"
+                active === index ? "border-burgundy" : "border-border hover:border-burgundy/40"
               }`}
             >
-              <MediaPlaceholder
-                variant="book"
-                label={item.label}
-                src={item.src}
-                aspectClassName="aspect-square"
-              />
+              <MediaPlaceholder variant="book" label={item.label} src={item.src} aspectClassName="aspect-square" />
               {item.type === "video" && (
                 <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-burgundy/90 text-white">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8 5v14l11-7z" />
                   </svg>
-                </span>
-              )}
-              {active === index && (
-                <span className="px-2.5 text-[10px] font-semibold uppercase tracking-wide text-burgundy">
-                  {item.type}
                 </span>
               )}
             </button>

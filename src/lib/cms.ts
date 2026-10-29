@@ -144,7 +144,7 @@ export function getLiveAnnouncements(): Announcement[] {
     .map((item) => ({ ...item, ...byId.get(item.id) }))
     .filter((item) => !byId.get(item.id)?.hidden);
   const seedIds = new Set(seededAnnouncements.map((item) => item.id));
-  return [...custom.filter((item) => !seedIds.has(item.id)), ...fromSeed];
+  return [...custom.filter((item) => !seedIds.has(item.id) && !byId.get(item.id)?.hidden), ...fromSeed];
 }
 
 export function saveAnnouncement(item: Announcement) {
@@ -177,7 +177,7 @@ export function getLiveEvents(): Event[] {
     .map((event) => ({ ...event, ...byId.get(event.id) }))
     .filter((event) => !byId.get(event.id)?.hidden);
   const seedIds = new Set(seededEvents.map((event) => event.id));
-  return [...custom.filter((event) => !seedIds.has(event.id)), ...fromSeed];
+  return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden), ...fromSeed];
 }
 
 export function getLiveEvent(slug: string) {
@@ -195,6 +195,13 @@ export function saveEvent(event: Event) {
   const custom = readJSON<Event[]>("vgmf_custom_events", []).filter((item) => item.id !== event.id);
   custom.unshift(event);
   writeJSON("vgmf_custom_events", custom);
+}
+
+export function deleteEvent(id: string) {
+  const edits = readJSON<EventEdit[]>(EVENTS_KEY, []).filter((edit) => edit.id !== id);
+  edits.push({ id, hidden: true });
+  writeJSON(EVENTS_KEY, edits);
+  writeJSON("vgmf_custom_events", readJSON<Event[]>("vgmf_custom_events", []).filter((item) => item.id !== id));
 }
 
 export function blankEvent(name: string): Event {

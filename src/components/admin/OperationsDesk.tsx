@@ -47,6 +47,7 @@ const paymentTitles: Record<PaymentFilter, string> = {
   Failed: "Failed payments",
   Pending: "Pending payments",
   Refunded: "Refunded payments",
+  "Partially Refunded": "Partial refunds",
 };
 
 export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
@@ -220,9 +221,10 @@ export function CertificateRegistry({ mode, eventName }: { mode: "list" | "issue
           });
         }}
         onHide={revokeCertificate}
+        hideLabel="Revoke"
       />
       <p className="text-xs text-slate-500">
-        Hide revokes the certificate on the public verification page.
+        Revoke removes the certificate from the public verification page.
       </p>
     </div>
   );

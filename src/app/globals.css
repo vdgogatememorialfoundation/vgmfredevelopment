@@ -60,7 +60,7 @@ body {
   }
 
   .section {
-    @apply py-16 sm:py-20 lg:py-24;
+    @apply py-10 sm:py-12 lg:py-14;
   }
 
   .btn-primary {

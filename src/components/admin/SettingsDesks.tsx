@@ -16,7 +16,7 @@ import {
 } from "@/lib/integrations";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
 import { testRazorpay } from "@/lib/payments-client";
-import { fetchCourierRates, syncPickupAddress, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
+import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { subscribeCms } from "@/lib/cms";
 import type { SiteSettings } from "@/types";
@@ -398,27 +398,30 @@ export function WhatsAppSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="WhatsApp: Meta Cloud API & AiSensy" text="Connect WhatsApp, sync approved templates and choose which template each site notification uses." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
+      <Header title="WhatsApp" text="Send order and account messages through Meta Cloud API (developers.facebook.com) or Zoho CPaaS (Agent API key). Sync Meta templates and map each site event to a template name or Zoho template alias." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
       <Card title="Provider">
-        <div className="grid gap-3 md:grid-cols-3">
-          {(["none", "meta", "aisensy"] as const).map((provider) => (
+        <div className="grid gap-3 md:grid-cols-4">
+          {([
+            ["none", "Off", "Only email is sent."],
+            ["meta", "Meta Cloud API", "Direct from your WhatsApp Business Account."],
+            ["zoho", "Zoho CPaaS", "Zoho CPaaS WhatsApp channel."],
+            ["aisensy", "AiSensy", "Through AiSensy API campaigns."],
+          ] as const).map(([provider, label, hint]) => (
             <button
               key={provider}
               type="button"
               onClick={() => set({ provider })}
               className={`rounded-xl border-2 p-4 text-left ${value.provider === provider ? "border-burgundy bg-burgundy/5" : "border-slate-200"}`}
             >
-              <p className="font-semibold text-slate-900">{provider === "none" ? "Off" : provider === "meta" ? "Meta WhatsApp Cloud API" : "AiSensy"}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {provider === "none" ? "Only email is sent." : provider === "meta" ? "Direct from your WhatsApp Business Account." : "Through AiSensy API campaigns."}
-              </p>
+              <p className="font-semibold text-slate-900">{label}</p>
+              <p className="mt-1 text-xs text-slate-500">{hint}</p>
             </button>
           ))}
         </div>
       </Card>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Meta (Facebook) credentials" text="Meta Business → WhatsApp → API setup. Use a permanent System User token.">
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Card title="Meta Cloud API" text="developers.facebook.com/docs → WhatsApp Cloud API. Phone number ID + permanent System User token. Templates are sent as Graph /{phone-number-id}/messages.">
           <div className="space-y-3">
             <Text label="App ID" value={value.metaAppId} onChange={(metaAppId) => set({ metaAppId })} />
             <Text label="WhatsApp Business Account ID" value={value.metaWabaId} onChange={(metaWabaId) => set({ metaWabaId })} />
@@ -426,9 +429,34 @@ export function WhatsAppSettingsDesk() {
             <Secret label="Access token" value={value.metaAccessToken} onChange={(metaAccessToken) => set({ metaAccessToken })} />
             <Text label="Graph API version" value={value.metaApiVersion} onChange={(metaApiVersion) => set({ metaApiVersion })} />
             <button type="button" className={ghost} disabled={busy} onClick={sync}>{busy ? "Syncing…" : "Sync templates from Meta"}</button>
+            <p className="text-xs text-slate-500">
+              Callback URL for Meta App → WhatsApp → Configuration:{" "}
+              <span className="font-mono break-all">{typeof window === "undefined" ? "/api/notify/webhook" : `${window.location.origin}/api/notify/webhook`}</span>
+              . Verify token env: <span className="font-mono">META_WA_VERIFY_TOKEN</span>.
+            </p>
           </div>
         </Card>
-        <Card title="AiSensy credentials" text="AiSensy → Manage → API key. Create one API campaign per message in AiSensy.">
+        <Card title="Zoho CPaaS" text="docs.zoho.com/cpaas — WhatsApp send is POST https://cpaas.zoho.com/v1.1/whatsapp with the Agent API key (Authorization: Zoho-enczapikey). From and to numbers must include the country code.">
+          <div className="space-y-3">
+            <Secret label="Agent API key" value={value.zohoCpaasApiKey} onChange={(zohoCpaasApiKey) => set({ zohoCpaasApiKey })} />
+            <Text
+              label="WhatsApp sender number"
+              value={value.zohoCpaasFrom}
+              onChange={(zohoCpaasFrom) => set({ zohoCpaasFrom })}
+              placeholder="+91…"
+              hint="The WABA number linked to this Agent, including country code."
+            />
+            <label className="block text-xs font-semibold text-slate-500">
+              CPaaS host
+              <select className={`${input} mt-1`} value={value.zohoCpaasDomain} onChange={(event) => set({ zohoCpaasDomain: event.target.value })}>
+                <option value="zoho.com">cpaas.zoho.com</option>
+                <option value="zoho.in">cpaas.zoho.in</option>
+                <option value="zoho.eu">cpaas.zoho.eu</option>
+              </select>
+            </label>
+          </div>
+        </Card>
+        <Card title="AiSensy" text="AiSensy → Manage → API key. Create one API campaign per message.">
           <div className="space-y-3">
             <Secret label="API key" value={value.aisensyApiKey} onChange={(aisensyApiKey) => set({ aisensyApiKey })} />
             <Text label="Project ID (optional)" value={value.aisensyProjectId} onChange={(aisensyProjectId) => set({ aisensyProjectId })} />
@@ -480,7 +508,13 @@ export function WhatsAppSettingsDesk() {
               <input
                 className={input}
                 list="wa-templates"
-                placeholder={value.provider === "aisensy" ? "AiSensy campaign name" : "Template name"}
+                placeholder={
+                  value.provider === "aisensy"
+                    ? "AiSensy campaign name"
+                    : value.provider === "zoho"
+                      ? "Zoho template alias or template key"
+                      : "Meta template name"
+                }
                 value={value.mapping[item.id] ?? ""}
                 onChange={(eventInput) => set({ mapping: { ...value.mapping, [item.id]: eventInput.target.value } })}
               />
@@ -537,41 +571,66 @@ export function ShippingApisDesk() {
     <div className="space-y-5">
       <Header
         title="Shipping APIs"
-        text="Credentials for courier aggregators and hyperlocal delivery. Live rates show at checkout and in admin, and booking a shipment debits the aggregator wallet."
+        text="Connect the APIs that actually book shipments: Shiprocket, iThink Logistics, Tookan (hyperlocal and parcel) and Shipday. Delhivery, Blue Dart, Ekart, DTDC, Shadowfax and India Post appear as courier options inside Shiprocket or iThink rates — they are not separate API accounts on this site."
         action={<button type="button" className={primary} onClick={() => save()}>Save</button>}
       />
       <Saved text={note} />
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Shiprocket" text="Settings → API → Create an API user (not your login)." right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
+        <Card title="Shiprocket" text="apidocs.shiprocket.in — Settings → API → Create an API user. Login, serviceability, adhoc order, assign AWB, generate pickup, label, invoice, manifest, track AWB, cancel and reverse pickup all use this account." right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
           <div className="space-y-3">
             <Text label="API user email" value={value.shiprocket.email} onChange={(email) => set({ shiprocket: { ...value.shiprocket, email } })} />
             <Secret label="API user password" value={value.shiprocket.password} onChange={(password) => set({ shiprocket: { ...value.shiprocket, password } })} />
             <Text label="Channel ID (optional)" value={value.shiprocket.channelId} onChange={(channelId) => set({ shiprocket: { ...value.shiprocket, channelId } })} />
             <button type="button" className={ghost} disabled={busy === "shiprocket"} onClick={() => test("shiprocket")}>{busy === "shiprocket" ? "Testing…" : "Test connection"}</button>
+            <p className="text-xs text-slate-500">
+              Webhook URL for Shiprocket Settings → API → Webhooks:{" "}
+              <span className="font-mono break-all text-slate-700">{typeof window === "undefined" ? "/api/shipping/webhook" : `${window.location.origin}/api/shipping/webhook`}</span>
+              . Optional header <span className="font-mono">x-api-key</span> = <span className="font-mono">SHIPROCKET_WEBHOOK_TOKEN</span>.
+            </p>
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy === "webhooks"}
+              onClick={async () => {
+                setBusy("webhooks");
+                setNote(await applyShiprocketWebhooks().catch((error: Error) => error.message));
+                setBusy("");
+              }}
+            >
+              Apply Shiprocket tracking updates
+            </button>
           </div>
         </Card>
-        <Card title="Nimbuspost" text="Your Nimbuspost login email and password." right={<Check label="Use" checked={value.nimbuspost.enabled} onChange={(enabled) => set({ nimbuspost: { ...value.nimbuspost, enabled } })} />}>
+        <Card title="iThink Logistics" text="docs.ithinklogistics.com v3 — access token + secret key. Rate check, order add, track, cancel, label, invoice and manifest." right={<Check label="Use" checked={value.ithink.enabled} onChange={(enabled) => set({ ithink: { ...value.ithink, enabled } })} />}>
+          <div className="space-y-3">
+            <Secret label="Access token" value={value.ithink.accessToken} onChange={(accessToken) => set({ ithink: { ...value.ithink, accessToken } })} />
+            <Secret label="Secret key" value={value.ithink.secretKey} onChange={(secretKey) => set({ ithink: { ...value.ithink, secretKey } })} />
+            <Text label="Pickup warehouse / address ID" value={value.ithink.pickupAddressId} onChange={(pickupAddressId) => set({ ithink: { ...value.ithink, pickupAddressId } })} />
+            <Text label="API host" value={value.ithink.host} onChange={(host) => set({ ithink: { ...value.ithink, host } })} hint="https://my.ithinklogistics.com/api_v3/" />
+            <button type="button" className={ghost} disabled={busy === "ithink"} onClick={() => test("ithink")}>{busy === "ithink" ? "Testing…" : "Test connection"}</button>
+          </div>
+        </Card>
+        <Card title="Nimbuspost" text="Nimbuspost login email and password, used as a second aggregator if you keep that account." right={<Check label="Use" checked={value.nimbuspost.enabled} onChange={(enabled) => set({ nimbuspost: { ...value.nimbuspost, enabled } })} />}>
           <div className="space-y-3">
             <Text label="Email" value={value.nimbuspost.email} onChange={(email) => set({ nimbuspost: { ...value.nimbuspost, email } })} />
             <Secret label="Password" value={value.nimbuspost.password} onChange={(password) => set({ nimbuspost: { ...value.nimbuspost, password } })} />
             <button type="button" className={ghost} disabled={busy === "nimbuspost"} onClick={() => test("nimbuspost")}>{busy === "nimbuspost" ? "Testing…" : "Test connection"}</button>
           </div>
         </Card>
-        <Card title="Shipyaari" text="Stored for booking. Shipyaari issues API documentation to account holders; estimates are used until it is connected." right={<Check label="Use" checked={value.shipyaari.enabled} onChange={(enabled) => set({ shipyaari: { ...value.shipyaari, enabled } })} />}>
+        <Card title="Tookan" text="tookanapi.docs.apiary.io — one API key. Hyperlocal is a delivery-only task (has_pickup=0). Parcel is pickup plus delivery (has_pickup=1). Test pings get_all_fleets.">
           <div className="space-y-3">
-            <Text label="Client ID" value={value.shipyaari.clientId} onChange={(clientId) => set({ shipyaari: { ...value.shipyaari, clientId } })} />
-            <Secret label="API key" value={value.shipyaari.apiKey} onChange={(apiKey) => set({ shipyaari: { ...value.shipyaari, apiKey } })} />
-            <Secret label="Secret" value={value.shipyaari.secret} onChange={(secret) => set({ shipyaari: { ...value.shipyaari, secret } })} />
+            <Secret label="Tookan API key" value={value.tookan.apiKey} onChange={(apiKey) => set({ tookan: { ...value.tookan, apiKey } })} />
+            <Text label="Team ID" value={value.tookan.teamId} onChange={(teamId) => set({ tookan: { ...value.tookan, teamId } })} />
+            <Check label="Hyperlocal (same-city delivery)" checked={value.tookan.hyperlocal} onChange={(hyperlocal) => set({ tookan: { ...value.tookan, hyperlocal } })} />
+            <Check label="Parcel (pickup + delivery)" checked={value.tookan.parcel} onChange={(parcel) => set({ tookan: { ...value.tookan, parcel } })} />
+            <button type="button" className={ghost} disabled={busy === "tookan"} onClick={() => test("tookan")}>{busy === "tookan" ? "Testing…" : "Test Tookan key"}</button>
           </div>
         </Card>
-        <Card title="Tookan & Shipday" text="Same-city delivery tasks for local riders.">
+        <Card title="Shipday" text="docs.shipday.com — POST /orders to create, GET /orders to track, DELETE /orders/{id} to cancel. Authorization: Basic {API key}." right={<Check label="Use" checked={value.shipday.enabled} onChange={(enabled) => set({ shipday: { ...value.shipday, enabled } })} />}>
           <div className="space-y-3">
-            <Check label="Use Tookan" checked={value.tookan.enabled} onChange={(enabled) => set({ tookan: { ...value.tookan, enabled } })} />
-            <Secret label="Tookan API key" value={value.tookan.apiKey} onChange={(apiKey) => set({ tookan: { ...value.tookan, apiKey } })} />
-            <Text label="Tookan team ID" value={value.tookan.teamId} onChange={(teamId) => set({ tookan: { ...value.tookan, teamId } })} />
-            <Check label="Use Shipday" checked={value.shipday.enabled} onChange={(enabled) => set({ shipday: { ...value.shipday, enabled } })} />
             <Secret label="Shipday API key" value={value.shipday.apiKey} onChange={(apiKey) => set({ shipday: { ...value.shipday, apiKey } })} />
+            <button type="button" className={ghost} disabled={busy === "shipday"} onClick={() => test("shipday")}>{busy === "shipday" ? "Testing…" : "Test Shipday key"}</button>
           </div>
         </Card>
       </div>
@@ -580,20 +639,41 @@ export function ShippingApisDesk() {
         title="Pickup address"
         text="Couriers collect parcels here. The nickname must match the pickup location name in Shiprocket."
         right={
-          <button
-            type="button"
-            className={ghost}
-            disabled={busy === "pickup"}
-            onClick={async () => {
-              save();
-              setBusy("pickup");
-              const result = await syncPickupAddress().catch((error: Error) => ({ ok: false, error: error.message }));
-              setBusy("");
-              setNote(result.ok ? "Pickup address added to Shiprocket." : `Shiprocket pickup sync: ${result.error}`);
-            }}
-          >
-            Add to Shiprocket
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy === "pickup"}
+              onClick={async () => {
+                save();
+                setBusy("pickup");
+                const result = await syncPickupAddress().catch((error: Error) => ({ ok: false, error: error.message }));
+                setBusy("");
+                setNote(result.ok ? "Pickup address added to Shiprocket." : `Shiprocket pickup sync: ${result.error}`);
+              }}
+            >
+              Add to Shiprocket
+            </button>
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy === "pickup-list"}
+              onClick={async () => {
+                save();
+                setBusy("pickup-list");
+                const result = await listPickupLocations().catch((error: Error) => ({ ok: false, error: error.message, locations: [] as { nickname: string; city: string; pincode: string }[] }));
+                setBusy("");
+                if (!result.ok) {
+                  setNote(`Shiprocket pickup list: ${result.error}`);
+                  return;
+                }
+                const names = (result.locations ?? []).map((location) => `${location.nickname} (${location.city} ${location.pincode})`);
+                setNote(names.length ? `Shiprocket pickup locations: ${names.join(" · ")}` : "Shiprocket returned no pickup locations.");
+              }}
+            >
+              List locations
+            </button>
+          </div>
         }
       >
         <div className="grid gap-3 sm:grid-cols-3">

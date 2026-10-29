@@ -1,72 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import SectionHeading from "@/components/common/SectionHeading";
 import Badge from "@/components/common/Badge";
 import { useLiveAnnouncements } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 
 export default function AnnouncementsSection() {
-  const announcements = useLiveAnnouncements();
-  const shown = announcements.filter(
-    (announcement) => announcement.priority === "high"
-  );
+  const shown = useLiveAnnouncements()
+    .filter((announcement) => announcement.priority === "high")
+    .slice(0, 3);
+
+  if (shown.length === 0) return null;
 
   return (
-    <section
-      className="section bg-background"
-      aria-labelledby="announcements-heading"
-    >
+    <section className="border-y border-border bg-white py-6" aria-labelledby="announcements-heading">
       <div className="container">
-        <SectionHeading
-          eyebrow="Announcements"
-          title="Latest Updates"
-          description="Stay informed with the latest news and announcements from the Foundation."
-        />
-
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {shown.map((announcement) => (
-            <article
-              key={announcement.id}
-              className="card flex flex-col p-6"
-            >
-              <div className="flex items-center gap-3">
-                <Badge tone="burgundy">{announcement.category}</Badge>
-                <time
-                  className="text-sm text-text-muted"
-                  dateTime={announcement.date}
-                >
-                  {formatDate(announcement.date)}
-                </time>
-              </div>
-
-              <h3 className="mt-4 text-lg font-semibold leading-snug text-text-primary">
-                {announcement.title}
-              </h3>
-
-              <p className="mt-2 text-sm text-text-muted line-clamp-3">
-                {announcement.description}
-              </p>
-
-              <Link
-                href={announcement.href}
-                className="mt-auto flex items-center gap-1.5 pt-4 text-sm font-semibold text-burgundy transition hover:text-burgundy-dark"
-              >
-                Read More
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14" />
-                  <path d="M12 5l7 7-7 7" />
-                </svg>
-              </Link>
-            </article>
-          ))}
-        </div>
-
-        <div className="mt-10 text-center">
-          <Link href="/announcements" className="btn-outline">
-            View All Announcements
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-burgundy">Announcements</p>
+            <h2 id="announcements-heading" className="mt-1 text-lg font-bold text-text-primary">
+              Latest updates
+            </h2>
+          </div>
+          <Link href="/announcements" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+            All announcements
           </Link>
         </div>
+        <ul className="divide-y divide-border rounded-xl border border-border">
+          {shown.map((announcement) => (
+            <li key={announcement.id}>
+              <Link href={announcement.href} className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-warm-cream/50">
+                <Badge tone="burgundy">{announcement.category}</Badge>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary">{announcement.title}</span>
+                <time className="text-xs text-text-muted" dateTime={announcement.date}>
+                  {formatDate(announcement.date)}
+                </time>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

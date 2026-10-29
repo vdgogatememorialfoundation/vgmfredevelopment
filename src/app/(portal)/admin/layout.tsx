@@ -7,6 +7,8 @@ import { adminNavigation } from "./_config/navigation"
 import { useAuth } from "@/components/auth/AuthContext"
 import ClientOnly from "@/components/common/ClientOnly"
 import { canOpen, getRole } from "@/lib/roles"
+import { getAccounts } from "@/lib/admin-store"
+import { loginBlockReason } from "@/lib/auth"
 
 export default function AdminLayout({
   children,
@@ -40,6 +42,29 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
             <Link href="/admin/login" className="btn-primary">Admin sign in</Link>
             <Link href="/staff/login" className="btn-outline">Staff sign in</Link>
           </div>
+        </div>
+      </div>
+    )
+  }
+
+  const liveAccount = getAccounts().find((account) => account.email.toLowerCase() === user.email.toLowerCase())
+  const blocked = user.role === "staff" ? (liveAccount ? loginBlockReason(liveAccount) : "This staff account has been deleted.") : null
+  if (blocked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F8F7F3] p-6">
+        <div className="w-full max-w-md rounded-2xl border border-[#E6E1D6] bg-white p-8 text-center shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900">Access removed</h1>
+          <p className="mt-2 text-sm text-gray-600">{blocked}</p>
+          <button
+            type="button"
+            className="btn-primary mt-6"
+            onClick={() => {
+              signOut()
+              router.push("/staff/login")
+            }}
+          >
+            Sign out
+          </button>
         </div>
       </div>
     )

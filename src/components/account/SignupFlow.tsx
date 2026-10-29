@@ -1,22 +1,33 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import DetailsForm from "@/components/account/DetailsForm";
 import OtpForm from "@/components/account/OtpForm";
 import AccountCreated from "@/components/account/AccountCreated";
 import { useAuth } from "@/components/auth/AuthContext";
-import { demoAccountId, saveAccount, setSession } from "@/lib/auth";
+import { demoAccountId, findAccountByIdentifier, saveAccount, setSession } from "@/lib/auth";
+import { displayName, sendAccountDetails } from "@/lib/admin-store";
 import type { User } from "@/types";
 
 type Step = "details" | "email" | "whatsapp" | "success";
 
+function newUserId() {
+  return `usr-${Date.now()}`;
+}
+
 export default function SignupFlow() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next");
   const { signIn } = useAuth();
   const [step, setStep] = useState<Step>("details");
 
   const [form, setForm] = useState({
+    salutation: "Dr.",
     firstName: "",
+    middleName: "",
     lastName: "",
     email: "",
     phone: "",
@@ -24,6 +35,16 @@ export default function SignupFlow() {
   });
 
   const [accountId, setAccountId] = useState("");
+  const [error, setError] = useState("");
+
+  const submitDetails = () => {
+    if (findAccountByIdentifier(form.email) || findAccountByIdentifier(form.phone)) {
+      setError("An account already exists with this email or phone. Please sign in instead.");
+      return;
+    }
+    setError("");
+    setStep("email");
+  };
 
   const updateField = (field: string, value: string) => {
     setForm((previous) => ({ ...previous, [field]: value }));
@@ -34,19 +55,30 @@ export default function SignupFlow() {
     setAccountId(accountIdValue);
 
     const user: User = {
-      id: `usr-${Date.now()}`,
+      id: newUserId(),
+      salutation: form.salutation,
       firstName: form.firstName,
+      middleName: form.middleName || undefined,
       lastName: form.lastName,
       email: form.email,
       phone: form.phone,
       whatsapp: form.whatsapp,
       accountId: accountIdValue,
+      role: "customer",
+      status: "active",
+      storeCredit: 0,
+      createdAt: new Date().toISOString(),
     };
 
     saveAccount(user);
+    sendAccountDetails(user.email, true);
     setSession(user);
     signIn(user);
 
+    if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
+      router.push(nextPath);
+      return;
+    }
     setStep("success");
   };
 
@@ -72,12 +104,15 @@ export default function SignupFlow() {
           <DetailsForm
             form={form}
             onChange={updateField}
-            onSubmit={() => setStep("email")}
+            onSubmit={submitDetails}
           />
+          {error && (
+            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>
+          )}
 
           <p className="mt-5 text-center text-sm text-text-muted">
             Already have an account?{" "}
-            <Link href="/login?mode=signin" className="font-semibold text-burgundy">
+            <Link href={nextPath?.startsWith("/") && !nextPath.startsWith("//") ? `/login?mode=signin&next=${encodeURIComponent(nextPath)}` : "/login?mode=signin"} className="font-semibold text-burgundy">
               Login
             </Link>
           </p>
@@ -112,7 +147,7 @@ export default function SignupFlow() {
         <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
           <AccountCreated
             accountId={accountId}
-            name={`${form.firstName} ${form.lastName}`}
+            name={displayName(form, true)}
           />
         </div>
       )}

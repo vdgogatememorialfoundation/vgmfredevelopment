@@ -96,6 +96,19 @@ const DEFAULT_POLICY: FulfillmentPolicy = {
   pickupHoldingDays: 3,
 };
 
+/** Last-mile names Shiprocket / iThink allocate. They are not APIs on this site. */
+const LAST_MILE_IDS = new Set([
+  "shadowfax",
+  "pidge",
+  "delhivery",
+  "bluedart",
+  "blue-dart",
+  "ekart",
+  "dtdc",
+  "indiapost",
+  "india-post",
+]);
+
 function defaultCarriers(): CarrierAccount[] {
   const national = (near: number, mid: number, far: number): Record<string, number> => ({
     "1": mid,
@@ -156,7 +169,7 @@ function defaultCarriers(): CarrierAccount[] {
     },
     {
       id: "tookan",
-      name: "Tookan",
+      name: "Tookan Hyperlocal",
       kind: "hyperlocal",
       enabled: true,
       priority: 4,
@@ -167,112 +180,37 @@ function defaultCarriers(): CarrierAccount[] {
       zoneDays: { "4": 1 },
       sameCityDays: 0,
       charge: 39,
-      blurb: "Same-city task delivery for Pune store pincodes.",
+      blurb: "Tookan hyperlocal: same-city delivery tasks for Pune store pincodes.",
     },
     {
-      id: "pidge",
-      name: "Pidge",
-      kind: "hyperlocal",
+      id: "tookan-parcel",
+      name: "Tookan Parcel",
+      kind: "aggregator",
       enabled: true,
       priority: 5,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: ["411", "400", "401", "410"],
-      zoneDays: { "4": 1 },
-      sameCityDays: 0,
-      charge: 49,
-      blurb: "Hyperlocal runs across Pune and Mumbai.",
-    },
-    {
-      id: "shadowfax",
-      name: "Shadowfax",
-      kind: "courier",
-      enabled: true,
-      priority: 6,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(2, 3, 4),
-      sameCityDays: 1,
-      charge: 55,
-      blurb: "On-demand and intercity delivery, faster inside metro prefixes.",
-    },
-    {
-      id: "delhivery",
-      name: "Delhivery",
-      kind: "courier",
-      enabled: true,
-      priority: 7,
       apiKey: "",
       apiSecret: "",
       webhookUrl: "",
       prefixes: [],
       zoneDays: national(2, 3, 5),
       sameCityDays: 1,
-      charge: 40,
-      blurb: "National surface network.",
+      charge: 45,
+      blurb: "Tookan parcel delivery: pickup and delivery tasks for intercity parcels.",
     },
     {
-      id: "bluedart",
-      name: "Blue Dart",
-      kind: "courier",
+      id: "shipday",
+      name: "Shipday",
+      kind: "hyperlocal",
       enabled: true,
-      priority: 8,
+      priority: 6,
       apiKey: "",
       apiSecret: "",
       webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(1, 2, 3),
-      sameCityDays: 1,
-      charge: 90,
-      blurb: "Express air network for faster national delivery.",
-    },
-    {
-      id: "ekart",
-      name: "Ekart",
-      kind: "courier",
-      enabled: true,
-      priority: 9,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(2, 4, 5),
-      sameCityDays: 2,
-      charge: 35,
-      blurb: "Economy surface delivery.",
-    },
-    {
-      id: "dtdc",
-      name: "DTDC",
-      kind: "courier",
-      enabled: false,
-      priority: 10,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(3, 4, 6),
-      sameCityDays: 2,
-      charge: 40,
-      blurb: "National courier, including extended pin codes.",
-    },
-    {
-      id: "indiapost",
-      name: "India Post",
-      kind: "courier",
-      enabled: false,
-      priority: 11,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: { "1": 6, "2": 6, "3": 5, "4": 4, "5": 6, "6": 7, "7": 8, "8": 7 },
-      sameCityDays: 3,
-      charge: 25,
-      blurb: "Widest pin-code reach, longer transit.",
+      prefixes: ["411"],
+      zoneDays: { "4": 1 },
+      sameCityDays: 0,
+      charge: 45,
+      blurb: "Local delivery dispatch with your own or Shipday partner drivers.",
     },
   ];
 }
@@ -293,18 +231,37 @@ function writeJSON(key: string, value: unknown) {
 }
 
 export function credentialsSaved(carrier: CarrierAccount) {
-  return carrier.apiKey.trim().length >= 8;
+  const shipping = getIntegrations().shipping;
+  if (carrier.id === "shiprocket") return Boolean(shipping.shiprocket.email && shipping.shiprocket.password);
+  if (carrier.id === "nimbuspost") return Boolean(shipping.nimbuspost.email && shipping.nimbuspost.password);
+  if (carrier.id === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
+  if (carrier.id === "tookan") return Boolean(shipping.tookan.apiKey && shipping.tookan.hyperlocal);
+  if (carrier.id === "tookan-parcel") return Boolean(shipping.tookan.apiKey && shipping.tookan.parcel);
+  if (carrier.id === "shipday") return Boolean(shipping.shipday.apiKey && shipping.shipday.enabled);
+  return false;
 }
 
 export function getCarriers(): CarrierAccount[] {
   const stored = readJSON<CarrierAccount[] | null>(CARRIERS_KEY, null);
-  if (!stored?.length) {
+  const allowed = new Set(defaultCarriers().map((carrier) => carrier.id));
+  const cleaned = (stored ?? []).filter((carrier) => allowed.has(carrier.id) && !LAST_MILE_IDS.has(carrier.id));
+  if (!stored?.length || cleaned.length !== stored.length) {
     const seeded = defaultCarriers();
-    writeJSON(CARRIERS_KEY, seeded);
-    return seeded;
+    const byId = new Map(cleaned.map((carrier) => [carrier.id, carrier]));
+    const next = seeded.map((carrier) => {
+      const saved = byId.get(carrier.id);
+      return saved ? { ...carrier, ...saved, id: carrier.id, name: carrier.name, kind: carrier.kind, blurb: carrier.blurb } : carrier;
+    });
+    writeJSON(CARRIERS_KEY, next);
+    return next;
   }
-  const byId = new Map(stored.map((carrier) => [carrier.id, carrier]));
-  return defaultCarriers().map((carrier) => ({ ...carrier, ...byId.get(carrier.id) }));
+  const byId = new Map(cleaned.map((carrier) => [carrier.id, carrier]));
+  const next = defaultCarriers().map((carrier) => {
+    const saved = byId.get(carrier.id);
+    return saved ? { ...carrier, ...saved, id: carrier.id, name: carrier.name, kind: carrier.kind, blurb: carrier.blurb } : carrier;
+  });
+  writeJSON(CARRIERS_KEY, next);
+  return next;
 }
 
 export function saveCarriers(carriers: CarrierAccount[]) {

@@ -71,7 +71,7 @@ export default function ClinicDesk() {
               <div className="mt-2 flex gap-3 text-sm font-semibold">
                 <button type="button" className="text-burgundy" onClick={() => setEditing(clinic)}>Edit</button>
                 <Link className="text-slate-500" href={`/clinics/${clinic.slug}`}>View</Link>
-                <button type="button" className="text-slate-400" onClick={() => hideClinic(clinic.id)}>Hide</button>
+                <button type="button" className="text-red-600" onClick={() => { if (window.confirm(`Delete ${clinic.name}?`)) hideClinic(clinic.id); }}>Delete</button>
               </div>
             </div>
           </li>

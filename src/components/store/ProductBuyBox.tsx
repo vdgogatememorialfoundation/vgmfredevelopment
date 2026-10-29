@@ -9,31 +9,51 @@ import {
   isInWishlist,
   toggleWishlist,
 } from "@/lib/store";
+import { addStockAlert, canOrder, canPreorder, isPurchasable } from "@/lib/product-data";
 import { checkPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
+import { useAuth } from "@/components/auth/AuthContext";
 import type { Book } from "@/types";
 
 export default function ProductBuyBox({ book }: { book: Book }) {
   const router = useRouter();
+  const { isAuthenticated, user } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [wishlisted, setWishlisted] = useState(false);
   const [pincode, setPincode] = useState("");
   const [estimate, setEstimate] = useState<DeliveryQuote | null>(null);
   const [checked, setChecked] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState("");
+  const [notifyNote, setNotifyNote] = useState("");
 
   const stock = estimate?.stock ?? book.stock ?? 0;
-  const inStock = stock > 0;
+  const purchasable = isPurchasable({ ...book, stock });
+  const preorder = canPreorder({ ...book, stock });
+  const orderable = canOrder({ ...book, stock });
   const pickup = getPickupLocation();
+  const nextUrl = `/shop/${book.slug}`;
+
+  const requireAccount = (then: () => void) => {
+    if (!isAuthenticated) {
+      router.push(`/login?mode=signin&next=${encodeURIComponent(nextUrl)}`);
+      return;
+    }
+    then();
+  };
 
   const handleAddToCart = () => {
-    addToCart(book.id, quantity);
-    setAdded(true);
-    window.setTimeout(() => setAdded(false), 3000);
+    requireAccount(() => {
+      addToCart(book.id, quantity);
+      setAdded(true);
+      window.setTimeout(() => setAdded(false), 3000);
+    });
   };
 
   const handleBuyNow = () => {
-    addToCart(book.id, quantity);
-    router.push(`/checkout?buyNow=${book.id}&qty=${quantity}`);
+    requireAccount(() => {
+      addToCart(book.id, quantity);
+      router.push(`/checkout?buyNow=${book.id}&qty=${quantity}`);
+    });
   };
 
   const checkDelivery = () => {
@@ -72,13 +92,18 @@ export default function ProductBuyBox({ book }: { book: Book }) {
       <p className="mt-4 flex items-center gap-2 text-sm">
         <span
           className={`h-2 w-2 rounded-full ${
-            inStock ? "bg-emerald-500" : "bg-red-500"
+            purchasable ? "bg-emerald-500" : preorder ? "bg-amber-500" : "bg-red-500"
           }`}
         />
-        <span className={inStock ? "text-emerald-700" : "text-red-600"}>
-          {book.availability}
+        <span className={purchasable ? "text-emerald-700" : preorder ? "text-burgundy" : "text-red-600"}>
+          {purchasable ? book.availability : preorder ? "Pre-order" : "Out of stock"}
         </span>
-        <span className="text-text-muted">· {stock} in stock at {estimate?.stockingLocation ?? "the Foundation store"}</span>
+        {purchasable && (
+          <span className="text-text-muted">· {stock} in stock at {estimate?.stockingLocation ?? "the Foundation store"}</span>
+        )}
+        {preorder && book.preorder?.releaseDate && (
+          <span className="text-text-muted">· expected {book.preorder.releaseDate}</span>
+        )}
       </p>
 
       <div className="mt-4 rounded-xl border border-gold/40 bg-warm-cream p-4 text-sm">
@@ -183,21 +208,30 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             <button
               type="button"
               aria-label="Increase quantity"
-              onClick={() => setQuantity((q) => Math.min(stock, q + 1))}
+              onClick={() => setQuantity((q) => Math.min(purchasable ? stock : 20, q + 1))}
               className="flex h-11 w-11 items-center justify-center text-text-primary transition hover:text-burgundy"
             >
               +
             </button>
           </div>
           <p className="text-sm text-text-muted">
-            {stock} in stock
+            {purchasable ? `${stock} in stock` : preorder ? "Pre-order" : "Currently unavailable"}
           </p>
         </div>
+
+        {!isAuthenticated && (
+          <p className="mt-4 rounded-xl border border-border bg-warm-cream px-3 py-2 text-xs text-text-muted">
+            Sign in or register to add this to your cart and place an order.{" "}
+            <Link href={`/login?mode=signin&next=${encodeURIComponent(nextUrl)}`} className="font-semibold text-burgundy">Sign in</Link>
+            {" · "}
+            <Link href={`/login?next=${encodeURIComponent(nextUrl)}`} className="font-semibold text-burgundy">Create account</Link>
+          </p>
+        )}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            disabled={!inStock}
+            disabled={!orderable}
             onClick={handleAddToCart}
             className="btn-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -205,19 +239,50 @@ export default function ProductBuyBox({ book }: { book: Book }) {
               <span className="flex items-center gap-2 text-emerald-700">
                 ✓ Added to Cart
               </span>
+            ) : preorder ? (
+              "Add pre-order"
             ) : (
               "Add to Cart"
             )}
           </button>
           <button
             type="button"
-            disabled={!inStock}
+            disabled={!orderable}
             onClick={handleBuyNow}
             className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Buy Now
+            {preorder ? "Pre-order now" : "Buy Now"}
           </button>
         </div>
+
+        {!orderable && (
+          <form
+            className="mt-4 rounded-xl border border-border bg-warm-cream p-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              try {
+                addStockAlert(book.id, notifyEmail || user?.email || "", user ? `${user.firstName} ${user.lastName}` : undefined);
+                setNotifyNote("We will email you when this is back in stock.");
+              } catch (problem) {
+                setNotifyNote(problem instanceof Error ? problem.message : "Could not save the alert.");
+              }
+            }}
+          >
+            <p className="text-sm font-semibold text-text-primary">Email me when it is back</p>
+            <div className="mt-2 flex gap-2">
+              <input
+                className="input-field py-2"
+                type="email"
+                required
+                placeholder="you@email.com"
+                value={notifyEmail || user?.email || ""}
+                onChange={(event) => setNotifyEmail(event.target.value)}
+              />
+              <button type="submit" className="btn-outline shrink-0 px-3 py-2 text-xs">Notify me</button>
+            </div>
+            {notifyNote && <p className="mt-2 text-xs text-emerald-700">{notifyNote}</p>}
+          </form>
+        )}
 
         <button
           type="button"

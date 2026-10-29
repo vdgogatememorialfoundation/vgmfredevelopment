@@ -1,5 +1,12 @@
-﻿import { CarrierDesk } from "@/components/admin/FulfillmentDesk";
+﻿"use client";
+
+import ClientOnly from "@/components/common/ClientOnly";
+import { ShippingApisDesk } from "@/components/admin/SettingsDesks";
 
 export default function Page() {
-  return <CarrierDesk mode="apis" />;
+  return (
+    <ClientOnly>
+      <ShippingApisDesk />
+    </ClientOnly>
+  );
 }

@@ -153,6 +153,14 @@ export async function sendZohoMail(input: Json, mail: { to: string; subject: str
 
 /* ---------------- WhatsApp ---------------- */
 
+/** Meta Cloud API wants country code + number, no plus sign or leading zeros. */
+function waCloudTo(raw: string) {
+  const digits = raw.replace(/\D/g, "").replace(/^0+/, "");
+  if (!digits) return raw.trim();
+  if (digits.length === 10) return `91${digits}`;
+  return digits;
+}
+
 export async function sendMetaTemplate(
   input: Json,
   message: { to: string; template: string; language?: string; params: string[] }
@@ -166,13 +174,14 @@ export async function sendMetaTemplate(
     headers: { authorization: `Bearer ${token}` },
     json: {
       messaging_product: "whatsapp",
-      to: message.to.replace(/\D/g, ""),
+      recipient_type: "individual",
+      to: waCloudTo(message.to),
       type: "template",
       template: {
         name: message.template,
         language: { code: message.language || "en" },
         components: message.params.length
-          ? [{ type: "body", parameters: message.params.map((text) => ({ type: "text", text })) }]
+          ? [{ type: "body", parameters: message.params.map((text) => ({ type: "text", text: String(text).slice(0, 1024) })) }]
           : undefined,
       },
     },
@@ -281,6 +290,9 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     weight: String(parcel.weightKg),
     cod: parcel.cod ? "1" : "0",
     declared_value: String(Math.round(parcel.declaredValue)),
+    length: String(parcel.length),
+    breadth: String(parcel.breadth),
+    height: String(parcel.height),
   });
   const data = await call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}`, {
     headers: { authorization: `Bearer ${token}` },
@@ -355,6 +367,8 @@ export type BookOut = {
   providerOrderId?: string;
   providerShipmentId?: string;
   labelUrl?: string;
+  invoiceUrl?: string;
+  manifestUrl?: string;
   pickupScheduledFor?: string;
   pickupReference?: string;
   courierCost?: number;
@@ -438,6 +452,46 @@ export async function shiprocketLabel(input: Json, shipmentId: string) {
     json: { shipment_id: [Number(shipmentId)] },
   });
   return { labelUrl: String(data.label_url ?? "") };
+}
+
+export async function shiprocketInvoice(input: Json, providerOrderId: string) {
+  const token = await shiprocketToken(input);
+  if (!token) return null;
+  const data = await call("https://apiv2.shiprocket.in/v1/external/orders/print/invoice", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    json: { ids: [Number(providerOrderId)] },
+  });
+  return { invoiceUrl: String(data.invoice_url ?? "") };
+}
+
+export async function shiprocketManifest(input: Json, shipmentId: string) {
+  const token = await shiprocketToken(input);
+  if (!token) return null;
+  const data = await call("https://apiv2.shiprocket.in/v1/external/manifests/generate", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    json: { shipment_id: [Number(shipmentId)] },
+  });
+  return { manifestUrl: String(data.manifest_url ?? "") };
+}
+
+export async function shiprocketPickupLocations(input: Json) {
+  const token = await shiprocketToken(input);
+  if (!token) return null;
+  const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const addresses = ((data.data as Json)?.shipping_address as Json[]) ?? [];
+  return {
+    locations: addresses.map((address) => ({
+      nickname: String(address.pickup_location ?? address.location_name ?? ""),
+      city: String(address.city ?? ""),
+      pincode: String(address.pin_code ?? address.pincode ?? ""),
+      phone: String(address.phone ?? ""),
+      address: String(address.address ?? ""),
+    })),
+  };
 }
 
 export async function shiprocketTrack(input: Json, awb: string) {
@@ -570,43 +624,7 @@ export async function nimbusCancel(input: Json, awb: string) {
 }
 
 export async function tookanBook(input: Json, order: BookInput): Promise<BookOut | null> {
-  const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
-  if (!apiKey) return null;
-  const when = new Date(Date.now() + 4 * 36e5).toISOString().slice(0, 16).replace("T", " ");
-  const data = await call("https://api.tookanapp.com/v2/create_task", {
-    method: "POST",
-    json: {
-      api_key: apiKey,
-      order_id: order.orderId,
-      team_id: typeof input.teamId === "string" ? input.teamId : "",
-      auto_assignment: "1",
-      job_description: order.items.map((item) => `${item.units} x ${item.name}`).join(", "),
-      job_pickup_phone: order.pickup.phone,
-      job_pickup_name: order.pickup.contactName,
-      job_pickup_address: `${order.pickup.line1}, ${order.pickup.city} ${order.pickup.pincode}`,
-      job_pickup_datetime: when,
-      customer_email: order.customer.email ?? "",
-      customer_username: order.customer.name,
-      customer_phone: order.customer.phone,
-      customer_address: `${order.customer.line1}, ${order.customer.city} ${order.customer.pincode}`,
-      job_delivery_datetime: when,
-      has_pickup: "1",
-      has_delivery: "1",
-      layout_type: "0",
-      tracking_link: 1,
-      timezone: "-330",
-    },
-  });
-  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the task."));
-  const task = (data.data as Json) ?? {};
-  return {
-    provider: "tookan",
-    awb: String(task.delivery_job_id ?? task.job_id ?? ""),
-    courierName: "Tookan rider",
-    providerOrderId: String(task.job_id ?? ""),
-    trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
-    pickupScheduledFor: when,
-  };
+  return tookanBookMode(input, order, "parcel");
 }
 
 export async function shipdayBook(input: Json, order: BookInput): Promise<BookOut | null> {
@@ -636,4 +654,497 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
     courierName: "Shipday driver",
     providerOrderId: String(data.orderId ?? ""),
   };
+}
+
+function shipdayAuth(apiKey: string) {
+  return { authorization: `Basic ${apiKey}` };
+}
+
+function shipdayOrders(data: unknown): Json[] {
+  if (Array.isArray(data)) return data as Json[];
+  const wrapped = data as Json;
+  if (Array.isArray(wrapped.orders)) return wrapped.orders as Json[];
+  if (wrapped && typeof wrapped === "object") return [wrapped];
+  return [];
+}
+
+export async function shipdayTrack(input: Json, orderId: string) {
+  const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
+  if (!apiKey) return null;
+  let match: Json | null = null;
+  try {
+    const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(orderId)}`, { headers: shipdayAuth(apiKey) });
+    match = Array.isArray(one) ? (one[0] as Json) : (one as Json);
+  } catch {
+    const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
+    match =
+      shipdayOrders(data).find(
+        (order) => String(order.orderId) === orderId || String(order.orderNumber) === orderId || String(order.id) === orderId
+      ) ?? null;
+  }
+  if (!match) {
+    return { status: "Not found", events: [] as { at: string; status: string; location: string }[] };
+  }
+  const status = String(match.orderStatus ?? match.status ?? "");
+  const carrier = (match.assignedCarrier as { name?: string } | undefined)?.name ?? "";
+  return {
+    status,
+    events: [{ at: new Date().toISOString(), status, location: String(carrier) }],
+  };
+}
+
+export async function shipdayCancel(input: Json, orderId: string) {
+  const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
+  if (!apiKey) return null;
+  await call(`https://api.shipday.com/orders/${encodeURIComponent(orderId)}`, {
+    method: "DELETE",
+    headers: shipdayAuth(apiKey),
+  });
+  return { cancelled: true };
+}
+
+export async function shipdayTest(input: Json) {
+  const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
+  if (!apiKey) return null;
+  const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
+  const count = shipdayOrders(data).length;
+  return { message: `Connected. Shipday returned ${count} order${count === 1 ? "" : "s"}.` };
+}
+
+/* ---------------- Tookan: hyperlocal vs parcel ---------------- */
+
+/** Tookan expects YYYY-MM-DD HH:MM:SS in the account timezone (IST = -330). */
+function tookanDatetime(from = new Date(), extraHours = 4) {
+  const when = new Date(from.getTime() + extraHours * 36e5);
+  const ist = new Date(when.getTime() + 330 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())} ${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
+}
+
+const tookanStatusLabel: Record<number, string> = {
+  0: "Assigned",
+  1: "Started",
+  2: "Successful",
+  3: "Failed",
+  4: "In progress",
+  6: "Unassigned",
+  7: "Accepted",
+  8: "Declined",
+  9: "Cancelled",
+};
+
+export async function tookanBookMode(input: Json, order: BookInput, mode: "hyperlocal" | "parcel"): Promise<BookOut | null> {
+  const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
+  if (!apiKey) return null;
+  const pickupAt = tookanDatetime(new Date(), 2);
+  const deliverAt = tookanDatetime(new Date(), 4);
+  const parcel = mode === "parcel";
+  const teamId = typeof input.teamId === "string" ? input.teamId.trim() : "";
+  const description = order.items.map((item) => `${item.units} x ${item.name}`).join(", ");
+  const pickupAddress = `${order.pickup.line1}, ${order.pickup.city} ${order.pickup.pincode}`;
+  const dropAddress = `${order.customer.line1}, ${order.customer.city} ${order.customer.pincode}`;
+
+  if (parcel) {
+    const data = await call("https://api.tookanapp.com/v2/create_multiple_tasks", {
+      method: "POST",
+      json: {
+        api_key: apiKey,
+        ...(teamId ? { team_id: Number(teamId) || teamId } : {}),
+        timezone: -330,
+        has_pickup: 1,
+        has_delivery: 1,
+        layout_type: 0,
+        geofence: 0,
+        auto_assignment: 1,
+        tags: "parcel",
+        pickups: [
+          {
+            address: pickupAddress,
+            time: pickupAt,
+            phone: order.pickup.phone,
+            job_description: description,
+            job_pickup_name: order.pickup.contactName,
+            job_pickup_phone: order.pickup.phone,
+            order_id: order.orderId,
+          },
+        ],
+        deliveries: [
+          {
+            address: dropAddress,
+            time: deliverAt,
+            phone: order.customer.phone,
+            job_description: description,
+            customer_username: order.customer.name,
+            customer_phone: order.customer.phone,
+            customer_email: order.customer.email ?? "",
+            order_id: order.orderId,
+          },
+        ],
+      },
+    });
+    if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the parcel task."));
+    const task = (data.data as Json) ?? {};
+    return {
+      provider: "tookan-parcel",
+      awb: String(task.delivery_job_id ?? task.job_id ?? ""),
+      courierName: "Tookan parcel",
+      providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
+      providerShipmentId: String(task.delivery_job_id ?? ""),
+      trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
+      pickupScheduledFor: pickupAt,
+    };
+  }
+
+  const data = await call("https://api.tookanapp.com/v2/create_task", {
+    method: "POST",
+    json: {
+      api_key: apiKey,
+      order_id: order.orderId,
+      ...(teamId ? { team_id: Number(teamId) || teamId } : {}),
+      auto_assignment: 1,
+      job_description: description,
+      job_pickup_phone: order.pickup.phone,
+      job_pickup_name: order.pickup.contactName,
+      job_pickup_address: pickupAddress,
+      job_pickup_datetime: pickupAt,
+      customer_email: order.customer.email ?? "",
+      customer_username: order.customer.name,
+      customer_phone: order.customer.phone,
+      customer_address: dropAddress,
+      job_delivery_datetime: deliverAt,
+      has_pickup: 0,
+      has_delivery: 1,
+      layout_type: 0,
+      tracking_link: 1,
+      timezone: -330,
+    },
+  });
+  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the hyperlocal task."));
+  const task = (data.data as Json) ?? {};
+  return {
+    provider: "tookan",
+    awb: String(task.job_id ?? task.delivery_job_id ?? ""),
+    courierName: "Tookan hyperlocal",
+    providerOrderId: String(task.job_id ?? ""),
+    trackingUrl: String(task.tracking_link ?? task.delivery_tracing_link ?? ""),
+    pickupScheduledFor: pickupAt,
+  };
+}
+
+export async function tookanTrack(input: Json, jobId: string) {
+  const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
+  if (!apiKey) return null;
+  const data = await call("https://api.tookanapp.com/v2/get_job_details", {
+    method: "POST",
+    json: { api_key: apiKey, job_ids: [Number(jobId) || jobId], include_task_history: 1 },
+  });
+  const job = ((data.data as Json[]) ?? [])[0] ?? {};
+  const history = (job.task_history as Json[]) ?? [];
+  const code = Number(job.job_status ?? job.status);
+  return {
+    status: tookanStatusLabel[code] ?? String(job.job_status ?? job.status ?? ""),
+    events: history.map((entry) => ({
+      at: String(entry.creation_datetime ?? entry.timestamp ?? ""),
+      status: String(entry.description ?? entry.status ?? ""),
+      location: String(entry.latitude && entry.longitude ? `${entry.latitude},${entry.longitude}` : ""),
+    })),
+  };
+}
+
+export async function tookanCancel(input: Json, jobId: string) {
+  const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
+  if (!apiKey) return null;
+  const data = await call("https://api.tookanapp.com/v2/cancel_task", {
+    method: "POST",
+    json: { api_key: apiKey, job_id: Number(jobId) || jobId, job_status: 9 },
+  });
+  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan could not cancel the task."));
+  return { cancelled: true };
+}
+
+export async function tookanTest(input: Json) {
+  const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
+  if (!apiKey) return null;
+  const data = await call("https://api.tookanapp.com/v2/get_all_fleets", {
+    method: "POST",
+    json: { api_key: apiKey },
+  });
+  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan rejected the API key."));
+  const fleets = Array.isArray(data.data) ? data.data : [];
+  return { message: `Connected. Tookan returned ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}.` };
+}
+
+/* ---------------- iThink Logistics ---------------- */
+
+function ithinkAuth(input: Json) {
+  const accessToken = pick(input.accessToken, "ITHINK_ACCESS_TOKEN");
+  const secretKey = pick(input.secretKey, "ITHINK_SECRET_KEY");
+  if (!accessToken || !secretKey) return null;
+  return { access_token: accessToken, secret_key: secretKey, host: pick(input.host, "ITHINK_HOST") || "https://my.ithinklogistics.com/api_v3/" };
+}
+
+async function ithinkPost(path: string, payload: Json & { host?: string }) {
+  const host = String(payload.host ?? "https://my.ithinklogistics.com/api_v3/").replace(/\/?$/, "/");
+  const body = { ...payload };
+  delete body.host;
+  const data = await call(`${host}${path.replace(/^\//, "")}`, { method: "POST", json: { data: body } });
+  const status = String(data.status ?? data.status_code ?? "").toLowerCase();
+  if (status && status !== "success" && status !== "200" && Number(data.status_code) >= 400) {
+    throw new ProviderError(String(data.message ?? data.remark ?? "iThink Logistics rejected the request."));
+  }
+  return data;
+}
+
+export async function ithinkRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  const data = await ithinkPost("rate/check.json", {
+    ...auth,
+    from_pincode: parcel.pickupPincode,
+    to_pincode: parcel.deliveryPincode,
+    shipping_length_cms: String(parcel.length),
+    shipping_width_cms: String(parcel.breadth),
+    shipping_height_cms: String(parcel.height),
+    shipping_weight_kg: String(parcel.weightKg),
+    order_type: "forward",
+    payment_type: parcel.cod ? "cod" : "prepaid",
+  });
+  const rates = ((data.data as Json)?.rate as Json[]) ?? (data.data as Json[]) ?? [];
+  return rates.map((courier) => ({
+    provider: "ithink",
+    courierId: String(courier.logistic_id ?? courier.id ?? courier.logistic_name ?? ""),
+    courierName: String(courier.logistic_name ?? courier.name ?? "iThink courier"),
+    rate: Number(courier.total_charges ?? courier.rate ?? courier.freight_charge ?? 0),
+    etaDays: daysUntil(String(courier.edd ?? courier.estimated_delivery ?? "")) ?? Number(courier.tat ?? 5),
+    live: true as const,
+  }));
+}
+
+export async function ithinkBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  const pickupId = typeof input.pickupAddressId === "string" ? input.pickupAddressId : "";
+  const data = await ithinkPost("order/add.json", {
+    ...auth,
+    pickup_address_id: pickupId,
+    shipments: [
+      {
+        waybill: "",
+        order: order.orderId,
+        sub_order: `${order.orderId}-1`,
+        order_date: order.orderDate.slice(0, 10),
+        total_amount: String(order.total),
+        name: order.customer.name,
+        company_name: "",
+        add: order.customer.line1,
+        add2: order.customer.line2 ?? "",
+        pin: order.customer.pincode,
+        city: order.customer.city,
+        state: order.customer.state,
+        country: "India",
+        phone: order.customer.phone.replace(/\D/g, "").slice(-10),
+        email: order.customer.email ?? order.pickup.email,
+        products: order.items.map((item) => item.name).join(", "),
+        quantity: String(order.items.reduce((sum, item) => sum + item.units, 0)),
+        payment_mode: order.cod ? "COD" : "Prepaid",
+        shipping_charges: String(order.shippingCharge),
+        cod_charges: "0",
+        discount: "0",
+        order_type: "forward",
+        return_address: order.pickup.line1,
+        return_pin: order.pickup.pincode,
+        return_city: order.pickup.city,
+        return_state: order.pickup.state,
+        return_country: "India",
+        return_phone: order.pickup.phone.replace(/\D/g, "").slice(-10),
+        shipping_length_cms: String(order.length),
+        shipping_width_cms: String(order.breadth),
+        shipping_height_cms: String(order.height),
+        shipping_weight_kg: String(order.weightKg),
+        logistic: order.courierId || undefined,
+      },
+    ],
+  });
+  const shipment = (((data.data as Json)?.shipments as Json[]) ?? [data.data as Json])[0] ?? {};
+  const awb = String(shipment.waybill ?? shipment.awb ?? shipment.awb_number ?? "");
+  if (!awb) throw new ProviderError(String(data.message ?? "iThink Logistics did not assign an AWB."));
+  return {
+    provider: "ithink",
+    awb,
+    courierName: String(shipment.logistic_name ?? shipment.courier ?? "iThink Logistics"),
+    providerOrderId: String(shipment.order_id ?? order.orderId),
+    providerShipmentId: String(shipment.shipment_id ?? ""),
+    labelUrl: String(shipment.shipping_label ?? shipment.label ?? ""),
+    courierCost: Number(shipment.total_charges ?? 0) || undefined,
+  };
+}
+
+export async function ithinkTrack(input: Json, awb: string) {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  const data = await ithinkPost("order/track.json", { ...auth, awb_number_list: awb });
+  const tracking = ((data.data as Json) ?? {})[awb] as Json | undefined;
+  const scans = (tracking?.scans as Json[]) ?? (tracking?.history as Json[]) ?? [];
+  return {
+    status: String(tracking?.current_status ?? tracking?.status ?? ""),
+    events: scans.map((scan) => ({
+      at: String(scan.date ?? scan.time ?? scan.updated_date ?? ""),
+      status: String(scan.status ?? scan.activity ?? ""),
+      location: String(scan.location ?? scan.city ?? ""),
+    })),
+  };
+}
+
+export async function ithinkCancel(input: Json, awb: string) {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  await ithinkPost("order/cancel.json", { ...auth, awbs: [awb] });
+  return { cancelled: true };
+}
+
+export async function ithinkLabel(input: Json, awb: string) {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  const data = await ithinkPost("shipping/label.json", { ...auth, awb_numbers: awb, page_size: "A4" });
+  return { labelUrl: String((data.data as Json)?.label ?? data.label_url ?? "") };
+}
+
+export async function ithinkInvoice(input: Json, awb: string) {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  const data = await ithinkPost("shipping/invoice.json", { ...auth, awb_numbers: awb });
+  return { invoiceUrl: String((data.data as Json)?.invoice ?? data.invoice_url ?? "") };
+}
+
+export async function ithinkManifest(input: Json, awb: string) {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  const data = await ithinkPost("shipping/manifest.json", { ...auth, awb_numbers: awb });
+  return { manifestUrl: String((data.data as Json)?.manifest ?? data.manifest_url ?? "") };
+}
+
+export async function ithinkPincode(input: Json, pincode: string) {
+  const auth = ithinkAuth(input);
+  if (!auth) return null;
+  const data = await ithinkPost("pincode/check.json", { ...auth, pincode });
+  const nested = (data.data as Json) ?? {};
+  const serviceable =
+    Boolean(nested.serviceable) ||
+    nested.status === "success" ||
+    nested.status === 200 ||
+    data.status === "success" ||
+    data.status === 200;
+  return { serviceable, raw: data };
+}
+
+/* ---------------- Shiprocket return ---------------- */
+
+export async function shiprocketReturn(input: Json, order: BookInput): Promise<BookOut | null> {
+  const token = await shiprocketToken(input);
+  if (!token) return null;
+  const auth = { authorization: `Bearer ${token}` };
+  const [firstName, ...rest] = order.customer.name.split(" ");
+  const created = await call("https://apiv2.shiprocket.in/v1/external/orders/create/return", {
+    method: "POST",
+    headers: auth,
+    json: {
+      order_id: `RET-${order.orderId}`,
+      order_date: new Date().toISOString().slice(0, 16).replace("T", " "),
+      channel_id: typeof input.channelId === "string" && input.channelId ? input.channelId : undefined,
+      pickup_customer_name: firstName || order.customer.name,
+      pickup_last_name: rest.join(" ") || ".",
+      pickup_address: order.customer.line1,
+      pickup_address_2: order.customer.line2 ?? "",
+      pickup_city: order.customer.city,
+      pickup_state: order.customer.state,
+      pickup_country: "India",
+      pickup_pincode: order.customer.pincode,
+      pickup_email: order.customer.email || order.pickup.email,
+      pickup_phone: order.customer.phone.replace(/\D/g, "").slice(-10),
+      pickup_isd_code: "91",
+      shipping_customer_name: order.pickup.contactName,
+      shipping_address: order.pickup.line1,
+      shipping_address_2: order.pickup.line2,
+      shipping_city: order.pickup.city,
+      shipping_country: "India",
+      shipping_pincode: order.pickup.pincode,
+      shipping_state: order.pickup.state,
+      shipping_email: order.pickup.email,
+      shipping_isd_code: "91",
+      shipping_phone: order.pickup.phone.replace(/\D/g, "").slice(-10),
+      order_items: order.items.map((item) => ({ name: item.name, sku: item.sku, units: item.units, selling_price: item.price, qc_enable: false })),
+      payment_method: "PREPAID",
+      sub_total: order.subtotal,
+      length: order.length,
+      breadth: order.breadth,
+      height: order.height,
+      weight: order.weightKg,
+    },
+  });
+  const shipmentId = String(created.shipment_id ?? "");
+  if (!shipmentId) throw new ProviderError(String(created.message ?? "Shiprocket did not create the return shipment."));
+  const assigned = await call("https://apiv2.shiprocket.in/v1/external/courier/assign/awb", {
+    method: "POST",
+    headers: auth,
+    json: { shipment_id: shipmentId, is_return: 1, courier_id: order.courierId || undefined },
+  });
+  const awbData = ((assigned.response as Json)?.data as Json) ?? {};
+  return {
+    provider: "shiprocket",
+    awb: String(awbData.awb_code ?? created.awb_code ?? ""),
+    courierName: String(awbData.courier_name ?? "Return courier"),
+    providerOrderId: String(created.order_id ?? ""),
+    providerShipmentId: shipmentId,
+    courierCost: Number(awbData.freight_charges ?? 0) || undefined,
+  };
+}
+
+/* ---------------- Zoho CPaaS WhatsApp ---------------- */
+
+function cpaasHost(domain: string) {
+  if (domain === "zoho.in") return "cpaas.zoho.in";
+  if (domain === "zoho.eu") return "cpaas.zoho.eu";
+  return "cpaas.zoho.com";
+}
+
+function waE164(raw: string) {
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return trimmed;
+  if (trimmed.startsWith("+")) return `+${digits}`;
+  if (digits.length === 10) return `+91${digits}`;
+  return `+${digits}`;
+}
+
+export async function sendZohoCpaas(
+  input: Json,
+  message: { to: string; template: string; language?: string; params: string[] }
+) {
+  const apiKey = pick(input.zohoCpaasApiKey, "ZOHO_CPAAS_API_KEY");
+  const from = pick(input.zohoCpaasFrom, "ZOHO_CPAAS_FROM");
+  if (!apiKey || !from) return null;
+  const domain = typeof input.zohoCpaasDomain === "string" && input.zohoCpaasDomain ? input.zohoCpaasDomain : "zoho.com";
+  const template = message.template.trim();
+  if (!template) throw new ProviderError("Map this notification to a Zoho CPaaS template alias or template key.");
+  const mergeInfo: Record<string, string> = {};
+  message.params.forEach((value, index) => {
+    mergeInfo[String(index + 1)] = value;
+  });
+  const named = ["name", "order_id", "status", "amount"] as const;
+  named.forEach((key, index) => {
+    if (message.params[index]) mergeInfo[key] = message.params[index];
+  });
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(template);
+  const data = await call(`https://${cpaasHost(domain)}/v1.1/whatsapp`, {
+    method: "POST",
+    headers: { authorization: apiKey.startsWith("Zoho-enczapikey") ? apiKey : `Zoho-enczapikey ${apiKey}` },
+    json: {
+      from: waE164(from),
+      to: waE164(message.to),
+      ...(uuid ? { template_key: template } : { template_alias: template }),
+      merge_info: mergeInfo,
+    },
+  });
+  const payload = (data.data as Json) ?? data;
+  return { id: String(payload.message_id ?? data.message_id ?? ""), provider: "zoho" };
 }

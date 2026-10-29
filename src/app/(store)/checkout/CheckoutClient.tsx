@@ -26,9 +26,10 @@ import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillm
 import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import { fetchCourierRates } from "@/lib/shipping-client";
 import { payWithRazorpay, paymentNotice } from "@/lib/payments-client";
-import { sendEmail } from "@/lib/admin-store";
+import { adjustStoreCredit, getStoreCredit, sendEmail } from "@/lib/admin-store";
+import { commitStockForOrder } from "@/lib/product-data";
 import { useOrderSettings } from "@/lib/use-cms";
-import type { CourierRate, DeliveryAddress, OrderItem } from "@/types";
+import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
 
 type CourierOption = CourierRate & { key: string; deliverBy: string };
 
@@ -76,6 +77,7 @@ export default function CheckoutClient() {
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
   const [orderId, setOrderId] = useState("");
+  const [useCredit, setUseCredit] = useState(false);
   const seededRef = useRef(false);
 
   // Seed cart for Buy Now flow (once).
@@ -177,10 +179,13 @@ export default function CheckoutClient() {
     deliveryMode === "store_pickup" || orderItems.length === 0
       ? 0
       : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
+  const storeCredit = user?.email ? getStoreCredit(user.email) : 0;
+  const creditApplied = useCredit ? Math.min(storeCredit, Math.max(0, priced.subtotal + priced.gst + shipping + codFee)) : 0;
   const totals = {
     ...priced,
     shipping: shipping + codFee,
-    total: priced.subtotal + priced.gst + shipping + codFee,
+    storeCredit: creditApplied,
+    total: Math.max(0, priced.subtotal + priced.gst + shipping + codFee - creditApplied),
   };
 
   const update = (field: keyof DeliveryAddress, value: string) =>
@@ -242,7 +247,10 @@ export default function CheckoutClient() {
       deliveryMode === "delivery"
         ? { ...address, fullName: address.fullName.trim() }
         : { ...address, fullName: address.fullName.trim() || "Store pickup" };
-    saveOrder({
+    if (creditApplied > 0 && user?.email) {
+      adjustStoreCredit(user.email, -creditApplied, `Used on order ${id}`, id);
+    }
+    const order: Order = {
       id,
       userId: user?.id ?? "guest",
       date: now,
@@ -259,6 +267,9 @@ export default function CheckoutClient() {
       razorpayPaymentId: payment.paymentId,
       razorpayOrderId: payment.razorpayOrderId,
       status: "Ordered",
+      channel: "online",
+      storeCreditUsed: creditApplied || undefined,
+      stockCommitted: false,
       deliveryMode,
       deliveryAddress,
       eta:
@@ -288,7 +299,9 @@ export default function CheckoutClient() {
       history: [
         { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
       ],
-    });
+    };
+    if (commitStockForOrder(order)) order.stockCommitted = true;
+    saveOrder(order);
     if (deliveryAddress.email) {
       sendEmail({
         to: deliveryAddress.email,
@@ -551,7 +564,7 @@ export default function CheckoutClient() {
                       <span className="font-semibold">Open-box delivery</span>{" "}
                       <span className="text-text-muted">
                         (optional) Inspect the item at the doorstep before
-                        accepting delivery. Offered by the seller for this item.
+                        accepting delivery. Offered for this item.
                       </span>
                     </span>
                   </label>
@@ -632,7 +645,7 @@ export default function CheckoutClient() {
                         {book.title}
                       </Link>
                       <p className="mt-1 text-xs text-text-muted">
-                        Sold by {book.seller ?? storeConfig.sellerName}
+                        Published by {book.publisher?.name ?? storeConfig.publisherName}
                       </p>
                       <p className="mt-2 text-sm">
                         <span className="font-bold text-text-primary">
@@ -790,6 +803,16 @@ export default function CheckoutClient() {
               </span>
             </div>
 
+            {storeCredit > 0 && (
+              <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-border px-4 py-3 text-sm">
+                <input type="checkbox" checked={useCredit} onChange={(event) => setUseCredit(event.target.checked)} className="mt-1 accent-burgundy" />
+                <span>
+                  <span className="block font-semibold text-text-primary">Use store credit ({formatPrice(storeCredit)})</span>
+                  <span className="block text-xs text-text-muted">{creditApplied ? `${formatPrice(creditApplied)} will be applied` : "Applied at payment"}</span>
+                </span>
+              </label>
+            )}
+
             <div className="mt-5 grid gap-3">
               <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${payMethod === "online" || !codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
                 <input type="radio" name="payment-method" checked={!codSelected} onChange={() => setPayMethod("online")} className="mt-1 accent-burgundy" />
@@ -921,6 +944,12 @@ export default function CheckoutClient() {
                       : formatPrice(totals.shipping)}
                 </dd>
               </div>
+              {creditApplied > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">Store credit</dt>
+                  <dd className="font-medium text-emerald-700">− {formatPrice(creditApplied)}</dd>
+                </div>
+              )}
               <div className="flex justify-between border-t border-border pt-3">
                 <dt className="font-semibold text-text-primary">Total</dt>
                 <dd className="font-bold text-burgundy">

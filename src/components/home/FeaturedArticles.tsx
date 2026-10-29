@@ -9,6 +9,7 @@ export default function FeaturedArticles() {
   const articles = useLiveArticles();
   const featured = articles.filter((article) => article.featured);
   const shown = (featured.length > 0 ? featured : articles).slice(0, 3);
+  if (shown.length === 0) return null;
 
   return (
     <section className="section bg-white" aria-labelledby="articles-heading">

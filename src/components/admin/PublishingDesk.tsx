@@ -9,6 +9,7 @@ import {
   blankEvent,
   canEdit,
   contentModules,
+  deleteEvent,
   editorsFor,
   getArticle,
   getLiveEvents,
@@ -196,7 +197,7 @@ export function ArticleAdmin() {
               <div className="flex gap-3 text-sm font-semibold">
                 <Link className="text-burgundy" href={`/admin/articles/new?id=${article.id}`}>Edit</Link>
                 <Link className="text-slate-500" href={`/articles/${article.slug}`}>View</Link>
-                <button type="button" className="text-slate-400" onClick={() => hideArticle(article.id)}>Hide</button>
+                <button type="button" className="text-red-600" onClick={() => { if (window.confirm(`Delete the article “${article.title}”?`)) hideArticle(article.id); }}>Delete</button>
               </div>
             </li>
           ))}
@@ -270,7 +271,7 @@ function AnnouncementForm({
             </div>
             <div className="flex gap-3 text-sm font-semibold">
               <Link className="text-burgundy" href={`/admin/website/announcements?id=${item.id}`}>Edit</Link>
-              <button type="button" className="text-slate-400" onClick={() => hideAnnouncement(item.id)}>Hide</button>
+              <button type="button" className="text-red-600" onClick={() => { if (window.confirm(`Delete the announcement “${item.title}”?`)) hideAnnouncement(item.id); }}>Delete</button>
             </div>
           </li>
         ))}
@@ -490,6 +491,7 @@ export function EventAdminList() {
             <div className="flex gap-3 text-sm font-semibold">
               <Link className="text-burgundy" href={`/admin/events/create?id=${event.id}`}>Edit</Link>
               <Link className="text-slate-500" href={`/events/${event.slug}`}>View</Link>
+              <button type="button" className="text-red-600" onClick={() => { if (window.confirm(`Delete the event “${event.name}”? It is removed from the site.`)) deleteEvent(event.id); }}>Delete</button>
             </div>
           </li>
         ))}
@@ -561,9 +563,7 @@ export function StaffDesk() {
   return <AccountsSection fixedRole="staff" />;
 }
 
-export function CustomerDesk() {
-  return <AccountsSection fixedRole="customer" />;
-}
+export { CustomerDesk } from "@/components/admin/CustomerDesk";
 
 export function ModuleAccessDesk() {
   const staff = getAccounts().filter((account) => account.role === "staff" || account.role === "admin");

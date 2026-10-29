@@ -4,8 +4,8 @@ const ROLES_KEY = "vgmf_staff_roles";
 
 export const staffModules = [
   { id: "orders", label: "Orders & shipments", paths: ["/admin/commerce/orders", "/admin/commerce/shipments", "/admin/shipments", "/admin/payments/refunds"] },
+  { id: "pos", label: "In-store POS", paths: ["/admin/commerce/pos"] },
   { id: "catalog", label: "Products & inventory", paths: ["/admin/commerce/products", "/admin/commerce/inventory", "/admin/commerce/serviceability"] },
-  { id: "sellers", label: "Sellers", paths: ["/admin/commerce/sellers", "/admin/sellers", "/admin/accounts/sellers"] },
   { id: "payments", label: "Payments", paths: ["/admin/payments", "/admin/commerce/payments"] },
   { id: "customers", label: "Customers", paths: ["/admin/accounts/customers"] },
   { id: "website", label: "Website & homepage", paths: ["/admin/website"] },
@@ -37,11 +37,11 @@ export const defaultRoles: StaffRole[] = [
   { id: "general-staff", name: "General Staff", category: "Operations", description: "Orders, customers and support.", modules: ["orders", "customers", "support"] },
   { id: "content-editor", name: "Content Editor", category: "Content", description: "Articles, homepage, announcements and About Us.", modules: ["articles", "website", "about"] },
   { id: "event-coordinator", name: "Event Coordinator", category: "Events", description: "Events, speakers, schedule and certificates.", modules: ["events", "certificates"] },
-  { id: "order-manager", name: "Order Manager", category: "Commerce", description: "Orders, shipping, couriers and inventory.", modules: ["orders", "catalog", "delivery", "customers"] },
+  { id: "order-manager", name: "Order Manager", category: "Commerce", description: "Orders, shipping, couriers and inventory.", modules: ["orders", "pos", "catalog", "delivery", "customers"] },
   { id: "accounts", name: "Accounts & Payments", category: "Finance", description: "Payments, refunds and reconciliation.", modules: ["payments", "orders"] },
   { id: "support-agent", name: "Support Agent", category: "Support", description: "Tickets, enquiries and notifications.", modules: ["support", "communication", "customers"] },
   { id: "clinic-manager", name: "Clinic Manager", category: "Clinic", description: "Clinic page, photos and doctor profiles.", modules: ["clinics"] },
-  { id: "store-manager", name: "Store Manager", category: "Management", description: "Everything in the shop.", modules: ["orders", "catalog", "sellers", "payments", "customers", "delivery"] },
+  { id: "store-manager", name: "Store Manager", category: "Management", description: "Everything in the shop.", modules: ["orders", "pos", "catalog", "payments", "customers", "delivery"] },
 ];
 
 function read(): StaffRole[] {

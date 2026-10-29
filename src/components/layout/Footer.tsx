@@ -21,7 +21,6 @@ const legalLinks = [
 const portalLinks = [
   { name: "Admin", href: "/admin" },
   { name: "Staff", href: "/staff" },
-  { name: "Seller portal", href: "/seller" },
 ];
 
 export default function Footer() {

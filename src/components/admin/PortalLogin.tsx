@@ -6,18 +6,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
 import { ensureAdminCredentials, getAccounts } from "@/lib/admin-store";
+import { loginBlockReason } from "@/lib/auth";
 
-export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }) {
+export function PortalLogin({ portal }: { portal: "admin" | "staff" }) {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const label = portal === "admin" ? "Admin" : portal === "staff" ? "Staff" : "Seller";
-  const target = portal === "staff" ? "/admin" : `/${portal}`;
-  const signedIn =
-    user?.role === portal || (portal === "seller" && user?.role === "seller");
+  const label = portal === "admin" ? "Admin" : "Staff";
+  const target = "/admin";
+  const signedIn = user?.role === portal;
 
   if (signedIn && user) {
     return (
@@ -50,6 +50,11 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }
     }
     if (!account.password || account.password !== password) {
       setError("Incorrect password. Please try again.");
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
       return;
     }
     setError("");
@@ -103,25 +108,13 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }
         </button>
       </form>
 
-      {portal === "seller" ? (
-        <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
-          <p className="font-semibold text-text-primary">New to VGMF?</p>
-          <p>
-            Create a seller account with your email and password, then complete your brand onboarding.
-          </p>
-          <Link href="/seller" className="mt-2 inline-block font-semibold text-burgundy hover:underline">
-            Create a seller account →
-          </Link>
-        </div>
-      ) : (
-        <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
-          <p className="font-semibold text-text-primary">Demo credentials</p>
-          <p>
-            {portal === "admin" ? "admin@vaidyagogate.org" : "care@vaidyagogate.org"} ·{" "}
-            password {portal === "admin" ? "admin123" : "staff123"}
-          </p>
-        </div>
-      )}
+      <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
+        <p className="font-semibold text-text-primary">Demo credentials</p>
+        <p>
+          {portal === "admin" ? "admin@vaidyagogate.org" : "care@vaidyagogate.org"} · password{" "}
+          {portal === "admin" ? "admin123" : "staff123"}
+        </p>
+      </div>
 
       <Link href="/" className="mt-6 block text-center text-sm font-medium text-text-muted transition hover:text-burgundy">
         ← Back to website
@@ -134,7 +127,7 @@ function Card({
   portal,
   children,
 }: {
-  portal: "admin" | "staff" | "seller";
+  portal: "admin" | "staff";
   children: React.ReactNode;
 }) {
   return (
@@ -145,13 +138,13 @@ function Card({
             <SiteLogo size={56} />
           </div>
           <p className="mt-4 text-center text-xs font-bold uppercase tracking-[0.18em] text-burgundy">
-            {portal === "admin" ? "Admin console" : portal === "staff" ? "Staff console" : "Seller portal"}
+            {portal === "admin" ? "Admin console" : "Staff console"}
           </p>
           <h1 className="mt-1 text-center text-2xl font-bold text-text-primary">
-            {portal === "admin" ? "Admin sign in" : portal === "staff" ? "Staff sign in" : "Seller sign in"}
+            {portal === "admin" ? "Admin sign in" : "Staff sign in"}
           </h1>
           <p className="mt-2 text-center text-sm text-text-muted">
-            Use your {portal === "admin" ? "administrator" : portal === "staff" ? "staff" : "seller"} email and password.
+            Use your {portal === "admin" ? "administrator" : "staff"} email and password.
           </p>
           <div className="mt-7">{children}</div>
         </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { createUserAccount, ensureBootstrapped, getAccounts, removeAccount, updateAccount } from "@/lib/admin-store";
+import { createUserAccount, ensureBootstrapped, getAccounts, removeAccount, sendAccountDetails, setAccountStatus, updateAccount } from "@/lib/admin-store";
+import { getSession } from "@/lib/auth";
 import { getRoles, roleCategories, saveRoles, staffModules, type StaffModuleId, type StaffRole } from "@/lib/roles";
 import { slugify } from "@/lib/cms";
 import type { User } from "@/types";
@@ -176,15 +177,40 @@ export function StaffAccountsDesk() {
   );
 }
 
+const STATUS_TONE: Record<string, string> = {
+  active: "bg-emerald-50 text-emerald-700",
+  disabled: "bg-amber-50 text-amber-800",
+  banned: "bg-red-50 text-red-700",
+};
+
 function StaffRow({ account, roles, onChange }: { account: User; roles: StaffRole[]; onChange: () => void }) {
   const [password, setPassword] = useState("");
   const [note, setNote] = useState("");
   const isAdmin = account.role === "admin";
+  const status = account.status ?? "active";
+  const isSelf = getSession()?.email.toLowerCase() === account.email.toLowerCase();
+
+  const changeStatus = (next: "active" | "disabled" | "banned") => {
+    let reason: string | undefined;
+    if (next !== "active") {
+      const answer = window.prompt(`Reason to ${next === "banned" ? "ban" : "disable"} ${account.email} (shown to them at sign-in):`, "");
+      if (answer === null) return;
+      reason = answer.trim() || undefined;
+    }
+    setAccountStatus(account.email, next, reason);
+    setNote(next === "active" ? "Reactivated." : next === "banned" ? "Banned. They can no longer sign in." : "Disabled. They can no longer sign in.");
+    onChange();
+  };
+
   return (
     <li className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 last:border-b-0 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <p className="font-semibold text-slate-900">{account.firstName} {account.lastName}</p>
-        <p className="text-xs text-slate-500">{account.email} · {account.phone}</p>
+        <p className="flex items-center gap-2 font-semibold text-slate-900">
+          {account.firstName} {account.lastName}
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${STATUS_TONE[status]}`}>{status}</span>
+        </p>
+        <p className="text-xs text-slate-500">{account.email} · {account.phone}{account.accountId ? ` · ID ${account.accountId}` : ""}</p>
+        {account.statusReason && status !== "active" && <p className="text-xs text-red-600">Reason: {account.statusReason}</p>}
       </div>
       {isAdmin ? (
         <span className="text-sm font-semibold text-burgundy">Administrator · all modules</span>
@@ -216,15 +242,28 @@ function StaffRow({ account, roles, onChange }: { account: User; roles: StaffRol
           >
             Set password
           </button>
+          <button type="button" className={ghost} onClick={() => { sendAccountDetails(account.email); setNote("Login details emailed."); }}>
+            Email login details
+          </button>
+          {status === "active" ? (
+            <>
+              <button type="button" className={ghost} disabled={isSelf} onClick={() => changeStatus("disabled")}>Disable</button>
+              <button type="button" className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-semibold text-red-700" disabled={isSelf} onClick={() => changeStatus("banned")}>Ban</button>
+            </>
+          ) : (
+            <button type="button" className={ghost} onClick={() => changeStatus("active")}>Reactivate</button>
+          )}
           <button
             type="button"
-            className="text-sm font-semibold text-red-600"
+            className="text-sm font-semibold text-red-600 disabled:opacity-40"
+            disabled={isSelf}
             onClick={() => {
+              if (!window.confirm(`Delete the staff account ${account.email}? This cannot be undone.`)) return;
               removeAccount(account.email);
               onChange();
             }}
           >
-            Remove
+            Delete
           </button>
           {note && <span className="text-xs text-emerald-700">{note}</span>}
         </div>

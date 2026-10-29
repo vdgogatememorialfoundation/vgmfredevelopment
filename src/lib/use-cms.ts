@@ -25,8 +25,10 @@ import {
   videoKeys,
   type SiteFlags,
 } from "@/lib/cms";
-import type { Announcement, Article, Clinic, Event, Flyer, Notice, SiteSettings, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, SiteSettings, User, Video } from "@/types";
 import { getSettings } from "@/lib/admin-store";
+import { books as seededBooks } from "@/data/books";
+import { getAllProducts } from "@/lib/product-data";
 
 let articleRaw = "\0";
 let articleList: Article[] = seededArticles;
@@ -130,6 +132,82 @@ export function useSiteSettings(): SiteSettings | null {
       return settingsValue;
     },
     () => null
+  );
+}
+
+const productKeys = ["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"];
+let productRaw = "\0";
+let productAll: Book[] = seededBooks;
+let productLive: Book[] = seededBooks;
+
+function readProducts() {
+  const raw = productKeys.map((key) => window.localStorage.getItem(key) ?? "").join("|");
+  if (raw !== productRaw) {
+    productRaw = raw;
+    productAll = getAllProducts();
+    productLive = productAll.filter((book) => book.active !== false);
+  }
+}
+
+/** Shop products, live from the admin catalogue. */
+export function useLiveBooks(): Book[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      readProducts();
+      return productLive;
+    },
+    () => seededBooks
+  );
+}
+
+/** Every product including drafts, for the admin. */
+export function useAllProducts(): Book[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      readProducts();
+      return productAll;
+    },
+    () => seededBooks
+  );
+}
+
+let accountsRaw = "\0";
+let accountsValue: User[] = [];
+
+export function useAccounts(): User[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = window.localStorage.getItem("vgmf_accounts") ?? "";
+      if (raw === accountsRaw) return accountsValue;
+      accountsRaw = raw;
+      accountsValue = raw ? (JSON.parse(raw) as User[]) : [];
+      return accountsValue;
+    },
+    () => accountsValue
+  );
+}
+
+let ordersRaw = "\0";
+let ordersValue: Order[] = [];
+
+export function useOrders(): Order[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = window.localStorage.getItem("vgmf_orders") ?? "";
+      if (raw === ordersRaw) return ordersValue;
+      ordersRaw = raw;
+      try {
+        ordersValue = raw ? (JSON.parse(raw) as Order[]) : [];
+      } catch {
+        ordersValue = [];
+      }
+      return ordersValue;
+    },
+    () => ordersValue
   );
 }
 

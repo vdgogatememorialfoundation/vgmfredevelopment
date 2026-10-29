@@ -148,8 +148,11 @@ export function StatusBadge({
 }
 
 export const ORDER_STATUS_TONES: Record<string, string> = {
+  Pending: "bg-slate-100 text-slate-600",
   Ordered: "bg-burgundy/10 text-burgundy",
+  Accepted: "bg-sky-50 text-sky-800",
   Packed: "bg-amber-50 text-amber-700",
+  "Ready to Ship": "bg-indigo-50 text-indigo-700",
   Shipped: "bg-warm-cream text-burgundy",
   "Out for Delivery": "bg-burgundy/10 text-burgundy",
   Delivered: "bg-emerald-50 text-emerald-700",
@@ -159,7 +162,9 @@ export const ORDER_STATUS_TONES: Record<string, string> = {
 
 export const ORDER_STATUS_FLOW = [
   "Ordered",
+  "Accepted",
   "Packed",
+  "Ready to Ship",
   "Shipped",
   "Out for Delivery",
   "Delivered",

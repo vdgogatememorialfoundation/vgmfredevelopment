@@ -1,6 +1,10 @@
+import { SALUTATIONS } from "@/lib/admin-store";
+
 interface DetailsFormProps {
   form: {
+    salutation: string;
     firstName: string;
+    middleName: string;
     lastName: string;
     email: string;
     phone: string;
@@ -25,6 +29,21 @@ export default function DetailsForm({
     >
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="salutation">
+            Salutation
+          </label>
+          <select
+            id="salutation"
+            value={form.salutation}
+            onChange={(event) => onChange("salutation", event.target.value)}
+            className="input-field"
+          >
+            {SALUTATIONS.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="first-name">
             First Name
           </label>
@@ -38,7 +57,19 @@ export default function DetailsForm({
             className="input-field"
           />
         </div>
-
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="middle-name">
+            Middle Name
+          </label>
+          <input
+            id="middle-name"
+            type="text"
+            placeholder="Optional"
+            value={form.middleName}
+            onChange={(event) => onChange("middleName", event.target.value)}
+            className="input-field"
+          />
+        </div>
         <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="last-name">
             Last Name

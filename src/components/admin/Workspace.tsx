@@ -24,7 +24,7 @@ export function WorkspaceHome() {
 
   const stats = [
     { label: "Orders", value: orders.length, hint: `${orders.filter((order) => order.paymentStatus === "Pending").length} awaiting payment` },
-    { label: "To pack", value: orders.filter((order) => order.status === "Ordered").length, hint: "paid and not packed" },
+    { label: "To pack", value: orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length, hint: "accepted and not packed" },
     { label: "Events", value: getLiveEvents().length, hint: "on the public site" },
     { label: "Certificates", value: getIssuedCertificates().length, hint: "valid certificates" },
     { label: "Open tickets", value: getTickets().filter((ticket) => ticket.status === "Open" || ticket.status === "In Progress").length, hint: "support" },

@@ -1,6 +1,5 @@
 import HeroSection from "@/components/home/HeroSection";
 import Announcements from "@/components/home/Announcements";
-import FlyerSection from "@/components/home/FlyerSection";
 import NoticeBoard from "@/components/home/NoticeBoard";
 import UpcomingEvents from "@/components/home/UpcomingEvents";
 import LegacySection from "@/components/home/LegacySection";
@@ -14,13 +13,12 @@ export default function HomePage() {
     <>
       <HeroSection />
       <SupportUs />
-      <Announcements />
-      <FlyerSection />
       <NoticeBoard />
+      <Announcements />
       <UpcomingEvents />
       <LegacySection />
-      <FeaturedArticles />
       <FeaturedBooks />
+      <FeaturedArticles />
       <ClinicsSection />
     </>
   );

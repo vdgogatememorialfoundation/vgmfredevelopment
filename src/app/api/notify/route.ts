@@ -4,6 +4,7 @@ import {
   sendAiSensy,
   sendMetaTemplate,
   sendZeptoMail,
+  sendZohoCpaas,
   sendZohoMail,
 } from "@/lib/server/providers";
 
@@ -38,7 +39,9 @@ export async function POST(request: NextRequest) {
       const sent =
         body.provider === "aisensy"
           ? await sendAiSensy(creds, { to, campaign: String(body.template ?? ""), name: String(body.name ?? ""), params })
-          : await sendMetaTemplate(creds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params });
+          : body.provider === "zoho"
+            ? await sendZohoCpaas(creds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params })
+            : await sendMetaTemplate(creds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params });
       if (!sent) return NextResponse.json({ ok: false, configured: false, error: "WhatsApp credentials are not configured." });
       return NextResponse.json({ ok: true, configured: true, ...sent });
     }

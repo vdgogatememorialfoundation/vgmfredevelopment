@@ -1,10 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import BookCard from "@/components/books/BookCard";
-import { books } from "@/data/books";
+import { useLiveBooks } from "@/lib/use-cms";
 
 export default function FeaturedBooks() {
-  const featured = books.slice(0, 3);
+  const featured = useLiveBooks().filter((book) => book.active !== false).slice(0, 4);
 
   return (
     <section className="section bg-background" aria-labelledby="books-heading">

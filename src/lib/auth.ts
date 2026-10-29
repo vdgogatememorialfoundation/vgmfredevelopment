@@ -45,6 +45,16 @@ export function findAccountByIdentifier(identifier: string): User | null {
   );
 }
 
+/** Why this account may not sign in, or null when it can. */
+export function loginBlockReason(user: Pick<User, "status" | "statusReason"> | null | undefined) {
+  if (!user || !user.status || user.status === "active") return null;
+  const base =
+    user.status === "banned"
+      ? "This account has been banned."
+      : "This account is disabled.";
+  return `${base}${user.statusReason ? ` Reason: ${user.statusReason}.` : ""} Contact support@vaidyagogate.org for help.`;
+}
+
 export function saveAccount(user: User) {
   if (typeof window === "undefined") return;
   const accounts = getAllAccounts().filter(
@@ -52,6 +62,7 @@ export function saveAccount(user: User) {
   );
   accounts.push(user);
   window.localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+  window.dispatchEvent(new Event("vgmf-cms"));
 }
 
 export function demoAccountId() {

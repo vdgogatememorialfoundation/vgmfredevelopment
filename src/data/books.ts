@@ -6,7 +6,7 @@ export const books: Book[] = [
     title: "Ayurveda Clinical Practice Guidelines",
     slug: "ayurveda-clinical-practice-guidelines",
     author: "Vaidya Gogate Memorial Foundation",
-    seller: "Vaidya Gogate Memorial Foundation Publications",
+    publisher: { name: "Vaidya Gogate Memorial Foundation Publications", address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra" },
     openBoxDelivery: true,
     sku: "VGMF-BK-0001-GL",
     description:
@@ -71,7 +71,7 @@ export const books: Book[] = [
     title: "Ayurveda Pharmacology, Volume II",
     slug: "ayurveda-pharmacology-vol-2",
     author: "Vaidya R. B. Gogate",
-    seller: "Vaidya Gogate Memorial Foundation Publications",
+    publisher: { name: "Vaidya Gogate Memorial Foundation Publications", address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra" },
     sku: "VGMF-BK-0002-V2",
     description:
       "The second volume of the late Vaidya R. B. Gogate's landmark pharmacology text. Covers therapeutic formulations, preparation methods and clinical applications of key mineral and herbal medicines.",
@@ -127,7 +127,7 @@ export const books: Book[] = [
     title: "Classical Panchakarma: Principles and Practice",
     slug: "classical-panchakarma-principles-and-practice",
     author: "Vaidya Sunil Khandekar",
-    seller: "Vaidya Gogate Memorial Foundation Publications",
+    publisher: { name: "Vaidya Gogate Memorial Foundation Publications", address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra" },
     sku: "VGMF-BK-0003-PK",
     description:
       "A comprehensive clinical reference on Panchakarma, presenting the classical principles alongside modern practical guidance for the consulting physician.",
@@ -191,7 +191,7 @@ export const books: Book[] = [
     title: "The Life and Legacy of Vaidya R. B. Gogate",
     slug: "life-legacy-vaidya-rb-gogate",
     author: "Vaidya Gogate Memorial Foundation",
-    seller: "Vaidya Gogate Memorial Foundation Publications",
+    publisher: { name: "Vaidya Gogate Memorial Foundation Publications", address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra" },
     sku: "VGMF-BK-0004-BIO",
     description:
       "An illustrated biography of Vaidya R. B. Gogate — his early life, education, clinical practice, teaching and enduring contributions to Ayurveda. Includes photographs and archival documents.",
@@ -247,7 +247,7 @@ export const books: Book[] = [
     title: "Clinical Case Studies in Ayurveda",
     slug: "clinical-case-studies-in-ayurveda",
     author: "Dr. Ananya Deshpande",
-    seller: "Vaidya Gogate Memorial Foundation Publications",
+    publisher: { name: "Vaidya Gogate Memorial Foundation Publications", address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra" },
     sku: "VGMF-BK-0005-CS",
     description:
       "Forty instructive case studies from the Foundation's clinics, demonstrating classical diagnostic reasoning applied to contemporary patient presentations.",
@@ -310,7 +310,7 @@ export const books: Book[] = [
     title: "Ayurveda Today: Conversations on the Future",
     slug: "ayurveda-today-conversations-on-the-future",
     author: "Vaidya Gogate Memorial Foundation",
-    seller: "Vaidya Gogate Memorial Foundation Publications",
+    publisher: { name: "Vaidya Gogate Memorial Foundation Publications", address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra" },
     sku: "VGMF-BK-0006-AT",
     description:
       "A curated collection of conversations with scholars and practitioners on the future of Ayurveda, education, research and clinical practice across the next decade.",

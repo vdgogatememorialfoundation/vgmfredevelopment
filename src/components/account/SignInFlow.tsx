@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import OtpForm from "@/components/account/OtpForm";
 import { useAuth } from "@/components/auth/AuthContext";
-import { findAccountByIdentifier, setSession } from "@/lib/auth";
+import { findAccountByIdentifier, loginBlockReason, setSession } from "@/lib/auth";
 
 type Step = "identifier" | "otp" | "complete";
 
@@ -24,16 +24,26 @@ export default function SignInFlow() {
       );
       return;
     }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
     setError("");
     setStep("otp");
   };
 
   const handleOtp = () => {
     const account = findAccountByIdentifier(identifier);
-    if (!account) return;
+    if (!account || loginBlockReason(account)) return;
 
     setSession(account);
     signIn(account);
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      router.push(next);
+      return;
+    }
     setStep("complete");
   };
 

@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { books } from "@/data/books";
 import { getLiveBooks, updateStock } from "@/lib/product-data";
+import { getIntegrations } from "@/lib/integrations";
 import {
   checkPincode,
-  credentialsSaved,
   getCarriers,
   getPickupLocation,
   getPolicy,
@@ -22,7 +23,7 @@ function splitList(value: string) {
   return value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
 }
 
-export function CarrierDesk({ mode = "partners" }: { mode?: "partners" | "apis" }) {
+export function CarrierDesk() {
   const [carriers, setCarriers] = useState<CarrierAccount[]>(() => getCarriers());
   const [notice, setNotice] = useState("");
 
@@ -36,13 +37,13 @@ export function CarrierDesk({ mode = "partners" }: { mode?: "partners" | "apis" 
     <div className="space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Delivery partners</p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900">
-          {mode === "apis" ? "Partner APIs" : "Courier partners"}
-        </h1>
+        <h1 className="mt-2 text-3xl font-bold text-slate-900">Courier partners</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-          Shiprocket, Nimbuspost, iThink Logistics, Tookan, Pidge, Shadowfax and the other
-          networks used on the storefront. Enable a partner, save its credentials, and its
-          serviceability and transit time are offered when a customer checks a pincode.
+          Enable the aggregators offered at checkout. Live credentials are entered under{" "}
+          <Link href="/admin/settings/shipping-apis" className="font-semibold text-burgundy">Settings → Shipping APIs</Link>
+          {" "}or{" "}
+          <Link href="/admin/delivery-partners/apis" className="font-semibold text-burgundy">Delivery Partners → APIs</Link>.
+          Last-mile names such as Delhivery, Blue Dart, Ekart, DTDC, Shadowfax and India Post are not APIs on this site. They appear as courier options after Shiprocket or iThink returns live rates.
         </p>
       </div>
 
@@ -57,7 +58,6 @@ export function CarrierDesk({ mode = "partners" }: { mode?: "partners" | "apis" 
           <CarrierCard
             key={carrier.id}
             carrier={carrier}
-            showSecrets={mode === "apis" || mode === "partners"}
             onChange={(next, message) => save(next, message)}
           />
         ))}
@@ -66,17 +66,26 @@ export function CarrierDesk({ mode = "partners" }: { mode?: "partners" | "apis" 
   );
 }
 
+function partnerConnected(id: string) {
+  const shipping = getIntegrations().shipping;
+  if (id === "shiprocket") return Boolean(shipping.shiprocket.email && shipping.shiprocket.password);
+  if (id === "nimbuspost") return Boolean(shipping.nimbuspost.email && shipping.nimbuspost.password);
+  if (id === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
+  if (id === "tookan") return Boolean(shipping.tookan.apiKey && shipping.tookan.hyperlocal);
+  if (id === "tookan-parcel") return Boolean(shipping.tookan.apiKey && shipping.tookan.parcel);
+  if (id === "shipday") return Boolean(shipping.shipday.apiKey && shipping.shipday.enabled);
+  return false;
+}
+
 function CarrierCard({
   carrier,
-  showSecrets,
   onChange,
 }: {
   carrier: CarrierAccount;
-  showSecrets: boolean;
   onChange: (carrier: CarrierAccount, message: string) => void;
 }) {
   const [draft, setDraft] = useState(carrier);
-  const connected = credentialsSaved(draft);
+  const connected = partnerConnected(draft.id);
 
   return (
     <form
@@ -98,7 +107,7 @@ function CarrierCard({
             checked={draft.enabled}
             onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
           />
-          Live
+          Offer on storefront
         </label>
       </div>
 
@@ -106,60 +115,18 @@ function CarrierCard({
         {draft.prefixes.length ? `Pin prefixes ${draft.prefixes.join(", ")}` : "All standard postal zones"}
         {" · "}
         same-city {draft.sameCityDays === 0 ? "same day after dispatch" : `${draft.sameCityDays} business day transit`}
-        {" · "}
-        {connected ? "Credentials saved" : "Awaiting API credentials"}
       </p>
-
-      {showSecrets && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="text-xs font-semibold text-slate-500">
-            API key
-            <input
-              type="password"
-              value={draft.apiKey}
-              onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-              placeholder="Partner API key"
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-500">
-            API secret
-            <input
-              type="password"
-              value={draft.apiSecret}
-              onChange={(event) => setDraft({ ...draft, apiSecret: event.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-            />
-          </label>
-          <label className="text-xs font-semibold text-slate-500 sm:col-span-2">
-            Webhook URL
-            <input
-              value={draft.webhookUrl}
-              onChange={(event) => setDraft({ ...draft, webhookUrl: event.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-              placeholder="https://"
-            />
-          </label>
-        </div>
-      )}
+      <p className={`mt-2 text-xs font-semibold ${connected ? "text-emerald-700" : "text-amber-700"}`}>
+        {connected ? "Connected — credentials saved in Settings → Shipping APIs" : "Not connected. Add credentials in Settings → Shipping APIs to book live."}
+      </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
           Save {draft.name}
         </button>
-        <button
-          type="button"
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
-          onClick={() => {
-            if (!credentialsSaved(draft)) {
-              onChange(draft, `Add the ${draft.name} API key (at least 8 characters) before marking it connected.`);
-              return;
-            }
-            onChange(draft, `${draft.name} credentials accepted. Storefront ETAs use this partner’s zone SLA.`);
-          }}
-        >
-          Test credentials
-        </button>
+        <Link href="/admin/settings/shipping-apis" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+          Open Shipping APIs
+        </Link>
       </div>
     </form>
   );

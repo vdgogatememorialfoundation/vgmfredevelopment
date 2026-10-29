@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -13,10 +14,11 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; next?: string }>;
 }) {
-  const { mode } = await searchParams;
+  const { mode, next } = await searchParams;
   const signInMode = mode === "signin";
+  const nextQuery = next ? `&next=${encodeURIComponent(next)}` : "";
 
   return (
     <main className="border-t border-border bg-background">
@@ -88,7 +90,7 @@ export default async function LoginPage({
 
             <div className="mb-8 grid grid-cols-2 gap-2 rounded-xl border border-border bg-white p-1.5">
               <Link
-                href="/login"
+                href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
                 className={`rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
                   !signInMode
                     ? "bg-burgundy text-white"
@@ -98,7 +100,7 @@ export default async function LoginPage({
                 Create Account
               </Link>
               <Link
-                href="/login?mode=signin"
+                href={`/login?mode=signin${nextQuery}`}
                 className={`rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
                   signInMode
                     ? "bg-burgundy text-white"
@@ -109,7 +111,11 @@ export default async function LoginPage({
               </Link>
             </div>
 
-            {signInMode ? <SignInFlow /> : <SignupFlow />}
+            {signInMode ? <SignInFlow /> : (
+              <Suspense fallback={<p className="text-sm text-text-muted">Loading…</p>}>
+                <SignupFlow />
+              </Suspense>
+            )}
           </div>
         </section>
       </div>

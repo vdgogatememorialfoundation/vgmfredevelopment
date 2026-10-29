@@ -5,8 +5,8 @@ const ORDER_SETTINGS_KEY = "vgmf_order_settings";
 
 export type PaymentMode = "demo" | "test" | "live";
 export type EmailProvider = "zeptomail" | "zoho";
-export type WhatsAppProvider = "none" | "meta" | "aisensy";
-export type AggregatorId = "shiprocket" | "nimbuspost" | "shipyaari";
+export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
+export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink";
 export type HyperlocalId = "tookan" | "shipday";
 
 export interface WhatsAppTemplate {
@@ -25,6 +25,11 @@ export const notificationEvents = [
   { id: "refund", label: "Refund issued" },
   { id: "shipment-booked", label: "Shipment booked" },
   { id: "account-created", label: "Account created" },
+  { id: "account-details", label: "Account details resent" },
+  { id: "back-in-stock", label: "Back in stock" },
+  { id: "store-credit", label: "Store credit issued" },
+  { id: "return-created", label: "Return created" },
+  { id: "pos-receipt", label: "In-store receipt" },
   { id: "support-reply", label: "Support reply" },
   { id: "ticket-update", label: "Ticket update" },
   { id: "abandoned-cart", label: "Abandoned cart" },
@@ -76,6 +81,11 @@ export interface IntegrationSettings {
     metaApiVersion: string;
     aisensyApiKey: string;
     aisensyProjectId: string;
+    /** Agent API key from CPaaS → Agent → SMTP/API. WhatsApp send uses this, not OAuth. */
+    zohoCpaasApiKey: string;
+    /** WhatsApp sender number for the Agent, including country code (e.g. +9198…). */
+    zohoCpaasFrom: string;
+    zohoCpaasDomain: string;
     templates: WhatsAppTemplate[];
     templatesSyncedAt: string;
     /** Site event → template (Meta) or campaign (AiSensy) name. */
@@ -84,8 +94,8 @@ export interface IntegrationSettings {
   shipping: {
     shiprocket: { email: string; password: string; channelId: string; enabled: boolean };
     nimbuspost: { email: string; password: string; enabled: boolean };
-    shipyaari: { apiKey: string; secret: string; clientId: string; enabled: boolean };
-    tookan: { apiKey: string; teamId: string; enabled: boolean };
+    ithink: { accessToken: string; secretKey: string; pickupAddressId: string; host: string; enabled: boolean };
+    tookan: { apiKey: string; teamId: string; hyperlocal: boolean; parcel: boolean };
     shipday: { apiKey: string; enabled: boolean };
     pickup: PickupAddress;
     defaultWeightKg: number;
@@ -157,6 +167,9 @@ export const defaultIntegrations: IntegrationSettings = {
     metaApiVersion: "v21.0",
     aisensyApiKey: "",
     aisensyProjectId: "",
+    zohoCpaasApiKey: "",
+    zohoCpaasFrom: "",
+    zohoCpaasDomain: "zoho.com",
     templates: [],
     templatesSyncedAt: "",
     mapping: {},
@@ -164,8 +177,8 @@ export const defaultIntegrations: IntegrationSettings = {
   shipping: {
     shiprocket: { email: "", password: "", channelId: "", enabled: true },
     nimbuspost: { email: "", password: "", enabled: true },
-    shipyaari: { apiKey: "", secret: "", clientId: "", enabled: false },
-    tookan: { apiKey: "", teamId: "", enabled: false },
+    ithink: { accessToken: "", secretKey: "", pickupAddressId: "", host: "https://my.ithinklogistics.com/api_v3/", enabled: false },
+    tookan: { apiKey: "", teamId: "", hyperlocal: false, parcel: false },
     shipday: { apiKey: "", enabled: false },
     pickup: {
       nickname: "VGMF-PUNE",
@@ -239,7 +252,10 @@ function merge<T extends object>(base: T, saved: Partial<T> | null | undefined):
 }
 
 export function getIntegrations(): IntegrationSettings {
-  return merge(defaultIntegrations, readJSON<Partial<IntegrationSettings> | null>(INTEGRATIONS_KEY, null));
+  const merged = merge(defaultIntegrations, readJSON<Partial<IntegrationSettings> | null>(INTEGRATIONS_KEY, null));
+  const tookan = merged.shipping.tookan as typeof merged.shipping.tookan & { enabled?: boolean };
+  if (tookan.enabled && !tookan.hyperlocal && !tookan.parcel) tookan.hyperlocal = true;
+  return merged;
 }
 
 export function saveIntegrations(settings: IntegrationSettings) {
