@@ -18,7 +18,7 @@ export default function SiteLogo({ size = 48, className = "" }: { size?: number;
   return (
     <div
       style={{ height: size, width: size }}
-      className={`flex shrink-0 items-center justify-center rounded-full border-2 border-gold/40 bg-paper ${className}`}
+      className={`flex shrink-0 items-center justify-center rounded-full border-2 border-burgundy/30 bg-paper ${className}`}
     >
       <span className="font-bold tracking-tight text-ink" style={{ fontSize: Math.max(9, size / 4.8) }}>
         {settings?.logoText || "VGMF"}

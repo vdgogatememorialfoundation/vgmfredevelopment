@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #7A2E3A;
-  --color-burgundy-dark: #541F28;
-  --color-gold: #9A7B32;
-  --color-saffron: #B45309;
-  --color-ink: #1A2332;
-  --color-ink-soft: #2A3545;
-  --color-paper: #F6F1E7;
-  --color-warm-cream: #F6F1E7;
+  --color-burgundy: #1B4F8A;
+  --color-burgundy-dark: #0E3466;
+  --color-gold: #2F7BC1;
+  --color-saffron: #1D6FBF;
+  --color-ink: #0F2C59;
+  --color-ink-soft: #1A4274;
+  --color-paper: #F3F7FC;
+  --color-warm-cream: #F3F7FC;
   --color-background: #FFFFFF;
-  --color-text-primary: #1A2332;
-  --color-text-muted: #5C564C;
-  --color-border: #E4DDD0;
+  --color-text-primary: #0F2C59;
+  --color-text-muted: #4A5F7A;
+  --color-border: #D5E2F0;
   --color-white: #FFFFFF;
   --font-serif: var(--font-serif-display), "Source Serif 4", Palatino, Georgia, serif;
   --font-sans: var(--font-sans-body), "Source Sans 3", "Segoe UI", system-ui, sans-serif;
@@ -50,11 +50,24 @@ body {
   .animate-marquee:hover {
     animation-play-state: paused;
   }
+
+  .hero-progress {
+    animation: hero-progress 7s linear forwards;
+  }
 }
 
 @keyframes marquee {
   to {
     transform: translateX(-50%);
+  }
+}
+
+@keyframes hero-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 
@@ -72,23 +85,27 @@ body {
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-ink-soft;
+    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-ink;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:border-gold hover:text-burgundy;
+    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:border-burgundy hover:text-burgundy;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white hover:text-ink;
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-ink transition hover:border-gold hover:text-burgundy hover:bg-paper;
+    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:border-burgundy hover:text-burgundy hover:bg-paper;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-gold focus:ring-2 focus:ring-gold/15;
+    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-burgundy focus:ring-2 focus:ring-burgundy/15;
   }
 
   .card {
-    @apply rounded-xl border border-border bg-white shadow-none transition hover:border-gold/40 hover:shadow-sm;
+    @apply rounded-xl border border-border bg-white shadow-none transition hover:border-burgundy/35 hover:shadow-sm;
   }
 
   .heading-1 {
@@ -108,7 +125,7 @@ body {
   }
 
   .eyebrow {
-    @apply mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold;
+    @apply mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy;
   }
 
   .text-body {
@@ -132,7 +149,7 @@ body {
 }
 
 :focus-visible {
-  @apply outline-none ring-2 ring-gold ring-offset-2 ring-offset-background;
+  @apply outline-none ring-2 ring-burgundy ring-offset-2 ring-offset-background;
 }
 
 @media print {

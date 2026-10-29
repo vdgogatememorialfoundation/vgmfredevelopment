@@ -26,7 +26,7 @@ export default function SectionHeading({
           !alignCenter && "border-b border-border pb-3"
         )}
       >
-        <div className={classNames(!alignCenter && "border-l-[3px] border-gold pl-3")}>
+        <div className={classNames(!alignCenter && "border-l-[3px] border-burgundy pl-3")}>
           {eyebrow && <p className="eyebrow">{eyebrow}</p>}
           <h2 className="heading-2">{title}</h2>
         </div>

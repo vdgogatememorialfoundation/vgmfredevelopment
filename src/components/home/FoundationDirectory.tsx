@@ -35,11 +35,11 @@ export default function FoundationDirectory() {
           <Link
             key={item.href}
             href={item.href}
-            className="rounded-xl border border-stone-200 bg-paper px-4 py-4 transition hover:border-gold"
+            className="rounded-xl border border-border bg-paper px-4 py-4 transition hover:border-burgundy"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">{item.eyebrow}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy">{item.eyebrow}</p>
             <p className="mt-1 font-serif text-base font-semibold text-ink">{item.title}</p>
-            <p className="mt-1 text-sm leading-6 text-stone-600">{item.text}</p>
+            <p className="mt-1 text-sm leading-6 text-text-muted">{item.text}</p>
           </Link>
         ))}
       </div>
