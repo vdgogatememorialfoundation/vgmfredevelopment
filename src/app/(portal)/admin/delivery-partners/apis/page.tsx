@@ -1,5 +1,5 @@
-﻿import { CarrierDesk } from "@/components/admin/FulfillmentDesk";
+﻿import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <CarrierDesk mode="apis" />;
+  redirect("/admin/settings/shipping-apis");
 }

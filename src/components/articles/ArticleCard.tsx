@@ -1,10 +1,16 @@
+"use client";
+
 import Link from "next/link";
 import type { Article } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { formatDate } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/LanguageProvider";
+import { localizedArticle } from "@/lib/article-display";
 
 export default function ArticleCard({ article }: { article: Article }) {
+  const { t, locale } = useI18n();
+  const shown = localizedArticle(article, locale);
   return (
     <article className="card flex flex-col overflow-hidden">
       {article.coverImage ? (
@@ -12,7 +18,7 @@ export default function ArticleCard({ article }: { article: Article }) {
         <img src={article.coverImage} alt="" className="aspect-[16/9] w-full object-cover" />
       ) : (
         article.featured && (
-          <MediaPlaceholder variant="article" label={article.title} aspectClassName="aspect-[16/9]" />
+          <MediaPlaceholder variant="article" label={shown.title} aspectClassName="aspect-[16/9]" />
         )
       )}
 
@@ -29,23 +35,23 @@ export default function ArticleCard({ article }: { article: Article }) {
             href={`/articles/${article.slug}`}
             className="transition hover:text-burgundy"
           >
-            {article.title}
+            {shown.title}
           </Link>
         </h3>
 
         <p className="mt-2 text-sm text-text-muted line-clamp-3">
-          {article.excerpt}
+          {shown.excerpt}
         </p>
 
         <div className="mt-auto pt-4 flex items-center justify-between text-sm">
           {article.author && (
-            <span className="text-text-muted">{article.author}</span>
+            <span className="text-text-muted">{t("article.publishedBy")} {article.author}</span>
           )}
           <Link
             href={`/articles/${article.slug}`}
             className="inline-flex items-center gap-1.5 font-semibold text-burgundy transition hover:text-burgundy-dark"
           >
-            Read
+            {t("article.read")}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14" />
               <path d="M12 5l7 7-7 7" />

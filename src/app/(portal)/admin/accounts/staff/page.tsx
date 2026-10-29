@@ -1,12 +1,12 @@
 "use client";
 
-import { StaffAccountsDesk } from "@/components/admin/StaffRoles";
+import { PeopleDesk } from "@/components/admin/PeopleDesk";
 import ClientOnly from "@/components/common/ClientOnly";
 
 export default function Page() {
   return (
     <ClientOnly>
-      <StaffAccountsDesk />
+      <PeopleDesk role="staff" />
     </ClientOnly>
   );
 }

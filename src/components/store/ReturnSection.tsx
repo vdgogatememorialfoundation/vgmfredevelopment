@@ -16,7 +16,7 @@ export default function ReturnSection({ order }: { order: Order }) {
   const [now] = useState(() => Date.now());
   const [, setReturnTick] = useState(0);
   const [showForm, setShowForm] = useState(false);
-  const [kind, setKind] = useState<ReturnKind>("return");
+  const [kind, setKind] = useState<ReturnKind>(settings.refunds.enabled ? "return" : "replacement");
   const [reason, setReason] = useState(RETURN_REASONS[0]);
   const [error, setError] = useState("");
 
@@ -44,15 +44,16 @@ export default function ReturnSection({ order }: { order: Order }) {
           ? `Returnable within ${windowDays} days of delivery for a refund${settings.returns.replacementAllowed ? " or replacement" : ""}.`
           : "Returns are not accepted."}
       </li>
-      {settings.returns.enabled && (
+      {settings.returns.enabled && settings.refunds.enabled && (
         <li>
           Return pickup charges of ₹{settings.returns.pickupCharge} are
           deducted from your refund{settings.returns.replacementAllowed ? " — replacements are free" : ""}.
         </li>
       )}
       <li>
-        Refunds are processed {settings.refunds.method === "original" ? "to the original payment method" : "by the store"} within{" "}
-        {settings.refunds.processingDays} business days of pickup.
+        {settings.refunds.enabled
+          ? `Refunds are processed ${settings.refunds.method === "original" ? "to the original payment method" : "by the store"} within ${settings.refunds.processingDays} business days of pickup.`
+          : "Customer refunds are turned off. The Foundation office can still refund or replace an order from the admin desk."}
       </li>
     </ul>
   );
@@ -60,7 +61,11 @@ export default function ReturnSection({ order }: { order: Order }) {
   const deliveredAt = order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
   const withinWindow = (now - Date.parse(deliveredAt)) / 864e5 <= windowDays;
   const cancellable = canCustomerCancel(order, settings, now);
-  const canInitiate = order.status === "Delivered" && settings.returns.enabled && withinWindow;
+  const canInitiate =
+    order.status === "Delivered" &&
+    settings.returns.enabled &&
+    withinWindow &&
+    (settings.refunds.enabled || settings.returns.replacementAllowed);
 
   return (
     <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
@@ -142,7 +147,7 @@ export default function ReturnSection({ order }: { order: Order }) {
                         desc: "New order created for the same item — no extra charge",
                       },
                     ] as const
-                  ).filter((option) => option.value === "return" || settings.returns.replacementAllowed).map((option) => (
+                  ).filter((option) => (option.value === "return" ? settings.refunds.enabled : settings.returns.replacementAllowed)).map((option) => (
                     <button
                       key={option.value}
                       type="button"

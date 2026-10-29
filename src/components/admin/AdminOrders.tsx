@@ -4,14 +4,21 @@ import { useState } from "react";
 import {
   cancelOrder,
   createAdminOrder,
+  createReplacement,
+  deleteOrder,
+  exportOrdersCsv,
   getAccounts,
   getOrder as getOrderByAdmin,
   getSettings,
   getShipments,
   patchOrder,
   printOrderInvoice,
+  printOrdersPdf,
   printPackagingSlip,
+  printShippingLabel,
   recordPayment,
+  refundToStoreCredit,
+  resaveOrder,
   setOrderStatus,
 } from "@/lib/admin-store";
 import { getOrders, getReturnRequest, initiateReturn, updateReturnRequest } from "@/lib/store";
@@ -21,26 +28,46 @@ import {
   advanceDemoShipment,
   bookShipment,
   cancelShipment,
+  createReturnShipment,
+  downloadInvoice,
   downloadLabel,
+  downloadManifest,
   fetchCourierRates,
   orderWeightKg,
+  reallocateCourier,
   schedulePickup,
   trackShipment,
   type RateQuote,
 } from "@/lib/shipping-client";
 import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
+import LiveTracking from "@/components/store/LiveTracking";
 import { formatDate } from "@/lib/utils";
-import type { CourierRate, DeliveryAddress, Order } from "@/types";
+import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
+import { AccountSearch } from "@/components/admin/AccountSearch";
+import { accountToDelivery } from "@/lib/account-search";
+import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesFor } from "@/lib/geo";
 import { classNames, formatDateTime } from "@/lib/utils";
 
-const ALL_STATUSES: Order["status"][] = ["Pending", "Processing", "Ordered", "Packed", "Shipped", "Out for Delivery", "Delivered", "Cancelled"];
+const ALL_STATUSES: Order["status"][] = [
+  "Pending",
+  "Processing",
+  "Ordered",
+  "Accepted",
+  "Packed",
+  "Ready to Ship",
+  "Shipped",
+  "Out for Delivery",
+  "Delivered",
+  "Cancelled",
+];
 const PAYMENT_TONES: Record<string, string> = {
   Paid: "bg-emerald-50 text-emerald-700",
   Pending: "bg-amber-50 text-amber-700",
   Failed: "bg-red-50 text-red-600",
   Refunded: "bg-slate-100 text-slate-600",
+  "Partially Refunded": "bg-amber-50 text-amber-700",
 };
 const PAYMENT_METHODS = ["UPI", "Bank transfer", "Cash", "Card (POS)", "Cheque", "Razorpay (manual)", "Cash on delivery"];
 
@@ -58,6 +85,9 @@ export function OrdersDashboard() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All");
   const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [bulkBusy, setBulkBusy] = useState("");
+  const [bulkNote, setBulkNote] = useState("");
 
   const orders = getOrders();
   const filtered = orders
@@ -73,10 +103,27 @@ export function OrdersDashboard() {
     .slice(0, 300);
   const selected = selectedId ? getOrderByAdmin(selectedId) : null;
 
-  const toPack = orders.filter((order) => order.status === "Ordered").length;
+  const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
+  const toPack = orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length;
   const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery").length;
   const inTransit = orders.filter((order) => order.status === "Shipped" || order.status === "Out for Delivery").length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
+
+  const bulk = async (label: string, task: (id: string) => Promise<void> | void) => {
+    if (selectedIds.length === 0) return;
+    setBulkBusy(label);
+    setBulkNote("");
+    try {
+      for (const id of selectedIds) await task(id);
+      setBulkNote(`${label} · ${selectedIds.length} order${selectedIds.length === 1 ? "" : "s"}`);
+      setPicked({});
+      refresh();
+    } catch (error) {
+      setBulkNote(error instanceof Error ? error.message : "Bulk action failed.");
+    } finally {
+      setBulkBusy("");
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -85,15 +132,17 @@ export function OrdersDashboard() {
           <h1 className="text-2xl font-bold text-text-primary">Orders</h1>
           <p className="text-sm text-text-muted">Create orders, collect payment, book couriers, schedule pickups, print AWB labels, and handle returns and refunds.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={() => setShowCreate((value) => !value)}>{showCreate ? "Close" : "+ Create order"}</Button>
+          <Button variant="outline" onClick={() => exportOrdersCsv(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>Excel</Button>
+          <Button variant="outline" onClick={() => printOrdersPdf(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>PDF</Button>
           <Button variant="outline" onClick={refresh}>Refresh</Button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
         {[
-          ["To pack", toPack, "Ordered"],
+          ["To pack", toPack, "Accepted"],
           ["Awaiting payment", awaitingPayment, "Pending"],
           ["In transit", inTransit, "Shipped"],
           ["Open returns", returns, "All"],
@@ -110,6 +159,35 @@ export function OrdersDashboard() {
         ))}
       </div>
 
+      {bulkNote && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{bulkNote}</p>}
+      {selectedIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">{selectedIds.length} selected</span>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
+            setOrderStatus(id, "Packed");
+            const order = getOrderByAdmin(id);
+            if (order?.deliveryMode === "delivery" && getIntegrations().shipping.autoBookOnPack) await bookShipment(id);
+          })}>Pack</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ready to ship", async (id) => {
+            setOrderStatus(id, "Ready to Ship");
+            const order = getOrderByAdmin(id);
+            if (order?.deliveryMode === "delivery") await bookShipment(id);
+          })}>Ready to ship</Button>
+          <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]))}>Excel</Button>
+          <Button variant="outline" onClick={() => printOrdersPdf(filtered.filter((order) => picked[order.id]))}>PDF</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Labels", async (id) => {
+            const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
+            if (shipment) await downloadLabel(shipment.id);
+          })}>Labels</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", (id) => cancelOrder(id, "Bulk cancel"))}>Cancel</Button>
+          <Button variant="danger" disabled={Boolean(bulkBusy)} onClick={() => {
+            if (!window.confirm(`Delete ${selectedIds.length} order(s)? This cannot be undone.`)) return;
+            bulk("Deleted", (id) => deleteOrder(id));
+          }}>Delete</Button>
+        </div>
+      )}
+
       {showCreate && (
         <CreateOrderForm
           onDone={(id) => {
@@ -122,7 +200,21 @@ export function OrdersDashboard() {
 
       <div className="grid gap-5 xl:grid-cols-5">
         <div className="xl:col-span-2">
-          <Panel title="All orders" description={`${filtered.length} of ${orders.length} orders`}>
+          <Panel
+            title="All orders"
+            description={`${filtered.length} of ${orders.length} orders`}
+            action={
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const allOn = filtered.every((order) => picked[order.id]);
+                  setPicked(allOn ? {} : Object.fromEntries(filtered.map((order) => [order.id, true])));
+                }}
+              >
+                {filtered.length > 0 && filtered.every((order) => picked[order.id]) ? "Clear" : "Select all"}
+              </Button>
+            }
+          >
             <div className="mb-3 grid gap-2 sm:grid-cols-3">
               <TextInput placeholder="Search id, name, phone, AWB" value={query} onChange={(event) => setQuery(event.target.value)} />
               <SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -142,12 +234,19 @@ export function OrdersDashboard() {
             ) : (
               <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
                 {filtered.map((order) => (
-                  <li key={order.id}>
+                  <li key={order.id} className="flex items-stretch">
+                    <label className="flex items-center px-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(picked[order.id])}
+                        onChange={(event) => setPicked((current) => ({ ...current, [order.id]: event.target.checked }))}
+                      />
+                    </label>
                     <button
                       type="button"
                       onClick={() => setSelectedId(order.id)}
                       className={classNames(
-                        "flex w-full items-center justify-between gap-3 px-2 py-3 text-left transition hover:bg-warm-cream/40",
+                        "flex min-w-0 flex-1 items-center justify-between gap-3 px-2 py-3 text-left transition hover:bg-warm-cream/40",
                         selectedId === order.id && "bg-warm-cream/70"
                       )}
                     >
@@ -155,6 +254,7 @@ export function OrdersDashboard() {
                         <span className="block font-mono text-xs font-semibold text-text-primary">#{order.id}</span>
                         <span className="block truncate text-xs text-text-muted">
                           {order.deliveryAddress?.fullName || order.items[0]?.title} · {formatDate(order.date)}
+                          {order.channel === "pos" ? " · POS" : ""}
                         </span>
                       </span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
@@ -194,7 +294,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const customers = getAccounts().filter((account) => !account.role || account.role === "customer");
   const [accountEmail, setAccountEmail] = useState("");
   const [items, setItems] = useState<{ bookId: string; quantity: number }[]>([{ bookId: books[0]?.id ?? "", quantity: 1 }]);
-  const [customer, setCustomer] = useState<DeliveryAddress>({ fullName: "", phone: "", email: "", line1: "", landmark: "", city: "", state: "Maharashtra", pincode: "" });
+  const [customer, setCustomer] = useState<DeliveryAddress>({ fullName: "", phone: "", email: "", line1: "", landmark: "", city: "", state: "Maharashtra", pincode: "", country: "India", countryCode: "IN" });
   const [mode, setMode] = useState<Order["deliveryMode"]>(orderSettings.deliveryEnabled ? "delivery" : "store_pickup");
   const [quote, setQuote] = useState<RateQuote | null>(null);
   const [picked, setPicked] = useState<number | undefined>();
@@ -209,10 +309,9 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const setRow = (index: number, patch: Partial<{ bookId: string; quantity: number }>) =>
     setItems((list) => list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
-  const pickAccount = (email: string) => {
-    setAccountEmail(email);
-    const account = customers.find((item) => item.email === email);
-    if (account) setCustomer((current) => ({ ...current, fullName: `${account.firstName} ${account.lastName}`.trim(), email: account.email, phone: account.phone || current.phone }));
+  const pickAccount = (account: User | null) => {
+    setAccountEmail(account?.email ?? "");
+    if (account) setCustomer((current) => accountToDelivery(account, current));
   };
 
   const subtotal = items.reduce((sum, row) => sum + (books.find((book) => book.id === row.bookId)?.price ?? 0) * row.quantity, 0);
@@ -221,8 +320,12 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const shippingFee = mode === "store_pickup" ? 0 : shippingOverride !== "" ? Number(shippingOverride) : shippingFeeFor(subtotal, itemCount, choice?.rate, orderSettings);
 
   const loadRates = async () => {
-    if (!/^\d{6}$/.test(customer.pincode)) {
-      setError("Enter a 6-digit pincode to check courier rates.");
+    if (!isIndia(customer.countryCode)) {
+      setError("Live Indian courier rates apply only to India. International dispatch is confirmed after the order.");
+      return;
+    }
+    if (!isValidPostal(customer.countryCode, customer.pincode)) {
+      setError("Enter a valid postal code to check courier rates.");
       return;
     }
     setError("");
@@ -242,7 +345,11 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
 
   const submit = async () => {
     if (!customer.fullName || !customer.phone || (mode === "delivery" && (!customer.line1 || !customer.city || !customer.pincode))) {
-      setError(mode === "delivery" ? "Fill the customer name, phone, address, city and pincode." : "Fill the customer name and phone.");
+      setError(mode === "delivery" ? "Fill the customer name, phone, address, city and postal code." : "Fill the customer name and phone.");
+      return;
+    }
+    if (!isValidPhone(customer.phone)) {
+      setError("Enter a valid international phone number, including country code.");
       return;
     }
     if (items.some((row) => !row.bookId || row.quantity < 1)) {
@@ -279,25 +386,55 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-3">
           <Field label="Customer account (optional)">
-            <SelectInput value={accountEmail} onChange={(event) => pickAccount(event.target.value)}>
-              <option value="">Guest / new customer</option>
-              {customers.map((account) => (
-                <option key={account.email} value={account.email}>{account.firstName} {account.lastName} · {account.email}</option>
-              ))}
-            </SelectInput>
+            <AccountSearch
+              accounts={customers}
+              selectedEmail={accountEmail}
+              onSelect={pickAccount}
+              placeholder="Search by name, phone or email"
+              emptyLabel="Guest / new customer"
+            />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name"><TextInput value={customer.fullName} onChange={(event) => setCustomer({ ...customer, fullName: event.target.value })} /></Field>
             <Field label="Phone"><TextInput value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} placeholder="+91" /></Field>
             <Field label="Email"><TextInput value={customer.email ?? ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} /></Field>
-            <Field label="Pincode"><TextInput value={customer.pincode} onChange={(event) => { setCustomer({ ...customer, pincode: event.target.value }); setQuote(null); setPicked(undefined); }} /></Field>
+            <Field label={isIndia(customer.countryCode) ? "Pincode" : "Postal code"}><TextInput value={customer.pincode} onChange={(event) => { setCustomer({ ...customer, pincode: event.target.value }); setQuote(null); setPicked(undefined); }} /></Field>
+            <Field label="Country">
+              <SelectInput
+                value={customer.countryCode || "IN"}
+                onChange={(event) => {
+                  const next = countryByCode(event.target.value);
+                  const nextStates = statesFor(next.code);
+                  setCustomer({
+                    ...customer,
+                    countryCode: next.code,
+                    country: next.name,
+                    state: nextStates.includes(customer.state) ? customer.state : nextStates[0] || "",
+                  });
+                  setQuote(null);
+                  setPicked(undefined);
+                }}
+              >
+                {COUNTRIES.map((item) => (
+                  <option key={item.code} value={item.code}>{item.name} ({item.dial})</option>
+                ))}
+              </SelectInput>
+            </Field>
           </div>
           {mode === "delivery" && (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Address"><TextInput value={customer.line1} onChange={(event) => setCustomer({ ...customer, line1: event.target.value })} /></Field>
               <Field label="Landmark"><TextInput value={customer.landmark ?? ""} onChange={(event) => setCustomer({ ...customer, landmark: event.target.value })} /></Field>
               <Field label="City"><TextInput value={customer.city} onChange={(event) => setCustomer({ ...customer, city: event.target.value })} /></Field>
-              <Field label="State"><TextInput value={customer.state} onChange={(event) => setCustomer({ ...customer, state: event.target.value })} /></Field>
+              <Field label="State / region">
+                {statesFor(customer.countryCode).length ? (
+                  <SelectInput value={customer.state} onChange={(event) => setCustomer({ ...customer, state: event.target.value })}>
+                    {statesFor(customer.countryCode).map((state) => <option key={state}>{state}</option>)}
+                  </SelectInput>
+                ) : (
+                  <TextInput value={customer.state} onChange={(event) => setCustomer({ ...customer, state: event.target.value })} />
+                )}
+              </Field>
             </div>
           )}
           <div>
@@ -421,8 +558,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [picked, setPicked] = useState<number | undefined>();
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [pickupSlot, setPickupSlot] = useState(shipment?.pickupSlot || settings.pickupTimeslots[0]?.label || "10:00 – 13:00");
-  const [returnKind, setReturnKind] = useState<"return" | "replacement">("return");
   const [returnReason, setReturnReason] = useState(getOrderSettings().returns.reasons[0] ?? "");
+  const [refundDest, setRefundDest] = useState<"original" | "store_credit">("original");
+  const [editing, setEditing] = useState(false);
+  const [editAddress, setEditAddress] = useState<DeliveryAddress>(order.deliveryAddress ?? { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "", country: "India", countryCode: "IN" });
+  const [editItems, setEditItems] = useState(order.items.map((item) => ({ ...item })));
 
   const run = async (label: string, task: () => Promise<string | void> | string | void) => {
     setBusy(label);
@@ -442,6 +582,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const applyStatus = () =>
     run("status", async () => {
       if (status === "Cancelled") {
+        if (shipment) await cancelShipment(shipment.id).catch(() => undefined);
         cancelOrder(order.id, cancelReason || "Cancelled by admin");
         return "Order cancelled. The customer is notified.";
       }
@@ -449,6 +590,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       if (status === "Packed" && order.deliveryMode === "delivery" && !shipment && integrations.shipping.autoBookOnPack) {
         const booking = await bookShipment(order.id);
         return `Status set to Packed. ${booking.message}`;
+      }
+      if (status === "Ready to Ship" && order.deliveryMode === "delivery") {
+        const booking = await bookShipment(order.id);
+        return `Ready to ship. ${booking.message}`;
       }
       return `Status set to ${status}. The customer is notified.`;
     });
@@ -474,7 +619,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   return (
     <Panel
       title={`Order #${order.id}`}
-      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
+      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${order.channel ? ` · ${order.channel}` : ""}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
       action={
         <span className="flex gap-1">
           <StatusBadge status={order.status} mapping={ORDER_STATUS_TONES} />
@@ -487,12 +632,37 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       {problem && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section title="Items & totals">
+        <Section
+          title="Items & totals"
+          action={
+            <Button variant="ghost" onClick={() => {
+              if (editing) {
+                setEditing(false);
+                setEditAddress(order.deliveryAddress ?? editAddress);
+                setEditItems(order.items.map((item) => ({ ...item })));
+              } else setEditing(true);
+            }}
+            >
+              {editing ? "Cancel edit" : "Edit order"}
+            </Button>
+          }
+        >
           <ul className="space-y-2">
-            {order.items.map((item) => (
+            {(editing ? editItems : order.items).map((item, index) => (
               <li key={item.bookId} className="flex items-center justify-between gap-3 text-sm">
                 <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                <span className="text-text-muted">× {item.quantity}</span>
+                {editing ? (
+                  <div className="w-16">
+                    <TextInput
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(event) => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: Number(event.target.value) } : row)))}
+                    />
+                  </div>
+                ) : (
+                  <span className="text-text-muted">× {item.quantity}</span>
+                )}
                 <span className="font-medium">{rupees(item.price * item.quantity)}</span>
               </li>
             ))}
@@ -501,20 +671,57 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(order.subtotal)}</dd></div>
             <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div>
             <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{order.shipping === 0 ? "Free" : rupees(order.shipping)}</dd></div>
+            {order.storeCreditUsed ? <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(order.storeCreditUsed)}</dd></div> : null}
             <div className="flex justify-between text-sm font-bold"><dt>Total</dt><dd className="text-burgundy">{rupees(order.total)}</dd></div>
             {order.refundAmount ? <div className="flex justify-between text-red-600"><dt>Refunded</dt><dd>−{rupees(order.refundAmount)}</dd></div> : null}
           </dl>
         </Section>
 
         <Section title="Customer">
-          <p className="text-sm font-semibold text-text-primary">{order.deliveryAddress?.fullName}</p>
-          <p className="text-xs text-text-muted">{order.deliveryAddress?.phone} · {order.deliveryAddress?.email || "no email"}</p>
-          {order.deliveryMode === "delivery" ? (
-            <p className="mt-2 text-xs text-text-muted">
-              {order.deliveryAddress?.line1}{order.deliveryAddress?.landmark ? `, ${order.deliveryAddress.landmark}` : ""}, {order.deliveryAddress?.city}, {order.deliveryAddress?.state} {order.deliveryAddress?.pincode}
-            </p>
+          {editing ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Name" />
+              <TextInput value={editAddress.phone} onChange={(event) => setEditAddress({ ...editAddress, phone: event.target.value })} placeholder="Phone" />
+              <TextInput value={editAddress.email ?? ""} onChange={(event) => setEditAddress({ ...editAddress, email: event.target.value })} placeholder="Email" />
+              <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="Postal code" />
+              <TextInput value={editAddress.line1} onChange={(event) => setEditAddress({ ...editAddress, line1: event.target.value })} placeholder="Address" />
+              <TextInput value={editAddress.city} onChange={(event) => setEditAddress({ ...editAddress, city: event.target.value })} placeholder="City" />
+              <TextInput value={editAddress.state} onChange={(event) => setEditAddress({ ...editAddress, state: event.target.value })} placeholder="State" />
+              <SelectInput
+                value={editAddress.countryCode || "IN"}
+                onChange={(event) => {
+                  const next = countryByCode(event.target.value);
+                  setEditAddress({ ...editAddress, countryCode: next.code, country: next.name });
+                }}
+              >
+                {COUNTRIES.map((item) => (
+                  <option key={item.code} value={item.code}>{item.name}</option>
+                ))}
+              </SelectInput>
+            </div>
           ) : (
-            <p className="mt-2 text-xs text-text-muted">Collects from the store.</p>
+            <>
+              <p className="text-sm font-semibold text-text-primary">{order.deliveryAddress?.fullName}</p>
+              <p className="text-xs text-text-muted">{order.deliveryAddress?.phone} · {order.deliveryAddress?.email || "no email"}</p>
+              {order.deliveryMode === "delivery" ? (
+                <p className="mt-2 text-xs text-text-muted">
+                  {order.deliveryAddress?.line1}{order.deliveryAddress?.landmark ? `, ${order.deliveryAddress.landmark}` : ""}, {order.deliveryAddress?.city}, {order.deliveryAddress?.state} {order.deliveryAddress?.pincode}{order.deliveryAddress?.country ? `, ${order.deliveryAddress.country}` : ""}
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-text-muted">Collects from the store.</p>
+              )}
+            </>
+          )}
+          {editing && (
+            <div className="mt-3">
+              <Button onClick={() => run("save", () => {
+                resaveOrder(order.id, { items: editItems.filter((item) => item.quantity > 0), deliveryAddress: editAddress });
+                setEditing(false);
+                return "Order saved.";
+              })}>
+                Save changes
+              </Button>
+            </div>
           )}
           {order.plan && (
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
@@ -537,11 +744,37 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             </div>
             <Button onClick={applyStatus} disabled={busy === "status" || status === order.status}>{busy === "status" ? "Saving…" : "Update status"}</Button>
           </div>
+          {order.status !== "Cancelled" && (
+            <div className="mt-3 rounded-lg border border-red-100 bg-red-50/60 p-3">
+              <p className="text-xs font-semibold text-red-800">Cancel this order</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <div className="min-w-48 flex-1"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
+                <Button
+                  variant="danger"
+                  disabled={busy === "cancel"}
+                  onClick={() => {
+                    if (!window.confirm("Cancel this order? The customer is notified.")) return;
+                    run("cancel", async () => {
+                      if (shipment) await cancelShipment(shipment.id).catch(() => undefined);
+                      cancelOrder(order.id, cancelReason || "Cancelled by admin");
+                      setStatus("Cancelled");
+                      return "Order cancelled.";
+                    });
+                  }}
+                >
+                  {busy === "cancel" ? "Cancelling…" : "Cancel order"}
+                </Button>
+              </div>
+            </div>
+          )}
           {status === "Cancelled" && status !== order.status && (
             <div className="mt-2"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
           )}
           {status === "Packed" && order.deliveryMode === "delivery" && !shipment && (
             <p className="mt-2 text-xs text-text-muted">{integrations.shipping.autoBookOnPack ? "Setting Packed books the courier automatically." : "Auto-booking on Packed is off. Book the courier below."}</p>
+          )}
+          {status === "Ready to Ship" && order.deliveryMode === "delivery" && (
+            <p className="mt-2 text-xs text-text-muted">Ready to Ship books the courier and requests pickup on Shiprocket / iThink / Tookan / Shipday.</p>
           )}
           {order.cancelReason && <p className="mt-2 text-xs text-red-600">Cancelled: {order.cancelReason}</p>}
         </Section>
@@ -582,11 +815,17 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           {refundable && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
               <div className="w-28"><TextInput type="number" min={1} max={order.total} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} /></div>
+              <SelectInput value={refundDest} onChange={(event) => setRefundDest(event.target.value as "original" | "store_credit")}>
+                <option value="original">Original payment method</option>
+                <option value="store_credit">Store credit</option>
+              </SelectInput>
               <Button variant="danger" disabled={busy === "refund"} onClick={() => {
-                if (!window.confirm(`Refund ₹${refundAmount} for order ${order.id}?`)) return;
-                run("refund", () => refundThroughGateway(order.id, Number(refundAmount)));
+                if (!window.confirm(`Refund ₹${refundAmount} to ${refundDest === "store_credit" ? "store credit" : "the original method"}?`)) return;
+                run("refund", () => refundDest === "store_credit"
+                  ? (refundToStoreCredit(order.id, Number(refundAmount)), "Store credit issued.")
+                  : refundThroughGateway(order.id, Number(refundAmount)));
               }}>
-                {busy === "refund" ? "Refunding…" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund via Razorpay" : "Record refund"}
+                {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund via Razorpay" : "Record refund"}
               </Button>
             </div>
           )}
@@ -616,7 +855,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
-                  With Shiprocket or Nimbuspost connected, booking assigns the AWB and the courier charge is debited from that aggregator wallet. Without credentials a demo AWB is created.
+                  Booking checks Shiprocket, Nimbuspost, iThink Logistics and Shipyaari wallets first. If credits are low the AWB is not created. Tookan and Shipday hyperlocal orders ping the agent on Google Maps.
                 </p>
               </div>
             ) : (
@@ -636,7 +875,28 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => run("label", () => downloadLabel(shipment.id))}>Download AWB label</Button>
+                    {shipment.provider === "shiprocket" && shipment.live && (
+                      <>
+                        <Button variant="outline" onClick={() => run("invoice", () => downloadInvoice(shipment.id))}>Courier invoice</Button>
+                        <Button variant="outline" onClick={() => run("manifest", () => downloadManifest(shipment.id))}>Pickup manifest</Button>
+                      </>
+                    )}
                     <Button variant="outline" onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>Track</Button>
+                    <Button variant="outline" onClick={() => run("realloc", async () => {
+                      const quoteResult = quote ?? await fetchCourierRates({
+                        deliveryPincode: order.deliveryAddress?.pincode ?? "",
+                        weightKg: orderWeightKg(order),
+                        declaredValue: order.total,
+                        bookIds: order.items.map((item) => item.bookId),
+                      });
+                      if (!quote) {
+                        setQuote(quoteResult);
+                        setPicked(0);
+                        return "Rates loaded. Pick a courier, then click Reallocate again.";
+                      }
+                      const choice = picked !== undefined ? quote.rates[picked] : undefined;
+                      return (await reallocateCourier(order.id, choice)).message;
+                    })}>Reallocate courier</Button>
                     {!shipment.live && shipment.status !== "Delivered" && (
                       <Button variant="ghost" onClick={() => run("advance", () => { advanceDemoShipment(shipment.id); return "Moved the demo shipment to the next scan."; })}>Next scan (demo)</Button>
                     )}
@@ -644,7 +904,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                     <TextInput type="date" value={pickupDate} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setPickupDate(event.target.value)} />
                     <SelectInput value={pickupSlot} onChange={(event) => setPickupSlot(event.target.value)}>
-                      {(settings.pickupTimeslots.length ? settings.pickupTimeslots.map((slot) => slot.label) : ["10:00 – 13:00", "14:00 – 18:00"]).map((label) => <option key={label}>{label}</option>)}
+                      {(settings.pickupTimeslots.length
+                        ? settings.pickupTimeslots
+                        : [{ id: "fallback", label: "10:00 – 13:00", from: "10:00", to: "13:00" }]
+                      ).map((slot) => (
+                        <option key={slot.id} value={slot.label}>
+                          {slot.label} ({slot.from} – {slot.to})
+                        </option>
+                      ))}
                     </SelectInput>
                     <Button onClick={() => run("pickup", () => schedulePickup(shipment.id, pickupDate, pickupSlot))}>Schedule pickup</Button>
                   </div>
@@ -662,27 +929,51 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ))}
                   </ol>
                 )}
+                <div className="lg:col-span-2">
+                  <LiveTracking order={order} />
+                </div>
               </div>
             )}
           </Section>
         </div>
       )}
 
-      {(order.status === "Delivered" || returnRequest) && (
+      {(order.status === "Delivered" || returnRequest || order.returnShipment || getOrderSettings().adminActions.processAfterDelivery) && order.status !== "Cancelled" && (
         <div className="mt-4">
-          <Section title="Returns & replacements">
+          <Section title="Returns, refunds & replacements">
+            {getOrderSettings().adminActions.processAfterDelivery ? (
+              <p className="mb-2 text-xs text-text-muted">Admin can process a cancellation, refund or replacement on this order even after delivery.</p>
+            ) : null}
+            {order.returnShipment && (
+              <p className="mb-2 text-xs text-text-muted">
+                Return AWB {order.returnShipment.awb || "pending"} · {order.returnShipment.courierName} · {order.returnShipment.live ? "live" : "demo"}
+              </p>
+            )}
             {returnRequest ? (
               <div className="space-y-2 text-sm">
-                <p><b>{returnRequest.kind === "return" ? "Return" : "Replacement"}</b> · {returnRequest.status}</p>
+                <p><b>Return</b> · {returnRequest.status}</p>
                 <p className="text-xs text-text-muted">Reason: {returnRequest.reason} · requested {formatDateTime(returnRequest.requestedAt)}</p>
                 {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)} after ₹{returnRequest.returnCharges} pickup charge.</p>}
-                {returnRequest.replacementOrderId && <p className="text-xs text-text-muted">Replacement order #{returnRequest.replacementOrderId}</p>}
                 <div className="flex flex-wrap gap-2">
                   {returnRequest.status === "Return Requested" && (
                     <Button variant="outline" onClick={() => run("rt", () => { updateReturnRequest(order.id, { status: "Return Approved" }); return "Return approved."; })}>Approve</Button>
                   )}
                   {returnRequest.status === "Return Approved" && (
-                    <Button variant="outline" onClick={() => run("rt", () => { updateReturnRequest(order.id, { status: "Pickup Scheduled" }); return `Return pickup scheduled for ${formatDate(pickupDate)}.`; })}>Schedule return pickup</Button>
+                    <Button variant="outline" onClick={() => run("rt", async () => {
+                      const created = await createReturnShipment(order.id);
+                      patchOrder(order.id, {
+                        returnShipment: {
+                          provider: "shiprocket",
+                          live: created.live,
+                          awb: created.awb,
+                          courierName: created.courierName,
+                          createdAt: new Date().toISOString(),
+                          note: created.note,
+                        },
+                      }, "Return pickup booked");
+                      updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                      return created.note ?? `Return pickup booked. AWB ${created.awb}.`;
+                    })}>Book reverse pickup</Button>
                   )}
                   {returnRequest.status === "Pickup Scheduled" && (
                     <Button variant="outline" onClick={() => run("rt", async () => {
@@ -705,22 +996,33 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </div>
               </div>
             ) : (
-              <div className="grid gap-2 sm:grid-cols-[auto_1fr_auto]">
-                <SelectInput value={returnKind} onChange={(event) => setReturnKind(event.target.value as "return" | "replacement")}>
-                  <option value="return">Return & refund</option>
-                  {getOrderSettings().returns.replacementAllowed && <option value="replacement">Replacement</option>}
-                </SelectInput>
+              <div className="space-y-3">
                 <SelectInput value={returnReason} onChange={(event) => setReturnReason(event.target.value)}>
                   {getOrderSettings().returns.reasons.map((reason) => <option key={reason}>{reason}</option>)}
                 </SelectInput>
-                <Button variant="outline" onClick={() => run("rt", () => {
-                  if (returnKind === "replacement") {
-                    const request = initiateReturn(order, { kind: "replacement", reason: returnReason });
-                    return `Replacement order ${request.replacementOrderId} created.`;
-                  }
-                  initiateReturn(order, { kind: "return", reason: returnReason });
-                  return "Return opened for the customer.";
-                })}>Open on behalf of customer</Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => run("rt", async () => {
+                    initiateReturn(order, { kind: "return", reason: returnReason });
+                    const created = await createReturnShipment(order.id);
+                    patchOrder(order.id, {
+                      returnShipment: {
+                        provider: "shiprocket",
+                        live: created.live,
+                        awb: created.awb,
+                        courierName: created.courierName,
+                        createdAt: new Date().toISOString(),
+                        note: created.note,
+                      },
+                    }, "Return opened");
+                    return created.note ?? "Return opened and reverse pickup requested.";
+                  })}>Create return (reverse pickup)</Button>
+                  {(getOrderSettings().returns.replacementAllowed || getOrderSettings().adminActions.processAfterDelivery) && (
+                    <Button variant="outline" onClick={() => run("rt", () => {
+                      const replacement = createReplacement(order.id);
+                      return replacement ? `Replacement order ${replacement.id} created separately.` : "Could not create replacement.";
+                    })}>Create replacement order</Button>
+                  )}
+                </div>
               </div>
             )}
           </Section>
@@ -730,6 +1032,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => printOrderInvoice(order, shipment)}>Print invoice</Button>
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
+        {shipment && <Button variant="ghost" onClick={() => printShippingLabel(shipment)}>Print shipping label</Button>}
+        <Button variant="danger" onClick={() => {
+          if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
+          run("delete", () => { deleteOrder(order.id); return "Order deleted."; });
+        }}>Delete order</Button>
       </div>
 
       {order.history && order.history.length > 0 && (

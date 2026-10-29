@@ -6,7 +6,7 @@ export default function AccountFaqPage() {
     <div>
       <SectionHeader
         title="FAQ"
-        description="Answers to common questions about your account, registrations, payments and certificates."
+        description="Answers to common questions about your account, orders and payments."
       />
       <EmptyState
         title="Still have questions?"

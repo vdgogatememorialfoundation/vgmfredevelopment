@@ -19,7 +19,7 @@ export default function AccountCreated({
         Account Created
       </p>
 
-      <h2 className="mt-2 text-3xl font-bold text-text-primary">
+      <h2 className="mt-2 text-xl font-semibold text-text-primary">
         Welcome, {name}
       </h2>
 

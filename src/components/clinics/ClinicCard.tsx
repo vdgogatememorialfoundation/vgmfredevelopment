@@ -1,9 +1,13 @@
+"use client";
+
 import Link from "next/link";
 import type { Clinic } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function ClinicCard({ clinic }: { clinic: Clinic }) {
+  const { t } = useI18n();
   return (
     <article className="card flex flex-col overflow-hidden">
       <MediaPlaceholder
@@ -52,12 +56,19 @@ export default function ClinicCard({ clinic }: { clinic: Clinic }) {
           </div>
         </div>
 
-        <Link
-          href={`/clinics/${clinic.slug}`}
-          className="btn-outline mt-6 w-full py-2.5 text-sm"
-        >
-          View Clinic
-        </Link>
+        <div className="mt-6 grid gap-2">
+          <Link
+            href={`/clinics/${clinic.slug}`}
+            className="btn-outline w-full py-2.5 text-sm"
+          >
+            {t("clinic.view")}
+          </Link>
+          {clinic.appointmentUrl ? (
+            <a href={clinic.appointmentUrl} target="_blank" rel="noopener noreferrer" className="btn-primary w-full py-2.5 text-sm">
+              {t("clinic.book")}
+            </a>
+          ) : null}
+        </div>
       </div>
     </article>
   );

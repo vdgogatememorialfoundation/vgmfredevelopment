@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { useAuth } from "@/components/auth/AuthContext";
-import { accountNavigation } from "@/lib/constants";
 import { classNames } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { LoginStamp } from "@/components/layout/LoginStamp";
+import { visibleAccountNav } from "@/lib/site-visibility";
 
 export default function AccountLayout({
   children,
@@ -21,7 +23,9 @@ export default function AccountLayout({
 
 function AccountShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
+  const items = visibleAccountNav();
 
   const initials = user
     ? `${user.firstName[0] ?? ""}${user.lastName[0] ?? ""}`.toUpperCase()
@@ -53,8 +57,17 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                 </div>
               )}
 
+              <div className="mt-4">
+                <LoginStamp
+                  onLogout={() => {
+                    signOut();
+                    router.push("/login");
+                  }}
+                />
+              </div>
+
               <nav aria-label="Account sidebar" className="mt-4 space-y-1">
-                {accountNavigation.map((item) => {
+                {items.map((item) => {
                   const active = pathname === item.href;
                   return (
                     <Link

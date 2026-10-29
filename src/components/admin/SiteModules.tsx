@@ -116,7 +116,7 @@ const modules: {
   },
   {
     id: "flyers",
-    label: "Flyers & banners",
+    label: "Slideshow images",
     publicHref: "/",
     adminHref: "/admin/website/flyers",
     count: flyers.length,

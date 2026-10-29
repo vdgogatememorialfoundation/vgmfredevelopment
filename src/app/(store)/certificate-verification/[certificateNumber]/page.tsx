@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCertificate } from "@/data/content";
+import { findValidCertificate } from "@/lib/server/certificates";
 import CertificateByNumber from "@/components/certificates/CertificateByNumber";
 
 interface CertificatePageProps {
@@ -10,7 +10,7 @@ export async function generateMetadata({
   params,
 }: CertificatePageProps): Promise<Metadata> {
   const { certificateNumber } = await params;
-  const certificate = getCertificate(certificateNumber);
+  const certificate = findValidCertificate(certificateNumber);
 
   if (!certificate) return {};
 

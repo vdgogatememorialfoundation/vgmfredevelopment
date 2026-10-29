@@ -1,12 +1,5 @@
-"use client";
-
-import ClientOnly from "@/components/common/ClientOnly";
-import { ShipmentsSection } from "@/components/admin/AdminShipments";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <ClientOnly>
-      <ShipmentsSection />
-    </ClientOnly>
-  );
+  redirect("/admin/commerce/shipments");
 }

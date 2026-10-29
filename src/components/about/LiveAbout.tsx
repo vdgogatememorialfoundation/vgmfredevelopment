@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
-import { buildTree, useAbout, type TreeBranch } from "@/lib/about";
+import { buildTree, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 function Initials({ name, size }: { name: string; size: string }) {
   return (
@@ -14,9 +15,10 @@ function Initials({ name, size }: { name: string; size: string }) {
 
 export function AboutLive() {
   const about = useAbout();
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow="About Us" title={about.title} description={about.intro} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={about.title} description={about.intro} />
       {about.heroImage && (
         <section className="bg-background pt-10">
           <div className="container">
@@ -36,7 +38,7 @@ export function AboutLive() {
                 )}
                 <h2 className="heading-3">{section.title}</h2>
                 <p className="mt-3 whitespace-pre-line text-text-muted">{section.body}</p>
-                {section.href && <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-burgundy">Learn more →</span>}
+                {section.href && <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-burgundy">{t("about.learnMore")}</span>}
               </>
             );
             return section.href ? (
@@ -50,7 +52,7 @@ export function AboutLive() {
       {about.gallery.length > 0 && (
         <section className="section bg-warm-cream">
           <div className="container">
-            <h2 className="heading-2 mb-8 text-center">Glimpses of the Foundation</h2>
+            <h2 className="heading-2 mb-8 text-center">{t("about.glimpses")}</h2>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {about.gallery.map((photo) => (
                 <figure key={photo.id} className="overflow-hidden rounded-2xl border border-border bg-white">
@@ -71,7 +73,7 @@ export function AboutLive() {
           <div className="container">
             <FamilyTree />
             <div className="mt-8 text-center">
-              <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-outline">Read the full legacy</Link>
+              <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-outline">{t("about.readLegacy")}</Link>
             </div>
           </div>
         </section>
@@ -111,12 +113,13 @@ function TreeNode({ branch }: { branch: TreeBranch }) {
 
 export function FamilyTree() {
   const about = useAbout();
+  const { t } = useI18n();
   const roots = buildTree(about.legacy.tree);
   if (!roots.length) return null;
   return (
     <div>
       <div className="mx-auto mb-10 max-w-2xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Legacy tree</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">{t("about.legacyTree")}</p>
         <h2 className="heading-2 mt-2">{about.legacy.treeTitle}</h2>
         {about.legacy.treeIntro && <p className="mt-3 text-text-muted">{about.legacy.treeIntro}</p>}
       </div>
@@ -131,19 +134,168 @@ export function FamilyTree() {
   );
 }
 
-export function LegacyLive() {
-  const { legacy } = useAbout();
+function PersonCard({ person, featured }: { person: AboutPerson; featured?: boolean }) {
+  const initials = person.name.split(" ").filter(Boolean).map((part) => part[0]).slice(-2).join("");
+  if (featured) {
+    return (
+      <div className="card p-6 text-center">
+        {person.photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={person.photo} alt={person.name} className="mx-auto h-20 w-20 rounded-full border-2 border-burgundy/20 object-cover" />
+        ) : (
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-burgundy/20 bg-burgundy/5">
+            <span className="text-sm font-bold text-burgundy">{initials}</span>
+          </div>
+        )}
+        <h3 className="mt-4 text-lg font-semibold text-text-primary">{person.name}</h3>
+        {person.role ? <p className="mt-1 text-sm font-medium text-burgundy">{person.role}</p> : null}
+        {person.bio ? <p className="mt-3 text-sm leading-6 text-text-muted">{person.bio}</p> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-border bg-white p-5">
+      {person.photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={person.photo} alt={person.name} className="h-12 w-12 shrink-0 rounded-full border border-burgundy/20 object-cover" />
+      ) : (
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-burgundy/20 bg-burgundy/5">
+          <span className="text-xs font-bold text-burgundy">{initials}</span>
+        </div>
+      )}
+      <div>
+        <p className="font-semibold text-text-primary">{person.name}</p>
+        {person.role ? <p className="text-sm text-text-muted">{person.role}</p> : null}
+        {person.bio ? <p className="mt-1 text-sm text-text-muted">{person.bio}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+export function FoundationLive() {
+  const { foundation } = useAbout();
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow="About Us" title={legacy.title} description={legacy.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={foundation.title} description={foundation.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
         <div className="container grid gap-12 lg:grid-cols-2">
           <div>
-            <h2 className="heading-3 mb-4">Biography</h2>
+            {foundation.sections.map((section) => (
+              <div key={section.id} className="mb-10 last:mb-0">
+                {section.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={section.image} alt="" className="mb-4 aspect-[16/8] w-full rounded-xl object-cover" />
+                ) : null}
+                <h2 className="heading-3 mb-4">{section.title}</h2>
+                {section.body.includes("\n") && !section.body.includes("\n\n") ? (
+                  <ul className="space-y-3 text-body" role="list">
+                    {section.body.split("\n").filter(Boolean).map((item) => (
+                      <li key={item} className="flex items-start gap-3">
+                        <span className="mt-2 text-burgundy">✓</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-body whitespace-pre-line">{section.body}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <div>
+            {foundation.activities.length > 0 ? <h2 className="heading-3 mb-4">{t("about.activities")}</h2> : null}
+            <ul className="space-y-4" role="list">
+              {foundation.activities.map((activity) => (
+                <li key={activity.id} className="card p-6">
+                  {activity.href ? (
+                    <Link href={activity.href} className="font-semibold text-text-primary transition hover:text-burgundy">
+                      {activity.title}
+                    </Link>
+                  ) : (
+                    <p className="font-semibold text-text-primary">{activity.title}</p>
+                  )}
+                  <p className="mt-2 text-sm leading-6 text-text-muted">{activity.body}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function HistoryLive() {
+  const { history } = useAbout();
+  const { t } = useI18n();
+  return (
+    <main>
+      <PageHeader eyebrow={t("about.eyebrow")} title={history.title} description={history.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container max-w-4xl">
+          <ol className="relative space-y-10 border-l-2 border-border pl-8" role="list">
+            {history.timeline.map((item) => (
+              <li key={item.id} className="relative">
+                <span className="absolute -left-[41px] top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-burgundy bg-white" aria-hidden="true">
+                  <span className="h-2 w-2 rounded-full bg-burgundy" />
+                </span>
+                <p className="text-sm font-bold uppercase tracking-[0.15em] text-burgundy">{item.year}</p>
+                <h2 className="heading-3 mt-1">{item.title}</h2>
+                <p className="mt-2 text-body">{item.description}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function TrusteesLive() {
+  const { trustees } = useAbout();
+  const { t } = useI18n();
+  return (
+    <main>
+      <PageHeader eyebrow={t("about.eyebrow")} title={trustees.title} description={trustees.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container">
+          <h2 className="heading-3 mb-8">{trustees.trusteesHeading}</h2>
+          <div className="grid gap-6 md:grid-cols-3">
+            {trustees.trustees.map((person) => (
+              <PersonCard key={person.id} person={person} featured />
+            ))}
+          </div>
+        </div>
+      </section>
+      <section className="section bg-warm-cream">
+        <div className="container">
+          <h2 className="heading-3 mb-8">{trustees.teamHeading}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {trustees.team.map((person) => (
+              <PersonCard key={person.id} person={person} />
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function LegacyLive() {
+  const { legacy } = useAbout();
+  const { t } = useI18n();
+  return (
+    <main>
+      <PageHeader eyebrow={t("about.eyebrow")} title={legacy.title} description={legacy.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container grid gap-12 lg:grid-cols-2">
+          <div>
+            <h2 className="heading-3 mb-4">{t("about.biography")}</h2>
             {legacy.biography.split(/\n\s*\n/).map((paragraph, index) => (
               <p key={index} className="text-body mb-4">{paragraph}</p>
             ))}
-            <h2 className="heading-3 mb-4 mt-10">Philosophy</h2>
+            <h2 className="heading-3 mb-4 mt-10">{t("about.philosophy")}</h2>
             <p className="text-body whitespace-pre-line">{legacy.philosophy}</p>
           </div>
           <div>
@@ -152,11 +304,11 @@ export function LegacyLive() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={legacy.portrait} alt="Vaidya R. B. Gogate" className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full items-center justify-center bg-gradient-to-br from-warm-cream to-[#EAF1EC] p-8 text-center">
+                <div className="flex h-full items-center justify-center bg-slate-50 p-8 text-center">
                   <div>
                     <Initials name="R B" size="mx-auto mb-5 h-24 w-24" />
                     <p className="text-lg font-bold text-text-primary">Vaidya R. B. Gogate</p>
-                    <p className="mt-2 text-sm text-text-muted">Physician • Teacher • Scholar</p>
+                    <p className="mt-2 text-sm text-text-muted">{t("legacy.portraitRole")}</p>
                   </div>
                 </div>
               )}
@@ -166,7 +318,7 @@ export function LegacyLive() {
       </section>
       <section className="section bg-warm-cream">
         <div className="container max-w-4xl">
-          <h2 className="heading-3 mb-10 text-center">Timeline</h2>
+          <h2 className="heading-3 mb-10 text-center">{t("about.timeline")}</h2>
           <ol className="relative space-y-10 border-l-2 border-border pl-8" role="list">
             {legacy.timeline.map((item) => (
               <li key={item.id} className="relative">

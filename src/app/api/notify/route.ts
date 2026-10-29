@@ -3,7 +3,9 @@ import {
   listMetaTemplates,
   sendAiSensy,
   sendMetaTemplate,
+  sendMsg91Sms,
   sendZeptoMail,
+  sendZohoCpaas,
   sendZohoMail,
 } from "@/lib/server/providers";
 
@@ -24,10 +26,27 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.channel === "email") {
-      const mail = { to: String(body.to ?? ""), subject: String(body.subject ?? ""), html: toHtml(String(body.body ?? "")) };
+      const mail = {
+        to: String(body.to ?? ""),
+        subject: String(body.subject ?? ""),
+        html: toHtml(String(body.body ?? "")),
+        replyTo: typeof body.replyTo === "string" && body.replyTo.includes("@") ? String(body.replyTo) : undefined,
+      };
       if (!/^\S+@\S+\.\S+$/.test(mail.to)) return NextResponse.json({ ok: false, configured: true, error: "Recipient email is not valid." });
       const sent = body.provider === "zoho" ? await sendZohoMail(creds, mail) : await sendZeptoMail(creds, mail);
       if (!sent) return NextResponse.json({ ok: false, configured: false, error: `${body.provider === "zoho" ? "Zoho Mail" : "ZeptoMail"} credentials are not configured.` });
+      return NextResponse.json({ ok: true, configured: true, ...sent });
+    }
+
+    if (body.channel === "sms") {
+      const to = String(body.to ?? "");
+      if (to.replace(/\D/g, "").length < 10) return NextResponse.json({ ok: false, configured: true, error: "Recipient phone number is not valid." });
+      const sent = await sendMsg91Sms(creds, {
+        to,
+        body: String(body.body ?? ""),
+        otp: typeof body.otp === "string" ? body.otp : undefined,
+      });
+      if (!sent) return NextResponse.json({ ok: false, configured: false, error: "MSG91 credentials are not configured." });
       return NextResponse.json({ ok: true, configured: true, ...sent });
     }
 
@@ -38,7 +57,9 @@ export async function POST(request: NextRequest) {
       const sent =
         body.provider === "aisensy"
           ? await sendAiSensy(creds, { to, campaign: String(body.template ?? ""), name: String(body.name ?? ""), params })
-          : await sendMetaTemplate(creds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params });
+          : body.provider === "zoho"
+            ? await sendZohoCpaas(creds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params })
+            : await sendMetaTemplate(creds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params });
       if (!sent) return NextResponse.json({ ok: false, configured: false, error: "WhatsApp credentials are not configured." });
       return NextResponse.json({ ok: true, configured: true, ...sent });
     }

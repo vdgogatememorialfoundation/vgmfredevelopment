@@ -1,72 +1,76 @@
 "use client";
 
 import Link from "next/link";
-import Badge from "@/components/common/Badge";
-import { useLiveNotices } from "@/lib/use-cms";
+import { noticeFileHref, noticeHasFile } from "@/lib/notice-display";
+import { useMergedNotices } from "@/lib/use-notices";
 import { formatDate } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function NoticeBoard() {
-  const notices = useLiveNotices();
-  return (
-    <section className="section bg-background py-10" aria-labelledby="notices-heading">
-      <div className="container">
-        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-burgundy/5 text-burgundy">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-                </svg>
-              </span>
-              <div>
-                <h2
-                  id="notices-heading"
-                  className="text-lg font-bold text-text-primary"
-                >
-                  Important Notices
-                </h2>
-                <p className="text-sm text-text-muted">
-                  Announcements, deadlines and updates from the Foundation.
-                </p>
-              </div>
-            </div>
+  const { notices: all } = useMergedNotices();
+  const { t } = useI18n();
+  const pinned = all.filter((notice) => notice.pinned);
+  const notices = (pinned.length ? pinned : all).slice(0, 6);
 
-            <Link
-              href="/notices"
-              className="flex items-center gap-1.5 text-sm font-semibold text-burgundy transition hover:text-burgundy-dark"
-            >
-              View All Notices
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14" />
-                <path d="M12 5l7 7-7 7" />
-              </svg>
+  return (
+    <section className="border-t border-border bg-paper py-10" aria-labelledby="notices-heading">
+      <div className="container">
+        <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-3 bg-ink px-5 py-4 text-white">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">{t("home.noticeEyebrow")}</p>
+              <h2 id="notices-heading" className="font-serif text-lg font-semibold">
+                {t("home.noticeBoard")}
+              </h2>
+            </div>
+            <Link href="/notices" className="text-sm font-medium text-amber-100 hover:text-white">
+              {t("home.allNotices")}
             </Link>
           </div>
-
-          <div className="mt-5 divide-y divide-border rounded-xl border border-border bg-warm-cream">
-            {notices.slice(0, 4).map((notice) => (
-              <Link
-                key={notice.id}
-                href={notice.href}
-                aria-label={`${notice.title} (${formatDate(notice.date)})`}
-                className="flex flex-col gap-2 px-5 py-4 transition hover:bg-white sm:flex-row sm:items-center sm:gap-4"
-              >
-                <span className="flex w-fit shrink-0 items-center gap-2 text-xs font-medium text-text-muted sm:w-32">
-                  <Badge tone="burgundy">{notice.category}</Badge>
-                </span>
-                <span className="min-w-0 flex-1 text-sm font-medium text-text-primary line-clamp-1">
-                  {notice.title}
-                </span>
-                <time
-                  className="shrink-0 text-xs text-text-muted"
-                  dateTime={notice.date}
-                >
-                  {formatDate(notice.date)}
-                </time>
-              </Link>
-            ))}
-          </div>
+          {notices.length === 0 ? (
+            <p className="px-5 py-8 text-sm text-text-muted">{t("home.noticeEmpty")}</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {notices.map((notice) => {
+                const file = noticeFileHref(notice);
+                return (
+                  <li key={notice.id} id={notice.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[7rem_1fr_auto] sm:items-start">
+                    <time className="text-xs font-medium text-text-muted" dateTime={notice.date}>
+                      {formatDate(notice.date)}
+                    </time>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-burgundy">{notice.category}</p>
+                        {notice.pinned ? (
+                          <span className="rounded bg-paper px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink">
+                            {t("notice.pinned")}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 font-serif text-sm font-semibold text-ink">{notice.title}</p>
+                      {notice.description ? <p className="mt-1 text-sm leading-6 text-text-muted">{notice.description}</p> : null}
+                    </div>
+                    <div className="sm:text-right">
+                      {file ? (
+                        <a
+                          href={file}
+                          className="inline-flex items-center rounded-md border border-border bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:border-burgundy hover:text-burgundy"
+                        >
+                          {notice.fileName ? `${t("notice.download")} ${notice.fileName}` : t("notice.download")}
+                        </a>
+                      ) : noticeHasFile(notice) ? (
+                        <a href={`/api/notices/${notice.id}/file`} className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-ink">
+                          {t("notice.download")}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-text-muted">{t("notice.textOnly")}</span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </div>
     </section>

@@ -189,6 +189,7 @@ export function saveOrder(order: Order) {
   const orders = getOrders();
   orders.unshift(order);
   window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+  window.dispatchEvent(new Event("vgmf-cms"));
 }
 
 export function getOrdersByEmail(email?: string) {
@@ -203,7 +204,7 @@ export function getOrdersByEmail(email?: string) {
 
 // ---------- Tracking ----------
 
-const COURIERS = ["Ekart Logistics", "Delhivery", "Blue Dart", "DTDC"];
+const COURIERS = ["Shiprocket Surface", "Shiprocket Express", "iThink Logistics"];
 
 export function pickCourier(orderId: string) {
   let hash = 0;
@@ -376,7 +377,7 @@ export function buildTrackingStages(order: Order): {
           reachedAt: "Processing",
           event: {
             id: "processing",
-            title: "Seller is processing your order",
+            title: "We are processing your order",
             at: at(150),
             location: "Pune, Maharashtra, India",
           },
@@ -385,7 +386,7 @@ export function buildTrackingStages(order: Order): {
           reachedAt: "Packed",
           event: {
             id: "dispatched",
-            title: "Your item is dispatched from seller facility",
+            title: "Your item is packed at our facility",
             at: at(1470),
             location: "Pune, Maharashtra, India",
           },
@@ -438,13 +439,13 @@ export function buildTrackingStages(order: Order): {
       makeStage(
         "packed",
         "Packed",
-        "Packed & dispatched by seller",
+        "Packed at our facility",
         [
           {
             reachedAt: "Processing",
             event: {
               id: "processing",
-              title: "Seller is processing your order",
+              title: "We are processing your order",
               at: at(150),
               location: "Pune, Maharashtra, India",
             },
@@ -453,7 +454,7 @@ export function buildTrackingStages(order: Order): {
             reachedAt: "Packed",
             event: {
               id: "dispatched",
-              title: "Your item has been dispatched from seller facility",
+              title: "Your item has been packed at our facility",
               at: at(1470),
               location: "Pune, Maharashtra, India",
             },

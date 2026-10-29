@@ -11,9 +11,7 @@ import {
   hideEventRecord,
   getEventRecords,
   nextCertificateNumber,
-  revokeCertificate,
   saveEventRecord,
-  saveIssuedCertificate,
   saveSectionSettings,
   type EventRecord,
   type EventRecordKind,
@@ -29,6 +27,7 @@ import {
 import { getOrders } from "@/lib/store";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { certificates as seededCertificates } from "@/data/content";
+import { deleteCertificate, publishCertificate } from "@/lib/certificates-client";
 import type { Order } from "@/types";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -47,6 +46,7 @@ const paymentTitles: Record<PaymentFilter, string> = {
   Failed: "Failed payments",
   Pending: "Pending payments",
   Refunded: "Refunded payments",
+  "Partially Refunded": "Partial refunds",
 };
 
 export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
@@ -213,16 +213,17 @@ export function CertificateRegistry({ mode, eventName }: { mode: "list" | "issue
         }}
         onSave={(record) => {
           const existing = records.some((item) => item.id === record.id);
-          saveIssuedCertificate({
+          void publishCertificate({
             ...record,
             issueDate: mode === "reissue" && existing ? new Date().toISOString().slice(0, 10) : record.issueDate,
             reissuedAt: mode === "reissue" && existing ? new Date().toISOString() : record.reissuedAt,
           });
         }}
-        onHide={revokeCertificate}
+        onHide={deleteCertificate}
+        hideLabel="Revoke"
       />
       <p className="text-xs text-slate-500">
-        Hide revokes the certificate on the public verification page.
+        Revoke removes the certificate from the public verification page.
       </p>
     </div>
   );
@@ -386,7 +387,9 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
     heading: "Registration settings",
     fields: [
       { key: "allowSignup", label: "Allow new customer sign-ups", kind: "toggle", fallback: "true" },
-      { key: "verifyEmail", label: "Require email verification", kind: "toggle", fallback: "true" },
+      { key: "allowLogin", label: "Allow customer sign-in", kind: "toggle", fallback: "true" },
+      { key: "verifyEmail", label: "Require email OTP for signup and login", kind: "toggle", fallback: "true" },
+      { key: "smsLogin", label: "Allow login with MSG91 SMS OTP", kind: "toggle", fallback: "false" },
       { key: "welcomeSubject", label: "Welcome email subject", fallback: "Welcome to the Vaidya Gogate Memorial Foundation" },
     ],
   },
@@ -426,7 +429,8 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
   security: {
     heading: "Security settings",
     fields: [
-      { key: "sessionMinutes", label: "Admin session length (minutes)", fallback: "60" },
+      { key: "persistUntilLogout", label: "Keep sessions signed in until Logout", kind: "toggle", fallback: "true" },
+      { key: "mfaRequired", label: "Require email OTP after password (MFA)", kind: "toggle", fallback: "true" },
       { key: "strongPasswords", label: "Require strong staff passwords", kind: "toggle", fallback: "true" },
       { key: "allowedDomain", label: "Staff email domain", fallback: "vaidyagogate.org" },
     ],

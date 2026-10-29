@@ -24,7 +24,6 @@ const ROLE_TONES: Record<string, string> = {
   customer: "bg-warm-cream text-burgundy",
   staff: "bg-amber-50 text-amber-700",
   admin: "bg-burgundy/10 text-burgundy",
-  seller: "bg-emerald-50 text-emerald-700",
 };
 
 export function AccountsSection({

@@ -1,21 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #2F7A57;
-  --color-burgundy-dark: #256447;
-  --color-gold: #B08D3E;
-  --color-saffron: #C9822F;
-  --color-warm-cream: #F6F3EC;
-  --color-background: #FDFCF9;
-  --color-text-primary: #1F2A24;
-  --color-text-muted: #5E6B64;
-  --color-border: #E7E2D7;
+  --color-burgundy: #8F2D2D;
+  --color-burgundy-dark: #6A1F1F;
+  --color-gold: #B8953A;
+  --color-saffron: #A67C2D;
+  --color-ink: #0B1F3A;
+  --color-ink-soft: #16325C;
+  --color-paper: #F7F3EA;
+  --color-warm-cream: #F7F3EA;
+  --color-background: #FFFdf8;
+  --color-text-primary: #0B1F3A;
+  --color-text-muted: #5C5648;
+  --color-border: #E4D8C4;
   --color-white: #FFFFFF;
-  --font-serif: var(--font-display), "Iowan Old Style", Palatino, Georgia, "Times New Roman", serif;
+  --font-serif: var(--font-serif-display), Fraunces, "Palatino Linotype", Palatino, Georgia, serif;
+  --font-sans: var(--font-sans-body), Outfit, var(--font-devanagari), var(--font-kannada), var(--font-tamil), var(--font-malayalam), var(--font-gujarati), "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Kannada", "Nirmala UI", "Segoe UI", system-ui, sans-serif;
 }
 
 :root {
-  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: var(--font-sans-body), var(--font-devanagari), var(--font-kannada), var(--font-tamil), var(--font-malayalam), var(--font-gujarati), "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Kannada", "Nirmala UI", "Segoe UI", system-ui, sans-serif;
 }
 
 * {
@@ -24,6 +28,7 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: clip;
 }
 
 body {
@@ -32,6 +37,17 @@ body {
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: clip;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+iframe {
+  max-width: 100%;
 }
 
 @layer utilities {
@@ -46,11 +62,24 @@ body {
   .animate-marquee:hover {
     animation-play-state: paused;
   }
+
+  .hero-progress {
+    animation: hero-progress 7s linear forwards;
+  }
 }
 
 @keyframes marquee {
   to {
     transform: translateX(-50%);
+  }
+}
+
+@keyframes hero-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
   }
 }
 
@@ -60,55 +89,63 @@ body {
   }
 
   .section {
-    @apply py-16 sm:py-20 lg:py-24;
+    @apply border-t border-border bg-white py-10 sm:py-12;
+  }
+
+  .section-paper {
+    @apply border-t border-border bg-paper py-10 sm:py-12;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-burgundy-dark;
+    @apply inline-flex items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-ink-soft;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy;
+    @apply inline-flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:border-gold hover:text-burgundy;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-md border border-white/40 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-white hover:text-ink;
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center rounded-lg border border-border px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy hover:bg-burgundy/5;
+    @apply inline-flex items-center justify-center rounded-md border border-border bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:border-gold hover:text-burgundy hover:bg-paper;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-burgundy focus:ring-2 focus:ring-burgundy/10;
+    @apply w-full rounded-md border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-gold focus:ring-2 focus:ring-gold/20;
   }
 
   .card {
-    @apply rounded-2xl border border-border bg-white shadow-sm transition hover:shadow-md;
+    @apply rounded-md border border-border bg-white shadow-none transition hover:border-gold/50 hover:shadow-sm;
   }
 
   .heading-1 {
-    @apply font-serif text-4xl font-bold tracking-tight text-text-primary sm:text-5xl lg:text-6xl;
+    @apply font-serif text-2xl font-semibold tracking-tight text-ink sm:text-3xl;
   }
 
   .heading-2 {
-    @apply font-serif text-3xl font-bold tracking-tight text-text-primary sm:text-4xl;
+    @apply font-serif text-xl font-semibold tracking-tight text-ink sm:text-2xl;
   }
 
   .heading-3 {
-    @apply font-serif text-2xl font-bold tracking-tight text-text-primary sm:text-3xl;
+    @apply font-serif text-lg font-semibold tracking-tight text-ink;
   }
 
   .heading-4 {
-    @apply font-serif text-xl font-bold tracking-tight text-text-primary;
+    @apply font-serif text-base font-semibold tracking-tight text-ink;
   }
 
   .eyebrow {
-    @apply mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy;
+    @apply mb-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold;
   }
 
   .text-body {
-    @apply text-base leading-7 text-text-muted;
+    @apply text-sm leading-6 text-text-muted;
   }
 
   .text-body-lg {
-    @apply text-lg leading-8 text-text-muted;
+    @apply text-sm leading-6 text-text-muted;
   }
 }
 
@@ -124,5 +161,15 @@ body {
 }
 
 :focus-visible {
-  @apply outline-none ring-2 ring-burgundy ring-offset-2 ring-offset-background;
+  @apply outline-none ring-2 ring-gold ring-offset-2 ring-offset-background;
+}
+
+@media print {
+  header,
+  footer,
+  [aria-label="Scrolling announcements"],
+  .btn-primary,
+  .btn-outline {
+    display: none !important;
+  }
 }

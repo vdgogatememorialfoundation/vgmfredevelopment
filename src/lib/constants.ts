@@ -8,11 +8,12 @@ export const siteConfig = {
   whatsapp: "+91 98765 43210",
   address: "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
   social: {
-    facebook: "#",
-    instagram: "#",
-    linkedin: "#",
-    youtube: "#",
-    twitter: "#",
+    facebook: "",
+    instagram: "",
+    linkedin: "",
+    youtube: "",
+    twitter: "",
+    whatsapp: "",
   },
 };
 
@@ -30,23 +31,24 @@ export const storeConfig = {
   cancellationWindowDays: 1,
   defaultDeliveryDays: 4,
   orderPreparationDays: 1,
-  sellerName: "Vaidya Gogate Memorial Foundation Publications",
+  publisherName: "Vaidya Gogate Memorial Foundation Publications",
   paymentGateway: "Razorpay",
   shippingGateway: "Shiprocket",
-  courierName: "Ekart Logistics",
-  courierPrefix: "EK",
+  courierName: "Shiprocket Surface",
+  courierPrefix: "SR",
   orderPrefix: "VGMF",
 };
 
 export const navigation = [
   { name: "About Us", href: "/about" },
   { name: "Events", href: "/events" },
+  { name: "Gallery", href: "/gallery" },
   { name: "Videos", href: "/videos" },
   { name: "Articles", href: "/articles" },
   { name: "Shop", href: "/shop" },
   { name: "Clinics", href: "/clinics" },
-  { name: "Certificate Verification", href: "/certificate-verification" },
   { name: "Contact", href: "/contact" },
+  { name: "Support", href: "/support" },
 ] as const;
 
 export const accountNavigation = [

@@ -3,11 +3,18 @@
 import Link from "next/link";
 import SiteLogo from "@/components/common/SiteLogo";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCart } from "@/lib/use-cart";
-import { accountNavigation, navigation, siteConfig } from "@/lib/constants";
+import { siteConfig } from "@/lib/constants";
 import { classNames } from "@/lib/utils";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/components/i18n/LanguageProvider";
+import { navMessageKey } from "@/lib/i18n/messages";
+import { getLiveCmsPages } from "@/lib/cms-pages";
+import { getSiteVisibility, visibleAccountNav, visiblePublicNav } from "@/lib/site-visibility";
+import { subscribeCms } from "@/lib/cms";
 
 function CartIcon() {
   return (
@@ -88,7 +95,17 @@ export default function Header() {
   const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
   const { count } = useCart();
+  const { t } = useI18n();
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  useSyncExternalStore(
+    subscribeCms,
+    () => `${window.localStorage.getItem("vgmf_site_visibility") ?? ""}|${window.localStorage.getItem("vgmf_cms_pages") ?? ""}`,
+    () => ""
+  );
+  const visibility = getSiteVisibility();
+  const navItems = visiblePublicNav(visibility);
+  const accountItems = visibleAccountNav(visibility);
+  const extraPages = getLiveCmsPages().filter((page) => page.showInNav);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -97,6 +114,20 @@ export default function Header() {
     }, 0);
     return () => clearTimeout(timer);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -123,14 +154,14 @@ export default function Header() {
     : "";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
       {/* Top bar */}
-      <div className="border-b border-border bg-warm-cream text-text-muted">
-        <div className="container flex items-center justify-between py-2 text-xs">
-          <p className="hidden gap-4 sm:flex">
+      <div className="border-b border-ink-soft bg-ink text-stone-300">
+        <div className="container flex items-center justify-between py-1.5 text-[11px] sm:py-2 sm:text-xs">
+          <p className="flex min-w-0 items-center gap-3 sm:gap-4">
             <a
               href={`mailto:${siteConfig.email}`}
-              className="flex items-center gap-1.5 hover:underline"
+              className="hidden items-center gap-1.5 hover:underline sm:flex"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
@@ -151,17 +182,14 @@ export default function Header() {
 
           <div className="ml-auto flex items-center gap-4">
             {isAuthenticated ? (
-              <span className="hidden text-text-primary md:inline">
+              <span className="hidden text-stone-200 md:inline">
                 {user?.accountId}
               </span>
-            ) : (
-              <Link href="/login" className="hover:underline">
-                Sign in | Create account
-              </Link>
-            )}
+            ) : null}
             <Link href="/contact" className="hover:underline">
-              Contact
+              {t("common.contact")}
             </Link>
+            <LanguageSwitcher tone="dark" />
           </div>
         </div>
       </div>
@@ -176,12 +204,12 @@ export default function Header() {
             aria-label="Vaidya Gogate Memorial Foundation — Home"
           >
             <SiteLogo size={48} />
-
+            <span className="hidden h-10 w-px bg-gold/50 sm:block" aria-hidden />
             <div className="min-w-0">
-              <div className="truncate text-[17px] font-bold leading-tight text-text-primary sm:text-[19px]">
+              <div className="truncate font-serif text-[15px] font-semibold leading-tight text-ink sm:text-base">
                 Vaidya Gogate
               </div>
-              <div className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted sm:text-xs">
+              <div className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-gold sm:text-[11px]">
                 Memorial Foundation
               </div>
             </div>
@@ -190,9 +218,9 @@ export default function Header() {
           {/* Desktop Navigation */}
           <nav
             aria-label="Main navigation"
-            className="hidden items-center gap-5 xl:flex"
+            className="hidden items-center lg:flex lg:gap-3 xl:gap-6"
           >
-            {navigation.map((item) => {
+            {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
                 pathname.startsWith(`${item.href}/`);
@@ -202,13 +230,32 @@ export default function Header() {
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
                   className={classNames(
-                    "whitespace-nowrap text-[13px] font-medium transition",
+                    "relative whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
                     isActive
-                      ? "text-burgundy"
+                      ? "text-burgundy after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:bg-gold"
                       : "text-text-primary hover:text-burgundy"
                   )}
                 >
-                  {item.name}
+                  {t(navMessageKey[item.href] ?? "nav.about")}
+                </Link>
+              );
+            })}
+            {extraPages.map((page) => {
+              const href = `/p/${page.slug}`;
+              const isActive = pathname === href;
+              return (
+                <Link
+                  key={page.id}
+                  href={href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={classNames(
+                    "relative whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
+                    isActive
+                      ? "text-burgundy after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:bg-gold"
+                      : "text-text-primary hover:text-burgundy"
+                  )}
+                >
+                  {page.title}
                 </Link>
               );
             })}
@@ -219,11 +266,11 @@ export default function Header() {
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
-              className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary transition hover:border-burgundy hover:bg-burgundy/5 hover:text-burgundy"
+              className="relative flex h-10 w-10 items-center justify-center text-ink transition hover:text-burgundy"
             >
               <CartIcon />
               {count > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-burgundy px-1 text-[10px] font-bold text-white">
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center bg-burgundy px-1 text-[10px] font-bold text-white">
                   {count > 99 ? "99+" : count}
                 </span>
               )}
@@ -236,27 +283,13 @@ export default function Header() {
                   onClick={() => setAccountMenuOpen((open) => !open)}
                   aria-expanded={accountMenuOpen}
                   aria-haspopup="menu"
-                  className="flex items-center gap-2 rounded-full border border-border py-1.5 pr-3 pl-1.5 transition hover:border-burgundy"
+                  aria-label="Account"
+                  className="flex h-10 items-center gap-1.5 text-ink transition hover:text-burgundy"
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-burgundy text-xs font-bold text-white">
-                    {initials}
+                  <UserIcon />
+                  <span className="max-w-[90px] truncate text-sm font-medium">
+                    {user.firstName || initials}
                   </span>
-                  <span className="max-w-[100px] truncate text-sm font-medium text-text-primary">
-                    {user.firstName}
-                  </span>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-text-muted"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
                 </button>
 
                 {accountMenuOpen && (
@@ -277,7 +310,7 @@ export default function Header() {
                     </div>
 
                     <nav aria-label="Account menu" className="max-h-80 overflow-y-auto py-2">
-                      {accountNavigation.map((item) => {
+                      {accountItems.map((item) => {
                         const active = pathname === item.href;
                         return (
                           <Link
@@ -303,8 +336,8 @@ export default function Header() {
                       {user.role === "staff" && (
                         <ConsoleLink href="/staff" pathname={pathname} label="Staff console" icon="dashboard" />
                       )}
-                      {user.role === "seller" && (
-                        <ConsoleLink href="/seller" pathname={pathname} label="Seller portal" icon="orders" />
+                      {user.role === "doctor" && (
+                        <ConsoleLink href="/doctor" pathname={pathname} label="Doctor console" icon="dashboard" />
                       )}
                     </nav>
 
@@ -322,22 +355,13 @@ export default function Header() {
                 )}
               </div>
             ) : (
-              <>
-                <Link
-                  href="/login"
-                  aria-label="Login or create account"
-                  className="group flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary transition hover:border-burgundy hover:bg-burgundy/5 hover:text-burgundy"
-                >
-                  <UserIcon />
-                </Link>
-
-                <Link
-                  href="/login"
-                  className="btn-primary py-2.5 text-sm"
-                >
-                  Get Started
-                </Link>
-              </>
+              <Link
+                href="/login"
+                aria-label="Account — sign in or create an account"
+                className="flex h-10 w-10 items-center justify-center text-ink transition hover:text-burgundy"
+              >
+                <UserIcon />
+              </Link>
             )}
           </div>
 
@@ -346,11 +370,11 @@ export default function Header() {
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
-              className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary"
+              className="relative flex h-10 w-10 items-center justify-center text-ink"
             >
               <CartIcon />
               {count > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-burgundy px-1 text-[10px] font-bold text-white">
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center bg-burgundy px-1 text-[10px] font-bold text-white">
                   {count > 99 ? "99+" : count}
                 </span>
               )}
@@ -358,16 +382,10 @@ export default function Header() {
 
             <Link
               href={isAuthenticated ? "/account" : "/login"}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary"
-              aria-label={isAuthenticated ? "My account" : "Login"}
+              className="flex h-10 w-10 items-center justify-center text-ink"
+              aria-label={isAuthenticated ? "My account" : "Account"}
             >
-              {isAuthenticated && user ? (
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-burgundy text-xs font-bold text-white">
-                  {initials}
-                </span>
-              ) : (
-                <UserIcon />
-              )}
+              <UserIcon />
             </Link>
 
             <button
@@ -382,63 +400,77 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="border-t border-border py-4 lg:hidden">
-            <nav aria-label="Mobile navigation" className="flex flex-col">
-              {navigation.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={classNames(
-                      "border-b border-border px-2 py-3.5 text-sm font-medium transition",
-                      isActive
-                        ? "text-burgundy"
-                        : "text-text-primary hover:text-burgundy"
-                    )}
-                  >
-                    {item.name}
-                  </Link>
-                );
-              })}
-
-              <div className="mt-4 flex flex-col gap-3">
-                {isAuthenticated ? (
-                  <Link
-                    href="/account"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="btn-primary"
-                  >
-                    My Account
-                  </Link>
-                ) : (
-                  <Link
-                    href="/login"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="btn-primary"
-                  >
-                    Create Account / Sign In
-                  </Link>
-                )}
-
-                <Link
-                  href="/events"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="btn-outline"
-                >
-                  Explore Events
-                </Link>
-              </div>
-            </nav>
-          </div>
-        )}
       </div>
+
+      {mobileMenuOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[80] lg:hidden" role="dialog" aria-modal="true" aria-label="Site menu">
+              <button
+                type="button"
+                className="absolute inset-0 bg-ink/40"
+                aria-label="Close menu"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+              <div className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-border px-4 py-4">
+                  <p className="font-serif text-lg font-semibold text-ink">Menu</p>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border"
+                    aria-label="Close menu"
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+                <nav aria-label="Mobile navigation" className="flex-1 overflow-y-auto px-2 py-2">
+                  {navItems.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        aria-current={isActive ? "page" : undefined}
+                        className={classNames(
+                          "block border-b border-border px-3 py-3.5 text-sm font-medium transition",
+                          isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
+                        )}
+                      >
+                        {t(navMessageKey[item.href] ?? "nav.about")}
+                      </Link>
+                    );
+                  })}
+                  {extraPages.map((page) => (
+                    <Link
+                      key={page.id}
+                      href={`/p/${page.slug}`}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block border-b border-border px-3 py-3.5 text-sm font-medium text-text-primary hover:text-burgundy"
+                    >
+                      {page.title}
+                    </Link>
+                  ))}
+                </nav>
+                <div className="flex flex-col gap-3 border-t border-border p-4">
+                  {isAuthenticated ? (
+                    <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-burgundy">
+                      {t("header.myAccount")}
+                    </Link>
+                  ) : (
+                    <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-burgundy">
+                      {t("common.signIn")}
+                    </Link>
+                  )}
+                  <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="btn-outline">
+                    {t("header.exploreEvents")}
+                  </Link>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </header>
   );
 }

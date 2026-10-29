@@ -1,4 +1,7 @@
+"use client";
+
 import PageHeader from "@/components/common/PageHeader";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 interface LegalSection {
   title: string;
@@ -20,20 +23,15 @@ export default function LegalPage({
   sections,
   lastUpdated,
 }: LegalPageProps) {
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader
-        eyebrow={eyebrow}
-        title={title}
-        description={description}
-      />
-
+      <PageHeader eyebrow={eyebrow} title={title} description={description} />
       <section className="section bg-background">
         <div className="container max-w-3xl">
           <p className="mb-10 text-sm text-text-muted">
-            Last updated: {lastUpdated}
+            {t("legal.lastUpdated")}: {lastUpdated}
           </p>
-
           <div className="space-y-10">
             {sections.map((section) => (
               <div key={section.title}>

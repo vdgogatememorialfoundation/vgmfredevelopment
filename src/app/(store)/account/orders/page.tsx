@@ -5,6 +5,7 @@ import Link from "next/link";
 import SectionHeader from "@/components/account/SectionHeader";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
+import LiveTracking from "@/components/store/LiveTracking";
 import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getOrdersByEmail, formatPrice } from "@/lib/store";
@@ -135,6 +136,7 @@ export default function OrdersPage() {
                     </div>
 
                     <OrderTrackingTimeline order={order} />
+                    <LiveTracking order={order} />
                   </div>
 
                   {/* All order details */}
@@ -312,8 +314,8 @@ const demoOrders: Order[] = [
       pincode: "411005",
     },
     eta: "Sep 15, 2026",
-    trackingId: "EK120690123457",
-    courierName: "Ekart Logistics",
+    trackingId: "SR120690123457",
+    courierName: "Shiprocket Surface",
     openBoxDelivery: true,
     returnableDays: storeConfig.returnDays,
   },
@@ -350,8 +352,8 @@ const demoOrders: Order[] = [
       pincode: "411005",
     },
     eta: "Sep 05, 2026",
-    trackingId: "EK120346712255",
-    courierName: "Ekart Logistics",
+    trackingId: "SR120346712255",
+    courierName: "Shiprocket Surface",
     openBoxDelivery: false,
     returnableDays: storeConfig.returnDays,
   },

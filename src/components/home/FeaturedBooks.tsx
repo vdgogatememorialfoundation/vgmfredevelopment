@@ -1,31 +1,40 @@
+"use client";
+
 import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import BookCard from "@/components/books/BookCard";
-import { books } from "@/data/books";
+import { useLiveBooks } from "@/lib/use-cms";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function FeaturedBooks() {
-  const featured = books.slice(0, 3);
+  const featured = useLiveBooks().filter((book) => book.active !== false).slice(0, 4);
+  const { t } = useI18n();
 
   return (
-    <section className="section bg-background" aria-labelledby="books-heading">
+    <section className="section-paper" aria-labelledby="books-heading">
       <div className="container">
         <SectionHeading
-          eyebrow="Shop"
-          title="Shop & Publications"
-          description="Clinical references, scholarly works and the writings of Vaidya R. B. Gogate. Order online with secure payments."
+          eyebrow={t("home.shopEyebrow")}
+          title={t("home.shopTitle")}
+          description={t("home.shopDesc")}
+          action={
+            <Link href="/shop" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+              {t("home.viewShop")}
+            </Link>
+          }
         />
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {featured.map((book) => (
-            <BookCard key={book.id} book={book} />
-          ))}
-        </div>
-
-        <div className="mt-10 text-center">
-          <Link href="/shop" className="btn-primary">
-            Explore the Shop
-          </Link>
-        </div>
+        {featured.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
+            {t("home.noBooks")}
+          </p>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {featured.map((book) => (
+              <BookCard key={book.id} book={book} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

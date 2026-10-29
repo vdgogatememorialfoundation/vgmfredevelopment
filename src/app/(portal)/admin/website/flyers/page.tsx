@@ -9,18 +9,15 @@ export default function Page() {
   const records = useLiveFlyers();
   return (
     <RecordDesk<Flyer>
-      heading="Flyers and banners"
-      description="Flyers with an image play as the slideshow at the top of the homepage and also appear under Featured Events."
+      heading="Slideshow, images and posters"
+      description="Add images and posters here. They play in the homepage slideshow. Notices are not shown in the slideshow — publish those on the Notice board. Banners that should pop up on the site belong under Banners."
       publicHref="/"
       records={records}
-      label={(record) => record.title}
+      label={(record) => record.title || "Untitled slide"}
       fields={[
-        { key: "title", label: "Title" },
-        { key: "event", label: "Event" },
-        { key: "date", label: "Date" },
-        { key: "cta", label: "Button label" },
-        { key: "href", label: "Link" },
-        { key: "image", label: "Banner image (wide, about 1600 × 700)", kind: "image" },
+        { key: "image", label: "Slideshow image (wide, about 1600 × 700)", kind: "image" },
+        { key: "title", label: "Title (admin label)" },
+        { key: "href", label: "Optional link when the slide is clicked" },
       ]}
       blank={() => ({
         id: `fly-${Date.now()}`,
@@ -28,12 +25,12 @@ export default function Page() {
         event: "",
         date: new Date().toISOString().slice(0, 10),
         image: "",
-        href: "/events",
-        cta: "View event",
+        href: "",
+        cta: "",
         isDesktop: true,
         isMobile: true,
       })}
-      onSave={(record) => saveFlyer({ ...record, href: record.href || "/events", cta: record.cta || "View event" })}
+      onSave={(record) => saveFlyer({ ...record, href: record.href.trim(), cta: record.cta || "View" })}
       onHide={hideFlyer}
     />
   );

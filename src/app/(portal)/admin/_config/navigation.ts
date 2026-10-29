@@ -20,11 +20,12 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/commerce/orders" },
+      { label: "In-store POS", href: "/admin/commerce/pos" },
       { label: "Shipment Management", href: "/admin/commerce/shipments" },
       { label: "Inventory Management", href: "/admin/commerce/inventory" },
       { label: "Product Management", href: "/admin/commerce/products" },
       { label: "Serviceability", href: "/admin/commerce/serviceability" },
-      { label: "Sellers", href: "/admin/commerce/sellers" },
+      { label: "Courier performance", href: "/admin/delivery-partners/performance" },
       { label: "Payments", href: "/admin/commerce/payments" },
     ],
   },
@@ -32,10 +33,9 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Accounts",
     items: [
-      { label: "Staff Accounts", href: "/admin/accounts/staff" },
+      { label: "Staff & co-admin", href: "/admin/accounts/staff" },
+      { label: "Doctor Accounts", href: "/admin/accounts/doctors" },
       { label: "Customers", href: "/admin/accounts/customers" },
-      { label: "Seller Accounts", href: "/admin/accounts/sellers" },
-      { label: "Delivery Partners", href: "/admin/accounts/delivery-partners" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
     ],
   },
@@ -44,15 +44,19 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Website & CMS",
     items: [
       { label: "Homepage", href: "/admin/website/homepage" },
+      { label: "Pages", href: "/admin/website/pages" },
+      { label: "Site & portal switches", href: "/admin/website/visibility" },
       { label: "About Us", href: "/admin/website/about" },
       { label: "Announcements", href: "/admin/website/announcements" },
       { label: "Notice Board", href: "/admin/website/notices" },
-      { label: "Flyers", href: "/admin/website/flyers" },
+      { label: "Slideshow & posters", href: "/admin/website/flyers" },
       { label: "Banners", href: "/admin/website/banners" },
       { label: "Media Library", href: "/admin/website/media" },
       { label: "Articles", href: "/admin/articles" },
+      { label: "Gallery", href: "/admin/website/gallery" },
       { label: "Videos", href: "/admin/website/videos" },
       { label: "Clinics", href: "/admin/website/clinics" },
+      { label: "Policies", href: "/admin/website/policies" },
     ],
   },
 
@@ -61,24 +65,8 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "All Events", href: "/admin/events" },
       { label: "Create Event", href: "/admin/events/create" },
-      { label: "Registrations", href: "/admin/events/registrations" },
-      { label: "Applications", href: "/admin/events/applications" },
-      { label: "Speakers", href: "/admin/events/speakers" },
       { label: "Schedule", href: "/admin/events/schedule" },
-      { label: "Payments", href: "/admin/events/payments" },
-      { label: "Tickets", href: "/admin/events/tickets" },
-      { label: "Attendance", href: "/admin/events/attendance" },
-      { label: "Certificates", href: "/admin/events/certificates" },
-    ],
-  },
-
-  {
-    label: "Certificates",
-    items: [
-      { label: "Certificates", href: "/admin/certificates" },
-      { label: "Issue Certificate", href: "/admin/certificates/issue" },
-      { label: "Reissue", href: "/admin/certificates/reissue" },
-      { label: "Verification", href: "/admin/certificates/verification" },
+      { label: "Speakers", href: "/admin/events/speakers" },
     ],
   },
 
@@ -99,19 +87,9 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Support",
     items: [
       { label: "Support Tickets", href: "/admin/support/tickets" },
+      { label: "Live chat", href: "/admin/support/chat" },
       { label: "Contact Enquiries", href: "/admin/support/contact" },
-    ],
-  },
-
-  {
-    label: "Delivery Partners",
-    items: [
-      { label: "Partners", href: "/admin/delivery-partners" },
-      { label: "Onboarding", href: "/admin/delivery-partners/onboarding" },
-      { label: "APIs", href: "/admin/delivery-partners/apis" },
-      { label: "Shipments", href: "/admin/delivery-partners/shipments" },
-      { label: "Assignments", href: "/admin/delivery-partners/assignments" },
-      { label: "Performance", href: "/admin/delivery-partners/performance" },
+      { label: "Support portal", href: "/support" },
     ],
   },
 
@@ -124,12 +102,21 @@ export const adminNavigation: AdminNavGroup[] = [
   },
 
   {
+    label: "Reports",
+    items: [
+      { label: "Downloads", href: "/admin/reports" },
+      { label: "Analytics", href: "/admin/analytics" },
+    ],
+  },
+
+  {
     label: "Settings",
     items: [
       { label: "General & maintenance", href: "/admin/settings" },
       { label: "Payments & Razorpay", href: "/admin/settings/payments" },
       { label: "Email: ZeptoMail & Zoho", href: "/admin/settings/email" },
-      { label: "WhatsApp: Meta & AiSensy", href: "/admin/settings/whatsapp" },
+      { label: "WhatsApp: Meta & Zoho CPaaS", href: "/admin/settings/whatsapp" },
+      { label: "SMS: MSG91", href: "/admin/settings/sms" },
       { label: "Shipping APIs", href: "/admin/settings/shipping-apis" },
       { label: "Orders, returns & refunds", href: "/admin/settings/orders" },
       { label: "Delivery zones", href: "/admin/settings/shipping" },

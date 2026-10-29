@@ -4,14 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import { ImageField } from "@/components/admin/ImageField";
 import { fileToDataUrl } from "@/lib/images";
-import { getAbout, resetAbout, saveAbout, type AboutContent, type AboutPhoto, type AboutSection, type FamilyNode, type TimelineEntry } from "@/lib/about";
+import { getAbout, resetAbout, saveAbout, type AboutContent, type AboutPerson, type AboutPhoto, type AboutSection, type FamilyNode, type TimelineEntry } from "@/lib/about";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const button = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white";
 const ghost = "rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700";
 const card = "space-y-4 rounded-xl border border-slate-200 bg-white p-5";
 
-const tabs = ["Page & sections", "Photo gallery", "Legacy & timeline", "Legacy tree"] as const;
+const tabs = ["Page & sections", "Inner pages", "Photo gallery", "Legacy & timeline", "Legacy tree"] as const;
+const innerTabs = ["Foundation", "History", "Trustees & team"] as const;
 
 function descendantsOf(nodes: FamilyNode[], id: string): Set<string> {
   const found = new Set<string>([id]);
@@ -31,11 +32,15 @@ function descendantsOf(nodes: FamilyNode[], id: string): Set<string> {
 export default function AboutDesk() {
   const [draft, setDraft] = useState<AboutContent>(() => getAbout());
   const [tab, setTab] = useState<(typeof tabs)[number]>(tabs[0]);
+  const [inner, setInner] = useState<(typeof innerTabs)[number]>(innerTabs[0]);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
 
   const set = (patch: Partial<AboutContent>) => setDraft((current) => ({ ...current, ...patch }));
   const setLegacy = (patch: Partial<AboutContent["legacy"]>) => setDraft((current) => ({ ...current, legacy: { ...current.legacy, ...patch } }));
+  const setFoundation = (patch: Partial<AboutContent["foundation"]>) => setDraft((current) => ({ ...current, foundation: { ...current.foundation, ...patch } }));
+  const setHistory = (patch: Partial<AboutContent["history"]>) => setDraft((current) => ({ ...current, history: { ...current.history, ...patch } }));
+  const setTrustees = (patch: Partial<AboutContent["trustees"]>) => setDraft((current) => ({ ...current, trustees: { ...current.trustees, ...patch } }));
   const editList = <T extends { id: string }>(list: T[], id: string, patch: Partial<T>) => list.map((item) => (item.id === id ? { ...item, ...patch } : item));
   const move = <T,>(list: T[], index: number, delta: number) => {
     const next = [...list];
@@ -72,11 +77,14 @@ export default function AboutDesk() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">About Us</h1>
-          <p className="mt-1 text-sm text-slate-500">Edit the About page, its photo gallery, the legacy biography and timeline, and the legacy family tree.</p>
+          <p className="mt-1 text-sm text-slate-500">Edit every About page — sections, images and text for Foundation, History, Trustees, Legacy — plus the photo gallery.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link href="/about" className={ghost}>View About</Link>
-          <Link href="/about/legacy-of-vaidya-rb-gogate" className={ghost}>View Legacy</Link>
+          <Link href="/about/foundation" className={ghost}>Foundation</Link>
+          <Link href="/about/history" className={ghost}>History</Link>
+          <Link href="/about/trustees" className={ghost}>Trustees</Link>
+          <Link href="/about/legacy-of-vaidya-rb-gogate" className={ghost}>Legacy</Link>
         </div>
       </div>
 
@@ -116,6 +124,136 @@ export default function AboutDesk() {
               </div>
             ))}
           </div>
+        </>
+      )}
+
+      {tab === "Inner pages" && (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {innerTabs.map((item) => (
+              <button key={item} type="button" onClick={() => setInner(item)} className={`rounded-full px-4 py-1.5 text-sm font-semibold ${inner === item ? "bg-ink text-white" : "border border-slate-200 bg-white text-slate-600"}`}>
+                {item}
+              </button>
+            ))}
+          </div>
+          {inner === "Foundation" && (
+            <>
+              <div className={card}>
+                <input className={field} placeholder="Page title" value={draft.foundation.title} onChange={(event) => setFoundation({ title: event.target.value })} />
+                <textarea className={field} rows={3} placeholder="Introduction" value={draft.foundation.intro} onChange={(event) => setFoundation({ intro: event.target.value })} />
+              </div>
+              <div className={card}>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">Mission, vision and other sections</p>
+                  <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => setFoundation({ sections: [...draft.foundation.sections, { id: `f-${Date.now()}`, title: "", body: "" }] })}>+ Add section</button>
+                </div>
+                {draft.foundation.sections.map((section: AboutSection, index) => (
+                  <div key={section.id} className="grid gap-3 rounded-lg border border-slate-100 p-4 lg:grid-cols-[1fr_260px]">
+                    <div className="space-y-2">
+                      <input className={field} placeholder="Heading" value={section.title} onChange={(event) => setFoundation({ sections: editList(draft.foundation.sections, section.id, { title: event.target.value }) })} />
+                      <textarea className={field} rows={4} placeholder="Text (one objective per line for lists)" value={section.body} onChange={(event) => setFoundation({ sections: editList(draft.foundation.sections, section.id, { body: event.target.value }) })} />
+                      <div className="flex gap-3 text-xs font-semibold">
+                        <button type="button" className="text-slate-500" onClick={() => setFoundation({ sections: move(draft.foundation.sections, index, -1) })}>Up</button>
+                        <button type="button" className="text-slate-500" onClick={() => setFoundation({ sections: move(draft.foundation.sections, index, 1) })}>Down</button>
+                        <button type="button" className="text-red-600" onClick={() => setFoundation({ sections: draft.foundation.sections.filter((item) => item.id !== section.id) })}>Remove</button>
+                      </div>
+                    </div>
+                    <ImageField label="Image" value={section.image} onChange={(image) => setFoundation({ sections: editList(draft.foundation.sections, section.id, { image }) })} />
+                  </div>
+                ))}
+              </div>
+              <div className={card}>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">Activities</p>
+                  <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => setFoundation({ activities: [...draft.foundation.activities, { id: `a-${Date.now()}`, title: "", body: "" }] })}>+ Add activity</button>
+                </div>
+                {draft.foundation.activities.map((activity: AboutSection, index) => (
+                  <div key={activity.id} className="space-y-2 rounded-lg border border-slate-100 p-3">
+                    <input className={field} placeholder="Title" value={activity.title} onChange={(event) => setFoundation({ activities: editList(draft.foundation.activities, activity.id, { title: event.target.value }) })} />
+                    <textarea className={field} rows={2} placeholder="Description" value={activity.body} onChange={(event) => setFoundation({ activities: editList(draft.foundation.activities, activity.id, { body: event.target.value }) })} />
+                    <input className={field} placeholder="Link (optional), e.g. /clinics" value={activity.href ?? ""} onChange={(event) => setFoundation({ activities: editList(draft.foundation.activities, activity.id, { href: event.target.value }) })} />
+                    <div className="flex gap-3 text-xs font-semibold">
+                      <button type="button" className="text-slate-500" onClick={() => setFoundation({ activities: move(draft.foundation.activities, index, -1) })}>Up</button>
+                      <button type="button" className="text-slate-500" onClick={() => setFoundation({ activities: move(draft.foundation.activities, index, 1) })}>Down</button>
+                      <button type="button" className="text-red-600" onClick={() => setFoundation({ activities: draft.foundation.activities.filter((item) => item.id !== activity.id) })}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {inner === "History" && (
+            <>
+              <div className={card}>
+                <input className={field} placeholder="Page title" value={draft.history.title} onChange={(event) => setHistory({ title: event.target.value })} />
+                <textarea className={field} rows={3} placeholder="Introduction" value={draft.history.intro} onChange={(event) => setHistory({ intro: event.target.value })} />
+              </div>
+              <div className={card}>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">Timeline</p>
+                  <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => setHistory({ timeline: [...draft.history.timeline, { id: `h-${Date.now()}`, year: "", title: "", description: "" }] })}>+ Add entry</button>
+                </div>
+                {draft.history.timeline.map((entry: TimelineEntry, index) => (
+                  <div key={entry.id} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-[110px_1fr]">
+                    <input className={field} placeholder="Year" value={entry.year} onChange={(event) => setHistory({ timeline: editList(draft.history.timeline, entry.id, { year: event.target.value }) })} />
+                    <input className={field} placeholder="Title" value={entry.title} onChange={(event) => setHistory({ timeline: editList(draft.history.timeline, entry.id, { title: event.target.value }) })} />
+                    <textarea className={`${field} sm:col-span-2`} rows={2} placeholder="Description" value={entry.description} onChange={(event) => setHistory({ timeline: editList(draft.history.timeline, entry.id, { description: event.target.value }) })} />
+                    <div className="flex gap-3 text-xs font-semibold">
+                      <button type="button" className="text-slate-500" onClick={() => setHistory({ timeline: move(draft.history.timeline, index, -1) })}>Up</button>
+                      <button type="button" className="text-slate-500" onClick={() => setHistory({ timeline: move(draft.history.timeline, index, 1) })}>Down</button>
+                      <button type="button" className="text-red-600" onClick={() => setHistory({ timeline: draft.history.timeline.filter((item) => item.id !== entry.id) })}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {inner === "Trustees & team" && (
+            <>
+              <div className={card}>
+                <input className={field} placeholder="Page title" value={draft.trustees.title} onChange={(event) => setTrustees({ title: event.target.value })} />
+                <textarea className={field} rows={3} placeholder="Introduction" value={draft.trustees.intro} onChange={(event) => setTrustees({ intro: event.target.value })} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input className={field} placeholder="Trustees heading" value={draft.trustees.trusteesHeading} onChange={(event) => setTrustees({ trusteesHeading: event.target.value })} />
+                  <input className={field} placeholder="Team heading" value={draft.trustees.teamHeading} onChange={(event) => setTrustees({ teamHeading: event.target.value })} />
+                </div>
+              </div>
+              <div className={card}>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">Trustees</p>
+                  <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => setTrustees({ trustees: [...draft.trustees.trustees, { id: `tr-${Date.now()}`, name: "", role: "", bio: "" }] })}>+ Add trustee</button>
+                </div>
+                {draft.trustees.trustees.map((person: AboutPerson) => (
+                  <div key={person.id} className="grid gap-3 rounded-lg border border-slate-100 p-4 lg:grid-cols-[220px_1fr]">
+                    <ImageField label="Photo" value={person.photo} maxWidth={500} onChange={(photo) => setTrustees({ trustees: editList(draft.trustees.trustees, person.id, { photo }) })} />
+                    <div className="space-y-2">
+                      <input className={field} placeholder="Name" value={person.name} onChange={(event) => setTrustees({ trustees: editList(draft.trustees.trustees, person.id, { name: event.target.value }) })} />
+                      <input className={field} placeholder="Role" value={person.role} onChange={(event) => setTrustees({ trustees: editList(draft.trustees.trustees, person.id, { role: event.target.value }) })} />
+                      <textarea className={field} rows={2} placeholder="Short biography" value={person.bio ?? ""} onChange={(event) => setTrustees({ trustees: editList(draft.trustees.trustees, person.id, { bio: event.target.value }) })} />
+                      <button type="button" className="text-xs font-semibold text-red-600" onClick={() => setTrustees({ trustees: draft.trustees.trustees.filter((item) => item.id !== person.id) })}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className={card}>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">Team</p>
+                  <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => setTrustees({ team: [...draft.trustees.team, { id: `tm-${Date.now()}`, name: "", role: "" }] })}>+ Add team member</button>
+                </div>
+                {draft.trustees.team.map((person: AboutPerson) => (
+                  <div key={person.id} className="grid gap-3 rounded-lg border border-slate-100 p-4 lg:grid-cols-[220px_1fr]">
+                    <ImageField label="Photo" value={person.photo} maxWidth={500} onChange={(photo) => setTrustees({ team: editList(draft.trustees.team, person.id, { photo }) })} />
+                    <div className="space-y-2">
+                      <input className={field} placeholder="Name" value={person.name} onChange={(event) => setTrustees({ team: editList(draft.trustees.team, person.id, { name: event.target.value }) })} />
+                      <input className={field} placeholder="Role" value={person.role} onChange={(event) => setTrustees({ team: editList(draft.trustees.team, person.id, { role: event.target.value }) })} />
+                      <textarea className={field} rows={2} placeholder="Note (optional)" value={person.bio ?? ""} onChange={(event) => setTrustees({ team: editList(draft.trustees.team, person.id, { bio: event.target.value }) })} />
+                      <button type="button" className="text-xs font-semibold text-red-600" onClick={() => setTrustees({ team: draft.trustees.team.filter((item) => item.id !== person.id) })}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 

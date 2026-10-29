@@ -1,97 +1,154 @@
+"use client";
+
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
+import SocialLinks from "@/components/layout/SocialLinks";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/components/i18n/LanguageProvider";
+import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
+import { siteConfig } from "@/lib/constants";
+import { getLiveCmsPages, subscribeCmsPages } from "@/lib/cms-pages";
+import { getSiteVisibility, subscribeSiteVisibility, visiblePublicNav } from "@/lib/site-visibility";
 
-const quickLinks = [
-  { name: "About", href: "/about" },
-  { name: "Events", href: "/events" },
-  { name: "Videos", href: "/videos" },
-  { name: "Articles", href: "/articles" },
-  { name: "Shop", href: "/shop" },
-  { name: "Clinics", href: "/clinics" },
-  { name: "Contact", href: "/contact" },
+const legalLinks: { key: MessageKey; href: string }[] = [
+  { key: "footer.privacy", href: "/privacy" },
+  { key: "footer.terms", href: "/terms" },
+  { key: "footer.shipping", href: "/shipping-policy" },
+  { key: "footer.returns", href: "/return-policy" },
+  { key: "footer.refund", href: "/refund-policy" },
+  { key: "footer.cancellation", href: "/cancellation-policy" },
 ];
 
-const legalLinks = [
-  { name: "Privacy", href: "/privacy" },
-  { name: "Terms", href: "/terms" },
-  { name: "Refund", href: "/refund-policy" },
-  { name: "Shipping", href: "/shipping-policy" },
-];
-
-const portalLinks = [
-  { name: "Admin", href: "/admin" },
-  { name: "Staff", href: "/staff" },
-  { name: "Seller portal", href: "/seller" },
-];
+function cmsSnapshot() {
+  return `${window.localStorage.getItem("vgmf_cms_pages") ?? ""}|${window.localStorage.getItem("vgmf_site_visibility") ?? ""}`;
+}
 
 export default function Footer() {
+  const { t } = useI18n();
+  useSyncExternalStore(
+    (onChange) => {
+      const unsubPages = subscribeCmsPages(onChange);
+      const unsubVis = subscribeSiteVisibility(onChange);
+      return () => {
+        unsubPages();
+        unsubVis();
+      };
+    },
+    cmsSnapshot,
+    () => ""
+  );
+  const visibility = getSiteVisibility();
+  const explore = visiblePublicNav(visibility);
+  const custom = getLiveCmsPages().filter((page) => page.showInFooter);
+
   return (
-    <footer className="border-t border-border bg-warm-cream text-text-primary">
-      <div className="container py-10">
-        <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
-          {/* Brand */}
-          <div className="flex items-center gap-3">
-            <SiteLogo size={40} />
-            <div>
-              <p className="font-semibold leading-tight">Vaidya Gogate</p>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-text-muted">
-                Memorial Foundation
-              </p>
+    <footer className="relative mt-8 overflow-hidden border-t border-gold/40 bg-paper text-ink">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ink via-gold to-burgundy" />
+      <div className="container py-14 sm:py-16">
+        <div className="grid gap-12 lg:grid-cols-[1.4fr_1fr_1fr]">
+          <div>
+            <div className="flex items-center gap-4">
+              <SiteLogo size={52} />
+              <div>
+                <p className="font-serif text-2xl font-medium leading-none tracking-tight text-ink">Vaidya Gogate</p>
+                <p className="mt-1 font-serif italic text-sm text-gold">Memorial Foundation</p>
+              </div>
+            </div>
+            <p className="mt-6 max-w-md font-serif text-lg leading-8 text-ink/80">{t("footer.tagline")}</p>
+            <p className="mt-4 max-w-sm text-sm leading-6 text-text-muted">{siteConfig.address}</p>
+            <p className="mt-2 text-sm text-text-muted">{t("footer.hours")}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <a href={`mailto:${siteConfig.email}`} className="rounded-full border border-gold/50 bg-gold/20 px-4 py-2 text-xs font-semibold tracking-wide text-burgundy transition hover:bg-gold/40">
+                {siteConfig.email}
+              </a>
+              <a href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className="rounded-full border border-gold/40 bg-white px-4 py-2 text-xs font-semibold tracking-wide text-burgundy transition hover:border-gold hover:bg-gold/15">
+                {siteConfig.phone}
+              </a>
             </div>
           </div>
 
-          {/* Quick links */}
-          <nav aria-label="Footer quick links" className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-            {quickLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm text-text-muted transition hover:text-burgundy"
-              >
-                {link.name}
-              </Link>
-            ))}
+          <nav aria-label="Footer explore">
+            <p className="font-serif text-xl text-ink">{t("footer.explore")}</p>
+            <ul className="mt-5 space-y-2.5">
+              {explore.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href} className="text-sm text-text-muted transition hover:text-burgundy">
+                    {t(navMessageKey[link.href] ?? "nav.about")}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </nav>
 
-          {/* Contact */}
-          <div className="flex flex-col items-center gap-1 text-sm text-text-muted md:items-end">
-            <a href="mailto:info@vaidyagogate.org" className="transition hover:text-burgundy">
-              info@vaidyagogate.org
-            </a>
-            <span>+91 20 1234 5678</span>
+          <div>
+            <p className="font-serif text-xl text-ink">{t("footer.pages")}</p>
+            <ul className="mt-5 space-y-2.5">
+              {custom.length === 0 ? (
+                <>
+                  <li>
+                    <Link href="/about" className="text-sm text-text-muted transition hover:text-burgundy">
+                      {t("nav.about")}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/contact" className="text-sm text-text-muted transition hover:text-burgundy">
+                      {t("nav.contact")}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
+                      {t("nav.support")}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/certificate-verification" className="text-sm text-text-muted transition hover:text-burgundy">
+                      Certificate verification
+                    </Link>
+                  </li>
+                </>
+              ) : (
+                <>
+                {custom.map((page) => (
+                  <li key={page.id}>
+                    <Link href={`/p/${page.slug}`} className="text-sm text-text-muted transition hover:text-burgundy">
+                      {page.title}
+                    </Link>
+                  </li>
+                ))}
+                <li>
+                  <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
+                    {t("nav.support")}
+                  </Link>
+                </li>
+                </>
+              )}
+            </ul>
+            <div className="mt-8">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">{t("footer.connect")}</p>
+              <SocialLinks />
+              <div className="mt-4">
+                <LanguageSwitcher />
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-text-muted md:flex-row">
-          <p>
-            © {new Date().getFullYear()} Vaidya Gogate Memorial Foundation.
-            All rights reserved.
+        <div className="mt-12 flex flex-col gap-4 border-t border-gold/30 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-text-muted">
+            © {new Date().getFullYear()} {siteConfig.name}. {t("footer.rights")}
           </p>
-
-          <nav aria-label="Footer legal links" className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <nav aria-label="Footer legal links" className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
             {legalLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="transition hover:text-burgundy"
-              >
-                {link.name}
-              </Link>
-            ))}
-          </nav>
-
-          <nav aria-label="Portal links" className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
-            {portalLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="font-medium text-burgundy transition hover:text-burgundy"
-              >
-                {link.name}
+              <Link key={link.href} href={link.href} className="text-text-muted transition hover:text-burgundy">
+                {t(link.key)}
               </Link>
             ))}
           </nav>
         </div>
+        <p className="mt-5 inline-flex rounded-full border border-gold/50 bg-gold/25 px-4 py-2 font-serif text-sm tracking-wide text-burgundy shadow-[0_0_0_1px_rgba(196,149,74,0.15)]">
+          Developed by <strong className="ml-1 font-bold">Capture Visual Studios</strong>
+        </p>
       </div>
     </footer>
   );

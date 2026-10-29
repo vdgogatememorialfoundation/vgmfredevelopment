@@ -4,7 +4,9 @@ import Link from "next/link";
 
 const links = [
   ["Videos", "/admin/website/videos", "/videos"],
-  ["Flyers and banners", "/admin/website/flyers", "/"],
+  ["Gallery", "/admin/website/gallery", "/gallery"],
+  ["Slideshow images", "/admin/website/flyers", "/"],
+  ["Banners", "/admin/website/banners", "/"],
   ["Articles", "/admin/articles", "/articles"],
   ["Notices", "/admin/website/notices", "/notices"],
 ];

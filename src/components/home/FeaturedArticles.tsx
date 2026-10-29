@@ -4,19 +4,27 @@ import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import ArticleCard from "@/components/articles/ArticleCard";
 import { useLiveArticles } from "@/lib/use-cms";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function FeaturedArticles() {
   const articles = useLiveArticles();
+  const { t } = useI18n();
   const featured = articles.filter((article) => article.featured);
   const shown = (featured.length > 0 ? featured : articles).slice(0, 3);
+  if (shown.length === 0) return null;
 
   return (
-    <section className="section bg-white" aria-labelledby="articles-heading">
+    <section className="section" aria-labelledby="articles-heading">
       <div className="container">
         <SectionHeading
-          eyebrow="Articles"
-          title="From Our Journal"
-          description="Perspectives on Ayurveda, research, education and the Foundation's work."
+          eyebrow={t("home.articlesEyebrow")}
+          title={t("home.articlesTitle")}
+          description={t("home.articlesDesc")}
+          action={
+            <Link href="/articles" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+              {t("common.viewAll")}
+            </Link>
+          }
         />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -25,9 +33,9 @@ export default function FeaturedArticles() {
           ))}
         </div>
 
-        <div className="mt-10 text-center">
+        <div className="mt-8">
           <Link href="/articles" className="btn-outline">
-            View All Articles
+            {t("home.viewArticles")}
           </Link>
         </div>
       </div>

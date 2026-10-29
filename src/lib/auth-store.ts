@@ -1,21 +1,51 @@
 import type { User } from "@/types";
-import { clearSession, getSession, setSession } from "@/lib/auth";
+import { clearSession, getSession, saveAccount, setSession } from "@/lib/auth";
+import { recordActivity } from "@/lib/activity";
 
 type Listener = () => void;
 
 let snapshot: User | null = null;
 let snapshotReady = false;
+let browserBound = false;
 const listeners = new Set<Listener>();
 
+function withLoginStamp(user: User): User {
+  if (user.lastLoginAt) return user;
+  return { ...user, lastLoginAt: new Date().toISOString() };
+}
+
 function resolveSnapshot(): User | null {
-  return getSession();
+  const session = getSession();
+  if (!session) return null;
+  if (session.lastLoginAt) return session;
+  const stamped = withLoginStamp(session);
+  setSession(stamped);
+  return stamped;
 }
 
 function notify() {
   for (const listener of listeners) listener();
 }
 
+function refreshFromStorage() {
+  snapshot = resolveSnapshot();
+  snapshotReady = true;
+  notify();
+}
+
+function bindBrowser() {
+  if (typeof window === "undefined" || browserBound) return;
+  browserBound = true;
+  window.addEventListener("storage", refreshFromStorage);
+  window.addEventListener("vgmf-cms", refreshFromStorage);
+  window.addEventListener("focus", refreshFromStorage);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshFromStorage();
+  });
+}
+
 export function storeSubscribe(listener: () => void) {
+  bindBrowser();
   if (!snapshotReady) {
     snapshot = resolveSnapshot();
     snapshotReady = true;
@@ -27,6 +57,7 @@ export function storeSubscribe(listener: () => void) {
 }
 
 export function storeSnapshot(): User | null {
+  bindBrowser();
   if (!snapshotReady) {
     snapshot = resolveSnapshot();
     snapshotReady = true;
@@ -35,13 +66,20 @@ export function storeSnapshot(): User | null {
 }
 
 export function storeSignIn(user: User) {
-  setSession(user);
-  snapshot = user;
+  const next = { ...user, lastLoginAt: new Date().toISOString(), lastLogoutAt: undefined };
+  saveAccount(next);
+  setSession(next);
+  snapshot = next;
   snapshotReady = true;
   notify();
+  recordActivity({ email: next.email, kind: "login", detail: "Signed in" });
 }
 
 export function storeSignOut() {
+  const email = snapshot?.email;
+  if (email) {
+    recordActivity({ email, kind: "logout", detail: "Signed out" });
+  }
   clearSession();
   snapshot = null;
   snapshotReady = true;

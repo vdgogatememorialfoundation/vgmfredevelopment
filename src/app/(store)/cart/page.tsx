@@ -87,7 +87,7 @@ export default function CartPage() {
                       {book.title}
                     </Link>
                     <p className="mt-1 text-xs text-text-muted">
-                      Sold by {book.seller ?? storeConfig.sellerName} ·{" "}
+                      Published by {book.publisher?.name ?? storeConfig.publisherName} ·{" "}
                       {book.sku ? `SKU: ${book.sku}` : book.author}
                     </p>
                     <div className="mt-2 flex flex-wrap items-baseline gap-2">

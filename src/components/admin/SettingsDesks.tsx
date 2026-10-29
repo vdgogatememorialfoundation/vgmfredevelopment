@@ -1,25 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChangePasswordForm } from "@/components/account/PasswordResetForm";
+import { getSession } from "@/lib/auth";
 import { getSettings, saveSettings } from "@/lib/admin-store";
 import { getPolicy, savePolicy } from "@/lib/fulfillment";
 import {
   getIntegrations,
   getOrderSettings,
+  getShippingConnection,
+  hasShippingCredentials,
   mask,
   notificationEvents,
   saveIntegrations,
   saveOrderSettings,
   type IntegrationSettings,
   type OrderSettings,
+  type ShippingProviderId,
   type WhatsAppTemplate,
 } from "@/lib/integrations";
+import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
-import { testRazorpay } from "@/lib/payments-client";
-import { fetchCourierRates, syncPickupAddress, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
+import { testPaytmEdc, testRazorpay } from "@/lib/payments-client";
+import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { subscribeCms } from "@/lib/cms";
 import type { SiteSettings } from "@/types";
+import { SOCIAL_NETWORKS, emptySocial } from "@/lib/social";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
 const primary = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -37,17 +44,35 @@ function Header({ title, text, action }: { title: string; text: string; action?:
   );
 }
 
-function Card({ title, text, children, right }: { title: string; text?: string; children: ReactNode; right?: ReactNode }) {
+const SettingsSaveContext = createContext<(() => void) | null>(null);
+
+function SettingsSave({ save, children }: { save: () => void; children: ReactNode }) {
+  return <SettingsSaveContext.Provider value={save}>{children}</SettingsSaveContext.Provider>;
+}
+
+function Card({ title, text, children, right, badge, onSave }: { title: string; text?: string; children: ReactNode; right?: ReactNode; badge?: ReactNode; onSave?: () => void }) {
+  const contextSave = useContext(SettingsSaveContext);
+  const save = onSave ?? contextSave;
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="font-semibold text-slate-900">{title}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-semibold text-slate-900">{title}</h2>
+            {badge}
+          </div>
           {text && <p className="mt-0.5 text-sm text-slate-500">{text}</p>}
         </div>
         {right}
       </div>
       {children}
+      {save ? (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <button type="button" className={primary} onClick={save}>
+            Save
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -129,7 +154,16 @@ export function GeneralSettingsDesk() {
 
   const save = () => {
     try {
-      saveSettings({ ...getSettings(), ...pickGeneral(settings) });
+      const current = getSettings();
+      saveSettings({
+        ...current,
+        ...pickGeneral(settings),
+        apiKeys: {
+          ...current.apiKeys,
+          googleMaps: settings.apiKeys.googleMaps,
+          googleAnalytics: settings.apiKeys.googleAnalytics,
+        },
+      });
       window.dispatchEvent(new Event("vgmf-cms"));
       setNote(settings.maintenanceMode ? "Saved. Visitors now see the maintenance page; admins and staff still see the site." : "Saved. The site is live.");
     } catch {
@@ -140,11 +174,13 @@ export function GeneralSettingsDesk() {
   const until = settings.maintenanceUntil ? Date.parse(settings.maintenanceUntil) : NaN;
   const preset = (minutes: number) => set({ maintenanceMode: true, maintenanceUntil: minutesFromNow(minutes) });
 
+  const session = typeof window === "undefined" ? null : getSession();
+
   return (
     <div className="space-y-5">
       <Header title="General & maintenance" text="Site name, logo and contact details shown in the header and footer, and the maintenance switch with an automatic end time." action={<button type="button" className={primary} onClick={save}>Save settings</button>} />
       <Saved text={note} />
-
+      <SettingsSave save={save}>
       <Card title="Branding" text="The logo replaces the VGMF badge in the header, footer, sign-in and maintenance pages.">
         <div className="grid gap-5 lg:grid-cols-2">
           <ImageField label="Site logo" value={settings.logoUrl} maxWidth={400} hint="Square or wide PNG/SVG works best. Uploads are resized to 400px." onChange={(logoUrl) => set({ logoUrl })} />
@@ -155,6 +191,37 @@ export function GeneralSettingsDesk() {
           <Text label="Support email" value={settings.supportEmail} onChange={(supportEmail) => set({ supportEmail })} />
           <Text label="Support phone" value={settings.supportPhone} onChange={(supportPhone) => set({ supportPhone })} />
         </div>
+      </Card>
+
+      <Card title="Social media" text="Icons appear in the footer and on Contact only for networks with an https link. Leave a field blank to hide it.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {SOCIAL_NETWORKS.map((network) => (
+            <Text
+              key={network.id}
+              label={network.label}
+              value={settings.social?.[network.id] ?? ""}
+              placeholder={network.placeholder}
+              onChange={(value) => set({ social: { ...emptySocial(), ...settings.social, [network.id]: value } })}
+            />
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Google Maps" text="Used on clinics, events, live tracking and the analytics live map. Paste a Maps URL if you leave this blank.">
+        <Text
+          label="Google Maps JavaScript API key"
+          value={settings.apiKeys.googleMaps}
+          onChange={(googleMaps) => set({ apiKeys: { ...settings.apiKeys, googleMaps } })}
+        />
+      </Card>
+
+      <Card title="Google Analytics" text="GA4 measurement ID is injected on the public site. Visitor counts also appear under Reports → Analytics.">
+        <Text
+          label="GA4 measurement ID"
+          value={settings.apiKeys.googleAnalytics ?? ""}
+          placeholder="G-XXXXXXXXXX"
+          onChange={(googleAnalytics) => set({ apiKeys: { ...settings.apiKeys, googleAnalytics } })}
+        />
       </Card>
 
       <Card title="Maintenance mode" text="Visitors see a maintenance page with a countdown. Admins and staff can still browse the site.">
@@ -192,27 +259,51 @@ export function GeneralSettingsDesk() {
           </p>
         </div>
       </Card>
+      </SettingsSave>
+      {session?.role === "admin" ? (
+        <Card title="Admin password" text="Administrators can reset their own password here." onSave={undefined}>
+          <ChangePasswordForm email={session.email} />
+        </Card>
+      ) : null}
     </div>
   );
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social };
 }
 
 /* ---------------- Payments ---------------- */
 
 export function PaymentSettingsDesk() {
-  const { value, setValue, note, setNote, save } = useIntegrationSlice("razorpay");
-  const [busy, setBusy] = useState(false);
+  const razorpay = useIntegrationSlice("razorpay");
+  const paytm = useIntegrationSlice("paytm");
+  const { value, setValue, note, setNote, save } = razorpay;
+  const [busy, setBusy] = useState("");
   const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
+  const setPaytm = (patch: Partial<typeof paytm.value>) => paytm.setValue({ ...paytm.value, ...patch });
+
+  const saveAll = () => {
+    save();
+    paytm.save();
+    setNote("Saved.");
+  };
 
   const test = async () => {
-    save();
-    setBusy(true);
+    saveAll();
+    setBusy("razorpay");
     const result = await testRazorpay().catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
-    setBusy(false);
+    setBusy("");
+    setNote(result.ok ? result.message || "Connected." : `Test failed: ${result.error}`);
+  };
+
+  const testPaytm = async () => {
+    saveAll();
+    setBusy("paytm");
+    const result = await testPaytmEdc().catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
+    setBusy("");
+    paytm.setNote(result.ok ? result.message || "Connected." : `Test failed: ${result.error}`);
     setNote(result.ok ? result.message || "Connected." : `Test failed: ${result.error}`);
   };
 
@@ -224,8 +315,9 @@ export function PaymentSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="Payments & Razorpay" text="Choose demo, test or live mode and store the Razorpay keys used by checkout, payment links and refunds." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
+      <Header title="Payments & Razorpay" text="Choose demo, test or live mode and store the Razorpay keys used by checkout, POS UPI, payment links and refunds. Add Razorpay and Paytm EDC details for the counter." action={<button type="button" className={primary} onClick={() => saveAll()}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={saveAll}>
       <Card title="Mode">
         <div className="grid gap-3 md:grid-cols-3">
           {modes.map((mode) => (
@@ -261,14 +353,62 @@ export function PaymentSettingsDesk() {
           <Secret label="Webhook secret" value={value.webhookSecret} onChange={(webhookSecret) => set({ webhookSecret })} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button type="button" className={ghost} disabled={busy || value.mode === "demo"} onClick={test}>
-            {busy ? "Testing…" : "Test connection"}
+          <button type="button" className={ghost} disabled={Boolean(busy) || value.mode === "demo"} onClick={() => void test()}>
+            {busy === "razorpay" ? "Testing…" : "Test connection"}
           </button>
           <p className="text-xs text-slate-500">
             Customers on other devices use the keys set on the host as RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, because these settings are saved in this browser.
           </p>
         </div>
       </Card>
+      <Card title="Razorpay EDC" text="In-store POS pushes the bill to this Razorpay POS machine. Device ID is required for wireless mode.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Text label="POS device ID" value={value.posDeviceId} placeholder="2841158834" onChange={(posDeviceId) => set({ posDeviceId })} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Device mode</span>
+            <select
+              className={input}
+              value={value.posDeviceMode}
+              onChange={(event) => set({ posDeviceMode: event.target.value === "wired" ? "wired" : "wireless" })}
+            >
+              <option value="wireless">Wireless</option>
+              <option value="wired">Wired</option>
+            </select>
+          </label>
+        </div>
+      </Card>
+      <Card title="Paytm EDC" text="Counter sales on Paytm card machines use Sale + Status Enquiry. Amount is in paise. Staging: securestage.paytmpayments.com · Live: securegw-edc.paytmpayments.in.">
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          {([
+            { id: "demo", title: "Demo", text: "POS records a simulated Paytm EDC payment." },
+            { id: "staging", title: "Staging", text: "Paytm test MID, key and TID." },
+            { id: "live", title: "Live", text: "Production Paytm EDC credentials." },
+          ] as const).map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => setPaytm({ mode: mode.id })}
+              className={`rounded-xl border-2 p-4 text-left transition ${paytm.value.mode === mode.id ? "border-burgundy bg-burgundy/5" : "border-slate-200 hover:border-burgundy/40"}`}
+            >
+              <p className="font-semibold text-slate-900">{mode.title}</p>
+              <p className="mt-1 text-xs text-slate-500">{mode.text}</p>
+            </button>
+          ))}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Text label="Merchant ID (MID)" value={paytm.value.mid} placeholder="YOURMID" onChange={(mid) => setPaytm({ mid })} />
+          <Text label="Terminal ID (TID)" value={paytm.value.tid} placeholder="12345678" onChange={(tid) => setPaytm({ tid })} />
+          <Secret label="Merchant key" value={paytm.value.merchantKey} onChange={(merchantKey) => setPaytm({ merchantKey })} />
+          <Text label="Channel ID" value={paytm.value.channelId} placeholder="WEB" onChange={(channelId) => setPaytm({ channelId })} />
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" className={ghost} disabled={Boolean(busy) || paytm.value.mode === "demo"} onClick={() => void testPaytm()}>
+            {busy === "paytm" ? "Testing…" : "Test Paytm EDC"}
+          </button>
+          <p className="text-xs text-slate-500">Host keys: PAYTM_MID, PAYTM_MERCHANT_KEY, PAYTM_TID, PAYTM_CHANNEL_ID.</p>
+        </div>
+      </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -282,7 +422,7 @@ async function sendTest(to: string, template: string, subject: string, phone?: s
     await new Promise((resolve) => setTimeout(resolve, 500));
     const latest = getNotifications().filter((item) => item.sentAt === record.sentAt);
     if (latest.every((item) => item.status !== "Queued")) {
-      return latest.map((item) => `${item.channel === "whatsapp" ? "WhatsApp" : "Email"}: ${item.status}${item.error ? ` (${item.error})` : ""}`).join(" · ");
+      return latest.map((item) => `${item.channel === "whatsapp" ? "WhatsApp" : item.channel === "sms" ? "SMS" : "Email"}: ${item.status}${item.error ? ` (${item.error})` : ""}`).join(" · ");
     }
   }
   return "Still sending. Check the notification log.";
@@ -298,6 +438,7 @@ export function EmailSettingsDesk() {
     <div className="space-y-5">
       <Header title="Email: ZeptoMail & Zoho Mail" text="Pick the provider that sends order, account and support emails, and store its credentials." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={save}>
       <Card title="Sender">
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
@@ -360,6 +501,72 @@ export function EmailSettingsDesk() {
           </button>
         </div>
       </Card>
+      </SettingsSave>
+    </div>
+  );
+}
+
+/* ---------------- SMS / MSG91 ---------------- */
+
+export function SmsSettingsDesk() {
+  const { value, setValue, note, setNote, save } = useIntegrationSlice("sms");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
+
+  return (
+    <div className="space-y-5">
+      <Header
+        title="SMS: MSG91"
+        text="Used when SMS login is turned on under Registration settings. OTP is sent with the MSG91 OTP API. Ticket and order updates also go by SMS when MSG91 is on."
+        action={<button type="button" className={primary} onClick={() => save()}>Save</button>}
+      />
+      <Saved text={note} />
+      <SettingsSave save={save}>
+        <Card title="Provider">
+          <div className="grid gap-3 md:grid-cols-2">
+            {([
+              ["none", "Off", "No SMS is sent. Email OTP still works."],
+              ["msg91", "MSG91", "OTP and transactional SMS through MSG91."],
+            ] as const).map(([provider, label, hint]) => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => set({ provider })}
+                className={`rounded-xl border-2 p-4 text-left ${value.provider === provider ? "border-burgundy bg-burgundy/5" : "border-slate-200"}`}
+              >
+                <p className="font-semibold text-slate-900">{label}</p>
+                <p className="mt-1 text-xs text-slate-500">{hint}</p>
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card title="MSG91 credentials" text="control.msg91.com → Authkey, sender ID and DLT OTP template. Turn on SMS login under Settings → Registration.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Secret label="Auth key" value={value.msg91AuthKey} onChange={(msg91AuthKey) => set({ msg91AuthKey })} />
+            <Text label="Sender ID" value={value.msg91SenderId} onChange={(msg91SenderId) => set({ msg91SenderId })} placeholder="VGMFIN" />
+            <Text label="OTP template ID" value={value.msg91TemplateId} onChange={(msg91TemplateId) => set({ msg91TemplateId })} hint="Required for login OTP." />
+          </div>
+        </Card>
+        <Card title="Send a test SMS">
+          <div className="flex flex-wrap gap-2">
+            <input className={`${input} max-w-sm`} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="91XXXXXXXXXX" />
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy}
+              onClick={async () => {
+                save();
+                setBusy(true);
+                setNote(await sendTest("", "otp", "VGMF SMS test", phone));
+                setBusy(false);
+              }}
+            >
+              {busy ? "Sending…" : "Send test OTP SMS"}
+            </button>
+          </div>
+        </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -398,27 +605,31 @@ export function WhatsAppSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="WhatsApp: Meta Cloud API & AiSensy" text="Connect WhatsApp, sync approved templates and choose which template each site notification uses." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
+      <Header title="WhatsApp" text="Send order and account messages through Meta Cloud API (developers.facebook.com) or Zoho CPaaS (Agent API key). Sync Meta templates and map each site event to a template name or Zoho template alias." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={save}>
       <Card title="Provider">
-        <div className="grid gap-3 md:grid-cols-3">
-          {(["none", "meta", "aisensy"] as const).map((provider) => (
+        <div className="grid gap-3 md:grid-cols-4">
+          {([
+            ["none", "Off", "Only email is sent."],
+            ["meta", "Meta Cloud API", "Direct from your WhatsApp Business Account."],
+            ["zoho", "Zoho CPaaS", "Zoho CPaaS WhatsApp channel."],
+            ["aisensy", "AiSensy", "Through AiSensy API campaigns."],
+          ] as const).map(([provider, label, hint]) => (
             <button
               key={provider}
               type="button"
               onClick={() => set({ provider })}
               className={`rounded-xl border-2 p-4 text-left ${value.provider === provider ? "border-burgundy bg-burgundy/5" : "border-slate-200"}`}
             >
-              <p className="font-semibold text-slate-900">{provider === "none" ? "Off" : provider === "meta" ? "Meta WhatsApp Cloud API" : "AiSensy"}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {provider === "none" ? "Only email is sent." : provider === "meta" ? "Direct from your WhatsApp Business Account." : "Through AiSensy API campaigns."}
-              </p>
+              <p className="font-semibold text-slate-900">{label}</p>
+              <p className="mt-1 text-xs text-slate-500">{hint}</p>
             </button>
           ))}
         </div>
       </Card>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Meta (Facebook) credentials" text="Meta Business → WhatsApp → API setup. Use a permanent System User token.">
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Card title="Meta Cloud API" text="developers.facebook.com/docs → WhatsApp Cloud API. Phone number ID + permanent System User token. Templates are sent as Graph /{phone-number-id}/messages.">
           <div className="space-y-3">
             <Text label="App ID" value={value.metaAppId} onChange={(metaAppId) => set({ metaAppId })} />
             <Text label="WhatsApp Business Account ID" value={value.metaWabaId} onChange={(metaWabaId) => set({ metaWabaId })} />
@@ -426,9 +637,34 @@ export function WhatsAppSettingsDesk() {
             <Secret label="Access token" value={value.metaAccessToken} onChange={(metaAccessToken) => set({ metaAccessToken })} />
             <Text label="Graph API version" value={value.metaApiVersion} onChange={(metaApiVersion) => set({ metaApiVersion })} />
             <button type="button" className={ghost} disabled={busy} onClick={sync}>{busy ? "Syncing…" : "Sync templates from Meta"}</button>
+            <p className="text-xs text-slate-500">
+              Callback URL for Meta App → WhatsApp → Configuration:{" "}
+              <span className="font-mono break-all">{typeof window === "undefined" ? "/api/notify/webhook" : `${window.location.origin}/api/notify/webhook`}</span>
+              . Verify token env: <span className="font-mono">META_WA_VERIFY_TOKEN</span>.
+            </p>
           </div>
         </Card>
-        <Card title="AiSensy credentials" text="AiSensy → Manage → API key. Create one API campaign per message in AiSensy.">
+        <Card title="Zoho CPaaS" text="docs.zoho.com/cpaas — WhatsApp send is POST https://cpaas.zoho.com/v1.1/whatsapp with the Agent API key (Authorization: Zoho-enczapikey). From and to numbers must include the country code.">
+          <div className="space-y-3">
+            <Secret label="Agent API key" value={value.zohoCpaasApiKey} onChange={(zohoCpaasApiKey) => set({ zohoCpaasApiKey })} />
+            <Text
+              label="WhatsApp sender number"
+              value={value.zohoCpaasFrom}
+              onChange={(zohoCpaasFrom) => set({ zohoCpaasFrom })}
+              placeholder="+91…"
+              hint="The WABA number linked to this Agent, including country code."
+            />
+            <label className="block text-xs font-semibold text-slate-500">
+              CPaaS host
+              <select className={`${input} mt-1`} value={value.zohoCpaasDomain} onChange={(event) => set({ zohoCpaasDomain: event.target.value })}>
+                <option value="zoho.com">cpaas.zoho.com</option>
+                <option value="zoho.in">cpaas.zoho.in</option>
+                <option value="zoho.eu">cpaas.zoho.eu</option>
+              </select>
+            </label>
+          </div>
+        </Card>
+        <Card title="AiSensy" text="AiSensy → Manage → API key. Create one API campaign per message.">
           <div className="space-y-3">
             <Secret label="API key" value={value.aisensyApiKey} onChange={(aisensyApiKey) => set({ aisensyApiKey })} />
             <Text label="Project ID (optional)" value={value.aisensyProjectId} onChange={(aisensyProjectId) => set({ aisensyProjectId })} />
@@ -480,7 +716,13 @@ export function WhatsAppSettingsDesk() {
               <input
                 className={input}
                 list="wa-templates"
-                placeholder={value.provider === "aisensy" ? "AiSensy campaign name" : "Template name"}
+                placeholder={
+                  value.provider === "aisensy"
+                    ? "AiSensy campaign name"
+                    : value.provider === "zoho"
+                      ? "Zoho template alias or template key"
+                      : "Meta template name"
+                }
                 value={value.mapping[item.id] ?? ""}
                 onChange={(eventInput) => set({ mapping: { ...value.mapping, [item.id]: eventInput.target.value } })}
               />
@@ -509,25 +751,58 @@ export function WhatsAppSettingsDesk() {
           </button>
         </div>
       </Card>
+      </SettingsSave>
     </div>
   );
 }
 
 /* ---------------- Shipping APIs ---------------- */
 
+function ProviderStatus({ id }: { id: ShippingProviderId }) {
+  const connection = getShippingConnection(id);
+  return (
+    <div>
+      <ConnectionBadge status={connection.status} hasKeys={hasShippingCredentials(id)} />
+      {connection.message && (connection.status === "success" || connection.status === "failed") && (
+        <p className={`mt-1 text-xs ${connection.status === "success" ? "text-emerald-700" : "text-red-700"}`}>{connection.message}</p>
+      )}
+    </div>
+  );
+}
+
 export function ShippingApisDesk() {
   const { value, setValue, note, setNote, save } = useIntegrationSlice("shipping");
   const [busy, setBusy] = useState("");
   const [pincode, setPincode] = useState("110001");
   const [quote, setQuote] = useState<RateQuote | null>(null);
+  const [, setStamp] = useState(0);
   const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
+
+  useEffect(() => subscribeCms(() => setStamp((current) => current + 1)), []);
 
   const test = async (provider: string) => {
     save();
     setBusy(provider);
     const result = await testShippingProvider(provider).catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
     setBusy("");
-    setNote(result.ok ? `${provider}: ${result.message}` : `${provider} test failed: ${result.error}`);
+    setNote(result.ok ? `${provider}: ${result.message}` : `${provider} failed from this site: ${result.error}`);
+    setStamp((current) => current + 1);
+    return result;
+  };
+
+  const saveAndTestAll = async () => {
+    save();
+    setBusy("all");
+    const results = await testConfiguredShippingProviders().catch((error: Error) => [{ id: "shipping", ok: false, error: error.message }]);
+    setBusy("");
+    if (!results.length) {
+      setNote("Save a key first, then Save & test. The check runs through /api/shipping on this site.");
+      return;
+    }
+    const ok = results.filter((item) => item.ok).map((item) => item.id);
+    const bad = results.filter((item) => !item.ok).map((item) => `${item.id}: ${item.error || "failed"}`);
+    setNote(bad.length ? `Live check: ${bad.join(" · ")}${ok.length ? ` · OK: ${ok.join(", ")}` : ""}` : `Live from this site: ${ok.join(", ")}.`);
+    setStamp((current) => current + 1);
   };
 
   const pickup = value.pickup;
@@ -537,41 +812,82 @@ export function ShippingApisDesk() {
     <div className="space-y-5">
       <Header
         title="Shipping APIs"
-        text="Credentials for courier aggregators and hyperlocal delivery. Live rates show at checkout and in admin, and booking a shipment debits the aggregator wallet."
-        action={<button type="button" className={primary} onClick={() => save()}>Save</button>}
+        text="This is the only courier integration page. Save a key, then Save & test — the request goes through this site’s /api/shipping route first, so Success or Failed is a live check from our server. Hyperlocal orders book Tookan create_task; standard orders book Tookan create_multiple_tasks (parcel)."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={ghost} onClick={() => save()}>Save</button>
+            <button type="button" className={primary} disabled={Boolean(busy)} onClick={() => saveAndTestAll()}>
+              {busy === "all" ? "Checking live…" : "Save & test all"}
+            </button>
+          </div>
+        }
       />
       <Saved text={note} />
+      <SettingsSave save={save}>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Shiprocket" text="Settings → API → Create an API user (not your login)." right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
+        <Card title="Shipday" text="docs.shipday.com — POST /orders to create, GET /orders to track, DELETE /orders/{id} to cancel. Authorization: Basic {API key}." badge={<ProviderStatus id="shipday" />} right={<Check label="Use" checked={value.shipday.enabled} onChange={(enabled) => set({ shipday: { ...value.shipday, enabled } })} />}>
+          <div className="space-y-3">
+            <Secret label="Shipday API key" value={value.shipday.apiKey} onChange={(apiKey) => set({ shipday: { ...value.shipday, apiKey } })} />
+            <button type="button" className={primary} disabled={busy === "shipday"} onClick={() => test("shipday")}>{busy === "shipday" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
+        <Card title="Shiprocket" text="apidocs.shiprocket.in — Settings → API → Create an API user. Login, serviceability, adhoc order, assign AWB, generate pickup, label, invoice, manifest, track AWB, cancel and reverse pickup all use this account." badge={<ProviderStatus id="shiprocket" />} right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
           <div className="space-y-3">
             <Text label="API user email" value={value.shiprocket.email} onChange={(email) => set({ shiprocket: { ...value.shiprocket, email } })} />
             <Secret label="API user password" value={value.shiprocket.password} onChange={(password) => set({ shiprocket: { ...value.shiprocket, password } })} />
             <Text label="Channel ID (optional)" value={value.shiprocket.channelId} onChange={(channelId) => set({ shiprocket: { ...value.shiprocket, channelId } })} />
-            <button type="button" className={ghost} disabled={busy === "shiprocket"} onClick={() => test("shiprocket")}>{busy === "shiprocket" ? "Testing…" : "Test connection"}</button>
+            <button type="button" className={primary} disabled={busy === "shiprocket"} onClick={() => test("shiprocket")}>{busy === "shiprocket" ? "Checking live…" : "Save & test"}</button>
+            <p className="text-xs text-slate-500">
+              Webhook URL for Shiprocket Settings → API → Webhooks:{" "}
+              <span className="font-mono break-all text-slate-700">{typeof window === "undefined" ? "/api/shipping/webhook" : `${window.location.origin}/api/shipping/webhook`}</span>
+              . Optional header <span className="font-mono">x-api-key</span> = <span className="font-mono">SHIPROCKET_WEBHOOK_TOKEN</span>.
+            </p>
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy === "webhooks"}
+              onClick={async () => {
+                setBusy("webhooks");
+                setNote(await applyShiprocketWebhooks().catch((error: Error) => error.message));
+                setBusy("");
+              }}
+            >
+              Apply Shiprocket tracking updates
+            </button>
           </div>
         </Card>
-        <Card title="Nimbuspost" text="Your Nimbuspost login email and password." right={<Check label="Use" checked={value.nimbuspost.enabled} onChange={(enabled) => set({ nimbuspost: { ...value.nimbuspost, enabled } })} />}>
+        <Card title="iThink Logistics" text="docs.ithinklogistics.com v3 — access token + secret key. Rate check, order add, track, cancel, label, invoice and manifest." badge={<ProviderStatus id="ithink" />} right={<Check label="Use" checked={value.ithink.enabled} onChange={(enabled) => set({ ithink: { ...value.ithink, enabled } })} />}>
+          <div className="space-y-3">
+            <Secret label="Access token" value={value.ithink.accessToken} onChange={(accessToken) => set({ ithink: { ...value.ithink, accessToken } })} />
+            <Secret label="Secret key" value={value.ithink.secretKey} onChange={(secretKey) => set({ ithink: { ...value.ithink, secretKey } })} />
+            <Text label="Pickup warehouse / address ID" value={value.ithink.pickupAddressId} onChange={(pickupAddressId) => set({ ithink: { ...value.ithink, pickupAddressId } })} />
+            <Text label="API host" value={value.ithink.host} onChange={(host) => set({ ithink: { ...value.ithink, host } })} hint="https://my.ithinklogistics.com/api_v3/" />
+            <button type="button" className={primary} disabled={busy === "ithink"} onClick={() => test("ithink")}>{busy === "ithink" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
+        <Card title="Tookan" text="One API key. Hyperlocal (same-city) books Tookan create_task. Standard / intercity books Tookan create_multiple_tasks (parcel: pickup + delivery). Save & test calls get_all_fleets through this site." badge={<ProviderStatus id="tookan" />}>
+          <div className="space-y-3">
+            <Secret label="Tookan API key" value={value.tookan.apiKey} onChange={(apiKey) => set({ tookan: { ...value.tookan, apiKey } })} />
+            <Text label="Team ID" value={value.tookan.teamId} onChange={(teamId) => set({ tookan: { ...value.tookan, teamId } })} />
+            <Check label="Offer hyperlocal as Tookan tasks" hint="Same-city pincodes book create_task (delivery only)." checked={value.tookan.hyperlocal} onChange={(hyperlocal) => set({ tookan: { ...value.tookan, hyperlocal } })} />
+            <Check label="Offer standard as Tookan parcel" hint="Other pincodes book create_multiple_tasks with pickup + delivery." checked={value.tookan.parcel} onChange={(parcel) => set({ tookan: { ...value.tookan, parcel } })} />
+            <button type="button" className={primary} disabled={busy === "tookan"} onClick={() => test("tookan")}>{busy === "tookan" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
+        <Card title="Nimbuspost" text="Nimbuspost login email and password, used as a second aggregator if you keep that account." badge={<ProviderStatus id="nimbuspost" />} right={<Check label="Use" checked={value.nimbuspost.enabled} onChange={(enabled) => set({ nimbuspost: { ...value.nimbuspost, enabled } })} />}>
           <div className="space-y-3">
             <Text label="Email" value={value.nimbuspost.email} onChange={(email) => set({ nimbuspost: { ...value.nimbuspost, email } })} />
             <Secret label="Password" value={value.nimbuspost.password} onChange={(password) => set({ nimbuspost: { ...value.nimbuspost, password } })} />
-            <button type="button" className={ghost} disabled={busy === "nimbuspost"} onClick={() => test("nimbuspost")}>{busy === "nimbuspost" ? "Testing…" : "Test connection"}</button>
+            <button type="button" className={primary} disabled={busy === "nimbuspost"} onClick={() => test("nimbuspost")}>{busy === "nimbuspost" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
-        <Card title="Shipyaari" text="Stored for booking. Shipyaari issues API documentation to account holders; estimates are used until it is connected." right={<Check label="Use" checked={value.shipyaari.enabled} onChange={(enabled) => set({ shipyaari: { ...value.shipyaari, enabled } })} />}>
+        <Card title="Shipyaari" text="API key or email/password. Wallet is checked before every booking — low credits block the AWB." badge={<ProviderStatus id="shipyaari" />} right={<Check label="Use" checked={value.shipyaari.enabled} onChange={(enabled) => set({ shipyaari: { ...value.shipyaari, enabled } })} />}>
           <div className="space-y-3">
-            <Text label="Client ID" value={value.shipyaari.clientId} onChange={(clientId) => set({ shipyaari: { ...value.shipyaari, clientId } })} />
             <Secret label="API key" value={value.shipyaari.apiKey} onChange={(apiKey) => set({ shipyaari: { ...value.shipyaari, apiKey } })} />
-            <Secret label="Secret" value={value.shipyaari.secret} onChange={(secret) => set({ shipyaari: { ...value.shipyaari, secret } })} />
-          </div>
-        </Card>
-        <Card title="Tookan & Shipday" text="Same-city delivery tasks for local riders.">
-          <div className="space-y-3">
-            <Check label="Use Tookan" checked={value.tookan.enabled} onChange={(enabled) => set({ tookan: { ...value.tookan, enabled } })} />
-            <Secret label="Tookan API key" value={value.tookan.apiKey} onChange={(apiKey) => set({ tookan: { ...value.tookan, apiKey } })} />
-            <Text label="Tookan team ID" value={value.tookan.teamId} onChange={(teamId) => set({ tookan: { ...value.tookan, teamId } })} />
-            <Check label="Use Shipday" checked={value.shipday.enabled} onChange={(enabled) => set({ shipday: { ...value.shipday, enabled } })} />
-            <Secret label="Shipday API key" value={value.shipday.apiKey} onChange={(apiKey) => set({ shipday: { ...value.shipday, apiKey } })} />
+            <Text label="Email (if no API key)" value={value.shipyaari.email} onChange={(email) => set({ shipyaari: { ...value.shipyaari, email } })} />
+            <Secret label="Password" value={value.shipyaari.password} onChange={(password) => set({ shipyaari: { ...value.shipyaari, password } })} />
+            <button type="button" className={primary} disabled={busy === "shipyaari"} onClick={() => test("shipyaari")}>{busy === "shipyaari" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
       </div>
@@ -580,20 +896,41 @@ export function ShippingApisDesk() {
         title="Pickup address"
         text="Couriers collect parcels here. The nickname must match the pickup location name in Shiprocket."
         right={
-          <button
-            type="button"
-            className={ghost}
-            disabled={busy === "pickup"}
-            onClick={async () => {
-              save();
-              setBusy("pickup");
-              const result = await syncPickupAddress().catch((error: Error) => ({ ok: false, error: error.message }));
-              setBusy("");
-              setNote(result.ok ? "Pickup address added to Shiprocket." : `Shiprocket pickup sync: ${result.error}`);
-            }}
-          >
-            Add to Shiprocket
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy === "pickup"}
+              onClick={async () => {
+                save();
+                setBusy("pickup");
+                const result = await syncPickupAddress().catch((error: Error) => ({ ok: false, error: error.message }));
+                setBusy("");
+                setNote(result.ok ? "Pickup address added to Shiprocket." : `Shiprocket pickup sync: ${result.error}`);
+              }}
+            >
+              Add to Shiprocket
+            </button>
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy === "pickup-list"}
+              onClick={async () => {
+                save();
+                setBusy("pickup-list");
+                const result = await listPickupLocations().catch((error: Error) => ({ ok: false, error: error.message, locations: [] as { nickname: string; city: string; pincode: string }[] }));
+                setBusy("");
+                if (!result.ok) {
+                  setNote(`Shiprocket pickup list: ${result.error}`);
+                  return;
+                }
+                const names = (result.locations ?? []).map((location) => `${location.nickname} (${location.city} ${location.pincode})`);
+                setNote(names.length ? `Shiprocket pickup locations: ${names.join(" · ")}` : "Shiprocket returned no pickup locations.");
+              }}
+            >
+              List locations
+            </button>
+          </div>
         }
       >
         <div className="grid gap-3 sm:grid-cols-3">
@@ -619,6 +956,20 @@ export function ShippingApisDesk() {
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <Check label="Book the courier when an order is packed" hint="Uses the courier the customer chose, or the rule below." checked={value.autoBookOnPack} onChange={(autoBookOnPack) => set({ autoBookOnPack })} />
           <Check label="Schedule pickup automatically" hint="Shiprocket gets a pickup request right after the AWB." checked={value.autoSchedulePickup} onChange={(autoSchedulePickup) => set({ autoSchedulePickup })} />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
+          <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.max(8, Number(seconds) || 20) })} hint="Tookan and Shipday agent location refresh." />
+        </div>
+        <div className="mt-4">
+          <ImageField
+            label="Scooter marker for Tookan / Shipday maps"
+            value={value.scooterImage}
+            onChange={(scooterImage) => set({ scooterImage })}
+            hint="Shown only on hyperlocal Google Maps tracking. Other couriers embed their own tracking page."
+          />
+        </div>
+        <div className="mt-4">
           <label className="block text-sm">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">When the customer did not choose</span>
             <select className={input} value={value.rateChoice} onChange={(event) => set({ rateChoice: event.target.value as typeof value.rateChoice })}>
@@ -649,6 +1000,7 @@ export function ShippingApisDesk() {
         </div>
         {quote && <RatesTable quote={quote} />}
       </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -707,6 +1059,7 @@ export function OrderSettingsDesk() {
     <div className="space-y-5">
       <Header title="Orders, returns & refunds" text="Which fulfilment options customers can pick, how shipping is charged, and the return, refund and cancellation rules." action={<button type="button" className={primary} onClick={save}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={save}>
       <Card title="Fulfilment options at checkout">
         <div className="grid gap-4 md:grid-cols-3">
           <Check label="Home delivery" checked={value.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} />
@@ -748,6 +1101,7 @@ export function OrderSettingsDesk() {
         </Card>
         <Card title="Refunds">
           <div className="space-y-3">
+            <Check label="Enable refunds" checked={value.refunds.enabled} onChange={(enabled) => set({ refunds: { ...value.refunds, enabled } })} />
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Refund to</span>
               <select className={input} value={value.refunds.method} onChange={(event) => set({ refunds: { ...value.refunds, method: event.target.value as OrderSettings["refunds"]["method"] } })}>
@@ -775,6 +1129,17 @@ export function OrderSettingsDesk() {
           </div>
         </Card>
       </div>
+      <Card title="Admin order actions">
+        <p className="mb-3 text-sm text-slate-500">
+          Customer rules above apply on the public account pages. From the admin order desk you can still cancel, refund or replace — including after delivery — when this is on.
+        </p>
+        <Check
+          label="Admin can cancel, refund or replace even after delivery"
+          checked={value.adminActions.processAfterDelivery}
+          onChange={(processAfterDelivery) => set({ adminActions: { ...value.adminActions, processAfterDelivery } })}
+        />
+      </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -862,6 +1227,7 @@ export function NotificationsDesk({ compose = false }: { compose?: boolean }) {
           <option value="all">All channels</option>
           <option value="email">Email</option>
           <option value="whatsapp">WhatsApp</option>
+          <option value="sms">SMS</option>
         </select>
         <select className={`${input} max-w-[160px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="all">All statuses</option>
@@ -905,7 +1271,7 @@ function FragmentRow({ item, open, onToggle }: { item: NotificationRecord; open:
     <>
       <tr className="border-b border-slate-100 align-top">
         <td className="whitespace-nowrap px-4 py-2 text-xs text-slate-500">{new Date(item.updatedAt ?? item.sentAt).toLocaleString("en-IN")}</td>
-        <td className="py-2 text-xs">{item.channel === "whatsapp" ? "WhatsApp" : "Email"}<span className="block text-slate-400">{item.provider}</span></td>
+        <td className="py-2 text-xs">{item.channel === "whatsapp" ? "WhatsApp" : item.channel === "sms" ? "SMS" : "Email"}<span className="block text-slate-400">{item.provider}</span></td>
         <td className="py-2 text-xs">{item.to || "—"}</td>
         <td className="py-2">
           <button type="button" className="text-left font-medium text-slate-800 hover:text-burgundy" onClick={onToggle}>{item.subject}</button>

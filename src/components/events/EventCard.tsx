@@ -1,8 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import type { Event } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
+import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
 import { eventDateText, eventPlaceText, eventTimeText } from "@/lib/event-display";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral"> = {
   Open: "success",
@@ -12,6 +16,7 @@ const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral">
 };
 
 export default function EventCard({ event }: { event: Event }) {
+  const { t } = useI18n();
   return (
     <article className="card flex flex-col overflow-hidden">
       <div className="relative">
@@ -40,7 +45,7 @@ export default function EventCard({ event }: { event: Event }) {
           {eventTimeText(event) ? ` · ${eventTimeText(event)}` : ""}
         </time>
 
-        <h3 className="mt-2 text-lg font-semibold text-text-primary leading-snug">
+        <h3 className="mt-2 text-base font-semibold text-text-primary leading-snug">
           <Link
             href={`/events/${event.slug}`}
             className="transition hover:text-burgundy"
@@ -65,21 +70,29 @@ export default function EventCard({ event }: { event: Event }) {
           </span>
         </div>
 
+        <div className="mt-4">
+          <RegistrationCountdown event={event} compact />
+        </div>
+
         <Link
           href={`/events/${event.slug}`}
           className="btn-primary mt-6 w-full"
         >
-          View Event
+          {t("events.view")}
         </Link>
 
-        <Link
-          href="https://seminar.vaidyagogate.org"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-outline mt-3 w-full"
-        >
-          Register on Seminar Website
-        </Link>
+        {event.tbd?.registration || !event.registrationUrl?.trim() ? (
+          <p className="mt-3 text-center text-xs text-text-muted">{t("events.tba")}</p>
+        ) : (
+          <a
+            href={event.registrationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-outline mt-3 w-full"
+          >
+            {t("events.register")}
+          </a>
+        )}
       </div>
     </article>
   );

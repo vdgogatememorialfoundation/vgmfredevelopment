@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 interface PageHeaderProps {
   eyebrow?: string;
@@ -13,18 +16,19 @@ export default function PageHeader({
   description,
   breadcrumb,
 }: PageHeaderProps) {
+  const { t } = useI18n();
   return (
-    <section className="border-b border-border bg-warm-cream">
-      <div className="container py-14 sm:py-20">
+    <section className="border-b border-border bg-paper">
+      <div className="container py-7 sm:py-8">
         {breadcrumb && breadcrumb.length > 0 && (
-          <nav aria-label="Breadcrumb" className="mb-5">
-            <ol className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
+          <nav aria-label="Breadcrumb" className="mb-3">
+            <ol className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
               <li>
                 <Link
                   href="/"
                   className="transition hover:text-burgundy"
                 >
-                  Home
+                  {t("common.home")}
                 </Link>
               </li>
               {breadcrumb.map((item, index) => (
@@ -49,7 +53,7 @@ export default function PageHeader({
         )}
 
         {eyebrow && (
-          <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy">
+          <p className="eyebrow">
             {eyebrow}
           </p>
         )}
@@ -57,7 +61,7 @@ export default function PageHeader({
         <h1 className="heading-1">{title}</h1>
 
         {description && (
-          <p className="mt-5 max-w-3xl text-body-lg">{description}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">{description}</p>
         )}
       </div>
     </section>

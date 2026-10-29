@@ -2,133 +2,113 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { findIssuedCertificate, type IssuedCertificate } from "@/lib/cms";
+import { verifyCertificate, type PublicCertificate } from "@/lib/certificates-client";
+import { CertificateResultCard } from "@/components/certificates/CertificateResult";
 
 type Result = {
-  status: "idle" | "verified" | "not-found";
+  status: "idle" | "verified" | "invalid" | "error";
   certificateNumber: string;
-  certificate?: IssuedCertificate;
+  certificate?: PublicCertificate;
+  message?: string;
 };
 
 export default function CertificateVerificationForm() {
   const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>({
     status: "idle",
     certificateNumber: "",
   });
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const certificateNumber = value.trim();
-
     if (!certificateNumber) return;
-
-    const certificate = findIssuedCertificate(certificateNumber);
-    setResult({
-      status: certificate ? "verified" : "not-found",
-      certificateNumber,
-      certificate,
-    });
+    setBusy(true);
+    try {
+      const data = await verifyCertificate(certificateNumber);
+      if (data.valid && data.certificate) {
+        setResult({
+          status: "verified",
+          certificateNumber,
+          certificate: data.certificate,
+        });
+        return;
+      }
+      setResult({
+        status: "invalid",
+        certificateNumber,
+        message: data.error || "This certificate could not be verified.",
+      });
+    } catch (error) {
+      setResult({
+        status: "error",
+        certificateNumber,
+        message: error instanceof Error ? error.message : "Verification is temporarily unavailable. Please try again later.",
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className="mx-auto max-w-2xl">
       <form
-        onSubmit={handleSubmit}
+        id="cert-check"
+        onSubmit={(event) => void handleSubmit(event)}
         className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8"
       >
-        <label
-          htmlFor="certificate-number"
-          className="block text-sm font-semibold text-text-primary"
-        >
-          Certificate Number
+        <label htmlFor="cert-id" className="block text-sm font-semibold text-text-primary">
+          Certificate ID
         </label>
+        <p className="mt-1 text-sm text-text-muted">
+          Enter the ID printed on the certificate, such as CERT-P-12-345 or CERT-V-4-8. Older CERT-12-345
+          numbers still verify. IDs are not case-sensitive. Email, phone and QR tokens are never shown.
+        </p>
 
         <input
-          id="certificate-number"
+          id="cert-id"
+          name="id"
           type="text"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="e.g. VGMF-CERT-2026-0001"
+          placeholder="CERT-P-12-345"
+          required
           className="input-field mt-3 text-center text-lg tracking-wider"
-          aria-describedby="certificate-help"
         />
 
-        <p id="certificate-help" className="mt-3 text-center text-sm text-text-muted">
-          Enter the certificate number printed on your certificate. seminar.vaidyagogate.org
-          and autism.vaidyagogate.org confirm the same record through GET /api/certificates/verify.
-        </p>
-
-        <button type="submit" className="btn-primary mt-6 w-full">
-          Verify Certificate
+        <button type="submit" disabled={busy} className="btn-primary mt-6 w-full disabled:opacity-50">
+          {busy ? "Checking…" : "Verify"}
         </button>
       </form>
 
-      {result.status === "verified" && (
-        <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white">
-            ✓
-          </div>
-
-          <h2 className="mt-6 text-2xl font-bold text-text-primary">
-            Certificate Verified
-          </h2>
-
-          <p className="mt-2 text-sm text-text-muted">
-            The following certificate is genuine and was issued by the
-            Vaidya Gogate Memorial Foundation.
-          </p>
-
-          <dl className="mx-auto mt-8 max-w-md space-y-3 rounded-2xl border border-emerald-200 bg-white p-6 text-left text-sm">
-            <CertificateRow
-              label="Certificate Number"
-              value={result.certificateNumber.toUpperCase()}
-            />
-            {result.certificate && (
-              <>
-                <CertificateRow label="Name" value={result.certificate.name} />
-                <CertificateRow label="Event" value={result.certificate.event} />
-                <CertificateRow label="Certificate Type" value={result.certificate.certificateType} />
-                <CertificateRow label="Issued On" value={result.certificate.issueDate} />
-              </>
-            )}
-            <CertificateRow label="Issued By" value="Vaidya Gogate Memorial Foundation" />
-          </dl>
+      {result.status === "verified" && result.certificate ? (
+        <div className="mt-8">
+          <CertificateResultCard certificate={result.certificate} />
         </div>
-      )}
+      ) : null}
 
-      {result.status === "not-found" && (
+      {result.status === "invalid" ? (
         <div className="mt-8 rounded-2xl border border-border bg-white p-8 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-2xl text-amber-600">
             !
           </div>
-
-          <h2 className="mt-6 text-2xl font-bold text-text-primary">
-            Certificate Not Found
-          </h2>
-
+          <h2 className="mt-6 font-serif text-2xl font-bold text-text-primary">Could not verify</h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-muted">
-            We could not find a certificate matching{" "}
-            <span className="font-semibold text-text-primary">
-              {result.certificateNumber}
-            </span>
-            . Please check the number and try again.
+            {result.message}
           </p>
-
+          <p className="mx-auto mt-3 max-w-md text-xs text-text-muted">
+            Looked up <span className="font-semibold text-text-primary">{result.certificateNumber}</span>.
+          </p>
           <Link href="/contact" className="btn-outline mt-6">
             Contact the Foundation
           </Link>
         </div>
-      )}
-    </div>
-  );
-}
+      ) : null}
 
-function CertificateRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-center">
-      <dt className="text-text-muted">{label}</dt>
-      <dd className="font-semibold text-text-primary">{value}</dd>
+      {result.status === "error" ? (
+        <p className="mt-6 text-center text-sm text-red-700">{result.message}</p>
+      ) : null}
     </div>
   );
 }

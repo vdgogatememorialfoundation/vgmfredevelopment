@@ -5,9 +5,12 @@ const ORDER_SETTINGS_KEY = "vgmf_order_settings";
 
 export type PaymentMode = "demo" | "test" | "live";
 export type EmailProvider = "zeptomail" | "zoho";
-export type WhatsAppProvider = "none" | "meta" | "aisensy";
-export type AggregatorId = "shiprocket" | "nimbuspost" | "shipyaari";
+export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
+export type SmsProvider = "none" | "msg91";
+export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari";
 export type HyperlocalId = "tookan" | "shipday";
+export type ShippingProviderId = AggregatorId | HyperlocalId;
+export type ShippingConnection = { status: "success" | "failed" | "untested"; message: string; at: string };
 
 export interface WhatsAppTemplate {
   name: string;
@@ -25,9 +28,15 @@ export const notificationEvents = [
   { id: "refund", label: "Refund issued" },
   { id: "shipment-booked", label: "Shipment booked" },
   { id: "account-created", label: "Account created" },
+  { id: "account-details", label: "Account details resent" },
+  { id: "back-in-stock", label: "Back in stock" },
+  { id: "store-credit", label: "Store credit issued" },
+  { id: "return-created", label: "Return created" },
+  { id: "pos-receipt", label: "In-store receipt" },
   { id: "support-reply", label: "Support reply" },
   { id: "ticket-update", label: "Ticket update" },
   { id: "abandoned-cart", label: "Abandoned cart" },
+  { id: "otp", label: "One-time password" },
 ] as const;
 
 export type NotificationEventId = (typeof notificationEvents)[number]["id"];
@@ -54,6 +63,15 @@ export interface IntegrationSettings {
     liveKeySecret: string;
     webhookSecret: string;
     linkExpiryHours: number;
+    posDeviceId: string;
+    posDeviceMode: "wired" | "wireless";
+  };
+  paytm: {
+    mode: PaymentMode | "staging";
+    mid: string;
+    merchantKey: string;
+    tid: string;
+    channelId: string;
   };
   email: {
     provider: EmailProvider;
@@ -76,17 +94,33 @@ export interface IntegrationSettings {
     metaApiVersion: string;
     aisensyApiKey: string;
     aisensyProjectId: string;
+    /** Agent API key from CPaaS → Agent → SMTP/API. WhatsApp send uses this, not OAuth. */
+    zohoCpaasApiKey: string;
+    /** WhatsApp sender number for the Agent, including country code (e.g. +9198…). */
+    zohoCpaasFrom: string;
+    zohoCpaasDomain: string;
     templates: WhatsAppTemplate[];
     templatesSyncedAt: string;
     /** Site event → template (Meta) or campaign (AiSensy) name. */
     mapping: Partial<Record<NotificationEventId, string>>;
   };
+  sms: {
+    provider: SmsProvider;
+    msg91AuthKey: string;
+    msg91SenderId: string;
+    msg91TemplateId: string;
+  };
   shipping: {
     shiprocket: { email: string; password: string; channelId: string; enabled: boolean };
     nimbuspost: { email: string; password: string; enabled: boolean };
-    shipyaari: { apiKey: string; secret: string; clientId: string; enabled: boolean };
-    tookan: { apiKey: string; teamId: string; enabled: boolean };
+    ithink: { accessToken: string; secretKey: string; pickupAddressId: string; host: string; enabled: boolean };
+    shipyaari: { email: string; password: string; apiKey: string; enabled: boolean };
+    tookan: { apiKey: string; teamId: string; hyperlocal: boolean; parcel: boolean };
     shipday: { apiKey: string; enabled: boolean };
+    scooterImage: string;
+    hyperlocalPingSeconds: number;
+    minWalletRupees: number;
+    connection: Partial<Record<ShippingProviderId, ShippingConnection>>;
     pickup: PickupAddress;
     defaultWeightKg: number;
     packageCm: { length: number; breadth: number; height: number };
@@ -114,6 +148,7 @@ export interface OrderSettings {
     reasons: string[];
   };
   refunds: {
+    enabled: boolean;
     method: "original" | "manual";
     processingDays: number;
     autoRefundOnReturnPickup: boolean;
@@ -123,6 +158,9 @@ export interface OrderSettings {
     allowedUntil: "Ordered" | "Packed" | "Shipped";
     windowHours: number;
     fee: number;
+  };
+  adminActions: {
+    processAfterDelivery: boolean;
   };
 }
 
@@ -135,6 +173,15 @@ export const defaultIntegrations: IntegrationSettings = {
     liveKeySecret: "",
     webhookSecret: "",
     linkExpiryHours: 72,
+    posDeviceId: "",
+    posDeviceMode: "wireless",
+  },
+  paytm: {
+    mode: "demo",
+    mid: "",
+    merchantKey: "",
+    tid: "",
+    channelId: "",
   },
   email: {
     provider: "zeptomail",
@@ -157,16 +204,30 @@ export const defaultIntegrations: IntegrationSettings = {
     metaApiVersion: "v21.0",
     aisensyApiKey: "",
     aisensyProjectId: "",
+    zohoCpaasApiKey: "",
+    zohoCpaasFrom: "",
+    zohoCpaasDomain: "zoho.com",
     templates: [],
     templatesSyncedAt: "",
     mapping: {},
   },
+  sms: {
+    provider: "none",
+    msg91AuthKey: "",
+    msg91SenderId: "VGMFIN",
+    msg91TemplateId: "",
+  },
   shipping: {
     shiprocket: { email: "", password: "", channelId: "", enabled: true },
     nimbuspost: { email: "", password: "", enabled: true },
-    shipyaari: { apiKey: "", secret: "", clientId: "", enabled: false },
-    tookan: { apiKey: "", teamId: "", enabled: false },
-    shipday: { apiKey: "", enabled: false },
+    ithink: { accessToken: "", secretKey: "", pickupAddressId: "", host: "https://my.ithinklogistics.com/api_v3/", enabled: false },
+    shipyaari: { email: "", password: "", apiKey: "", enabled: false },
+    tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
+    shipday: { apiKey: "", enabled: true },
+    scooterImage: "",
+    hyperlocalPingSeconds: 20,
+    minWalletRupees: 50,
+    connection: {},
     pickup: {
       nickname: "VGMF-PUNE",
       contactName: "VGMF Dispatch",
@@ -204,8 +265,9 @@ export const defaultOrderSettings: OrderSettings = {
     replacementAllowed: true,
     reasons: ["Damaged or defective item", "Wrong item delivered", "Edition or size mismatch", "No longer needed"],
   },
-  refunds: { method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
+  refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
   cancellation: { enabled: true, allowedUntil: "Packed", windowHours: 24, fee: 0 },
+  adminActions: { processAfterDelivery: true },
 };
 
 function readJSON<T>(key: string, fallback: T): T {
@@ -238,12 +300,72 @@ function merge<T extends object>(base: T, saved: Partial<T> | null | undefined):
   return out as T;
 }
 
+export function shippingProviderId(id: string): ShippingProviderId | null {
+  if (id === "tookan-parcel") return "tookan";
+  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "shipyaari" || id === "tookan" || id === "shipday") return id;
+  return null;
+}
+
+function credentialFingerprint(shipping: IntegrationSettings["shipping"], provider: ShippingProviderId) {
+  if (provider === "shiprocket") return `${shipping.shiprocket.email}\0${shipping.shiprocket.password}\0${shipping.shiprocket.channelId}`;
+  if (provider === "nimbuspost") return `${shipping.nimbuspost.email}\0${shipping.nimbuspost.password}`;
+  if (provider === "ithink") return `${shipping.ithink.accessToken}\0${shipping.ithink.secretKey}\0${shipping.ithink.host}`;
+  if (provider === "shipyaari") return `${shipping.shipyaari.email}\0${shipping.shipyaari.password}\0${shipping.shipyaari.apiKey}`;
+  if (provider === "tookan") return `${shipping.tookan.apiKey}\0${shipping.tookan.teamId}`;
+  return shipping.shipday.apiKey;
+}
+
+export function hasShippingCredentials(provider: ShippingProviderId, settings = getIntegrations()) {
+  const shipping = settings.shipping;
+  if (provider === "shiprocket") return Boolean(shipping.shiprocket.email && shipping.shiprocket.password);
+  if (provider === "nimbuspost") return Boolean(shipping.nimbuspost.email && shipping.nimbuspost.password);
+  if (provider === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
+  if (provider === "shipyaari") return Boolean(shipping.shipyaari.apiKey || (shipping.shipyaari.email && shipping.shipyaari.password));
+  if (provider === "tookan") return Boolean(shipping.tookan.apiKey);
+  if (provider === "shipday") return Boolean(shipping.shipday.apiKey);
+  return false;
+}
+
+export function getShippingConnection(provider: ShippingProviderId): ShippingConnection {
+  return getIntegrations().shipping.connection[provider] ?? { status: "untested", message: "", at: "" };
+}
+
 export function getIntegrations(): IntegrationSettings {
-  return merge(defaultIntegrations, readJSON<Partial<IntegrationSettings> | null>(INTEGRATIONS_KEY, null));
+  const merged = merge(defaultIntegrations, readJSON<Partial<IntegrationSettings> | null>(INTEGRATIONS_KEY, null));
+  const tookan = merged.shipping.tookan as typeof merged.shipping.tookan & { enabled?: boolean };
+  if ((tookan.enabled || tookan.apiKey) && !tookan.hyperlocal && !tookan.parcel) {
+    tookan.hyperlocal = true;
+    tookan.parcel = true;
+  }
+  if (merged.shipping.shipday.apiKey && merged.shipping.shipday.enabled === false) {
+    /* keep an explicit off; empty key stays available to turn on */
+  }
+  if (!merged.shipping.connection) merged.shipping.connection = {};
+  return merged;
+}
+
+export function recordShippingConnection(provider: ShippingProviderId, status: ShippingConnection["status"], message: string) {
+  const settings = getIntegrations();
+  settings.shipping.connection = {
+    ...settings.shipping.connection,
+    [provider]: { status, message, at: new Date().toISOString() },
+  };
+  writeJSON(INTEGRATIONS_KEY, settings);
+  return settings.shipping.connection[provider]!;
 }
 
 export function saveIntegrations(settings: IntegrationSettings) {
-  writeJSON(INTEGRATIONS_KEY, settings);
+  const previous = getIntegrations();
+  const next = merge(defaultIntegrations, settings);
+  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "tookan", "shipday"];
+  const connection = { ...next.shipping.connection, ...previous.shipping.connection };
+  for (const provider of providers) {
+    if (credentialFingerprint(previous.shipping, provider) !== credentialFingerprint(next.shipping, provider)) {
+      connection[provider] = { status: "untested", message: "", at: "" };
+    }
+  }
+  next.shipping.connection = connection;
+  writeJSON(INTEGRATIONS_KEY, next);
 }
 
 export function getOrderSettings(): OrderSettings {
@@ -259,6 +381,17 @@ export function razorpayKeys(settings = getIntegrations()) {
   if (mode === "live") return { mode, keyId: settings.razorpay.liveKeyId, keySecret: settings.razorpay.liveKeySecret };
   if (mode === "test") return { mode, keyId: settings.razorpay.testKeyId, keySecret: settings.razorpay.testKeySecret };
   return { mode, keyId: "", keySecret: "" };
+}
+
+export function paytmKeys(settings = getIntegrations()) {
+  const { mode } = settings.paytm;
+  return {
+    mode,
+    mid: settings.paytm.mid,
+    merchantKey: settings.paytm.merchantKey,
+    tid: settings.paytm.tid,
+    channelId: settings.paytm.channelId,
+  };
 }
 
 export function shippingFeeFor(

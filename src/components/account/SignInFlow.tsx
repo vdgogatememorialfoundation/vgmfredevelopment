@@ -3,39 +3,141 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import OtpForm from "@/components/account/OtpForm";
+import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
 import { useAuth } from "@/components/auth/AuthContext";
-import { findAccountByIdentifier, setSession } from "@/lib/auth";
+import { findAccountByIdentifier, loginBlockReason } from "@/lib/auth";
+import { sendOtpCode } from "@/lib/admin-store";
+import { getAuthAccess } from "@/lib/auth-access";
+import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
+import type { User } from "@/types";
 
-type Step = "identifier" | "otp" | "complete";
+type Step = "identifier" | "otp" | "forgot" | "complete";
+type Method = "password" | "sms";
 
 export default function SignInFlow() {
   const router = useRouter();
   const { signIn } = useAuth();
+  const access = getAuthAccess();
   const [step, setStep] = useState<Step>("identifier");
+  const [method, setMethod] = useState<Method>("password");
   const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [otpHint, setOtpHint] = useState("");
+  const [pending, setPending] = useState<User | null>(null);
+
+  const enterAccount = (account: User) => {
+    signIn(account);
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      router.push(next);
+      return;
+    }
+    setStep("complete");
+  };
+
+  const sendEmailMfa = (account: User) => {
+    const code = issueEmailOtp(account.email, "customer");
+    sendOtpCode({
+      email: account.email,
+      phone: account.phone,
+      name: account.firstName,
+      code,
+      purpose: "sign-in",
+    });
+    setPending(account);
+    setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+    setStep("otp");
+  };
+
+  const sendSmsOtp = (account: User) => {
+    const code = issueEmailOtp(account.phone, "customer-sms");
+    sendOtpCode({
+      phone: account.phone,
+      name: account.firstName,
+      code,
+      purpose: "SMS sign-in",
+    });
+    setPending(account);
+    setOtpHint(`Code sent by SMS to ${account.phone}. Demo code: ${code}`);
+    setStep("otp");
+  };
 
   const handleIdentifier = (event: React.FormEvent) => {
     event.preventDefault();
     const account = findAccountByIdentifier(identifier);
     if (!account) {
-      setError(
-        "No account found with these details. Please create an account first."
-      );
+      setError("No account found with these details. Please create an account first.");
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    if (method === "sms") {
+      if (!access.smsLogin) {
+        setError("SMS login is turned off.");
+        return;
+      }
+      setError("");
+      sendSmsOtp(account);
+      return;
+    }
+    if (!password) {
+      setError("Enter your password, then we will send a one-time code to your email.");
+      return;
+    }
+    if (!account.password || account.password !== password) {
+      setError("Incorrect password. Use forgot password if you need a reset.");
       return;
     }
     setError("");
-    setStep("otp");
+    if (!access.emailOtp) {
+      enterAccount(account);
+      return;
+    }
+    sendEmailMfa(account);
   };
 
-  const handleOtp = () => {
-    const account = findAccountByIdentifier(identifier);
-    if (!account) return;
-
-    setSession(account);
-    signIn(account);
-    setStep("complete");
+  const handleOtp = (code: string) => {
+    const account = pending ?? findAccountByIdentifier(identifier);
+    if (!account) {
+      setError("Sign in again so we can send a new code.");
+      setStep("identifier");
+      return;
+    }
+    const role = method === "sms" ? "customer-sms" : "customer";
+    const target = method === "sms" ? account.phone : account.email;
+    const invalid = verifyEmailOtp(target, role, code);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError("");
+    enterAccount(account);
   };
+
+  if (!access.loginEnabled) {
+    return (
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        Sign-in is turned off. {access.signupEnabled ? "You can still create an account." : "Please contact the Foundation office."}
+      </p>
+    );
+  }
+
+  if (step === "forgot") {
+    return (
+      <ForgotPasswordForm
+        role="customer"
+        onBack={() => setStep("identifier")}
+        onComplete={(account) => {
+          signIn(account);
+          setStep("complete");
+        }}
+      />
+    );
+  }
 
   if (step === "complete") {
     return (
@@ -48,7 +150,7 @@ export default function SignInFlow() {
           Signed In
         </p>
 
-        <h2 className="mt-2 text-3xl font-bold text-text-primary">
+        <h2 className="mt-2 text-xl font-semibold text-text-primary">
           Welcome back
         </h2>
 
@@ -66,13 +168,26 @@ export default function SignInFlow() {
 
   if (step === "otp") {
     return (
-      <OtpForm
-        title="Verify your identity"
-        description={`We sent a verification code to your registered email and WhatsApp.`}
-        onSubmit={handleOtp}
-        onBack={() => setStep("identifier")}
-        onResend={() => undefined}
-      />
+      <div>
+        {otpHint && <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
+        {error && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+        <OtpForm
+          title={method === "sms" ? "SMS verification" : "Email verification"}
+          description={
+            method === "sms"
+              ? "Enter the 6-digit code sent to your registered mobile. You can resend after 1 minute."
+              : "Password accepted. Enter the 6-digit code emailed to your registered address. You can resend after 1 minute."
+          }
+          onSubmit={handleOtp}
+          onBack={() => setStep("identifier")}
+          onResend={() => {
+            const account = pending ?? findAccountByIdentifier(identifier);
+            if (!account) return;
+            if (method === "sms") sendSmsOtp(account);
+            else sendEmailMfa(account);
+          }}
+        />
+      </div>
     );
   }
 
@@ -83,14 +198,37 @@ export default function SignInFlow() {
           Sign In
         </p>
 
-        <h2 className="text-3xl font-bold text-text-primary sm:text-4xl">
+        <h2 className="text-xl font-semibold text-text-primary">
           Welcome back
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
-          Log in with your registered email, phone number or Account ID.
+          {method === "sms"
+            ? "Sign in with the mobile number on your account. We send a one-time SMS code."
+            : access.emailOtp
+              ? "Sign in with your password. We then email a one-time code — both are required."
+              : "Sign in with your registered email, phone or account ID and password."}
         </p>
       </div>
+
+      {access.smsLogin && (
+        <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl border border-border bg-white p-1.5">
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${method === "password" ? "bg-burgundy text-white" : "text-text-muted"}`}
+            onClick={() => setMethod("password")}
+          >
+            Email / password
+          </button>
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${method === "sms" ? "bg-burgundy text-white" : "text-text-muted"}`}
+            onClick={() => setMethod("sms")}
+          >
+            SMS OTP
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleIdentifier} className="space-y-5">
         <div>
@@ -98,7 +236,7 @@ export default function SignInFlow() {
             className="mb-2 block text-sm font-semibold text-text-primary"
             htmlFor="signin-identifier"
           >
-            Email, Phone or Account ID
+            {method === "sms" ? "Registered mobile number" : "Email, Phone or Account ID"}
           </label>
           <input
             id="signin-identifier"
@@ -107,10 +245,27 @@ export default function SignInFlow() {
             value={identifier}
             onChange={(event) => setIdentifier(event.target.value)}
             className="input-field"
-            placeholder="name@example.com / +91 98765 43210 / 12-digit Account ID"
+            placeholder={method === "sms" ? "+91 98765 43210" : "name@example.com / +91 98765 43210 / 12-digit Account ID"}
             autoComplete="username"
           />
         </div>
+        {method === "password" && (
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="signin-password">
+              Password
+            </label>
+            <input
+              id="signin-password"
+              type="password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="input-field"
+              placeholder="Your password"
+              autoComplete="current-password"
+            />
+          </div>
+        )}
 
         {error && (
           <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -119,8 +274,13 @@ export default function SignInFlow() {
         )}
 
         <button type="submit" className="btn-primary w-full">
-          Send Codes to Email & WhatsApp
+          {method === "sms" ? "Send SMS code" : access.emailOtp ? "Continue to verification" : "Sign in"}
         </button>
+        {method === "password" && (
+          <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => setStep("forgot")}>
+            Forgot password?
+          </button>
+        )}
       </form>
     </div>
   );

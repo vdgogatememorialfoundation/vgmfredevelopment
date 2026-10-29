@@ -1,9 +1,10 @@
 import { books } from "@/data/books";
-import { getIntegrations } from "@/lib/integrations";
+import { getIntegrations, hasShippingCredentials, shippingProviderId } from "@/lib/integrations";
 import type { Book, ProcessingTimeline, ProductOverride, SiteSettings } from "@/types";
 import { formatDate } from "@/lib/utils";
 
-const CARRIERS_KEY = "vgmf_carriers";
+const CARRIERS_KEY = "vgmf_carriers_official";
+const LEGACY_CARRIERS_KEY = "vgmf_carriers";
 const PROFILES_KEY = "vgmf_product_fulfillment";
 const POLICY_KEY = "vgmf_fulfillment_policy";
 const SETTINGS_KEY = "vgmf_settings";
@@ -96,6 +97,27 @@ const DEFAULT_POLICY: FulfillmentPolicy = {
   pickupHoldingDays: 3,
 };
 
+/** Last-mile names Shiprocket / iThink allocate. They are not APIs on this site. */
+const LAST_MILE_IDS = new Set([
+  "shadowfax",
+  "pidge",
+  "delhivery",
+  "bluedart",
+  "blue-dart",
+  "ekart",
+  "dtdc",
+  "indiapost",
+  "india-post",
+]);
+
+const LAST_MILE_NAME = /shadowfax|delhivery|blue\s*dart|ekart|e-?kart|dtdc|india\s*post|pidge/i;
+
+function isLastMile(carrier: { id?: string; name?: string }) {
+  const id = String(carrier.id ?? "").toLowerCase();
+  const name = String(carrier.name ?? "");
+  return LAST_MILE_IDS.has(id) || LAST_MILE_NAME.test(id) || LAST_MILE_NAME.test(name);
+}
+
 function defaultCarriers(): CarrierAccount[] {
   const national = (near: number, mid: number, far: number): Record<string, number> => ({
     "1": mid,
@@ -110,6 +132,21 @@ function defaultCarriers(): CarrierAccount[] {
 
   return [
     {
+      id: "shipday",
+      name: "Shipday",
+      kind: "hyperlocal",
+      enabled: true,
+      priority: 6,
+      apiKey: "",
+      apiSecret: "",
+      webhookUrl: "",
+      prefixes: ["411"],
+      zoneDays: { "4": 1 },
+      sameCityDays: 0,
+      charge: 45,
+      blurb: "On-demand local delivery. Book, assign and track with the Shipday API key.",
+    },
+    {
       id: "shiprocket",
       name: "Shiprocket",
       kind: "aggregator",
@@ -123,21 +160,6 @@ function defaultCarriers(): CarrierAccount[] {
       sameCityDays: 1,
       charge: 49,
       blurb: "Multi-courier checkout for surface and express across India.",
-    },
-    {
-      id: "nimbuspost",
-      name: "Nimbuspost",
-      kind: "aggregator",
-      enabled: true,
-      priority: 2,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(2, 3, 5),
-      sameCityDays: 1,
-      charge: 45,
-      blurb: "Shipping aggregator with prepaid and COD serviceability.",
     },
     {
       id: "ithink",
@@ -156,7 +178,7 @@ function defaultCarriers(): CarrierAccount[] {
     },
     {
       id: "tookan",
-      name: "Tookan",
+      name: "Tookan Hyperlocal",
       kind: "hyperlocal",
       enabled: true,
       priority: 4,
@@ -167,112 +189,37 @@ function defaultCarriers(): CarrierAccount[] {
       zoneDays: { "4": 1 },
       sameCityDays: 0,
       charge: 39,
-      blurb: "Same-city task delivery for Pune store pincodes.",
+      blurb: "Tookan hyperlocal: same-city create_task for store pincodes.",
     },
     {
-      id: "pidge",
-      name: "Pidge",
-      kind: "hyperlocal",
+      id: "tookan-parcel",
+      name: "Tookan Parcel",
+      kind: "aggregator",
       enabled: true,
       priority: 5,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: ["411", "400", "401", "410"],
-      zoneDays: { "4": 1 },
-      sameCityDays: 0,
-      charge: 49,
-      blurb: "Hyperlocal runs across Pune and Mumbai.",
-    },
-    {
-      id: "shadowfax",
-      name: "Shadowfax",
-      kind: "courier",
-      enabled: true,
-      priority: 6,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(2, 3, 4),
-      sameCityDays: 1,
-      charge: 55,
-      blurb: "On-demand and intercity delivery, faster inside metro prefixes.",
-    },
-    {
-      id: "delhivery",
-      name: "Delhivery",
-      kind: "courier",
-      enabled: true,
-      priority: 7,
       apiKey: "",
       apiSecret: "",
       webhookUrl: "",
       prefixes: [],
       zoneDays: national(2, 3, 5),
       sameCityDays: 1,
-      charge: 40,
-      blurb: "National surface network.",
+      charge: 45,
+      blurb: "Tookan standard parcel: create_multiple_tasks with pickup and delivery.",
     },
     {
-      id: "bluedart",
-      name: "Blue Dart",
-      kind: "courier",
+      id: "nimbuspost",
+      name: "Nimbuspost",
+      kind: "aggregator",
       enabled: true,
-      priority: 8,
+      priority: 2,
       apiKey: "",
       apiSecret: "",
       webhookUrl: "",
       prefixes: [],
-      zoneDays: national(1, 2, 3),
+      zoneDays: national(2, 3, 5),
       sameCityDays: 1,
-      charge: 90,
-      blurb: "Express air network for faster national delivery.",
-    },
-    {
-      id: "ekart",
-      name: "Ekart",
-      kind: "courier",
-      enabled: true,
-      priority: 9,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(2, 4, 5),
-      sameCityDays: 2,
-      charge: 35,
-      blurb: "Economy surface delivery.",
-    },
-    {
-      id: "dtdc",
-      name: "DTDC",
-      kind: "courier",
-      enabled: false,
-      priority: 10,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(3, 4, 6),
-      sameCityDays: 2,
-      charge: 40,
-      blurb: "National courier, including extended pin codes.",
-    },
-    {
-      id: "indiapost",
-      name: "India Post",
-      kind: "courier",
-      enabled: false,
-      priority: 11,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: { "1": 6, "2": 6, "3": 5, "4": 4, "5": 6, "6": 7, "7": 8, "8": 7 },
-      sameCityDays: 3,
-      charge: 25,
-      blurb: "Widest pin-code reach, longer transit.",
+      charge: 45,
+      blurb: "Shipping aggregator with prepaid and COD serviceability.",
     },
   ];
 }
@@ -293,33 +240,71 @@ function writeJSON(key: string, value: unknown) {
 }
 
 export function credentialsSaved(carrier: CarrierAccount) {
-  return carrier.apiKey.trim().length >= 8;
+  return carrierIsBookable(carrier);
+}
+
+/** A courier is offered on the store only when its API key is saved and the desk is on. */
+export function carrierIsBookable(carrier: CarrierAccount) {
+  if (!carrier.enabled) return false;
+  const provider = shippingProviderId(carrier.id);
+  if (!provider || !hasShippingCredentials(provider)) return false;
+  const shipping = getIntegrations().shipping;
+  if (carrier.id === "tookan") return Boolean(shipping.tookan.hyperlocal);
+  if (carrier.id === "tookan-parcel") return Boolean(shipping.tookan.parcel);
+  if (carrier.id === "shipday") return shipping.shipday.enabled !== false;
+  if (carrier.id === "shiprocket") return shipping.shiprocket.enabled !== false;
+  if (carrier.id === "nimbuspost") return shipping.nimbuspost.enabled !== false;
+  if (carrier.id === "ithink") return shipping.ithink.enabled !== false;
+  return true;
+}
+
+export function officialCarrierIds() {
+  return defaultCarriers().map((carrier) => carrier.id);
 }
 
 export function getCarriers(): CarrierAccount[] {
-  const stored = readJSON<CarrierAccount[] | null>(CARRIERS_KEY, null);
-  if (!stored?.length) {
-    const seeded = defaultCarriers();
-    writeJSON(CARRIERS_KEY, seeded);
-    return seeded;
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(LEGACY_CARRIERS_KEY);
   }
-  const byId = new Map(stored.map((carrier) => [carrier.id, carrier]));
-  return defaultCarriers().map((carrier) => ({ ...carrier, ...byId.get(carrier.id) }));
+  const stored = readJSON<CarrierAccount[] | null>(CARRIERS_KEY, null);
+  const allowed = new Set(officialCarrierIds());
+  const cleaned = (stored ?? []).filter((carrier) => allowed.has(carrier.id) && !isLastMile(carrier));
+  const seeded = defaultCarriers();
+  const byId = new Map(cleaned.map((carrier) => [carrier.id, carrier]));
+  const next = seeded.map((carrier) => {
+    const saved = byId.get(carrier.id);
+    return saved
+      ? { ...carrier, ...saved, id: carrier.id, name: carrier.name, kind: carrier.kind, blurb: carrier.blurb, apiKey: "", apiSecret: "", webhookUrl: "" }
+      : carrier;
+  });
+  writeJSON(CARRIERS_KEY, next);
+  return next;
+}
+
+function officialOnly(carriers: CarrierAccount[]) {
+  const allowed = new Set(officialCarrierIds());
+  return carriers
+    .filter((carrier) => allowed.has(carrier.id) && !isLastMile(carrier))
+    .map((carrier) => ({ ...carrier, apiKey: "", apiSecret: "", webhookUrl: "" }));
 }
 
 export function saveCarriers(carriers: CarrierAccount[]) {
-  writeJSON(CARRIERS_KEY, carriers);
+  const next = officialOnly(carriers);
+  writeJSON(CARRIERS_KEY, next);
   const settings = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
   if (settings) {
-    settings.couriers = carriers.filter((carrier) => carrier.enabled).map((carrier) => carrier.name);
-    const shiprocket = carriers.find((carrier) => carrier.id === "shiprocket");
-    if (shiprocket) settings.apiKeys = { ...settings.apiKeys, shiprocket: shiprocket.apiKey };
+    settings.couriers = next.filter((carrier) => carrier.enabled).map((carrier) => carrier.name);
     writeJSON(SETTINGS_KEY, settings);
   }
 }
 
 export function saveCarrier(carrier: CarrierAccount) {
-  const next = getCarriers().map((item) => (item.id === carrier.id ? carrier : item));
+  if (isLastMile(carrier) || !defaultCarriers().some((item) => item.id === carrier.id)) return;
+  const next = getCarriers().map((item) =>
+    item.id === carrier.id
+      ? { ...carrier, id: item.id, name: item.name, kind: item.kind, blurb: item.blurb, apiKey: "", apiSecret: "", webhookUrl: "" }
+      : item
+  );
   saveCarriers(next);
 }
 
@@ -523,7 +508,7 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
 
   const origin = getOriginPincode();
   const offers = getCarriers()
-    .filter((carrier) => carrier.enabled)
+    .filter(carrierIsBookable)
     .map((carrier) => offerFor(carrier, normalized, origin, dispatchBy, handoffBy, policy.defaultTransitDays))
     .filter((offer): offer is CarrierOffer => Boolean(offer))
     .sort((a, b) => {
@@ -536,7 +521,11 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
   if (!offers.length) {
     return {
       ...emptyOffers,
-      note: "No enabled delivery partner services this pincode. You can still choose pickup from store when it is available.",
+      serviceable: true,
+      deliveryAvailable: true,
+      note: pickupAvailable
+        ? "No shipping API is connected yet, so courier names and delivery dates are not shown. Pickup from store still uses the Foundation packing calendar."
+        : "No shipping API is connected yet. Add keys in Admin → Settings → Shipping APIs before courier dates can be shown.",
     };
   }
 
@@ -566,6 +555,24 @@ export function checkCart(
   const pickupAvailable = quotes.every((quote) => quote.pickupAvailable);
   const shared = intersectOffers(quotes);
   const base = quotes[0];
+  if (!shared.length && quotes.every((quote) => quote.serviceable)) {
+    return {
+      ...base,
+      serviceable: true,
+      deliveryAvailable: true,
+      pickupAvailable,
+      offers: [],
+      courier: null,
+      courierId: null,
+      deliverFrom: "",
+      deliverBy: "",
+      note: base.note,
+      processingDays: Math.max(...quotes.map((quote) => quote.processingDays)),
+      dispatchBy: latestLabel(quotes.map((quote) => quote.dispatchBy)),
+      pickupReadyBy: latestLabel(quotes.map((quote) => quote.pickupReadyBy)),
+      stockingLocation: quotes.map((quote) => quote.stockingLocation).filter(unique).join(", "),
+    };
+  }
   if (!shared.length) {
     const note = quotes.find((quote) => quote.note && !quote.serviceable)?.note
       ?? "One or more products cannot be delivered to this pincode together.";

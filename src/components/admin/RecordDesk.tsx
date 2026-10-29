@@ -23,6 +23,7 @@ export default function RecordDesk<T extends { id: string }>({
   label,
   onSave,
   onHide,
+  hideLabel = "Delete",
 }: {
   heading: string;
   description: string;
@@ -33,6 +34,7 @@ export default function RecordDesk<T extends { id: string }>({
   label: (record: T) => string;
   onSave: (record: T) => void;
   onHide: (id: string) => void;
+  hideLabel?: string;
 }) {
   const [draft, setDraft] = useState<T>(() => blank());
   const [editing, setEditing] = useState(false);
@@ -134,8 +136,19 @@ export default function RecordDesk<T extends { id: string }>({
               >
                 Edit
               </button>
-              <button type="button" className="text-slate-400" onClick={() => onHide(record.id)}>
-                Hide
+              <button
+                type="button"
+                className="text-red-600"
+                onClick={() => {
+                  if (!window.confirm(`${hideLabel} “${label(record)}”? It is removed from the site.`)) return;
+                  onHide(record.id);
+                  if (draft.id === record.id) {
+                    setDraft(blank());
+                    setEditing(false);
+                  }
+                }}
+              >
+                {hideLabel}
               </button>
             </div>
           </li>

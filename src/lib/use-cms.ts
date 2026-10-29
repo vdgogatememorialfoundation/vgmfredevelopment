@@ -11,25 +11,32 @@ import { videos as seededVideos } from "@/data/videos";
 import {
   clinicKeys,
   defaultFlags,
+  bannerKeys,
   flyerKeys,
+  getAllArticles,
   getLiveAnnouncements,
-  getLiveArticles,
+  getLiveBanners,
   getLiveClinics,
   getLiveEvents,
   getLiveFlyers,
   getLiveNotices,
   getLiveVideos,
+  getPublishedArticles,
   getSiteFlags,
   noticeKeys,
   subscribeCms,
   videoKeys,
   type SiteFlags,
 } from "@/lib/cms";
-import type { Announcement, Article, Clinic, Event, Flyer, Notice, SiteSettings, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, SiteBanner, SiteSettings, User, Video } from "@/types";
 import { getSettings } from "@/lib/admin-store";
+import { books as seededBooks } from "@/data/books";
+import { getAllProducts } from "@/lib/product-data";
 
 let articleRaw = "\0";
 let articleList: Article[] = seededArticles;
+let allArticleRaw = "\0";
+let allArticleList: Article[] = seededArticles;
 let announcementRaw = "\0";
 let announcementList: Announcement[] = seededAnnouncements;
 let eventRaw = "\0";
@@ -44,8 +51,22 @@ export function useLiveArticles() {
       const raw = `${window.localStorage.getItem("vgmf_article_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_articles") ?? ""}`;
       if (raw === articleRaw) return articleList;
       articleRaw = raw;
-      articleList = raw === "|" ? seededArticles : getLiveArticles();
+      articleList = getPublishedArticles();
       return articleList;
+    },
+    () => seededArticles
+  );
+}
+
+export function useAllArticles() {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = `${window.localStorage.getItem("vgmf_article_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_articles") ?? ""}`;
+      if (raw === allArticleRaw) return allArticleList;
+      allArticleRaw = raw;
+      allArticleList = getAllArticles();
+      return allArticleList;
     },
     () => seededArticles
   );
@@ -99,6 +120,7 @@ export function collectionHook<T>(editsKey: string, customKey: string, seed: T[]
 
 export const useLiveNotices = collectionHook<Notice>(noticeKeys.edits, noticeKeys.custom, seededNotices, getLiveNotices);
 export const useLiveFlyers = collectionHook<Flyer>(flyerKeys.edits, flyerKeys.custom, seededFlyers, getLiveFlyers);
+export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners);
 export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos);
 export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics);
 
@@ -130,6 +152,82 @@ export function useSiteSettings(): SiteSettings | null {
       return settingsValue;
     },
     () => null
+  );
+}
+
+const productKeys = ["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"];
+let productRaw = "\0";
+let productAll: Book[] = seededBooks;
+let productLive: Book[] = seededBooks;
+
+function readProducts() {
+  const raw = productKeys.map((key) => window.localStorage.getItem(key) ?? "").join("|");
+  if (raw !== productRaw) {
+    productRaw = raw;
+    productAll = getAllProducts();
+    productLive = productAll.filter((book) => book.active !== false);
+  }
+}
+
+/** Shop products, live from the admin catalogue. */
+export function useLiveBooks(): Book[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      readProducts();
+      return productLive;
+    },
+    () => seededBooks
+  );
+}
+
+/** Every product including drafts, for the admin. */
+export function useAllProducts(): Book[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      readProducts();
+      return productAll;
+    },
+    () => seededBooks
+  );
+}
+
+let accountsRaw = "\0";
+let accountsValue: User[] = [];
+
+export function useAccounts(): User[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = window.localStorage.getItem("vgmf_accounts") ?? "";
+      if (raw === accountsRaw) return accountsValue;
+      accountsRaw = raw;
+      accountsValue = raw ? (JSON.parse(raw) as User[]) : [];
+      return accountsValue;
+    },
+    () => accountsValue
+  );
+}
+
+let ordersRaw = "\0";
+let ordersValue: Order[] = [];
+
+export function useOrders(): Order[] {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = window.localStorage.getItem("vgmf_orders") ?? "";
+      if (raw === ordersRaw) return ordersValue;
+      ordersRaw = raw;
+      try {
+        ordersValue = raw ? (JSON.parse(raw) as Order[]) : [];
+      } catch {
+        ordersValue = [];
+      }
+      return ordersValue;
+    },
+    () => ordersValue
   );
 }
 

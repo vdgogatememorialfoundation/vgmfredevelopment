@@ -4,28 +4,41 @@ import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import ClinicCard from "@/components/clinics/ClinicCard";
 import { useLiveClinics } from "@/lib/use-cms";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function ClinicsSection() {
   const shown = useLiveClinics().slice(0, 3);
+  const { t } = useI18n();
 
   return (
-    <section className="section bg-warm-cream" aria-labelledby="clinics-heading">
+    <section className="section-paper" aria-labelledby="clinics-heading">
       <div className="container">
         <SectionHeading
-          eyebrow="Clinics"
-          title="Our Clinics"
-          description="Foundation clinics providing authentic Ayurveda consultation, therapy and community care."
+          eyebrow={t("home.clinicsEyebrow")}
+          title={t("home.clinicsTitle")}
+          description={t("home.clinicsDesc")}
+          action={
+            <Link href="/clinics" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+              {t("common.viewAll")}
+            </Link>
+          }
         />
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {shown.map((clinic) => (
-            <ClinicCard key={clinic.id} clinic={clinic} />
-          ))}
-        </div>
+        {shown.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
+            {t("home.noClinics")}
+          </p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {shown.map((clinic) => (
+              <ClinicCard key={clinic.id} clinic={clinic} />
+            ))}
+          </div>
+        )}
 
-        <div className="mt-10 text-center">
+        <div className="mt-8">
           <Link href="/clinics" className="btn-outline">
-            View All Clinics
+            {t("home.viewClinics")}
           </Link>
         </div>
       </div>

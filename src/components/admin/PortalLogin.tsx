@@ -2,22 +2,36 @@
 
 import SiteLogo from "@/components/common/SiteLogo";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
-import { ensureAdminCredentials, getAccounts } from "@/lib/admin-store";
+import { ensureAdminCredentials, getAccounts, sendOtpCode } from "@/lib/admin-store";
+import { loginBlockReason } from "@/lib/auth";
+import { OTP_RESEND_SECONDS, issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
+import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
+import type { User } from "@/types";
 
-export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }) {
+const copy = {
+  admin: { label: "Admin", target: "/admin", hint: "administrator" },
+  staff: { label: "Staff", target: "/staff", hint: "staff" },
+  doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
+} as const;
+
+type Mode = "password" | "mfa" | "otp" | "forgot";
+
+export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }) {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [mode, setMode] = useState<Mode>("password");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpHint, setOtpHint] = useState("");
   const [error, setError] = useState("");
-
-  const label = portal === "admin" ? "Admin" : portal === "staff" ? "Staff" : "Seller";
-  const target = portal === "staff" ? "/admin" : `/${portal}`;
-  const signedIn =
-    user?.role === portal || (portal === "seller" && user?.role === "seller");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const { label, target, hint } = copy[portal];
+  const signedIn = Boolean(user && matchesPortal(user, portal));
 
   if (signedIn && user) {
     return (
@@ -38,13 +52,17 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }
     );
   }
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
+  const findPortalAccount = () => {
     ensureAdminCredentials();
-    const account = getAccounts().find(
-      (a) => a.email.toLowerCase() === email.trim().toLowerCase()
+    return getAccounts().find(
+      (account) => account.email.toLowerCase() === email.trim().toLowerCase() && matchesPortal(account, portal)
     );
-    if (!account || account.role !== portal) {
+  };
+
+  const submitPassword = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
       return;
     }
@@ -52,74 +70,214 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }
       setError("Incorrect password. Please try again.");
       return;
     }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    setError("");
+    const code = issueEmailOtp(account.email, portal);
+    sendOtpCode({
+      email: account.email,
+      phone: account.phone,
+      name: account.firstName,
+      code,
+      purpose: `${label.toLowerCase()} sign-in`,
+    });
+    setPendingEmail(account.email);
+    setOtpHint(`Password accepted. Code sent to ${account.email}. Demo code: ${code}`);
+    setMode("mfa");
+  };
+
+  const sendCode = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
+      setError(`No ${label.toLowerCase()} account found for this email.`);
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    const code = issueEmailOtp(account.email, portal);
+    sendOtpCode({
+      email: account.email,
+      phone: account.phone,
+      name: account.firstName,
+      code,
+      purpose: `${label.toLowerCase()} sign-in`,
+    });
+    setOtpSent(true);
+    setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+    setError("");
+  };
+
+  const submitOtp = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
+      setError(`No ${label.toLowerCase()} account found for this email.`);
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    const invalid = verifyEmailOtp(account.email, portal, otp);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
     setError("");
     signIn(account);
     router.push(target);
   };
 
+  const submitMfa = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
+      setError(`No ${label.toLowerCase()} account found for this email.`);
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    const invalid = verifyEmailOtp(account.email, portal, otp);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError("");
+    signIn(account);
+    router.push(target);
+  };
+
+  if (mode === "forgot") {
+    return (
+      <Card portal={portal}>
+        <ForgotPasswordForm role={portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
+      </Card>
+    );
+  }
+
   return (
     <Card portal={portal}>
-      <form onSubmit={submit} className="space-y-5">
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-email`}>
-            Email id
-          </label>
-          <input
-            id={`${portal}-email`}
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input-field"
-            placeholder="you@vaidyagogate.org"
-            autoComplete="username"
-          />
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-password`}>
-            Password
-          </label>
-          <input
-            id={`${portal}-password`}
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="input-field"
-            placeholder="Enter your password"
-            autoComplete="current-password"
-          />
-        </div>
-
-        {error && (
-          <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
+      {mode === "mfa" ? (
+        <form onSubmit={submitMfa} className="space-y-5">
+          <p className="text-sm text-text-muted">
+            Multi-factor step for {pendingEmail || email}. Enter the code from email to finish signing in. The session then stays open until you log out.
           </p>
-        )}
-
-        <button type="submit" className="btn-primary w-full">
-          Sign in to {label} portal
-        </button>
-      </form>
-
-      {portal === "seller" ? (
-        <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
-          <p className="font-semibold text-text-primary">New to VGMF?</p>
-          <p>
-            Create a seller account with your email and password, then complete your brand onboarding.
-          </p>
-          <Link href="/seller" className="mt-2 inline-block font-semibold text-burgundy hover:underline">
-            Create a seller account →
-          </Link>
-        </div>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-mfa`}>
+              6-digit verification code
+            </label>
+            <input
+              id={`${portal}-mfa`}
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              required
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="input-field tracking-[0.3em]"
+              placeholder="••••••"
+              autoComplete="one-time-code"
+            />
+          </div>
+          {otpHint && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
+          {error && <ErrorText text={error} />}
+          <button type="submit" className="btn-primary w-full">
+            Verify and open portal
+          </button>
+          <ResendButton
+            onResend={() => {
+              const account = findPortalAccount();
+              if (account) {
+                const code = issueEmailOtp(account.email, portal);
+                sendOtpCode({
+                  email: account.email,
+                  phone: account.phone,
+                  name: account.firstName,
+                  code,
+                  purpose: `${label.toLowerCase()} sign-in`,
+                });
+                setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+              }
+            }}
+          />
+          <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => { setMode("password"); setError(""); setOtp(""); }}>
+            Back to password
+          </button>
+        </form>
+      ) : mode === "password" || portal !== "staff" ? (
+        <form onSubmit={submitPassword} className="space-y-5">
+          <EmailField portal={portal} email={email} setEmail={setEmail} />
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-password`}>
+              Password
+            </label>
+            <input
+              id={`${portal}-password`}
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input-field"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+            />
+          </div>
+          {error && <ErrorText text={error} />}
+          <button type="submit" className="btn-primary w-full">
+            Sign in to {label} portal
+          </button>
+          <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => { setMode("forgot"); setError(""); }}>
+            Forgot password?
+          </button>
+        </form>
       ) : (
+        <form onSubmit={otpSent ? submitOtp : sendCode} className="space-y-5">
+          <EmailField portal={portal} email={email} setEmail={setEmail} />
+          {otpSent && (
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="staff-otp">
+                6-digit code
+              </label>
+              <input
+                id="staff-otp"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="input-field tracking-[0.3em]"
+                placeholder="••••••"
+                autoComplete="one-time-code"
+              />
+            </div>
+          )}
+          {otpHint && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
+          {error && <ErrorText text={error} />}
+          <button type="submit" className="btn-primary w-full">
+            {otpSent ? "Verify code" : "Send email code"}
+          </button>
+          {otpSent && (
+            <ResendButton onResend={() => sendCode()} />
+          )}
+        </form>
+      )}
+
+      {portal === "admin" && (
         <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
           <p className="font-semibold text-text-primary">Demo credentials</p>
-          <p>
-            {portal === "admin" ? "admin@vaidyagogate.org" : "care@vaidyagogate.org"} ·{" "}
-            password {portal === "admin" ? "admin123" : "staff123"}
-          </p>
+          <p>admin@vaidyagogate.org · password admin123</p>
         </div>
       )}
 
@@ -130,13 +288,74 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "seller" }
   );
 }
 
+function matchesPortal(account: Pick<User, "role">, portal: "admin" | "staff" | "doctor") {
+  if (portal === "staff") return account.role === "staff" || account.role === "coadmin";
+  return account.role === portal;
+}
+
+function ResendButton({ onResend }: { onResend: () => void }) {
+  const [seconds, setSeconds] = useState(OTP_RESEND_SECONDS);
+  useEffect(() => {
+    if (seconds <= 0) return;
+    const timer = window.setTimeout(() => setSeconds((current) => current - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [seconds]);
+  return (
+    <button
+      type="button"
+      className="w-full text-sm font-semibold text-burgundy disabled:text-text-muted"
+      disabled={seconds > 0}
+      onClick={() => {
+        if (seconds > 0) return;
+        setSeconds(OTP_RESEND_SECONDS);
+        onResend();
+      }}
+    >
+      {seconds > 0 ? `Resend OTP in ${seconds}s` : "Resend OTP"}
+    </button>
+  );
+}
+
+function EmailField({
+  portal,
+  email,
+  setEmail,
+}: {
+  portal: string;
+  email: string;
+  setEmail: (value: string) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-email`}>
+        Email id
+      </label>
+      <input
+        id={`${portal}-email`}
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input-field"
+        placeholder="you@vaidyagogate.org"
+        autoComplete="username"
+      />
+    </div>
+  );
+}
+
+function ErrorText({ text }: { text: string }) {
+  return <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{text}</p>;
+}
+
 function Card({
   portal,
   children,
 }: {
-  portal: "admin" | "staff" | "seller";
+  portal: "admin" | "staff" | "doctor";
   children: React.ReactNode;
 }) {
+  const { label, hint } = copy[portal];
   return (
     <main className="flex min-h-screen items-center justify-center bg-warm-cream/40 px-5">
       <div className="w-full max-w-md">
@@ -145,13 +364,15 @@ function Card({
             <SiteLogo size={56} />
           </div>
           <p className="mt-4 text-center text-xs font-bold uppercase tracking-[0.18em] text-burgundy">
-            {portal === "admin" ? "Admin console" : portal === "staff" ? "Staff console" : "Seller portal"}
+            {label} console
           </p>
           <h1 className="mt-1 text-center text-2xl font-bold text-text-primary">
-            {portal === "admin" ? "Admin sign in" : portal === "staff" ? "Staff sign in" : "Seller sign in"}
+            {label} sign in
           </h1>
           <p className="mt-2 text-center text-sm text-text-muted">
-            Use your {portal === "admin" ? "administrator" : portal === "staff" ? "staff" : "seller"} email and password.
+            {portal === "staff"
+              ? "Staff and co-administrators sign in here with email, password and a one-time email code."
+              : `Use your ${hint} email and password, then the email verification code. Sessions stay signed in until Logout.`}
           </p>
           <div className="mt-7">{children}</div>
         </div>

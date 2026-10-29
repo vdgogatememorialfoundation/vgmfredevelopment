@@ -127,6 +127,41 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return <textarea {...props} className="input-field" />;
 }
 
+export function ConnectionBadge({
+  status,
+  hasKeys,
+}: {
+  status?: "success" | "failed" | "untested";
+  hasKeys: boolean;
+}) {
+  if (status === "success") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+        Success — connected
+      </span>
+    );
+  }
+  if (!hasKeys) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+        Awaiting credentials
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-800">
+        Failed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+      Saved — test to verify
+    </span>
+  );
+}
+
 export function StatusBadge({
   status,
   mapping,
@@ -148,8 +183,11 @@ export function StatusBadge({
 }
 
 export const ORDER_STATUS_TONES: Record<string, string> = {
+  Pending: "bg-slate-100 text-slate-600",
   Ordered: "bg-burgundy/10 text-burgundy",
+  Accepted: "bg-sky-50 text-sky-800",
   Packed: "bg-amber-50 text-amber-700",
+  "Ready to Ship": "bg-indigo-50 text-indigo-700",
   Shipped: "bg-warm-cream text-burgundy",
   "Out for Delivery": "bg-burgundy/10 text-burgundy",
   Delivered: "bg-emerald-50 text-emerald-700",
@@ -159,7 +197,9 @@ export const ORDER_STATUS_TONES: Record<string, string> = {
 
 export const ORDER_STATUS_FLOW = [
   "Ordered",
+  "Accepted",
   "Packed",
+  "Ready to Ship",
   "Shipped",
   "Out for Delivery",
   "Delivered",

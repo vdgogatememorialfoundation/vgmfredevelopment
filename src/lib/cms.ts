@@ -3,11 +3,13 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { announcements as seededAnnouncements, certificates as baseCertificates, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
-import type { Announcement, Article, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, User, Video } from "@/types";
+import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, SiteBanner, User, Video } from "@/types";
+import { isArticlePublished } from "@/lib/article-display";
 import { modulesFor, type StaffModuleId } from "@/lib/roles";
 
 const ARTICLES_KEY = "vgmf_article_edits";
 const CUSTOM_ARTICLES_KEY = "vgmf_custom_articles";
+const ASSIGNMENTS_KEY = "vgmf_article_assignments";
 const ANNOUNCEMENTS_KEY = "vgmf_announcement_edits";
 const EVENTS_KEY = "vgmf_event_edits";
 const FLAGS_KEY = "vgmf_site_flags";
@@ -18,7 +20,6 @@ export const contentModules = [
   { id: "events", label: "Events" },
   { id: "announcements", label: "Announcements" },
   { id: "orders", label: "Orders & refunds" },
-  { id: "certificates", label: "Certificates" },
   { id: "clinic", label: "Clinic" },
 ] as const;
 
@@ -85,46 +86,63 @@ export function saveSiteFlags(flags: SiteFlags) {
   writeJSON(FLAGS_KEY, flags);
 }
 
-export function getLiveArticles(): Article[] {
+function normalizeArticle(article: Article): Article {
+  return { ...article, status: article.status ?? "published" };
+}
+
+export function getAllArticles(): Article[] {
   const edits = readJSON<ArticleEdit[]>(ARTICLES_KEY, []);
   const custom = readJSON<Article[]>(CUSTOM_ARTICLES_KEY, []);
-  if (!edits.length && !custom.length) return seededArticles;
+  if (!edits.length && !custom.length) return seededArticles.map(normalizeArticle);
   const byId = new Map(edits.map((edit) => [edit.id, edit]));
   const fromSeed = seededArticles
-    .map((article) => ({ ...article, ...byId.get(article.id) }))
+    .map((article) => normalizeArticle({ ...article, ...byId.get(article.id) }))
     .filter((article) => !byId.get(article.id)?.hidden);
   const seedIds = new Set(seededArticles.map((article) => article.id));
-  return [...custom.filter((article) => !seedIds.has(article.id) && !byId.get(article.id)?.hidden), ...fromSeed];
+  return [...custom.filter((article) => !seedIds.has(article.id) && !byId.get(article.id)?.hidden).map(normalizeArticle), ...fromSeed];
+}
+
+export function getPublishedArticles() {
+  return getAllArticles().filter(isArticlePublished);
+}
+
+export function getLiveArticles(): Article[] {
+  return getPublishedArticles();
 }
 
 export function getArticle(idOrSlug: string) {
-  return getLiveArticles().find((article) => article.id === idOrSlug || article.slug === idOrSlug);
+  return getAllArticles().find((article) => article.id === idOrSlug || article.slug === idOrSlug);
 }
 
 export function saveArticle(article: Article) {
   const isSeed = seededArticles.some((item) => item.id === article.id);
+  const record: Article = normalizeArticle(article);
   if (isSeed) {
     const edits = readJSON<ArticleEdit[]>(ARTICLES_KEY, []).filter((item) => item.id !== article.id);
-    edits.push({
-      id: article.id,
-      title: article.title,
-      slug: article.slug,
-      excerpt: article.excerpt,
-      content: article.content,
-      author: article.author,
-      category: article.category,
-      featured: article.featured,
-      coverImage: article.coverImage,
-      images: article.images,
-      readingTime: article.readingTime,
-      hidden: false,
-    });
+    edits.push({ ...record, hidden: false });
     writeJSON(ARTICLES_KEY, edits);
     return;
   }
   const custom = readJSON<Article[]>(CUSTOM_ARTICLES_KEY, []).filter((item) => item.id !== article.id);
-  custom.unshift(article);
+  custom.unshift(record);
   writeJSON(CUSTOM_ARTICLES_KEY, custom);
+}
+
+export function getArticleAssignments(): ArticleAssignment[] {
+  return readJSON<ArticleAssignment[]>(ASSIGNMENTS_KEY, []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function saveArticleAssignment(assignment: ArticleAssignment) {
+  const next = getArticleAssignments().filter((item) => item.id !== assignment.id);
+  next.unshift(assignment);
+  writeJSON(ASSIGNMENTS_KEY, next);
+}
+
+export function removeArticleAssignment(id: string) {
+  writeJSON(
+    ASSIGNMENTS_KEY,
+    getArticleAssignments().filter((item) => item.id !== id)
+  );
 }
 
 export function hideArticle(id: string) {
@@ -144,7 +162,7 @@ export function getLiveAnnouncements(): Announcement[] {
     .map((item) => ({ ...item, ...byId.get(item.id) }))
     .filter((item) => !byId.get(item.id)?.hidden);
   const seedIds = new Set(seededAnnouncements.map((item) => item.id));
-  return [...custom.filter((item) => !seedIds.has(item.id)), ...fromSeed];
+  return [...custom.filter((item) => !seedIds.has(item.id) && !byId.get(item.id)?.hidden), ...fromSeed];
 }
 
 export function saveAnnouncement(item: Announcement) {
@@ -177,7 +195,7 @@ export function getLiveEvents(): Event[] {
     .map((event) => ({ ...event, ...byId.get(event.id) }))
     .filter((event) => !byId.get(event.id)?.hidden);
   const seedIds = new Set(seededEvents.map((event) => event.id));
-  return [...custom.filter((event) => !seedIds.has(event.id)), ...fromSeed];
+  return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden), ...fromSeed];
 }
 
 export function getLiveEvent(slug: string) {
@@ -197,6 +215,13 @@ export function saveEvent(event: Event) {
   writeJSON("vgmf_custom_events", custom);
 }
 
+export function deleteEvent(id: string) {
+  const edits = readJSON<EventEdit[]>(EVENTS_KEY, []).filter((edit) => edit.id !== id);
+  edits.push({ id, hidden: true });
+  writeJSON(EVENTS_KEY, edits);
+  writeJSON("vgmf_custom_events", readJSON<Event[]>("vgmf_custom_events", []).filter((item) => item.id !== id));
+}
+
 export function blankEvent(name: string): Event {
   const today = new Date().toISOString().slice(0, 10);
   return {
@@ -208,7 +233,7 @@ export function blankEvent(name: string): Event {
     bannerUrl: "",
     startDate: today,
     endDate: today,
-    city: "Pune",
+    city: "",
     venue: "",
     mode: "Offline" as EventMode,
     eventType: "Seminar" as EventType,
@@ -217,6 +242,9 @@ export function blankEvent(name: string): Event {
     fee: 0,
     currency: "INR",
     registrationStatus: "Open" as RegistrationStatus,
+    registrationUrl: "",
+    mapsUrl: "",
+    tbd: { venue: true, city: true, registration: true, fee: true },
   };
 }
 
@@ -227,7 +255,6 @@ export function getModuleAccess(): Record<ContentModuleId, string[]> {
     events: saved.events ?? [],
     announcements: saved.announcements ?? [],
     orders: saved.orders ?? [],
-    certificates: saved.certificates ?? [],
     clinic: saved.clinic ?? [],
   };
 }
@@ -246,7 +273,6 @@ const roleModuleFor: Record<ContentModuleId, StaffModuleId> = {
   events: "events",
   announcements: "website",
   orders: "orders",
-  certificates: "certificates",
   clinic: "clinics",
 };
 
@@ -296,6 +322,7 @@ export function hideRecord(editsKey: string, customKey: string, id: string) {
 
 export const noticeKeys = { edits: "vgmf_notice_edits", custom: "vgmf_custom_notices" };
 export const flyerKeys = { edits: "vgmf_flyer_edits", custom: "vgmf_custom_flyers" };
+export const bannerKeys = { edits: "vgmf_banner_edits", custom: "vgmf_custom_banners" };
 export const videoKeys = { edits: "vgmf_video_edits", custom: "vgmf_custom_videos" };
 export const clinicKeys = { edits: "vgmf_clinic_edits", custom: "vgmf_custom_clinics" };
 
@@ -306,6 +333,10 @@ export const hideNotice = (id: string) => hideRecord(noticeKeys.edits, noticeKey
 export const getLiveFlyers = () => liveRecords(seededFlyers, flyerKeys.edits, flyerKeys.custom);
 export const saveFlyer = (record: Flyer) => saveRecord(seededFlyers, flyerKeys.edits, flyerKeys.custom, record);
 export const hideFlyer = (id: string) => hideRecord(flyerKeys.edits, flyerKeys.custom, id);
+
+export const getLiveBanners = () => liveRecords<SiteBanner>([], bannerKeys.edits, bannerKeys.custom);
+export const saveBanner = (record: SiteBanner) => saveRecord<SiteBanner>([], bannerKeys.edits, bannerKeys.custom, record);
+export const hideBanner = (id: string) => hideRecord(bannerKeys.edits, bannerKeys.custom, id);
 
 export const getLiveVideos = () => liveRecords(seededVideos, videoKeys.edits, videoKeys.custom);
 export const saveVideo = (record: Video) => saveRecord(seededVideos, videoKeys.edits, videoKeys.custom, record);
