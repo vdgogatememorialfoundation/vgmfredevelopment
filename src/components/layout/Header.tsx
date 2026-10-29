@@ -123,7 +123,7 @@ export default function Header() {
     : "";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-border bg-white/95 shadow-[0_1px_0_0_rgba(184,149,58,0.45)] backdrop-blur">
       {/* Top bar */}
       <div className="border-b border-ink-soft bg-ink text-stone-300">
         <div className="container flex items-center justify-between py-2 text-xs">

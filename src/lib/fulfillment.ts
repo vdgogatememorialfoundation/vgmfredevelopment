@@ -240,8 +240,22 @@ function writeJSON(key: string, value: unknown) {
 }
 
 export function credentialsSaved(carrier: CarrierAccount) {
+  return carrierIsBookable(carrier);
+}
+
+/** A courier is offered on the store only when its API key is saved and the desk is on. */
+export function carrierIsBookable(carrier: CarrierAccount) {
+  if (!carrier.enabled) return false;
   const provider = shippingProviderId(carrier.id);
-  return provider ? hasShippingCredentials(provider) : false;
+  if (!provider || !hasShippingCredentials(provider)) return false;
+  const shipping = getIntegrations().shipping;
+  if (carrier.id === "tookan") return Boolean(shipping.tookan.hyperlocal);
+  if (carrier.id === "tookan-parcel") return Boolean(shipping.tookan.parcel);
+  if (carrier.id === "shipday") return shipping.shipday.enabled !== false;
+  if (carrier.id === "shiprocket") return shipping.shiprocket.enabled !== false;
+  if (carrier.id === "nimbuspost") return shipping.nimbuspost.enabled !== false;
+  if (carrier.id === "ithink") return shipping.ithink.enabled !== false;
+  return true;
 }
 
 export function officialCarrierIds() {
@@ -494,7 +508,7 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
 
   const origin = getOriginPincode();
   const offers = getCarriers()
-    .filter((carrier) => carrier.enabled)
+    .filter(carrierIsBookable)
     .map((carrier) => offerFor(carrier, normalized, origin, dispatchBy, handoffBy, policy.defaultTransitDays))
     .filter((offer): offer is CarrierOffer => Boolean(offer))
     .sort((a, b) => {
@@ -507,7 +521,11 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
   if (!offers.length) {
     return {
       ...emptyOffers,
-      note: "No enabled delivery partner services this pincode. You can still choose pickup from store when it is available.",
+      serviceable: true,
+      deliveryAvailable: true,
+      note: pickupAvailable
+        ? "No shipping API is connected yet, so courier names and delivery dates are not shown. Pickup from store still uses the Foundation packing calendar."
+        : "No shipping API is connected yet. Add keys in Admin → Settings → Shipping APIs before courier dates can be shown.",
     };
   }
 
@@ -537,6 +555,24 @@ export function checkCart(
   const pickupAvailable = quotes.every((quote) => quote.pickupAvailable);
   const shared = intersectOffers(quotes);
   const base = quotes[0];
+  if (!shared.length && quotes.every((quote) => quote.serviceable)) {
+    return {
+      ...base,
+      serviceable: true,
+      deliveryAvailable: true,
+      pickupAvailable,
+      offers: [],
+      courier: null,
+      courierId: null,
+      deliverFrom: "",
+      deliverBy: "",
+      note: base.note,
+      processingDays: Math.max(...quotes.map((quote) => quote.processingDays)),
+      dispatchBy: latestLabel(quotes.map((quote) => quote.dispatchBy)),
+      pickupReadyBy: latestLabel(quotes.map((quote) => quote.pickupReadyBy)),
+      stockingLocation: quotes.map((quote) => quote.stockingLocation).filter(unique).join(", "),
+    };
+  }
   if (!shared.length) {
     const note = quotes.find((quote) => quote.note && !quote.serviceable)?.note
       ?? "One or more products cannot be delivered to this pincode together.";

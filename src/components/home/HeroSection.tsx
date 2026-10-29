@@ -26,9 +26,9 @@ const INTERVAL = 7000;
 const isImage = (value?: string) => Boolean(value && /^(https?:|data:image)/.test(value));
 
 const tones: Record<SlideTone, string> = {
-  navy: "bg-[linear-gradient(135deg,#0F2C59_0%,#1B4F8A_58%,#2F7BC1_100%)] text-white",
-  blue: "bg-[linear-gradient(135deg,#1B4F8A_0%,#2F7BC1_70%,#7EB6E8_100%)] text-white",
-  ice: "bg-[linear-gradient(135deg,#FFFFFF_0%,#E8F1FA_55%,#D5E6F6_100%)] text-ink",
+  navy: "bg-[linear-gradient(135deg,#0B1F3A_0%,#16325C_62%,#2A4A73_100%)] text-white",
+  blue: "bg-[linear-gradient(135deg,#16325C_0%,#2A4A73_70%,#B8953A_140%)] text-white",
+  ice: "bg-[linear-gradient(135deg,#FFFDF8_0%,#F7F3EA_55%,#E8DCC4_100%)] text-ink",
 };
 
 function foundationSlide(tagline?: string): HeroSlide {
@@ -159,7 +159,7 @@ export default function HeroSection() {
               />
               <div className="container relative grid min-h-[420px] items-center gap-8 py-12 sm:min-h-[460px] lg:min-h-[500px] lg:grid-cols-[1.2fr_0.8fr]">
                 <div className="max-w-2xl">
-                  <p className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] ${onIce && !item.image ? "text-burgundy" : "text-sky-100"}`}>
+                  <p className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] ${onIce && !item.image ? "text-gold" : "text-amber-100"}`}>
                     {item.eyebrow}
                   </p>
                   <h1 className={`font-serif text-3xl font-semibold tracking-tight sm:text-4xl ${item.image ? "text-white" : ""}`}>

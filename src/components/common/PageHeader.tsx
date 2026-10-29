@@ -14,7 +14,7 @@ export default function PageHeader({
   breadcrumb,
 }: PageHeaderProps) {
   return (
-    <section className="border-b border-border bg-white">
+    <section className="border-b border-border bg-paper">
       <div className="container py-7 sm:py-8">
         {breadcrumb && breadcrumb.length > 0 && (
           <nav aria-label="Breadcrumb" className="mb-3">

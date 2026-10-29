@@ -1,6 +1,6 @@
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { checkPincode } from "@/lib/fulfillment";
-import { getIntegrations, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
+import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
 import {
   generateAWB,
   getOrder,
@@ -52,7 +52,9 @@ export async function fetchCourierRates(input: {
   const settings = getIntegrations();
   const { shipping } = settings;
   const notes: string[] = [];
-  const wanted = (["shiprocket", "nimbuspost", "ithink"] as const).filter((id) => shipping[id].enabled);
+  const wanted = (["shiprocket", "nimbuspost", "ithink"] as const).filter(
+    (id) => shipping[id].enabled && hasShippingCredentials(id, settings)
+  );
   let live: CourierRate[] = [];
   if (/^\d{6}$/.test(input.deliveryPincode) && wanted.length) {
     try {

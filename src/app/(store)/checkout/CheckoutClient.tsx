@@ -733,7 +733,9 @@ export default function CheckoutClient() {
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-muted">Expected delivery</dt>
                     <dd className="text-right font-medium text-emerald-700">
-                      {selectedOffer?.deliverBy ?? quote?.deliverBy} via {selectedOffer?.name ?? quote?.courier}
+                      {selectedOffer?.deliverBy || quote?.deliverBy
+                        ? `${selectedOffer?.deliverBy ?? quote?.deliverBy}${selectedOffer?.name || quote?.courier ? ` via ${selectedOffer?.name ?? quote?.courier}` : ""}`
+                        : "Confirmed after a courier is booked"}
                     </dd>
                   </div>
                 </dl>

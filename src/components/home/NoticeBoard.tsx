@@ -16,12 +16,12 @@ export default function NoticeBoard() {
         <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-3 bg-ink px-5 py-4 text-white">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-200">Official gazette</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">Official gazette</p>
               <h2 id="notices-heading" className="font-serif text-lg font-semibold">
                 Notice board
               </h2>
             </div>
-            <Link href="/notices" className="text-sm font-medium text-sky-100 hover:text-white">
+            <Link href="/notices" className="text-sm font-medium text-amber-100 hover:text-white">
               All notices
             </Link>
           </div>

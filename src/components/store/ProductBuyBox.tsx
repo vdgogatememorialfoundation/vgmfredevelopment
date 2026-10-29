@@ -117,7 +117,11 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </svg>
           Expected delivery:
           <span className="font-semibold">
-            {estimate?.serviceable ? estimate.deliverBy : "Check your pincode"}
+            {estimate?.deliverBy
+              ? estimate.deliverBy
+              : estimate && checked
+                ? "Confirmed after a courier is booked"
+                : "Check your pincode"}
           </span>
         </div>
 
@@ -148,21 +152,29 @@ export default function ProductBuyBox({ book }: { book: Book }) {
 
         {checked && estimate?.serviceable && (
           <div className="mt-3 rounded-lg bg-white p-3 text-xs">
-            <p className="font-semibold text-text-primary">
-              Deliverable to {estimate.pincode} by {estimate.deliverBy} via {estimate.courier}
-            </p>
+            {estimate.courier && estimate.deliverBy ? (
+              <p className="font-semibold text-text-primary">
+                Deliverable to {estimate.pincode} by {estimate.deliverBy} via {estimate.courier}
+              </p>
+            ) : (
+              <p className="font-semibold text-text-primary">
+                Deliverable to {estimate.pincode}. A courier date appears after a shipping API is connected.
+              </p>
+            )}
             <ul className="mt-2 space-y-1 text-text-muted">
               <li>Order date: {estimate.orderDate}</li>
               <li>
                 Processing and packing: {estimate.processingDays} business day
                 {estimate.processingDays === 1 ? "" : "s"} · dispatch {estimate.dispatchBy}
               </li>
-              <li>
-                {estimate.courier} transit: {estimate.transitDays} business day
-                {estimate.transitDays === 1 ? "" : "s"}
-              </li>
+              {estimate.courier ? (
+                <li>
+                  {estimate.courier} transit: {estimate.transitDays} business day
+                  {estimate.transitDays === 1 ? "" : "s"}
+                </li>
+              ) : null}
             </ul>
-            {estimate.offers.length > 1 && (
+            {estimate.offers.length > 0 && (
               <ul className="mt-2 space-y-1 border-t border-border pt-2 text-text-muted">
                 {estimate.offers.slice(0, 4).map((offer) => (
                   <li key={offer.id}>
@@ -175,7 +187,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </div>
         )}
         {checked && estimate && !estimate.serviceable && (
-          <p className="mt-2 text-xs text-red-700">{estimate.note}</p>
+          <p className={`mt-2 text-xs ${estimate.pickupAvailable ? "text-text-muted" : "text-red-700"}`}>{estimate.note}</p>
         )}
 
         <div className="mt-3 rounded-lg border border-border bg-white p-3 text-xs">
