@@ -127,14 +127,14 @@ export default function Header() {
     : "";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-white/95 shadow-[0_1px_0_0_rgba(184,149,58,0.45)] backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
       {/* Top bar */}
       <div className="border-b border-ink-soft bg-ink text-stone-300">
-        <div className="container flex items-center justify-between py-2 text-xs">
-          <p className="hidden gap-4 sm:flex">
+        <div className="container flex items-center justify-between py-1.5 text-[11px] sm:py-2 sm:text-xs">
+          <p className="flex min-w-0 items-center gap-3 sm:gap-4">
             <a
               href={`mailto:${siteConfig.email}`}
-              className="flex items-center gap-1.5 hover:underline"
+              className="hidden items-center gap-1.5 hover:underline sm:flex"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
@@ -181,12 +181,12 @@ export default function Header() {
             aria-label="Vaidya Gogate Memorial Foundation — Home"
           >
             <SiteLogo size={48} />
-
+            <span className="hidden h-10 w-px bg-gold/50 sm:block" aria-hidden />
             <div className="min-w-0">
-              <div className="truncate text-[15px] font-semibold leading-tight text-text-primary sm:text-base">
+              <div className="truncate font-serif text-[15px] font-semibold leading-tight text-ink sm:text-base">
                 Vaidya Gogate
               </div>
-              <div className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted sm:text-xs">
+              <div className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-gold sm:text-[11px]">
                 Memorial Foundation
               </div>
             </div>
@@ -195,7 +195,7 @@ export default function Header() {
           {/* Desktop Navigation */}
           <nav
             aria-label="Main navigation"
-            className="hidden items-center gap-5 xl:flex"
+            className="hidden items-center lg:flex lg:gap-3 xl:gap-6"
           >
             {navigation.map((item) => {
               const isActive =
@@ -207,9 +207,9 @@ export default function Header() {
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
                   className={classNames(
-                    "whitespace-nowrap text-[13px] font-medium transition",
+                    "relative whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
                     isActive
-                      ? "text-burgundy"
+                      ? "text-burgundy after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:bg-gold"
                       : "text-text-primary hover:text-burgundy"
                   )}
                 >
@@ -340,7 +340,7 @@ export default function Header() {
                   href="/login"
                   className="btn-primary py-2.5 text-sm"
                 >
-                  Get Started
+                  {t("header.getStarted")}
                 </Link>
               </>
             )}
@@ -420,7 +420,7 @@ export default function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                     className="btn-primary"
                   >
-                    My Account
+                    {t("header.myAccount")}
                   </Link>
                 ) : (
                   <Link
@@ -428,7 +428,7 @@ export default function Header() {
                     onClick={() => setMobileMenuOpen(false)}
                     className="btn-primary"
                   >
-                    Create Account / Sign In
+                    {t("header.createAccount")}
                   </Link>
                 )}
 
@@ -437,7 +437,7 @@ export default function Header() {
                   onClick={() => setMobileMenuOpen(false)}
                   className="btn-outline"
                 >
-                  Explore Events
+                  {t("header.exploreEvents")}
                 </Link>
               </div>
             </nav>

@@ -39,7 +39,7 @@ export function findAccountByIdentifier(identifier: string): User | null {
     getAllAccounts().find(
       (account) =>
         account.email.toLowerCase() === value ||
-        account.phone.replace(/\D/g, "") === value.replace(/\D/g, "") ||
+        (account.phone ?? "").replace(/\D/g, "") === value.replace(/\D/g, "") ||
         account.accountId === identifier.trim()
     ) ?? null
   );

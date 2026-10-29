@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import PageHeader from "@/components/common/PageHeader";
 import { galleryCategories, useGallery } from "@/lib/gallery";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export function GalleryView() {
+  const { t } = useI18n();
   const items = useGallery();
   const categories = galleryCategories(items);
   const [category, setCategory] = useState("all");
@@ -16,10 +18,10 @@ export function GalleryView() {
   return (
     <main>
       <PageHeader
-        eyebrow="Gallery"
-        title="Gallery"
-        description="Photographs from the Foundation, seminars, clinics and community programmes. Categories are set when images are added in Admin → Website → Gallery."
-        breadcrumb={[{ name: "Gallery", href: "/gallery" }]}
+        eyebrow={t("gallery.eyebrow")}
+        title={t("gallery.title")}
+        description={t("gallery.desc")}
+        breadcrumb={[{ name: t("nav.gallery"), href: "/gallery" }]}
       />
       <section className="section-paper">
         <div className="container">
@@ -31,7 +33,7 @@ export function GalleryView() {
                 category === "all" ? "border-ink bg-ink text-white" : "border-border text-ink hover:border-burgundy"
               }`}
             >
-              All
+              {t("gallery.all")}
             </button>
             {categories.map((item) => (
               <button
@@ -48,7 +50,7 @@ export function GalleryView() {
           </div>
           {shown.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted">
-              No photographs in this category yet.
+              {t("gallery.empty")}
             </p>
           ) : (
             <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

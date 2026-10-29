@@ -36,7 +36,7 @@ export const roleCategories = ["Content", "Events", "Commerce", "Finance", "Supp
 
 export const defaultRoles: StaffRole[] = [
   { id: "general-staff", name: "General Staff", category: "Operations", description: "Orders, customers and support.", modules: ["orders", "customers", "support"] },
-  { id: "article-writer", name: "Article writer", category: "Content", description: "Only the Articles module — create and publish articles shown under this account name.", modules: ["articles"] },
+  { id: "article-writer", name: "Article writer", category: "Content", description: "Only the Articles module — write and edit articles. New pieces wait for admin approval before they go live.", modules: ["articles"] },
   { id: "content-editor", name: "Content Editor", category: "Content", description: "Articles, homepage, announcements and About Us.", modules: ["articles", "website", "about"] },
   { id: "event-coordinator", name: "Event Coordinator", category: "Events", description: "Events, speakers and schedule.", modules: ["events"] },
   { id: "order-manager", name: "Order Manager", category: "Commerce", description: "Orders, shipping, couriers and inventory.", modules: ["orders", "pos", "catalog", "delivery", "customers"] },

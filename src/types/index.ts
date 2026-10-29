@@ -91,6 +91,14 @@ export interface Sponsor {
   level: string;
 }
 
+export type ArticleStatus = "draft" | "pending" | "published" | "rejected";
+
+export type ArticleLocaleCopy = {
+  title?: string;
+  excerpt?: string;
+  content?: string;
+};
+
 export interface Article {
   id: string;
   title: string;
@@ -106,6 +114,22 @@ export interface Article {
   readingTime?: string;
   tags?: string[];
   images?: CaptionedImage[];
+  status?: ArticleStatus;
+  assignedTo?: string;
+  reviewNote?: string;
+  translations?: Record<string, ArticleLocaleCopy>;
+}
+
+export interface ArticleAssignment {
+  id: string;
+  title: string;
+  brief: string;
+  assignedTo: string;
+  assignedBy: string;
+  dueDate?: string;
+  articleId?: string;
+  status: "assigned" | "writing" | "submitted" | "done";
+  createdAt: string;
 }
 
 export interface CaptionedImage {

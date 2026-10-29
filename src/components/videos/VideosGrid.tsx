@@ -4,13 +4,12 @@ import { useState } from "react";
 import VideoCard from "@/components/videos/VideoCard";
 import { videoCategories } from "@/data/videos";
 import type { Video } from "@/types";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function VideosGrid({ videos }: { videos: Video[] }) {
+  const { t } = useI18n();
   const [active, setActive] = useState("All");
-  const filtered =
-    active === "All"
-      ? videos
-      : videos.filter((video) => video.category === active);
+  const filtered = active === "All" ? videos : videos.filter((video) => video.category === active);
 
   return (
     <div>
@@ -26,14 +25,14 @@ export default function VideosGrid({ videos }: { videos: Video[] }) {
                 : "border-border bg-white text-text-muted hover:border-burgundy hover:text-burgundy"
             }`}
           >
-            {category}
+            {category === "All" ? t("videos.all") : category}
           </button>
         ))}
       </div>
 
       {filtered.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border bg-white p-12 text-center text-sm text-text-muted">
-          No videos in this category yet.
+          {t("videos.empty")}
         </p>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

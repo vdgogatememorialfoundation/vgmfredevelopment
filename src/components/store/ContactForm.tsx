@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { addSupportQuery, addTicket } from "@/lib/admin-store";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function ContactForm() {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -29,13 +31,10 @@ export default function ContactForm() {
   if (sent) {
     return (
       <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
-        <h2 className="heading-3">Thank you — we received your enquiry</h2>
-        <p className="mt-2 text-sm text-text-muted">
-          Our team typically responds within two working days. A confirmation
-          email has also been logged with our support desk.
-        </p>
+        <h2 className="heading-3">{t("contact.thanks")}</h2>
+        <p className="mt-2 text-sm text-text-muted">{t("contact.thanksText")}</p>
         <button type="button" onClick={() => setSent(false)} className="btn-outline mt-6">
-          Send another message
+          {t("contact.another")}
         </button>
       </div>
     );
@@ -43,22 +42,19 @@ export default function ContactForm() {
 
   return (
     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
-      <h2 className="heading-3">Send an Enquiry</h2>
-      <p className="mt-2 text-sm text-text-muted">
-        We typically respond within two working days.
-      </p>
+      <h2 className="heading-3">{t("contact.formTitle")}</h2>
+      <p className="mt-2 text-sm text-text-muted">{t("contact.formHint")}</p>
 
       <form className="mt-6 space-y-5" onSubmit={submit}>
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="contact-first-name">
-              First Name
+              {t("contact.firstName")}
             </label>
             <input
               id="contact-first-name"
               type="text"
               className="input-field"
-              placeholder="Enter first name"
               required
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
@@ -66,13 +62,12 @@ export default function ContactForm() {
           </div>
           <div>
             <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="contact-last-name">
-              Last Name
+              {t("contact.lastName")}
             </label>
             <input
               id="contact-last-name"
               type="text"
               className="input-field"
-              placeholder="Enter last name"
               required
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
@@ -82,13 +77,12 @@ export default function ContactForm() {
 
         <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="contact-email">
-            Email Address
+            {t("contact.emailAddress")}
           </label>
           <input
             id="contact-email"
             type="email"
             className="input-field"
-            placeholder="name@example.com"
             required
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -97,7 +91,7 @@ export default function ContactForm() {
 
         <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="contact-subject">
-            Subject
+            {t("contact.subject")}
           </label>
           <select
             id="contact-subject"
@@ -107,25 +101,25 @@ export default function ContactForm() {
             required
           >
             <option value="" disabled>
-              Select a subject
+              {t("contact.selectSubject")}
             </option>
-            <option value="events">Events & Registration</option>
-            <option value="books">Books & Orders</option>
-            <option value="clinics">Clinics & Appointments</option>
-            <option value="publications">Publications</option>
-            <option value="other">Other</option>
+            <option value="events">{t("contact.subjectEvents")}</option>
+            <option value="books">{t("contact.subjectBooks")}</option>
+            <option value="clinics">{t("contact.subjectClinics")}</option>
+            <option value="publications">{t("contact.subjectPublications")}</option>
+            <option value="other">{t("contact.subjectOther")}</option>
           </select>
         </div>
 
         <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="contact-message">
-            Message
+            {t("contact.message")}
           </label>
           <textarea
             id="contact-message"
             rows={5}
             className="input-field resize-y"
-            placeholder="How can we help?"
+            placeholder={t("contact.messagePh")}
             required
             value={form.message}
             onChange={(e) => setForm({ ...form, message: e.target.value })}
@@ -133,7 +127,7 @@ export default function ContactForm() {
         </div>
 
         <button type="submit" className="btn-primary w-full">
-          Send Message
+          {t("contact.send")}
         </button>
       </form>
     </div>

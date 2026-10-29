@@ -12,13 +12,16 @@ import {
   deleteEvent,
   editorsFor,
   getArticle,
+  getArticleAssignments,
   getLiveEvents,
   getModuleAccess,
   getSiteFlags,
   hideAnnouncement,
   hideArticle,
+  removeArticleAssignment,
   saveAnnouncement,
   saveArticle,
+  saveArticleAssignment,
   saveEvent,
   saveModuleAccess,
   saveSiteFlags,
@@ -38,8 +41,11 @@ import {
   setOrderStatus,
 } from "@/lib/admin-store";
 import { getOrders } from "@/lib/store";
-import { useLiveAnnouncements, useLiveArticles, useLiveEvents } from "@/lib/use-cms";
-import type { Announcement, Article, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
+import { useAllArticles, useLiveAnnouncements, useLiveEvents } from "@/lib/use-cms";
+import type { Announcement, Article, ArticleAssignment, ArticleLocaleCopy, ArticleStatus, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
+import { LOCALES, type Locale } from "@/lib/i18n/locales";
+import { ShareBar } from "@/components/common/ShareBar";
+import { articlePublicUrl, articleShareText } from "@/lib/article-display";
 import { getSession } from "@/lib/auth";
 import { displayName } from "@/lib/admin-store";
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
@@ -78,11 +84,18 @@ function EditorGate({
   );
 }
 
+function emptyLocaleCopy(): ArticleLocaleCopy {
+  return { title: "", excerpt: "", content: "" };
+}
+
 export function ArticleEditor({ articleId }: { articleId?: string | null }) {
+  const assignId = useSearchParams().get("assign");
+  const assignment = assignId ? getArticleAssignments().find((item) => item.id === assignId) : undefined;
   const existing = articleId ? getArticle(articleId) : undefined;
   const session = getSession();
+  const isAdmin = session?.role === "admin";
   const [email, setEmail] = useState(() => session?.email ?? "admin@vaidyagogate.org");
-  const [title, setTitle] = useState(existing?.title ?? "");
+  const [title, setTitle] = useState(existing?.title ?? assignment?.title ?? "");
   const [excerpt, setExcerpt] = useState(existing?.excerpt ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
   const [author, setAuthor] = useState(existing?.author ?? (session ? displayName(session) : ""));
@@ -91,19 +104,29 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const [coverImage, setCoverImage] = useState(existing?.coverImage ?? "");
   const [images, setImages] = useState<CaptionedImage[]>(existing?.images ?? []);
   const [featured, setFeatured] = useState(Boolean(existing?.featured));
+  const [assignedTo, setAssignedTo] = useState(existing?.assignedTo ?? assignment?.assignedTo ?? session?.email ?? "");
+  const [translations, setTranslations] = useState<Record<string, ArticleLocaleCopy>>(existing?.translations ?? {});
+  const [localeEdit, setLocaleEdit] = useState<Locale>("en");
   const [saved, setSaved] = useState("");
+  const [status, setStatus] = useState<ArticleStatus | "">(existing?.status ?? "");
+  const [reviewNote, setReviewNote] = useState(existing?.reviewNote ?? "");
   const [error, setError] = useState("");
+  const staff = getAccounts().filter((account) => account.role === "staff" || account.role === "admin");
 
   const insertImage = (index: number) =>
     setContent((current) => `${current.trimEnd()}${current.trim() ? "\n\n" : ""}[[image:${index + 1}]]\n\n`);
 
-  const publish = () => {
+  const translation = translations[localeEdit] ?? emptyLocaleCopy();
+  const setTranslation = (patch: ArticleLocaleCopy) =>
+    setTranslations((current) => ({ ...current, [localeEdit]: { ...(current[localeEdit] ?? emptyLocaleCopy()), ...patch } }));
+
+  const persist = (nextStatus: ArticleStatus) => {
     if (!title.trim() || !content.trim()) {
       setError("Add a title and the article text, then save.");
       return;
     }
     if (!canEdit("articles", email)) {
-      setError("This account cannot publish articles. Give its staff role the Articles module, or use an admin account.");
+      setError("This account cannot save articles. Give its staff role the Articles module, or use an admin account.");
       return;
     }
     setError("");
@@ -123,26 +146,76 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       images: images.filter((image) => image.src),
       readingTime: `${Math.max(1, Math.round(words / 200))} min`,
       tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      status: nextStatus,
+      assignedTo: assignedTo || undefined,
+      reviewNote: nextStatus === "published" ? undefined : reviewNote || existing?.reviewNote,
+      translations,
     };
     if (!article.tags?.length) article.tags = [article.category];
     try {
       saveArticle(article);
+      const linked = getArticleAssignments().find((item) => item.id === assignId || item.articleId === article.id || (item.title === article.title && item.assignedTo === (session?.email ?? "")));
+      if (linked) {
+        saveArticleAssignment({
+          ...linked,
+          articleId: article.id,
+          status: nextStatus === "published" ? "done" : nextStatus === "pending" ? "submitted" : "writing",
+        });
+      }
+      setStatus(nextStatus);
       setSaved(article.slug);
     } catch {
       setError("The browser storage is full. Use smaller images or image URLs instead of uploads.");
     }
   };
 
+  const staffSaveStatus: ArticleStatus = existing?.status === "published" ? "published" : "pending";
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">{existing ? "Edit article" : "Create article"}</h1>
         <Link href="/admin/articles" className={ghost}>Back to articles</Link>
       </div>
       <EditorGate moduleId="articles" email={email} onEmail={setEmail} />
+      {!isAdmin && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Staff articles go to admin for review before they appear on the public site. You can keep editing at any time.
+        </p>
+      )}
+      {(status === "rejected" || existing?.status === "rejected") && (reviewNote || existing?.reviewNote) && (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          Returned for changes: {reviewNote || existing?.reviewNote}
+        </p>
+      )}
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
-          <input className={field} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
+          <div className="flex flex-wrap gap-2">
+            {LOCALES.map((locale) => (
+              <button
+                key={locale.id}
+                type="button"
+                onClick={() => setLocaleEdit(locale.id)}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${localeEdit === locale.id ? "bg-ink text-white" : "border border-slate-200 text-slate-600"}`}
+              >
+                {locale.native}
+              </button>
+            ))}
+          </div>
+          {localeEdit === "en" ? (
+            <>
+              <input className={field} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
+              <textarea className={field} rows={3} placeholder="Excerpt shown on article cards" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} />
+              <textarea className={`${field} font-mono`} rows={14} placeholder="Article body. Leave a blank line between paragraphs." value={content} onChange={(event) => setContent(event.target.value)} />
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-slate-500">Translation for {LOCALES.find((item) => item.id === localeEdit)?.name}. Leave a field empty to keep the original English.</p>
+              <input className={field} placeholder="Translated title" value={translation.title ?? ""} onChange={(event) => setTranslation({ title: event.target.value })} />
+              <textarea className={field} rows={3} placeholder="Translated excerpt" value={translation.excerpt ?? ""} onChange={(event) => setTranslation({ excerpt: event.target.value })} />
+              <textarea className={`${field} font-mono`} rows={14} placeholder="Translated body" value={translation.content ?? ""} onChange={(event) => setTranslation({ content: event.target.value })} />
+            </>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               className={field}
@@ -155,8 +228,6 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
             <input className={field} placeholder="Category" value={category} onChange={(event) => setCategory(event.target.value)} />
           </div>
           <input className={field} placeholder="Tags, separated by commas" value={tags} onChange={(event) => setTags(event.target.value)} />
-          <textarea className={field} rows={3} placeholder="Excerpt shown on article cards" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} />
-          <textarea className={`${field} font-mono`} rows={14} placeholder="Article body. Leave a blank line between paragraphs." value={content} onChange={(event) => setContent(event.target.value)} />
           <p className="text-xs text-slate-500">
             Start a line with <code>## </code> for a sub-heading. <code>[[image:2]]</code> on its own line places gallery image 2 inside the article;
             images not placed in the text are shown as a gallery at the end.
@@ -165,12 +236,45 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
             <input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />
             Feature on the homepage and at the top of Articles
           </label>
-          <button type="button" className={button} onClick={publish}>Save and publish on the site</button>
+          {isAdmin && (
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Assigned writer
+              <select className={`${field} mt-1`} value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)}>
+                <option value="">Unassigned</option>
+                {staff.map((account) => (
+                  <option key={account.email} value={account.email}>{displayName(account)} · {account.email}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {isAdmin ? (
+              <>
+                <button type="button" className={ghost} onClick={() => persist("draft")}>Save draft</button>
+                <button type="button" className={button} onClick={() => persist("published")}>Approve and publish</button>
+              </>
+            ) : (
+              <button type="button" className={button} onClick={() => persist(staffSaveStatus)}>
+                {staffSaveStatus === "published" ? "Save changes" : "Save for admin review"}
+              </button>
+            )}
+          </div>
           {error && <p className="text-sm text-red-700">{error}</p>}
           {saved && (
             <p className="text-sm text-emerald-700">
-              Published. <Link className="underline" href={`/articles/${saved}`}>View on the site</Link>
+              {status === "published" ? (
+                <>Published. <Link className="underline" href={`/articles/${saved}`}>View on the site</Link></>
+              ) : status === "pending" ? (
+                "Saved. An administrator must approve it before it goes live."
+              ) : (
+                "Draft saved."
+              )}
             </p>
+          )}
+          {existing && (
+            <div className="border-t border-slate-100 pt-4">
+              <ShareBar url={articlePublicUrl(existing)} title={title || existing.title} text={articleShareText({ ...existing, title: title || existing.title, excerpt: excerpt || existing.excerpt })} />
+            </div>
           )}
         </div>
         <div className="space-y-5 rounded-xl border border-slate-200 bg-white p-5">
@@ -191,30 +295,162 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   );
 }
 
+const statusLabel: Record<ArticleStatus, string> = {
+  draft: "Draft",
+  pending: "Awaiting approval",
+  published: "Live",
+  rejected: "Returned",
+};
+
 export function ArticleAdmin() {
-  const articles = useLiveArticles();
+  const articles = useAllArticles();
+  const session = getSession();
+  const isAdmin = session?.role === "admin";
+  const [assignments, setAssignments] = useState(() => getArticleAssignments());
+  const [brief, setBrief] = useState({ title: "", notes: "", assignedTo: "", dueDate: "" });
+  const [shareId, setShareId] = useState<string | null>(null);
+  const staff = getAccounts().filter((account) => account.role === "staff");
+  const refreshAssignments = () => setAssignments(getArticleAssignments());
+
+  const assign = () => {
+    if (!brief.title.trim() || !brief.assignedTo) return;
+    saveArticleAssignment({
+      id: `asg-${Date.now()}`,
+      title: brief.title.trim(),
+      brief: brief.notes.trim(),
+      assignedTo: brief.assignedTo,
+      assignedBy: session?.email ?? "admin@vaidyagogate.org",
+      dueDate: brief.dueDate || undefined,
+      status: "assigned",
+      createdAt: new Date().toISOString(),
+    });
+    setBrief({ title: "", notes: "", assignedTo: "", dueDate: "" });
+    refreshAssignments();
+  };
+
+  const mine = session?.role === "staff" ? assignments.filter((item) => item.assignedTo.toLowerCase() === session.email.toLowerCase()) : assignments;
+  const listed =
+    session?.role === "staff"
+      ? articles.filter(
+          (article) =>
+            article.publishedByEmail?.toLowerCase() === session.email.toLowerCase() ||
+            article.assignedTo?.toLowerCase() === session.email.toLowerCase()
+        )
+      : articles;
+  const sharing = listed.find((article) => article.id === shareId);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Articles</h1>
+          <p className="mt-1 text-sm text-slate-500">Staff drafts wait for admin approval. Share a live article to social networks or copy its link.</p>
+        </div>
         <Link href="/admin/articles/new" className={button}>+ Create article</Link>
       </div>
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <ul>
-          {articles.map((article) => (
+
+      {isAdmin && (
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+          <p className="font-semibold text-slate-900">Assign an article to write</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <input className={field} placeholder="Working title" value={brief.title} onChange={(event) => setBrief({ ...brief, title: event.target.value })} />
+            <select className={field} value={brief.assignedTo} onChange={(event) => setBrief({ ...brief, assignedTo: event.target.value })}>
+              <option value="">Choose staff</option>
+              {staff.map((account) => (
+                <option key={account.email} value={account.email}>{displayName(account)} · {account.email}</option>
+              ))}
+            </select>
+            <input className={field} type="date" value={brief.dueDate} onChange={(event) => setBrief({ ...brief, dueDate: event.target.value })} />
+            <textarea className={`${field} md:col-span-2`} rows={2} placeholder="Brief for the writer" value={brief.notes} onChange={(event) => setBrief({ ...brief, notes: event.target.value })} />
+          </div>
+          <button type="button" className={button} onClick={assign} disabled={!brief.title.trim() || !brief.assignedTo}>Assign</button>
+        </div>
+      )}
+
+      {mine.length > 0 && (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <p className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-900">Writing assignments</p>
+          <ul>
+            {mine.map((item) => (
+              <li key={item.id} className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold text-slate-900">{item.title}</p>
+                  <p className="text-xs text-slate-500">
+                    {item.status} · {item.assignedTo}{item.dueDate ? ` · due ${item.dueDate}` : ""}
+                  </p>
+                  {item.brief ? <p className="mt-1 text-sm text-slate-600">{item.brief}</p> : null}
+                </div>
+                <div className="flex flex-wrap gap-3 text-sm font-semibold">
+                  <Link className="text-burgundy" href={item.articleId ? `/admin/articles/new?id=${item.articleId}` : `/admin/articles/new?assign=${item.id}`}>
+                    {item.articleId ? "Open draft" : "Start writing"}
+                  </Link>
+                  {isAdmin && (
+                    <button type="button" className="text-red-600" onClick={() => { removeArticleAssignment(item.id); refreshAssignments(); }}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+        <ul className="min-w-[36rem]">
+          {listed.map((article) => (
             <li key={article.id} className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-semibold text-slate-900">{article.title}</p>
-                <p className="text-xs text-slate-500">{article.category} · Published by {article.author || "VGMF"}</p>
+                <p className="text-xs text-slate-500">
+                  {statusLabel[article.status ?? "published"]} · {article.category} · Published by {article.author || "VGMF"}
+                  {article.assignedTo ? ` · Writer ${article.assignedTo}` : ""}
+                  {article.reviewNote && (article.status === "rejected" || article.status === "pending") ? ` · Note: ${article.reviewNote}` : ""}
+                </p>
               </div>
-              <div className="flex gap-3 text-sm font-semibold">
+              <div className="flex flex-wrap gap-3 text-sm font-semibold">
                 <Link className="text-burgundy" href={`/admin/articles/new?id=${article.id}`}>Edit</Link>
-                <Link className="text-slate-500" href={`/articles/${article.slug}`}>View</Link>
+                {(article.status ?? "published") === "published" && (
+                  <>
+                    <Link className="text-slate-500" href={`/articles/${article.slug}`}>View</Link>
+                    <button type="button" className="text-ink" onClick={() => setShareId(article.id === shareId ? null : article.id)}>Share</button>
+                  </>
+                )}
+                {isAdmin && (article.status ?? "published") !== "published" && (
+                  <>
+                    <button
+                      type="button"
+                      className="text-emerald-700"
+                      onClick={() => {
+                        saveArticle({ ...article, status: "published", reviewNote: undefined });
+                      }}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="text-amber-800"
+                      onClick={() => {
+                        const note = window.prompt("Note for the writer (optional)", article.reviewNote ?? "") ?? "";
+                        saveArticle({ ...article, status: "rejected", reviewNote: note.trim() || undefined });
+                      }}
+                    >
+                      Return
+                    </button>
+                  </>
+                )}
                 <button type="button" className="text-red-600" onClick={() => { if (window.confirm(`Delete the article “${article.title}”?`)) hideArticle(article.id); }}>Delete</button>
               </div>
             </li>
           ))}
         </ul>
       </div>
+      {sharing && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <p className="mb-3 text-sm font-semibold text-slate-900">Share “{sharing.title}”</p>
+          <ShareBar url={articlePublicUrl(sharing)} title={sharing.title} text={articleShareText(sharing)} />
+        </div>
+      )}
     </div>
   );
 }

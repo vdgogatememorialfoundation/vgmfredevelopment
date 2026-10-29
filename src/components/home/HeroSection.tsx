@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiveFlyers, useSiteSettings } from "@/lib/use-cms";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 type SlideTone = "navy" | "blue" | "ice";
 
@@ -31,61 +32,68 @@ const tones: Record<SlideTone, string> = {
   ice: "bg-[linear-gradient(135deg,#FFFDF8_0%,#F7F3EA_55%,#E8DCC4_100%)] text-ink",
 };
 
-function foundationSlide(tagline?: string): HeroSlide {
+function foundationSlide(
+  tagline: string | undefined,
+  copy: { kicker: string; cta: string; secondary: string; fallback: string }
+): HeroSlide {
   const text = tagline || "Preserving Ayurveda. Advancing Knowledge. Serving Society.";
   return {
     id: "hero-foundation",
     eyebrow: "Vaidya Gogate Memorial Foundation",
     title: text,
     lines: text.split(/(?<=\.)\s+/).filter(Boolean),
-    text: "Ayurveda education, publications and clinical care.",
-    kicker: "Ayurveda • Education",
+    text: copy.fallback,
+    kicker: copy.kicker,
     href: "/events",
-    cta: "Explore Events",
+    cta: copy.cta,
     secondaryHref: "/about/legacy-of-vaidya-rb-gogate",
-    secondaryCta: "Discover Our Legacy",
+    secondaryCta: copy.secondary,
     tone: "navy",
   };
 }
 
-const extraSlides: HeroSlide[] = [
-  {
-    id: "hero-legacy",
-    eyebrow: "Our legacy",
-    title: "The work of Vaidya R. B. Gogate",
-    text: "Clinical care, teaching and publications continued in his memory.",
-    href: "/about/legacy-of-vaidya-rb-gogate",
-    cta: "Discover Our Legacy",
-    tone: "ice",
-  },
-];
-
 export default function HeroSection() {
   const flyers = useLiveFlyers();
   const settings = useSiteSettings();
+  const { t } = useI18n();
 
   const slides = useMemo(() => {
-    const next: HeroSlide[] = [foundationSlide(settings?.tagline)];
+    const next: HeroSlide[] = [
+      foundationSlide(settings?.tagline, {
+        kicker: t("hero.kicker"),
+        cta: t("hero.exploreEvents"),
+        secondary: t("hero.discoverLegacy"),
+        fallback: t("hero.taglineFallback"),
+      }),
+    ];
     const tonesCycle: SlideTone[] = ["blue", "navy", "ice"];
 
     flyers.forEach((flyer, flyerIndex) => {
       next.push({
         id: flyer.id,
-        eyebrow: flyer.event || "Poster",
+        eyebrow: flyer.event || t("common.learnMore"),
         title: flyer.title,
         text: flyer.event,
         href: flyer.href,
-        cta: flyer.cta || "Learn more",
+        cta: flyer.cta || t("common.learnMore"),
         image: isImage(flyer.image) ? flyer.image : undefined,
         tone: tonesCycle[flyerIndex % tonesCycle.length],
       });
     });
 
     if (flyers.length === 0) {
-      for (const slide of extraSlides) next.push(slide);
+      next.push({
+        id: "hero-legacy",
+        eyebrow: t("hero.legacyEyebrow"),
+        title: t("hero.legacyTitle"),
+        text: t("hero.legacyText"),
+        href: "/about/legacy-of-vaidya-rb-gogate",
+        cta: t("hero.discoverLegacy"),
+        tone: "ice",
+      });
     }
     return next;
-  }, [flyers, settings?.tagline]);
+  }, [flyers, settings?.tagline, t]);
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -184,7 +192,7 @@ export default function HeroSection() {
                   <div className={`flex aspect-square w-64 flex-col items-center justify-center rounded-full border ${onIce && !item.image ? "border-burgundy/20 bg-white/80 text-ink" : "border-white/25 bg-white/10 text-white"} backdrop-blur-sm`}>
                     <span className="font-serif text-4xl font-semibold tracking-tight">VGMF</span>
                     <p className="mt-2 px-6 text-center text-sm font-medium">Vaidya Gogate Memorial Foundation</p>
-                    <p className={`mt-1 text-xs ${onIce && !item.image ? "text-text-muted" : "text-white/75"}`}>{item.kicker || "Ayurveda • Education"}</p>
+                    <p className={`mt-1 text-xs ${onIce && !item.image ? "text-text-muted" : "text-white/75"}`}>{item.kicker || t("hero.kicker")}</p>
                   </div>
                 </div>
               </div>
@@ -197,7 +205,7 @@ export default function HeroSection() {
         <>
           <button
             type="button"
-            aria-label="Previous slide"
+            aria-label={t("hero.prev")}
             onClick={() => go(active - 1)}
             className="absolute left-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-ink/15 bg-white text-lg text-ink shadow-sm hover:bg-paper sm:flex"
           >
@@ -205,7 +213,7 @@ export default function HeroSection() {
           </button>
           <button
             type="button"
-            aria-label="Next slide"
+            aria-label={t("hero.next")}
             onClick={() => go(active + 1)}
             className="absolute right-3 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-ink/15 bg-white text-lg text-ink shadow-sm hover:bg-paper sm:flex"
           >

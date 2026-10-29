@@ -8,6 +8,8 @@ import { useLiveArticles } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 import type { Article, CaptionedImage } from "@/types";
 import { useI18n } from "@/components/i18n/LanguageProvider";
+import { articlePublicUrl, articleShareText, localizedArticle } from "@/lib/article-display";
+import { ShareBar } from "@/components/common/ShareBar";
 
 function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
   return (
@@ -20,6 +22,7 @@ function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
 }
 
 function ArticleBody({ article }: { article: Article }) {
+  const { t } = useI18n();
   const images = article.images ?? [];
   const placed = new Set<number>();
   const blocks = article.content.split(/\n\s*\n/).map((block, index) => {
@@ -43,7 +46,7 @@ function ArticleBody({ article }: { article: Article }) {
       {blocks}
       {remaining.length > 0 && (
         <div className="mt-10 border-t border-border pt-8">
-          <h2 className="heading-3 mb-5">Gallery</h2>
+          <h2 className="heading-3 mb-5">{t("article.gallery")}</h2>
           <div className="grid gap-5 sm:grid-cols-2">
             {remaining.map((image, index) => (
               <Figure key={index} image={image} alt={article.title} />
@@ -62,20 +65,21 @@ function ArticleByline({ author }: { author: string }) {
 
 export function ArticlesIndex() {
   const articles = useLiveArticles();
+  const { t } = useI18n();
   const featured = articles.filter((article) => article.featured);
   const rest = articles.filter((article) => !article.featured);
 
   return (
     <main>
       <PageHeader
-        eyebrow="Articles"
-        title="Articles & Perspectives"
-        description="Thoughts on Ayurveda, research, education and the Foundation's continuing work."
+        eyebrow={t("article.eyebrow")}
+        title={t("article.indexTitle")}
+        description={t("article.indexDesc")}
       />
       {featured.length > 0 && (
         <section className="section bg-background">
           <div className="container">
-            <h2 className="heading-3 mb-8">Featured</h2>
+            <h2 className="heading-3 mb-8">{t("article.featured")}</h2>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {featured.map((article) => (
                 <ArticleCard key={article.id} article={article} />
@@ -99,7 +103,7 @@ export function ArticlesIndex() {
         <section className="section bg-background">
           <div className="container">
             <p className="rounded-2xl border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted">
-              No articles are published yet.
+              {t("article.empty")}
             </p>
           </div>
         </section>
@@ -110,16 +114,17 @@ export function ArticlesIndex() {
 
 export function ArticleView({ slug }: { slug: string }) {
   const articles = useLiveArticles();
-  const article = articles.find((item) => item.slug === slug);
-  if (!article) {
+  const { t, locale } = useI18n();
+  const found = articles.find((item) => item.slug === slug);
+  if (!found) {
     return (
       <main className="container py-20">
-        <h1 className="heading-2">Article not published</h1>
-        <p className="mt-3 text-text-muted">This article is not on the public site.</p>
-        <Link href="/articles" className="btn-outline mt-6">All articles</Link>
+        <h1 className="heading-2">{t("article.notPublished")}</h1>
+        <Link href="/articles" className="btn-outline mt-6">{t("article.all")}</Link>
       </main>
     );
   }
+  const article = localizedArticle(found, locale);
   const related = articles.filter((item) => item.slug !== article.slug).slice(0, 3);
 
   return (
@@ -127,9 +132,9 @@ export function ArticleView({ slug }: { slug: string }) {
       <section className="border-b border-border bg-warm-cream">
         <div className="container py-10 sm:py-14">
           <nav aria-label="Breadcrumb" className="mb-5 text-sm text-text-muted">
-            <Link href="/" className="hover:text-burgundy">Home</Link>
+            <Link href="/" className="hover:text-burgundy">{t("common.home")}</Link>
             <span className="mx-2">/</span>
-            <Link href="/articles" className="hover:text-burgundy">Articles</Link>
+            <Link href="/articles" className="hover:text-burgundy">{t("nav.articles")}</Link>
           </nav>
           <div className="flex flex-wrap items-center gap-3">
             <Badge tone="burgundy">{article.category}</Badge>
@@ -137,11 +142,14 @@ export function ArticleView({ slug }: { slug: string }) {
           </div>
           <h1 className="heading-1 mt-4 max-w-4xl">{article.title}</h1>
           {article.author && <ArticleByline author={article.author} />}
+          <div className="mt-6">
+            <ShareBar url={articlePublicUrl(article)} title={article.title} text={articleShareText(article)} />
+          </div>
         </div>
       </section>
       <section className="section bg-background">
         <div className="container grid gap-12 lg:grid-cols-3">
-          <article className="lg:col-span-2">
+          <article className="min-w-0 lg:col-span-2">
             {article.coverImage && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={article.coverImage} alt={article.title} className="mb-8 aspect-[16/9] w-full rounded-2xl border border-border object-cover" />
@@ -149,7 +157,7 @@ export function ArticleView({ slug }: { slug: string }) {
             <ArticleBody article={article} />
           </article>
           <aside className="space-y-6">
-            <h2 className="heading-3">Related Articles</h2>
+            <h2 className="heading-3">{t("article.related")}</h2>
             {related.map((item) => (
               <ArticleCard key={item.id} article={item} />
             ))}

@@ -16,8 +16,10 @@ import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, ev
 import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export function EventsIndex() {
+  const { t } = useI18n();
   const now = useScheduleTick();
   const events = useLiveEvents().filter((event) => isPublishedNow(event, now));
   const upcoming = events
@@ -30,16 +32,16 @@ export function EventsIndex() {
   return (
     <main>
       <PageHeader
-        eyebrow="Events"
-        title="Events & Programmes"
-        description="Seminars, workshops, fellowships and other programmes of the Foundation. Registrations are handled on the official seminar website."
+        eyebrow={t("events.eyebrow")}
+        title={t("events.title")}
+        description={t("events.desc")}
       />
       <section className="section bg-background">
         <div className="container">
-          <h2 className="heading-3 mb-8">Upcoming Events</h2>
+          <h2 className="heading-3 mb-8">{t("events.upcoming")}</h2>
           {upcoming.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted">
-              No events are published yet.
+              {t("events.empty")}
             </p>
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -53,7 +55,7 @@ export function EventsIndex() {
       {past.length > 0 && (
         <section className="section bg-warm-cream">
           <div className="container">
-            <h2 className="heading-3 mb-8">Past Events</h2>
+            <h2 className="heading-3 mb-8">{t("events.past")}</h2>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {past.map((event) => (
                 <EventCard key={event.id} event={event} />
@@ -67,6 +69,7 @@ export function EventsIndex() {
 }
 
 export function LiveEventPage({ slug }: { slug: string }) {
+  const { t } = useI18n();
   const now = useScheduleTick();
   const events = useLiveEvents();
   const speakerRecords = useSpeakerRecords();
@@ -75,8 +78,8 @@ export function LiveEventPage({ slug }: { slug: string }) {
   if (!found) {
     return (
       <main className="container py-20">
-        <h1 className="heading-2">Event not published</h1>
-        <Link href="/events" className="btn-outline mt-6">All events</Link>
+        <h1 className="heading-2">{t("events.notPublished")}</h1>
+        <Link href="/events" className="btn-outline mt-6">{t("events.all")}</Link>
       </main>
     );
   }

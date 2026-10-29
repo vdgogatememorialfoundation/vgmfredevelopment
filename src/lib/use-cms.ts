@@ -12,13 +12,14 @@ import {
   clinicKeys,
   defaultFlags,
   flyerKeys,
+  getAllArticles,
   getLiveAnnouncements,
-  getLiveArticles,
   getLiveClinics,
   getLiveEvents,
   getLiveFlyers,
   getLiveNotices,
   getLiveVideos,
+  getPublishedArticles,
   getSiteFlags,
   noticeKeys,
   subscribeCms,
@@ -32,6 +33,8 @@ import { getAllProducts } from "@/lib/product-data";
 
 let articleRaw = "\0";
 let articleList: Article[] = seededArticles;
+let allArticleRaw = "\0";
+let allArticleList: Article[] = seededArticles;
 let announcementRaw = "\0";
 let announcementList: Announcement[] = seededAnnouncements;
 let eventRaw = "\0";
@@ -46,8 +49,22 @@ export function useLiveArticles() {
       const raw = `${window.localStorage.getItem("vgmf_article_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_articles") ?? ""}`;
       if (raw === articleRaw) return articleList;
       articleRaw = raw;
-      articleList = raw === "|" ? seededArticles : getLiveArticles();
+      articleList = getPublishedArticles();
       return articleList;
+    },
+    () => seededArticles
+  );
+}
+
+export function useAllArticles() {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = `${window.localStorage.getItem("vgmf_article_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_articles") ?? ""}`;
+      if (raw === allArticleRaw) return allArticleList;
+      allArticleRaw = raw;
+      allArticleList = getAllArticles();
+      return allArticleList;
     },
     () => seededArticles
   );

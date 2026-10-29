@@ -13,14 +13,15 @@ import { NoticesGazette } from "@/components/site/NoticesGazette";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export function AnnouncementsIndex() {
+  const { t } = useI18n();
   const items = [...useLiveAnnouncements()].sort((a, b) => b.date.localeCompare(a.date));
   return (
     <main>
       <PageHeader
-        eyebrow="Archive"
-        title="Announcement archive"
-        description="Full wording of items that also run in the site-wide ticker. This page is the archive — the homepage does not repeat this list."
-        breadcrumb={[{ name: "Announcements", href: "/announcements" }]}
+        eyebrow={t("announce.eyebrow")}
+        title={t("announce.title")}
+        description={t("announce.desc")}
+        breadcrumb={[{ name: t("announce.title"), href: "/announcements" }]}
       />
       <section className="section-paper">
         <div className="container max-w-4xl">
@@ -33,7 +34,7 @@ export function AnnouncementsIndex() {
                 </div>
                 <h2 className="mt-2 font-serif text-lg font-semibold text-ink">{announcement.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-stone-600">{announcement.description}</p>
-                <Link href={announcement.href} className="mt-3 inline-block text-sm font-semibold text-burgundy">Open linked page</Link>
+                <Link href={announcement.href} className="mt-3 inline-block text-sm font-semibold text-burgundy">{t("announce.open")}</Link>
               </li>
             ))}
           </ul>
@@ -48,11 +49,12 @@ export function NoticesIndex() {
 }
 
 export function VideosIndex() {
+  const { t } = useI18n();
   const videos = useLiveVideos();
   const featured = videos.find((video) => video.featured) ?? videos[0];
   return (
     <main>
-      <PageHeader eyebrow="Media" title="Videos" description="Lectures, seminar recordings and films published from the admin console." />
+      <PageHeader eyebrow={t("videos.eyebrow")} title={t("videos.title")} description={t("videos.desc")} />
       {featured?.youtubeUrl && (
         <section className="border-b border-border bg-warm-cream">
           <div className="container grid items-center gap-8 py-10 lg:grid-cols-2">
@@ -81,10 +83,11 @@ export function VideosIndex() {
 }
 
 export function ClinicsIndex() {
+  const { t } = useI18n();
   const clinics = useLiveClinics();
   return (
     <main>
-      <PageHeader eyebrow="Clinics" title="Our Clinics" description="Foundation clinics published from the admin console." />
+      <PageHeader eyebrow={t("clinic.pageEyebrow")} title={t("clinic.pageTitle")} description={t("clinic.pageDesc")} />
       <section className="section bg-background">
         <div className="container">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -104,8 +107,8 @@ export function ClinicDetail({ slug }: { slug: string }) {
   if (!clinic) {
     return (
       <main className="container py-20">
-        <h1 className="heading-2">Clinic not published</h1>
-        <Link href="/clinics" className="btn-outline mt-6">All clinics</Link>
+        <h1 className="heading-2">{t("clinic.notPublished")}</h1>
+        <Link href="/clinics" className="btn-outline mt-6">{t("clinic.all")}</Link>
       </main>
     );
   }
@@ -116,12 +119,12 @@ export function ClinicDetail({ slug }: { slug: string }) {
     <main>
       <section className="border-b border-border bg-warm-cream">
         <div className="container py-10">
-          <Link href="/clinics" className="text-sm text-text-muted hover:text-burgundy">Clinics</Link>
+          <Link href="/clinics" className="text-sm text-text-muted hover:text-burgundy">{t("nav.clinics")}</Link>
           <h1 className="heading-1 mt-4">{clinic.name}</h1>
           <p className="mt-3 text-sm font-semibold text-burgundy">
             {clinic.specialization} · {clinic.city}
           </p>
-          {clinic.operatedBy && <p className="mt-2 text-sm text-text-muted">Operated by {clinic.operatedBy}</p>}
+          {clinic.operatedBy && <p className="mt-2 text-sm text-text-muted">{t("clinic.operatedBy")} {clinic.operatedBy}</p>}
         </div>
       </section>
       {photos.length > 0 && (
@@ -143,7 +146,7 @@ export function ClinicDetail({ slug }: { slug: string }) {
             {clinic.about && <p className="text-body whitespace-pre-line">{clinic.about}</p>}
             {clinic.services && clinic.services.length > 0 && (
               <div>
-                <h2 className="heading-3 mb-4">Services</h2>
+                <h2 className="heading-3 mb-4">{t("clinic.services")}</h2>
                 <ul className="flex flex-wrap gap-2">
                   {clinic.services.map((service) => (
                     <li key={service} className="rounded-full border border-border bg-white px-3 py-1 text-sm">{service}</li>
@@ -153,7 +156,7 @@ export function ClinicDetail({ slug }: { slug: string }) {
             )}
             {doctors.length > 0 && (
               <div>
-                <h2 className="heading-3 mb-4">Our doctors</h2>
+                <h2 className="heading-3 mb-4">{t("clinic.doctors")}</h2>
                 <div className="grid gap-4 sm:grid-cols-2">
                   {doctors.map((doctor) => (
                     <article key={doctor.id} className="flex gap-4 rounded-2xl border border-border bg-white p-5">
@@ -179,7 +182,7 @@ export function ClinicDetail({ slug }: { slug: string }) {
             )}
             {embed && (
               <div>
-                <h2 className="heading-3 mb-4">Location</h2>
+                <h2 className="heading-3 mb-4">{t("clinic.location")}</h2>
                 <div className="overflow-hidden rounded-2xl border border-border">
                   <iframe title={`Map of ${clinic.name}`} src={embed} className="h-80 w-full" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
                 </div>
@@ -200,8 +203,8 @@ export function ClinicDetail({ slug }: { slug: string }) {
                 ))}
               </ul>
             )}
-            {clinic.consultationFee && <p><span className="text-text-muted">Consultation:</span> {clinic.consultationFee}</p>}
-            {clinic.doctor && doctors.length === 0 && <p><span className="text-text-muted">Doctor:</span> {clinic.doctor}</p>}
+            {clinic.consultationFee && <p><span className="text-text-muted">{t("clinic.consultation")}:</span> {clinic.consultationFee}</p>}
+            {clinic.doctor && doctors.length === 0 && <p><span className="text-text-muted">{t("clinic.doctor")}:</span> {clinic.doctor}</p>}
             {clinic.phone && <a className="block font-semibold text-burgundy" href={`tel:${clinic.phone.replace(/\s/g, "")}`}>{clinic.phone}</a>}
             {clinic.email && <a className="block text-burgundy" href={`mailto:${clinic.email}`}>{clinic.email}</a>}
             {clinic.appointmentUrl ? (

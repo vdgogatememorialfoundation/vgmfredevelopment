@@ -3,6 +3,7 @@
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import { buildTree, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 function Initials({ name, size }: { name: string; size: string }) {
   return (
@@ -14,9 +15,10 @@ function Initials({ name, size }: { name: string; size: string }) {
 
 export function AboutLive() {
   const about = useAbout();
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow="About Us" title={about.title} description={about.intro} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={about.title} description={about.intro} />
       {about.heroImage && (
         <section className="bg-background pt-10">
           <div className="container">
@@ -36,7 +38,7 @@ export function AboutLive() {
                 )}
                 <h2 className="heading-3">{section.title}</h2>
                 <p className="mt-3 whitespace-pre-line text-text-muted">{section.body}</p>
-                {section.href && <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-burgundy">Learn more →</span>}
+                {section.href && <span className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold text-burgundy">{t("about.learnMore")}</span>}
               </>
             );
             return section.href ? (
@@ -50,7 +52,7 @@ export function AboutLive() {
       {about.gallery.length > 0 && (
         <section className="section bg-warm-cream">
           <div className="container">
-            <h2 className="heading-2 mb-8 text-center">Glimpses of the Foundation</h2>
+            <h2 className="heading-2 mb-8 text-center">{t("about.glimpses")}</h2>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {about.gallery.map((photo) => (
                 <figure key={photo.id} className="overflow-hidden rounded-2xl border border-border bg-white">
@@ -71,7 +73,7 @@ export function AboutLive() {
           <div className="container">
             <FamilyTree />
             <div className="mt-8 text-center">
-              <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-outline">Read the full legacy</Link>
+              <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-outline">{t("about.readLegacy")}</Link>
             </div>
           </div>
         </section>
@@ -111,12 +113,13 @@ function TreeNode({ branch }: { branch: TreeBranch }) {
 
 export function FamilyTree() {
   const about = useAbout();
+  const { t } = useI18n();
   const roots = buildTree(about.legacy.tree);
   if (!roots.length) return null;
   return (
     <div>
       <div className="mx-auto mb-10 max-w-2xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Legacy tree</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">{t("about.legacyTree")}</p>
         <h2 className="heading-2 mt-2">{about.legacy.treeTitle}</h2>
         {about.legacy.treeIntro && <p className="mt-3 text-text-muted">{about.legacy.treeIntro}</p>}
       </div>
@@ -171,9 +174,10 @@ function PersonCard({ person, featured }: { person: AboutPerson; featured?: bool
 
 export function FoundationLive() {
   const { foundation } = useAbout();
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow="About Us" title={foundation.title} description={foundation.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={foundation.title} description={foundation.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
         <div className="container grid gap-12 lg:grid-cols-2">
           <div>
@@ -200,7 +204,7 @@ export function FoundationLive() {
             ))}
           </div>
           <div>
-            {foundation.activities.length > 0 ? <h2 className="heading-3 mb-4">Activities</h2> : null}
+            {foundation.activities.length > 0 ? <h2 className="heading-3 mb-4">{t("about.activities")}</h2> : null}
             <ul className="space-y-4" role="list">
               {foundation.activities.map((activity) => (
                 <li key={activity.id} className="card p-6">
@@ -224,9 +228,10 @@ export function FoundationLive() {
 
 export function HistoryLive() {
   const { history } = useAbout();
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow="About Us" title={history.title} description={history.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={history.title} description={history.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
         <div className="container max-w-4xl">
           <ol className="relative space-y-10 border-l-2 border-border pl-8" role="list">
@@ -249,9 +254,10 @@ export function HistoryLive() {
 
 export function TrusteesLive() {
   const { trustees } = useAbout();
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow="About Us" title={trustees.title} description={trustees.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={trustees.title} description={trustees.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
         <div className="container">
           <h2 className="heading-3 mb-8">{trustees.trusteesHeading}</h2>
@@ -278,17 +284,18 @@ export function TrusteesLive() {
 
 export function LegacyLive() {
   const { legacy } = useAbout();
+  const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow="About Us" title={legacy.title} description={legacy.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={legacy.title} description={legacy.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
         <div className="container grid gap-12 lg:grid-cols-2">
           <div>
-            <h2 className="heading-3 mb-4">Biography</h2>
+            <h2 className="heading-3 mb-4">{t("about.biography")}</h2>
             {legacy.biography.split(/\n\s*\n/).map((paragraph, index) => (
               <p key={index} className="text-body mb-4">{paragraph}</p>
             ))}
-            <h2 className="heading-3 mb-4 mt-10">Philosophy</h2>
+            <h2 className="heading-3 mb-4 mt-10">{t("about.philosophy")}</h2>
             <p className="text-body whitespace-pre-line">{legacy.philosophy}</p>
           </div>
           <div>
@@ -301,7 +308,7 @@ export function LegacyLive() {
                   <div>
                     <Initials name="R B" size="mx-auto mb-5 h-24 w-24" />
                     <p className="text-lg font-bold text-text-primary">Vaidya R. B. Gogate</p>
-                    <p className="mt-2 text-sm text-text-muted">Physician • Teacher • Scholar</p>
+                    <p className="mt-2 text-sm text-text-muted">{t("legacy.portraitRole")}</p>
                   </div>
                 </div>
               )}
@@ -311,7 +318,7 @@ export function LegacyLive() {
       </section>
       <section className="section bg-warm-cream">
         <div className="container max-w-4xl">
-          <h2 className="heading-3 mb-10 text-center">Timeline</h2>
+          <h2 className="heading-3 mb-10 text-center">{t("about.timeline")}</h2>
           <ol className="relative space-y-10 border-l-2 border-border pl-8" role="list">
             {legacy.timeline.map((item) => (
               <li key={item.id} className="relative">

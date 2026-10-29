@@ -3,11 +3,13 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { announcements as seededAnnouncements, certificates as baseCertificates, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
-import type { Announcement, Article, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, User, Video } from "@/types";
+import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, User, Video } from "@/types";
+import { isArticlePublished } from "@/lib/article-display";
 import { modulesFor, type StaffModuleId } from "@/lib/roles";
 
 const ARTICLES_KEY = "vgmf_article_edits";
 const CUSTOM_ARTICLES_KEY = "vgmf_custom_articles";
+const ASSIGNMENTS_KEY = "vgmf_article_assignments";
 const ANNOUNCEMENTS_KEY = "vgmf_announcement_edits";
 const EVENTS_KEY = "vgmf_event_edits";
 const FLAGS_KEY = "vgmf_site_flags";
@@ -84,47 +86,63 @@ export function saveSiteFlags(flags: SiteFlags) {
   writeJSON(FLAGS_KEY, flags);
 }
 
-export function getLiveArticles(): Article[] {
+function normalizeArticle(article: Article): Article {
+  return { ...article, status: article.status ?? "published" };
+}
+
+export function getAllArticles(): Article[] {
   const edits = readJSON<ArticleEdit[]>(ARTICLES_KEY, []);
   const custom = readJSON<Article[]>(CUSTOM_ARTICLES_KEY, []);
-  if (!edits.length && !custom.length) return seededArticles;
+  if (!edits.length && !custom.length) return seededArticles.map(normalizeArticle);
   const byId = new Map(edits.map((edit) => [edit.id, edit]));
   const fromSeed = seededArticles
-    .map((article) => ({ ...article, ...byId.get(article.id) }))
+    .map((article) => normalizeArticle({ ...article, ...byId.get(article.id) }))
     .filter((article) => !byId.get(article.id)?.hidden);
   const seedIds = new Set(seededArticles.map((article) => article.id));
-  return [...custom.filter((article) => !seedIds.has(article.id) && !byId.get(article.id)?.hidden), ...fromSeed];
+  return [...custom.filter((article) => !seedIds.has(article.id) && !byId.get(article.id)?.hidden).map(normalizeArticle), ...fromSeed];
+}
+
+export function getPublishedArticles() {
+  return getAllArticles().filter(isArticlePublished);
+}
+
+export function getLiveArticles(): Article[] {
+  return getPublishedArticles();
 }
 
 export function getArticle(idOrSlug: string) {
-  return getLiveArticles().find((article) => article.id === idOrSlug || article.slug === idOrSlug);
+  return getAllArticles().find((article) => article.id === idOrSlug || article.slug === idOrSlug);
 }
 
 export function saveArticle(article: Article) {
   const isSeed = seededArticles.some((item) => item.id === article.id);
+  const record: Article = normalizeArticle(article);
   if (isSeed) {
     const edits = readJSON<ArticleEdit[]>(ARTICLES_KEY, []).filter((item) => item.id !== article.id);
-    edits.push({
-      id: article.id,
-      title: article.title,
-      slug: article.slug,
-      excerpt: article.excerpt,
-      content: article.content,
-      author: article.author,
-      publishedByEmail: article.publishedByEmail,
-      category: article.category,
-      featured: article.featured,
-      coverImage: article.coverImage,
-      images: article.images,
-      readingTime: article.readingTime,
-      hidden: false,
-    });
+    edits.push({ ...record, hidden: false });
     writeJSON(ARTICLES_KEY, edits);
     return;
   }
   const custom = readJSON<Article[]>(CUSTOM_ARTICLES_KEY, []).filter((item) => item.id !== article.id);
-  custom.unshift(article);
+  custom.unshift(record);
   writeJSON(CUSTOM_ARTICLES_KEY, custom);
+}
+
+export function getArticleAssignments(): ArticleAssignment[] {
+  return readJSON<ArticleAssignment[]>(ASSIGNMENTS_KEY, []).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function saveArticleAssignment(assignment: ArticleAssignment) {
+  const next = getArticleAssignments().filter((item) => item.id !== assignment.id);
+  next.unshift(assignment);
+  writeJSON(ASSIGNMENTS_KEY, next);
+}
+
+export function removeArticleAssignment(id: string) {
+  writeJSON(
+    ASSIGNMENTS_KEY,
+    getArticleAssignments().filter((item) => item.id !== id)
+  );
 }
 
 export function hideArticle(id: string) {
