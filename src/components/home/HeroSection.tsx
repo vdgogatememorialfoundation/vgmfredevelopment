@@ -10,8 +10,8 @@ const isImage = (value?: string) => Boolean(value && /^(https?:|data:image)/.tes
 function StaticHero({ tagline }: { tagline?: string }) {
   const lines = (tagline || "Preserving Ayurveda. Advancing Knowledge. Serving Society.").split(/(?<=\.)\s+/);
   return (
-    <section className="relative overflow-hidden bg-warm-cream">
-      <div className="container grid items-center gap-6 py-8 lg:grid-cols-2 lg:py-10">
+    <section className="relative overflow-hidden border-b border-border bg-white">
+      <div className="container grid items-center gap-8 py-10 lg:grid-cols-2 lg:py-12">
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy">Vaidya Gogate Memorial Foundation</p>
           <h1 className="heading-1 max-w-2xl">
@@ -26,7 +26,7 @@ function StaticHero({ tagline }: { tagline?: string }) {
         </div>
         <div className="relative">
           <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-            <div className="flex h-full items-center justify-center bg-gradient-to-br from-warm-cream via-white to-gold/20 p-6 text-center">
+            <div className="flex h-full items-center justify-center bg-slate-50 p-6 text-center">
               <div>
                 <SiteLogo size={72} className="mx-auto mb-3" />
                 <h2 className="text-base font-semibold text-text-primary">Vaidya Gogate Memorial Foundation</h2>
@@ -59,7 +59,7 @@ export default function HeroSection() {
 
   return (
     <section
-      className="relative overflow-hidden bg-warm-cream"
+      className="relative overflow-hidden border-b border-border bg-white"
       aria-roledescription="carousel"
       aria-label="Featured banners"
       onMouseEnter={() => setPaused(true)}

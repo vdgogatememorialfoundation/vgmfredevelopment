@@ -152,7 +152,7 @@ export function LegacyLive() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={legacy.portrait} alt="Vaidya R. B. Gogate" className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full items-center justify-center bg-gradient-to-br from-warm-cream to-[#EAF1EC] p-8 text-center">
+                <div className="flex h-full items-center justify-center bg-slate-50 p-8 text-center">
                   <div>
                     <Initials name="R B" size="mx-auto mb-5 h-24 w-24" />
                     <p className="text-lg font-bold text-text-primary">Vaidya R. B. Gogate</p>

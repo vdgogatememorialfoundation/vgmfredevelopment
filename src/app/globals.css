@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #1E4636;
-  --color-burgundy-dark: #143328;
-  --color-gold: #A6843D;
-  --color-saffron: #C47B2B;
-  --color-warm-cream: #F4EFE4;
-  --color-background: #FBF8F2;
-  --color-text-primary: #1C1712;
-  --color-text-muted: #6A5E52;
-  --color-border: #E4D8C4;
-  --color-white: #FFFCF7;
+  --color-burgundy: #165A3A;
+  --color-burgundy-dark: #0E3D28;
+  --color-gold: #8B6914;
+  --color-saffron: #B45309;
+  --color-warm-cream: #FFFFFF;
+  --color-background: #FFFFFF;
+  --color-text-primary: #111827;
+  --color-text-muted: #4B5563;
+  --color-border: #E5E7EB;
+  --color-white: #FFFFFF;
   --font-serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, "Times New Roman", serif;
 }
 
@@ -60,7 +60,7 @@ body {
   }
 
   .section {
-    @apply py-8 sm:py-10;
+    @apply border-t border-border bg-white py-10 sm:py-12;
   }
 
   .btn-primary {
@@ -80,7 +80,7 @@ body {
   }
 
   .card {
-    @apply rounded-2xl border border-border bg-white shadow-sm transition hover:shadow-md;
+    @apply rounded-xl border border-border bg-white shadow-none transition hover:border-burgundy/30 hover:shadow-sm;
   }
 
   .heading-1 {

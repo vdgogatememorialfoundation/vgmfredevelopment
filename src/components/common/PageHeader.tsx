@@ -14,8 +14,8 @@ export default function PageHeader({
   breadcrumb,
 }: PageHeaderProps) {
   return (
-    <section className="border-b border-border bg-warm-cream">
-      <div className="container py-8 sm:py-10">
+    <section className="border-b border-border bg-white">
+      <div className="container py-7 sm:py-8">
         {breadcrumb && breadcrumb.length > 0 && (
           <nav aria-label="Breadcrumb" className="mb-3">
             <ol className="flex flex-wrap items-center gap-2 text-xs text-text-muted">

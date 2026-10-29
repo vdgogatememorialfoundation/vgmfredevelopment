@@ -8,7 +8,7 @@ import { formatDate } from "@/lib/utils";
 export default function FlyerSection() {
   const flyers = useLiveFlyers();
   return (
-    <section className="section bg-warm-cream" aria-labelledby="flyers-heading">
+    <section className="section" aria-labelledby="flyers-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Promotional Banners"

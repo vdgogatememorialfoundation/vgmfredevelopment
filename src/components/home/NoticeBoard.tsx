@@ -31,9 +31,9 @@ export default function NoticeBoard() {
   const notices = (pinned.length ? pinned : all).slice(0, 3);
 
   return (
-    <section className="bg-background py-8" aria-labelledby="notices-heading">
+    <section className="section" aria-labelledby="notices-heading">
       <div className="container">
-        <div className="mx-auto max-w-xl rounded-[28px] border border-border bg-white px-5 py-5 shadow-sm sm:px-6">
+        <div className="mx-auto max-w-2xl rounded-xl border border-border bg-white px-5 py-5 sm:px-6">
           <div className="mb-4 flex items-center gap-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-text-primary" aria-hidden="true">
               <path d="M3 11v2a1 1 0 0 0 1 1h1.5l6 4.5V5.5L5.5 10H4a1 1 0 0 0-1 1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -50,7 +50,7 @@ export default function NoticeBoard() {
               return (
                 <li
                   key={notice.id}
-                  className="rounded-2xl border-l-[3px] border-burgundy bg-[#F4FBF7] px-4 py-3.5"
+                  className="rounded-lg border border-border border-l-[3px] border-l-burgundy bg-white px-4 py-3.5"
                 >
                   <p className="text-sm font-semibold leading-5 text-text-primary">{notice.title}</p>
                   {notice.description ? (

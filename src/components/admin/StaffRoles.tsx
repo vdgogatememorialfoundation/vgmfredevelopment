@@ -107,7 +107,7 @@ export function RolesDesk() {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {role.modules.map((id) => (
-                      <span key={id} className="rounded-full bg-[#F4F1EA] px-2.5 py-0.5 text-xs text-slate-700">
+                      <span key={id} className="rounded-full bg-[#F3F4F6] px-2.5 py-0.5 text-xs text-slate-700">
                         {staffModules.find((item) => item.id === id)?.label}
                       </span>
                     ))}

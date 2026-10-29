@@ -9,12 +9,17 @@ export default function ClinicsSection() {
   const shown = useLiveClinics().slice(0, 3);
 
   return (
-    <section className="section bg-warm-cream" aria-labelledby="clinics-heading">
+    <section className="section" aria-labelledby="clinics-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Clinics"
-          title="Our Clinics"
-          description="Foundation clinics providing authentic Ayurveda consultation, therapy and community care."
+          title="Our clinics"
+          description="Foundation clinics providing Ayurveda consultation, therapy and community care."
+          action={
+            <Link href="/clinics" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+              View all
+            </Link>
+          }
         />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -23,9 +28,9 @@ export default function ClinicsSection() {
           ))}
         </div>
 
-        <div className="mt-10 text-center">
+        <div className="mt-8">
           <Link href="/clinics" className="btn-outline">
-            View All Clinics
+            View all clinics
           </Link>
         </div>
       </div>

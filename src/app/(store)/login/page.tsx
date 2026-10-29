@@ -24,7 +24,7 @@ export default async function LoginPage({
     <main className="border-t border-border bg-background">
       <div className="mx-auto grid max-w-7xl lg:grid-cols-2">
         {/* Left panel */}
-        <section className="hidden flex-col justify-center border-r border-border bg-warm-cream px-10 py-16 text-text-primary lg:flex xl:px-20">
+        <section className="hidden flex-col justify-center border-r border-border bg-slate-50 px-10 py-16 text-text-primary lg:flex xl:px-20">
           <div className="max-w-lg">
             <SiteLogo size={64} className="mb-8" />
 

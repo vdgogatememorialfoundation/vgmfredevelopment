@@ -14,15 +14,17 @@ export default function UpcomingEvents() {
     .slice(0, 3);
 
   return (
-    <section
-      className="section bg-background py-10"
-      aria-labelledby="upcoming-events-heading"
-    >
+    <section className="section" aria-labelledby="upcoming-events-heading">
       <div className="container">
         <SectionHeading
-          eyebrow="Upcoming Events"
-          title="Events & Programmes"
+          eyebrow="Events"
+          title="Events & programmes"
           description="Upcoming programmes from the Foundation."
+          action={
+            <Link href="/events" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+              View all
+            </Link>
+          }
         />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -31,9 +33,9 @@ export default function UpcomingEvents() {
           ))}
         </div>
 
-        <div className="mt-10 text-center">
+        <div className="mt-8">
           <Link href="/events" className="btn-primary">
-            View All Events
+            View all events
           </Link>
         </div>
       </div>

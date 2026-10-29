@@ -9,24 +9,23 @@ export default function FeaturedBooks() {
   const featured = useLiveBooks().filter((book) => book.active !== false).slice(0, 4);
 
   return (
-    <section className="section bg-background" aria-labelledby="books-heading">
+    <section className="section" aria-labelledby="books-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Shop"
-          title="Shop & Publications"
-          description="Clinical references, scholarly works and the writings of Vaidya R. B. Gogate. Order online with secure payments."
+          title="Shop & publications"
+          description="Clinical references, scholarly works and the writings of Vaidya R. B. Gogate."
+          action={
+            <Link href="/shop" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+              View shop
+            </Link>
+          }
         />
 
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {featured.map((book) => (
             <BookCard key={book.id} book={book} />
           ))}
-        </div>
-
-        <div className="mt-10 text-center">
-          <Link href="/shop" className="btn-primary">
-            Explore the Shop
-          </Link>
         </div>
       </div>
     </section>

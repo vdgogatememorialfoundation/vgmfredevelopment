@@ -12,12 +12,17 @@ export default function FeaturedArticles() {
   if (shown.length === 0) return null;
 
   return (
-    <section className="section bg-white" aria-labelledby="articles-heading">
+    <section className="section" aria-labelledby="articles-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Articles"
-          title="From Our Journal"
+          title="From our journal"
           description="Perspectives on Ayurveda, education and the Foundation's work."
+          action={
+            <Link href="/articles" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
+              View all
+            </Link>
+          }
         />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -26,9 +31,9 @@ export default function FeaturedArticles() {
           ))}
         </div>
 
-        <div className="mt-10 text-center">
+        <div className="mt-8">
           <Link href="/articles" className="btn-outline">
-            View All Articles
+            View all articles
           </Link>
         </div>
       </div>

@@ -21,7 +21,7 @@ const pillars = [
 
 export default function LegacySection() {
   return (
-    <section className="section bg-warm-cream" aria-labelledby="legacy-heading">
+    <section className="section" aria-labelledby="legacy-heading">
       <div className="container">
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div>
@@ -58,7 +58,7 @@ export default function LegacySection() {
 
           <div className="relative">
             <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-              <div className="flex h-full items-center justify-center bg-gradient-to-br from-warm-cream to-[#E9DDD0] p-8 text-center">
+              <div className="flex h-full items-center justify-center bg-slate-50 p-8 text-center">
                 <div>
                   <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full border-2 border-burgundy">
                     <span className="font-bold text-burgundy">

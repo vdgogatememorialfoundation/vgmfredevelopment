@@ -29,7 +29,7 @@ export default function AnnouncementsSection() {
         <ul className="divide-y divide-border rounded-xl border border-border">
           {shown.map((announcement) => (
             <li key={announcement.id}>
-              <Link href={announcement.href} className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-warm-cream/50">
+              <Link href={announcement.href} className="flex flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-slate-50">
                 <Badge tone="burgundy">{announcement.category}</Badge>
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary">{announcement.title}</span>
                 <time className="text-xs text-text-muted" dateTime={announcement.date}>

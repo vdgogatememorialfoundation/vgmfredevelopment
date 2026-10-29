@@ -9,10 +9,10 @@ interface MediaPlaceholderProps {
 }
 
 const variants = {
-  event: "from-burgundy/20 via-warm-cream to-[#EFE4D8]",
-  book: "from-[#E4EFE8] via-warm-cream to-[#F3EBDC]",
-  article: "from-[#EDE4D6] via-warm-cream to-[#F7F1E6]",
-  clinic: "from-[#E7E2DA] via-warm-cream to-[#F2EBDF]",
+  event: "from-slate-100 via-white to-slate-50",
+  book: "from-slate-100 via-white to-slate-50",
+  article: "from-slate-100 via-white to-slate-50",
+  clinic: "from-slate-100 via-white to-slate-50",
 };
 
 const labelGlyphs = {
