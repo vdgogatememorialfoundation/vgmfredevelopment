@@ -7,7 +7,6 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCart } from "@/lib/use-cart";
-import { siteConfig } from "@/lib/constants";
 import { classNames } from "@/lib/utils";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/LanguageProvider";
@@ -155,46 +154,6 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
-      {/* Top bar */}
-      <div className="border-b border-ink-soft bg-ink text-stone-300">
-        <div className="container flex items-center justify-between py-1.5 text-[11px] sm:py-2 sm:text-xs">
-          <p className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <a
-              href={`mailto:${siteConfig.email}`}
-              className="hidden items-center gap-1.5 hover:underline sm:flex"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                <polyline points="22,6 12,13 2,6" />
-              </svg>
-              {siteConfig.email}
-            </a>
-            <a
-              href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}
-              className="flex items-center gap-1.5 hover:underline"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-              </svg>
-              {siteConfig.phone}
-            </a>
-          </p>
-
-          <div className="ml-auto flex items-center gap-4">
-            {isAuthenticated ? (
-              <span className="hidden text-stone-200 md:inline">
-                {user?.accountId}
-              </span>
-            ) : null}
-            <Link href="/contact" className="hover:underline">
-              {t("common.contact")}
-            </Link>
-            <LanguageSwitcher tone="dark" />
-          </div>
-        </div>
-      </div>
-
-      {/* Main header */}
       <div className="container">
         <div className="flex h-[78px] items-center justify-between gap-4">
           {/* Logo */}
@@ -263,6 +222,7 @@ export default function Header() {
 
           {/* Actions */}
           <div className="hidden items-center gap-3 lg:flex">
+            <LanguageSwitcher />
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
@@ -465,6 +425,7 @@ export default function Header() {
                   <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="btn-outline">
                     {t("header.exploreEvents")}
                   </Link>
+                  <LanguageSwitcher />
                 </div>
               </div>
             </div>,
@@ -597,6 +558,13 @@ function AccountIcon({ name }: { name: string }) {
         <svg {...common}>
           <circle cx="12" cy="12" r="9" />
           <path d="m9 12 2 2 4-4" />
+        </svg>
+      );
+    case "bell":
+      return (
+        <svg {...common}>
+          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.7 1.7 0 0 0 3.4 0" />
         </svg>
       );
     case "faq":

@@ -47,7 +47,7 @@ export default function TicketsPage() {
     <div>
       <SectionHeader
         title="Support Tickets"
-        description="Raise a support request and track the Foundation team's response."
+        description="This is the only place to raise a Foundation support ticket. Track replies here."
       />
       <button type="button" onClick={() => setShowForm((v) => !v)} className="btn-primary">
         {showForm ? "Close" : "New ticket"}

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720" role="img" aria-label="Foundation events">
+  <defs>
+    <linearGradient id="g" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A1D18"/>
+      <stop offset="0.5" stop-color="#6B2E24"/>
+      <stop offset="1" stop-color="#C4954A"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="720" fill="url(#g)"/>
+  <rect x="1040" y="80" width="460" height="560" rx="18" fill="#ffffff" fill-opacity="0.1"/>
+  <text x="90" y="250" fill="#F8E7C5" font-family="Georgia, serif" font-size="28" letter-spacing="6">PROGRAMMES</text>
+  <text x="90" y="360" fill="#ffffff" font-family="Georgia, serif" font-size="68">Seminars, fellowships</text>
+  <text x="90" y="450" fill="#ffffff" font-family="Georgia, serif" font-size="68">and workshops.</text>
+  <text x="90" y="560" fill="#F8E7C5" font-family="Georgia, serif" font-size="28">See upcoming Foundation events and register online.</text>
+</svg>

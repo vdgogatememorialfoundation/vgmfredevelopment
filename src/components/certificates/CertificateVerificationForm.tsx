@@ -62,8 +62,9 @@ export default function CertificateVerificationForm() {
           Certificate ID
         </label>
         <p className="mt-1 text-sm text-text-muted">
-          Enter the ID printed on the certificate, such as CERT-P-12-345 or CERT-V-4-8. Older CERT-12-345
-          numbers still verify. IDs are not case-sensitive. Email, phone and QR tokens are never shown.
+          Enter the ID printed on the certificate, such as CERT-P-12-345, CERT-V-4-8, or a 12-digit number
+          like 000000200329. Older CERT-12-345 numbers still verify. IDs are not case-sensitive. Email, phone
+          and QR tokens are never shown.
         </p>
 
         <input
@@ -72,7 +73,7 @@ export default function CertificateVerificationForm() {
           type="text"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="CERT-P-12-345"
+          placeholder="CERT-P-12-345 or 000000200329"
           required
           className="input-field mt-3 text-center text-lg tracking-wider"
         />

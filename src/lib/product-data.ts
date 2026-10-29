@@ -1,6 +1,7 @@
 import { books } from "@/data/books";
 import type { AdminCategory, Book, Order, ProductOverride } from "@/types";
 import { queueNotification } from "@/lib/notify";
+import { pushInbox } from "@/lib/inbox";
 
 const OVERRIDES_KEY = "vgmf_admin_products";
 const CUSTOM_KEY = "vgmf_custom_books";
@@ -135,6 +136,15 @@ export function saveProduct(book: Book) {
   writeJSON(CUSTOM_KEY, list);
   writeJSON(OVERRIDES_KEY, getOverrides().filter((o) => o.bookId !== book.id));
   writeJSON(DELETED_KEY, getDeletedIds().filter((id) => id !== book.id));
+  if (before && before.stock !== record.stock) {
+    pushInbox({
+      audience: "staff",
+      kind: "stock",
+      title: `Stock updated: ${record.title}`,
+      body: `${record.sku || record.id}: ${before.stock} → ${record.stock} units.`,
+      href: "/admin/commerce/inventory",
+    });
+  }
   if (before && !isPurchasable(before) && isPurchasable(record) && record.active !== false) {
     notifyBackInStock(record);
   }
@@ -176,6 +186,13 @@ export function adjustStock(bookId: string, delta: number) {
   const book = getLiveBook(bookId);
   if (!book) return;
   updateStock(bookId, book.stock + delta);
+}
+
+export function restockProduct(bookId: string, add: number) {
+  const book = getLiveBook(bookId);
+  if (!book) return book;
+  updateStock(bookId, book.stock + Math.max(0, Math.floor(add)));
+  return getLiveBook(bookId);
 }
 
 /** Takes the ordered units out of stock once per order. */
@@ -305,6 +322,14 @@ export function notifyBackInStock(book: Book) {
       subject: `Back in stock: ${book.title}`,
       template: "back-in-stock",
       body: `Hello${alert.name ? ` ${alert.name}` : ""},\n\n${book.title} is back in stock at the VGMF store.\n\nPrice: ₹${book.price.toLocaleString("en-IN")}\nOrder here: ${origin}/shop/${book.slug}\n\nStock is limited, so order soon.\n\n– VGMF Store`,
+    });
+    pushInbox({
+      audience: "customer",
+      email: alert.email,
+      kind: "stock",
+      title: `${book.title} is back in stock`,
+      body: `It is available again in the Foundation shop. Price ₹${book.price.toLocaleString("en-IN")}.`,
+      href: `/shop/${book.slug}`,
     });
   }
   writeJSON(ALERTS_KEY, all.map((alert) => (pending.some((item) => item.id === alert.id) ? { ...alert, notifiedAt: now } : alert)));

@@ -6,26 +6,32 @@ import { useLiveFlyers, useSiteSettings } from "@/lib/use-cms";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 const INTERVAL = 7000;
-const isImage = (value?: string) => Boolean(value && /^(https?:|data:image)/.test(value));
+const isImage = (value?: string) =>
+  Boolean(value && (/^(https?:|data:image|\/)/i.test(value) || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(value)));
 
 type ImageSlide = { id: string; title: string; image: string; href?: string };
+
+const DEFAULT_SLIDES: ImageSlide[] = [
+  { id: "slide-legacy", title: "Preserving Ayurveda. Advancing knowledge.", image: "/slides/legacy.svg", href: "/about" },
+  { id: "slide-events", title: "Seminars, fellowships and workshops", image: "/slides/events.svg", href: "/events" },
+  { id: "slide-shop", title: "Books and study materials from VGMF", image: "/slides/shop.svg", href: "/shop" },
+];
 
 export default function HeroSection() {
   const flyers = useLiveFlyers();
   const settings = useSiteSettings();
   const { t } = useI18n();
-  const slides = useMemo<ImageSlide[]>(
-    () =>
-      flyers
-        .filter((flyer) => isImage(flyer.image))
-        .map((flyer) => ({
-          id: flyer.id,
-          title: flyer.title,
-          image: flyer.image,
-          href: flyer.href?.trim() || undefined,
-        })),
-    [flyers]
-  );
+  const slides = useMemo<ImageSlide[]>(() => {
+    const fromCms = flyers
+      .filter((flyer) => isImage(flyer.image))
+      .map((flyer) => ({
+        id: flyer.id,
+        title: flyer.title,
+        image: flyer.image,
+        href: flyer.href?.trim() || undefined,
+      }));
+    return fromCms.length ? fromCms : DEFAULT_SLIDES;
+  }, [flyers]);
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);

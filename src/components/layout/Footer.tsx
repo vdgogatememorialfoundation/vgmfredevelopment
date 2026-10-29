@@ -97,13 +97,8 @@ export default function Footer() {
                     </Link>
                   </li>
                   <li>
-                    <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
-                      {t("nav.support")}
-                    </Link>
-                  </li>
-                  <li>
                     <Link href="/certificate-verification" className="text-sm text-text-muted transition hover:text-burgundy">
-                      Certificate verification
+                      {t("nav.certificates")}
                     </Link>
                   </li>
                 </>
@@ -117,8 +112,8 @@ export default function Footer() {
                   </li>
                 ))}
                 <li>
-                  <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
-                    {t("nav.support")}
+                  <Link href="/certificate-verification" className="text-sm text-text-muted transition hover:text-burgundy">
+                    {t("nav.certificates")}
                   </Link>
                 </li>
                 </>

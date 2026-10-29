@@ -10,6 +10,7 @@ const en = {
   "nav.shop": "Shop",
   "nav.clinics": "Clinics",
   "nav.contact": "Contact",
+  "nav.certificates": "Certificates",
   "nav.support": "Support",
   "common.signIn": "Sign in | Create account",
   "common.contact": "Contact",
@@ -270,6 +271,7 @@ const hi: Partial<Record<MessageKey, string>> = {
   "nav.shop": "दुकान",
   "nav.clinics": "चिकित्सालय",
   "nav.contact": "संपर्क",
+  "nav.certificates": "प्रमाणपत्र",
   "common.signIn": "साइन इन | खाता बनाएँ",
   "common.contact": "संपर्क",
   "common.viewAll": "सभी देखें",
@@ -1144,5 +1146,6 @@ export const navMessageKey: Record<string, MessageKey> = {
   "/shop": "nav.shop",
   "/clinics": "nav.clinics",
   "/contact": "nav.contact",
+  "/certificate-verification": "nav.certificates",
   "/support": "nav.support",
 };

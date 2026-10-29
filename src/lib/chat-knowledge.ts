@@ -325,7 +325,7 @@ export function answerQuestion(question: string): string {
     return "Certificate numbers issued from Foundation seminar and autism programmes can be checked on this website. Open /certificate-verification and enter the certificate ID.";
   }
   if (/\b(ticket|help desk|complaint|live chat|talk to (a )?person|agent|open (a )?support)\b/i.test(question)) {
-    return "Open /support to create a ticket or use live chat when staff are online. If nobody replies, we create a 12-digit ticket and send a short form in the chat. If your email or phone is already on an account we attach the ticket there; otherwise we create an account and email updates. Staff can view tickets assigned to them; admins and co-admins see every ticket.";
+    return "Support tickets are raised from the customer dashboard at /account/tickets after you sign in. Live chat can still answer questions when staff are online. Staff see tickets assigned to them; admins and co-admins see every ticket.";
   }
   if (/\b(donate|donation|contribute|support us|support the foundation)\b/i.test(question)) {
     const flags = getSiteFlags();

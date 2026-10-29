@@ -9,6 +9,8 @@ import { allStaffModules, canOpen, firstPathFor, getRole, moduleForPath, modules
 import { LoginStamp } from "@/components/layout/LoginStamp";
 import { isStaffModuleEnabled } from "@/lib/site-visibility";
 import { useRouter } from "next/navigation";
+import { InboxBell, InboxList } from "@/components/notifications/InboxBell";
+import { markAllInboxRead } from "@/lib/inbox";
 
 function StaffHome() {
   const { user, signOut } = useAuth();
@@ -41,7 +43,10 @@ function StaffHome() {
           </p>
         </div>
         <div className="flex flex-col items-end gap-2 text-sm">
-          <Link href="/staff/profile" className="font-semibold text-burgundy hover:underline">Edit profile</Link>
+          <div className="flex items-center gap-3">
+            <InboxBell href="#staff-notifications" />
+            <Link href="/staff/profile" className="font-semibold text-burgundy hover:underline">Edit profile</Link>
+          </div>
           <LoginStamp
             onLogout={() => {
               signOut();
@@ -50,6 +55,19 @@ function StaffHome() {
           />
         </div>
       </div>
+
+      <section id="staff-notifications" className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Notifications</h2>
+            <p className="text-sm text-slate-500">Order updates, restocks, tickets and other alerts.</p>
+          </div>
+          <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700" onClick={() => markAllInboxRead(user)}>
+            Mark all as read
+          </button>
+        </div>
+        <InboxList />
+      </section>
 
       {user.role === "staff" && allowed !== "all" && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
