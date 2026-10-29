@@ -67,10 +67,10 @@ export function SupportSection() {
       <div>
         <h1 className="text-2xl font-bold text-text-primary">Support</h1>
         <p className="text-sm text-text-muted">
-          Tickets from the public support portal, staff and customers — including every reply. Staff see tickets assigned to them. Enable live chat when the team is online.
+          Tickets from the customer dashboard and staff — including every reply. Staff see tickets assigned to them. Enable live chat when the team is online.
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
-          <Link href="/support" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-burgundy">Support portal</Link>
+          <Link href="/account/tickets" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-burgundy">Customer tickets</Link>
           <Link href="/account" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-burgundy">Customer portal</Link>
           <Link href="/staff" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-burgundy">Staff portal</Link>
         </div>
@@ -138,7 +138,7 @@ export function SupportSection() {
       )}
 
       {tab === "tickets" && (
-        <Panel title={`Support tickets (${tickets.length})`} description="Every ticket from /support, customer accounts and staff, with the full reply thread. New tickets use a 12-digit ID.">
+        <Panel title={`Support tickets (${tickets.length})`} description="Every ticket from the customer dashboard and staff, with the full reply thread. New tickets use a 12-digit ID.">
           <div className="mb-4 grid gap-2 rounded-xl border border-dashed border-border p-4 sm:grid-cols-2">
             <TextInput value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} placeholder="Name" />
             <TextInput value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="Email" />
@@ -161,7 +161,7 @@ export function SupportSection() {
             </Button>
           </div>
           {tickets.length === 0 ? (
-            <EmptyState text="No tickets yet. Visitors raise them from /support or the account area." />
+            <EmptyState text="No tickets yet. Customers raise them from the account dashboard." />
           ) : (
             <ul className="space-y-3">
               {tickets.map((ticket) => (
@@ -261,7 +261,7 @@ export function LiveChatDesk() {
           </label>
         </div>
         <p className="mt-2 text-xs text-text-muted">
-          When chat is enabled but offline, visitors are asked to open a ticket on /support.
+          When chat is enabled but offline, visitors are asked to raise a ticket from the customer dashboard.
         </p>
       </Panel>
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">

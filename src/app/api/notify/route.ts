@@ -13,8 +13,21 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 }
 
-function toHtml(text: string) {
-  return `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#1f2a24">${escapeHtml(text).replace(/\n/g, "<br/>")}</div>`;
+function imageHtml(images: unknown) {
+  if (!Array.isArray(images)) return "";
+  return images
+    .filter((src): src is string => typeof src === "string" && /^(https?:|data:image)/i.test(src))
+    .slice(0, 6)
+    .map(
+      (src) =>
+        `<p><img src="${src.replace(/"/g, "")}" alt="" style="max-width:100%;height:auto;border-radius:8px;margin:12px 0" /></p>`
+    )
+    .join("");
+}
+
+function toHtml(text: string, html?: boolean, images?: unknown) {
+  const body = html || /<(img|p|br|div|strong|em|a)\b/i.test(text) ? text : escapeHtml(text).replace(/\n/g, "<br/>");
+  return `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#1f2a24">${body}${imageHtml(images)}</div>`;
 }
 
 export async function POST(request: NextRequest) {
@@ -29,7 +42,7 @@ export async function POST(request: NextRequest) {
       const mail = {
         to: String(body.to ?? ""),
         subject: String(body.subject ?? ""),
-        html: toHtml(String(body.body ?? "")),
+        html: toHtml(String(body.body ?? ""), body.html === true, body.images),
         replyTo: typeof body.replyTo === "string" && body.replyTo.includes("@") ? String(body.replyTo) : undefined,
       };
       if (!/^\S+@\S+\.\S+$/.test(mail.to)) return NextResponse.json({ ok: false, configured: true, error: "Recipient email is not valid." });

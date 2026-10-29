@@ -10,6 +10,7 @@ import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
 import { siteConfig } from "@/lib/constants";
 import { getLiveCmsPages, subscribeCmsPages } from "@/lib/cms-pages";
 import { getSiteVisibility, subscribeSiteVisibility, visiblePublicNav } from "@/lib/site-visibility";
+import { isAppDownloadPublic } from "@/lib/mobile-config";
 
 const legalLinks: { key: MessageKey; href: string }[] = [
   { key: "footer.privacy", href: "/privacy" },
@@ -21,7 +22,7 @@ const legalLinks: { key: MessageKey; href: string }[] = [
 ];
 
 function cmsSnapshot() {
-  return `${window.localStorage.getItem("vgmf_cms_pages") ?? ""}|${window.localStorage.getItem("vgmf_site_visibility") ?? ""}`;
+  return `${window.localStorage.getItem("vgmf_cms_pages") ?? ""}|${window.localStorage.getItem("vgmf_site_visibility") ?? ""}|${window.localStorage.getItem("vgmf_mobile_app") ?? ""}`;
 }
 
 export default function Footer() {
@@ -97,13 +98,8 @@ export default function Footer() {
                     </Link>
                   </li>
                   <li>
-                    <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
-                      {t("nav.support")}
-                    </Link>
-                  </li>
-                  <li>
                     <Link href="/certificate-verification" className="text-sm text-text-muted transition hover:text-burgundy">
-                      Certificate verification
+                      {t("nav.certificates")}
                     </Link>
                   </li>
                 </>
@@ -117,8 +113,8 @@ export default function Footer() {
                   </li>
                 ))}
                 <li>
-                  <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
-                    {t("nav.support")}
+                  <Link href="/certificate-verification" className="text-sm text-text-muted transition hover:text-burgundy">
+                    {t("nav.certificates")}
                   </Link>
                 </li>
                 </>
@@ -126,7 +122,14 @@ export default function Footer() {
             </ul>
             <div className="mt-8">
               <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">{t("footer.connect")}</p>
-              <SocialLinks />
+              <SocialLinks tone="dark" always />
+              {isAppDownloadPublic() ? (
+                <p className="mt-4">
+                  <Link href="/app" className="text-sm font-semibold text-burgundy transition hover:text-ink">
+                    Get the Android app
+                  </Link>
+                </p>
+              ) : null}
               <div className="mt-4">
                 <LanguageSwitcher />
               </div>

@@ -188,6 +188,27 @@ async function verifyAutism(id: string, events: PartnerEvent[]): Promise<AutismV
   return last;
 }
 
+async function seminarLookup(id: string) {
+  const result = await verifySeminar(id, []);
+  if (result.certificate) {
+    const events = await loadPartnerEvents(SEMINAR_ORIGIN);
+    const matched = events.find(
+      (event) => event.id === result.certificate?.eventId || event.title === result.certificate?.event
+    );
+    if (matched) result.certificate.eventDetails = matched;
+  }
+  return result;
+}
+
+async function autismLookup(id: string) {
+  const result = await verifyAutism(id, []);
+  if (result.certificate) {
+    const events = await loadPartnerEvents(AUTISM_ORIGIN);
+    return { ...result, certificate: enrichAutism(result.certificate, events) };
+  }
+  return result;
+}
+
 export async function lookupPartnerCertificate(id: string): Promise<{
   certificate: UnifiedCertificate | null;
   status: string;
@@ -200,49 +221,43 @@ export async function lookupPartnerCertificate(id: string): Promise<{
     return { certificate: null, status: "invalid_id", code: "INVALID_ID", error: "Add a certificate number.", sourceTried: [] };
   }
 
-  const trySeminar = isSeminarId(trimmed) || !isAutismId(trimmed);
-  const tryAutism = isAutismId(trimmed) || !isSeminarId(trimmed);
-  const sourceTried: CertificateSource[] = [];
+  const seminarId = isSeminarId(trimmed);
+  const autismId = isAutismId(trimmed);
+  const sourceTried: CertificateSource[] = seminarId ? ["seminar", "autism"] : ["autism"];
 
-  if (trySeminar && isSeminarId(trimmed)) {
-    sourceTried.push("seminar");
-    const result = await verifySeminar(trimmed, []);
-    if (result.certificate) {
-      const events = await loadPartnerEvents(SEMINAR_ORIGIN);
-      const matched = events.find((event) => event.id === result.certificate?.eventId || event.title === result.certificate?.event);
-      if (matched) result.certificate.eventDetails = matched;
-      return { ...result, sourceTried };
+  if (seminarId) {
+    const [seminar, autism] = await Promise.all([seminarLookup(trimmed), autismLookup(trimmed)]);
+    if (seminar.certificate) return { ...seminar, sourceTried };
+    if (autism.certificate) return { ...autism, sourceTried };
+    if (autism.code && autism.code !== "NOT_FOUND" && autism.code !== "UNAVAILABLE" && autism.code !== "INVALID_ID") {
+      return { ...autism, sourceTried };
     }
+    return {
+      certificate: null,
+      status: seminar.status || "not_found",
+      code: "NOT_FOUND",
+      error: "No certificate was found for this ID.",
+      sourceTried,
+    };
   }
 
-  if (tryAutism && isAutismId(trimmed)) {
-    sourceTried.push("autism");
-    const result = await verifyAutism(trimmed, []);
-    if (result.certificate) {
-      const events = await loadPartnerEvents(AUTISM_ORIGIN);
-      return { ...result, certificate: enrichAutism(result.certificate, events), sourceTried };
-    }
-    if (result.code && result.code !== "UNAVAILABLE") return { ...result, sourceTried };
+  const autism = await autismLookup(trimmed);
+  if (autism.certificate) return { ...autism, sourceTried };
+  if (autism.code && autism.code !== "NOT_FOUND" && autism.code !== "UNAVAILABLE") {
+    return { ...autism, sourceTried };
   }
 
-  if (trySeminar && !sourceTried.includes("seminar")) {
+  if (!autismId) {
     sourceTried.push("seminar");
-    const result = await verifySeminar(trimmed, []);
-    if (result.certificate) return { ...result, sourceTried };
-  }
-
-  if (tryAutism && !sourceTried.includes("autism") && isAutismId(trimmed)) {
-    sourceTried.push("autism");
-    const result = await verifyAutism(trimmed, []);
-    if (result.certificate) return { ...result, sourceTried };
-    return { ...result, sourceTried };
+    const seminar = await seminarLookup(trimmed);
+    if (seminar.certificate) return { ...seminar, sourceTried };
   }
 
   return {
     certificate: null,
-    status: "not_found",
-    code: "NOT_FOUND",
-    error: "No certificate was found for this ID.",
+    status: autism.status || "not_found",
+    code: autism.code || "NOT_FOUND",
+    error: autism.error || "No certificate was found for this ID.",
     sourceTried,
   };
 }

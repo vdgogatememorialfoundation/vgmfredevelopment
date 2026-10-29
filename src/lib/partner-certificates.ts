@@ -46,7 +46,7 @@ export type AutismVerifyResult = {
 };
 
 export const AUTISM_ERROR_COPY: Record<string, string> = {
-  INVALID_ID: "Enter a certificate ID such as CERT-P-12-345 or CERT-V-12-345.",
+  INVALID_ID: "Enter a certificate ID such as CERT-P-12-345, CERT-V-12-345, or a 12-digit number.",
   NOT_FOUND: "No certificate was found for this ID.",
   NOT_ISSUED: "This certificate ID is on file but has not been issued yet.",
   AMBIGUOUS: "This older certificate ID matches more than one certificate. Use the full ID printed as CERT-P-… or CERT-V-….",
@@ -183,7 +183,7 @@ export function mapAutismApiResponse(
   if (status >= 500 || code === "UNAVAILABLE") return autismFail("UNAVAILABLE", error);
 
   const nested = asRecord(body.certificate);
-  const valid = body.valid === true && Boolean(nested);
+  const valid = Boolean(nested) && (body.valid === true || (body.ok === true && body.valid !== false));
   if (!valid) {
     if (code) return autismFail(code, error);
     if (body.valid === false) return autismFail("NOT_FOUND", error);

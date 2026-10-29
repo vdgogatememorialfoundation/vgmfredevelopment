@@ -11,9 +11,11 @@ import {
   isProductCodeTaken,
   isSkuTaken,
   pendingStockAlerts,
+  restockProduct,
   saveCategory,
   saveProduct,
   stockLevel,
+  updateStock,
 } from "@/lib/product-data";
 import { useAllProducts } from "@/lib/use-cms";
 import { fileToDataUrl } from "@/lib/images";
@@ -86,6 +88,8 @@ export function ProductsSection() {
   const [creating, setCreating] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [restockQty, setRestockQty] = useState<Record<string, string>>({});
+  const [stockNote, setStockNote] = useState("");
 
   const shown = books.filter((book) => {
     const q = query.trim().toLowerCase();
@@ -180,8 +184,43 @@ export function ProductsSection() {
                       </td>
                       <td className="px-3 font-medium">{formatINR(book.price)}</td>
                       <td className="px-3">
-                        {book.preorder?.enabled && level === "out" ? "Pre-order" : book.stock}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            className="w-20 rounded-lg border border-border px-2 py-1 text-sm"
+                            defaultValue={book.stock}
+                            key={`${book.id}-${book.stock}`}
+                            onBlur={(event) => {
+                              const next = Math.max(0, Math.floor(Number(event.target.value)));
+                              if (next !== book.stock) updateStock(book.id, next);
+                            }}
+                            aria-label={`On-hand stock for ${book.title}`}
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            placeholder="+qty"
+                            className="w-16 rounded-lg border border-border px-2 py-1 text-sm"
+                            value={restockQty[book.id] ?? ""}
+                            onChange={(event) => setRestockQty((current) => ({ ...current, [book.id]: event.target.value }))}
+                            aria-label={`Restock ${book.title}`}
+                          />
+                          <Button
+                            variant="ghost"
+                            onClick={() => {
+                              const add = Math.max(0, Math.floor(Number(restockQty[book.id] || 0)));
+                              if (!add) return;
+                              restockProduct(book.id, add);
+                              setRestockQty((current) => ({ ...current, [book.id]: "" }));
+                              setStockNote(`${book.title}: added ${add} units.`);
+                            }}
+                          >
+                            Restock
+                          </Button>
+                        </div>
                         {waiting > 0 && <p className="text-[11px] text-amber-700">{waiting} waiting for restock</p>}
+                        {stockNote.includes(book.title) && <p className="text-[11px] text-emerald-700">{stockNote}</p>}
                       </td>
                       <td className="px-3 text-text-muted">{book.category}</td>
                       <td className="px-3">

@@ -64,7 +64,7 @@ export function WorkspaceHome() {
             <Link href="/admin" className="rounded-lg bg-burgundy px-3 py-2 text-sm font-semibold text-white">Admin</Link>
             <Link href="/staff" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Staff</Link>
             <Link href="/account" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Customer</Link>
-            <Link href="/support" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Support</Link>
+            <Link href="/admin/support/tickets" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Tickets</Link>
             <Link href="/admin/analytics" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Analytics</Link>
             <Link href="/admin/reports" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Reports</Link>
           </div>

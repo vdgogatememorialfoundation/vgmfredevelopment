@@ -1,0 +1,10 @@
+node_modules
+.expo
+dist
+ios/Pods
+android/.gradle
+android/app/build
+android/build
+*.jks
+*.keystore
+!debug.keystore

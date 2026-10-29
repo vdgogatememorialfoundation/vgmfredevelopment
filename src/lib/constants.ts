@@ -48,10 +48,11 @@ export const navigation = [
   { name: "Shop", href: "/shop" },
   { name: "Clinics", href: "/clinics" },
   { name: "Contact", href: "/contact" },
-  { name: "Support", href: "/support" },
+  { name: "Certificates", href: "/certificate-verification" },
 ] as const;
 
 export const accountNavigation = [
+  { name: "Notifications", href: "/account/notifications", icon: "bell" },
   { name: "My Orders", href: "/account/orders", icon: "orders" },
   { name: "Subscriptions", href: "/account/subscriptions", icon: "subs" },
   { name: "My Payments", href: "/account/payments", icon: "payments" },

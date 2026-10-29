@@ -8,6 +8,7 @@ import { classNames } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { LoginStamp } from "@/components/layout/LoginStamp";
 import { visibleAccountNav } from "@/lib/site-visibility";
+import { InboxBell } from "@/components/notifications/InboxBell";
 
 export default function AccountLayout({
   children,
@@ -57,13 +58,14 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                 </div>
               )}
 
-              <div className="mt-4">
+              <div className="mt-4 flex items-center justify-between gap-3">
                 <LoginStamp
                   onLogout={() => {
                     signOut();
                     router.push("/login");
                   }}
                 />
+                <InboxBell href="/account/notifications" />
               </div>
 
               <nav aria-label="Account sidebar" className="mt-4 space-y-1">
@@ -150,6 +152,13 @@ function AccountIcon({ name }: { name: string }) {
         <svg {...common}>
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
           <circle cx="12" cy="10" r="3" />
+        </svg>
+      );
+    case "bell":
+      return (
+        <svg {...common}>
+          <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+          <path d="M10.3 21a1.7 1.7 0 0 0 3.4 0" />
         </svg>
       );
     case "tickets":

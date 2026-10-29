@@ -18,6 +18,7 @@ import { formatDate } from "@/lib/utils";
 import { findAccountByIdentifier, saveAccount } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { getNotifications, queueNotification } from "@/lib/notify";
+import { pushInbox } from "@/lib/inbox";
 import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
@@ -1065,6 +1066,25 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
     template: "order-status",
     body: `Hi ${name},\n\nYour order ${order.id} is now ${status}.${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\n– VGMF Store`,
   });
+  if (to) {
+    pushInbox({
+      audience: "customer",
+      email: to,
+      kind: "order",
+      title: `Order ${order.id} is now ${status}`,
+      body: order.trackingId
+        ? `Tracking: ${order.courierName ?? ""} ${order.trackingId}`
+        : `Your Foundation shop order was updated to ${status}.`,
+      href: "/account/orders",
+    });
+  }
+  pushInbox({
+    audience: "staff",
+    kind: "order",
+    title: `Order ${order.id} → ${status}`,
+    body: `${name} · ₹${order.total.toLocaleString("en-IN")}`,
+    href: "/admin/commerce/orders",
+  });
 }
 
 function withHistory(order: Order, status: string, note?: string): Order {
@@ -1254,6 +1274,21 @@ export function addTicket(input: {
     template: "ticket-update",
     body: `Hi ${ticket.name},\n\nWe have opened ticket ${ticket.id}: ${ticket.subject}.\n\n${ticket.body}\n\nYou will receive updates on this ticket at ${ticket.email}.\n\n– VGMF Support`,
   });
+  pushInbox({
+    audience: "customer",
+    email: ticket.email,
+    kind: "ticket",
+    title: `Ticket ${ticket.id} opened`,
+    body: ticket.subject,
+    href: "/account/tickets",
+  });
+  pushInbox({
+    audience: "staff",
+    kind: "ticket",
+    title: `New ticket ${ticket.id}`,
+    body: `${ticket.name}: ${ticket.subject}`,
+    href: "/admin/support/tickets",
+  });
   return ticket;
 }
 
@@ -1281,6 +1316,14 @@ export function respondToTicket(id: string, from: string, text: string) {
     subject: `Update on your ticket ${ticket.id}`,
     template: "ticket-update",
     body: `Hi ${ticket.name},\n\n${text}\n\n– VGMF Support`,
+  });
+  pushInbox({
+    audience: "customer",
+    email: ticket.email,
+    kind: "ticket",
+    title: `Update on ticket ${ticket.id}`,
+    body: text,
+    href: "/account/tickets",
   });
 }
 

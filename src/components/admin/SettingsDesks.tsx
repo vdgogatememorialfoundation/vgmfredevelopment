@@ -24,6 +24,7 @@ import { clearNotifications, deliver, eventLabel, getNotifications, markNotifica
 import { testPaytmEdc, testRazorpay } from "@/lib/payments-client";
 import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
+import { fileToDataUrl } from "@/lib/images";
 import { subscribeCms } from "@/lib/cms";
 import type { SiteSettings } from "@/types";
 import { SOCIAL_NETWORKS, emptySocial } from "@/lib/social";
@@ -193,7 +194,7 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
-      <Card title="Social media" text="Icons appear in the footer and on Contact only for networks with an https link. Leave a field blank to hide it.">
+      <Card title="Social media" text="Footer always shows these icons. Paste an https URL to make an icon open that profile. Leave a field blank to keep the icon visible but inactive.">
         <div className="grid gap-4 sm:grid-cols-2">
           {SOCIAL_NETWORKS.map((network) => (
             <Text
@@ -1165,7 +1166,7 @@ export function NotificationsDesk({ compose = false }: { compose?: boolean }) {
   const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ to: "", phone: "", subject: "", body: "" });
+  const [draft, setDraft] = useState({ to: "", phone: "", subject: "", body: "", images: [] as string[] });
   const [note, setNote] = useState("");
 
   const filtered = useMemo(
@@ -1203,6 +1204,42 @@ export function NotificationsDesk({ compose = false }: { compose?: boolean }) {
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Message</span>
               <textarea className={input} rows={4} value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} />
             </label>
+            <div className="sm:col-span-2 space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Images</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className={input}
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    event.target.value = "";
+                    void Promise.all(files.slice(0, 6).map((file) => fileToDataUrl(file, 1000))).then((images) => {
+                      setDraft((current) => ({ ...current, images: [...current.images, ...images].slice(0, 6) }));
+                    });
+                  }}
+                />
+                <span className="mt-1 block text-xs text-slate-500">Up to six images are embedded in the email.</span>
+              </label>
+              {draft.images.length > 0 ? (
+                <ul className="flex flex-wrap gap-3">
+                  {draft.images.map((src, index) => (
+                    <li key={`${index}-${src.slice(0, 24)}`} className="relative h-20 w-28 overflow-hidden rounded-lg border border-slate-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        className="absolute right-1 top-1 rounded bg-white/90 px-1 text-[10px] font-bold text-red-700"
+                        onClick={() => setDraft((current) => ({ ...current, images: current.images.filter((_, itemIndex) => itemIndex !== index) }))}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           </div>
           <div className="mt-3 flex items-center gap-3">
             <button
@@ -1210,8 +1247,16 @@ export function NotificationsDesk({ compose = false }: { compose?: boolean }) {
               className={primary}
               onClick={() => {
                 if (!draft.to || !draft.subject) return setNote("Add an email address and subject.");
-                queueNotification({ to: draft.to, phone: draft.phone || undefined, subject: draft.subject, body: draft.body, template: "custom" });
-                setDraft({ to: "", phone: "", subject: "", body: "" });
+                queueNotification({
+                  to: draft.to,
+                  phone: draft.phone || undefined,
+                  subject: draft.subject,
+                  body: draft.body,
+                  template: "custom",
+                  images: draft.images,
+                  html: draft.images.length > 0,
+                });
+                setDraft({ to: "", phone: "", subject: "", body: "", images: [] });
                 setNote("Queued. The status updates below.");
               }}
             >

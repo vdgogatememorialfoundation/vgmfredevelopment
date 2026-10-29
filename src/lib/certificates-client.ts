@@ -7,6 +7,7 @@ import {
   isAutismId,
   mapAutismApiResponse,
   normalizeCertificateId,
+  seminarDigits,
   stripPrivateFields,
   type CertificateSource,
   type PartnerEvent,
@@ -135,6 +136,7 @@ export async function verifyCertificate(number: string, apiKey?: string): Promis
       headers,
     });
   } catch {
+    if (seminarDigits(number).length === 12) return verifyAutismDirect(number);
     return UNAVAILABLE;
   }
 
@@ -142,11 +144,12 @@ export async function verifyCertificate(number: string, apiKey?: string): Promis
   try {
     data = (await response.json()) as VerifyCertificateResult;
   } catch {
+    if (seminarDigits(number).length === 12) return verifyAutismDirect(number);
     return UNAVAILABLE;
   }
 
   if (response.status === 401) throw new Error(data.error || "Invalid API key.");
-  return {
+  const mapped: VerifyCertificateResult = {
     ...data,
     verified: Boolean(data.verified || (data.valid && data.certificate)),
     valid: Boolean(data.valid && data.certificate),
@@ -154,6 +157,13 @@ export async function verifyCertificate(number: string, apiKey?: string): Promis
       data.error ||
       (data.valid ? undefined : data.code ? autismErrorText(data.code) : "This certificate could not be verified."),
   };
+  if (mapped.certificate) return mapped;
+  if (seminarDigits(number).length === 12) {
+    const autism = await verifyAutismDirect(number);
+    if (autism.certificate) return autism;
+    if (autism.code && autism.code !== "UNAVAILABLE") return autism;
+  }
+  return mapped;
 }
 
 export async function publishCertificate(record: IssuedCertificate) {

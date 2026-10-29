@@ -707,6 +707,8 @@ export interface OutboxEmail {
   providerMessageId?: string;
   updatedAt?: string;
   replyTo?: string;
+  images?: string[];
+  html?: boolean;
 }
 
 export interface OrderPlan {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { configuredSocial, type SocialNetworkId } from "@/lib/social";
+import { SOCIAL_NETWORKS, configuredSocial, type SocialNetworkId } from "@/lib/social";
 import { useSiteSettings } from "@/lib/use-cms";
 import { classNames } from "@/lib/utils";
 
@@ -37,39 +37,57 @@ export default function SocialLinks({
   iconClassName,
   tone = "light",
   title,
+  always = false,
 }: {
   className?: string;
   iconClassName?: string;
   tone?: "light" | "dark";
   title?: string;
+  /** Show every network; links activate when admin adds an https URL. */
+  always?: boolean;
 }) {
   const settings = useSiteSettings();
-  const links = configuredSocial(settings?.social);
+  const configured = configuredSocial(settings?.social);
+  const merged = settings?.social;
+  const links = always
+    ? SOCIAL_NETWORKS.map((network) => ({
+        ...network,
+        href: (merged?.[network.id] ?? "").trim(),
+      }))
+    : configured;
   if (links.length === 0) return null;
 
   const list = (
     <ul className={classNames("flex flex-wrap items-center gap-2", !title && className)}>
-      {links.map((link) => (
-        <li key={link.id}>
-          <a
-            href={link.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={link.label}
-            className={classNames(
-              "inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
-              tone === "light"
-                ? "border-white/20 text-stone-200 hover:border-gold hover:text-gold"
-                : "border-border text-text-muted hover:border-burgundy hover:text-burgundy",
-              iconClassName
+      {links.map((link) => {
+        const active = /^https?:\/\//i.test(link.href);
+        const classNameIcon = classNames(
+          "inline-flex h-9 w-9 items-center justify-center rounded-full border transition",
+          tone === "light"
+            ? "border-gold/40 bg-white/10 text-stone-100 hover:border-gold hover:text-gold"
+            : "border-gold/50 bg-white text-burgundy hover:border-burgundy hover:text-burgundy",
+          !active && "opacity-60",
+          iconClassName
+        );
+        const icon = (
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+            {ICONS[link.id]}
+          </svg>
+        );
+        return (
+          <li key={link.id}>
+            {active ? (
+              <a href={link.href} target="_blank" rel="noopener noreferrer" aria-label={link.label} className={classNameIcon}>
+                {icon}
+              </a>
+            ) : (
+              <span aria-label={`${link.label} (add a link in Admin → Settings)`} title={`${link.label}: add a link in Admin → General`} className={classNameIcon}>
+                {icon}
+              </span>
             )}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-              {ICONS[link.id]}
-            </svg>
-          </a>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 

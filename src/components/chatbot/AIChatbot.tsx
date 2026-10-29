@@ -108,7 +108,7 @@ export function AIChatbot() {
           role: "bot",
           text:
             answer ??
-            "I can help with events, shop orders, tickets, sign-in, certificates, clinics and Foundation info. Please try another question, or open /support — or talk to a person when live chat is on.",
+            "I can help with events, shop orders, tickets, sign-in, certificates, clinics and Foundation info. Please try another question, or raise a ticket from your dashboard at /account/tickets — or talk to a person when live chat is on.",
         },
       ]);
       setIsTyping(false);
@@ -213,8 +213,8 @@ export function AIChatbot() {
                 {!live.online ? (
                   <p className="rounded-xl bg-white p-3 text-text-muted">
                     Live chat is offline. Please{" "}
-                    <Link href="/support" className="font-semibold text-burgundy">
-                      open a support ticket
+                    <Link href="/account/tickets" className="font-semibold text-burgundy">
+                      raise a ticket from your dashboard
                     </Link>{" "}
                     and the team will reply by email.
                   </p>
@@ -281,8 +281,8 @@ export function AIChatbot() {
                 </form>
               ) : (
                 <div className="border-t border-gold/30 p-3">
-                  <Link href="/support" className="btn-primary block text-center">
-                    Open a ticket
+                  <Link href="/account/tickets" className="btn-primary block text-center">
+                    Raise a ticket
                   </Link>
                 </div>
               )}

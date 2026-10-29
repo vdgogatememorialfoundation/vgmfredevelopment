@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { books } from "@/data/books";
-import { getLiveBooks, updateStock } from "@/lib/product-data";
+import { getLiveBooks, restockProduct, updateStock } from "@/lib/product-data";
 import {
   getIntegrations,
   getShippingConnection,
@@ -439,24 +439,54 @@ export function ShippingDesk() {
 
 export function InventoryDesk() {
   const [rows, setRows] = useState(() => loadInventory());
+  const [restock, setRestock] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
+
+  function refresh() {
+    setRows(loadInventory());
+  }
+
+  function saveRow(row: ReturnType<typeof loadInventory>[number]) {
+    updateStock(row.book.id, row.stock);
+    saveProductFulfillment(row.profile);
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Commerce</p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900">Inventory & stocking</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-          On-hand quantity, reorder level and the location that feeds delivery dates.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Commerce</p>
+          <h1 className="mt-2 text-3xl font-bold text-slate-900">Inventory & stocking</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+            Set on-hand quantity, restock incoming units, reorder level and the location that feeds delivery dates.
+            Saving a restock notifies waiting customers and staff.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white"
+          onClick={() => {
+            rows.forEach(saveRow);
+            refresh();
+            setNotice(`Saved inventory for ${rows.length} products.`);
+          }}
+        >
+          Save all
+        </button>
       </div>
       {notice && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
+      {rows.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-sm text-slate-500">
+          No products yet. Add them under Product Management, then restock quantities here.
+        </p>
+      ) : null}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[920px] text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Stock</th>
+              <th className="px-4 py-3">On hand</th>
+              <th className="px-4 py-3">Restock</th>
               <th className="px-4 py-3">Reorder</th>
               <th className="px-4 py-3">Stocking location</th>
               <th className="px-4 py-3">Status</th>
@@ -468,7 +498,7 @@ export function InventoryDesk() {
               <tr key={row.book.id} className="border-t border-slate-100">
                 <td className="px-4 py-3">
                   <p className="font-semibold text-slate-900">{row.book.title}</p>
-                  <p className="text-xs text-slate-500">{row.book.sku}</p>
+                  <p className="text-xs text-slate-500">{row.book.sku} · {row.book.productCode || "no code"}</p>
                 </td>
                 <td className="px-4 py-3">
                   <input
@@ -477,7 +507,36 @@ export function InventoryDesk() {
                     value={row.stock}
                     onChange={(event) => updateRow(row.book.id, { stock: Number(event.target.value) })}
                     className="w-24 rounded-lg border border-slate-200 px-2 py-1.5"
+                    aria-label={`On-hand stock for ${row.book.title}`}
                   />
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="+ qty"
+                      value={restock[row.book.id] ?? ""}
+                      onChange={(event) => setRestock((current) => ({ ...current, [row.book.id]: event.target.value }))}
+                      className="w-20 rounded-lg border border-slate-200 px-2 py-1.5"
+                      aria-label={`Restock quantity for ${row.book.title}`}
+                    />
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700"
+                      onClick={() => {
+                        const add = Math.max(0, Math.floor(Number(restock[row.book.id] || 0)));
+                        if (!add) return;
+                        restockProduct(row.book.id, add);
+                        saveProductFulfillment(row.profile);
+                        setRestock((current) => ({ ...current, [row.book.id]: "" }));
+                        refresh();
+                        setNotice(`${row.book.title}: added ${add} units.`);
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <input
@@ -511,8 +570,8 @@ export function InventoryDesk() {
                     type="button"
                     className="rounded-lg bg-burgundy px-3 py-1.5 text-xs font-semibold text-white"
                     onClick={() => {
-                      updateStock(row.book.id, row.stock);
-                      saveProductFulfillment(row.profile);
+                      saveRow(row);
+                      refresh();
                       setNotice(`${row.book.title} inventory saved.`);
                     }}
                   >

@@ -89,7 +89,6 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Support Tickets", href: "/admin/support/tickets" },
       { label: "Live chat", href: "/admin/support/chat" },
       { label: "Contact Enquiries", href: "/admin/support/contact" },
-      { label: "Support portal", href: "/support" },
     ],
   },
 
@@ -125,6 +124,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Registration", href: "/admin/settings/registration" },
       { label: "Events", href: "/admin/settings/events" },
       { label: "Certificate API keys", href: "/admin/settings/api-keys" },
+      { label: "Mobile app", href: "/admin/settings/mobile" },
       { label: "Security", href: "/admin/settings/security" },
     ],
   },
