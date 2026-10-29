@@ -27,11 +27,17 @@ export default function UpcomingEvents() {
           }
         />
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {upcoming.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
-        </div>
+        {upcoming.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
+            No upcoming events are listed yet.
+          </p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {upcoming.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </div>
+        )}
 
         <div className="mt-8">
           <Link href="/events" className="btn-primary">

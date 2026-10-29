@@ -22,7 +22,6 @@ interface KnowledgeBaseEntry {
 const QUICK_QUESTIONS = [
   "What is the next seminar?",
   "How do I register for an event?",
-  "How do I verify a certificate?",
   "How can I order a book?",
   "Track my order",
 ];
@@ -52,7 +51,7 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["certificate", "verify", "verification"],
     answer: () =>
-      "Certificates are verified on the Certificate Verification page.",
+      "Certificate numbers issued from Foundation seminar and autism programmes can be checked on this website. Open /certificate-verification and enter the certificate ID.",
   },
   {
     keywords: ["support", "donate", "contribute", "donation", "help"],
@@ -67,7 +66,7 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["account", "login", "register", "create"],
     answer: () =>
-      "Create a foundation account from the Login page — it takes less than a minute. Your 12-digit Account ID ties together your registrations, tickets, certificates and orders.",
+      "Create a foundation account from the Login page — it takes less than a minute. Your 12-digit Account ID ties together your shop orders and account details.",
   },
   {
     keywords: ["book", "store", "purchase", "publication", "buy"],
@@ -238,7 +237,7 @@ export function AIChatbot() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "bot",
-      text: "Namaste! I'm the VGMF Assistant. Ask me about events, registration, certificates, books, clinics or the foundation — and I can add publications to your cart or fetch your order status when you share the 12-digit Order ID.",
+      text: "Namaste! I'm the VGMF Assistant. Ask me about events, registration, books, clinics or the foundation — and I can add publications to your cart or fetch your order status when you share the 12-digit Order ID.",
     },
   ]);
   const [input, setInput] = useState("");

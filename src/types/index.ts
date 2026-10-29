@@ -44,6 +44,11 @@ export interface Event {
   /** Fields not finalised yet are shown publicly as "To be announced". */
   tbd?: EventTbd;
   timeText?: string;
+  registrationUrl?: string;
+  mapsUrl?: string;
+  placeId?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface EventTbd {
@@ -54,6 +59,7 @@ export interface EventTbd {
   fee?: boolean;
   speakers?: boolean;
   schedule?: boolean;
+  registration?: boolean;
 }
 
 export interface Speaker {
@@ -270,6 +276,8 @@ export interface User {
   createdAt?: string;
   createdBy?: string;
   lastDetailsSentAt?: string;
+  lastLoginAt?: string;
+  lastLogoutAt?: string;
 }
 
 export interface Certificate {
@@ -280,6 +288,8 @@ export interface Certificate {
   eventDate: string;
   issueDate: string;
   signature: string;
+  year?: number;
+  eventSlug?: string;
 }
 
 export interface Registration {
@@ -459,7 +469,7 @@ export interface Application {
   appliedAt: string;
 }
 
-export type UserRole = "customer" | "admin" | "staff";
+export type UserRole = "customer" | "admin" | "staff" | "doctor";
 
 export interface FulfillmentLocation {
   id: string;

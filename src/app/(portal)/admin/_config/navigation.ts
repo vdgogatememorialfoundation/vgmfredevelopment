@@ -34,6 +34,7 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Accounts",
     items: [
       { label: "Staff Accounts", href: "/admin/accounts/staff" },
+      { label: "Doctor Accounts", href: "/admin/accounts/doctors" },
       { label: "Customers", href: "/admin/accounts/customers" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
     ],
@@ -52,6 +53,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Articles", href: "/admin/articles" },
       { label: "Videos", href: "/admin/website/videos" },
       { label: "Clinics", href: "/admin/website/clinics" },
+      { label: "Policies", href: "/admin/website/policies" },
     ],
   },
 
@@ -60,24 +62,8 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "All Events", href: "/admin/events" },
       { label: "Create Event", href: "/admin/events/create" },
-      { label: "Registrations", href: "/admin/events/registrations" },
-      { label: "Applications", href: "/admin/events/applications" },
-      { label: "Speakers", href: "/admin/events/speakers" },
       { label: "Schedule", href: "/admin/events/schedule" },
-      { label: "Payments", href: "/admin/events/payments" },
-      { label: "Tickets", href: "/admin/events/tickets" },
-      { label: "Attendance", href: "/admin/events/attendance" },
-      { label: "Certificates", href: "/admin/events/certificates" },
-    ],
-  },
-
-  {
-    label: "Certificates",
-    items: [
-      { label: "Certificates", href: "/admin/certificates" },
-      { label: "Issue Certificate", href: "/admin/certificates/issue" },
-      { label: "Reissue", href: "/admin/certificates/reissue" },
-      { label: "Verification", href: "/admin/certificates/verification" },
+      { label: "Speakers", href: "/admin/events/speakers" },
     ],
   },
 
@@ -107,6 +93,13 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Email & WhatsApp", href: "/admin/email" },
       { label: "Notification log", href: "/admin/settings/notifications" },
+    ],
+  },
+
+  {
+    label: "Reports",
+    items: [
+      { label: "Downloads", href: "/admin/reports" },
     ],
   },
 

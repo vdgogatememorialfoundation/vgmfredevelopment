@@ -57,13 +57,13 @@ export default function ContactPage() {
 
             <div className="card p-6">
               <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-text-muted">
-                Certificates
+                Shop
               </h2>
               <Link
-                href="/certificate-verification"
+                href="/shop"
                 className="mt-3 inline-block text-sm font-medium text-burgundy hover:underline"
               >
-                Verify a certificate
+                Browse publications
               </Link>
             </div>
           </div>

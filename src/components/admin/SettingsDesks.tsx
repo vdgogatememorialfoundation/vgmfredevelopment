@@ -136,7 +136,12 @@ export function GeneralSettingsDesk() {
 
   const save = () => {
     try {
-      saveSettings({ ...getSettings(), ...pickGeneral(settings) });
+      const current = getSettings();
+      saveSettings({
+        ...current,
+        ...pickGeneral(settings),
+        apiKeys: { ...current.apiKeys, googleMaps: settings.apiKeys.googleMaps },
+      });
       window.dispatchEvent(new Event("vgmf-cms"));
       setNote(settings.maintenanceMode ? "Saved. Visitors now see the maintenance page; admins and staff still see the site." : "Saved. The site is live.");
     } catch {
@@ -162,6 +167,14 @@ export function GeneralSettingsDesk() {
           <Text label="Support email" value={settings.supportEmail} onChange={(supportEmail) => set({ supportEmail })} />
           <Text label="Support phone" value={settings.supportPhone} onChange={(supportPhone) => set({ supportPhone })} />
         </div>
+      </Card>
+
+      <Card title="Google Maps" text="Used on Create Event to search a venue. Paste a Maps URL if you leave this blank.">
+        <Text
+          label="Google Maps JavaScript API key"
+          value={settings.apiKeys.googleMaps}
+          onChange={(googleMaps) => set({ apiKeys: { ...settings.apiKeys, googleMaps } })}
+        />
       </Card>
 
       <Card title="Maintenance mode" text="Visitors see a maintenance page with a countdown. Admins and staff can still browse the site.">

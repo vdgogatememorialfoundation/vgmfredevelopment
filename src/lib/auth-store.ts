@@ -1,5 +1,6 @@
 import type { User } from "@/types";
 import { clearSession, getSession, setSession } from "@/lib/auth";
+import { recordActivity } from "@/lib/activity";
 
 type Listener = () => void;
 
@@ -39,9 +40,14 @@ export function storeSignIn(user: User) {
   snapshot = user;
   snapshotReady = true;
   notify();
+  recordActivity({ email: user.email, kind: "login", detail: "Signed in" });
 }
 
 export function storeSignOut() {
+  const email = snapshot?.email;
+  if (email) {
+    recordActivity({ email, kind: "logout", detail: "Signed out" });
+  }
   clearSession();
   snapshot = null;
   snapshotReady = true;

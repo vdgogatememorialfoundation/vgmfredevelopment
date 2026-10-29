@@ -95,7 +95,7 @@ export default function SignupFlow() {
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
           Create your account to register for events, manage tickets,
-          certificates and orders.
+          shop orders and your profile.
         </p>
       </div>
 

@@ -19,6 +19,8 @@ import { findAccountByIdentifier, saveAccount } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { generatePassword } from "@/lib/passwords";
+import { currentActorEmail, recordActivity } from "@/lib/activity";
 
 export type OrderStatus = Order["status"];
 
@@ -113,7 +115,13 @@ function defaultSettings(): SiteSettings {
 export function getSettings(): SiteSettings {
   const current = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
   if (!current) return defaultSettings();
-  return { ...defaultSettings(), ...current };
+  const defaults = defaultSettings();
+  return {
+    ...defaults,
+    ...current,
+    apiKeys: { ...defaults.apiKeys, ...current.apiKeys },
+    processing: { ...defaults.processing, ...current.processing },
+  };
 }
 
 export function saveSettings(settings: SiteSettings) {
@@ -131,8 +139,45 @@ export function setMaintenanceMode(on: boolean, message?: string) {
 
 /* ---------------- Seed admin / staff accounts ---------------- */
 
+const CONTENT_RESET_KEY = "vgmf_content_cleared_v3";
+const DEMO_CONTENT_KEYS = [
+  "vgmf_orders",
+  "vgmf_cart",
+  "vgmf_wishlist",
+  "vgmf_returns",
+  "vgmf_shipments",
+  "vgmf_event_edits",
+  "vgmf_custom_events",
+  "vgmf_article_edits",
+  "vgmf_custom_articles",
+  "vgmf_announcement_edits",
+  "vgmf_custom_announcements",
+  "vgmf_certificate_edits",
+  "vgmf_custom_certificates",
+  "vgmf_custom_books",
+  "vgmf_admin_products",
+  "vgmf_deleted_books",
+  "vgmf_applications",
+  "vgmf_store_credit",
+  "vgmf_support",
+  "vgmf_tickets",
+  "vgmf_outbox",
+  "vgmf_notice_edits",
+  "vgmf_custom_notices",
+  "vgmf_flyer_edits",
+  "vgmf_custom_flyers",
+  "vgmf_video_edits",
+  "vgmf_custom_videos",
+  "vgmf_clinic_edits",
+  "vgmf_custom_clinics",
+];
+
 export function ensureBootstrapped() {
   if (typeof window === "undefined") return;
+  if (!window.localStorage.getItem(CONTENT_RESET_KEY)) {
+    DEMO_CONTENT_KEYS.forEach((key) => window.localStorage.removeItem(key));
+    window.localStorage.setItem(CONTENT_RESET_KEY, "1");
+  }
   if (window.localStorage.getItem(BOOT_KEY)) return;
   seedAccounts();
   writeJSON(BOOT_KEY, "1");
@@ -192,6 +237,7 @@ export function updateAccount(email: string, update: Partial<User>) {
 }
 
 export function removeAccount(email: string) {
+  recordActivity({ email, kind: "deleted", by: currentActorEmail() });
   writeJSON("vgmf_accounts", getAccounts().filter((account) => account.email.toLowerCase() !== email.toLowerCase()));
   const session = readJSON<User | null>("vgmf_session", null);
   if (session?.email.toLowerCase() === email.toLowerCase()) window.localStorage.removeItem("vgmf_session");
@@ -200,6 +246,12 @@ export function removeAccount(email: string) {
 
 export function setAccountStatus(email: string, status: AccountStatus, reason?: string) {
   updateAccount(email, { status, statusReason: status === "active" ? undefined : reason });
+  recordActivity({
+    email,
+    kind: status === "banned" ? "banned" : status === "disabled" ? "disabled" : "reactivated",
+    by: currentActorEmail(),
+    detail: reason,
+  });
   notifyCms();
 }
 
@@ -264,8 +316,10 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
     storeCredit: 0,
     createdAt: new Date().toISOString(),
     createdBy: currentActor(),
+    password: generatePassword(),
   };
   saveAccount(account);
+  recordActivity({ email: account.email, kind: "created", by: currentActorEmail(), detail: "Customer account created" });
   notifyCms();
   if (options.sendDetails !== false) sendAccountDetails(account.email, true);
   return getAccountByEmail(account.email) ?? account;
@@ -289,7 +343,14 @@ export function sendAccountDetails(email: string, isNew = false) {
   const account = getAccountByEmail(email);
   if (!account) return;
   const role = account.role ?? "customer";
-  const signIn = role === "customer" ? `${siteOrigin()}/login?mode=signin` : `${siteOrigin()}/${role === "staff" ? "staff" : "admin"}/login`;
+  const signIn =
+    role === "customer"
+      ? `${siteOrigin()}/login?mode=signin`
+      : role === "staff"
+        ? `${siteOrigin()}/staff/login`
+        : role === "doctor"
+          ? `${siteOrigin()}/doctor/login`
+          : `${siteOrigin()}/admin/login`;
   const address = account.address
     ? [account.address.line1, account.address.landmark, account.address.city, account.address.state, account.address.pincode].filter(Boolean).join(", ")
     : "Not added";
@@ -306,9 +367,7 @@ export function sendAccountDetails(email: string, isNew = false) {
     role === "customer" ? `Store credit balance: ₹${(account.storeCredit ?? 0).toLocaleString("en-IN")}` : `Role: ${role}`,
     "",
     "How to sign in",
-    role === "customer"
-      ? `Open ${signIn} and enter your email, mobile number or Account ID. A one-time code is sent to your registered email and WhatsApp.`
-      : `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`,
+    `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`,
     "",
     "If you did not expect this email, contact us at support@vaidyagogate.org.",
     "",
@@ -360,10 +419,11 @@ export function createUserAccount(input: {
   lastName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin" | "staff";
+  role: "customer" | "admin" | "staff" | "doctor";
   password?: string;
   staffRoleId?: string;
 }) {
+  const password = input.password?.trim() || generatePassword();
   const account: User = {
     id: `usr-${Date.now()}`,
     firstName: input.firstName,
@@ -377,21 +437,11 @@ export function createUserAccount(input: {
     createdAt: new Date().toISOString(),
     createdBy: currentActor(),
     staffRoleId: input.role === "staff" ? input.staffRoleId ?? "general-staff" : undefined,
-    password:
-      input.password?.trim() ||
-      (input.role === "admin"
-        ? ADMIN_PASSWORD
-        : input.role === "staff"
-          ? STAFF_PASSWORD
-          : undefined),
+    password,
   };
   saveAccount(account);
-  sendEmail({
-    to: account.email,
-    subject: `Your VGMF account for ${input.role} panel`,
-    template: "account-created",
-    body: `Hi ${account.firstName},\n\nAn account has been created for you on the VGMF portal.\n\nAccount ID: ${account.accountId}\nRole: ${input.role}\nPassword: ${account.password}\n\nSign in at ${input.role === "customer" ? "/login" : `/${input.role}/login`} using your email and password.\n\n– VGMF Team`,
-  });
+  recordActivity({ email: account.email, kind: "created", by: currentActorEmail(), detail: `${input.role} account created` });
+  sendAccountDetails(account.email, true);
   return account;
 }
 

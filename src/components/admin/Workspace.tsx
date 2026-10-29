@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getOrders } from "@/lib/store";
 import { getNotifications } from "@/lib/notify";
-import { getIssuedCertificates, getLiveEvents } from "@/lib/cms";
+import { getLiveEvents } from "@/lib/cms";
 import { getSettings, getTickets } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
 import { firstPathFor, getRole, modulesFor, staffModules } from "@/lib/roles";
@@ -26,7 +26,6 @@ export function WorkspaceHome() {
     { label: "Orders", value: orders.length, hint: `${orders.filter((order) => order.paymentStatus === "Pending").length} awaiting payment` },
     { label: "To pack", value: orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length, hint: "accepted and not packed" },
     { label: "Events", value: getLiveEvents().length, hint: "on the public site" },
-    { label: "Certificates", value: getIssuedCertificates().length, hint: "valid certificates" },
     { label: "Open tickets", value: getTickets().filter((ticket) => ticket.status === "Open" || ticket.status === "In Progress").length, hint: "support" },
     { label: "Failed messages", value: notifications.filter((item) => item.status === "Failed").length, hint: `${notifications.length} in the log` },
   ];
@@ -45,7 +44,7 @@ export function WorkspaceHome() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-gray-600">
             {isAdmin
-              ? "Manage the website, events, orders, certificates, payments, staff and delivery."
+              ? "Manage the website, events, orders, payments, staff and delivery."
               : `${role?.name} (${role?.category}). These are the modules your role can open.`}
           </p>
         </div>

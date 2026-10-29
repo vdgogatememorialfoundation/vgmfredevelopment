@@ -22,11 +22,17 @@ export default function ClinicsSection() {
           }
         />
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {shown.map((clinic) => (
-            <ClinicCard key={clinic.id} clinic={clinic} />
-          ))}
-        </div>
+        {shown.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
+            No clinics are listed yet.
+          </p>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {shown.map((clinic) => (
+              <ClinicCard key={clinic.id} clinic={clinic} />
+            ))}
+          </div>
+        )}
 
         <div className="mt-8">
           <Link href="/clinics" className="btn-outline">

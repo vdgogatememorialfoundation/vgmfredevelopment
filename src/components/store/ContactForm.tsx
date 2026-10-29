@@ -112,7 +112,7 @@ export default function ContactForm() {
             <option value="events">Events & Registration</option>
             <option value="books">Books & Orders</option>
             <option value="clinics">Clinics & Appointments</option>
-            <option value="certificates">Certificates</option>
+            <option value="publications">Publications</option>
             <option value="other">Other</option>
           </select>
         </div>

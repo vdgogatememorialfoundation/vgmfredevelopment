@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
+import JsonLd from "@/components/seo/JsonLd";
+import { siteConfig } from "@/lib/constants";
 import "./globals.css";
 
 const sans = Source_Sans_3({
@@ -15,42 +17,54 @@ const serif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://vaidyagogate.org"),
+  metadataBase: new URL(siteConfig.url),
   title: {
-    default: "Vaidya Gogate Memorial Foundation",
-    template: "%s | Vaidya Gogate Memorial Foundation",
+    default: siteConfig.name,
+    template: `%s | ${siteConfig.name}`,
   },
-  description: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
-  keywords: ["Vaidya Gogate", "Ayurveda", "Foundation", "Memorial", "Education", "Events", "Books", "Publications"],
-  authors: [{ name: "Vaidya Gogate Memorial Foundation" }],
-  creator: "Vaidya Gogate Memorial Foundation",
-  publisher: "Vaidya Gogate Memorial Foundation",
-  robots: "index, follow",
+  description: siteConfig.tagline,
+  keywords: [
+    "Vaidya Gogate Memorial Foundation",
+    "Ayurveda",
+    "Pune",
+    "Ayurveda education",
+    "Ayurveda seminars",
+    "Ayurveda publications",
+    "Ayurveda clinics",
+    "VGMF",
+  ],
+  authors: [{ name: siteConfig.name, url: siteConfig.url }],
+  creator: "Capture Visual Studios",
+  publisher: siteConfig.name,
+  category: "education",
+  applicationName: siteConfig.shortName,
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
+  alternates: { canonical: siteConfig.url },
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: "https://vaidyagogate.org",
-    siteName: "Vaidya Gogate Memorial Foundation",
-    title: "Vaidya Gogate Memorial Foundation",
-    description: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
+    url: siteConfig.url,
+    siteName: siteConfig.name,
+    title: siteConfig.name,
+    description: siteConfig.tagline,
     images: [
       {
         url: "/images/og-image.jpg",
         width: 1200,
         height: 630,
-        alt: "Vaidya Gogate Memorial Foundation",
+        alt: siteConfig.name,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vaidya Gogate Memorial Foundation",
-    description: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
+    title: siteConfig.name,
+    description: siteConfig.tagline,
     images: ["/images/og-image.jpg"],
   },
-  verification: {
-    google: "google-site-verification-code",
-  },
+  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export const viewport: Viewport = {
@@ -72,6 +86,7 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">
+        <JsonLd />
         {children}
       </body>
     </html>

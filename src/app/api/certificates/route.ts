@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listCertificates, publicCertificate, upsertCertificate } from "@/lib/server/certificates";
+import { certificatesGroupedByYear, listCertificates, publicCertificate, upsertCertificate } from "@/lib/server/certificates";
 
 export const runtime = "nodejs";
 
-export function GET() {
+export function GET(request: NextRequest) {
+  const yearParam = request.nextUrl.searchParams.get("year");
+  const year = yearParam ? Number(yearParam) : Number.NaN;
+  const event = (request.nextUrl.searchParams.get("event") ?? request.nextUrl.searchParams.get("eventSlug") ?? "").trim();
+  const grouped = certificatesGroupedByYear();
+  const years = Number.isFinite(year) ? grouped.filter((item) => item.year === year) : grouped;
+  const filtered = event
+    ? years.map((item) => ({
+        ...item,
+        events: item.events.filter((entry) => entry.eventSlug === event || entry.event.toLowerCase() === event.toLowerCase()),
+      })).filter((item) => item.events.length)
+    : years;
   return NextResponse.json({
     ok: true,
+    years: filtered,
     certificates: listCertificates().filter((certificate) => certificate.status !== "Revoked").map(publicCertificate),
   });
 }
@@ -22,6 +34,8 @@ export async function POST(request: NextRequest) {
       name,
       certificateNumber,
       event: String(body.event ?? ""),
+      eventSlug: String(body.eventSlug ?? ""),
+      year: body.year ? Number(body.year) : undefined,
       certificateType: String(body.certificateType ?? "Participation"),
       eventDate: String(body.eventDate ?? ""),
       issueDate: String(body.issueDate ?? ""),

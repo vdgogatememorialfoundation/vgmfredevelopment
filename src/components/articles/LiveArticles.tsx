@@ -89,6 +89,15 @@ export function ArticlesIndex() {
           </div>
         </section>
       )}
+      {articles.length === 0 && (
+        <section className="section bg-background">
+          <div className="container">
+            <p className="rounded-2xl border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted">
+              No articles are published yet.
+            </p>
+          </div>
+        </section>
+      )}
     </main>
   );
 }

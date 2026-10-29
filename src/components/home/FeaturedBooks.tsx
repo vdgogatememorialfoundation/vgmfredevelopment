@@ -22,11 +22,17 @@ export default function FeaturedBooks() {
           }
         />
 
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {featured.map((book) => (
-            <BookCard key={book.id} book={book} />
-          ))}
-        </div>
+        {featured.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
+            No publications are listed yet.
+          </p>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {featured.map((book) => (
+              <BookCard key={book.id} book={book} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

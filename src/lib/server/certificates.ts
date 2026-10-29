@@ -53,6 +53,13 @@ export function findValidCertificate(number: string) {
   return certificate;
 }
 
+function certificateYear(certificate: StoredCertificate) {
+  if (certificate.year) return certificate.year;
+  const source = certificate.eventDate || certificate.issueDate;
+  const parsed = source ? new Date(source).getFullYear() : new Date().getFullYear();
+  return Number.isFinite(parsed) ? parsed : new Date().getFullYear();
+}
+
 export function publicCertificate(certificate: StoredCertificate) {
   return {
     certificateNumber: certificate.certificateNumber,
@@ -64,7 +71,31 @@ export function publicCertificate(certificate: StoredCertificate) {
     signature: certificate.signature,
     status: certificate.status ?? "Valid",
     reissuedAt: certificate.reissuedAt,
+    year: certificateYear(certificate),
+    eventSlug: certificate.eventSlug || "",
   };
+}
+
+export function certificatesGroupedByYear(records = listCertificates()) {
+  const groups = new Map<number, Map<string, ReturnType<typeof publicCertificate>[]>>();
+  for (const certificate of records.filter((item) => item.status !== "Revoked")) {
+    const year = certificateYear(certificate);
+    const eventKey = certificate.eventSlug?.trim() || certificate.event.trim() || "Unassigned";
+    if (!groups.has(year)) groups.set(year, new Map());
+    const events = groups.get(year)!;
+    if (!events.has(eventKey)) events.set(eventKey, []);
+    events.get(eventKey)!.push(publicCertificate(certificate));
+  }
+  return [...groups.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([year, events]) => ({
+      year,
+      events: [...events.entries()].map(([key, certificates]) => ({
+        event: certificates[0]?.event || key,
+        eventSlug: certificates[0]?.eventSlug || key,
+        certificates,
+      })),
+    }));
 }
 
 export function upsertCertificate(input: Partial<IssuedCertificate> & Pick<IssuedCertificate, "name" | "certificateNumber">) {
@@ -80,6 +111,8 @@ export function upsertCertificate(input: Partial<IssuedCertificate> & Pick<Issue
     certificateNumber,
     name: input.name.trim(),
     event: (input.event ?? existing?.event ?? "").trim(),
+    eventSlug: (input.eventSlug ?? existing?.eventSlug ?? "").trim(),
+    year: input.year ?? existing?.year,
     certificateType: (input.certificateType ?? existing?.certificateType ?? "Participation").trim(),
     eventDate: input.eventDate?.trim() || existing?.eventDate || new Date().toISOString().slice(0, 10),
     issueDate: input.issueDate?.trim() || existing?.issueDate || new Date().toISOString().slice(0, 10),

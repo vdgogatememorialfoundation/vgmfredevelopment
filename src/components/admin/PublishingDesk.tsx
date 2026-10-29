@@ -39,9 +39,10 @@ import {
 } from "@/lib/admin-store";
 import { getOrders } from "@/lib/store";
 import { useLiveAnnouncements, useLiveArticles, useLiveEvents } from "@/lib/use-cms";
-import type { Announcement, Article, CaptionedImage, Event, EventTbd, Order, ScheduleItem, Speaker } from "@/types";
+import type { Announcement, Article, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
 import { getSession } from "@/lib/auth";
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
+import { EventLocationField } from "@/components/events/EventLocationField";
 import type { OrderStatus } from "@/lib/admin-store";
 
 ensureBootstrapped();
@@ -282,12 +283,9 @@ function AnnouncementForm({
 
 const tbdFields: { key: keyof EventTbd; label: string }[] = [
   { key: "dates", label: "Dates" },
-  { key: "time", label: "Timings" },
-  { key: "venue", label: "Venue" },
-  { key: "city", label: "City" },
-  { key: "fee", label: "Fee" },
+  { key: "fee", label: "Price" },
   { key: "speakers", label: "Speakers" },
-  { key: "schedule", label: "Schedule" },
+  { key: "registration", label: "Registration link" },
 ];
 
 export function EventEditor({ eventId }: { eventId?: string | null }) {
@@ -301,12 +299,8 @@ export function EventEditor({ eventId }: { eventId?: string | null }) {
   const tbd = draft.tbd ?? {};
   const toggleTbd = (key: keyof EventTbd, value: boolean) => set({ tbd: { ...tbd, [key]: value } });
   const speakers = draft.speakers ?? [];
-  const schedule = draft.schedule ?? [];
   const setSpeaker = (index: number, patch: Partial<Speaker>) =>
     set({ speakers: speakers.map((item, i) => (i === index ? { ...item, ...patch } : item)) });
-  const setSlot = (index: number, patch: Partial<ScheduleItem>) =>
-    set({ schedule: schedule.map((item, i) => (i === index ? { ...item, ...patch } : item)) });
-
   const publish = () => {
     if (!draft.name.trim()) {
       setError("Add the event name.");
@@ -327,7 +321,6 @@ export function EventEditor({ eventId }: { eventId?: string | null }) {
       name: draft.name.trim(),
       endDate: draft.endDate || draft.startDate,
       speakers: speakers.filter((item) => item.name.trim()),
-      schedule: schedule.filter((item) => item.title.trim()),
     };
     try {
       saveEvent(event);
@@ -349,7 +342,7 @@ export function EventEditor({ eventId }: { eventId?: string | null }) {
       <EditorGate moduleId="events" email={email} onEmail={setEmail} />
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
         <p className="text-sm font-semibold text-amber-900">Not finalised yet?</p>
-        <p className="mt-1 text-xs text-amber-800">Tick anything still being decided. The site shows it as “To be announced” until you untick it.</p>
+        <p className="mt-1 text-xs text-amber-800">Tick anything still being decided. The site shows it as “To be announced” until you add it later.</p>
         <div className="mt-3 flex flex-wrap gap-4">
           {tbdFields.map((item) => (
             <label key={item.key} className="flex items-center gap-2 text-sm text-amber-900">
@@ -361,34 +354,6 @@ export function EventEditor({ eventId }: { eventId?: string | null }) {
       </div>
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-5 sm:grid-cols-2">
         <input className={`${field} sm:col-span-2`} placeholder="Event name" value={draft.name} onChange={(event) => set({ name: event.target.value, slug: existing ? draft.slug : slugify(event.target.value) })} />
-        <label className="space-y-1 text-xs font-semibold text-slate-600">
-          <span className="flex justify-between">Start date {tbdNote("dates")}</span>
-          <input className={field} type="date" value={draft.startDate} onChange={(event) => set({ startDate: event.target.value })} />
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-slate-600">
-          End date
-          <input className={field} type="date" value={draft.endDate} onChange={(event) => set({ endDate: event.target.value })} />
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-slate-600">
-          <span className="flex justify-between">Timings {tbdNote("time")}</span>
-          <input className={field} placeholder="e.g. 10:00 AM – 5:00 PM IST" value={draft.timeText ?? ""} onChange={(event) => set({ timeText: event.target.value })} />
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-slate-600">
-          Mode
-          <select className={field} value={draft.mode} onChange={(event) => set({ mode: event.target.value as Event["mode"] })}>
-            <option>Offline</option>
-            <option>Online</option>
-            <option>Hybrid</option>
-          </select>
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-slate-600">
-          <span className="flex justify-between">Venue {tbdNote("venue")}</span>
-          <input className={field} placeholder="Venue" value={draft.venue ?? ""} onChange={(event) => set({ venue: event.target.value })} />
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-slate-600">
-          <span className="flex justify-between">City {tbdNote("city")}</span>
-          <input className={field} placeholder="City" value={draft.city ?? ""} onChange={(event) => set({ city: event.target.value })} />
-        </label>
         <label className="space-y-1 text-xs font-semibold text-slate-600">
           Event type
           <select className={field} value={draft.eventType} onChange={(event) => set({ eventType: event.target.value as Event["eventType"] })}>
@@ -402,61 +367,68 @@ export function EventEditor({ eventId }: { eventId?: string | null }) {
           </select>
         </label>
         <label className="space-y-1 text-xs font-semibold text-slate-600">
-          <span className="flex justify-between">Fee (₹) {tbdNote("fee")}</span>
-          <input className={field} type="number" min={0} value={draft.fee} onChange={(event) => set({ fee: Number(event.target.value) })} />
-        </label>
-        <label className="space-y-1 text-xs font-semibold text-slate-600">
-          Registration
-          <select className={field} value={draft.registrationStatus} onChange={(event) => set({ registrationStatus: event.target.value as Event["registrationStatus"] })}>
-            <option>Open</option>
-            <option>Closing Soon</option>
-            <option>Waitlist</option>
-            <option>Closed</option>
+          Mode
+          <select className={field} value={draft.mode} onChange={(event) => set({ mode: event.target.value as Event["mode"] })}>
+            <option>Offline</option>
+            <option>Online</option>
+            <option>Hybrid</option>
           </select>
         </label>
         <label className="space-y-1 text-xs font-semibold text-slate-600">
-          Capacity
-          <input className={field} type="number" min={0} value={draft.capacity ?? ""} onChange={(event) => set({ capacity: event.target.value ? Number(event.target.value) : undefined })} />
+          <span className="flex justify-between">Start date {tbdNote("dates")}</span>
+          <input className={field} type="date" value={draft.startDate} onChange={(event) => set({ startDate: event.target.value })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          End date
+          <input className={field} type="date" value={draft.endDate} onChange={(event) => set({ endDate: event.target.value })} />
+        </label>
+        <EventLocationField
+          tbd={Boolean(tbd.venue)}
+          venue={draft.venue}
+          city={draft.city}
+          mapsUrl={draft.mapsUrl}
+          placeId={draft.placeId}
+          lat={draft.lat}
+          lng={draft.lng}
+          onTbd={(value) => toggleTbd("venue", value)}
+          onChange={(place) => set({ venue: place.venue, city: place.city, mapsUrl: place.mapsUrl, placeId: place.placeId, lat: place.lat, lng: place.lng })}
+        />
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          <span className="flex justify-between">Price (₹) {tbdNote("fee")}</span>
+          <input className={field} type="number" min={0} value={draft.fee} onChange={(event) => set({ fee: Number(event.target.value) })} disabled={Boolean(tbd.fee)} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          <span className="flex justify-between">Registration link {tbdNote("registration")}</span>
+          <input
+            className={field}
+            placeholder="https://seminar.vaidyagogate.org/..."
+            value={draft.registrationUrl ?? ""}
+            disabled={Boolean(tbd.registration)}
+            onChange={(event) => set({ registrationUrl: event.target.value, tbd: { ...tbd, registration: false } })}
+          />
         </label>
         <textarea className={`${field} sm:col-span-2`} rows={3} placeholder="Short description" value={draft.shortDescription} onChange={(event) => set({ shortDescription: event.target.value })} />
-        <textarea className={`${field} sm:col-span-2`} rows={6} placeholder="Full description" value={draft.description} onChange={(event) => set({ description: event.target.value })} />
+        <textarea className={`${field} sm:col-span-2`} rows={6} placeholder="Event description" value={draft.description} onChange={(event) => set({ description: event.target.value })} />
         <div className="sm:col-span-2">
           <ImageField label="Event banner" value={draft.bannerUrl} onChange={(value) => set({ bannerUrl: value })} hint="Wide image, about 1600 × 700." />
         </div>
       </div>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between">
-            <p className="font-semibold text-slate-900">Speakers {tbdNote("speakers")}</p>
-            <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => set({ speakers: [...speakers, { id: `spk-${Date.now()}`, name: "", designation: "", topic: "" }] })}>+ Add speaker</button>
-          </div>
-          {speakers.map((speaker, index) => (
-            <div key={speaker.id} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-3">
-              <input className={field} placeholder="Name" value={speaker.name} onChange={(event) => setSpeaker(index, { name: event.target.value })} />
-              <input className={field} placeholder="Designation" value={speaker.designation} onChange={(event) => setSpeaker(index, { designation: event.target.value })} />
-              <div className="flex gap-2">
-                <input className={field} placeholder="Topic" value={speaker.topic} onChange={(event) => setSpeaker(index, { topic: event.target.value })} />
-                <button type="button" className="text-xs font-semibold text-red-600" onClick={() => set({ speakers: speakers.filter((_, i) => i !== index) })}>Remove</button>
-              </div>
-            </div>
-          ))}
-          {speakers.length === 0 && <p className="text-xs text-slate-500">No speakers added.</p>}
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+        <div className="flex items-center justify-between">
+          <p className="font-semibold text-slate-900">Speakers {tbdNote("speakers")}</p>
+          <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => set({ speakers: [...speakers, { id: `spk-${Date.now()}`, name: "", designation: "", topic: "" }] })}>+ Add speaker</button>
         </div>
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between">
-            <p className="font-semibold text-slate-900">Schedule {tbdNote("schedule")}</p>
-            <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => set({ schedule: [...schedule, { id: `sch-${Date.now()}`, time: "", title: "" }] })}>+ Add slot</button>
-          </div>
-          {schedule.map((slot, index) => (
-            <div key={slot.id} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-3">
-              <input className={field} placeholder="Time" value={slot.time} onChange={(event) => setSlot(index, { time: event.target.value })} />
-              <input className={`${field} sm:col-span-2`} placeholder="Session title" value={slot.title} onChange={(event) => setSlot(index, { title: event.target.value })} />
-              <input className={`${field} sm:col-span-2`} placeholder="Details (optional)" value={slot.description ?? ""} onChange={(event) => setSlot(index, { description: event.target.value })} />
-              <button type="button" className="text-xs font-semibold text-red-600" onClick={() => set({ schedule: schedule.filter((_, i) => i !== index) })}>Remove</button>
+        {speakers.map((speaker, index) => (
+          <div key={speaker.id} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-3">
+            <input className={field} placeholder="Name" value={speaker.name} onChange={(event) => setSpeaker(index, { name: event.target.value })} />
+            <input className={field} placeholder="Designation" value={speaker.designation} onChange={(event) => setSpeaker(index, { designation: event.target.value })} />
+            <div className="flex gap-2">
+              <input className={field} placeholder="Topic" value={speaker.topic} onChange={(event) => setSpeaker(index, { topic: event.target.value })} />
+              <button type="button" className="text-xs font-semibold text-red-600" onClick={() => set({ speakers: speakers.filter((_, i) => i !== index) })}>Remove</button>
             </div>
-          ))}
-          {schedule.length === 0 && <p className="text-xs text-slate-500">No sessions added.</p>}
-        </div>
+          </div>
+        ))}
+        {speakers.length === 0 && <p className="text-xs text-slate-500">No speakers added. You can add them later from Events → Speakers.</p>}
       </div>
       <div>
         <button type="button" className={button} onClick={publish}>Save event</button>
@@ -478,6 +450,11 @@ export function EventAdminList() {
       <div className="flex justify-end">
         <Link href="/admin/events/create" className={button}>+ Create event</Link>
       </div>
+      {events.length === 0 && (
+        <p className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          No events yet. Create one with dates, location, price, speakers and a registration link.
+        </p>
+      )}
       <ul className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         {events.map((event) => (
           <li key={event.id} className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">

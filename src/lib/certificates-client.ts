@@ -10,6 +10,8 @@ export type PublicCertificate = {
   signature: string;
   status?: "Valid" | "Revoked";
   reissuedAt?: string;
+  year?: number;
+  eventSlug?: string;
 };
 
 export async function verifyCertificate(number: string, apiKey?: string) {

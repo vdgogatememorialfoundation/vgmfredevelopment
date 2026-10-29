@@ -14,10 +14,10 @@ const items = [
     text: "Seminars, fellowships and workshops with current dates.",
   },
   {
-    href: "/certificate-verification",
-    eyebrow: "Records",
-    title: "Verify a certificate",
-    text: "Look up a Foundation certificate by its printed number.",
+    href: "/articles",
+    eyebrow: "Journal",
+    title: "Articles",
+    text: "Writing on Ayurveda, education and the Foundation’s work.",
   },
   {
     href: "/clinics",

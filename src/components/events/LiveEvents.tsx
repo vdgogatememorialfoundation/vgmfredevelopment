@@ -4,9 +4,9 @@ import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import EventCard from "@/components/events/EventCard";
 import Badge from "@/components/common/Badge";
-import { seminarSiteUrl } from "@/lib/constants";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { eventRecordKeys, getEventRecords, type EventRecord } from "@/lib/cms";
+import { mapsEmbedUrl } from "@/lib/maps-place";
 
 const speakerKeys = eventRecordKeys("speakers");
 const scheduleKeys = eventRecordKeys("schedule");
@@ -33,11 +33,17 @@ export function EventsIndex() {
       <section className="section bg-background">
         <div className="container">
           <h2 className="heading-3 mb-8">Upcoming Events</h2>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {upcoming.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-          </div>
+          {upcoming.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-border bg-white p-10 text-center text-sm text-text-muted">
+              No events are published yet.
+            </p>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {upcoming.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
       {past.length > 0 && (
@@ -159,12 +165,24 @@ export function LiveEventPage({ slug }: { slug: string }) {
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
             </dl>
-            <a href={seminarSiteUrl} target="_blank" rel="noopener noreferrer" className="btn-primary mt-5 w-full">
-              Register on the seminar site
-            </a>
-            <Link href="/certificate-verification" className="btn-outline mt-3 w-full">
-              Verify a certificate
-            </Link>
+            {event.tbd?.registration || !event.registrationUrl?.trim() ? (
+              <p className="mt-5 rounded-xl border border-dashed border-border bg-warm-cream px-4 py-3 text-sm text-text-muted">
+                Registration link {TBA.toLowerCase()}.
+              </p>
+            ) : (
+              <a href={event.registrationUrl} target="_blank" rel="noopener noreferrer" className="btn-primary mt-5 w-full">
+                Register
+              </a>
+            )}
+            {!event.tbd?.venue && mapsEmbedUrl(event) && (
+              <iframe
+                title={`${event.name} location`}
+                src={mapsEmbedUrl(event)}
+                className="mt-4 h-48 w-full rounded-xl border border-border"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            )}
           </aside>
         </div>
       </section>

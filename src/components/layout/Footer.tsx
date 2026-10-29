@@ -8,20 +8,15 @@ const quickLinks = [
   { name: "Articles", href: "/articles" },
   { name: "Shop", href: "/shop" },
   { name: "Clinics", href: "/clinics" },
-  { name: "Certificates", href: "/certificate-verification" },
   { name: "Contact", href: "/contact" },
 ];
 
 const legalLinks = [
   { name: "Privacy", href: "/privacy" },
   { name: "Terms", href: "/terms" },
-  { name: "Refund", href: "/refund-policy" },
   { name: "Shipping", href: "/shipping-policy" },
-];
-
-const portalLinks = [
-  { name: "Admin", href: "/admin" },
-  { name: "Staff", href: "/staff" },
+  { name: "Returns", href: "/return-policy" },
+  { name: "Refund", href: "/refund-policy" },
 ];
 
 export default function Footer() {
@@ -76,13 +71,11 @@ export default function Footer() {
                 {link.name}
               </Link>
             ))}
-            {portalLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="font-medium text-gold transition hover:text-white">
-                {link.name}
-              </Link>
-            ))}
           </nav>
         </div>
+        <p className="mt-4 text-xs text-stone-500">
+          Developed by Capture Visual Studios
+        </p>
       </div>
     </footer>
   );

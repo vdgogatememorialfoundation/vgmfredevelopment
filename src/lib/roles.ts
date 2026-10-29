@@ -13,11 +13,12 @@ export const staffModules = [
   { id: "articles", label: "Articles", paths: ["/admin/articles"] },
   { id: "clinics", label: "Clinics", paths: ["/admin/website/clinics"] },
   { id: "events", label: "Events", paths: ["/admin/events"] },
-  { id: "certificates", label: "Certificates", paths: ["/admin/certificates", "/admin/events/certificates"] },
+  { id: "reports", label: "Reports", paths: ["/admin/reports"] },
+  { id: "policies", label: "Policies", paths: ["/admin/website/policies"] },
   { id: "support", label: "Support", paths: ["/admin/support"] },
   { id: "delivery", label: "Shipping APIs", paths: ["/admin/settings/shipping-apis", "/admin/delivery-partners"] },
   { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications"] },
-  { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles"] },
+  { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles", "/admin/accounts/doctors"] },
   { id: "settings", label: "Site settings", paths: ["/admin/settings"] },
 ] as const;
 
@@ -36,7 +37,7 @@ export const roleCategories = ["Content", "Events", "Commerce", "Finance", "Supp
 export const defaultRoles: StaffRole[] = [
   { id: "general-staff", name: "General Staff", category: "Operations", description: "Orders, customers and support.", modules: ["orders", "customers", "support"] },
   { id: "content-editor", name: "Content Editor", category: "Content", description: "Articles, homepage, announcements and About Us.", modules: ["articles", "website", "about"] },
-  { id: "event-coordinator", name: "Event Coordinator", category: "Events", description: "Events, speakers, schedule and certificates.", modules: ["events", "certificates"] },
+  { id: "event-coordinator", name: "Event Coordinator", category: "Events", description: "Events, speakers and schedule.", modules: ["events"] },
   { id: "order-manager", name: "Order Manager", category: "Commerce", description: "Orders, shipping, couriers and inventory.", modules: ["orders", "pos", "catalog", "delivery", "customers"] },
   { id: "accounts", name: "Accounts & Payments", category: "Finance", description: "Payments, refunds and reconciliation.", modules: ["payments", "orders"] },
   { id: "support-agent", name: "Support Agent", category: "Support", description: "Tickets, enquiries and notifications.", modules: ["support", "communication", "customers"] },
@@ -71,6 +72,7 @@ export function getRole(id?: string) {
 export function modulesFor(user: User | null | undefined): StaffModuleId[] | "all" {
   if (!user) return [];
   if (user.role === "admin") return "all";
+  if (user.role === "doctor") return ["clinics"];
   if (user.role !== "staff") return [];
   return getRole(user.staffRoleId).modules;
 }

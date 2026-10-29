@@ -42,7 +42,7 @@ const timeline = [
     year: "2026",
     title: "Education, research & digital services",
     description:
-      "The Foundation runs seminars, fellowships, clinics, publications and digital services, including account, event and certificate management.",
+      "The Foundation runs seminars, fellowships, clinics, publications and digital services, including account and event management.",
   },
 ];
 

@@ -86,6 +86,7 @@ export default function CertificateVerificationForm() {
           <dl className="mx-auto mt-8 max-w-md space-y-3 rounded-2xl border border-emerald-200 bg-white p-6 text-left text-sm">
             <CertificateRow label="Certificate Number" value={result.certificate.certificateNumber} />
             <CertificateRow label="Name" value={result.certificate.name} />
+            <CertificateRow label="Year" value={result.certificate.year ? String(result.certificate.year) : "—"} />
             <CertificateRow label="Event" value={result.certificate.event} />
             <CertificateRow label="Certificate Type" value={result.certificate.certificateType} />
             <CertificateRow label="Issued On" value={result.certificate.issueDate} />

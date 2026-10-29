@@ -8,7 +8,7 @@ import SignInFlow from "@/components/account/SignInFlow";
 export const metadata: Metadata = {
   title: "Login / Create Account",
   description:
-    "Create a Vaidya Gogate Memorial Foundation account or log in to manage events, tickets, certificates and orders.",
+    "Create a Vaidya Gogate Memorial Foundation account or log in to manage shop orders and your profile.",
 };
 
 export default async function LoginPage({
@@ -37,9 +37,8 @@ export default async function LoginPage({
             </h1>
 
             <p className="mt-6 text-base leading-7 text-text-muted">
-              Register once and use your account for events, seminar
-              registrations, tickets, certificates, shop purchases and
-              other foundation services.
+              Register once and use your account for shop purchases and
+              other Foundation services.
             </p>
 
             <div className="mt-10 space-y-5">

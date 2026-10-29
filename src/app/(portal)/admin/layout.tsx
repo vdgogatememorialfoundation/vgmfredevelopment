@@ -29,7 +29,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   const { user, signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  if (!user || (user.role !== "admin" && user.role !== "staff")) {
+  if (!user || (user.role !== "admin" && user.role !== "staff" && user.role !== "doctor")) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] p-6">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -41,6 +41,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Link href="/admin/login" className="btn-primary">Admin sign in</Link>
             <Link href="/staff/login" className="btn-outline">Staff sign in</Link>
+            <Link href="/doctor/login" className="btn-outline">Doctor sign in</Link>
           </div>
         </div>
       </div>
@@ -48,7 +49,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   }
 
   const liveAccount = getAccounts().find((account) => account.email.toLowerCase() === user.email.toLowerCase())
-  const blocked = user.role === "staff" ? (liveAccount ? loginBlockReason(liveAccount) : "This staff account has been deleted.") : null
+  const blocked = user.role === "admin" ? null : liveAccount ? loginBlockReason(liveAccount) : "This account has been deleted."
   if (blocked) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] p-6">
@@ -60,7 +61,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
             className="btn-primary mt-6"
             onClick={() => {
               signOut()
-              router.push("/staff/login")
+              router.push(user.role === "doctor" ? "/doctor/login" : "/staff/login")
             }}
           >
             Sign out
@@ -71,6 +72,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   }
 
   const isStaff = user.role === "staff"
+  const isDoctor = user.role === "doctor"
   const role = isStaff ? getRole(user.staffRoleId) : null
   const groups = adminNavigation
     .map((group) => ({ ...group, items: group.items.filter((item) => canOpen(user, item.href)) }))
@@ -118,9 +120,9 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
           <div className="sticky top-0 flex h-screen flex-col">
             <div className="border-b border-slate-200 px-6 py-5">
               <div className="text-xs font-semibold uppercase tracking-widest text-burgundy">VGMF</div>
-              <div className="mt-1 text-lg font-semibold">{isStaff ? "Staff workspace" : "Admin Console"}</div>
+              <div className="mt-1 text-lg font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : "Admin Console"}</div>
               <div className="mt-1 text-xs text-gray-500">
-                {isStaff ? `${role?.name} · ${role?.category}` : "Vaidya Gogate Memorial Foundation"}
+                {isStaff ? `${role?.name} · ${role?.category}` : isDoctor ? "Clinic pages" : "Vaidya Gogate Memorial Foundation"}
               </div>
             </div>
             {nav}
@@ -145,12 +147,12 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                 </button>
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wider text-gray-400">VGMF</div>
-                  <div className="font-semibold">{isStaff ? "Staff workspace" : "Administration"}</div>
+                  <div className="font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : "Administration"}</div>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-sm">
                 <span className="hidden text-gray-600 sm:inline">
-                  {user.firstName} {user.lastName} · {isStaff ? role?.name : "Administrator"}
+                  {user.firstName} {user.lastName} · {isDoctor ? "Doctor" : isStaff ? role?.name : "Administrator"}
                 </span>
                 <Link href="/" className="text-burgundy hover:underline">View website</Link>
                 <button
@@ -158,7 +160,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                   className="text-gray-500 hover:text-burgundy"
                   onClick={() => {
                     signOut()
-                    router.push(isStaff ? "/staff/login" : "/admin/login")
+                    router.push(isDoctor ? "/doctor/login" : isStaff ? "/staff/login" : "/admin/login")
                   }}
                 >
                   Sign out
@@ -178,7 +180,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                   {role?.name} can open: {groups.flatMap((group) => group.items).map((item) => item.label).join(", ") || "nothing yet"}.
                   Ask an administrator to change your role under Accounts → Roles & Permissions.
                 </p>
-                <Link href="/staff" className="btn-outline mt-5">Open my workspace</Link>
+                <Link href={isDoctor ? "/doctor" : "/staff"} className="btn-outline mt-5">Open my workspace</Link>
               </div>
             )}
           </div>

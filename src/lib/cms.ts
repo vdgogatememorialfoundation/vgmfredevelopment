@@ -18,7 +18,6 @@ export const contentModules = [
   { id: "events", label: "Events" },
   { id: "announcements", label: "Announcements" },
   { id: "orders", label: "Orders & refunds" },
-  { id: "certificates", label: "Certificates" },
   { id: "clinic", label: "Clinic" },
 ] as const;
 
@@ -215,7 +214,7 @@ export function blankEvent(name: string): Event {
     bannerUrl: "",
     startDate: today,
     endDate: today,
-    city: "Pune",
+    city: "",
     venue: "",
     mode: "Offline" as EventMode,
     eventType: "Seminar" as EventType,
@@ -224,6 +223,9 @@ export function blankEvent(name: string): Event {
     fee: 0,
     currency: "INR",
     registrationStatus: "Open" as RegistrationStatus,
+    registrationUrl: "",
+    mapsUrl: "",
+    tbd: { venue: true, city: true, registration: true, fee: true },
   };
 }
 
@@ -234,7 +236,6 @@ export function getModuleAccess(): Record<ContentModuleId, string[]> {
     events: saved.events ?? [],
     announcements: saved.announcements ?? [],
     orders: saved.orders ?? [],
-    certificates: saved.certificates ?? [],
     clinic: saved.clinic ?? [],
   };
 }
@@ -253,7 +254,6 @@ const roleModuleFor: Record<ContentModuleId, StaffModuleId> = {
   events: "events",
   announcements: "website",
   orders: "orders",
-  certificates: "certificates",
   clinic: "clinics",
 };
 

@@ -8,16 +8,20 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { ensureAdminCredentials, getAccounts } from "@/lib/admin-store";
 import { loginBlockReason } from "@/lib/auth";
 
-export function PortalLogin({ portal }: { portal: "admin" | "staff" }) {
+const copy = {
+  admin: { label: "Admin", target: "/admin", hint: "administrator" },
+  staff: { label: "Staff", target: "/staff", hint: "staff" },
+  doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
+} as const;
+
+export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }) {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-
-  const label = portal === "admin" ? "Admin" : "Staff";
-  const target = "/admin";
-  const signedIn = user?.role === portal;
+  const { label, target, hint } = copy[portal];
+  const signedIn = user?.role === portal || (portal === "staff" && user?.role === "admin");
 
   if (signedIn && user) {
     return (
@@ -44,7 +48,8 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" }) {
     const account = getAccounts().find(
       (a) => a.email.toLowerCase() === email.trim().toLowerCase()
     );
-    if (!account || account.role !== portal) {
+    const allowed = account?.role === portal || (portal === "staff" && account?.role === "admin");
+    if (!account || !allowed) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
       return;
     }
@@ -59,7 +64,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" }) {
     }
     setError("");
     signIn(account);
-    router.push(target);
+    router.push(account.role === "admin" && portal === "staff" ? "/admin" : target);
   };
 
   return (
@@ -108,13 +113,15 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" }) {
         </button>
       </form>
 
-      <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
-        <p className="font-semibold text-text-primary">Demo credentials</p>
-        <p>
-          {portal === "admin" ? "admin@vaidyagogate.org" : "care@vaidyagogate.org"} · password{" "}
-          {portal === "admin" ? "admin123" : "staff123"}
-        </p>
-      </div>
+      {portal !== "doctor" && (
+        <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
+          <p className="font-semibold text-text-primary">Demo credentials</p>
+          <p>
+            {portal === "admin" ? "admin@vaidyagogate.org" : "care@vaidyagogate.org"} · password{" "}
+            {portal === "admin" ? "admin123" : "staff123"}
+          </p>
+        </div>
+      )}
 
       <Link href="/" className="mt-6 block text-center text-sm font-medium text-text-muted transition hover:text-burgundy">
         ← Back to website
@@ -127,9 +134,10 @@ function Card({
   portal,
   children,
 }: {
-  portal: "admin" | "staff";
+  portal: "admin" | "staff" | "doctor";
   children: React.ReactNode;
 }) {
+  const { label, hint } = copy[portal];
   return (
     <main className="flex min-h-screen items-center justify-center bg-warm-cream/40 px-5">
       <div className="w-full max-w-md">
@@ -138,13 +146,13 @@ function Card({
             <SiteLogo size={56} />
           </div>
           <p className="mt-4 text-center text-xs font-bold uppercase tracking-[0.18em] text-burgundy">
-            {portal === "admin" ? "Admin console" : "Staff console"}
+            {label} console
           </p>
           <h1 className="mt-1 text-center text-2xl font-bold text-text-primary">
-            {portal === "admin" ? "Admin sign in" : "Staff sign in"}
+            {label} sign in
           </h1>
           <p className="mt-2 text-center text-sm text-text-muted">
-            Use your {portal === "admin" ? "administrator" : "staff"} email and password.
+            Use your {hint} email and password.
           </p>
           <div className="mt-7">{children}</div>
         </div>

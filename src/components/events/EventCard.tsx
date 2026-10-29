@@ -72,14 +72,18 @@ export default function EventCard({ event }: { event: Event }) {
           View Event
         </Link>
 
-        <Link
-          href="https://seminar.vaidyagogate.org"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-outline mt-3 w-full"
-        >
-          Register on Seminar Website
-        </Link>
+        {event.tbd?.registration || !event.registrationUrl?.trim() ? (
+          <p className="mt-3 text-center text-xs text-text-muted">Registration to be announced</p>
+        ) : (
+          <a
+            href={event.registrationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-outline mt-3 w-full"
+          >
+            Register
+          </a>
+        )}
       </div>
     </article>
   );
