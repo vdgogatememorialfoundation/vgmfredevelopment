@@ -71,6 +71,8 @@ export type MobileAppConfig = {
   modules: Record<MobileModuleId, boolean>;
   /** Live name and logo for each installed app. Changing these does not need a Play Store release. */
   apps: Record<AppFlavorId, MobileAppBrand>;
+  /** When false, the public site hides Android download links. Admin can still download from this desk. */
+  showPublicDownload: boolean;
 };
 
 export const defaultMobileAppConfig: MobileAppConfig = {
@@ -84,6 +86,7 @@ export const defaultMobileAppConfig: MobileAppConfig = {
   apiBaseUrl: "",
   modules: Object.fromEntries(mobileModules.map((item) => [item.id, true])) as Record<MobileModuleId, boolean>,
   apps: defaultAppBrands,
+  showPublicDownload: false,
 };
 
 export function getMobileAppConfig(): MobileAppConfig {
@@ -102,6 +105,7 @@ export function getMobileAppConfig(): MobileAppConfig {
         staff: { ...defaultAppBrands.staff, ...saved.apps?.staff },
         support: { ...defaultAppBrands.support, ...saved.apps?.support },
       },
+      showPublicDownload: saved.showPublicDownload === true,
     };
   } catch {
     return defaultMobileAppConfig;
@@ -111,4 +115,8 @@ export function getMobileAppConfig(): MobileAppConfig {
 export function saveMobileAppConfig(config: MobileAppConfig) {
   window.localStorage.setItem(MOBILE_APP_KEY, JSON.stringify(config));
   window.dispatchEvent(new Event("vgmf-cms"));
+}
+
+export function isAppDownloadPublic() {
+  return getMobileAppConfig().showPublicDownload === true;
 }

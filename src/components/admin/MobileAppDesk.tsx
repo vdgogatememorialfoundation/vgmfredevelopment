@@ -100,6 +100,27 @@ export function MobileAppDesk() {
       {note ? <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{note}</p> : null}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Public download</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          Hidden on the website until you turn this on. The footer link and /app download cards stay off by default.
+        </p>
+        <label className="mt-4 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-burgundy"
+            checked={config.showPublicDownload}
+            onChange={(event) => patch({ showPublicDownload: event.target.checked })}
+          />
+          Show Android app download on the public site
+        </label>
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <button type="button" className={primary} onClick={save}>
+            Save
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">App name and logo</h2>
         <p className="mt-0.5 text-sm text-slate-500">
           These appear inside the installed apps on the next refresh. You do not submit a Play Store or App Store update to

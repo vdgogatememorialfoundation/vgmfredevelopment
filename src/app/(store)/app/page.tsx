@@ -1,13 +1,37 @@
-import type { Metadata } from "next";
-import { siteConfig } from "@/lib/constants";
-import { appFlavors } from "@/lib/mobile-config";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Mobile apps",
-  description: `Install the ${siteConfig.shortName} Android apps for customers, admin, staff and support. Names and logos update from the admin console without a Play Store release.`,
-};
+import { useSyncExternalStore } from "react";
+import Link from "next/link";
+import { siteConfig } from "@/lib/constants";
+import { appFlavors, isAppDownloadPublic } from "@/lib/mobile-config";
+import { subscribeCms } from "@/lib/cms";
+
+function snapshot() {
+  return window.localStorage.getItem("vgmf_mobile_app") ?? "";
+}
 
 export default function AppDownloadPage() {
+  useSyncExternalStore(subscribeCms, snapshot, () => "");
+  const visible = isAppDownloadPublic();
+
+  if (!visible) {
+    return (
+      <div className="container py-16">
+        <div className="mx-auto max-w-xl rounded-3xl border border-border bg-white p-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">{siteConfig.shortName}</p>
+          <h1 className="mt-2 font-serif text-3xl text-ink">Android apps</h1>
+          <p className="mt-4 text-sm leading-7 text-text-muted">
+            Public downloads are turned off. The Foundation will publish the apps from Admin → Mobile app when they are
+            ready.
+          </p>
+          <Link href="/" className="btn-outline mt-8 inline-flex">
+            Back to home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container py-16">
       <div className="mx-auto max-w-3xl">
@@ -18,11 +42,6 @@ export default function AppDownloadPage() {
           this website. Changing those in <strong>Admin → Mobile app</strong> and publishing updates phones immediately — no
           Play Store or App Store release.
         </p>
-        <p className="mt-3 text-sm leading-7 text-text-muted">
-          Android may ask you to allow installs from this browser. Content, tickets and the shop still update when the
-          Foundation publishes.
-        </p>
-
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
           {appFlavors.map((app) => (
             <article key={app.id} className="rounded-3xl border border-gold/40 bg-white p-6 shadow-sm">

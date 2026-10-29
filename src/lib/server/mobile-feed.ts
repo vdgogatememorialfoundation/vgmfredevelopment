@@ -77,6 +77,7 @@ export function readMobileFeed(): MobileFeed {
         staff: { ...base.mobile.apps.staff, ...snapshot.mobile?.apps?.staff },
         support: { ...base.mobile.apps.support, ...snapshot.mobile?.apps?.support },
       },
+      showPublicDownload: snapshot.mobile?.showPublicDownload === true,
     },
     events: snapshot.events ?? base.events,
     articles: snapshot.articles ?? base.articles,
