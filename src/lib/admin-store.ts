@@ -359,7 +359,7 @@ export function sendAccountDetails(email: string, isNew = false) {
   const signIn =
     role === "customer"
       ? `${siteOrigin()}/login?mode=signin`
-      : role === "staff"
+      : role === "staff" || role === "coadmin"
         ? `${siteOrigin()}/staff/login`
         : role === "doctor"
           ? `${siteOrigin()}/doctor/login`
@@ -432,7 +432,7 @@ export function createUserAccount(input: {
   lastName: string;
   email: string;
   phone: string;
-  role: "customer" | "admin" | "staff" | "doctor";
+  role: "customer" | "admin" | "coadmin" | "staff" | "doctor";
   password?: string;
   staffRoleId?: string;
 }) {
@@ -1018,6 +1018,19 @@ export function sendEmail(input: {
   });
 }
 
+export function sendOtpCode(input: { email?: string; phone?: string; name?: string; code: string; purpose: string }) {
+  const body = `Hi ${input.name || "there"},\n\nYour VGMF ${input.purpose} code is ${input.code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the message.\n\n– VGMF`;
+  return queueNotification({
+    to: input.email ?? "",
+    phone: input.phone,
+    name: input.name,
+    params: [input.code],
+    subject: `VGMF ${input.purpose} code`,
+    template: "otp",
+    body,
+  });
+}
+
 export function sendPeopleEmail(recipients: User[], subject: string, body: string) {
   const text = body.trim();
   const title = subject.trim();
@@ -1145,25 +1158,112 @@ export function getTickets(): SupportTicket[] {
   return readJSON<SupportTicket[]>(TICKETS_KEY, []);
 }
 
+function uniqueTicketId() {
+  const existing = new Set(getTickets().map((ticket) => ticket.id));
+  let id = "";
+  do {
+    id = String(Math.floor(100000000000 + Math.random() * 900000000000));
+  } while (existing.has(id));
+  return id;
+}
+
+/** Find a customer by email or phone, or create one and send account details. */
+export function ensureCustomerAccount(input: { name?: string; email?: string; phone?: string }): User | null {
+  const email = (input.email || "").trim();
+  const phone = (input.phone || "").trim();
+  if (!email && !phone) return null;
+  const existing =
+    (email ? findAccountByIdentifier(email) : null) ||
+    (phone ? findAccountByIdentifier(phone) : null);
+  if (existing) return existing;
+  const digits = phone.replace(/\D/g, "");
+  const resolvedEmail = email || (digits ? `guest.${digits}@accounts.vaidyagogate.org` : "");
+  if (!resolvedEmail) return null;
+  const parts = (input.name || "Guest").trim().split(/\s+/).filter(Boolean);
+  return createUserAccount({
+    firstName: parts[0] || "Guest",
+    lastName: parts.slice(1).join(" "),
+    email: resolvedEmail,
+    phone: phone || "0000000000",
+    role: "customer",
+  });
+}
+
+export function listSupportAgents(): User[] {
+  return getAccounts().filter((account) => {
+    const role = account.role;
+    return (role === "admin" || role === "coadmin" || role === "staff") && (account.status ?? "active") === "active";
+  });
+}
+
+export function ticketsVisibleTo(user: User | null | undefined): SupportTicket[] {
+  const tickets = getTickets();
+  if (!user) return [];
+  if (user.role === "admin" || user.role === "coadmin") return tickets;
+  const email = user.email.toLowerCase();
+  if (user.role === "staff") {
+    return tickets.filter(
+      (ticket) =>
+        !ticket.assignedTo ||
+        ticket.assignedTo.toLowerCase() === email ||
+        ticket.email.toLowerCase() === email ||
+        ticket.userId === user.id
+    );
+  }
+  return tickets.filter((ticket) => ticket.email.toLowerCase() === email || ticket.userId === user.id);
+}
+
 export function addTicket(input: {
   name: string;
   email: string;
   subject: string;
   body: string;
   portal?: SupportTicket["portal"];
+  phone?: string;
+  assignedTo?: string;
+  chatThreadId?: string;
+  userId?: string;
 }) {
+  const account = ensureCustomerAccount({ name: input.name, email: input.email, phone: input.phone });
   const now = new Date().toISOString();
   const ticket: SupportTicket = {
-    id: `TK${Math.floor(100000 + Math.random() * 900000)}`,
-    ...input,
+    id: uniqueTicketId(),
+    name: input.name.trim() || account?.firstName || "Guest",
+    email: (account?.email || input.email).trim(),
+    phone: input.phone || account?.phone,
+    subject: input.subject.trim(),
+    body: input.body.trim(),
     portal: input.portal ?? "customer",
     status: "Open",
     createdAt: now,
     updatedAt: now,
+    assignedTo: input.assignedTo,
+    userId: input.userId || account?.id,
+    chatThreadId: input.chatThreadId,
     responses: [],
   };
   const list = getTickets();
   list.push(ticket);
+  writeJSON(TICKETS_KEY, list);
+  sendEmail({
+    to: ticket.email,
+    phone: ticket.phone,
+    name: ticket.name,
+    params: [ticket.name, ticket.id, ticket.status],
+    subject: `Support ticket ${ticket.id} opened`,
+    template: "ticket-update",
+    body: `Hi ${ticket.name},\n\nWe have opened ticket ${ticket.id}: ${ticket.subject}.\n\n${ticket.body}\n\nYou will receive updates on this ticket at ${ticket.email}.\n\n– VGMF Support`,
+  });
+  return ticket;
+}
+
+export function assignTicket(id: string, assignedTo: string) {
+  const list = getTickets();
+  const ticket = list.find((item) => item.id === id);
+  if (!ticket) return;
+  ticket.assignedTo = assignedTo || undefined;
+  ticket.updatedAt = new Date().toISOString();
+  if (ticket.status === "Open" && assignedTo) ticket.status = "In Progress";
   writeJSON(TICKETS_KEY, list);
   return ticket;
 }

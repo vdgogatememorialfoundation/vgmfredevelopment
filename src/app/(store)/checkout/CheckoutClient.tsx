@@ -26,7 +26,7 @@ import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillm
 import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import { fetchCourierRates } from "@/lib/shipping-client";
 import { payWithRazorpay, paymentNotice } from "@/lib/payments-client";
-import { adjustStoreCredit, getStoreCredit, sendEmail } from "@/lib/admin-store";
+import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, sendEmail } from "@/lib/admin-store";
 import { commitStockForOrder } from "@/lib/product-data";
 import { useOrderSettings } from "@/lib/use-cms";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
@@ -243,9 +243,16 @@ export default function CheckoutClient() {
     if (creditApplied > 0 && user?.email) {
       adjustStoreCredit(user.email, -creditApplied, `Used on order ${id}`, id);
     }
+    const account =
+      user ??
+      ensureCustomerAccount({
+        name: deliveryAddress.fullName,
+        email: deliveryAddress.email,
+        phone: deliveryAddress.phone,
+      });
     const order: Order = {
       id,
-      userId: user?.id ?? "guest",
+      userId: account?.id ?? user?.id ?? "guest",
       date: now,
       items: orderItems,
       subtotal: totals.subtotal,

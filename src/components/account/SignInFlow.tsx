@@ -6,16 +6,20 @@ import OtpForm from "@/components/account/OtpForm";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
 import { useAuth } from "@/components/auth/AuthContext";
 import { findAccountByIdentifier, loginBlockReason } from "@/lib/auth";
-import { sendEmail } from "@/lib/admin-store";
+import { sendOtpCode } from "@/lib/admin-store";
+import { getAuthAccess } from "@/lib/auth-access";
 import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import type { User } from "@/types";
 
 type Step = "identifier" | "otp" | "forgot" | "complete";
+type Method = "password" | "sms";
 
 export default function SignInFlow() {
   const router = useRouter();
   const { signIn } = useAuth();
+  const access = getAuthAccess();
   const [step, setStep] = useState<Step>("identifier");
+  const [method, setMethod] = useState<Method>("password");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -32,18 +36,30 @@ export default function SignInFlow() {
     setStep("complete");
   };
 
-  const sendMfa = (account: User) => {
+  const sendEmailMfa = (account: User) => {
     const code = issueEmailOtp(account.email, "customer");
-    sendEmail({
-      to: account.email,
+    sendOtpCode({
+      email: account.email,
       phone: account.phone,
       name: account.firstName,
-      subject: "VGMF sign-in verification code",
-      template: "custom",
-      body: `Hi ${account.firstName || "there"},\n\nYour VGMF verification code is ${code}. It expires in 10 minutes.\n\nIf you did not try to sign in, ignore this message.\n\n– VGMF`,
+      code,
+      purpose: "sign-in",
     });
     setPending(account);
     setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+    setStep("otp");
+  };
+
+  const sendSmsOtp = (account: User) => {
+    const code = issueEmailOtp(account.phone, "customer-sms");
+    sendOtpCode({
+      phone: account.phone,
+      name: account.firstName,
+      code,
+      purpose: "SMS sign-in",
+    });
+    setPending(account);
+    setOtpHint(`Code sent by SMS to ${account.phone}. Demo code: ${code}`);
     setStep("otp");
   };
 
@@ -59,6 +75,15 @@ export default function SignInFlow() {
       setError(blocked);
       return;
     }
+    if (method === "sms") {
+      if (!access.smsLogin) {
+        setError("SMS login is turned off.");
+        return;
+      }
+      setError("");
+      sendSmsOtp(account);
+      return;
+    }
     if (!password) {
       setError("Enter your password, then we will send a one-time code to your email.");
       return;
@@ -68,7 +93,11 @@ export default function SignInFlow() {
       return;
     }
     setError("");
-    sendMfa(account);
+    if (!access.emailOtp) {
+      enterAccount(account);
+      return;
+    }
+    sendEmailMfa(account);
   };
 
   const handleOtp = (code: string) => {
@@ -78,7 +107,9 @@ export default function SignInFlow() {
       setStep("identifier");
       return;
     }
-    const invalid = verifyEmailOtp(account.email, "customer", code);
+    const role = method === "sms" ? "customer-sms" : "customer";
+    const target = method === "sms" ? account.phone : account.email;
+    const invalid = verifyEmailOtp(target, role, code);
     if (invalid) {
       setError(invalid);
       return;
@@ -86,6 +117,14 @@ export default function SignInFlow() {
     setError("");
     enterAccount(account);
   };
+
+  if (!access.loginEnabled) {
+    return (
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        Sign-in is turned off. {access.signupEnabled ? "You can still create an account." : "Please contact the Foundation office."}
+      </p>
+    );
+  }
 
   if (step === "forgot") {
     return (
@@ -133,13 +172,19 @@ export default function SignInFlow() {
         {otpHint && <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
         {error && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
         <OtpForm
-          title="Multi-factor verification"
-          description="Password accepted. Enter the 6-digit code emailed to your registered address to finish signing in."
+          title={method === "sms" ? "SMS verification" : "Email verification"}
+          description={
+            method === "sms"
+              ? "Enter the 6-digit code sent to your registered mobile. You can resend after 1 minute."
+              : "Password accepted. Enter the 6-digit code emailed to your registered address. You can resend after 1 minute."
+          }
           onSubmit={handleOtp}
           onBack={() => setStep("identifier")}
           onResend={() => {
             const account = pending ?? findAccountByIdentifier(identifier);
-            if (account) sendMfa(account);
+            if (!account) return;
+            if (method === "sms") sendSmsOtp(account);
+            else sendEmailMfa(account);
           }}
         />
       </div>
@@ -158,9 +203,32 @@ export default function SignInFlow() {
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
-          Sign in with your password. We then email a one-time code — both are required.
+          {method === "sms"
+            ? "Sign in with the mobile number on your account. We send a one-time SMS code."
+            : access.emailOtp
+              ? "Sign in with your password. We then email a one-time code — both are required."
+              : "Sign in with your registered email, phone or account ID and password."}
         </p>
       </div>
+
+      {access.smsLogin && (
+        <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl border border-border bg-white p-1.5">
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${method === "password" ? "bg-burgundy text-white" : "text-text-muted"}`}
+            onClick={() => setMethod("password")}
+          >
+            Email / password
+          </button>
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${method === "sms" ? "bg-burgundy text-white" : "text-text-muted"}`}
+            onClick={() => setMethod("sms")}
+          >
+            SMS OTP
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleIdentifier} className="space-y-5">
         <div>
@@ -168,7 +236,7 @@ export default function SignInFlow() {
             className="mb-2 block text-sm font-semibold text-text-primary"
             htmlFor="signin-identifier"
           >
-            Email, Phone or Account ID
+            {method === "sms" ? "Registered mobile number" : "Email, Phone or Account ID"}
           </label>
           <input
             id="signin-identifier"
@@ -177,25 +245,27 @@ export default function SignInFlow() {
             value={identifier}
             onChange={(event) => setIdentifier(event.target.value)}
             className="input-field"
-            placeholder="name@example.com / +91 98765 43210 / 12-digit Account ID"
+            placeholder={method === "sms" ? "+91 98765 43210" : "name@example.com / +91 98765 43210 / 12-digit Account ID"}
             autoComplete="username"
           />
         </div>
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="signin-password">
-            Password
-          </label>
-          <input
-            id="signin-password"
-            type="password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="input-field"
-            placeholder="Your password"
-            autoComplete="current-password"
-          />
-        </div>
+        {method === "password" && (
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="signin-password">
+              Password
+            </label>
+            <input
+              id="signin-password"
+              type="password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="input-field"
+              placeholder="Your password"
+              autoComplete="current-password"
+            />
+          </div>
+        )}
 
         {error && (
           <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -204,11 +274,13 @@ export default function SignInFlow() {
         )}
 
         <button type="submit" className="btn-primary w-full">
-          Continue to verification
+          {method === "sms" ? "Send SMS code" : access.emailOtp ? "Continue to verification" : "Sign in"}
         </button>
-        <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => setStep("forgot")}>
-          Forgot password?
-        </button>
+        {method === "password" && (
+          <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => setStep("forgot")}>
+            Forgot password?
+          </button>
+        )}
       </form>
     </div>
   );

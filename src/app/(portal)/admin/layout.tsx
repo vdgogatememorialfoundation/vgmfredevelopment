@@ -31,7 +31,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   const { user, signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  if (!user || (user.role !== "admin" && user.role !== "staff" && user.role !== "doctor")) {
+  if (!user || (user.role !== "admin" && user.role !== "coadmin" && user.role !== "staff" && user.role !== "doctor")) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] p-6">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -72,6 +72,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   }
 
   const isStaff = user.role === "staff"
+  const isCoadmin = user.role === "coadmin"
   const isDoctor = user.role === "doctor"
   const role = isStaff ? getRole(user.staffRoleId) : null
   const groups = adminNavigation
@@ -79,7 +80,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
       ...group,
       items: group.items.filter((item) => {
         if (!canOpen(user, item.href)) return false
-        if (user.role === "admin") return true
+        if (user.role === "admin" || user.role === "coadmin") return true
         const owner = moduleForPath(item.href)
         return owner ? isStaffModuleEnabled(owner) : true
       }),
@@ -88,7 +89,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   const owner = moduleForPath(pathname)
   const allowed =
     canOpen(user, pathname) &&
-    (user.role === "admin" || !owner || isStaffModuleEnabled(owner))
+    (user.role === "admin" || user.role === "coadmin" || !owner || isStaffModuleEnabled(owner))
 
   const nav = (
     <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -131,9 +132,9 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
           <div className="sticky top-0 flex h-screen flex-col">
             <div className="border-b border-slate-200 px-6 py-5">
               <div className="text-xs font-semibold uppercase tracking-widest text-burgundy">VGMF</div>
-              <div className="mt-1 text-lg font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : "Admin Console"}</div>
+              <div className="mt-1 text-lg font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin workspace" : "Admin Console"}</div>
               <div className="mt-1 text-xs text-gray-500">
-                {isStaff ? `${role?.name} · ${role?.category}` : isDoctor ? "Clinic pages" : "Vaidya Gogate Memorial Foundation"}
+                {isStaff ? `${role?.name} · ${role?.category}` : isDoctor ? "Clinic pages" : isCoadmin ? "Higher-authority access via /staff" : "Vaidya Gogate Memorial Foundation"}
               </div>
             </div>
             {nav}
@@ -158,19 +159,19 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                 </button>
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wider text-gray-400">VGMF</div>
-                  <div className="font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : "Administration"}</div>
+                  <div className="font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin" : "Administration"}</div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3 text-sm">
                 <span className="hidden text-gray-600 sm:inline">
-                  {user.firstName} {user.lastName} · {isDoctor ? "Doctor" : isStaff ? role?.name : "Administrator"}
+                  {user.firstName} {user.lastName} · {isDoctor ? "Doctor" : isStaff ? role?.name : isCoadmin ? "Co-admin" : "Administrator"}
                 </span>
                 <Link href="/" className="text-burgundy hover:underline">View website</Link>
                 <LoginStamp
                   compact
                   onLogout={() => {
                     signOut()
-                    router.push(isDoctor ? "/doctor/login" : isStaff ? "/staff/login" : "/admin/login")
+                    router.push(isDoctor ? "/doctor/login" : isStaff || isCoadmin ? "/staff/login" : "/admin/login")
                   }}
                 />
               </div>
@@ -188,7 +189,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                   {role?.name} can open: {groups.flatMap((group) => group.items).map((item) => item.label).join(", ") || "nothing yet"}.
                   Ask an administrator to change your role under Accounts → Roles & Permissions.
                 </p>
-                <Link href={isDoctor ? "/doctor" : "/staff"} className="btn-outline mt-5">Open my workspace</Link>
+                <Link href={isDoctor ? "/doctor" : isCoadmin || isStaff ? "/staff" : "/admin"} className="btn-outline mt-5">Open my workspace</Link>
               </div>
             )}
           </div>

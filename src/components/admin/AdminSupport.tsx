@@ -3,24 +3,29 @@
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
+  addTicket,
+  assignTicket,
   deleteFaq,
   getFaqs,
   getOutbox,
   getSupportMessages,
-  getTickets,
+  listSupportAgents,
   replyToQuery,
   respondToTicket,
   sendAbandonedCartEmail,
+  ticketsVisibleTo,
   triggerOutOfStockEmails,
   updateTicketStatus,
   saveFaq,
 } from "@/lib/admin-store";
+import { useAuth } from "@/components/auth/AuthContext";
 import {
   getChatThreads,
   getLiveChatSettings,
   postChatMessage,
   saveLiveChatSettings,
   subscribeLiveChat,
+  transferChat,
 } from "@/lib/live-chat";
 import type { FAQItem, SupportTicket } from "@/types";
 import {
@@ -43,15 +48,17 @@ const TICKET_TONES: Record<string, string> = {
 };
 
 export function SupportSection() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<"queries" | "tickets" | "chat" | "faq">("tickets");
   const [messages, setMessages] = useState(() => getSupportMessages());
-  const [tickets, setTickets] = useState(() => getTickets());
+  const [tickets, setTickets] = useState(() => ticketsVisibleTo(user));
+  const [createForm, setCreateForm] = useState({ name: "", email: "", phone: "", subject: "", body: "", assignedTo: "" });
   const [faqs, setFaqs] = useState(() => getFaqs());
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const refresh = () => {
     setMessages(getSupportMessages());
-    setTickets(getTickets());
+    setTickets(ticketsVisibleTo(user));
     setFaqs(getFaqs());
   };
 
@@ -60,7 +67,7 @@ export function SupportSection() {
       <div>
         <h1 className="text-2xl font-bold text-text-primary">Support</h1>
         <p className="text-sm text-text-muted">
-          Tickets from the public support portal, staff and customers — including every reply. Enable live chat when the team is online.
+          Tickets from the public support portal, staff and customers — including every reply. Staff see tickets assigned to them. Enable live chat when the team is online.
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
           <Link href="/support" className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-burgundy">Support portal</Link>
@@ -131,7 +138,28 @@ export function SupportSection() {
       )}
 
       {tab === "tickets" && (
-        <Panel title={`Support tickets (${tickets.length})`} description="Every ticket from /support, customer accounts and staff, with the full reply thread.">
+        <Panel title={`Support tickets (${tickets.length})`} description="Every ticket from /support, customer accounts and staff, with the full reply thread. New tickets use a 12-digit ID.">
+          <div className="mb-4 grid gap-2 rounded-xl border border-dashed border-border p-4 sm:grid-cols-2">
+            <TextInput value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} placeholder="Name" />
+            <TextInput value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="Email" />
+            <TextInput value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} placeholder="Phone" />
+            <TextInput value={createForm.subject} onChange={(e) => setCreateForm({ ...createForm, subject: e.target.value })} placeholder="Subject" />
+            <TextArea className="sm:col-span-2" rows={2} value={createForm.body} onChange={(e) => setCreateForm({ ...createForm, body: e.target.value })} placeholder="Details" />
+            <Button
+              onClick={() => {
+                if (!createForm.name.trim() || !createForm.email.trim() || !createForm.subject.trim() || !createForm.body.trim()) return;
+                addTicket({
+                  ...createForm,
+                  portal: user?.role === "admin" ? "admin" : "staff",
+                  assignedTo: createForm.assignedTo || user?.email,
+                });
+                setCreateForm({ name: "", email: "", phone: "", subject: "", body: "", assignedTo: "" });
+                refresh();
+              }}
+            >
+              Create ticket
+            </Button>
+          </div>
           {tickets.length === 0 ? (
             <EmptyState text="No tickets yet. Visitors raise them from /support or the account area." />
           ) : (
@@ -157,15 +185,24 @@ export function SupportSection() {
 
 function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: () => void }) {
   const [response, setResponse] = useState("");
+  const agents = listSupportAgents();
   return (
     <li className="rounded-xl border border-border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="font-semibold text-text-primary">#{ticket.id} — {ticket.subject}</p>
-          <p className="text-xs text-text-muted">{ticket.name} · {ticket.email} · {ticket.portal ?? "customer"} · {formatDateTime(ticket.createdAt)}</p>
+          <p className="text-xs text-text-muted">{ticket.name} · {ticket.email}{ticket.phone ? ` · ${ticket.phone}` : ""} · {ticket.portal ?? "customer"} · {formatDateTime(ticket.createdAt)}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={ticket.status} mapping={TICKET_TONES} />
+          <SelectInput className="w-40" value={ticket.assignedTo ?? ""} onChange={(e) => { assignTicket(ticket.id, e.target.value); onChanged(); }}>
+            <option value="">Unassigned</option>
+            {agents.map((agent) => (
+              <option key={agent.email} value={agent.email}>
+                {agent.firstName} {agent.lastName} ({agent.role})
+              </option>
+            ))}
+          </SelectInput>
           <SelectInput className="w-32" value={ticket.status} onChange={(e) => { updateTicketStatus(ticket.id, e.target.value as SupportTicket["status"]); onChanged(); }}>
             {["Open", "In Progress", "Resolved", "Closed"].map((s) => <option key={s}>{s}</option>)}
           </SelectInput>
@@ -249,7 +286,25 @@ export function LiveChatDesk() {
         {active ? (
           <div className="rounded-xl border border-border bg-white p-4">
             <p className="font-semibold text-text-primary">{active.name}</p>
-            <p className="text-xs text-text-muted">{active.email || "no email"} · {active.page}</p>
+            <p className="text-xs text-text-muted">{active.email || "no email"} · {active.page}{active.assignedName ? ` · assigned to ${active.assignedName}` : ""}{active.ticketId ? ` · ticket ${active.ticketId}` : ""}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <SelectInput
+                className="w-56"
+                value={active.assignedTo ?? ""}
+                onChange={(event) => {
+                  const agent = listSupportAgents().find((item) => item.email === event.target.value);
+                  if (!agent) return;
+                  transferChat(active.id, agent.email, `${agent.firstName} ${agent.lastName}`.trim(), "VGMF Support");
+                }}
+              >
+                <option value="">Transfer chat…</option>
+                {listSupportAgents().map((agent) => (
+                  <option key={agent.email} value={agent.email}>
+                    {agent.firstName} {agent.lastName} ({agent.role})
+                  </option>
+                ))}
+              </SelectInput>
+            </div>
             <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
               {active.messages.map((message) => (
                 <p key={message.id} className={`rounded-lg p-2 text-sm ${message.from === "staff" ? "bg-emerald-50" : "bg-warm-cream"}`}>

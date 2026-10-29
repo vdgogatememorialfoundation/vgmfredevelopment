@@ -523,7 +523,7 @@ export interface Application {
   appliedAt: string;
 }
 
-export type UserRole = "customer" | "admin" | "staff" | "doctor";
+export type UserRole = "customer" | "admin" | "coadmin" | "staff" | "doctor";
 
 export interface FulfillmentLocation {
   id: string;
@@ -671,12 +671,16 @@ export interface SupportTicket {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   subject: string;
   body: string;
   status: "Open" | "In Progress" | "Resolved" | "Closed";
   createdAt: string;
   updatedAt: string;
   portal?: "public" | "staff" | "customer" | "admin";
+  assignedTo?: string;
+  userId?: string;
+  chatThreadId?: string;
   responses: { at: string; from: string; text: string }[];
 }
 
@@ -696,7 +700,7 @@ export interface OutboxEmail {
   template: string;
   status: "Queued" | "Sent" | "Delivered" | "Failed";
   sentAt: string;
-  channel?: "email" | "whatsapp";
+  channel?: "email" | "whatsapp" | "sms";
   provider?: string;
   live?: boolean;
   error?: string;

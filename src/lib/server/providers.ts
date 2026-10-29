@@ -1550,3 +1550,48 @@ export async function shipyaariTest(input: Json) {
   return { message: `Connected. Shipyaari wallet ₹${wallet.balance}.` };
 }
 
+function msg91Mobile(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  return digits;
+}
+
+export async function sendMsg91Sms(
+  creds: Json,
+  input: { to: string; body: string; otp?: string }
+) {
+  const authkey = pick(creds.msg91AuthKey, "MSG91_AUTH_KEY") || pick(creds.authkey, "MSG91_AUTHKEY");
+  if (!authkey) return null;
+  const mobile = msg91Mobile(input.to);
+  const sender = pick(creds.msg91SenderId, "MSG91_SENDER_ID") || "VGMFIN";
+  const templateId = pick(creds.msg91TemplateId, "MSG91_TEMPLATE_ID");
+  if (input.otp) {
+    const data = await call("https://control.msg91.com/api/v5/otp", {
+      method: "POST",
+      headers: { authkey, accept: "application/json" },
+      json: {
+        template_id: templateId || undefined,
+        mobile,
+        otp: input.otp,
+        sender,
+        otp_expiry: 10,
+      },
+    });
+    return { id: String(data.message ?? data.request_id ?? "msg91-otp") };
+  }
+  const params = new URLSearchParams({
+    authkey,
+    mobiles: mobile,
+    message: input.body.slice(0, 1000),
+    sender,
+    route: "4",
+    country: "91",
+  });
+  if (templateId) params.set("DLT_TE_ID", templateId);
+  const data = await call(`https://control.msg91.com/api/sendhttp.php?${params.toString()}`, {
+    method: "GET",
+    headers: { accept: "application/json" },
+  });
+  return { id: String(data.message ?? data.request_id ?? "msg91") };
+}
+

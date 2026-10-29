@@ -3,7 +3,7 @@
 import { useState } from "react";
 import SectionHeader from "@/components/account/SectionHeader";
 import { useAuth } from "@/components/auth/AuthContext";
-import { addTicket, getTickets } from "@/lib/admin-store";
+import { addTicket, ticketsVisibleTo } from "@/lib/admin-store";
 import { formatDateTime } from "@/lib/utils";
 import type { SupportTicket } from "@/types";
 
@@ -16,12 +16,12 @@ const TONE: Record<string, string> = {
 
 export default function TicketsPage() {
   const { user } = useAuth();
-  const [tickets, setTickets] = useState<SupportTicket[]>(() => getTickets());
+  const [tickets, setTickets] = useState<SupportTicket[]>(() => ticketsVisibleTo(user));
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ subject: "", body: "" });
   const [error, setError] = useState("");
 
-  const refresh = () => setTickets(getTickets());
+  const refresh = () => setTickets(ticketsVisibleTo(user));
 
   const submit = () => {
     if (!form.subject.trim() || !form.body.trim()) {
@@ -31,16 +31,17 @@ export default function TicketsPage() {
     addTicket({
       name: user ? `${user.firstName} ${user.lastName}`.trim() : "Guest",
       email: user?.email ?? "",
+      phone: user?.phone,
       subject: form.subject,
       body: form.body,
-      portal: "customer",
+      portal: user?.role === "staff" || user?.role === "coadmin" ? "staff" : "customer",
     });
     setForm({ subject: "", body: "" });
     setShowForm(false);
     refresh();
   };
 
-  const mine = tickets.filter((t) => (user ? t.email === user.email : true));
+  const mine = tickets;
 
   return (
     <div>

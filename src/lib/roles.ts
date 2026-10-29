@@ -18,7 +18,7 @@ export const staffModules = [
   { id: "support", label: "Support", paths: ["/admin/support"] },
   { id: "analytics", label: "Analytics", paths: ["/admin/analytics"] },
   { id: "delivery", label: "Shipping APIs", paths: ["/admin/settings/shipping-apis", "/admin/delivery-partners"] },
-  { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications"] },
+  { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications", "/admin/settings/email", "/admin/settings/whatsapp", "/admin/settings/sms"] },
   { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles", "/admin/accounts/doctors"] },
   { id: "settings", label: "Site settings", paths: ["/admin/settings"] },
 ] as const;
@@ -116,7 +116,7 @@ export function getRole(id?: string) {
 
 export function modulesFor(user: User | null | undefined): StaffModuleId[] | "all" {
   if (!user) return [];
-  if (user.role === "admin") return "all";
+  if (user.role === "admin" || user.role === "coadmin") return "all";
   if (user.role === "doctor") return ["clinics"];
   if (user.role !== "staff") return [];
   return getRole(user.staffRoleId).modules;

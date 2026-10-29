@@ -88,6 +88,22 @@ export function queueNotification(input: {
       sentAt: now,
     });
   }
+  if (settings.sms.provider === "msg91" && input.phone) {
+    records.push({
+      id: newId("SMS"),
+      channel: "sms",
+      provider: "msg91",
+      to: input.phone,
+      phone: input.phone,
+      name: input.name,
+      params: input.params ?? [],
+      subject: input.subject,
+      template: input.template,
+      body: input.body,
+      status: "Queued",
+      sentAt: now,
+    });
+  }
   if (!records.length) return undefined;
   write([...records, ...read()]);
   for (const record of records) void deliver(record.id);
@@ -118,6 +134,15 @@ export async function deliver(id: string) {
         language,
         params: record.params ?? [],
         creds: settings.whatsapp,
+      };
+    } else if (record.channel === "sms") {
+      payload = {
+        channel: "sms",
+        provider: "msg91",
+        to: record.phone ?? record.to,
+        body: record.body,
+        otp: record.template === "otp" ? record.params?.[0] : undefined,
+        creds: settings.sms,
       };
     } else {
       payload = {

@@ -13,11 +13,12 @@ import { useRouter } from "next/navigation";
 function StaffHome() {
   const { user, signOut } = useAuth();
   const router = useRouter();
-  if (!user || user.role !== "staff") {
+  if (!user || (user.role !== "staff" && user.role !== "coadmin")) {
     return <PortalLogin portal="staff" />;
   }
 
   const allowed = modulesFor(user);
+  const isCoadmin = user.role === "coadmin";
   const role = user.role === "staff" ? getRole(user.staffRoleId) : null;
   const cards = adminNavigation
     .flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
@@ -31,10 +32,12 @@ function StaffHome() {
     <div className="mx-auto max-w-5xl space-y-8 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-burgundy">Staff portal</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-burgundy">{isCoadmin ? "Co-admin portal" : "Staff portal"}</p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">Welcome, {user.firstName}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {`${role?.name} (${role?.category}). These are the modules assigned to your role.`}
+            {isCoadmin
+              ? "Co-administrator access — the same modules as the admin console. Sign in stays on /staff."
+              : `${role?.name} (${role?.category}). These are the modules assigned to your role.`}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2 text-sm">

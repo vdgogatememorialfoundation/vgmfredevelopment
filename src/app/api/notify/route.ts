@@ -3,6 +3,7 @@ import {
   listMetaTemplates,
   sendAiSensy,
   sendMetaTemplate,
+  sendMsg91Sms,
   sendZeptoMail,
   sendZohoCpaas,
   sendZohoMail,
@@ -34,6 +35,18 @@ export async function POST(request: NextRequest) {
       if (!/^\S+@\S+\.\S+$/.test(mail.to)) return NextResponse.json({ ok: false, configured: true, error: "Recipient email is not valid." });
       const sent = body.provider === "zoho" ? await sendZohoMail(creds, mail) : await sendZeptoMail(creds, mail);
       if (!sent) return NextResponse.json({ ok: false, configured: false, error: `${body.provider === "zoho" ? "Zoho Mail" : "ZeptoMail"} credentials are not configured.` });
+      return NextResponse.json({ ok: true, configured: true, ...sent });
+    }
+
+    if (body.channel === "sms") {
+      const to = String(body.to ?? "");
+      if (to.replace(/\D/g, "").length < 10) return NextResponse.json({ ok: false, configured: true, error: "Recipient phone number is not valid." });
+      const sent = await sendMsg91Sms(creds, {
+        to,
+        body: String(body.body ?? ""),
+        otp: typeof body.otp === "string" ? body.otp : undefined,
+      });
+      if (!sent) return NextResponse.json({ ok: false, configured: false, error: "MSG91 credentials are not configured." });
       return NextResponse.json({ ok: true, configured: true, ...sent });
     }
 

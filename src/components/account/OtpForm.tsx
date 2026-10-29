@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import OtpInput from "@/components/common/OtpInput";
+import { OTP_RESEND_SECONDS } from "@/lib/otp";
 
 interface OtpFormProps {
   title: string;
@@ -11,7 +12,7 @@ interface OtpFormProps {
   onResend: () => void;
 }
 
-const RESEND_SECONDS = 30;
+const RESEND_SECONDS = OTP_RESEND_SECONDS;
 
 export default function OtpForm({
   title,

@@ -36,16 +36,17 @@ const emptyForm = {
   email: "",
   phone: "",
   staffRoleId: "general-staff",
+  asCoadmin: false,
 };
 
 function refreshRole(role: PeopleRole) {
-  return getAccounts().filter((account) => account.role === role);
+  return getAccounts().filter((account) => (role === "staff" ? account.role === "staff" || account.role === "coadmin" : account.role === role));
 }
 
 export function PeopleDesk({ role }: { role: PeopleRole }) {
   const roles = getRoles();
   const [accounts, setAccounts] = useState<User[]>(() => refreshRole(role));
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState({ ...emptyForm });
   const [message, setMessage] = useState("");
   const [createdPassword, setCreatedPassword] = useState("");
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
@@ -90,16 +91,17 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
       setMessage("An account with this email already exists.");
       return;
     }
+    const createdRole = role === "staff" && form.asCoadmin ? "coadmin" : role;
     const created = createUserAccount({
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       email: form.email.trim(),
       phone: form.phone.trim(),
-      role,
-      staffRoleId: role === "staff" ? form.staffRoleId : undefined,
+      role: createdRole,
+      staffRoleId: createdRole === "staff" ? form.staffRoleId : undefined,
     });
     setCreatedPassword(created.password ?? "");
-    setMessage(`Created. ${created.firstName} can sign in at ${loginPath}. The password was emailed to ${created.email}.`);
+    setMessage(`Created. ${created.firstName} can sign in at ${loginPath}${createdRole === "coadmin" ? " as a co-administrator" : ""}. The password was emailed to ${created.email}.`);
     setForm({ ...emptyForm, staffRoleId: form.staffRoleId });
     refresh();
     setSelectedEmail(created.email);
@@ -109,9 +111,9 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{role === "staff" ? "Staff accounts" : "Doctor accounts"}</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{role === "staff" ? "Staff & co-admin accounts" : "Doctor accounts"}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Search by name, phone or email. Email one person or everyone shown. The system sets a password automatically and emails it. You can view the password, edit the account, disable, ban or delete it, and open a full activity log.
+          Search by name, phone or email. Co-administrators sign in at /staff with full module access. The system sets a password automatically and emails it.
         </p>
       </div>
 
@@ -122,7 +124,7 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
           <input className={field} placeholder="Last name" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
           <input className={field} placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <input className={field} placeholder="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-          {role === "staff" && (
+          {role === "staff" && !form.asCoadmin && (
             <select className={field} value={form.staffRoleId} onChange={(event) => setForm({ ...form, staffRoleId: event.target.value })}>
               {roles.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -130,6 +132,16 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
                 </option>
               ))}
             </select>
+          )}
+          {role === "staff" && (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={form.asCoadmin}
+                onChange={(event) => setForm({ ...form, asCoadmin: event.target.checked })}
+              />
+              Co-administrator (full access, signs in at /staff)
+            </label>
           )}
         </div>
         <button type="button" className={`${primary} mt-4`} onClick={create}>
@@ -285,6 +297,7 @@ function PeopleRow({
           <p className="text-xs text-slate-500">
             {account.email} · {account.phone}
             {account.accountId ? ` · ID ${account.accountId}` : ""}
+            {account.role === "coadmin" ? " · Co-administrator" : ""}
             {account.role === "staff" ? ` · ${roles.find((item) => item.id === (account.staffRoleId ?? "general-staff"))?.name ?? "Staff"}` : ""}
           </p>
           <p className="mt-1 text-xs text-slate-500">

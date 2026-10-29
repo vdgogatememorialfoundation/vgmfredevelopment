@@ -8,10 +8,12 @@ import OtpForm from "@/components/account/OtpForm";
 import AccountCreated from "@/components/account/AccountCreated";
 import { useAuth } from "@/components/auth/AuthContext";
 import { demoAccountId, findAccountByIdentifier, saveAccount, setSession } from "@/lib/auth";
-import { displayName, sendAccountDetails } from "@/lib/admin-store";
+import { displayName, sendAccountDetails, sendOtpCode } from "@/lib/admin-store";
+import { getAuthAccess } from "@/lib/auth-access";
+import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import type { User } from "@/types";
 
-type Step = "details" | "email" | "whatsapp" | "success";
+type Step = "details" | "email" | "success";
 
 function newUserId() {
   return `usr-${Date.now()}`;
@@ -22,6 +24,7 @@ export default function SignupFlow() {
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next");
   const { signIn } = useAuth();
+  const access = getAuthAccess();
   const [step, setStep] = useState<Step>("details");
 
   const [form, setForm] = useState({
@@ -36,6 +39,19 @@ export default function SignupFlow() {
 
   const [accountId, setAccountId] = useState("");
   const [error, setError] = useState("");
+  const [otpHint, setOtpHint] = useState("");
+
+  const dispatchEmailOtp = () => {
+    const code = issueEmailOtp(form.email, "customer-signup");
+    sendOtpCode({
+      email: form.email,
+      phone: form.phone,
+      name: form.firstName,
+      code,
+      purpose: "email verification",
+    });
+    setOtpHint(`Code sent to ${form.email}. Demo code: ${code}`);
+  };
 
   const submitDetails = () => {
     if (findAccountByIdentifier(form.email) || findAccountByIdentifier(form.phone)) {
@@ -43,6 +59,11 @@ export default function SignupFlow() {
       return;
     }
     setError("");
+    if (!access.emailOtp) {
+      completeSignup();
+      return;
+    }
+    dispatchEmailOtp();
     setStep("email");
   };
 
@@ -82,6 +103,24 @@ export default function SignupFlow() {
     setStep("success");
   };
 
+  const handleOtp = (code: string) => {
+    const invalid = verifyEmailOtp(form.email, "customer-signup", code);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError("");
+    completeSignup();
+  };
+
+  if (!access.signupEnabled) {
+    return (
+      <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        New accounts are closed. Existing members can still sign in if login is enabled.
+      </p>
+    );
+  }
+
   return (
     <>
       <div className="mb-8">
@@ -95,7 +134,7 @@ export default function SignupFlow() {
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
           Create your account to register for events, manage tickets,
-          shop orders and your profile.
+          shop orders and your profile. We verify the email with a one-time code.
         </p>
       </div>
 
@@ -121,24 +160,14 @@ export default function SignupFlow() {
 
       {step === "email" && (
         <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
+          {otpHint && <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
+          {error && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           <OtpForm
             title="Verify your email"
-            description={`We sent a verification code to ${form.email}.`}
-            onSubmit={() => setStep("whatsapp")}
+            description={`We sent a verification code to ${form.email}. You can resend after 1 minute.`}
+            onSubmit={handleOtp}
             onBack={() => setStep("details")}
-            onResend={() => undefined}
-          />
-        </div>
-      )}
-
-      {step === "whatsapp" && (
-        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
-          <OtpForm
-            title="Verify WhatsApp"
-            description={`We sent a verification code to ${form.whatsapp}.`}
-            onSubmit={completeSignup}
-            onBack={() => setStep("email")}
-            onResend={() => undefined}
+            onResend={dispatchEmailOtp}
           />
         </div>
       )}

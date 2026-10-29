@@ -6,6 +6,7 @@ const ORDER_SETTINGS_KEY = "vgmf_order_settings";
 export type PaymentMode = "demo" | "test" | "live";
 export type EmailProvider = "zeptomail" | "zoho";
 export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
+export type SmsProvider = "none" | "msg91";
 export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari";
 export type HyperlocalId = "tookan" | "shipday";
 export type ShippingProviderId = AggregatorId | HyperlocalId;
@@ -35,6 +36,7 @@ export const notificationEvents = [
   { id: "support-reply", label: "Support reply" },
   { id: "ticket-update", label: "Ticket update" },
   { id: "abandoned-cart", label: "Abandoned cart" },
+  { id: "otp", label: "One-time password" },
 ] as const;
 
 export type NotificationEventId = (typeof notificationEvents)[number]["id"];
@@ -101,6 +103,12 @@ export interface IntegrationSettings {
     templatesSyncedAt: string;
     /** Site event → template (Meta) or campaign (AiSensy) name. */
     mapping: Partial<Record<NotificationEventId, string>>;
+  };
+  sms: {
+    provider: SmsProvider;
+    msg91AuthKey: string;
+    msg91SenderId: string;
+    msg91TemplateId: string;
   };
   shipping: {
     shiprocket: { email: string; password: string; channelId: string; enabled: boolean };
@@ -202,6 +210,12 @@ export const defaultIntegrations: IntegrationSettings = {
     templates: [],
     templatesSyncedAt: "",
     mapping: {},
+  },
+  sms: {
+    provider: "none",
+    msg91AuthKey: "",
+    msg91SenderId: "VGMFIN",
+    msg91TemplateId: "",
   },
   shipping: {
     shiprocket: { email: "", password: "", channelId: "", enabled: true },

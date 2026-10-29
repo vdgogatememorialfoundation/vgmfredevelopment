@@ -79,14 +79,14 @@ async function verifyAutismDirect(id: string): Promise<VerifyCertificateResult> 
       try {
         parsed = text ? JSON.parse(text) : null;
       } catch {
-        last = mapAutismApiResponse(response.status, null, id);
+        const mapped = mapAutismApiResponse(response.status, null, id);
         last = {
-          ok: last.ok,
+          ok: mapped.ok,
           verified: false,
           valid: false,
-          status: last.status,
-          code: last.code,
-          error: last.error,
+          status: mapped.status,
+          code: mapped.code,
+          error: mapped.error,
           source: "autism",
         };
         if (last.code && last.code !== "UNAVAILABLE") return last;

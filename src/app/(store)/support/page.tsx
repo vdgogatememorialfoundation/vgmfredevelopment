@@ -3,7 +3,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
-import { addTicket, getTickets, respondToTicket } from "@/lib/admin-store";
+import { addTicket, getTickets, respondToTicket, ticketsVisibleTo, updateTicketStatus } from "@/lib/admin-store";
 import { formatDateTime } from "@/lib/utils";
 import type { SupportTicket } from "@/types";
 
@@ -35,16 +35,18 @@ export default function SupportPage() {
   );
 
   const tickets = getTickets();
-  const portal = user?.role === "staff" || user?.role === "admin" ? "staff" : user ? "customer" : "public";
-  const mine = useMemo(
-    () =>
-      user
-        ? tickets.filter((ticket) => ticket.email.toLowerCase() === user.email.toLowerCase())
-        : [],
-    [tickets, user]
-  );
+  const portal =
+    user?.role === "staff" || user?.role === "coadmin"
+      ? "staff"
+      : user?.role === "admin"
+        ? "admin"
+        : user
+          ? "customer"
+          : "public";
+  const mine = useMemo(() => (user ? ticketsVisibleTo(user) : tickets.filter(() => false)), [tickets, user]);
+  const canManage = user?.role === "admin" || user?.role === "coadmin" || user?.role === "staff";
 
-  const [form, setForm] = useState({ name: "", email: "", subject: "", body: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", subject: "", body: "" });
   const [error, setError] = useState("");
   const [reply, setReply] = useState<Record<string, string>>({});
 
@@ -58,11 +60,13 @@ export default function SupportPage() {
     addTicket({
       name,
       email,
+      phone: user?.phone || form.phone,
       subject: form.subject,
       body: form.body,
       portal,
+      assignedTo: canManage ? user?.email : undefined,
     });
-    setForm({ name: "", email: "", subject: "", body: "" });
+    setForm({ name: "", email: "", phone: "", subject: "", body: "" });
     setError("");
   };
 
@@ -72,8 +76,7 @@ export default function SupportPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">Support</p>
         <h1 className="mt-2 font-serif text-4xl text-ink">Help desk</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-text-muted">
-          Staff, customers and anyone who creates an account can open a ticket here. Replies stay on the ticket thread.
-          Live chat can be turned on from the admin console when the team is online.
+          Guests, customers and staff can open a ticket here. If the email or phone already belongs to an account we attach it; otherwise we create one and send updates. Live chat is on the site assistant when the team enables it.
         </p>
         {!user ? (
           <p className="mt-4 text-sm">
@@ -109,6 +112,12 @@ export default function SupportPage() {
                 type="email"
                 value={form.email}
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
+              />
+              <input
+                className="input-field sm:col-span-2"
+                placeholder="Phone"
+                value={form.phone}
+                onChange={(event) => setForm({ ...form, phone: event.target.value })}
               />
             </div>
           ) : null}
@@ -146,6 +155,8 @@ export default function SupportPage() {
                 ticket={ticket}
                 reply={reply[ticket.id] ?? ""}
                 onReplyChange={(value) => setReply((current) => ({ ...current, [ticket.id]: value }))}
+                canManage={Boolean(canManage && (user?.role !== "staff" || ticket.assignedTo === user?.email || !ticket.assignedTo))}
+                onStatus={(status) => updateTicketStatus(ticket.id, status)}
                 onSend={() => {
                   const text = reply[ticket.id]?.trim();
                   if (!text) return;
@@ -171,11 +182,15 @@ function TicketThread({
   reply,
   onReplyChange,
   onSend,
+  canManage,
+  onStatus,
 }: {
   ticket: SupportTicket;
   reply: string;
   onReplyChange: (value: string) => void;
   onSend: () => void;
+  canManage?: boolean;
+  onStatus?: (status: SupportTicket["status"]) => void;
 }) {
   return (
     <article className="rounded-2xl border border-border bg-white p-4 shadow-sm">
@@ -188,9 +203,21 @@ function TicketThread({
             {ticket.portal ?? "support"} · {formatDateTime(ticket.createdAt)}
           </p>
         </div>
+        {canManage && onStatus ? (
+          <select
+            className="rounded-lg border border-border px-2 py-1 text-xs"
+            value={ticket.status}
+            onChange={(event) => onStatus(event.target.value as SupportTicket["status"])}
+          >
+            {["Open", "In Progress", "Resolved", "Closed"].map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        ) : (
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE[ticket.status] ?? ""}`}>
           {ticket.status}
         </span>
+        )}
       </div>
       <p className="mt-2 text-sm text-text-primary">{ticket.body}</p>
       {ticket.responses.map((item, index) => (

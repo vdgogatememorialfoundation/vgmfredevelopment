@@ -33,7 +33,7 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Accounts",
     items: [
-      { label: "Staff Accounts", href: "/admin/accounts/staff" },
+      { label: "Staff & co-admin", href: "/admin/accounts/staff" },
       { label: "Doctor Accounts", href: "/admin/accounts/doctors" },
       { label: "Customers", href: "/admin/accounts/customers" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
@@ -116,6 +116,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Payments & Razorpay", href: "/admin/settings/payments" },
       { label: "Email: ZeptoMail & Zoho", href: "/admin/settings/email" },
       { label: "WhatsApp: Meta & Zoho CPaaS", href: "/admin/settings/whatsapp" },
+      { label: "SMS: MSG91", href: "/admin/settings/sms" },
       { label: "Shipping APIs", href: "/admin/settings/shipping-apis" },
       { label: "Orders, returns & refunds", href: "/admin/settings/orders" },
       { label: "Delivery zones", href: "/admin/settings/shipping" },

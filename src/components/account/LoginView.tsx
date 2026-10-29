@@ -7,6 +7,7 @@ import SignupFlow from "@/components/account/SignupFlow";
 import SignInFlow from "@/components/account/SignInFlow";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { siteConfig } from "@/lib/constants";
+import { authClosedMessage, getAuthAccess } from "@/lib/auth-access";
 
 export default function LoginView({
   signInMode,
@@ -17,6 +18,10 @@ export default function LoginView({
 }) {
   const { t } = useI18n();
   const nextQuery = next ? `&next=${encodeURIComponent(next)}` : "";
+  const access = getAuthAccess();
+  const closed = !access.loginEnabled && !access.signupEnabled;
+  const showSignIn = signInMode || !access.signupEnabled;
+  const effectiveSignIn = access.loginEnabled && (!access.signupEnabled || showSignIn);
 
   return (
     <main className="border-t border-border bg-background">
@@ -48,30 +53,38 @@ export default function LoginView({
             <Link href="/" className="mb-8 inline-flex text-sm font-medium text-text-muted transition hover:text-burgundy">
               ← {t("common.back")}
             </Link>
+            {closed ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                {authClosedMessage(access)}
+              </p>
+            ) : (
+              <>
             <div className="mb-8 grid grid-cols-2 gap-2 rounded-xl border border-border bg-white p-1.5">
               <Link
                 href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
                 className={`rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
-                  !signInMode ? "bg-burgundy text-white" : "text-text-muted hover:text-burgundy"
-                }`}
+                  !effectiveSignIn ? "bg-burgundy text-white" : "text-text-muted hover:text-burgundy"
+                } ${!access.signupEnabled ? "pointer-events-none opacity-40" : ""}`}
               >
                 {t("login.create")}
               </Link>
               <Link
                 href={`/login?mode=signin${nextQuery}`}
                 className={`rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
-                  signInMode ? "bg-burgundy text-white" : "text-text-muted hover:text-burgundy"
-                }`}
+                  effectiveSignIn ? "bg-burgundy text-white" : "text-text-muted hover:text-burgundy"
+                } ${!access.loginEnabled ? "pointer-events-none opacity-40" : ""}`}
               >
                 {t("login.signIn")}
               </Link>
             </div>
-            {signInMode ? (
+            {effectiveSignIn ? (
               <SignInFlow />
             ) : (
               <Suspense fallback={<p className="text-sm text-text-muted">{t("common.loading")}</p>}>
                 <SignupFlow />
               </Suspense>
+            )}
+              </>
             )}
           </div>
         </section>

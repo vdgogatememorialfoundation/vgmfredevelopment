@@ -422,7 +422,7 @@ async function sendTest(to: string, template: string, subject: string, phone?: s
     await new Promise((resolve) => setTimeout(resolve, 500));
     const latest = getNotifications().filter((item) => item.sentAt === record.sentAt);
     if (latest.every((item) => item.status !== "Queued")) {
-      return latest.map((item) => `${item.channel === "whatsapp" ? "WhatsApp" : "Email"}: ${item.status}${item.error ? ` (${item.error})` : ""}`).join(" · ");
+      return latest.map((item) => `${item.channel === "whatsapp" ? "WhatsApp" : item.channel === "sms" ? "SMS" : "Email"}: ${item.status}${item.error ? ` (${item.error})` : ""}`).join(" · ");
     }
   }
   return "Still sending. Check the notification log.";
@@ -501,6 +501,71 @@ export function EmailSettingsDesk() {
           </button>
         </div>
       </Card>
+      </SettingsSave>
+    </div>
+  );
+}
+
+/* ---------------- SMS / MSG91 ---------------- */
+
+export function SmsSettingsDesk() {
+  const { value, setValue, note, setNote, save } = useIntegrationSlice("sms");
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
+
+  return (
+    <div className="space-y-5">
+      <Header
+        title="SMS: MSG91"
+        text="Used when SMS login is turned on under Registration settings. OTP is sent with the MSG91 OTP API. Ticket and order updates also go by SMS when MSG91 is on."
+        action={<button type="button" className={primary} onClick={() => save()}>Save</button>}
+      />
+      <Saved text={note} />
+      <SettingsSave save={save}>
+        <Card title="Provider">
+          <div className="grid gap-3 md:grid-cols-2">
+            {([
+              ["none", "Off", "No SMS is sent. Email OTP still works."],
+              ["msg91", "MSG91", "OTP and transactional SMS through MSG91."],
+            ] as const).map(([provider, label, hint]) => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => set({ provider })}
+                className={`rounded-xl border-2 p-4 text-left ${value.provider === provider ? "border-burgundy bg-burgundy/5" : "border-slate-200"}`}
+              >
+                <p className="font-semibold text-slate-900">{label}</p>
+                <p className="mt-1 text-xs text-slate-500">{hint}</p>
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card title="MSG91 credentials" text="control.msg91.com → Authkey, sender ID and DLT OTP template. Turn on SMS login under Settings → Registration.">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Secret label="Auth key" value={value.msg91AuthKey} onChange={(msg91AuthKey) => set({ msg91AuthKey })} />
+            <Text label="Sender ID" value={value.msg91SenderId} onChange={(msg91SenderId) => set({ msg91SenderId })} placeholder="VGMFIN" />
+            <Text label="OTP template ID" value={value.msg91TemplateId} onChange={(msg91TemplateId) => set({ msg91TemplateId })} hint="Required for login OTP." />
+          </div>
+        </Card>
+        <Card title="Send a test SMS">
+          <div className="flex flex-wrap gap-2">
+            <input className={`${input} max-w-sm`} value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="91XXXXXXXXXX" />
+            <button
+              type="button"
+              className={ghost}
+              disabled={busy}
+              onClick={async () => {
+                save();
+                setBusy(true);
+                setNote(await sendTest("", "otp", "VGMF SMS test", phone));
+                setBusy(false);
+              }}
+            >
+              {busy ? "Sending…" : "Send test OTP SMS"}
+            </button>
+          </div>
+        </Card>
       </SettingsSave>
     </div>
   );
@@ -1162,6 +1227,7 @@ export function NotificationsDesk({ compose = false }: { compose?: boolean }) {
           <option value="all">All channels</option>
           <option value="email">Email</option>
           <option value="whatsapp">WhatsApp</option>
+          <option value="sms">SMS</option>
         </select>
         <select className={`${input} max-w-[160px]`} value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="all">All statuses</option>
@@ -1205,7 +1271,7 @@ function FragmentRow({ item, open, onToggle }: { item: NotificationRecord; open:
     <>
       <tr className="border-b border-slate-100 align-top">
         <td className="whitespace-nowrap px-4 py-2 text-xs text-slate-500">{new Date(item.updatedAt ?? item.sentAt).toLocaleString("en-IN")}</td>
-        <td className="py-2 text-xs">{item.channel === "whatsapp" ? "WhatsApp" : "Email"}<span className="block text-slate-400">{item.provider}</span></td>
+        <td className="py-2 text-xs">{item.channel === "whatsapp" ? "WhatsApp" : item.channel === "sms" ? "SMS" : "Email"}<span className="block text-slate-400">{item.provider}</span></td>
         <td className="py-2 text-xs">{item.to || "—"}</td>
         <td className="py-2">
           <button type="button" className="text-left font-medium text-slate-800 hover:text-burgundy" onClick={onToggle}>{item.subject}</button>

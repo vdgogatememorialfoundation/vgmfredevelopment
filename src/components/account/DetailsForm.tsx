@@ -134,7 +134,7 @@ export default function DetailsForm({
         />
 
         <p className="mt-2 text-xs text-text-muted">
-          A WhatsApp OTP will be sent to verify this number.
+          We use this number for order and ticket updates. Email OTP is used to verify the account.
         </p>
       </div>
 

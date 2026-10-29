@@ -2,13 +2,14 @@
 
 import SiteLogo from "@/components/common/SiteLogo";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
-import { ensureAdminCredentials, getAccounts, sendEmail } from "@/lib/admin-store";
+import { ensureAdminCredentials, getAccounts, sendOtpCode } from "@/lib/admin-store";
 import { loginBlockReason } from "@/lib/auth";
-import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
+import { OTP_RESEND_SECONDS, issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
+import type { User } from "@/types";
 
 const copy = {
   admin: { label: "Admin", target: "/admin", hint: "administrator" },
@@ -30,7 +31,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
   const [error, setError] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
   const { label, target, hint } = copy[portal];
-  const signedIn = user?.role === portal;
+  const signedIn = Boolean(user && matchesPortal(user, portal));
 
   if (signedIn && user) {
     return (
@@ -54,7 +55,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
   const findPortalAccount = () => {
     ensureAdminCredentials();
     return getAccounts().find(
-      (account) => account.email.toLowerCase() === email.trim().toLowerCase() && account.role === portal
+      (account) => account.email.toLowerCase() === email.trim().toLowerCase() && matchesPortal(account, portal)
     );
   };
 
@@ -76,21 +77,20 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     }
     setError("");
     const code = issueEmailOtp(account.email, portal);
-    sendEmail({
-      to: account.email,
+    sendOtpCode({
+      email: account.email,
       phone: account.phone,
       name: account.firstName,
-      subject: `${label} verification code`,
-      template: "custom",
-      body: `Hi ${account.firstName},\n\nYour ${label.toLowerCase()} verification code is ${code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the email.\n\n– VGMF`,
+      code,
+      purpose: `${label.toLowerCase()} sign-in`,
     });
     setPendingEmail(account.email);
     setOtpHint(`Password accepted. Code sent to ${account.email}. Demo code: ${code}`);
     setMode("mfa");
   };
 
-  const sendCode = (event: React.FormEvent) => {
-    event.preventDefault();
+  const sendCode = (event?: React.FormEvent) => {
+    event?.preventDefault();
     const account = findPortalAccount();
     if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
@@ -102,13 +102,12 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
       return;
     }
     const code = issueEmailOtp(account.email, portal);
-    sendEmail({
-      to: account.email,
+    sendOtpCode({
+      email: account.email,
       phone: account.phone,
       name: account.firstName,
-      subject: `${label} sign-in code`,
-      template: "custom",
-      body: `Hi ${account.firstName},\n\nYour ${label.toLowerCase()} sign-in code is ${code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the email.\n\n– VGMF`,
+      code,
+      purpose: `${label.toLowerCase()} sign-in`,
     });
     setOtpSent(true);
     setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
@@ -196,6 +195,22 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
           <button type="submit" className="btn-primary w-full">
             Verify and open portal
           </button>
+          <ResendButton
+            onResend={() => {
+              const account = findPortalAccount();
+              if (account) {
+                const code = issueEmailOtp(account.email, portal);
+                sendOtpCode({
+                  email: account.email,
+                  phone: account.phone,
+                  name: account.firstName,
+                  code,
+                  purpose: `${label.toLowerCase()} sign-in`,
+                });
+                setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+              }
+            }}
+          />
           <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => { setMode("password"); setError(""); setOtp(""); }}>
             Back to password
           </button>
@@ -254,9 +269,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
             {otpSent ? "Verify code" : "Send email code"}
           </button>
           {otpSent && (
-            <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={sendCode}>
-              Resend code
-            </button>
+            <ResendButton onResend={() => sendCode()} />
           )}
         </form>
       )}
@@ -272,6 +285,34 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
         ← Back to website
       </Link>
     </Card>
+  );
+}
+
+function matchesPortal(account: Pick<User, "role">, portal: "admin" | "staff" | "doctor") {
+  if (portal === "staff") return account.role === "staff" || account.role === "coadmin";
+  return account.role === portal;
+}
+
+function ResendButton({ onResend }: { onResend: () => void }) {
+  const [seconds, setSeconds] = useState(OTP_RESEND_SECONDS);
+  useEffect(() => {
+    if (seconds <= 0) return;
+    const timer = window.setTimeout(() => setSeconds((current) => current - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [seconds]);
+  return (
+    <button
+      type="button"
+      className="w-full text-sm font-semibold text-burgundy disabled:text-text-muted"
+      disabled={seconds > 0}
+      onClick={() => {
+        if (seconds > 0) return;
+        setSeconds(OTP_RESEND_SECONDS);
+        onResend();
+      }}
+    >
+      {seconds > 0 ? `Resend OTP in ${seconds}s` : "Resend OTP"}
+    </button>
   );
 }
 
@@ -330,7 +371,7 @@ function Card({
           </h1>
           <p className="mt-2 text-center text-sm text-text-muted">
             {portal === "staff"
-              ? "Use your registered staff email and password, or a one-time code emailed to that address."
+              ? "Staff and co-administrators sign in here with email, password and a one-time email code."
               : `Use your ${hint} email and password, then the email verification code. Sessions stay signed in until Logout.`}
           </p>
           <div className="mt-7">{children}</div>

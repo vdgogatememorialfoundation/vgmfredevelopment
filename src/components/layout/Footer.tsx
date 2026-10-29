@@ -146,8 +146,8 @@ export default function Footer() {
             ))}
           </nav>
         </div>
-        <p className="mt-5 inline-flex rounded-full border border-gold/50 bg-gold/25 px-4 py-2 font-serif text-sm font-semibold tracking-wide text-burgundy shadow-[0_0_0_1px_rgba(196,149,74,0.15)]">
-          {t("footer.developed")}
+        <p className="mt-5 inline-flex rounded-full border border-gold/50 bg-gold/25 px-4 py-2 font-serif text-sm tracking-wide text-burgundy shadow-[0_0_0_1px_rgba(196,149,74,0.15)]">
+          Developed by <strong className="ml-1 font-bold">Capture Visual Studios</strong>
         </p>
       </div>
     </footer>

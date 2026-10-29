@@ -324,15 +324,24 @@ export function answerQuestion(question: string): string {
   if (/\b(certificate|verify|verification)\b/i.test(question)) {
     return "Certificate numbers issued from Foundation seminar and autism programmes can be checked on this website. Open /certificate-verification and enter the certificate ID.";
   }
-  if (/\b(support|donate|contribute|donation)\b/i.test(question)) {
+  if (/\b(ticket|help desk|complaint|live chat|talk to (a )?person|agent|open (a )?support)\b/i.test(question)) {
+    return "Open /support to create a ticket or use live chat when staff are online. If nobody replies, we create a 12-digit ticket and send a short form in the chat. If your email or phone is already on an account we attach the ticket there; otherwise we create an account and email updates. Staff can view tickets assigned to them; admins and co-admins see every ticket.";
+  }
+  if (/\b(donate|donation|contribute|support us|support the foundation)\b/i.test(question)) {
     const flags = getSiteFlags();
     if (!flags.supportUs) {
       return "Support for the Foundation is not open on the website right now. You can still write to us from the Contact page.";
     }
     return `${flags.supportUsTitle}. ${flags.supportUsText}`;
   }
-  if (/\b(account|login|register|create account|sign in)\b/i.test(question)) {
-    return "Create a foundation account from the Login page — it takes less than a minute. Your 12-digit Account ID ties together your shop orders and account details.";
+  if (/\b(otp|sms|msg91|verify email|resend)\b/i.test(question)) {
+    return "Signup and sign-in use a 6-digit email OTP. After a code is sent, Resend stays disabled for 1 minute. If the admin has turned on SMS login, you can sign in with MSG91 OTP on your registered mobile instead of a password.";
+  }
+  if (/\b(guest|without account|create account automatically)\b/i.test(question)) {
+    return "Guests can still shop, chat and raise tickets. If we have an email or phone that already belongs to a member we use that account; if not, we create one and send the Account ID and sign-in details.";
+  }
+  if (/\b(account|login|register|create account|sign in|sign-in|signup|sign up)\b/i.test(question)) {
+    return "Create a foundation account from the Login page. The administrator can turn signup and login on or off independently. Signup verifies email with OTP. Sign-in uses password plus email OTP, or SMS OTP when that is enabled. Your 12-digit Account ID ties together shop orders and tickets.";
   }
   if (/\b(language|hindi|marathi|tamil|kannada|gujarati)\b|भाषा|मराठी|हिन्दी/i.test(question)) {
     return "Use the language control in the header or footer to read the site in English, Hindi, Marathi and other Indian languages. Article translations, when the writer has added them, follow the language you choose.";
