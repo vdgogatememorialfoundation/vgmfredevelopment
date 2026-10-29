@@ -184,7 +184,7 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
-      <Card title="Google Maps" text="Used on Create Event to search a venue. Paste a Maps URL if you leave this blank.">
+      <Card title="Google Maps" text="Used on clinics and events to search a place, preview the map, and store coordinates. Paste a Maps URL if you leave this blank.">
         <Text
           label="Google Maps JavaScript API key"
           value={settings.apiKeys.googleMaps}

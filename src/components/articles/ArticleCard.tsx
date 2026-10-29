@@ -1,10 +1,14 @@
+"use client";
+
 import Link from "next/link";
 import type { Article } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { formatDate } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function ArticleCard({ article }: { article: Article }) {
+  const { t } = useI18n();
   return (
     <article className="card flex flex-col overflow-hidden">
       {article.coverImage ? (
@@ -39,7 +43,7 @@ export default function ArticleCard({ article }: { article: Article }) {
 
         <div className="mt-auto pt-4 flex items-center justify-between text-sm">
           {article.author && (
-            <span className="text-text-muted">{article.author}</span>
+            <span className="text-text-muted">{t("article.publishedBy")} {article.author}</span>
           )}
           <Link
             href={`/articles/${article.slug}`}

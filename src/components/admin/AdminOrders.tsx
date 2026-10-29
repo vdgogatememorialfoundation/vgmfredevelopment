@@ -831,7 +831,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                     <TextInput type="date" value={pickupDate} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setPickupDate(event.target.value)} />
                     <SelectInput value={pickupSlot} onChange={(event) => setPickupSlot(event.target.value)}>
-                      {(settings.pickupTimeslots.length ? settings.pickupTimeslots.map((slot) => slot.label) : ["10:00 – 13:00", "14:00 – 18:00"]).map((label) => <option key={label}>{label}</option>)}
+                      {(settings.pickupTimeslots.length
+                        ? settings.pickupTimeslots
+                        : [{ id: "fallback", label: "10:00 – 13:00", from: "10:00", to: "13:00" }]
+                      ).map((slot) => (
+                        <option key={slot.id} value={slot.label}>
+                          {slot.label} ({slot.from} – {slot.to})
+                        </option>
+                      ))}
                     </SelectInput>
                     <Button onClick={() => run("pickup", () => schedulePickup(shipment.id, pickupDate, pickupSlot))}>Schedule pickup</Button>
                   </div>

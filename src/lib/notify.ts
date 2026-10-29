@@ -52,6 +52,7 @@ export function queueNotification(input: {
   phone?: string;
   name?: string;
   params?: string[];
+  replyTo?: string;
 }) {
   const now = new Date().toISOString();
   const settings = getIntegrations();
@@ -67,6 +68,7 @@ export function queueNotification(input: {
       body: input.body,
       status: "Queued",
       sentAt: now,
+      replyTo: input.replyTo,
     });
   }
   const templateName = settings.whatsapp.mapping[input.template as NotificationEventId];
@@ -124,6 +126,7 @@ export async function deliver(id: string) {
         to: record.to,
         subject: record.subject,
         body: record.body,
+        replyTo: record.replyTo,
         creds: settings.email,
       };
     }

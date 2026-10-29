@@ -15,11 +15,11 @@
   --color-border: #E4D8C4;
   --color-white: #FFFFFF;
   --font-serif: var(--font-serif-display), "Source Serif 4", Palatino, Georgia, serif;
-  --font-sans: var(--font-sans-body), "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-sans-body), var(--font-devanagari), var(--font-kannada), var(--font-tamil), var(--font-malayalam), var(--font-gujarati), "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Kannada", "Nirmala UI", "Segoe UI", system-ui, sans-serif;
 }
 
 :root {
-  --font-sans: var(--font-sans-body), "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-sans-body), var(--font-devanagari), var(--font-kannada), var(--font-tamil), var(--font-malayalam), var(--font-gujarati), "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Kannada", "Nirmala UI", "Segoe UI", system-ui, sans-serif;
 }
 
 * {

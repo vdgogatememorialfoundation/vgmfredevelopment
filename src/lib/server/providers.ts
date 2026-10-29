@@ -310,7 +310,7 @@ export async function paytmEdcStatus(
 
 /* ---------------- Email ---------------- */
 
-export async function sendZeptoMail(input: Json, mail: { to: string; subject: string; html: string }) {
+export async function sendZeptoMail(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
   const token = pick(input.zeptoToken, "ZEPTOMAIL_TOKEN");
   const from = pick(input.fromAddress, "MAIL_FROM_ADDRESS");
   if (!token || !from) return null;
@@ -323,12 +323,13 @@ export async function sendZeptoMail(input: Json, mail: { to: string; subject: st
       to: [{ email_address: { address: mail.to } }],
       subject: mail.subject,
       htmlbody: mail.html,
+      ...(mail.replyTo ? { reply_to: [{ address: mail.replyTo }] } : {}),
     },
   });
   return { id: String(data.request_id ?? ""), provider: "zeptomail" };
 }
 
-export async function sendZohoMail(input: Json, mail: { to: string; subject: string; html: string }) {
+export async function sendZohoMail(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
   const clientId = pick(input.zohoClientId, "ZOHO_CLIENT_ID");
   const clientSecret = pick(input.zohoClientSecret, "ZOHO_CLIENT_SECRET");
   const refreshToken = pick(input.zohoRefreshToken, "ZOHO_REFRESH_TOKEN");
@@ -342,7 +343,14 @@ export async function sendZohoMail(input: Json, mail: { to: string; subject: str
   const data = await call(`https://mail.${domain}/api/accounts/${encodeURIComponent(accountId)}/messages`, {
     method: "POST",
     headers: { authorization: `Zoho-oauthtoken ${token.access_token}` },
-    json: { fromAddress: from, toAddress: mail.to, subject: mail.subject, content: mail.html, mailFormat: "html" },
+    json: {
+      fromAddress: from,
+      toAddress: mail.to,
+      subject: mail.subject,
+      content: mail.html,
+      mailFormat: "html",
+      ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
+    },
   });
   return { id: String((data.data as Json)?.messageId ?? ""), provider: "zoho" };
 }

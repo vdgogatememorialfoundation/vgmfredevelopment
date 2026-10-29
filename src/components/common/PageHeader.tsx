@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 interface PageHeaderProps {
   eyebrow?: string;
@@ -13,6 +16,7 @@ export default function PageHeader({
   description,
   breadcrumb,
 }: PageHeaderProps) {
+  const { t } = useI18n();
   return (
     <section className="border-b border-border bg-paper">
       <div className="container py-7 sm:py-8">
@@ -24,7 +28,7 @@ export default function PageHeader({
                   href="/"
                   className="transition hover:text-burgundy"
                 >
-                  Home
+                  {t("common.home")}
                 </Link>
               </li>
               {breadcrumb.map((item, index) => (

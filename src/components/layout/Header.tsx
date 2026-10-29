@@ -8,6 +8,9 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { useCart } from "@/lib/use-cart";
 import { accountNavigation, navigation, siteConfig } from "@/lib/constants";
 import { classNames } from "@/lib/utils";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/components/i18n/LanguageProvider";
+import { navMessageKey } from "@/lib/i18n/messages";
 
 function CartIcon() {
   return (
@@ -88,6 +91,7 @@ export default function Header() {
   const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
   const { count } = useCart();
+  const { t } = useI18n();
   const accountMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -156,12 +160,13 @@ export default function Header() {
               </span>
             ) : (
               <Link href="/login" className="hover:underline">
-                Sign in | Create account
+                {t("common.signIn")}
               </Link>
             )}
             <Link href="/contact" className="hover:underline">
-              Contact
+              {t("common.contact")}
             </Link>
+            <LanguageSwitcher tone="dark" />
           </div>
         </div>
       </div>
@@ -208,7 +213,7 @@ export default function Header() {
                       : "text-text-primary hover:text-burgundy"
                   )}
                 >
-                  {item.name}
+                  {t(navMessageKey[item.href] ?? "nav.about")}
                 </Link>
               );
             })}
@@ -403,7 +408,7 @@ export default function Header() {
                         : "text-text-primary hover:text-burgundy"
                     )}
                   >
-                    {item.name}
+                    {t(navMessageKey[item.href] ?? "nav.about")}
                   </Link>
                 );
               })}

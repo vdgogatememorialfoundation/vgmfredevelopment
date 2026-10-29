@@ -78,15 +78,56 @@ export function SettingsSection() {
         </div>
       </Panel>
 
-      <Panel title="Pickup timeslots" description="Time windows for courier pickup scheduling.">
-        <ul className="space-y-2">
-          {settings.pickupTimeslots.map((slot) => (
-            <li key={slot.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border px-3 py-2 text-sm">
-              <span className="font-medium text-text-primary">{slot.label}</span>
-              <span className="text-text-muted">{slot.from} – {slot.to}</span>
+      <Panel title="Pickup timeslots" description="Time windows for courier pickup scheduling. Edit the label and hours, or add another window.">
+        <ul className="space-y-3">
+          {settings.pickupTimeslots.map((slot, index) => (
+            <li key={slot.id} className="grid gap-2 rounded-xl border border-border p-3 sm:grid-cols-[1fr_7rem_7rem_auto] sm:items-end">
+              <Field label="Label">
+                <TextInput
+                  value={slot.label}
+                  onChange={(event) => setSlot(index, "label", event.target.value)}
+                />
+              </Field>
+              <Field label="From">
+                <TextInput
+                  type="time"
+                  value={slot.from}
+                  onChange={(event) => setSlot(index, "from", event.target.value)}
+                />
+              </Field>
+              <Field label="To">
+                <TextInput
+                  type="time"
+                  value={slot.to}
+                  onChange={(event) => setSlot(index, "to", event.target.value)}
+                />
+              </Field>
+              <button
+                type="button"
+                className="mb-1 text-sm font-semibold text-red-600 disabled:opacity-40"
+                disabled={settings.pickupTimeslots.length < 2}
+                onClick={() => update({ pickupTimeslots: settings.pickupTimeslots.filter((_, i) => i !== index) })}
+              >
+                Remove
+              </button>
             </li>
           ))}
         </ul>
+        <div className="mt-3">
+          <Button
+            variant="outline"
+            onClick={() =>
+              update({
+                pickupTimeslots: [
+                  ...settings.pickupTimeslots,
+                  { id: `ts-${Date.now()}`, label: "New window", from: "10:00", to: "12:00" },
+                ],
+              })
+            }
+          >
+            + Add timeslot
+          </Button>
+        </div>
       </Panel>
 
       <Panel title="Courier partners">
@@ -107,6 +148,13 @@ export function SettingsSection() {
       fulfillmentLocations: s.fulfillmentLocations.map((loc, i) =>
         i === index ? { ...loc, [key]: value } : loc
       ),
+    }));
+  }
+
+  function setSlot(index: number, key: "label" | "from" | "to", value: string) {
+    setSettings((s) => ({
+      ...s,
+      pickupTimeslots: s.pickupTimeslots.map((slot, i) => (i === index ? { ...slot, [key]: value } : slot)),
     }));
   }
 }

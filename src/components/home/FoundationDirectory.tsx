@@ -1,33 +1,38 @@
-import Link from "next/link";
+"use client";
 
-const items = [
+import Link from "next/link";
+import { useI18n } from "@/components/i18n/LanguageProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+
+const items: { href: string; eyebrow: MessageKey; title: MessageKey; text: MessageKey }[] = [
   {
     href: "/notices",
-    eyebrow: "Gazette",
-    title: "Official notices",
-    text: "Deadlines, lists and circulars published from the admin desk.",
+    eyebrow: "home.dirOffice",
+    title: "home.dirNotices",
+    text: "home.dirNoticesText",
   },
   {
     href: "/events",
-    eyebrow: "Programmes",
-    title: "Events calendar",
-    text: "Seminars, fellowships and workshops with current dates.",
+    eyebrow: "home.dirProgrammes",
+    title: "home.dirEvents",
+    text: "home.dirEventsText",
   },
   {
     href: "/articles",
-    eyebrow: "Journal",
-    title: "Articles",
-    text: "Writing on Ayurveda, education and the Foundation’s work.",
+    eyebrow: "home.dirJournal",
+    title: "home.dirArticles",
+    text: "home.dirArticlesText",
   },
   {
     href: "/clinics",
-    eyebrow: "Care",
-    title: "Clinics",
-    text: "Consultation hours and directions for Foundation clinics.",
+    eyebrow: "home.dirCare",
+    title: "home.dirClinics",
+    text: "home.dirClinicsText",
   },
 ];
 
 export default function FoundationDirectory() {
+  const { t } = useI18n();
   return (
     <section className="border-t border-border bg-white py-8" aria-label="Foundation services">
       <div className="container grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -37,9 +42,9 @@ export default function FoundationDirectory() {
             href={item.href}
             className="rounded-xl border border-border bg-paper px-4 py-4 transition hover:border-burgundy"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy">{item.eyebrow}</p>
-            <p className="mt-1 font-serif text-base font-semibold text-ink">{item.title}</p>
-            <p className="mt-1 text-sm leading-6 text-text-muted">{item.text}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy">{t(item.eyebrow)}</p>
+            <p className="mt-1 font-serif text-base font-semibold text-ink">{t(item.title)}</p>
+            <p className="mt-1 text-sm leading-6 text-text-muted">{t(item.text)}</p>
           </Link>
         ))}
       </div>

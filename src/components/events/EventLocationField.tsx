@@ -2,49 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getSettings } from "@/lib/admin-store";
-import { mapsEmbedUrl, mapsSearchUrl, parseMapsUrl, type PlaceSelection } from "@/lib/maps-place";
-
-type GoogleMapsWindow = Window & {
-  google?: {
-    maps?: {
-      places?: {
-        Autocomplete: new (
-          input: HTMLInputElement,
-          options?: { fields?: string[]; types?: string[] }
-        ) => {
-          addListener: (event: string, handler: () => void) => void;
-          getPlace: () => {
-            name?: string;
-            formatted_address?: string;
-            place_id?: string;
-            url?: string;
-            geometry?: { location?: { lat: () => number; lng: () => number } };
-          };
-        };
-      };
-    };
-  };
-};
-
-function loadPlaces(key: string) {
-  const win = window as GoogleMapsWindow;
-  if (win.google?.maps?.places) return Promise.resolve();
-  return new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>("script[data-vgmf-maps]");
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Google Maps failed to load.")), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
-    script.async = true;
-    script.dataset.vgmfMaps = "1";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Google Maps failed to load."));
-    document.head.appendChild(script);
-  });
-}
+import { loadGooglePlaces, mapsEmbedUrl, mapsSearchUrl, parseMapsUrl, type GoogleMapsWindow, type PlaceSelection } from "@/lib/maps-place";
 
 export function EventLocationField({
   tbd,
@@ -77,7 +35,7 @@ export function EventLocationField({
   useEffect(() => {
     if (tbd || !mapsKey || !inputRef.current) return;
     let cancelled = false;
-    loadPlaces(mapsKey)
+    loadGooglePlaces(mapsKey)
       .then(() => {
         if (cancelled || !inputRef.current) return;
         const google = (window as GoogleMapsWindow).google;

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getLiveEvents, getSiteFlags } from "@/lib/cms";
-import { announcements } from "@/data/content";
+import { getLiveAnnouncements, getLiveArticles, getLiveEvents, getLiveNotices, getSiteFlags } from "@/lib/cms";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 import { books } from "@/data/books";
 import { addToCart, buildTrackingStages, formatPrice, getOrders } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
@@ -21,7 +21,7 @@ interface KnowledgeBaseEntry {
 
 const QUICK_QUESTIONS = [
   "What is the next seminar?",
-  "How do I register for an event?",
+  "Latest articles",
   "How can I order a book?",
   "Track my order",
 ];
@@ -29,19 +29,11 @@ const QUICK_QUESTIONS = [
 const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["next", "upcoming", "event", "seminar", "workshop", "happen"],
-    answer: () => {
-      const upcoming = getLiveEvents().filter(
-        (event) => event.registrationStatus !== "Closed"
-      );
-      if (upcoming.length === 0) {
-        return "There are no upcoming events published right now. Please check the Events page for the latest schedule.";
-      }
-      const next = upcoming[0];
-      return `The next event is "${next.name}" on ${formatDateRange(
-        next.startDate,
-        next.endDate
-      )} at ${[next.venue, next.city].filter(Boolean).join(", ")}. See the Events page for full details.`;
-    },
+    answer: () => summariseEvents(),
+  },
+  {
+    keywords: ["article", "journal", "write", "paper", "latest article"],
+    answer: () => summariseArticles(),
   },
   {
     keywords: ["register", "registration", "fee", "book", "seat", "attend"],
@@ -86,8 +78,14 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["notice", "announcement", "news", "update"],
     answer: () => {
+      const notices = getLiveNotices();
+      const announcements = getLiveAnnouncements();
+      if (notices.length) {
+        const latest = notices[0];
+        return `Latest notice: “${latest.title}”. Open the Notice board for deadlines, lists and circulars from the Foundation office.`;
+      }
       if (announcements.length === 0) {
-        return "There are no announcements right now.";
+        return "There are no notices or announcements right now.";
       }
       const latest = announcements[0];
       return `Latest announcement: "${latest.title}". See the Announcements page for the full list.`;
@@ -99,6 +97,95 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
       "You can reach the Foundation through the Contact page, or write to us at our registered address. A team member typically responds within 2-3 working days.",
   },
 ];
+
+function summariseEvents() {
+  const upcoming = getLiveEvents().filter((event) => event.registrationStatus !== "Closed");
+  if (upcoming.length === 0) {
+    return "There are no upcoming events published right now. Please check the Events page once new programmes are added.";
+  }
+  const next = upcoming[0];
+  const more = upcoming.slice(1, 3).map((event) => `“${event.name}”`).join(", ");
+  return `The next event is “${next.name}”${next.startDate ? ` on ${formatDateRange(next.startDate, next.endDate)}` : ""}${[next.venue, next.city].filter(Boolean).length ? ` at ${[next.venue, next.city].filter(Boolean).join(", ")}` : ""}.${next.shortDescription ? ` ${next.shortDescription}` : ""}${more ? ` Also listed: ${more}.` : ""} Open Events for the full schedule.`;
+}
+
+function summariseArticles() {
+  const articles = getLiveArticles();
+  if (articles.length === 0) {
+    return "No articles have been published on the site yet. Staff with the Articles module can add them from the staff portal.";
+  }
+  const top = articles.slice(0, 3);
+  return `Latest writing on the site: ${top.map((article) => `“${article.title}”${article.author ? ` (published by ${article.author})` : ""}`).join("; ")}. Open Articles to read them.`;
+}
+
+function searchFedContent(question: string): string | null {
+  const tokens = question
+    .toLowerCase()
+    .split(/[^a-z0-9\u0900-\u0d7f]+/i)
+    .filter((token) => token.length >= 3);
+  if (tokens.length === 0) return null;
+
+  const articleHits = getLiveArticles()
+    .map((article) => {
+      const hay = [article.title, article.excerpt, article.content, article.author, article.category, ...(article.tags ?? [])]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const score = tokens.reduce((sum, token) => (hay.includes(token) ? sum + token.length : sum), 0);
+      return { article, score };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2);
+
+  const eventHits = getLiveEvents()
+    .map((event) => {
+      const hay = [event.name, event.shortDescription, event.description, event.city, event.venue, event.eventType]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const score = tokens.reduce((sum, token) => (hay.includes(token) ? sum + token.length : sum), 0);
+      return { event, score };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2);
+
+  const noticeHits = getLiveNotices()
+    .map((notice) => {
+      const hay = [notice.title, notice.description, notice.category].filter(Boolean).join(" ").toLowerCase();
+      const score = tokens.reduce((sum, token) => (hay.includes(token) ? sum + token.length : sum), 0);
+      return { notice, score };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2);
+
+  if (!articleHits.length && !eventHits.length && !noticeHits.length) return null;
+  const parts: string[] = [];
+  if (eventHits.length) {
+    parts.push(
+      eventHits
+        .map(({ event }) => `Event: “${event.name}”${event.shortDescription ? ` — ${event.shortDescription}` : ""}.`)
+        .join(" ")
+    );
+  }
+  if (articleHits.length) {
+    parts.push(
+      articleHits
+        .map(({ article }) => {
+          const snippet = (article.excerpt || article.content.replace(/\[\[image:\d+\]\]/g, "")).trim().slice(0, 180);
+          return `Article: “${article.title}”${article.author ? `, published by ${article.author}` : ""}. ${snippet}`;
+        })
+        .join(" ")
+    );
+  }
+  if (noticeHits.length) {
+    parts.push(
+      noticeHits.map(({ notice }) => `Notice: “${notice.title}”${notice.description ? ` — ${notice.description}` : ""}.`).join(" ")
+    );
+  }
+  return parts.join(" ");
+}
 
 function findBestAnswer(question: string): string | null {
   const normalized = question.toLowerCase().trim();
@@ -227,22 +314,33 @@ function answerQuestion(question: string): string {
   }
 
   return (
+    searchFedContent(question) ??
     findBestAnswer(question) ??
-    "Apologies, I don't have an answer for that yet. Please try a different question, or contact the foundation directly via the Contact page."
+    "I can answer from the articles and events published on this site. Try asking about a programme or an article title, or write via the Contact page."
   );
 }
 
 export function AIChatbot() {
+  const { t, locale } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "bot",
-      text: "Namaste! I'm the VGMF Assistant. Ask me about events, registration, books, clinics or the foundation — and I can add publications to your cart or fetch your order status when you share the 12-digit Order ID.",
+      text: t("chat.greeting"),
     },
   ]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMessages((current) => {
+      if (current.length === 1 && current[0].role === "bot") {
+        return [{ role: "bot", text: t("chat.greeting") }];
+      }
+      return current;
+    });
+  }, [locale, t]);
 
   useEffect(() => {
     if (isOpen) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -295,8 +393,8 @@ export function AIChatbot() {
                 VGMF
               </div>
               <div>
-                <p className="text-sm font-semibold">VGMF Assistant</p>
-                <p className="text-xs text-white/70">Typically replies instantly</p>
+                <p className="text-sm font-semibold">{t("chat.assistant")}</p>
+                <p className="text-xs text-white/70">{t("chat.replies")}</p>
               </div>
             </div>
             <button
@@ -344,14 +442,19 @@ export function AIChatbot() {
 
           {/* Quick questions */}
           <div className="flex flex-wrap gap-2 border-t border-border bg-white px-5 py-3">
-            {QUICK_QUESTIONS.map((question) => (
+            {[
+              { label: t("chat.quickEvents"), ask: QUICK_QUESTIONS[0] },
+              { label: t("chat.quickArticles"), ask: QUICK_QUESTIONS[1] },
+              { label: t("chat.quickOrder"), ask: QUICK_QUESTIONS[2] },
+              { label: t("chat.quickTrack"), ask: QUICK_QUESTIONS[3] },
+            ].map((question) => (
               <button
-                key={question}
+                key={question.ask}
                 type="button"
-                onClick={() => handleSend(question)}
+                onClick={() => handleSend(question.ask)}
                 className="rounded-full border border-burgundy/20 bg-burgundy/5 px-3 py-1.5 text-xs font-medium text-burgundy transition hover:bg-burgundy hover:text-white"
               >
-                {question}
+                {question.label}
               </button>
             ))}
           </div>
@@ -368,7 +471,7 @@ export function AIChatbot() {
               type="text"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask the VGMF Assistant…"
+              placeholder={t("chat.placeholder")}
               aria-label="Type your message"
               className="input-field flex-1 !mb-0"
             />

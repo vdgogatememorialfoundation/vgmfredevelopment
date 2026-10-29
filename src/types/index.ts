@@ -94,6 +94,7 @@ export interface Article {
   excerpt: string;
   content: string;
   author?: string;
+  publishedByEmail?: string;
   category: string;
   date: string;
   coverImage?: string;
@@ -187,6 +188,13 @@ export interface Video {
   featured?: boolean;
 }
 
+export interface ClinicHours {
+  day: string;
+  closed?: boolean;
+  from?: string;
+  to?: string;
+}
+
 export interface Clinic {
   id: string;
   name: string;
@@ -197,6 +205,8 @@ export interface Clinic {
   address: string;
   phone: string;
   timings: string;
+  weeklyHours?: ClinicHours[];
+  appointmentUrl?: string;
   consultationFee?: string;
   about?: string;
   coordinates?: { lat: number; lng: number };
@@ -204,6 +214,7 @@ export interface Clinic {
   photos?: CaptionedImage[];
   operatedBy?: string;
   mapLink?: string;
+  placeId?: string;
   email?: string;
   doctors?: ClinicDoctor[];
 }
@@ -278,6 +289,8 @@ export interface User {
   lastDetailsSentAt?: string;
   lastLoginAt?: string;
   lastLogoutAt?: string;
+  /** Reply-To used when this staff member sends mail. Empty uses care@vaidyagogate.org. */
+  replyToEmail?: string;
 }
 
 export interface Certificate {
@@ -643,6 +656,7 @@ export interface OutboxEmail {
   error?: string;
   providerMessageId?: string;
   updatedAt?: string;
+  replyTo?: string;
 }
 
 export interface OrderPlan {

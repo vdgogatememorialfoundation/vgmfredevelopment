@@ -58,15 +58,6 @@ const extraSlides: HeroSlide[] = [
     cta: "Discover Our Legacy",
     tone: "ice",
   },
-  {
-    id: "hero-notices",
-    eyebrow: "Official gazette",
-    title: "Notice board",
-    text: "Deadlines, lists and circulars published by the Foundation office.",
-    href: "/notices",
-    cta: "All notices",
-    tone: "blue",
-  },
 ];
 
 export default function HeroSection() {
@@ -80,7 +71,7 @@ export default function HeroSection() {
     flyers.forEach((flyer, flyerIndex) => {
       next.push({
         id: flyer.id,
-        eyebrow: flyer.event || "Featured",
+        eyebrow: flyer.event || "Poster",
         title: flyer.title,
         text: flyer.event,
         href: flyer.href,
@@ -90,7 +81,9 @@ export default function HeroSection() {
       });
     });
 
-    for (const slide of extraSlides) next.push(slide);
+    if (flyers.length === 0) {
+      for (const slide of extraSlides) next.push(slide);
+    }
     return next;
   }, [flyers, settings?.tagline]);
 

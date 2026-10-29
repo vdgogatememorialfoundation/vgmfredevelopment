@@ -9,8 +9,8 @@ export default function Page() {
   const records = useLiveFlyers();
   return (
     <RecordDesk<Flyer>
-      heading="Flyers and banners"
-      description="Flyers with an image play as the slideshow at the top of the homepage and also appear under Featured Events."
+      heading="Slideshow, images and posters"
+      description="Add images and posters here. They play in the homepage slideshow. Notices are not shown in the slideshow — publish those on the Notice board."
       publicHref="/"
       records={records}
       label={(record) => record.title}

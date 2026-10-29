@@ -41,6 +41,7 @@ import { getOrders } from "@/lib/store";
 import { useLiveAnnouncements, useLiveArticles, useLiveEvents } from "@/lib/use-cms";
 import type { Announcement, Article, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
 import { getSession } from "@/lib/auth";
+import { displayName } from "@/lib/admin-store";
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
 import { EventLocationField } from "@/components/events/EventLocationField";
 import type { OrderStatus } from "@/lib/admin-store";
@@ -78,11 +79,12 @@ function EditorGate({
 
 export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const existing = articleId ? getArticle(articleId) : undefined;
-  const [email, setEmail] = useState(() => getSession()?.email ?? "admin@vaidyagogate.org");
+  const session = getSession();
+  const [email, setEmail] = useState(() => session?.email ?? "admin@vaidyagogate.org");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [excerpt, setExcerpt] = useState(existing?.excerpt ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
-  const [author, setAuthor] = useState(existing?.author ?? "");
+  const [author, setAuthor] = useState(existing?.author ?? (session ? displayName(session) : ""));
   const [category, setCategory] = useState(existing?.category ?? "Ayurveda");
   const [tags, setTags] = useState((existing?.tags ?? []).join(", "));
   const [coverImage, setCoverImage] = useState(existing?.coverImage ?? "");
@@ -111,7 +113,8 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       slug: existing?.slug ?? slugify(title),
       excerpt: excerpt.trim() || content.replace(/\[\[image:\d+\]\]/g, "").trim().slice(0, 160),
       content: content.trim(),
-      author: author.trim() || "VGMF",
+      author: (session ? displayName(session) : author.trim()) || "VGMF",
+      publishedByEmail: session?.email || email.trim() || undefined,
       category: category.trim() || "Ayurveda",
       date: existing?.date ?? new Date().toISOString().slice(0, 10),
       featured,
@@ -140,7 +143,14 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
           <input className={field} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
           <div className="grid gap-3 sm:grid-cols-2">
-            <input className={field} placeholder="Author" value={author} onChange={(event) => setAuthor(event.target.value)} />
+            <input
+              className={field}
+              placeholder="Published by (account name)"
+              value={session ? displayName(session) : author}
+              onChange={(event) => setAuthor(event.target.value)}
+              readOnly={Boolean(session)}
+              title="Articles show the signed-in account name as publisher."
+            />
             <input className={field} placeholder="Category" value={category} onChange={(event) => setCategory(event.target.value)} />
           </div>
           <input className={field} placeholder="Tags, separated by commas" value={tags} onChange={(event) => setTags(event.target.value)} />
@@ -193,7 +203,7 @@ export function ArticleAdmin() {
             <li key={article.id} className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-semibold text-slate-900">{article.title}</p>
-                <p className="text-xs text-slate-500">{article.category} · {article.author}</p>
+                <p className="text-xs text-slate-500">{article.category} · Published by {article.author || "VGMF"}</p>
               </div>
               <div className="flex gap-3 text-sm font-semibold">
                 <Link className="text-burgundy" href={`/admin/articles/new?id=${article.id}`}>Edit</Link>

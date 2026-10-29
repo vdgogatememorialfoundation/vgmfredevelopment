@@ -5,9 +5,11 @@ import SectionHeading from "@/components/common/SectionHeading";
 import EventCard from "@/components/events/EventCard";
 import { useLiveEvents } from "@/lib/use-cms";
 import { compareEventDates } from "@/lib/event-display";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function UpcomingEvents() {
   const events = useLiveEvents();
+  const { t } = useI18n();
   const upcoming = events
     .filter((event) => event.registrationStatus !== "Closed")
     .sort(compareEventDates)
@@ -17,19 +19,19 @@ export default function UpcomingEvents() {
     <section className="section-paper" aria-labelledby="upcoming-events-heading">
       <div className="container">
         <SectionHeading
-          eyebrow="Events"
-          title="Events & programmes"
-          description="Upcoming programmes from the Foundation."
+          eyebrow={t("home.eventsEyebrow")}
+          title={t("home.eventsTitle")}
+          description={t("home.eventsDesc")}
           action={
             <Link href="/events" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
-              View all
+              {t("common.viewAll")}
             </Link>
           }
         />
 
         {upcoming.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
-            No upcoming events are listed yet.
+            {t("home.noEvents")}
           </p>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -41,7 +43,7 @@ export default function UpcomingEvents() {
 
         <div className="mt-8">
           <Link href="/events" className="btn-primary">
-            View all events
+            {t("home.viewEvents")}
           </Link>
         </div>
       </div>

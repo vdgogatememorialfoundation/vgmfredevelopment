@@ -111,6 +111,7 @@ export function saveArticle(article: Article) {
       excerpt: article.excerpt,
       content: article.content,
       author: article.author,
+      publishedByEmail: article.publishedByEmail,
       category: article.category,
       featured: article.featured,
       coverImage: article.coverImage,

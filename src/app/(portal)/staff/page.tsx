@@ -30,6 +30,7 @@ function StaffHome() {
           </p>
         </div>
         <div className="flex gap-3 text-sm">
+          <Link href="/staff/profile" className="font-semibold text-burgundy hover:underline">Edit profile</Link>
           <button type="button" className="text-slate-500 hover:text-burgundy" onClick={() => signOut()}>
             Sign out
           </button>

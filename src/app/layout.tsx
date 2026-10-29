@@ -1,5 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
+import {
+  Noto_Sans_Devanagari,
+  Noto_Sans_Gujarati,
+  Noto_Sans_Kannada,
+  Noto_Sans_Malayalam,
+  Noto_Sans_Tamil,
+  Source_Sans_3,
+  Source_Serif_4,
+} from "next/font/google";
 import JsonLd from "@/components/seo/JsonLd";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
@@ -13,6 +21,41 @@ const sans = Source_Sans_3({
 const serif = Source_Serif_4({
   variable: "--font-serif-display",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const devanagari = Noto_Sans_Devanagari({
+  variable: "--font-devanagari",
+  subsets: ["devanagari"],
+  weight: ["400", "600", "700"],
+  display: "swap",
+});
+
+const kannada = Noto_Sans_Kannada({
+  variable: "--font-kannada",
+  subsets: ["kannada"],
+  weight: ["400", "600", "700"],
+  display: "swap",
+});
+
+const tamil = Noto_Sans_Tamil({
+  variable: "--font-tamil",
+  subsets: ["tamil"],
+  weight: ["400", "600", "700"],
+  display: "swap",
+});
+
+const malayalam = Noto_Sans_Malayalam({
+  variable: "--font-malayalam",
+  subsets: ["malayalam"],
+  weight: ["400", "600", "700"],
+  display: "swap",
+});
+
+const gujarati = Noto_Sans_Gujarati({
+  variable: "--font-gujarati",
+  subsets: ["gujarati"],
+  weight: ["400", "600", "700"],
   display: "swap",
 });
 
@@ -82,7 +125,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${sans.variable} ${serif.variable} scroll-smooth`}
+      className={`${sans.variable} ${serif.variable} ${devanagari.variable} ${kannada.variable} ${tamil.variable} ${malayalam.variable} ${gujarati.variable} scroll-smooth`}
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">

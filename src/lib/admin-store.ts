@@ -22,6 +22,7 @@ import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
 import { emptySocial } from "@/lib/social";
+import { staffReplyTo } from "@/lib/account-mail";
 
 export type OrderStatus = Order["status"];
 
@@ -124,6 +125,7 @@ export function getSettings(): SiteSettings {
     apiKeys: { ...defaults.apiKeys, ...current.apiKeys },
     processing: { ...defaults.processing, ...current.processing },
     social: { ...defaults.social, ...current.social },
+    pickupTimeslots: current.pickupTimeslots?.length ? current.pickupTimeslots : defaults.pickupTimeslots,
   };
 }
 
@@ -334,6 +336,7 @@ export function updateCustomer(email: string, update: Partial<User>) {
     throw new Error("Another account already uses this email.");
   }
   updateAccount(email, { ...update, whatsapp: update.phone ?? update.whatsapp });
+  recordActivity({ email: nextEmail || email, kind: "updated", by: currentActorEmail(), detail: "Account details updated" });
   notifyCms();
 }
 
@@ -1000,14 +1003,19 @@ export function sendEmail(input: {
   phone?: string;
   name?: string;
   params?: string[];
+  replyTo?: string;
 }) {
-  return queueNotification(input);
+  return queueNotification({
+    ...input,
+    replyTo: input.replyTo || staffReplyTo(),
+  });
 }
 
 export function sendPeopleEmail(recipients: User[], subject: string, body: string) {
   const text = body.trim();
   const title = subject.trim();
   if (!title || !text || recipients.length === 0) return 0;
+  const replyTo = staffReplyTo();
   for (const account of recipients) {
     const name = displayName(account, true) || account.firstName || "there";
     sendEmail({
@@ -1017,6 +1025,7 @@ export function sendPeopleEmail(recipients: User[], subject: string, body: strin
       subject: title,
       template: "custom",
       body: text.split("{name}").join(name),
+      replyTo,
     });
   }
   return recipients.length;

@@ -1,4 +1,5 @@
 import type { User } from "@/types";
+import { emailAccountActivity } from "@/lib/account-mail";
 
 const KEY = "vgmf_account_activity";
 
@@ -40,6 +41,11 @@ export function recordActivity(input: Omit<AccountActivity, "id" | "at" | "userA
     by: input.by,
   };
   write([row, ...read()]);
+  try {
+    emailAccountActivity(row);
+  } catch {
+    /* mail is best-effort */
+  }
   return row;
 }
 

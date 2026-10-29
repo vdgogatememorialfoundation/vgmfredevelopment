@@ -10,6 +10,7 @@ import { useLiveAnnouncements, useLiveClinics, useLiveVideos } from "@/lib/use-c
 import { formatDate } from "@/lib/utils";
 import { clinicDirectionsUrl, clinicMapEmbed } from "@/lib/maps";
 import { NoticesGazette } from "@/components/site/NoticesGazette";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export function AnnouncementsIndex() {
   const items = [...useLiveAnnouncements()].sort((a, b) => b.date.localeCompare(a.date));
@@ -98,6 +99,7 @@ export function ClinicsIndex() {
 }
 
 export function ClinicDetail({ slug }: { slug: string }) {
+  const { t } = useI18n();
   const clinic = useLiveClinics().find((item) => item.slug === slug);
   if (!clinic) {
     return (
@@ -185,14 +187,29 @@ export function ClinicDetail({ slug }: { slug: string }) {
             )}
           </div>
           <aside className="h-fit space-y-3 rounded-2xl border border-border bg-white p-6 text-sm lg:sticky lg:top-28">
-            <p className="font-semibold text-text-primary">Visit the clinic</p>
+            <p className="font-semibold text-text-primary">{t("clinic.visit")}</p>
             <p className="text-text-muted">{clinic.address}</p>
-            {clinic.timings && <p><span className="text-text-muted">Timings:</span> {clinic.timings}</p>}
+            {clinic.timings && <p><span className="text-text-muted">{t("clinic.timings")}:</span> {clinic.timings}</p>}
+            {clinic.weeklyHours && clinic.weeklyHours.length > 0 && (
+              <ul className="space-y-1 text-text-muted">
+                {clinic.weeklyHours.map((row) => (
+                  <li key={row.day} className="flex justify-between gap-3">
+                    <span>{row.day}</span>
+                    <span>{row.closed ? t("clinic.closed") : `${row.from} – ${row.to}`}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {clinic.consultationFee && <p><span className="text-text-muted">Consultation:</span> {clinic.consultationFee}</p>}
             {clinic.doctor && doctors.length === 0 && <p><span className="text-text-muted">Doctor:</span> {clinic.doctor}</p>}
             {clinic.phone && <a className="block font-semibold text-burgundy" href={`tel:${clinic.phone.replace(/\s/g, "")}`}>{clinic.phone}</a>}
             {clinic.email && <a className="block text-burgundy" href={`mailto:${clinic.email}`}>{clinic.email}</a>}
-            <a className="btn-primary mt-2 w-full" href={clinicDirectionsUrl(clinic)} target="_blank" rel="noopener noreferrer">Get directions</a>
+            {clinic.appointmentUrl ? (
+              <a className="btn-primary mt-2 w-full" href={clinic.appointmentUrl} target="_blank" rel="noopener noreferrer">
+                {t("clinic.book")}
+              </a>
+            ) : null}
+            <a className="btn-outline mt-2 w-full" href={clinicDirectionsUrl(clinic)} target="_blank" rel="noopener noreferrer">{t("clinic.directions")}</a>
           </aside>
         </div>
       </section>

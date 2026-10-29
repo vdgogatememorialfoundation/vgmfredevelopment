@@ -5,8 +5,8 @@ import Link from "next/link";
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
 import { hideClinic, saveClinic, slugify } from "@/lib/cms";
 import { useLiveClinics } from "@/lib/use-cms";
-import { clinicMapEmbed } from "@/lib/maps";
-import type { Clinic, ClinicDoctor } from "@/types";
+import type { Clinic, ClinicDoctor, ClinicHours } from "@/types";
+import { ClinicLocationField } from "@/components/admin/ClinicLocationField";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const button = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white";
@@ -28,11 +28,24 @@ function blankClinic(): Clinic {
     services: [],
     photos: [],
     doctors: [],
+    weeklyHours: defaultHours(),
+    appointmentUrl: "",
   };
 }
 
 function blankDoctor(): ClinicDoctor {
   return { id: `doc-${Date.now()}`, name: "", qualification: "", specialization: "", experience: "", timings: "", photo: "", bio: "" };
+}
+
+const WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function defaultHours(): ClinicHours[] {
+  return WEEK_DAYS.map((day) => ({
+    day,
+    closed: day === "Sunday",
+    from: "10:00",
+    to: "18:00",
+  }));
 }
 
 export default function ClinicDesk() {
@@ -89,7 +102,6 @@ function ClinicEditor({ initial, onDone }: { initial: Clinic; onDone: () => void
   const doctors = draft.doctors ?? [];
   const setDoctor = (index: number, patch: Partial<ClinicDoctor>) =>
     set({ doctors: doctors.map((doctor, i) => (i === index ? { ...doctor, ...patch } : doctor)) });
-  const embed = clinicMapEmbed(draft);
 
   const save = () => {
     if (!draft.name.trim()) {
@@ -105,6 +117,8 @@ function ClinicEditor({ initial, onDone }: { initial: Clinic; onDone: () => void
       doctor: draft.doctor || cleanDoctors[0]?.name || "",
       services: services.split(",").map((item) => item.trim()).filter(Boolean),
       photos: (draft.photos ?? []).filter((photo) => photo.src),
+      weeklyHours: draft.weeklyHours?.length ? draft.weeklyHours : defaultHours(),
+      appointmentUrl: draft.appointmentUrl?.trim() || undefined,
     };
     try {
       saveClinic(record);
@@ -133,31 +147,75 @@ function ClinicEditor({ initial, onDone }: { initial: Clinic; onDone: () => void
         <input className={field} placeholder="Lead doctor (shown on cards)" value={draft.doctor} onChange={(event) => set({ doctor: event.target.value })} />
         <input className={field} placeholder="Phone" value={draft.phone} onChange={(event) => set({ phone: event.target.value })} />
         <input className={field} placeholder="Email" value={draft.email ?? ""} onChange={(event) => set({ email: event.target.value })} />
-        <input className={field} placeholder="Timings, e.g. Mon–Sat 10 AM – 6 PM" value={draft.timings} onChange={(event) => set({ timings: event.target.value })} />
+        <input className={field} placeholder="Timings summary, e.g. Mon–Sat 10 AM – 6 PM" value={draft.timings} onChange={(event) => set({ timings: event.target.value })} />
         <input className={field} placeholder="Consultation fee" value={draft.consultationFee ?? ""} onChange={(event) => set({ consultationFee: event.target.value })} />
+        <input
+          className={`${field} sm:col-span-2`}
+          placeholder="Appointment booking link (optional) — https://…"
+          value={draft.appointmentUrl ?? ""}
+          onChange={(event) => set({ appointmentUrl: event.target.value })}
+        />
         <input className={`${field} sm:col-span-2`} placeholder="Services, separated by commas" value={services} onChange={(event) => setServices(event.target.value)} />
         <textarea className={`${field} sm:col-span-2`} rows={5} placeholder="About the clinic" value={draft.about ?? ""} onChange={(event) => set({ about: event.target.value })} />
       </section>
 
-      <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 lg:grid-cols-2">
-        <div className="space-y-3">
-          <h2 className="font-semibold text-slate-900">Location</h2>
-          <input className={field} placeholder="City" value={draft.city} onChange={(event) => set({ city: event.target.value })} />
-          <textarea className={field} rows={3} placeholder="Full address" value={draft.address} onChange={(event) => set({ address: event.target.value })} />
-          <input className={field} placeholder="Google Maps link (Share → Copy link) or embed URL" value={draft.mapLink ?? ""} onChange={(event) => set({ mapLink: event.target.value })} />
-          <div className="grid grid-cols-2 gap-2">
-            <input className={field} placeholder="Latitude" value={draft.coordinates?.lat ?? ""} onChange={(event) => set({ coordinates: { lat: Number(event.target.value), lng: draft.coordinates?.lng ?? 0 } })} />
-            <input className={field} placeholder="Longitude" value={draft.coordinates?.lng ?? ""} onChange={(event) => set({ coordinates: { lat: draft.coordinates?.lat ?? 0, lng: Number(event.target.value) } })} />
-          </div>
-          <p className="text-xs text-slate-500">The map uses coordinates when given, otherwise the address. Paste an embed URL from Google Maps → Share → Embed a map to pin an exact place.</p>
-        </div>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-          {embed ? (
-            <iframe title="Map preview" src={embed} className="h-full min-h-64 w-full" loading="lazy" />
-          ) : (
-            <p className="p-6 text-sm text-slate-500">Add an address to preview the map.</p>
-          )}
-        </div>
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Clinic timings</h2>
+        <p className="mt-1 text-sm text-slate-500">Set opening hours for each day. Closed days are hidden on the public page.</p>
+        <ul className="mt-3 grid gap-2">
+          {(draft.weeklyHours?.length ? draft.weeklyHours : defaultHours()).map((row, index) => (
+            <li key={row.day} className="grid gap-2 sm:grid-cols-[7rem_auto_7rem_7rem] sm:items-center">
+              <span className="text-sm font-medium text-slate-800">{row.day}</span>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={!row.closed}
+                  onChange={(event) => {
+                    const hours = [...(draft.weeklyHours?.length ? draft.weeklyHours : defaultHours())];
+                    hours[index] = { ...hours[index], closed: !event.target.checked };
+                    set({ weeklyHours: hours });
+                  }}
+                />
+                Open
+              </label>
+              <input
+                className={field}
+                type="time"
+                disabled={row.closed}
+                value={row.from ?? "10:00"}
+                onChange={(event) => {
+                  const hours = [...(draft.weeklyHours?.length ? draft.weeklyHours : defaultHours())];
+                  hours[index] = { ...hours[index], from: event.target.value };
+                  set({ weeklyHours: hours });
+                }}
+              />
+              <input
+                className={field}
+                type="time"
+                disabled={row.closed}
+                value={row.to ?? "18:00"}
+                onChange={(event) => {
+                  const hours = [...(draft.weeklyHours?.length ? draft.weeklyHours : defaultHours())];
+                  hours[index] = { ...hours[index], to: event.target.value };
+                  set({ weeklyHours: hours });
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-3 font-semibold text-slate-900">Location & Google Maps</h2>
+        <ClinicLocationField
+          address={draft.address}
+          city={draft.city}
+          mapLink={draft.mapLink}
+          placeId={draft.placeId}
+          lat={draft.coordinates?.lat}
+          lng={draft.coordinates?.lng}
+          onChange={(patch) => set(patch)}
+        />
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">

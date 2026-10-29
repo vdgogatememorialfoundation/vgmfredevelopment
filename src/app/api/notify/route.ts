@@ -25,7 +25,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.channel === "email") {
-      const mail = { to: String(body.to ?? ""), subject: String(body.subject ?? ""), html: toHtml(String(body.body ?? "")) };
+      const mail = {
+        to: String(body.to ?? ""),
+        subject: String(body.subject ?? ""),
+        html: toHtml(String(body.body ?? "")),
+        replyTo: typeof body.replyTo === "string" && body.replyTo.includes("@") ? String(body.replyTo) : undefined,
+      };
       if (!/^\S+@\S+\.\S+$/.test(mail.to)) return NextResponse.json({ ok: false, configured: true, error: "Recipient email is not valid." });
       const sent = body.provider === "zoho" ? await sendZohoMail(creds, mail) : await sendZeptoMail(creds, mail);
       if (!sent) return NextResponse.json({ ok: false, configured: false, error: `${body.provider === "zoho" ? "Zoho Mail" : "ZeptoMail"} credentials are not configured.` });

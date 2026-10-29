@@ -7,6 +7,7 @@ import Badge from "@/components/common/Badge";
 import { useLiveArticles } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 import type { Article, CaptionedImage } from "@/types";
+import { useI18n } from "@/components/i18n/LanguageProvider";
 
 function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
   return (
@@ -52,6 +53,11 @@ function ArticleBody({ article }: { article: Article }) {
       )}
     </>
   );
+}
+
+function ArticleByline({ author }: { author: string }) {
+  const { t } = useI18n();
+  return <p className="mt-5 text-sm font-medium text-text-muted">{t("article.publishedBy")} {author}</p>;
 }
 
 export function ArticlesIndex() {
@@ -130,7 +136,7 @@ export function ArticleView({ slug }: { slug: string }) {
             <time className="text-sm text-text-muted" dateTime={article.date}>{formatDate(article.date)}</time>
           </div>
           <h1 className="heading-1 mt-4 max-w-4xl">{article.title}</h1>
-          {article.author && <p className="mt-5 text-sm font-medium text-text-muted">By {article.author}</p>}
+          {article.author && <ArticleByline author={article.author} />}
         </div>
       </section>
       <section className="section bg-background">
