@@ -57,6 +57,21 @@ export function WorkspaceHome() {
       </div>
 
       {isAdmin && (
+        <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Portals</h2>
+          <p className="mt-1 text-sm text-gray-600">Admin can open every portal: staff, customer and public support.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/admin" className="rounded-lg bg-burgundy px-3 py-2 text-sm font-semibold text-white">Admin</Link>
+            <Link href="/staff" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Staff</Link>
+            <Link href="/account" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Customer</Link>
+            <Link href="/support" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Support</Link>
+            <Link href="/admin/analytics" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Analytics</Link>
+            <Link href="/admin/reports" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Reports</Link>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {stats.map((stat) => (
             <div key={stat.label} className="rounded-2xl border border-[#E5E7EB] bg-white p-5">

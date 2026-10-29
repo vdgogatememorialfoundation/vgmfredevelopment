@@ -57,4 +57,5 @@ export const publicSitemapPaths = [
   "/refund-policy",
   "/cancellation-policy",
   "/certificate-verification",
+  "/support",
 ];

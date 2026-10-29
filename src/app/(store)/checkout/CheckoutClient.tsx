@@ -30,21 +30,14 @@ import { adjustStoreCredit, getStoreCredit, sendEmail } from "@/lib/admin-store"
 import { commitStockForOrder } from "@/lib/product-data";
 import { useOrderSettings } from "@/lib/use-cms";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
+import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
+import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
 
 type CourierOption = CourierRate & { key: string; deliverBy: string };
 
 type Step = "address" | "review" | "payment" | "success";
 
-const EMPTY_ADDRESS: DeliveryAddress = {
-  fullName: "",
-  phone: "",
-  email: "",
-  line1: "",
-  landmark: "",
-  city: "",
-  state: "",
-  pincode: "",
-};
+const EMPTY_ADDRESS: DeliveryAddress = emptyDeliveryAddress();
 
 export default function CheckoutClient() {
   const searchParams = useSearchParams();
@@ -107,13 +100,14 @@ export default function CheckoutClient() {
     rows.map(({ item }) => ({ bookId: item.bookId, quantity: item.quantity })),
     address.pincode
   );
-  const pincodeValid = /^\d{6}$/.test(address.pincode);
+  const domestic = isIndia(address.countryCode);
+  const pincodeValid = isValidPostal(address.countryCode, address.pincode);
   const cartKey = rows.map(({ item }) => `${item.bookId}x${item.quantity}`).join(",");
   const cartValue = rows.reduce((sum, { item, book }) => sum + book.price * item.quantity, 0);
   const cartUnits = rows.reduce((sum, { item }) => sum + item.quantity, 0);
 
   useEffect(() => {
-    if (deliveryMode !== "delivery" || !pincodeValid || !orderSettings.showCourierChoice) return;
+    if (deliveryMode !== "delivery" || !pincodeValid || !domestic || !orderSettings.showCourierChoice) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setLoadingRates(true);
@@ -135,7 +129,7 @@ export default function CheckoutClient() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [address.pincode, pincodeValid, deliveryMode, orderSettings.showCourierChoice, cartKey, cartValue, cartUnits]);
+  }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, cartKey, cartValue, cartUnits]);
 
   const courierOptions: CourierOption[] =
     liveRates && liveRates.pincode === address.pincode && liveRates.rates.length
@@ -188,9 +182,6 @@ export default function CheckoutClient() {
     total: Math.max(0, priced.subtotal + priced.gst + shipping + codFee - creditApplied),
   };
 
-  const update = (field: keyof DeliveryAddress, value: string) =>
-    setAddress((prev) => ({ ...prev, [field]: value }));
-
   const validateAddress = () => {
     const required: (keyof DeliveryAddress)[] = [
       "fullName",
@@ -201,14 +192,16 @@ export default function CheckoutClient() {
       "pincode",
     ];
     for (const field of required) {
-      if (!address[field]?.trim()) return `Please fill in ${field.replace(/([A-Z])/g, " $1").toLowerCase()}.`;
+      if (!String(address[field] ?? "").trim()) return `Please fill in ${field.replace(/([A-Z])/g, " $1").toLowerCase()}.`;
     }
-    if (!/^\d{6}$/.test(address.pincode.trim()))
-      return "Pincode must be a valid 6-digit number.";
-    if (quote && !quote.serviceable)
+    if (!isValidPostal(address.countryCode, address.pincode))
+      return isIndia(address.countryCode)
+        ? "Pincode must be a valid 6-digit number."
+        : "Please enter a valid postal code.";
+    if (domestic && quote && !quote.serviceable)
       return quote.note || "Delivery is not available for this pincode.";
-    if (!/^[+\d][\d\s-]{9,}$/.test(address.phone.trim()))
-      return "Please enter a valid phone number.";
+    if (!isValidPhone(address.phone))
+      return "Please enter a valid international phone number, including country code.";
     return "";
   };
 
@@ -407,107 +400,15 @@ export default function CheckoutClient() {
 
             {deliveryMode === "delivery" && (
               <>
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="co-name">
-                      Full Name
-                    </label>
-                    <input
-                      id="co-name"
-                      type="text"
-                      className="input-field"
-                      value={address.fullName}
-                      onChange={(e) => update("fullName", e.target.value)}
-                      placeholder="Your full name"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="co-phone">
-                      Phone Number
-                    </label>
-                    <input
-                      id="co-phone"
-                      type="tel"
-                      className="input-field"
-                      value={address.phone}
-                      onChange={(e) => update("phone", e.target.value)}
-                      placeholder="+91 98765 43210"
-                    />
-                  </div>
-                </div>
+                <AddressFields value={address} onChange={setAddress} idPrefix="co" showEmail />
 
-                <div className="mt-5">
-                  <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="co-line1">
-                    Address
-                  </label>
-                  <input
-                    id="co-line1"
-                    type="text"
-                    className="input-field"
-                    value={address.line1}
-                    onChange={(e) => update("line1", e.target.value)}
-                    placeholder="House number, street, area"
-                  />
-                </div>
+                {!domestic ? (
+                  <p className="mt-5 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-ink">
+                    International dispatch is available. Courier rates for India do not apply; shipping is confirmed after the order is placed.
+                  </p>
+                ) : null}
 
-                <div className="mt-5">
-                  <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="co-landmark">
-                    Landmark <span className="font-normal text-text-muted">(optional)</span>
-                  </label>
-                  <input
-                    id="co-landmark"
-                    type="text"
-                    className="input-field"
-                    value={address.landmark ?? ""}
-                    onChange={(e) => update("landmark", e.target.value)}
-                    placeholder="Near…"
-                  />
-                </div>
-
-                <div className="mt-5 grid gap-5 sm:grid-cols-3">
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="co-city">
-                      City
-                    </label>
-                    <input
-                      id="co-city"
-                      type="text"
-                      className="input-field"
-                      value={address.city}
-                      onChange={(e) => update("city", e.target.value)}
-                      placeholder="City"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="co-state">
-                      State
-                    </label>
-                    <input
-                      id="co-state"
-                      type="text"
-                      className="input-field"
-                      value={address.state}
-                      onChange={(e) => update("state", e.target.value)}
-                      placeholder="State"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="co-pincode">
-                      Pincode
-                    </label>
-                    <input
-                      id="co-pincode"
-                      type="text"
-                      inputMode="numeric"
-                      className="input-field"
-                      value={address.pincode}
-                      onChange={(e) => update("pincode", e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="6-digit PIN"
-                    />
-                  </div>
-                </div>
-
-                {orderSettings.showCourierChoice && courierOptions.length > 0 && (
+                {domestic && orderSettings.showCourierChoice && courierOptions.length > 0 && (
                   <fieldset className="mt-5">
                     <legend className="mb-2 text-sm font-semibold text-text-primary">
                       Choose your delivery partner {loadingRates && <span className="text-xs font-normal text-text-muted">· checking live rates…</span>}
@@ -548,7 +449,7 @@ export default function CheckoutClient() {
                     </div>
                   </fieldset>
                 )}
-                {quote && !quote.serviceable && /^\d{6}$/.test(address.pincode) && (
+                {domestic && quote && !quote.serviceable && pincodeValid && (
                   <p className="mt-3 text-sm text-red-700">{quote.note}</p>
                 )}
 
@@ -727,7 +628,7 @@ export default function CheckoutClient() {
                     <dd className="text-right font-medium text-text-primary">
                       {address.line1}
                       {address.landmark ? `, ${address.landmark}` : ""},{" "}
-                      {address.city} {address.state} {address.pincode}
+                      {formatAddressLine(address)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">

@@ -5,12 +5,14 @@ import {
   asRecord,
   isAutismId,
   isSeminarId,
+  mapAutismApiResponse,
   mapPartnerEvent,
   parseAutismId,
   seminarDigits,
   sourceLabel,
   stripPrivateFields,
   textField,
+  type AutismVerifyResult,
   type CertificateSource,
   type PartnerEvent,
   type UnifiedCertificate,
@@ -123,32 +125,17 @@ function mapSeminar(body: Record<string, unknown> | null, fallbackId: string, ev
   };
 }
 
-function mapAutism(body: Record<string, unknown> | null, rawId: string, events: PartnerEvent[]): UnifiedCertificate | null {
-  if (!body) return null;
-  const valid = body.valid === true || body.status === "valid" || body.verified === true;
-  if (!valid) return null;
-  const parsed = parseAutismId(rawId);
-  const event = eventFromBody(body);
-  const matched = matchEvent(events, event?.id || parsed?.eventId, event?.title) || event;
-  const name = textField(body, ["name", "holderName", "holder_name"]);
-  if (!name) return null;
-  const eventDate = matched?.date || event?.date || textField(body, ["eventDate", "date"]);
-  const type = textField(body, ["certificateType", "type", "kind"]) || parsed?.kind || "Participation";
+function enrichAutism(mapped: UnifiedCertificate, events: PartnerEvent[]): UnifiedCertificate {
+  const matched = matchEvent(events, mapped.eventId, mapped.event);
+  if (!matched) return mapped;
   return {
-    certificateNumber: textField(body, ["certificateId", "certificateNumber", "id"]) || rawId.trim().toUpperCase(),
-    name,
-    event: matched?.title || event?.title || "",
-    certificateType: type,
-    eventDate,
-    issueDate: textField(body, ["issuedAt", "issueDate"]).slice(0, 10) || eventDate,
-    signature: "Vaidya Gogate Memorial Foundation",
-    year: yearFrom(eventDate),
-    source: "autism",
-    sourceLabel: sourceLabel("autism"),
-    eventId: matched?.id || parsed?.eventId || event?.id,
-    eventVenue: matched?.venue || event?.venue,
-    kind: parsed?.kind || type,
+    ...mapped,
+    event: matched.title || mapped.event,
+    eventDate: matched.date || mapped.eventDate,
+    eventVenue: matched.venue || mapped.eventVenue,
+    eventId: matched.id || mapped.eventId,
     eventDetails: matched,
+    year: mapped.year || yearFrom(matched.date || mapped.eventDate),
   };
 }
 
@@ -172,32 +159,46 @@ async function verifySeminar(id: string, events: PartnerEvent[]) {
   return { status: "not_found" as const, certificate: null };
 }
 
-async function verifyAutism(id: string, events: PartnerEvent[]) {
+async function verifyAutism(id: string, events: PartnerEvent[]): Promise<AutismVerifyResult> {
   const parsed = parseAutismId(id);
-  const lookup = encodeURIComponent((parsed?.raw || id).trim());
+  const lookup = encodeURIComponent(parsed?.raw || id.replace(/\s+/g, ""));
   const urls = [
     `${AUTISM_ORIGIN}/api/public/certificates/verify?id=${lookup}`,
     `${AUTISM_ORIGIN}/api/public/certificates/${lookup}`,
   ];
+  let last: AutismVerifyResult = {
+    ok: false,
+    valid: false,
+    code: "UNAVAILABLE",
+    error: "Verification is temporarily unavailable. Please try again later.",
+    status: "unavailable",
+    certificate: null,
+  };
   for (const url of urls) {
     const result = await fetchJson(url);
-    if (result.status === 404 || result.status === 0) continue;
-    const mapped = mapAutism(result.body, parsed?.raw || id, events);
-    if (mapped) return { status: "valid" as const, certificate: mapped };
-    if (result.body && (result.body.valid === false || result.body.status === "not_found")) {
-      return { status: "not_found" as const, certificate: null };
+    if (result.status === 0) continue;
+    const mapped = mapAutismApiResponse(result.status, result.body, parsed?.raw || id);
+    if (mapped.certificate) {
+      mapped.certificate = enrichAutism(mapped.certificate, events);
+      return mapped;
     }
+    last = mapped;
+    if (mapped.code && mapped.code !== "UNAVAILABLE") return mapped;
   }
-  return { status: "not_found" as const, certificate: null };
+  return last;
 }
 
 export async function lookupPartnerCertificate(id: string): Promise<{
   certificate: UnifiedCertificate | null;
   status: string;
+  code?: string;
+  error?: string;
   sourceTried: CertificateSource[];
 }> {
   const trimmed = id.trim();
-  if (!trimmed) return { certificate: null, status: "invalid_id", sourceTried: [] };
+  if (!trimmed) {
+    return { certificate: null, status: "invalid_id", code: "INVALID_ID", error: "Add a certificate number.", sourceTried: [] };
+  }
 
   const trySeminar = isSeminarId(trimmed) || !isAutismId(trimmed);
   const tryAutism = isAutismId(trimmed) || !isSeminarId(trimmed);
@@ -219,17 +220,9 @@ export async function lookupPartnerCertificate(id: string): Promise<{
     const result = await verifyAutism(trimmed, []);
     if (result.certificate) {
       const events = await loadPartnerEvents(AUTISM_ORIGIN);
-      const matched = events.find(
-        (event) => event.id === result.certificate?.eventId || event.title === result.certificate?.event
-      );
-      if (matched) {
-        result.certificate.eventDetails = matched;
-        result.certificate.event = matched.title || result.certificate.event;
-        result.certificate.eventDate = matched.date || result.certificate.eventDate;
-        result.certificate.eventVenue = matched.venue || result.certificate.eventVenue;
-      }
-      return { ...result, sourceTried };
+      return { ...result, certificate: enrichAutism(result.certificate, events), sourceTried };
     }
+    if (result.code && result.code !== "UNAVAILABLE") return { ...result, sourceTried };
   }
 
   if (trySeminar && !sourceTried.includes("seminar")) {
@@ -238,11 +231,18 @@ export async function lookupPartnerCertificate(id: string): Promise<{
     if (result.certificate) return { ...result, sourceTried };
   }
 
-  if (tryAutism && !sourceTried.includes("autism")) {
+  if (tryAutism && !sourceTried.includes("autism") && isAutismId(trimmed)) {
     sourceTried.push("autism");
     const result = await verifyAutism(trimmed, []);
     if (result.certificate) return { ...result, sourceTried };
+    return { ...result, sourceTried };
   }
 
-  return { certificate: null, status: "not_found", sourceTried };
+  return {
+    certificate: null,
+    status: "not_found",
+    code: "NOT_FOUND",
+    error: "No certificate was found for this ID.",
+    sourceTried,
+  };
 }

@@ -21,6 +21,7 @@ export const publicSitePages = [
   { id: "shop", label: "Shop", href: "/shop" },
   { id: "clinics", label: "Clinics", href: "/clinics" },
   { id: "contact", label: "Contact", href: "/contact" },
+  { id: "support", label: "Support", href: "/support" },
   { id: "announcements", label: "Announcements", href: "/announcements" },
   { id: "notices", label: "Notice board", href: "/notices" },
   { id: "certificates", label: "Certificate verification", href: "/certificate-verification" },

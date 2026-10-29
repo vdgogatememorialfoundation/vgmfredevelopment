@@ -87,7 +87,9 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Support",
     items: [
       { label: "Support Tickets", href: "/admin/support/tickets" },
+      { label: "Live chat", href: "/admin/support/chat" },
       { label: "Contact Enquiries", href: "/admin/support/contact" },
+      { label: "Support portal", href: "/support" },
     ],
   },
 
@@ -103,6 +105,7 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Reports",
     items: [
       { label: "Downloads", href: "/admin/reports" },
+      { label: "Analytics", href: "/admin/analytics" },
     ],
   },
 

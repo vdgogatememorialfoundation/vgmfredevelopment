@@ -59,10 +59,10 @@ export default function Footer() {
             <p className="mt-4 max-w-sm text-sm leading-6 text-text-muted">{siteConfig.address}</p>
             <p className="mt-2 text-sm text-text-muted">{t("footer.hours")}</p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a href={`mailto:${siteConfig.email}`} className="rounded-full bg-ink px-4 py-2 text-xs font-semibold tracking-wide text-paper transition hover:bg-burgundy">
+              <a href={`mailto:${siteConfig.email}`} className="rounded-full border border-gold/50 bg-gold/20 px-4 py-2 text-xs font-semibold tracking-wide text-burgundy transition hover:bg-gold/40">
                 {siteConfig.email}
               </a>
-              <a href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className="rounded-full border border-ink/20 px-4 py-2 text-xs font-semibold tracking-wide text-ink transition hover:border-gold hover:text-burgundy">
+              <a href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className="rounded-full border border-gold/40 bg-white px-4 py-2 text-xs font-semibold tracking-wide text-burgundy transition hover:border-gold hover:bg-gold/15">
                 {siteConfig.phone}
               </a>
             </div>
@@ -96,15 +96,32 @@ export default function Footer() {
                       {t("nav.contact")}
                     </Link>
                   </li>
+                  <li>
+                    <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
+                      {t("nav.support")}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/certificate-verification" className="text-sm text-text-muted transition hover:text-burgundy">
+                      Certificate verification
+                    </Link>
+                  </li>
                 </>
               ) : (
-                custom.map((page) => (
+                <>
+                {custom.map((page) => (
                   <li key={page.id}>
                     <Link href={`/p/${page.slug}`} className="text-sm text-text-muted transition hover:text-burgundy">
                       {page.title}
                     </Link>
                   </li>
-                ))
+                ))}
+                <li>
+                  <Link href="/support" className="text-sm text-text-muted transition hover:text-burgundy">
+                    {t("nav.support")}
+                  </Link>
+                </li>
+                </>
               )}
             </ul>
             <div className="mt-8">
@@ -129,7 +146,9 @@ export default function Footer() {
             ))}
           </nav>
         </div>
-        <p className="mt-4 font-serif italic text-xs text-ink/50">{t("footer.developed")}</p>
+        <p className="mt-5 inline-flex rounded-full border border-gold/50 bg-gold/25 px-4 py-2 font-serif text-sm font-semibold tracking-wide text-burgundy shadow-[0_0_0_1px_rgba(196,149,74,0.15)]">
+          {t("footer.developed")}
+        </p>
       </div>
     </footer>
   );

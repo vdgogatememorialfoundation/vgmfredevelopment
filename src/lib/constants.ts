@@ -48,6 +48,7 @@ export const navigation = [
   { name: "Shop", href: "/shop" },
   { name: "Clinics", href: "/clinics" },
   { name: "Contact", href: "/contact" },
+  { name: "Support", href: "/support" },
 ] as const;
 
 export const accountNavigation = [

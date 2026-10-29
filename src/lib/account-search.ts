@@ -48,5 +48,7 @@ export function accountToDelivery(account: User, current?: Partial<DeliveryAddre
     city: account.address?.city || current?.city || "",
     state: account.address?.state || current?.state || "Maharashtra",
     pincode: account.address?.pincode || current?.pincode || "",
+    country: account.address?.country || current?.country || "India",
+    countryCode: account.address?.countryCode || current?.countryCode || "IN",
   };
 }

@@ -1,6 +1,16 @@
 import { saveIssuedCertificate, revokeCertificate, type IssuedCertificate } from "@/lib/cms";
 
-import type { CertificateSource, PartnerEvent } from "@/lib/partner-certificates";
+import {
+  AUTISM_ORIGIN,
+  asRecord,
+  autismErrorText,
+  isAutismId,
+  mapAutismApiResponse,
+  normalizeCertificateId,
+  stripPrivateFields,
+  type CertificateSource,
+  type PartnerEvent,
+} from "@/lib/partner-certificates";
 
 export type PublicCertificate = {
   certificateNumber: string;
@@ -22,32 +32,127 @@ export type PublicCertificate = {
   eventVenue?: string;
   kind?: string;
   eventDetails?: PartnerEvent;
+  typeLabel?: string;
+  issuer?: string;
+  verifyUrl?: string;
+  apiUrl?: string;
+  participantId?: string;
+  issuedAt?: string;
 };
 
-export async function verifyCertificate(number: string, apiKey?: string) {
+export type VerifyCertificateResult = {
+  ok: boolean;
+  verified: boolean;
+  valid?: boolean;
+  status?: string;
+  code?: string;
+  error?: string;
+  certificate?: PublicCertificate;
+  source?: string;
+  sourceLabel?: string;
+};
+
+const UNAVAILABLE: VerifyCertificateResult = {
+  ok: false,
+  verified: false,
+  valid: false,
+  status: "unavailable",
+  code: "UNAVAILABLE",
+  error: autismErrorText("UNAVAILABLE"),
+};
+
+async function verifyAutismDirect(id: string): Promise<VerifyCertificateResult> {
+  const lookup = encodeURIComponent(normalizeCertificateId(id));
+  const urls = [
+    `${AUTISM_ORIGIN}/api/public/certificates/verify?id=${lookup}`,
+    `${AUTISM_ORIGIN}/api/public/certificates/${lookup}`,
+  ];
+  let last = UNAVAILABLE;
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      const text = await response.text();
+      let parsed: unknown = null;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        last = mapAutismApiResponse(response.status, null, id);
+        last = {
+          ok: last.ok,
+          verified: false,
+          valid: false,
+          status: last.status,
+          code: last.code,
+          error: last.error,
+          source: "autism",
+        };
+        if (last.code && last.code !== "UNAVAILABLE") return last;
+        continue;
+      }
+      const mapped = mapAutismApiResponse(response.status, asRecord(stripPrivateFields(parsed)), id);
+      if (mapped.certificate) {
+        return {
+          ok: true,
+          verified: true,
+          valid: true,
+          status: "valid",
+          certificate: mapped.certificate,
+          source: "autism",
+          sourceLabel: mapped.certificate.sourceLabel,
+        };
+      }
+      last = {
+        ok: false,
+        verified: false,
+        valid: false,
+        status: mapped.status,
+        code: mapped.code,
+        error: mapped.error,
+        source: "autism",
+      };
+      if (mapped.code && mapped.code !== "UNAVAILABLE") return last;
+    } catch {
+      last = UNAVAILABLE;
+    }
+  }
+  return last;
+}
+
+export async function verifyCertificate(number: string, apiKey?: string): Promise<VerifyCertificateResult> {
+  if (isAutismId(number)) {
+    return verifyAutismDirect(number);
+  }
+
   const headers: HeadersInit = { accept: "application/json" };
   if (apiKey) headers["x-api-key"] = apiKey;
-  const response = await fetch(`/api/certificates/verify?number=${encodeURIComponent(number)}`, {
-    cache: "no-store",
-    headers,
-  });
-  const data = (await response.json()) as {
-    ok: boolean;
-    verified?: boolean;
-    valid?: boolean;
-    status?: string;
-    certificate?: PublicCertificate;
-    error?: string;
-    source?: string;
-    sourceLabel?: string;
-  };
-  if (response.status === 401) throw new Error(data.error || "Invalid API key.");
-  if (!response.ok && response.status !== 404 && response.status !== 400) {
-    throw new Error(data.error || "Could not verify the certificate.");
+  let response: Response;
+  try {
+    response = await fetch(`/api/certificates/verify?number=${encodeURIComponent(number)}`, {
+      cache: "no-store",
+      headers,
+    });
+  } catch {
+    return UNAVAILABLE;
   }
+
+  let data: VerifyCertificateResult;
+  try {
+    data = (await response.json()) as VerifyCertificateResult;
+  } catch {
+    return UNAVAILABLE;
+  }
+
+  if (response.status === 401) throw new Error(data.error || "Invalid API key.");
   return {
     ...data,
     verified: Boolean(data.verified || (data.valid && data.certificate)),
+    valid: Boolean(data.valid && data.certificate),
+    error:
+      data.error ||
+      (data.valid ? undefined : data.code ? autismErrorText(data.code) : "This certificate could not be verified."),
   };
 }
 

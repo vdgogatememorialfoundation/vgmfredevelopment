@@ -33,6 +33,7 @@ export default function TicketsPage() {
       email: user?.email ?? "",
       subject: form.subject,
       body: form.body,
+      portal: "customer",
     });
     setForm({ subject: "", body: "" });
     setShowForm(false);

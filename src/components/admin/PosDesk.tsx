@@ -166,6 +166,8 @@ export function PosDesk() {
         city: "Pune",
         state: "Maharashtra",
         pincode: "411005",
+        country: "India",
+        countryCode: "IN",
       };
       const order = createAdminOrder({
         id: saleId,

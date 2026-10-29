@@ -63,10 +63,13 @@ function defaultSettings(): SiteSettings {
     social: emptySocial(),
     apiKeys: {
       googleMaps: "",
+      googleAnalytics: "",
       shiprocket: "",
       razorpay: "",
       zeptomail: "",
     },
+    liveChatEnabled: false,
+    liveChatOnline: false,
     processing: {
       daysToPack: 1,
       daysToPickup: 1,
@@ -125,6 +128,8 @@ export function getSettings(): SiteSettings {
     apiKeys: { ...defaults.apiKeys, ...current.apiKeys },
     processing: { ...defaults.processing, ...current.processing },
     social: { ...defaults.social, ...current.social },
+    liveChatEnabled: current.liveChatEnabled ?? defaults.liveChatEnabled,
+    liveChatOnline: current.liveChatOnline ?? defaults.liveChatOnline,
     pickupTimeslots: current.pickupTimeslots?.length ? current.pickupTimeslots : defaults.pickupTimeslots,
   };
 }
@@ -1145,11 +1150,13 @@ export function addTicket(input: {
   email: string;
   subject: string;
   body: string;
+  portal?: SupportTicket["portal"];
 }) {
   const now = new Date().toISOString();
   const ticket: SupportTicket = {
     id: `TK${Math.floor(100000 + Math.random() * 900000)}`,
     ...input,
+    portal: input.portal ?? "customer",
     status: "Open",
     createdAt: now,
     updatedAt: now,

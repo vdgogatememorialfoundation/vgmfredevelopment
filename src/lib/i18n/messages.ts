@@ -10,6 +10,7 @@ const en = {
   "nav.shop": "Shop",
   "nav.clinics": "Clinics",
   "nav.contact": "Contact",
+  "nav.support": "Support",
   "common.signIn": "Sign in | Create account",
   "common.contact": "Contact",
   "common.viewAll": "View all",
@@ -1139,4 +1140,5 @@ export const navMessageKey: Record<string, MessageKey> = {
   "/shop": "nav.shop",
   "/clinics": "nav.clinics",
   "/contact": "nav.contact",
+  "/support": "nav.support",
 };

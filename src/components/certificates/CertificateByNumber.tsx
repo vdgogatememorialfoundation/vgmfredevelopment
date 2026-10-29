@@ -7,16 +7,27 @@ import { CertificateResultCard } from "@/components/certificates/CertificateResu
 
 export default function CertificateByNumber({ number }: { number: string }) {
   const [certificate, setCertificate] = useState<PublicCertificate | null>(null);
+  const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     verifyCertificate(number)
       .then((data) => {
-        if (!cancelled) setCertificate(data.verified && data.certificate ? data.certificate : null);
+        if (cancelled) return;
+        if (data.valid && data.certificate) {
+          setCertificate(data.certificate);
+          setError("");
+          return;
+        }
+        setCertificate(null);
+        setError(data.error || "This certificate could not be verified.");
       })
       .catch(() => {
-        if (!cancelled) setCertificate(null);
+        if (!cancelled) {
+          setCertificate(null);
+          setError("Verification is temporarily unavailable. Please try again later.");
+        }
       })
       .finally(() => {
         if (!cancelled) setReady(true);
@@ -29,7 +40,7 @@ export default function CertificateByNumber({ number }: { number: string }) {
   if (!ready) {
     return (
       <main className="section bg-background">
-        <div className="container max-w-2xl text-center text-sm text-text-muted">Checking the certificate…</div>
+        <div className="container max-w-2xl text-center text-sm text-text-muted">Checking…</div>
       </main>
     );
   }
@@ -38,10 +49,10 @@ export default function CertificateByNumber({ number }: { number: string }) {
     return (
       <main className="section bg-background">
         <div className="container max-w-2xl text-center">
-          <h1 className="font-serif text-3xl font-bold text-text-primary">Certificate Not Found</h1>
-          <p className="mt-3 text-sm text-text-muted">No issued certificate matches {number.toUpperCase()}.</p>
+          <h1 className="font-serif text-3xl font-bold text-text-primary">Could not verify</h1>
+          <p className="mt-3 text-sm text-text-muted">{error}</p>
           <Link href="/certificate-verification" className="btn-outline mt-8">
-            Verify Another Certificate
+            Verify another certificate
           </Link>
         </div>
       </main>
@@ -55,7 +66,7 @@ export default function CertificateByNumber({ number }: { number: string }) {
           <CertificateResultCard certificate={certificate} />
           <div className="mt-8 text-center">
             <Link href="/certificate-verification" className="btn-outline">
-              Verify Another Certificate
+              Verify another certificate
             </Link>
           </div>
         </div>

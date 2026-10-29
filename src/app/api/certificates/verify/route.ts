@@ -106,15 +106,29 @@ export async function GET(request: NextRequest) {
         { headers: auth.headers }
       );
     }
+    const httpStatus =
+      partner.code === "INVALID_ID" || partner.status === "invalid_id"
+        ? 400
+        : partner.code === "AMBIGUOUS"
+          ? 409
+          : partner.code === "RATE_LIMITED"
+            ? 429
+            : partner.code === "UNAVAILABLE" || partner.status === "unavailable"
+              ? 500
+              : partner.code === "NOT_ISSUED" || partner.code === "NOT_FOUND"
+                ? 404
+                : 200;
     return NextResponse.json(
       {
-        ok: true,
+        ok: false,
         verified: false,
         valid: false,
         status: partner.status || "not_found",
+        code: partner.code,
+        error: partner.error || "This certificate could not be verified.",
         source: "https://vaidyagogate.org",
       },
-      { status: 200, headers: auth.headers }
+      { status: httpStatus, headers: auth.headers }
     );
   }
 

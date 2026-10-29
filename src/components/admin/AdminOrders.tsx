@@ -47,6 +47,7 @@ import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
 import { accountToDelivery } from "@/lib/account-search";
+import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesFor } from "@/lib/geo";
 import { classNames, formatDateTime } from "@/lib/utils";
 
 const ALL_STATUSES: Order["status"][] = [
@@ -293,7 +294,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const customers = getAccounts().filter((account) => !account.role || account.role === "customer");
   const [accountEmail, setAccountEmail] = useState("");
   const [items, setItems] = useState<{ bookId: string; quantity: number }[]>([{ bookId: books[0]?.id ?? "", quantity: 1 }]);
-  const [customer, setCustomer] = useState<DeliveryAddress>({ fullName: "", phone: "", email: "", line1: "", landmark: "", city: "", state: "Maharashtra", pincode: "" });
+  const [customer, setCustomer] = useState<DeliveryAddress>({ fullName: "", phone: "", email: "", line1: "", landmark: "", city: "", state: "Maharashtra", pincode: "", country: "India", countryCode: "IN" });
   const [mode, setMode] = useState<Order["deliveryMode"]>(orderSettings.deliveryEnabled ? "delivery" : "store_pickup");
   const [quote, setQuote] = useState<RateQuote | null>(null);
   const [picked, setPicked] = useState<number | undefined>();
@@ -319,8 +320,12 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const shippingFee = mode === "store_pickup" ? 0 : shippingOverride !== "" ? Number(shippingOverride) : shippingFeeFor(subtotal, itemCount, choice?.rate, orderSettings);
 
   const loadRates = async () => {
-    if (!/^\d{6}$/.test(customer.pincode)) {
-      setError("Enter a 6-digit pincode to check courier rates.");
+    if (!isIndia(customer.countryCode)) {
+      setError("Live Indian courier rates apply only to India. International dispatch is confirmed after the order.");
+      return;
+    }
+    if (!isValidPostal(customer.countryCode, customer.pincode)) {
+      setError("Enter a valid postal code to check courier rates.");
       return;
     }
     setError("");
@@ -340,7 +345,11 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
 
   const submit = async () => {
     if (!customer.fullName || !customer.phone || (mode === "delivery" && (!customer.line1 || !customer.city || !customer.pincode))) {
-      setError(mode === "delivery" ? "Fill the customer name, phone, address, city and pincode." : "Fill the customer name and phone.");
+      setError(mode === "delivery" ? "Fill the customer name, phone, address, city and postal code." : "Fill the customer name and phone.");
+      return;
+    }
+    if (!isValidPhone(customer.phone)) {
+      setError("Enter a valid international phone number, including country code.");
       return;
     }
     if (items.some((row) => !row.bookId || row.quantity < 1)) {
@@ -389,14 +398,43 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
             <Field label="Name"><TextInput value={customer.fullName} onChange={(event) => setCustomer({ ...customer, fullName: event.target.value })} /></Field>
             <Field label="Phone"><TextInput value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} placeholder="+91" /></Field>
             <Field label="Email"><TextInput value={customer.email ?? ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} /></Field>
-            <Field label="Pincode"><TextInput value={customer.pincode} onChange={(event) => { setCustomer({ ...customer, pincode: event.target.value }); setQuote(null); setPicked(undefined); }} /></Field>
+            <Field label={isIndia(customer.countryCode) ? "Pincode" : "Postal code"}><TextInput value={customer.pincode} onChange={(event) => { setCustomer({ ...customer, pincode: event.target.value }); setQuote(null); setPicked(undefined); }} /></Field>
+            <Field label="Country">
+              <SelectInput
+                value={customer.countryCode || "IN"}
+                onChange={(event) => {
+                  const next = countryByCode(event.target.value);
+                  const nextStates = statesFor(next.code);
+                  setCustomer({
+                    ...customer,
+                    countryCode: next.code,
+                    country: next.name,
+                    state: nextStates.includes(customer.state) ? customer.state : nextStates[0] || "",
+                  });
+                  setQuote(null);
+                  setPicked(undefined);
+                }}
+              >
+                {COUNTRIES.map((item) => (
+                  <option key={item.code} value={item.code}>{item.name} ({item.dial})</option>
+                ))}
+              </SelectInput>
+            </Field>
           </div>
           {mode === "delivery" && (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Address"><TextInput value={customer.line1} onChange={(event) => setCustomer({ ...customer, line1: event.target.value })} /></Field>
               <Field label="Landmark"><TextInput value={customer.landmark ?? ""} onChange={(event) => setCustomer({ ...customer, landmark: event.target.value })} /></Field>
               <Field label="City"><TextInput value={customer.city} onChange={(event) => setCustomer({ ...customer, city: event.target.value })} /></Field>
-              <Field label="State"><TextInput value={customer.state} onChange={(event) => setCustomer({ ...customer, state: event.target.value })} /></Field>
+              <Field label="State / region">
+                {statesFor(customer.countryCode).length ? (
+                  <SelectInput value={customer.state} onChange={(event) => setCustomer({ ...customer, state: event.target.value })}>
+                    {statesFor(customer.countryCode).map((state) => <option key={state}>{state}</option>)}
+                  </SelectInput>
+                ) : (
+                  <TextInput value={customer.state} onChange={(event) => setCustomer({ ...customer, state: event.target.value })} />
+                )}
+              </Field>
             </div>
           )}
           <div>
@@ -523,7 +561,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [returnReason, setReturnReason] = useState(getOrderSettings().returns.reasons[0] ?? "");
   const [refundDest, setRefundDest] = useState<"original" | "store_credit">("original");
   const [editing, setEditing] = useState(false);
-  const [editAddress, setEditAddress] = useState<DeliveryAddress>(order.deliveryAddress ?? { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "" });
+  const [editAddress, setEditAddress] = useState<DeliveryAddress>(order.deliveryAddress ?? { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "", country: "India", countryCode: "IN" });
   const [editItems, setEditItems] = useState(order.items.map((item) => ({ ...item })));
 
   const run = async (label: string, task: () => Promise<string | void> | string | void) => {
@@ -645,10 +683,21 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Name" />
               <TextInput value={editAddress.phone} onChange={(event) => setEditAddress({ ...editAddress, phone: event.target.value })} placeholder="Phone" />
               <TextInput value={editAddress.email ?? ""} onChange={(event) => setEditAddress({ ...editAddress, email: event.target.value })} placeholder="Email" />
-              <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="Pincode" />
+              <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="Postal code" />
               <TextInput value={editAddress.line1} onChange={(event) => setEditAddress({ ...editAddress, line1: event.target.value })} placeholder="Address" />
               <TextInput value={editAddress.city} onChange={(event) => setEditAddress({ ...editAddress, city: event.target.value })} placeholder="City" />
               <TextInput value={editAddress.state} onChange={(event) => setEditAddress({ ...editAddress, state: event.target.value })} placeholder="State" />
+              <SelectInput
+                value={editAddress.countryCode || "IN"}
+                onChange={(event) => {
+                  const next = countryByCode(event.target.value);
+                  setEditAddress({ ...editAddress, countryCode: next.code, country: next.name });
+                }}
+              >
+                {COUNTRIES.map((item) => (
+                  <option key={item.code} value={item.code}>{item.name}</option>
+                ))}
+              </SelectInput>
             </div>
           ) : (
             <>
@@ -656,7 +705,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <p className="text-xs text-text-muted">{order.deliveryAddress?.phone} · {order.deliveryAddress?.email || "no email"}</p>
               {order.deliveryMode === "delivery" ? (
                 <p className="mt-2 text-xs text-text-muted">
-                  {order.deliveryAddress?.line1}{order.deliveryAddress?.landmark ? `, ${order.deliveryAddress.landmark}` : ""}, {order.deliveryAddress?.city}, {order.deliveryAddress?.state} {order.deliveryAddress?.pincode}
+                  {order.deliveryAddress?.line1}{order.deliveryAddress?.landmark ? `, ${order.deliveryAddress.landmark}` : ""}, {order.deliveryAddress?.city}, {order.deliveryAddress?.state} {order.deliveryAddress?.pincode}{order.deliveryAddress?.country ? `, ${order.deliveryAddress.country}` : ""}
                 </p>
               ) : (
                 <p className="mt-2 text-xs text-text-muted">Collects from the store.</p>

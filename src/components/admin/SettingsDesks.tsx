@@ -158,7 +158,11 @@ export function GeneralSettingsDesk() {
       saveSettings({
         ...current,
         ...pickGeneral(settings),
-        apiKeys: { ...current.apiKeys, googleMaps: settings.apiKeys.googleMaps },
+        apiKeys: {
+          ...current.apiKeys,
+          googleMaps: settings.apiKeys.googleMaps,
+          googleAnalytics: settings.apiKeys.googleAnalytics,
+        },
       });
       window.dispatchEvent(new Event("vgmf-cms"));
       setNote(settings.maintenanceMode ? "Saved. Visitors now see the maintenance page; admins and staff still see the site." : "Saved. The site is live.");
@@ -203,11 +207,20 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
-      <Card title="Google Maps" text="Used on clinics and events to search a place, preview the map, and store coordinates. Paste a Maps URL if you leave this blank.">
+      <Card title="Google Maps" text="Used on clinics, events, live tracking and the analytics live map. Paste a Maps URL if you leave this blank.">
         <Text
           label="Google Maps JavaScript API key"
           value={settings.apiKeys.googleMaps}
           onChange={(googleMaps) => set({ apiKeys: { ...settings.apiKeys, googleMaps } })}
+        />
+      </Card>
+
+      <Card title="Google Analytics" text="GA4 measurement ID is injected on the public site. Visitor counts also appear under Reports → Analytics.">
+        <Text
+          label="GA4 measurement ID"
+          value={settings.apiKeys.googleAnalytics ?? ""}
+          placeholder="G-XXXXXXXXXX"
+          onChange={(googleAnalytics) => set({ apiKeys: { ...settings.apiKeys, googleAnalytics } })}
         />
       </Card>
 

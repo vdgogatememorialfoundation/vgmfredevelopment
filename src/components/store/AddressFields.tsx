@@ -1,0 +1,207 @@
+"use client";
+
+import type { DeliveryAddress } from "@/types";
+import {
+  COUNTRIES,
+  DEFAULT_COUNTRY,
+  countryByCode,
+  isIndia,
+  statesFor,
+} from "@/lib/geo";
+
+export function emptyDeliveryAddress(partial?: Partial<DeliveryAddress>): DeliveryAddress {
+  const country = countryByCode(partial?.countryCode || DEFAULT_COUNTRY);
+  return {
+    fullName: "",
+    phone: "",
+    email: "",
+    line1: "",
+    landmark: "",
+    city: "",
+    state: isIndia(country.code) ? "Maharashtra" : "",
+    pincode: "",
+    country: country.name,
+    countryCode: country.code,
+    ...partial,
+  };
+}
+
+export function AddressFields({
+  value,
+  onChange,
+  idPrefix = "addr",
+  showEmail = false,
+}: {
+  value: DeliveryAddress;
+  onChange: (next: DeliveryAddress) => void;
+  idPrefix?: string;
+  showEmail?: boolean;
+}) {
+  const countryCode = value.countryCode || DEFAULT_COUNTRY;
+  const country = countryByCode(countryCode);
+  const states = statesFor(country.code);
+  const postalLabel = isIndia(country.code) ? "Pincode" : "Postal code";
+
+  const set = (patch: Partial<DeliveryAddress>) => onChange({ ...value, ...patch });
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-name`}>
+            Full name
+          </label>
+          <input
+            id={`${idPrefix}-name`}
+            className="input-field"
+            value={value.fullName}
+            onChange={(event) => set({ fullName: event.target.value })}
+            placeholder="Your full name"
+          />
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-phone`}>
+            Phone (with country code)
+          </label>
+          <input
+            id={`${idPrefix}-phone`}
+            type="tel"
+            className="input-field"
+            value={value.phone}
+            onChange={(event) => set({ phone: event.target.value })}
+            placeholder={`${country.dial} 98765 43210`}
+          />
+        </div>
+      </div>
+
+      {showEmail ? (
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-email`}>
+            Email
+          </label>
+          <input
+            id={`${idPrefix}-email`}
+            type="email"
+            className="input-field"
+            value={value.email ?? ""}
+            onChange={(event) => set({ email: event.target.value })}
+          />
+        </div>
+      ) : null}
+
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-country`}>
+          Country
+        </label>
+        <select
+          id={`${idPrefix}-country`}
+          className="input-field"
+          value={country.code}
+          onChange={(event) => {
+            const next = countryByCode(event.target.value);
+            const nextStates = statesFor(next.code);
+            set({
+              countryCode: next.code,
+              country: next.name,
+              state: nextStates.includes(value.state) ? value.state : nextStates[0] || "",
+              pincode: isIndia(next.code) ? value.pincode.replace(/\D/g, "").slice(0, 6) : value.pincode,
+            });
+          }}
+        >
+          {COUNTRIES.map((item) => (
+            <option key={item.code} value={item.code}>
+              {item.name} ({item.dial})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-line1`}>
+          Address
+        </label>
+        <input
+          id={`${idPrefix}-line1`}
+          className="input-field"
+          value={value.line1}
+          onChange={(event) => set({ line1: event.target.value })}
+          placeholder="House number, street, area"
+        />
+      </div>
+
+      <div>
+        <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-landmark`}>
+          Landmark <span className="font-normal text-text-muted">(optional)</span>
+        </label>
+        <input
+          id={`${idPrefix}-landmark`}
+          className="input-field"
+          value={value.landmark ?? ""}
+          onChange={(event) => set({ landmark: event.target.value })}
+          placeholder="Near…"
+        />
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-3">
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-city`}>
+            City
+          </label>
+          <input
+            id={`${idPrefix}-city`}
+            className="input-field"
+            value={value.city}
+            onChange={(event) => set({ city: event.target.value })}
+            placeholder="City"
+          />
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-state`}>
+            State / region
+          </label>
+          {states.length ? (
+            <select
+              id={`${idPrefix}-state`}
+              className="input-field"
+              value={value.state}
+              onChange={(event) => set({ state: event.target.value })}
+            >
+              <option value="">Select</option>
+              {states.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id={`${idPrefix}-state`}
+              className="input-field"
+              value={value.state}
+              onChange={(event) => set({ state: event.target.value })}
+              placeholder="State or region"
+            />
+          )}
+        </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-postal`}>
+            {postalLabel}
+          </label>
+          <input
+            id={`${idPrefix}-postal`}
+            className="input-field"
+            value={value.pincode}
+            onChange={(event) =>
+              set({
+                pincode: isIndia(country.code)
+                  ? event.target.value.replace(/\D/g, "").slice(0, 6)
+                  : event.target.value.slice(0, 12),
+              })
+            }
+            placeholder={isIndia(country.code) ? "6-digit PIN" : "Postal code"}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}

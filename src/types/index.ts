@@ -385,6 +385,8 @@ export interface DeliveryAddress {
   city: string;
   state: string;
   pincode: string;
+  country?: string;
+  countryCode?: string;
 }
 
 export interface CartItem {
@@ -544,6 +546,7 @@ export interface PickupTimeslot {
 
 export interface ApiKeys {
   googleMaps: string;
+  googleAnalytics: string;
   shiprocket: string;
   razorpay: string;
   zeptomail: string;
@@ -594,6 +597,8 @@ export interface SiteSettings {
   pickupTimeslots: PickupTimeslot[];
   couriers: string[];
   outOfStockThreshold: number;
+  liveChatEnabled?: boolean;
+  liveChatOnline?: boolean;
 }
 
 export interface AdminCategory {
@@ -671,6 +676,7 @@ export interface SupportTicket {
   status: "Open" | "In Progress" | "Resolved" | "Closed";
   createdAt: string;
   updatedAt: string;
+  portal?: "public" | "staff" | "customer" | "admin";
   responses: { at: string; from: string; text: string }[];
 }
 
