@@ -2,7 +2,7 @@ import { subscribeCms } from "@/lib/cms";
 
 const KEY = "vgmf_policies";
 
-export type PolicyId = "privacy" | "terms" | "shipping" | "returns" | "refund";
+export type PolicyId = "privacy" | "terms" | "shipping" | "returns" | "refund" | "cancellation";
 
 export interface PolicySection {
   title: string;
@@ -123,6 +123,26 @@ export const defaultPolicies: Record<PolicyId, PolicyDoc> = {
       },
     ],
   },
+  cancellation: {
+    id: "cancellation",
+    title: "Cancellation Policy",
+    description: "How orders placed through the Vaidya Gogate Memorial Foundation store can be cancelled.",
+    lastUpdated: "October 2026",
+    sections: [
+      {
+        title: "Customer cancellations",
+        body: "If cancellations are enabled in the store settings, you may cancel an order from your account within the stated window — typically before the order is packed or shipped. A cancellation fee may apply if one is published at checkout.",
+      },
+      {
+        title: "After dispatch or delivery",
+        body: "Once an order has shipped, customer self-service cancellation may no longer be available. The Foundation office can still cancel, refund or replace an order from the admin desk, including after delivery, where that is appropriate.",
+      },
+      {
+        title: "How to request a cancellation",
+        body: "Open the order in your account, or write to info@vaidyagogate.org with the order number. Approved cancellations are confirmed by email.",
+      },
+    ],
+  },
 };
 
 function readSaved(): Partial<Record<PolicyId, PolicyDoc>> {
@@ -147,6 +167,7 @@ export function getPolicies(): Record<PolicyId, PolicyDoc> {
     shipping: getPolicy("shipping"),
     returns: getPolicy("returns"),
     refund: getPolicy("refund"),
+    cancellation: getPolicy("cancellation"),
   };
 }
 
@@ -161,4 +182,4 @@ export function subscribePolicies(onChange: () => void) {
   return subscribeCms(onChange);
 }
 
-export const policyIds: PolicyId[] = ["privacy", "terms", "shipping", "returns", "refund"];
+export const policyIds: PolicyId[] = ["privacy", "terms", "shipping", "returns", "refund", "cancellation"];

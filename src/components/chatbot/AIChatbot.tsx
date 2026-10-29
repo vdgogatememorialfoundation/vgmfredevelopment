@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getLiveAnnouncements, getLiveArticles, getLiveEvents, getLiveNotices, getSiteFlags } from "@/lib/cms";
+import { isPublishedNow } from "@/lib/schedule";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { books } from "@/data/books";
 import { addToCart, buildTrackingStages, formatPrice, getOrders } from "@/lib/store";
@@ -78,7 +79,7 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["notice", "announcement", "news", "update"],
     answer: () => {
-      const notices = getLiveNotices();
+      const notices = getLiveNotices().filter((notice) => isPublishedNow(notice));
       const announcements = getLiveAnnouncements();
       if (notices.length) {
         const latest = notices[0];
@@ -99,7 +100,7 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
 ];
 
 function summariseEvents() {
-  const upcoming = getLiveEvents().filter((event) => event.registrationStatus !== "Closed");
+  const upcoming = getLiveEvents().filter((event) => isPublishedNow(event) && event.registrationStatus !== "Closed");
   if (upcoming.length === 0) {
     return "There are no upcoming events published right now. Please check the Events page once new programmes are added.";
   }
@@ -138,6 +139,7 @@ function searchFedContent(question: string): string | null {
     .slice(0, 2);
 
   const eventHits = getLiveEvents()
+    .filter((event) => isPublishedNow(event))
     .map((event) => {
       const hay = [event.name, event.shortDescription, event.description, event.city, event.venue, event.eventType]
         .filter(Boolean)
@@ -151,6 +153,7 @@ function searchFedContent(question: string): string | null {
     .slice(0, 2);
 
   const noticeHits = getLiveNotices()
+    .filter((notice) => isPublishedNow(notice))
     .map((notice) => {
       const hay = [notice.title, notice.description, notice.category].filter(Boolean).join(" ").toLowerCase();
       const score = tokens.reduce((sum, token) => (hay.includes(token) ? sum + token.length : sum), 0);

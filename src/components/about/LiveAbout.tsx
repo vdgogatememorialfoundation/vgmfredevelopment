@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
-import { buildTree, useAbout, type TreeBranch } from "@/lib/about";
+import { buildTree, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
 
 function Initials({ name, size }: { name: string; size: string }) {
   return (
@@ -128,6 +128,151 @@ export function FamilyTree() {
         </ul>
       </div>
     </div>
+  );
+}
+
+function PersonCard({ person, featured }: { person: AboutPerson; featured?: boolean }) {
+  const initials = person.name.split(" ").filter(Boolean).map((part) => part[0]).slice(-2).join("");
+  if (featured) {
+    return (
+      <div className="card p-6 text-center">
+        {person.photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={person.photo} alt={person.name} className="mx-auto h-20 w-20 rounded-full border-2 border-burgundy/20 object-cover" />
+        ) : (
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-burgundy/20 bg-burgundy/5">
+            <span className="text-sm font-bold text-burgundy">{initials}</span>
+          </div>
+        )}
+        <h3 className="mt-4 text-lg font-semibold text-text-primary">{person.name}</h3>
+        {person.role ? <p className="mt-1 text-sm font-medium text-burgundy">{person.role}</p> : null}
+        {person.bio ? <p className="mt-3 text-sm leading-6 text-text-muted">{person.bio}</p> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border border-border bg-white p-5">
+      {person.photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={person.photo} alt={person.name} className="h-12 w-12 shrink-0 rounded-full border border-burgundy/20 object-cover" />
+      ) : (
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-burgundy/20 bg-burgundy/5">
+          <span className="text-xs font-bold text-burgundy">{initials}</span>
+        </div>
+      )}
+      <div>
+        <p className="font-semibold text-text-primary">{person.name}</p>
+        {person.role ? <p className="text-sm text-text-muted">{person.role}</p> : null}
+        {person.bio ? <p className="mt-1 text-sm text-text-muted">{person.bio}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+export function FoundationLive() {
+  const { foundation } = useAbout();
+  return (
+    <main>
+      <PageHeader eyebrow="About Us" title={foundation.title} description={foundation.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container grid gap-12 lg:grid-cols-2">
+          <div>
+            {foundation.sections.map((section) => (
+              <div key={section.id} className="mb-10 last:mb-0">
+                {section.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={section.image} alt="" className="mb-4 aspect-[16/8] w-full rounded-xl object-cover" />
+                ) : null}
+                <h2 className="heading-3 mb-4">{section.title}</h2>
+                {section.body.includes("\n") && !section.body.includes("\n\n") ? (
+                  <ul className="space-y-3 text-body" role="list">
+                    {section.body.split("\n").filter(Boolean).map((item) => (
+                      <li key={item} className="flex items-start gap-3">
+                        <span className="mt-2 text-burgundy">✓</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-body whitespace-pre-line">{section.body}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <div>
+            {foundation.activities.length > 0 ? <h2 className="heading-3 mb-4">Activities</h2> : null}
+            <ul className="space-y-4" role="list">
+              {foundation.activities.map((activity) => (
+                <li key={activity.id} className="card p-6">
+                  {activity.href ? (
+                    <Link href={activity.href} className="font-semibold text-text-primary transition hover:text-burgundy">
+                      {activity.title}
+                    </Link>
+                  ) : (
+                    <p className="font-semibold text-text-primary">{activity.title}</p>
+                  )}
+                  <p className="mt-2 text-sm leading-6 text-text-muted">{activity.body}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function HistoryLive() {
+  const { history } = useAbout();
+  return (
+    <main>
+      <PageHeader eyebrow="About Us" title={history.title} description={history.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container max-w-4xl">
+          <ol className="relative space-y-10 border-l-2 border-border pl-8" role="list">
+            {history.timeline.map((item) => (
+              <li key={item.id} className="relative">
+                <span className="absolute -left-[41px] top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-burgundy bg-white" aria-hidden="true">
+                  <span className="h-2 w-2 rounded-full bg-burgundy" />
+                </span>
+                <p className="text-sm font-bold uppercase tracking-[0.15em] text-burgundy">{item.year}</p>
+                <h2 className="heading-3 mt-1">{item.title}</h2>
+                <p className="mt-2 text-body">{item.description}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function TrusteesLive() {
+  const { trustees } = useAbout();
+  return (
+    <main>
+      <PageHeader eyebrow="About Us" title={trustees.title} description={trustees.intro} breadcrumb={[{ name: "About", href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container">
+          <h2 className="heading-3 mb-8">{trustees.trusteesHeading}</h2>
+          <div className="grid gap-6 md:grid-cols-3">
+            {trustees.trustees.map((person) => (
+              <PersonCard key={person.id} person={person} featured />
+            ))}
+          </div>
+        </div>
+      </section>
+      <section className="section bg-warm-cream">
+        <div className="container">
+          <h2 className="heading-3 mb-8">{trustees.teamHeading}</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {trustees.team.map((person) => (
+              <PersonCard key={person.id} person={person} />
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
 

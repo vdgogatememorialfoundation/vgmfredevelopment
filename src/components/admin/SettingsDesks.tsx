@@ -967,6 +967,7 @@ export function OrderSettingsDesk() {
         </Card>
         <Card title="Refunds">
           <div className="space-y-3">
+            <Check label="Enable refunds" checked={value.refunds.enabled} onChange={(enabled) => set({ refunds: { ...value.refunds, enabled } })} />
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Refund to</span>
               <select className={input} value={value.refunds.method} onChange={(event) => set({ refunds: { ...value.refunds, method: event.target.value as OrderSettings["refunds"]["method"] } })}>
@@ -994,6 +995,16 @@ export function OrderSettingsDesk() {
           </div>
         </Card>
       </div>
+      <Card title="Admin order actions">
+        <p className="mb-3 text-sm text-slate-500">
+          Customer rules above apply on the public account pages. From the admin order desk you can still cancel, refund or replace — including after delivery — when this is on.
+        </p>
+        <Check
+          label="Admin can cancel, refund or replace even after delivery"
+          checked={value.adminActions.processAfterDelivery}
+          onChange={(processAfterDelivery) => set({ adminActions: { ...value.adminActions, processAfterDelivery } })}
+        />
+      </Card>
     </div>
   );
 }

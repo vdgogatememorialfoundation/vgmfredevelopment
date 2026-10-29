@@ -41,8 +41,8 @@ export const storeConfig = {
 
 export const navigation = [
   { name: "About Us", href: "/about" },
-  { name: "Notices", href: "/notices" },
   { name: "Events", href: "/events" },
+  { name: "Gallery", href: "/gallery" },
   { name: "Videos", href: "/videos" },
   { name: "Articles", href: "/articles" },
   { name: "Shop", href: "/shop" },

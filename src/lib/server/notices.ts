@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { notices as seededNotices } from "@/data/content";
+import { isPublishedNow } from "@/lib/schedule";
 import type { Notice } from "@/types";
 
 export type StoredNotice = Notice & { updatedAt: string };
@@ -33,16 +34,17 @@ function write(notices: StoredNotice[]) {
   }
 }
 
-export function listNotices() {
-  return read().sort((a, b) => {
+export function listNotices(opts?: { includeScheduled?: boolean }) {
+  const notices = read().sort((a, b) => {
     if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
     return (b.date + b.updatedAt).localeCompare(a.date + a.updatedAt);
   });
+  return opts?.includeScheduled ? notices : notices.filter((notice) => isPublishedNow(notice));
 }
 
-export function queryNotices(query: { q?: string; category?: string; kind?: string; year?: string }) {
+export function queryNotices(query: { q?: string; category?: string; kind?: string; year?: string; includeScheduled?: boolean }) {
   const q = query.q?.trim().toLowerCase() ?? "";
-  return listNotices().filter((notice) => {
+  return listNotices({ includeScheduled: query.includeScheduled }).filter((notice) => {
     if (query.category && notice.category !== query.category) return false;
     if (query.year && notice.date.slice(0, 4) !== query.year) return false;
     if (query.kind === "file" && !notice.attachment) return false;
@@ -74,6 +76,8 @@ export function upsertNotice(input: Partial<Notice> & Pick<Notice, "title">) {
     fileType: input.fileType === undefined ? existing?.fileType : input.fileType,
     pinned: input.pinned ?? existing?.pinned ?? false,
     href: input.href?.trim() || existing?.href || `/notices#${id}`,
+    publishAt: input.publishAt === undefined ? existing?.publishAt : input.publishAt || undefined,
+    unpublishAt: input.unpublishAt === undefined ? existing?.unpublishAt : input.unpublishAt || undefined,
     updatedAt: new Date().toISOString(),
   };
   if (!next.title) throw new Error("Add a title.");
@@ -99,6 +103,13 @@ export async function fileFromForm(form: FormData) {
 
 export function asBoolean(value: FormDataEntryValue | null) {
   return value === "true" || value === "1" || value === "on";
+}
+
+export function scheduleFromForm(form: FormData) {
+  return {
+    publishAt: form.has("publishAt") ? String(form.get("publishAt") ?? "") : undefined,
+    unpublishAt: form.has("unpublishAt") ? String(form.get("unpublishAt") ?? "") : undefined,
+  };
 }
 
 export function removeNotice(id: string) {

@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import type { Event } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
+import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
 import { eventDateText, eventPlaceText, eventTimeText } from "@/lib/event-display";
 
 const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral"> = {
@@ -63,6 +66,10 @@ export default function EventCard({ event }: { event: Event }) {
           <span className="line-clamp-1">
             {eventPlaceText(event)}
           </span>
+        </div>
+
+        <div className="mt-4">
+          <RegistrationCountdown event={event} compact />
         </div>
 
         <Link

@@ -862,9 +862,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </div>
       )}
 
-      {(order.status === "Delivered" || returnRequest || order.returnShipment) && (
+      {(order.status === "Delivered" || returnRequest || order.returnShipment || getOrderSettings().adminActions.processAfterDelivery) && order.status !== "Cancelled" && (
         <div className="mt-4">
-          <Section title="Returns & replacements">
+          <Section title="Returns, refunds & replacements">
+            {getOrderSettings().adminActions.processAfterDelivery ? (
+              <p className="mb-2 text-xs text-text-muted">Admin can process a cancellation, refund or replacement on this order even after delivery.</p>
+            ) : null}
             {order.returnShipment && (
               <p className="mb-2 text-xs text-text-muted">
                 Return AWB {order.returnShipment.awb || "pending"} · {order.returnShipment.courierName} · {order.returnShipment.live ? "live" : "demo"}
@@ -937,7 +940,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     }, "Return opened");
                     return created.note ?? "Return opened and reverse pickup requested.";
                   })}>Create return (reverse pickup)</Button>
-                  {getOrderSettings().returns.replacementAllowed && (
+                  {(getOrderSettings().returns.replacementAllowed || getOrderSettings().adminActions.processAfterDelivery) && (
                     <Button variant="outline" onClick={() => run("rt", () => {
                       const replacement = createReplacement(order.id);
                       return replacement ? `Replacement order ${replacement.id} created separately.` : "Could not create replacement.";

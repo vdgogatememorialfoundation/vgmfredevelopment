@@ -26,6 +26,8 @@ function toForm(input: {
   pinned?: boolean;
   file?: File | null;
   attachment?: string;
+  publishAt?: string;
+  unpublishAt?: string;
 }) {
   const form = new FormData();
   if (input.id) form.set("id", input.id);
@@ -34,23 +36,27 @@ function toForm(input: {
   form.set("category", input.category);
   form.set("date", input.date);
   form.set("pinned", input.pinned ? "true" : "false");
+  form.set("publishAt", input.publishAt ?? "");
+  form.set("unpublishAt", input.unpublishAt ?? "");
   if (input.file) form.set("file", input.file);
   if (!input.file && input.attachment === "") form.set("clearFile", "true");
   return form;
 }
 
-function persistLocal(notice: PublicNotice, attachment?: string): Notice {
+function persistLocal(notice: PublicNotice, extra?: { attachment?: string; publishAt?: string; unpublishAt?: string }): Notice {
   const local: Notice = {
     id: notice.id,
     title: notice.title,
     date: notice.date,
     category: notice.category,
     description: notice.description,
-    attachment: attachment || (notice.hasFile ? notice.fileUrl : undefined),
+    attachment: extra?.attachment || (notice.hasFile ? notice.fileUrl : undefined),
     fileName: notice.fileName,
     fileType: notice.fileType,
     pinned: notice.pinned,
     href: notice.href || `/notices#${notice.id}`,
+    publishAt: extra?.publishAt ?? notice.publishAt,
+    unpublishAt: extra?.unpublishAt ?? notice.unpublishAt,
   };
   saveNotice(local);
   return local;
@@ -67,13 +73,19 @@ export async function publishNotice(input: {
   attachment?: string;
   fileName?: string;
   fileType?: string;
+  publishAt?: string;
+  unpublishAt?: string;
 }) {
   const path = input.id ? `/api/notices/${input.id}` : "/api/notices";
   const method = input.id ? "PATCH" : "POST";
   const response = await fetch(path, { method, body: toForm(input) });
   const data = (await response.json()) as { ok: boolean; notice?: PublicNotice; error?: string };
   if (!response.ok || !data.ok || !data.notice) throw new Error(data.error || "Could not publish the notice.");
-  persistLocal(data.notice, input.attachment);
+  persistLocal(data.notice, {
+    attachment: input.attachment,
+    publishAt: input.publishAt ?? data.notice.publishAt,
+    unpublishAt: input.unpublishAt ?? data.notice.unpublishAt,
+  });
   return data.notice;
 }
 

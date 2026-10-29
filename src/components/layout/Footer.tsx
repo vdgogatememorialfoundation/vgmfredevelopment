@@ -9,8 +9,8 @@ import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
 
 const quickLinks = [
   { key: "nav.about" as MessageKey, href: "/about" },
-  { key: "nav.notices" as MessageKey, href: "/notices" },
   { key: "nav.events" as MessageKey, href: "/events" },
+  { key: "nav.gallery" as MessageKey, href: "/gallery" },
   { key: "nav.articles" as MessageKey, href: "/articles" },
   { key: "nav.shop" as MessageKey, href: "/shop" },
   { key: "nav.clinics" as MessageKey, href: "/clinics" },
@@ -23,6 +23,7 @@ const legalLinks: { key: MessageKey; href: string }[] = [
   { key: "footer.shipping", href: "/shipping-policy" },
   { key: "footer.returns", href: "/return-policy" },
   { key: "footer.refund", href: "/refund-policy" },
+  { key: "footer.cancellation", href: "/cancellation-policy" },
 ];
 
 export default function Footer() {

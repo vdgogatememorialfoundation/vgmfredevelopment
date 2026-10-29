@@ -6,9 +6,12 @@ import EventCard from "@/components/events/EventCard";
 import { useLiveEvents } from "@/lib/use-cms";
 import { compareEventDates } from "@/lib/event-display";
 import { useI18n } from "@/components/i18n/LanguageProvider";
+import { isPublishedNow } from "@/lib/schedule";
+import { useScheduleTick } from "@/lib/use-schedule";
 
 export default function UpcomingEvents() {
-  const events = useLiveEvents();
+  const now = useScheduleTick();
+  const events = useLiveEvents().filter((event) => isPublishedNow(event, now));
   const { t } = useI18n();
   const upcoming = events
     .filter((event) => event.registrationStatus !== "Closed")

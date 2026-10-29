@@ -136,6 +136,7 @@ export interface OrderSettings {
     reasons: string[];
   };
   refunds: {
+    enabled: boolean;
     method: "original" | "manual";
     processingDays: number;
     autoRefundOnReturnPickup: boolean;
@@ -145,6 +146,9 @@ export interface OrderSettings {
     allowedUntil: "Ordered" | "Packed" | "Shipped";
     windowHours: number;
     fee: number;
+  };
+  adminActions: {
+    processAfterDelivery: boolean;
   };
 }
 
@@ -239,8 +243,9 @@ export const defaultOrderSettings: OrderSettings = {
     replacementAllowed: true,
     reasons: ["Damaged or defective item", "Wrong item delivered", "Edition or size mismatch", "No longer needed"],
   },
-  refunds: { method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
+  refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
   cancellation: { enabled: true, allowedUntil: "Packed", windowHours: 24, fee: 0 },
+  adminActions: { processAfterDelivery: true },
 };
 
 function readJSON<T>(key: string, fallback: T): T {

@@ -49,6 +49,10 @@ export interface Event {
   placeId?: string;
   lat?: number;
   lng?: number;
+  /** ISO datetime — hidden on the public site until this time. */
+  publishAt?: string;
+  /** ISO datetime — hidden on the public site after this time. */
+  unpublishAt?: string;
 }
 
 export interface EventTbd {
@@ -238,6 +242,8 @@ export interface Announcement {
   category: string;
   href: string;
   priority: "high" | "normal";
+  publishAt?: string;
+  unpublishAt?: string;
 }
 
 export interface Notice {
@@ -251,6 +257,8 @@ export interface Notice {
   fileType?: string;
   pinned?: boolean;
   href: string;
+  publishAt?: string;
+  unpublishAt?: string;
 }
 
 export interface Flyer {

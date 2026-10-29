@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asBoolean, fileFromForm, listNotices, publicNotice, queryNotices, upsertNotice } from "@/lib/server/notices";
+import { asBoolean, fileFromForm, listNotices, publicNotice, queryNotices, scheduleFromForm, upsertNotice } from "@/lib/server/notices";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,11 @@ export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get("category") ?? "";
   const kind = request.nextUrl.searchParams.get("kind") ?? "";
   const year = request.nextUrl.searchParams.get("year") ?? "";
-  const notices = q || category || kind || year ? queryNotices({ q, category, kind, year }) : listNotices();
+  const includeScheduled = request.nextUrl.searchParams.get("scheduled") === "1";
+  const notices =
+    q || category || kind || year
+      ? queryNotices({ q, category, kind, year, includeScheduled })
+      : listNotices({ includeScheduled });
   return NextResponse.json({
     ok: true,
     notices: notices.map(publicNotice),
@@ -32,6 +36,7 @@ export async function POST(request: NextRequest) {
         date: String(form.get("date") ?? ""),
         href: String(form.get("href") ?? ""),
         pinned: asBoolean(form.get("pinned")),
+        ...scheduleFromForm(form),
         ...(clearFile && !uploaded.attachment ? { attachment: "", fileName: "", fileType: "" } : uploaded),
       });
       return NextResponse.json({ ok: true, notice: publicNotice(notice) });
@@ -51,6 +56,8 @@ export async function POST(request: NextRequest) {
       fileName: typeof body.fileName === "string" ? body.fileName : undefined,
       fileType: typeof body.fileType === "string" ? body.fileType : undefined,
       pinned: Boolean(body.pinned),
+      publishAt: typeof body.publishAt === "string" ? body.publishAt : undefined,
+      unpublishAt: typeof body.unpublishAt === "string" ? body.unpublishAt : undefined,
     });
     return NextResponse.json({ ok: true, notice: publicNotice(notice) });
   } catch (error) {

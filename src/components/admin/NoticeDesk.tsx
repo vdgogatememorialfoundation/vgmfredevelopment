@@ -6,6 +6,7 @@ import { useLiveNotices } from "@/lib/use-cms";
 import { deleteNotice, publishNotice } from "@/lib/notices-client";
 import { fileToStoredUrl } from "@/lib/images";
 import type { Notice } from "@/types";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/schedule";
 
 const field = "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-ink";
 
@@ -17,6 +18,8 @@ export function NoticeDesk() {
   const [category, setCategory] = useState("Notice");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [pinned, setPinned] = useState(true);
+  const [publishAt, setPublishAt] = useState("");
+  const [unpublishAt, setUnpublishAt] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [attachment, setAttachment] = useState("");
   const [fileName, setFileName] = useState("");
@@ -31,6 +34,8 @@ export function NoticeDesk() {
     setCategory("Notice");
     setDate(new Date().toISOString().slice(0, 10));
     setPinned(true);
+    setPublishAt("");
+    setUnpublishAt("");
     setFile(null);
     setAttachment("");
     setFileName("");
@@ -44,6 +49,8 @@ export function NoticeDesk() {
     setCategory(notice.category);
     setDate(notice.date);
     setPinned(Boolean(notice.pinned));
+    setPublishAt(toDatetimeLocal(notice.publishAt));
+    setUnpublishAt(toDatetimeLocal(notice.unpublishAt));
     setFile(null);
     setAttachment(notice.attachment ?? "");
     setFileName(notice.fileName ?? "");
@@ -75,6 +82,8 @@ export function NoticeDesk() {
         category: category.trim() || "Notice",
         date,
         pinned,
+        publishAt: fromDatetimeLocal(publishAt),
+        unpublishAt: fromDatetimeLocal(unpublishAt),
         file,
         attachment: stored,
         fileName: storedName,
@@ -82,8 +91,8 @@ export function NoticeDesk() {
       });
       setNote(
         file || attachment
-          ? "Published with a file. It is on the homepage notice board (if pinned) and /notices."
-          : "Published as text. It is on the homepage notice board (if pinned) and /notices."
+          ? "Published with a file. It appears on the homepage notice board (if pinned), /notices, and the announcement ticker once live."
+          : "Published as text. It appears on the homepage notice board (if pinned), /notices, and the announcement ticker once live."
       );
       reset();
     } catch (error) {
@@ -141,6 +150,16 @@ export function NoticeDesk() {
             Pin to homepage board
           </label>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">
+            Go live (leave empty to publish now)
+            <input className={`${field} mt-1`} type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} />
+          </label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-stone-500">
+            Hide after (optional)
+            <input className={`${field} mt-1`} type="datetime-local" value={unpublishAt} onChange={(event) => setUnpublishAt(event.target.value)} />
+          </label>
+        </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">File (optional)</p>
           <div className="mt-1 flex flex-wrap items-center gap-3">
@@ -196,6 +215,8 @@ export function NoticeDesk() {
               <p className="text-xs text-stone-500">
                 {notice.category} · {notice.date}
                 {notice.pinned ? " · Homepage" : ""}
+                {notice.publishAt ? ` · Live ${notice.publishAt.slice(0, 16).replace("T", " ")}` : ""}
+                {notice.unpublishAt ? ` · Hide ${notice.unpublishAt.slice(0, 16).replace("T", " ")}` : ""}
                 {notice.attachment || notice.fileName ? ` · File: ${notice.fileName || "attached"}` : " · Text only"}
               </p>
               {notice.description ? <p className="mt-1 max-w-2xl text-sm text-stone-600">{notice.description}</p> : null}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asBoolean, fileFromForm, getNotice, publicNotice, removeNotice, upsertNotice } from "@/lib/server/notices";
+import { asBoolean, fileFromForm, getNotice, publicNotice, removeNotice, scheduleFromForm, upsertNotice } from "@/lib/server/notices";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -31,6 +31,7 @@ export async function PATCH(request: NextRequest, context: Params) {
         date: String(form.get("date") ?? existing.date),
         href: String(form.get("href") ?? existing.href),
         pinned: form.has("pinned") ? asBoolean(form.get("pinned")) : existing.pinned,
+        ...scheduleFromForm(form),
         ...(clearFile && !uploaded.attachment ? { attachment: "", fileName: "", fileType: "" } : uploaded),
       });
       return NextResponse.json({ ok: true, notice: publicNotice(notice) });
@@ -44,6 +45,8 @@ export async function PATCH(request: NextRequest, context: Params) {
       title: String(body.title ?? existing.title),
       description: String(body.description ?? body.body ?? existing.description),
       pinned: body.pinned === undefined ? existing.pinned : Boolean(body.pinned),
+      publishAt: typeof body.publishAt === "string" ? body.publishAt : existing.publishAt,
+      unpublishAt: typeof body.unpublishAt === "string" ? body.unpublishAt : existing.unpublishAt,
     });
     return NextResponse.json({ ok: true, notice: publicNotice(notice) });
   } catch (error) {

@@ -44,6 +44,7 @@ export const publicSitemapPaths = [
   "/about/legacy-of-vaidya-rb-gogate",
   "/notices",
   "/events",
+  "/gallery",
   "/videos",
   "/articles",
   "/shop",
@@ -54,5 +55,6 @@ export const publicSitemapPaths = [
   "/shipping-policy",
   "/return-policy",
   "/refund-policy",
+  "/cancellation-policy",
   "/certificate-verification",
 ];

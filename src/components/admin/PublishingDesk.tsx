@@ -45,6 +45,7 @@ import { displayName } from "@/lib/admin-store";
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
 import { EventLocationField } from "@/components/events/EventLocationField";
 import type { OrderStatus } from "@/lib/admin-store";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/schedule";
 
 ensureBootstrapped();
 
@@ -238,6 +239,8 @@ function AnnouncementForm({
   const [href, setHref] = useState(current?.href ?? "/announcements");
   const [category, setCategory] = useState(current?.category ?? "News");
   const [priority, setPriority] = useState<"high" | "normal">(current?.priority ?? "high");
+  const [publishAt, setPublishAt] = useState(toDatetimeLocal(current?.publishAt));
+  const [unpublishAt, setUnpublishAt] = useState(toDatetimeLocal(current?.unpublishAt));
   const [saved, setSaved] = useState(false);
 
   const publish = () => {
@@ -250,6 +253,8 @@ function AnnouncementForm({
       category,
       href: href.trim() || "/announcements",
       priority,
+      publishAt: fromDatetimeLocal(publishAt),
+      unpublishAt: fromDatetimeLocal(unpublishAt),
     };
     saveAnnouncement(item);
     setSaved(true);
@@ -270,8 +275,18 @@ function AnnouncementForm({
             <option value="normal">Lower priority</option>
           </select>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Go live (leave empty to publish now)
+            <input className={`${field} mt-1`} type="datetime-local" value={publishAt} onChange={(event) => setPublishAt(event.target.value)} />
+          </label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
+            Hide after (optional)
+            <input className={`${field} mt-1`} type="datetime-local" value={unpublishAt} onChange={(event) => setUnpublishAt(event.target.value)} />
+          </label>
+        </div>
         <button type="button" className={button} onClick={publish}>{current ? "Update announcement" : "Publish announcement"}</button>
-        {saved && <p className="text-sm text-emerald-700">Saved. It appears in the site ticker, not as a second homepage block.</p>}
+        {saved && <p className="text-sm text-emerald-700">Saved. It appears in the site ticker as soon as it is live.</p>}
       </div>
       <ul className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         {items.map((item) => (
@@ -417,6 +432,23 @@ export function EventEditor({ eventId }: { eventId?: string | null }) {
             onChange={(event) => set({ registrationUrl: event.target.value, tbd: { ...tbd, registration: false } })}
           />
         </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Registration opens
+          <input className={field} type="datetime-local" value={toDatetimeLocal(draft.registrationStart)} onChange={(event) => set({ registrationStart: fromDatetimeLocal(event.target.value) ?? "" })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Registration closes (countdown)
+          <input className={field} type="datetime-local" value={toDatetimeLocal(draft.registrationEnd)} onChange={(event) => set({ registrationEnd: fromDatetimeLocal(event.target.value) ?? "" })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Go live on the site
+          <input className={field} type="datetime-local" value={toDatetimeLocal(draft.publishAt)} onChange={(event) => set({ publishAt: fromDatetimeLocal(event.target.value) })} />
+        </label>
+        <label className="space-y-1 text-xs font-semibold text-slate-600">
+          Hide after (optional)
+          <input className={field} type="datetime-local" value={toDatetimeLocal(draft.unpublishAt)} onChange={(event) => set({ unpublishAt: fromDatetimeLocal(event.target.value) })} />
+        </label>
+        <p className="sm:col-span-2 text-xs text-slate-500">Leave “Go live” empty to publish immediately. The ticker, events list and registration countdown use these times.</p>
         <textarea className={`${field} sm:col-span-2`} rows={3} placeholder="Short description" value={draft.shortDescription} onChange={(event) => set({ shortDescription: event.target.value })} />
         <textarea className={`${field} sm:col-span-2`} rows={6} placeholder="Event description" value={draft.description} onChange={(event) => set({ description: event.target.value })} />
         <div className="sm:col-span-2">

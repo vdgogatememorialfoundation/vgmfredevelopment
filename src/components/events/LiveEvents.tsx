@@ -13,9 +13,13 @@ const scheduleKeys = eventRecordKeys("schedule");
 const useSpeakerRecords = collectionHook<EventRecord>(speakerKeys.edits, speakerKeys.custom, [], () => getEventRecords("speakers"));
 const useScheduleRecords = collectionHook<EventRecord>(scheduleKeys.edits, scheduleKeys.custom, [], () => getEventRecords("schedule"));
 import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, eventTimeText } from "@/lib/event-display";
+import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
+import { isPublishedNow } from "@/lib/schedule";
+import { useScheduleTick } from "@/lib/use-schedule";
 
 export function EventsIndex() {
-  const events = useLiveEvents();
+  const now = useScheduleTick();
+  const events = useLiveEvents().filter((event) => isPublishedNow(event, now));
   const upcoming = events
     .filter((event) => event.registrationStatus !== "Closed")
     .sort(compareEventDates);
@@ -63,10 +67,11 @@ export function EventsIndex() {
 }
 
 export function LiveEventPage({ slug }: { slug: string }) {
+  const now = useScheduleTick();
   const events = useLiveEvents();
   const speakerRecords = useSpeakerRecords();
   const scheduleRecords = useScheduleRecords();
-  const found = events.find((item) => item.slug === slug);
+  const found = events.find((item) => item.slug === slug && isPublishedNow(item, now));
   if (!found) {
     return (
       <main className="container py-20">
@@ -159,6 +164,9 @@ export function LiveEventPage({ slug }: { slug: string }) {
           <aside className="rounded-2xl border border-border bg-white p-6">
             <p className="text-sm text-text-muted">Registration fee</p>
             <p className="mt-1 text-2xl font-semibold text-text-primary">{eventFeeText(event)}</p>
+            <div className="mt-4">
+              <RegistrationCountdown event={event} />
+            </div>
             <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Dates</dt><dd className="text-right font-medium">{eventDateText(event)}</dd></div>
               {eventTimeText(event) && <div className="flex justify-between gap-3"><dt className="text-text-muted">Time</dt><dd className="text-right font-medium">{eventTimeText(event)}</dd></div>}
