@@ -3,7 +3,8 @@ import { getIntegrations, hasShippingCredentials, shippingProviderId } from "@/l
 import type { Book, ProcessingTimeline, ProductOverride, SiteSettings } from "@/types";
 import { formatDate } from "@/lib/utils";
 
-const CARRIERS_KEY = "vgmf_carriers";
+const CARRIERS_KEY = "vgmf_carriers_official";
+const LEGACY_CARRIERS_KEY = "vgmf_carriers";
 const PROFILES_KEY = "vgmf_product_fulfillment";
 const POLICY_KEY = "vgmf_fulfillment_policy";
 const SETTINGS_KEY = "vgmf_settings";
@@ -243,9 +244,16 @@ export function credentialsSaved(carrier: CarrierAccount) {
   return provider ? hasShippingCredentials(provider) : false;
 }
 
+export function officialCarrierIds() {
+  return defaultCarriers().map((carrier) => carrier.id);
+}
+
 export function getCarriers(): CarrierAccount[] {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(LEGACY_CARRIERS_KEY);
+  }
   const stored = readJSON<CarrierAccount[] | null>(CARRIERS_KEY, null);
-  const allowed = new Set(defaultCarriers().map((carrier) => carrier.id));
+  const allowed = new Set(officialCarrierIds());
   const cleaned = (stored ?? []).filter((carrier) => allowed.has(carrier.id) && !isLastMile(carrier));
   const seeded = defaultCarriers();
   const byId = new Map(cleaned.map((carrier) => [carrier.id, carrier]));
@@ -260,7 +268,7 @@ export function getCarriers(): CarrierAccount[] {
 }
 
 function officialOnly(carriers: CarrierAccount[]) {
-  const allowed = new Set(defaultCarriers().map((carrier) => carrier.id));
+  const allowed = new Set(officialCarrierIds());
   return carriers
     .filter((carrier) => allowed.has(carrier.id) && !isLastMile(carrier))
     .map((carrier) => ({ ...carrier, apiKey: "", apiSecret: "", webhookUrl: "" }));

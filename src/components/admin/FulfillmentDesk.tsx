@@ -20,6 +20,7 @@ import {
   getPickupLocation,
   getPolicy,
   getProductFulfillment,
+  officialCarrierIds,
   saveCarrier,
   savePolicy,
   saveProductFulfillment,
@@ -27,6 +28,13 @@ import {
   type FulfillmentPolicy,
   type ProductFulfillment,
 } from "@/lib/fulfillment";
+
+const OFFICIAL_IDS = officialCarrierIds();
+
+function officialCarriers() {
+  const byId = new Map(getCarriers().map((carrier) => [carrier.id, carrier]));
+  return OFFICIAL_IDS.map((id) => byId.get(id)).filter((carrier): carrier is CarrierAccount => Boolean(carrier));
+}
 
 function splitList(value: string) {
   return value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
@@ -86,21 +94,32 @@ function persistCreds(id: string, fields: CredDraft, enabled: boolean) {
 }
 
 export function CarrierDesk() {
-  const [carriers, setCarriers] = useState<CarrierAccount[]>(() => getCarriers());
+  const [carriers, setCarriers] = useState<CarrierAccount[]>(() => officialCarriers());
   const [notice, setNotice] = useState("");
   const [tone, setTone] = useState<"ok" | "bad">("ok");
 
-  useEffect(() => subscribeCms(() => setCarriers(getCarriers())), []);
+  useEffect(() => subscribeCms(() => setCarriers(officialCarriers())), []);
+
+  const shipday = carriers.find((carrier) => carrier.id === "shipday");
+  const others = carriers.filter((carrier) => carrier.id !== "shipday");
+
+  const onNotice = (message: string, nextTone: "ok" | "bad") => {
+    setNotice(message);
+    setTone(nextTone);
+    setCarriers(officialCarriers());
+  };
 
   return (
     <div className="space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Delivery partners</p>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900">Courier APIs</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">Shipday and courier APIs</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-          Connect Shipday, Shiprocket, iThink, Tookan and Nimbuspost. Save a real API key, then test it — the badge
-          becomes Success or Failed from the live response. Last-mile names such as Delhivery, Blue Dart, Ekart, DTDC,
-          Shadowfax and India Post are not accounts on this site; they appear inside Shiprocket or iThink rates.
+          Only these accounts can be connected here: Shipday, Shiprocket, iThink Logistics, Tookan and Nimbuspost.
+          Save a real API key, then test it. The badge becomes Success or Failed from the live API.
+        </p>
+        <p className="mt-2 text-xs font-semibold text-slate-600">
+          {carriers.map((carrier) => carrier.name).join(" · ")}
         </p>
       </div>
 
@@ -110,17 +129,11 @@ export function CarrierDesk() {
         </p>
       )}
 
+      {shipday && <CarrierCard carrier={shipday} featured onNotice={onNotice} />}
+
       <div className="grid gap-4 xl:grid-cols-2">
-        {carriers.map((carrier) => (
-          <CarrierCard
-            key={carrier.id}
-            carrier={carrier}
-            onNotice={(message, nextTone) => {
-              setNotice(message);
-              setTone(nextTone);
-              setCarriers(getCarriers());
-            }}
-          />
+        {others.map((carrier) => (
+          <CarrierCard key={carrier.id} carrier={carrier} onNotice={onNotice} />
         ))}
       </div>
     </div>
@@ -175,9 +188,11 @@ function TextField({
 function CarrierCard({
   carrier,
   onNotice,
+  featured = false,
 }: {
   carrier: CarrierAccount;
   onNotice: (message: string, tone: "ok" | "bad") => void;
+  featured?: boolean;
 }) {
   const [enabled, setEnabled] = useState(carrier.enabled);
   const [fields, setFields] = useState<CredDraft>(() => credsFor(carrier.id));
@@ -201,7 +216,7 @@ function CarrierCard({
 
   return (
     <form
-      className="rounded-2xl border border-slate-200 bg-white p-5"
+      className={`rounded-2xl border bg-white p-5 ${featured ? "border-burgundy/40 shadow-sm" : "border-slate-200"}`}
       onSubmit={(event) => {
         event.preventDefault();
         persist();
