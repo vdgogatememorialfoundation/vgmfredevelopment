@@ -11,9 +11,11 @@ import { videos as seededVideos } from "@/data/videos";
 import {
   clinicKeys,
   defaultFlags,
+  bannerKeys,
   flyerKeys,
   getAllArticles,
   getLiveAnnouncements,
+  getLiveBanners,
   getLiveClinics,
   getLiveEvents,
   getLiveFlyers,
@@ -26,7 +28,7 @@ import {
   videoKeys,
   type SiteFlags,
 } from "@/lib/cms";
-import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, SiteSettings, User, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, SiteBanner, SiteSettings, User, Video } from "@/types";
 import { getSettings } from "@/lib/admin-store";
 import { books as seededBooks } from "@/data/books";
 import { getAllProducts } from "@/lib/product-data";
@@ -118,6 +120,7 @@ export function collectionHook<T>(editsKey: string, customKey: string, seed: T[]
 
 export const useLiveNotices = collectionHook<Notice>(noticeKeys.edits, noticeKeys.custom, seededNotices, getLiveNotices);
 export const useLiveFlyers = collectionHook<Flyer>(flyerKeys.edits, flyerKeys.custom, seededFlyers, getLiveFlyers);
+export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners);
 export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos);
 export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics);
 

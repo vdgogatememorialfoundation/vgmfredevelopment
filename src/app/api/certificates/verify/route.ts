@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findValidCertificate, publicCertificate } from "@/lib/server/certificates";
 import { partnerForKey, partnerForOrigin, readApiKey } from "@/lib/partner-keys";
+import { lookupPartnerCertificate } from "@/lib/server/partner-certificates";
+import { sourceLabel } from "@/lib/partner-certificates";
 
 function corsHeaders(origin: string | null, allowOrigin?: string) {
   const headers = new Headers();
@@ -54,27 +56,63 @@ export function OPTIONS(request: NextRequest) {
   });
 }
 
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const auth = authorize(request);
   if (!auth.ok) {
     return NextResponse.json({ ok: false, verified: false, error: auth.error }, { status: auth.status, headers: auth.headers });
   }
 
-  const number = request.nextUrl.searchParams.get("number") ?? request.nextUrl.searchParams.get("certificateNumber") ?? "";
+  const number =
+    request.nextUrl.searchParams.get("number") ??
+    request.nextUrl.searchParams.get("certificateNumber") ??
+    request.nextUrl.searchParams.get("id") ??
+    "";
   if (!number.trim()) {
     return NextResponse.json(
-      { ok: false, verified: false, error: "Add a certificate number." },
+      { ok: false, verified: false, valid: false, error: "Add a certificate number." },
       { status: 400, headers: auth.headers }
     );
   }
 
   const certificate = findValidCertificate(number);
-  if (!certificate) {
+  if (certificate) {
+    return NextResponse.json(
+      {
+        ok: true,
+        verified: true,
+        valid: true,
+        status: "valid",
+        source: "foundation",
+        sourceLabel: sourceLabel("foundation"),
+        certificate: { ...publicCertificate(certificate), source: "foundation", sourceLabel: sourceLabel("foundation") },
+      },
+      { headers: auth.headers }
+    );
+  }
+
+  if (!auth.partner) {
+    const partner = await lookupPartnerCertificate(number);
+    if (partner.certificate) {
+      return NextResponse.json(
+        {
+          ok: true,
+          verified: true,
+          valid: true,
+          status: "valid",
+          source: partner.certificate.source,
+          sourceLabel: partner.certificate.sourceLabel,
+          certificate: partner.certificate,
+        },
+        { headers: auth.headers }
+      );
+    }
     return NextResponse.json(
       {
         ok: true,
         verified: false,
-        source: auth.partner?.origin ?? "https://vaidyagogate.org",
+        valid: false,
+        status: partner.status || "not_found",
+        source: "https://vaidyagogate.org",
       },
       { status: 200, headers: auth.headers }
     );
@@ -83,10 +121,11 @@ export function GET(request: NextRequest) {
   return NextResponse.json(
     {
       ok: true,
-      verified: true,
+      verified: false,
+      valid: false,
+      status: "not_found",
       source: auth.partner?.origin ?? "https://vaidyagogate.org",
-      certificate: publicCertificate(certificate),
     },
-    { headers: auth.headers }
+    { status: 200, headers: auth.headers }
   );
 }

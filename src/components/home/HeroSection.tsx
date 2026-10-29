@@ -5,95 +5,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiveFlyers, useSiteSettings } from "@/lib/use-cms";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
-type SlideTone = "navy" | "blue" | "ice";
-
-type HeroSlide = {
-  id: string;
-  eyebrow: string;
-  title: string;
-  lines?: string[];
-  text?: string;
-  kicker?: string;
-  href?: string;
-  cta?: string;
-  secondaryHref?: string;
-  secondaryCta?: string;
-  image?: string;
-  tone: SlideTone;
-};
-
 const INTERVAL = 7000;
-
 const isImage = (value?: string) => Boolean(value && /^(https?:|data:image)/.test(value));
 
-const tones: Record<SlideTone, string> = {
-  navy: "bg-[linear-gradient(135deg,#0B1F3A_0%,#16325C_62%,#2A4A73_100%)] text-white",
-  blue: "bg-[linear-gradient(135deg,#16325C_0%,#2A4A73_70%,#B8953A_140%)] text-white",
-  ice: "bg-[linear-gradient(135deg,#FFFDF8_0%,#F7F3EA_55%,#E8DCC4_100%)] text-ink",
-};
-
-function foundationSlide(
-  tagline: string | undefined,
-  copy: { kicker: string; cta: string; secondary: string; fallback: string }
-): HeroSlide {
-  const text = tagline || "Preserving Ayurveda. Advancing Knowledge. Serving Society.";
-  return {
-    id: "hero-foundation",
-    eyebrow: "Vaidya Gogate Memorial Foundation",
-    title: text,
-    lines: text.split(/(?<=\.)\s+/).filter(Boolean),
-    text: copy.fallback,
-    kicker: copy.kicker,
-    href: "/events",
-    cta: copy.cta,
-    secondaryHref: "/about/legacy-of-vaidya-rb-gogate",
-    secondaryCta: copy.secondary,
-    tone: "navy",
-  };
-}
+type ImageSlide = { id: string; title: string; image: string; href?: string };
 
 export default function HeroSection() {
   const flyers = useLiveFlyers();
   const settings = useSiteSettings();
   const { t } = useI18n();
-
-  const slides = useMemo(() => {
-    const next: HeroSlide[] = [
-      foundationSlide(settings?.tagline, {
-        kicker: t("hero.kicker"),
-        cta: t("hero.exploreEvents"),
-        secondary: t("hero.discoverLegacy"),
-        fallback: t("hero.taglineFallback"),
-      }),
-    ];
-    const tonesCycle: SlideTone[] = ["blue", "navy", "ice"];
-
-    flyers.forEach((flyer, flyerIndex) => {
-      next.push({
-        id: flyer.id,
-        eyebrow: flyer.event || t("common.learnMore"),
-        title: flyer.title,
-        text: flyer.event,
-        href: flyer.href,
-        cta: flyer.cta || t("common.learnMore"),
-        image: isImage(flyer.image) ? flyer.image : undefined,
-        tone: tonesCycle[flyerIndex % tonesCycle.length],
-      });
-    });
-
-    if (flyers.length === 0) {
-      next.push({
-        id: "hero-legacy",
-        eyebrow: t("hero.legacyEyebrow"),
-        title: t("hero.legacyTitle"),
-        text: t("hero.legacyText"),
-        href: "/about/legacy-of-vaidya-rb-gogate",
-        cta: t("hero.discoverLegacy"),
-        tone: "ice",
-      });
-    }
-    return next;
-  }, [flyers, settings?.tagline, t]);
+  const slides = useMemo<ImageSlide[]>(
+    () =>
+      flyers
+        .filter((flyer) => isImage(flyer.image))
+        .map((flyer) => ({
+          id: flyer.id,
+          title: flyer.title,
+          image: flyer.image,
+          href: flyer.href?.trim() || undefined,
+        })),
+    [flyers]
+  );
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -114,88 +46,59 @@ export default function HeroSection() {
     return () => window.clearInterval(timer);
   }, [count, paused, active]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "ArrowRight") go(active + 1);
-      if (event.key === "ArrowLeft") go(active - 1);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [active, go]);
+  if (!count) {
+    const tagline = settings?.tagline || t("hero.taglineFallback");
+    return (
+      <section className="relative overflow-hidden border-b border-border bg-[linear-gradient(135deg,#0B1F3A_0%,#16325C_62%,#2A4A73_100%)] text-white">
+        <div className="container grid min-h-[420px] items-center gap-8 py-12 sm:min-h-[460px] lg:min-h-[500px] lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="max-w-2xl">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-100">{t("hero.kicker")}</p>
+            <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">{tagline}</h1>
+            <p className="mt-4 max-w-xl text-sm leading-6 text-white/85">{t("hero.taglineFallback")}</p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link href="/events" className="btn-primary bg-white text-ink hover:bg-paper">
+                {t("hero.exploreEvents")}
+              </Link>
+              <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-ghost">
+                {t("hero.discoverLegacy")}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   const slide = slides[active];
-  if (!slide) return null;
 
   return (
     <section
-      className="relative overflow-hidden border-b border-border"
+      className="relative overflow-hidden border-b border-border bg-ink"
       aria-roledescription="carousel"
       aria-label="Foundation slideshow"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
-      onBlurCapture={() => setPaused(false)}
     >
-      <div className="relative min-h-[420px] sm:min-h-[460px] lg:min-h-[500px]">
+      <div className="relative min-h-[280px] sm:min-h-[420px] lg:min-h-[520px]">
         {slides.map((item, slideIndex) => {
-          const onIce = item.tone === "ice";
           const visible = slideIndex === active;
+          const image = (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.image} alt={item.title || "Slideshow image"} className="absolute inset-0 h-full w-full object-cover" />
+          );
           return (
             <div
               key={item.id}
-              className={`absolute inset-0 transition-opacity duration-700 ${tones[item.tone]} ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              className={`absolute inset-0 transition-opacity duration-700 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
               aria-hidden={!visible}
             >
-              {item.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              ) : null}
-              {item.image ? <div className="absolute inset-0 bg-gradient-to-r from-ink/90 via-ink/70 to-ink/25" /> : null}
-              <div
-                className="pointer-events-none absolute inset-0 opacity-30"
-                style={{
-                  backgroundImage:
-                    "radial-gradient(circle at 18% 20%, rgba(255,255,255,0.18) 0, transparent 28%), radial-gradient(circle at 88% 70%, rgba(255,255,255,0.12) 0, transparent 32%)",
-                }}
-              />
-              <div className="container relative grid min-h-[420px] items-center gap-8 py-12 sm:min-h-[460px] lg:min-h-[500px] lg:grid-cols-[1.2fr_0.8fr]">
-                <div className="max-w-2xl">
-                  <p className={`mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] ${onIce && !item.image ? "text-gold" : "text-amber-100"}`}>
-                    {item.eyebrow}
-                  </p>
-                  <h1 className={`font-serif text-3xl font-semibold tracking-tight sm:text-4xl ${item.image ? "text-white" : ""}`}>
-                    {(item.lines ?? [item.title]).map((line) => (
-                      <span key={line} className="block">
-                        {line}
-                      </span>
-                    ))}
-                  </h1>
-                  {item.text ? (
-                    <p className={`mt-4 max-w-xl text-sm leading-6 ${onIce && !item.image ? "text-text-muted" : "text-white/85"}`}>
-                      {item.text}
-                    </p>
-                  ) : null}
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    {item.href && item.cta ? (
-                      <Link href={item.href} className={onIce && !item.image ? "btn-primary" : "btn-primary bg-white text-ink hover:bg-paper"} tabIndex={visible ? 0 : -1}>
-                        {item.cta}
-                      </Link>
-                    ) : null}
-                    {item.secondaryHref && item.secondaryCta ? (
-                      <Link href={item.secondaryHref} className={onIce && !item.image ? "btn-outline" : "btn-ghost"} tabIndex={visible ? 0 : -1}>
-                        {item.secondaryCta}
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="hidden justify-end lg:flex">
-                  <div className={`flex aspect-square w-64 flex-col items-center justify-center rounded-full border ${onIce && !item.image ? "border-burgundy/20 bg-white/80 text-ink" : "border-white/25 bg-white/10 text-white"} backdrop-blur-sm`}>
-                    <span className="font-serif text-4xl font-semibold tracking-tight">VGMF</span>
-                    <p className="mt-2 px-6 text-center text-sm font-medium">Vaidya Gogate Memorial Foundation</p>
-                    <p className={`mt-1 text-xs ${onIce && !item.image ? "text-text-muted" : "text-white/75"}`}>{item.kicker || t("hero.kicker")}</p>
-                  </div>
-                </div>
-              </div>
+              {item.href ? (
+                <a href={item.href} className="absolute inset-0" tabIndex={visible ? 0 : -1} aria-label={item.title || "Open slide link"}>
+                  {image}
+                </a>
+              ) : (
+                image
+              )}
             </div>
           );
         })}
@@ -224,18 +127,12 @@ export default function HeroSection() {
               <button
                 key={item.id}
                 type="button"
-                aria-label={`Show slide ${slideIndex + 1}: ${item.title}`}
+                aria-label={`Show slide ${slideIndex + 1}`}
                 aria-current={slideIndex === active}
                 onClick={() => go(slideIndex)}
                 className={`h-2.5 rounded-full transition-all ${slideIndex === active ? "w-8 bg-white shadow ring-1 ring-ink/20" : "w-2.5 bg-white/70 hover:bg-white"}`}
               />
             ))}
-          </div>
-          <div className="absolute inset-x-0 bottom-0 h-1 bg-ink/15">
-            <div
-              key={`${slide.id}-${paused}`}
-              className={`h-full origin-left bg-white ${paused ? "" : "hero-progress"}`}
-            />
           </div>
         </>
       ) : null}

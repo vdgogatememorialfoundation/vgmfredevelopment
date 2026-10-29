@@ -5,7 +5,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import ClientOnly from "@/components/common/ClientOnly";
 import { PortalLogin } from "@/components/admin/PortalLogin";
 import { adminNavigation } from "@/app/(portal)/admin/_config/navigation";
-import { canOpen, firstPathFor, getRole, modulesFor, staffModules } from "@/lib/roles";
+import { allStaffModules, canOpen, firstPathFor, getRole, modulesFor } from "@/lib/roles";
 
 function StaffHome() {
   const { user, signOut } = useAuth();
@@ -39,7 +39,7 @@ function StaffHome() {
 
       {user.role === "staff" && allowed !== "all" && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {staffModules
+          {allStaffModules()
             .filter((moduleItem) => allowed.includes(moduleItem.id))
             .map((moduleItem) => (
               <Link key={moduleItem.id} href={firstPathFor(moduleItem.id)} className="rounded-2xl border border-slate-200 bg-white p-6 transition hover:border-burgundy/40">

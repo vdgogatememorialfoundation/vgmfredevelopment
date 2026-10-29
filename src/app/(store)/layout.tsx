@@ -1,6 +1,7 @@
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import AnnouncementTicker from "@/components/common/AnnouncementTicker";
+import BannerPopup from "@/components/home/BannerPopup";
 import { AIChatbot } from "@/components/chatbot/AIChatbot";
 import { AuthProvider } from "@/components/auth/AuthContext";
 import { MaintenanceGate } from "@/components/admin/MaintenanceGate";
@@ -21,6 +22,7 @@ export default function StoreLayout({
             {children}
           </main>
           <Footer />
+          <BannerPopup />
           <AIChatbot />
         </MaintenanceGate>
       </LanguageProvider>

@@ -3,17 +3,32 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import OtpForm from "@/components/account/OtpForm";
+import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
 import { useAuth } from "@/components/auth/AuthContext";
 import { findAccountByIdentifier, loginBlockReason, setSession } from "@/lib/auth";
 
-type Step = "identifier" | "otp" | "complete";
+type Step = "identifier" | "otp" | "forgot" | "complete";
 
 export default function SignInFlow() {
   const router = useRouter();
   const { signIn } = useAuth();
   const [step, setStep] = useState<Step>("identifier");
   const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  const enterAccount = () => {
+    const account = findAccountByIdentifier(identifier);
+    if (!account || loginBlockReason(account)) return;
+    setSession(account);
+    signIn(account);
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      router.push(next);
+      return;
+    }
+    setStep("complete");
+  };
 
   const handleIdentifier = (event: React.FormEvent) => {
     event.preventDefault();
@@ -29,23 +44,36 @@ export default function SignInFlow() {
       setError(blocked);
       return;
     }
+    if (password) {
+      if (!account.password || account.password !== password) {
+        setError("Incorrect password. Use forgot password or request an email code.");
+        return;
+      }
+      setError("");
+      enterAccount();
+      return;
+    }
     setError("");
     setStep("otp");
   };
 
   const handleOtp = () => {
-    const account = findAccountByIdentifier(identifier);
-    if (!account || loginBlockReason(account)) return;
-
-    setSession(account);
-    signIn(account);
-    const next = new URLSearchParams(window.location.search).get("next");
-    if (next?.startsWith("/") && !next.startsWith("//")) {
-      router.push(next);
-      return;
-    }
-    setStep("complete");
+    enterAccount();
   };
+
+  if (step === "forgot") {
+    return (
+      <ForgotPasswordForm
+        role="customer"
+        onBack={() => setStep("identifier")}
+        onComplete={(account) => {
+          setSession(account);
+          signIn(account);
+          setStep("complete");
+        }}
+      />
+    );
+  }
 
   if (step === "complete") {
     return (
@@ -98,7 +126,7 @@ export default function SignInFlow() {
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
-          Log in with your registered email, phone number or Account ID.
+          Sign in with your password, or leave it blank to receive an email and WhatsApp code.
         </p>
       </div>
 
@@ -121,6 +149,20 @@ export default function SignInFlow() {
             autoComplete="username"
           />
         </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="signin-password">
+            Password
+          </label>
+          <input
+            id="signin-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="input-field"
+            placeholder="Optional if you prefer a one-time code"
+            autoComplete="current-password"
+          />
+        </div>
 
         {error && (
           <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -129,7 +171,10 @@ export default function SignInFlow() {
         )}
 
         <button type="submit" className="btn-primary w-full">
-          Send Codes to Email & WhatsApp
+          {password ? "Sign in" : "Send Codes to Email & WhatsApp"}
+        </button>
+        <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => setStep("forgot")}>
+          Forgot password?
         </button>
       </form>
     </div>

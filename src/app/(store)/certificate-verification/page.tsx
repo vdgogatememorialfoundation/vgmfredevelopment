@@ -14,7 +14,7 @@ export default function CertificateVerificationPage() {
       <PageHeader
         eyebrow="Verification"
         title="Certificate Verification"
-        description="Verify that a certificate was genuinely issued by the Vaidya Gogate Memorial Foundation."
+        description="Check a Foundation, seminar or autism programme certificate by the unique id printed on it."
       />
 
       <section className="section bg-background">

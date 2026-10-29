@@ -4,6 +4,7 @@ import Link from "next/link";
 import SiteLogo from "@/components/common/SiteLogo";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCart } from "@/lib/use-cart";
 import { accountNavigation, navigation, siteConfig } from "@/lib/constants";
@@ -101,6 +102,20 @@ export default function Header() {
     }, 0);
     return () => clearTimeout(timer);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -387,63 +402,67 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <div className="border-t border-border py-4 lg:hidden">
-            <nav aria-label="Mobile navigation" className="flex flex-col">
-              {navigation.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={classNames(
-                      "border-b border-border px-2 py-3.5 text-sm font-medium transition",
-                      isActive
-                        ? "text-burgundy"
-                        : "text-text-primary hover:text-burgundy"
-                    )}
-                  >
-                    {t(navMessageKey[item.href] ?? "nav.about")}
-                  </Link>
-                );
-              })}
-
-              <div className="mt-4 flex flex-col gap-3">
-                {isAuthenticated ? (
-                  <Link
-                    href="/account"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="btn-primary"
-                  >
-                    {t("header.myAccount")}
-                  </Link>
-                ) : (
-                  <Link
-                    href="/login"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="btn-primary"
-                  >
-                    {t("header.createAccount")}
-                  </Link>
-                )}
-
-                <Link
-                  href="/events"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="btn-outline"
-                >
-                  {t("header.exploreEvents")}
-                </Link>
-              </div>
-            </nav>
-          </div>
-        )}
       </div>
+
+      {mobileMenuOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[80] lg:hidden" role="dialog" aria-modal="true" aria-label="Site menu">
+              <button
+                type="button"
+                className="absolute inset-0 bg-ink/40"
+                aria-label="Close menu"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+              <div className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-border px-4 py-4">
+                  <p className="font-serif text-lg font-semibold text-ink">Menu</p>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-border"
+                    aria-label="Close menu"
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+                <nav aria-label="Mobile navigation" className="flex-1 overflow-y-auto px-2 py-2">
+                  {navigation.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        aria-current={isActive ? "page" : undefined}
+                        className={classNames(
+                          "block border-b border-border px-3 py-3.5 text-sm font-medium transition",
+                          isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
+                        )}
+                      >
+                        {t(navMessageKey[item.href] ?? "nav.about")}
+                      </Link>
+                    );
+                  })}
+                </nav>
+                <div className="flex flex-col gap-3 border-t border-border p-4">
+                  {isAuthenticated ? (
+                    <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="btn-primary">
+                      {t("header.myAccount")}
+                    </Link>
+                  ) : (
+                    <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="btn-primary">
+                      {t("header.createAccount")}
+                    </Link>
+                  )}
+                  <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="btn-outline">
+                    {t("header.exploreEvents")}
+                  </Link>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </header>
   );
 }

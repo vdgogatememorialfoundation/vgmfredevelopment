@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { ensureAdminCredentials, getAccounts, sendEmail } from "@/lib/admin-store";
 import { loginBlockReason } from "@/lib/auth";
 import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
+import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
 
 const copy = {
   admin: { label: "Admin", target: "/admin", hint: "administrator" },
@@ -15,7 +16,7 @@ const copy = {
   doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
 } as const;
 
-type Mode = "password" | "otp";
+type Mode = "password" | "otp" | "forgot";
 
 export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }) {
   const router = useRouter();
@@ -125,6 +126,14 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     router.push(target);
   };
 
+  if (mode === "forgot") {
+    return (
+      <Card portal={portal}>
+        <ForgotPasswordForm role={portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
+      </Card>
+    );
+  }
+
   return (
     <Card portal={portal}>
       {portal === "staff" && (
@@ -167,6 +176,9 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
           {error && <ErrorText text={error} />}
           <button type="submit" className="btn-primary w-full">
             Sign in to {label} portal
+          </button>
+          <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => { setMode("forgot"); setError(""); }}>
+            Forgot password?
           </button>
         </form>
       ) : (

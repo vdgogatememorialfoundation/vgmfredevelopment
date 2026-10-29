@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { verifyCertificate, type PublicCertificate } from "@/lib/certificates-client";
+import { CertificateResultCard } from "@/components/certificates/CertificateResult";
 
 type Result = {
   status: "idle" | "verified" | "not-found" | "error";
@@ -48,19 +49,20 @@ export default function CertificateVerificationForm() {
         onSubmit={(event) => void handleSubmit(event)}
         className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8"
       >
-        <label
-          htmlFor="certificate-number"
-          className="block text-sm font-semibold text-text-primary"
-        >
+        <label htmlFor="certificate-number" className="block text-sm font-semibold text-text-primary">
           Certificate Number
         </label>
+        <p className="mt-1 text-sm text-text-muted">
+          Foundation IDs, seminar 12-digit IDs, and autism IDs such as CERT-P-12-345 or CERT-V-12-345 all work here.
+          Older CERT-12-345 numbers still verify. Email, phone and QR tokens are never shown.
+        </p>
 
         <input
           id="certificate-number"
           type="text"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="e.g. VGMF-CERT-2026-0001"
+          placeholder="e.g. 433495146392 or CERT-P-12-345"
           className="input-field mt-3 text-center text-lg tracking-wider"
         />
 
@@ -69,68 +71,32 @@ export default function CertificateVerificationForm() {
         </button>
       </form>
 
-      {result.status === "verified" && result.certificate && (
-        <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white">
-            ✓
-          </div>
-
-          <h2 className="mt-6 font-serif text-2xl font-bold text-text-primary">
-            Certificate Verified
-          </h2>
-
-          <p className="mt-2 text-sm text-text-muted">
-            This certificate is genuine and was issued by the Vaidya Gogate Memorial Foundation.
-          </p>
-
-          <dl className="mx-auto mt-8 max-w-md space-y-3 rounded-2xl border border-emerald-200 bg-white p-6 text-left text-sm">
-            <CertificateRow label="Certificate Number" value={result.certificate.certificateNumber} />
-            <CertificateRow label="Name" value={result.certificate.name} />
-            <CertificateRow label="Year" value={result.certificate.year ? String(result.certificate.year) : "—"} />
-            <CertificateRow label="Event" value={result.certificate.event} />
-            <CertificateRow label="Certificate Type" value={result.certificate.certificateType} />
-            <CertificateRow label="Issued On" value={result.certificate.issueDate} />
-            <CertificateRow label="Issued By" value="Vaidya Gogate Memorial Foundation" />
-          </dl>
+      {result.status === "verified" && result.certificate ? (
+        <div className="mt-8">
+          <CertificateResultCard certificate={result.certificate} />
         </div>
-      )}
+      ) : null}
 
-      {result.status === "not-found" && (
+      {result.status === "not-found" ? (
         <div className="mt-8 rounded-2xl border border-border bg-white p-8 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-2xl text-amber-600">
             !
           </div>
-
-          <h2 className="mt-6 font-serif text-2xl font-bold text-text-primary">
-            Certificate Not Found
-          </h2>
-
+          <h2 className="mt-6 font-serif text-2xl font-bold text-text-primary">Certificate Not Found</h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-muted">
-            We could not find a certificate matching{" "}
-            <span className="font-semibold text-text-primary">
-              {result.certificateNumber}
-            </span>
-            . Please check the number and try again.
+            We could not find an issued certificate matching{" "}
+            <span className="font-semibold text-text-primary">{result.certificateNumber}</span>. Only issued
+            certificates are valid.
           </p>
-
           <Link href="/contact" className="btn-outline mt-6">
             Contact the Foundation
           </Link>
         </div>
-      )}
+      ) : null}
 
-      {result.status === "error" && (
+      {result.status === "error" ? (
         <p className="mt-6 text-center text-sm text-red-700">{result.message}</p>
-      )}
-    </div>
-  );
-}
-
-function CertificateRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-center">
-      <dt className="text-text-muted">{label}</dt>
-      <dd className="font-semibold text-text-primary">{value}</dd>
+      ) : null}
     </div>
   );
 }

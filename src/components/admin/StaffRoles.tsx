@@ -3,7 +3,16 @@
 import { useState } from "react";
 import { createUserAccount, ensureBootstrapped, getAccounts, removeAccount, sendAccountDetails, setAccountStatus, updateAccount } from "@/lib/admin-store";
 import { getSession } from "@/lib/auth";
-import { getRoles, roleCategories, saveRoles, staffModules, type StaffModuleId, type StaffRole } from "@/lib/roles";
+import {
+  allStaffModules,
+  getRoles,
+  removeCustomModule,
+  roleCategories,
+  saveCustomModule,
+  saveRoles,
+  type StaffModuleId,
+  type StaffRole,
+} from "@/lib/roles";
 import { slugify } from "@/lib/cms";
 import type { User } from "@/types";
 
@@ -18,6 +27,8 @@ const blankRole = (): StaffRole => ({ id: "", name: "", category: roleCategories
 export function RolesDesk() {
   const [roles, setRoles] = useState<StaffRole[]>(() => getRoles());
   const [draft, setDraft] = useState<StaffRole>(blankRole);
+  const [modules, setModules] = useState(() => allStaffModules());
+  const [moduleDraft, setModuleDraft] = useState({ name: "", path: "" });
   const [message, setMessage] = useState("");
   const staff = getAccounts().filter((account) => account.role === "staff");
 
@@ -57,9 +68,52 @@ export function RolesDesk() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Roles & permissions</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Group roles by category and tick the modules each role can open. Staff sign in at /staff/login and only see these modules.
+          Add or change roles and the modules they can open. Staff sign in at /staff/login and only see these modules.
         </p>
       </div>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Modules</h2>
+        <p className="mt-1 text-sm text-slate-500">Built-in modules stay available. Add extra modules with an admin path if you need a new grouping.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+          <input className={field} placeholder="Module name, e.g. Speakers desk" value={moduleDraft.name} onChange={(event) => setModuleDraft({ ...moduleDraft, name: event.target.value })} />
+          <input className={field} placeholder="Admin path, e.g. /admin/events/speakers" value={moduleDraft.path} onChange={(event) => setModuleDraft({ ...moduleDraft, path: event.target.value })} />
+          <button
+            type="button"
+            className={primary}
+            onClick={() => {
+              if (!moduleDraft.name.trim() || !moduleDraft.path.trim()) return setMessage("Add a module name and path.");
+              const path = moduleDraft.path.startsWith("/") ? moduleDraft.path.trim() : `/admin/${moduleDraft.path.trim()}`;
+              saveCustomModule({ id: slugify(moduleDraft.name), label: moduleDraft.name.trim(), paths: [path], custom: true });
+              setModules(allStaffModules());
+              setModuleDraft({ name: "", path: "" });
+              setMessage("Module saved. Tick it on a role and save the role.");
+            }}
+          >
+            Save module
+          </button>
+        </div>
+        <ul className="mt-4 flex flex-wrap gap-2">
+          {modules.map((moduleItem) => (
+            <li key={moduleItem.id} className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs">
+              {moduleItem.label}
+              {moduleItem.custom ? (
+                <button
+                  type="button"
+                  className="text-red-600"
+                  onClick={() => {
+                    removeCustomModule(moduleItem.id);
+                    setModules(allStaffModules());
+                    setDraft((current) => ({ ...current, modules: current.modules.filter((id) => id !== moduleItem.id) }));
+                  }}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">{draft.id ? `Edit ${draft.name}` : "New role"}</h2>
@@ -73,7 +127,7 @@ export function RolesDesk() {
           <input className={field} placeholder="What this role does" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {staffModules.map((moduleItem) => (
+          {modules.map((moduleItem) => (
             <label key={moduleItem.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
               <input type="checkbox" checked={draft.modules.includes(moduleItem.id)} onChange={() => toggle(moduleItem.id)} />
               {moduleItem.label}
@@ -108,7 +162,7 @@ export function RolesDesk() {
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {role.modules.map((id) => (
                       <span key={id} className="rounded-full bg-[#F3F4F6] px-2.5 py-0.5 text-xs text-slate-700">
-                        {staffModules.find((item) => item.id === id)?.label}
+                        {modules.find((item) => item.id === id)?.label}
                       </span>
                     ))}
                   </div>
@@ -213,7 +267,22 @@ function StaffRow({ account, roles, onChange }: { account: User; roles: StaffRol
         {account.statusReason && status !== "active" && <p className="text-xs text-red-600">Reason: {account.statusReason}</p>}
       </div>
       {isAdmin ? (
-        <span className="text-sm font-semibold text-burgundy">Administrator · all modules</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-burgundy">Administrator · all modules</span>
+          <input className="w-36 rounded-lg border border-slate-200 px-3 py-1.5 text-sm" type="password" placeholder="New password" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <button
+            type="button"
+            className={ghost}
+            onClick={() => {
+              if (password.length < 6) return setNote("Use 6+ characters.");
+              updateAccount(account.email, { password });
+              setPassword("");
+              setNote("Admin password changed.");
+            }}
+          >
+            Reset password
+          </button>
+        </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <select

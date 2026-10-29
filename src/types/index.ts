@@ -297,6 +297,13 @@ export interface Flyer {
   isMobile?: boolean;
 }
 
+export interface SiteBanner {
+  id: string;
+  title: string;
+  image: string;
+  href: string;
+}
+
 export type AccountStatus = "active" | "disabled" | "banned";
 
 export interface User {

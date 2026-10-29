@@ -938,9 +938,10 @@ export function CertificateApiDesk() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Certificate verification API</h1>
         <p className="mt-1 text-sm text-slate-500">
-          The public Certificate Verification page looks up the same records. seminar.vaidyagogate.org and
-          autism.vaidyagogate.org call <span className="font-mono">GET /api/certificates/verify?number=</span> with header{" "}
-          <span className="font-mono">x-api-key</span>.
+          The public Certificate Verification page checks this site, then the seminar and autism public APIs.
+          Seminar IDs are 12 digits. Autism IDs look like CERT-P-12-345, CERT-V-12-345 or older CERT-12-345.
+          Partner sites may still call <span className="font-mono">GET /api/certificates/verify?number=</span> with{" "}
+          <span className="font-mono">x-api-key</span> for Foundation-issued certificates.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">

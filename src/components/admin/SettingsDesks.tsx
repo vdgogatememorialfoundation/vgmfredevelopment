@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChangePasswordForm } from "@/components/account/PasswordResetForm";
+import { getSession } from "@/lib/auth";
 import { getSettings, saveSettings } from "@/lib/admin-store";
 import { getPolicy, savePolicy } from "@/lib/fulfillment";
 import {
@@ -42,7 +44,15 @@ function Header({ title, text, action }: { title: string; text: string; action?:
   );
 }
 
-function Card({ title, text, children, right, badge }: { title: string; text?: string; children: ReactNode; right?: ReactNode; badge?: ReactNode }) {
+const SettingsSaveContext = createContext<(() => void) | null>(null);
+
+function SettingsSave({ save, children }: { save: () => void; children: ReactNode }) {
+  return <SettingsSaveContext.Provider value={save}>{children}</SettingsSaveContext.Provider>;
+}
+
+function Card({ title, text, children, right, badge, onSave }: { title: string; text?: string; children: ReactNode; right?: ReactNode; badge?: ReactNode; onSave?: () => void }) {
+  const contextSave = useContext(SettingsSaveContext);
+  const save = onSave ?? contextSave;
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
@@ -56,6 +66,13 @@ function Card({ title, text, children, right, badge }: { title: string; text?: s
         {right}
       </div>
       {children}
+      {save ? (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <button type="button" className={primary} onClick={save}>
+            Save
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -153,11 +170,13 @@ export function GeneralSettingsDesk() {
   const until = settings.maintenanceUntil ? Date.parse(settings.maintenanceUntil) : NaN;
   const preset = (minutes: number) => set({ maintenanceMode: true, maintenanceUntil: minutesFromNow(minutes) });
 
+  const session = typeof window === "undefined" ? null : getSession();
+
   return (
     <div className="space-y-5">
       <Header title="General & maintenance" text="Site name, logo and contact details shown in the header and footer, and the maintenance switch with an automatic end time." action={<button type="button" className={primary} onClick={save}>Save settings</button>} />
       <Saved text={note} />
-
+      <SettingsSave save={save}>
       <Card title="Branding" text="The logo replaces the VGMF badge in the header, footer, sign-in and maintenance pages.">
         <div className="grid gap-5 lg:grid-cols-2">
           <ImageField label="Site logo" value={settings.logoUrl} maxWidth={400} hint="Square or wide PNG/SVG works best. Uploads are resized to 400px." onChange={(logoUrl) => set({ logoUrl })} />
@@ -227,6 +246,12 @@ export function GeneralSettingsDesk() {
           </p>
         </div>
       </Card>
+      </SettingsSave>
+      {session?.role === "admin" ? (
+        <Card title="Admin password" text="Administrators can reset their own password here." onSave={undefined}>
+          <ChangePasswordForm email={session.email} />
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -279,6 +304,7 @@ export function PaymentSettingsDesk() {
     <div className="space-y-5">
       <Header title="Payments & Razorpay" text="Choose demo, test or live mode and store the Razorpay keys used by checkout, POS UPI, payment links and refunds. Add Razorpay and Paytm EDC details for the counter." action={<button type="button" className={primary} onClick={() => saveAll()}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={saveAll}>
       <Card title="Mode">
         <div className="grid gap-3 md:grid-cols-3">
           {modes.map((mode) => (
@@ -369,6 +395,7 @@ export function PaymentSettingsDesk() {
           <p className="text-xs text-slate-500">Host keys: PAYTM_MID, PAYTM_MERCHANT_KEY, PAYTM_TID, PAYTM_CHANNEL_ID.</p>
         </div>
       </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -398,6 +425,7 @@ export function EmailSettingsDesk() {
     <div className="space-y-5">
       <Header title="Email: ZeptoMail & Zoho Mail" text="Pick the provider that sends order, account and support emails, and store its credentials." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={save}>
       <Card title="Sender">
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
@@ -460,6 +488,7 @@ export function EmailSettingsDesk() {
           </button>
         </div>
       </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -500,6 +529,7 @@ export function WhatsAppSettingsDesk() {
     <div className="space-y-5">
       <Header title="WhatsApp" text="Send order and account messages through Meta Cloud API (developers.facebook.com) or Zoho CPaaS (Agent API key). Sync Meta templates and map each site event to a template name or Zoho template alias." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={save}>
       <Card title="Provider">
         <div className="grid gap-3 md:grid-cols-4">
           {([
@@ -643,6 +673,7 @@ export function WhatsAppSettingsDesk() {
           </button>
         </div>
       </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -714,6 +745,7 @@ export function ShippingApisDesk() {
         }
       />
       <Saved text={note} />
+      <SettingsSave save={save}>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Shipday" text="docs.shipday.com — POST /orders to create, GET /orders to track, DELETE /orders/{id} to cancel. Authorization: Basic {API key}." badge={<ProviderStatus id="shipday" />} right={<Check label="Use" checked={value.shipday.enabled} onChange={(enabled) => set({ shipday: { ...value.shipday, enabled } })} />}>
@@ -868,6 +900,7 @@ export function ShippingApisDesk() {
         </div>
         {quote && <RatesTable quote={quote} />}
       </Card>
+      </SettingsSave>
     </div>
   );
 }
@@ -926,6 +959,7 @@ export function OrderSettingsDesk() {
     <div className="space-y-5">
       <Header title="Orders, returns & refunds" text="Which fulfilment options customers can pick, how shipping is charged, and the return, refund and cancellation rules." action={<button type="button" className={primary} onClick={save}>Save</button>} />
       <Saved text={note} />
+      <SettingsSave save={save}>
       <Card title="Fulfilment options at checkout">
         <div className="grid gap-4 md:grid-cols-3">
           <Check label="Home delivery" checked={value.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} />
@@ -1005,6 +1039,7 @@ export function OrderSettingsDesk() {
           onChange={(processAfterDelivery) => set({ adminActions: { ...value.adminActions, processAfterDelivery } })}
         />
       </Card>
+      </SettingsSave>
     </div>
   );
 }

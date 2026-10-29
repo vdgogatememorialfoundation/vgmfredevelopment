@@ -22,7 +22,14 @@ export const staffModules = [
   { id: "settings", label: "Site settings", paths: ["/admin/settings"] },
 ] as const;
 
-export type StaffModuleId = (typeof staffModules)[number]["id"];
+export type StaffModuleId = string;
+
+export type StaffModule = {
+  id: string;
+  label: string;
+  paths: string[];
+  custom?: boolean;
+};
 
 export interface StaffRole {
   id: string;
@@ -30,6 +37,40 @@ export interface StaffRole {
   category: string;
   description: string;
   modules: StaffModuleId[];
+}
+
+const CUSTOM_MODULES_KEY = "vgmf_custom_modules";
+
+export function getCustomModules(): StaffModule[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_MODULES_KEY);
+    return raw ? (JSON.parse(raw) as StaffModule[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function allStaffModules(): StaffModule[] {
+  return [
+    ...staffModules.map((item) => ({ id: item.id, label: item.label, paths: [...item.paths] })),
+    ...getCustomModules(),
+  ];
+}
+
+export function saveCustomModules(modules: StaffModule[]) {
+  window.localStorage.setItem(CUSTOM_MODULES_KEY, JSON.stringify(modules));
+  window.dispatchEvent(new Event("vgmf-cms"));
+}
+
+export function saveCustomModule(moduleItem: StaffModule) {
+  const next = getCustomModules().filter((item) => item.id !== moduleItem.id);
+  next.push({ ...moduleItem, custom: true, paths: moduleItem.paths.filter(Boolean) });
+  saveCustomModules(next);
+}
+
+export function removeCustomModule(id: string) {
+  saveCustomModules(getCustomModules().filter((item) => item.id !== id));
 }
 
 export const roleCategories = ["Content", "Events", "Commerce", "Finance", "Support", "Clinic", "Operations", "Management"];
@@ -83,7 +124,7 @@ export function modulesFor(user: User | null | undefined): StaffModuleId[] | "al
 /** The most specific module that owns a path, so /admin/website/clinics belongs to Clinics and not Website. */
 export function moduleForPath(path: string): StaffModuleId | null {
   let best: { id: StaffModuleId; length: number } | null = null;
-  for (const moduleItem of staffModules) {
+  for (const moduleItem of allStaffModules()) {
     for (const prefix of moduleItem.paths) {
       if ((path === prefix || path.startsWith(`${prefix}/`)) && (!best || prefix.length > best.length)) {
         best = { id: moduleItem.id, length: prefix.length };
@@ -102,5 +143,5 @@ export function canOpen(user: User | null | undefined, path: string) {
 }
 
 export function firstPathFor(moduleId: StaffModuleId) {
-  return staffModules.find((item) => item.id === moduleId)?.paths[0] ?? "/admin";
+  return allStaffModules().find((item) => item.id === moduleId)?.paths[0] ?? "/admin";
 }

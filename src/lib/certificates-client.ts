@@ -1,5 +1,7 @@
 import { saveIssuedCertificate, revokeCertificate, type IssuedCertificate } from "@/lib/cms";
 
+import type { CertificateSource, PartnerEvent } from "@/lib/partner-certificates";
+
 export type PublicCertificate = {
   certificateNumber: string;
   name: string;
@@ -12,6 +14,14 @@ export type PublicCertificate = {
   reissuedAt?: string;
   year?: number;
   eventSlug?: string;
+  source?: CertificateSource;
+  sourceLabel?: string;
+  prn?: string;
+  applicationNumber?: string;
+  eventId?: string;
+  eventVenue?: string;
+  kind?: string;
+  eventDetails?: PartnerEvent;
 };
 
 export async function verifyCertificate(number: string, apiKey?: string) {
@@ -24,13 +34,21 @@ export async function verifyCertificate(number: string, apiKey?: string) {
   const data = (await response.json()) as {
     ok: boolean;
     verified?: boolean;
+    valid?: boolean;
+    status?: string;
     certificate?: PublicCertificate;
     error?: string;
     source?: string;
+    sourceLabel?: string;
   };
   if (response.status === 401) throw new Error(data.error || "Invalid API key.");
-  if (!response.ok && response.status !== 404) throw new Error(data.error || "Could not verify the certificate.");
-  return data;
+  if (!response.ok && response.status !== 404 && response.status !== 400) {
+    throw new Error(data.error || "Could not verify the certificate.");
+  }
+  return {
+    ...data,
+    verified: Boolean(data.verified || (data.valid && data.certificate)),
+  };
 }
 
 export async function publishCertificate(record: IssuedCertificate) {

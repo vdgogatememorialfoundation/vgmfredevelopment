@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { displayName, getAccounts, updateAccount } from "@/lib/admin-store";
+import { ChangePasswordForm } from "@/components/account/PasswordResetForm";
 import { recordActivity, currentActorEmail } from "@/lib/activity";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -18,7 +19,6 @@ export function StaffProfile() {
     lastName: live?.lastName ?? "",
     phone: live?.phone ?? "",
     email: live?.email ?? "",
-    password: live?.password ?? "",
     replyTo: live?.replyToEmail || CARE,
   });
   const [note, setNote] = useState("");
@@ -43,7 +43,6 @@ export function StaffProfile() {
       phone: draft.phone.trim(),
       whatsapp: draft.phone.trim(),
       email: draft.email.trim(),
-      password: draft.password.trim() || live.password,
       replyToEmail: draft.replyTo.trim() || CARE,
     });
     recordActivity({ email: draft.email.trim(), kind: "updated", by: currentActorEmail(), detail: "Staff profile updated" });
@@ -66,7 +65,6 @@ export function StaffProfile() {
         <input className={field} placeholder="Last name" value={draft.lastName} onChange={(event) => setDraft({ ...draft, lastName: event.target.value })} />
         <input className={field} placeholder="Email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} />
         <input className={field} placeholder="Phone" value={draft.phone} onChange={(event) => setDraft({ ...draft, phone: event.target.value })} />
-        <input className={`${field} sm:col-span-2`} placeholder="Password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} />
         <fieldset className="sm:col-span-2">
           <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Reply-to for emails you send</legend>
           <label className="flex items-center gap-2 text-sm">
@@ -83,6 +81,13 @@ export function StaffProfile() {
           <Link href="/staff" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Back to workspace</Link>
         </div>
         {note && <p className="sm:col-span-2 text-sm text-emerald-700">{note}</p>}
+      </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Reset password</h2>
+        <p className="mt-1 text-sm text-slate-500">Staff can set a new password here without waiting on an administrator.</p>
+        <div className="mt-4">
+          <ChangePasswordForm email={live.email} />
+        </div>
       </div>
     </div>
   );

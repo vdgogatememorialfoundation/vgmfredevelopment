@@ -33,6 +33,9 @@ export function SettingsSection() {
       </div>
 
       <Panel title="Order processing timeline" description="Auto-computes pack → pick → ship → deliver dates for every new order.">
+        <div className="mb-4">
+          <Button onClick={save}>{saved ? "Saved" : "Save"}</Button>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Days to pack">
             <TextInput type="number" value={settings.processing.daysToPack} onChange={(e) => update({ processing: { ...settings.processing, daysToPack: Number(e.target.value) } })} />
@@ -71,10 +74,11 @@ export function SettingsSection() {
             </div>
           ))}
         </div>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap gap-3">
           <Button variant="outline" onClick={() => update({ fulfillmentLocations: [...settings.fulfillmentLocations, { id: `fl-${Date.now()}`, name: "New location", code: "NEW", address: "", city: "", state: "Maharashtra", pincode: "", phone: "", active: true }] })}>
             + Add location
           </Button>
+          <Button onClick={save}>{saved ? "Saved" : "Save"}</Button>
         </div>
       </Panel>
 
@@ -127,6 +131,7 @@ export function SettingsSection() {
           >
             + Add timeslot
           </Button>
+          <Button onClick={save}>{saved ? "Saved" : "Save"}</Button>
         </div>
       </Panel>
 
@@ -137,6 +142,9 @@ export function SettingsSection() {
               {courier}
             </span>
           ))}
+        </div>
+        <div className="mt-3">
+          <Button onClick={save}>{saved ? "Saved" : "Save"}</Button>
         </div>
       </Panel>
     </div>

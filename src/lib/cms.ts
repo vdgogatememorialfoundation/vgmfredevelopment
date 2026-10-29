@@ -3,7 +3,7 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { announcements as seededAnnouncements, certificates as baseCertificates, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
-import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, User, Video } from "@/types";
+import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, SiteBanner, User, Video } from "@/types";
 import { isArticlePublished } from "@/lib/article-display";
 import { modulesFor, type StaffModuleId } from "@/lib/roles";
 
@@ -322,6 +322,7 @@ export function hideRecord(editsKey: string, customKey: string, id: string) {
 
 export const noticeKeys = { edits: "vgmf_notice_edits", custom: "vgmf_custom_notices" };
 export const flyerKeys = { edits: "vgmf_flyer_edits", custom: "vgmf_custom_flyers" };
+export const bannerKeys = { edits: "vgmf_banner_edits", custom: "vgmf_custom_banners" };
 export const videoKeys = { edits: "vgmf_video_edits", custom: "vgmf_custom_videos" };
 export const clinicKeys = { edits: "vgmf_clinic_edits", custom: "vgmf_custom_clinics" };
 
@@ -332,6 +333,10 @@ export const hideNotice = (id: string) => hideRecord(noticeKeys.edits, noticeKey
 export const getLiveFlyers = () => liveRecords(seededFlyers, flyerKeys.edits, flyerKeys.custom);
 export const saveFlyer = (record: Flyer) => saveRecord(seededFlyers, flyerKeys.edits, flyerKeys.custom, record);
 export const hideFlyer = (id: string) => hideRecord(flyerKeys.edits, flyerKeys.custom, id);
+
+export const getLiveBanners = () => liveRecords<SiteBanner>([], bannerKeys.edits, bannerKeys.custom);
+export const saveBanner = (record: SiteBanner) => saveRecord<SiteBanner>([], bannerKeys.edits, bannerKeys.custom, record);
+export const hideBanner = (id: string) => hideRecord(bannerKeys.edits, bannerKeys.custom, id);
 
 export const getLiveVideos = () => liveRecords(seededVideos, videoKeys.edits, videoKeys.custom);
 export const saveVideo = (record: Video) => saveRecord(seededVideos, videoKeys.edits, videoKeys.custom, record);

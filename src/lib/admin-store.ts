@@ -171,6 +171,8 @@ const DEMO_CONTENT_KEYS = [
   "vgmf_custom_notices",
   "vgmf_flyer_edits",
   "vgmf_custom_flyers",
+  "vgmf_banner_edits",
+  "vgmf_custom_banners",
   "vgmf_video_edits",
   "vgmf_custom_videos",
   "vgmf_clinic_edits",

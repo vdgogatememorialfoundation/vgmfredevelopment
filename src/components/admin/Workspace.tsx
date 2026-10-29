@@ -7,7 +7,7 @@ import { getNotifications } from "@/lib/notify";
 import { getLiveEvents } from "@/lib/cms";
 import { getSettings, getTickets } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
-import { firstPathFor, getRole, modulesFor, staffModules } from "@/lib/roles";
+import { allStaffModules, firstPathFor, getRole, modulesFor } from "@/lib/roles";
 import { adminNavigation } from "@/app/(portal)/admin/_config/navigation";
 import { canOpen } from "@/lib/roles";
 
@@ -70,7 +70,7 @@ export function WorkspaceHome() {
 
       {!isAdmin && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {staffModules
+          {allStaffModules()
             .filter((moduleItem) => allowed.includes(moduleItem.id))
             .map((moduleItem) => (
               <Link key={moduleItem.id} href={firstPathFor(moduleItem.id)} className="rounded-2xl border border-[#E5E7EB] bg-white p-6 transition hover:shadow-md">

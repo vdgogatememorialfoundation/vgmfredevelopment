@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import SectionHeader from "@/components/account/SectionHeader";
+import { ChangePasswordForm } from "@/components/account/PasswordResetForm";
 import { useAuth } from "@/components/auth/AuthContext";
+import { updateAccount } from "@/lib/admin-store";
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -20,6 +22,13 @@ export default function ProfilePage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    updateAccount(user.email, {
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      whatsapp: form.whatsapp.trim(),
+    });
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2500);
   };
@@ -129,6 +138,14 @@ export default function ProfilePage() {
           )}
         </div>
       </form>
+
+      <div className="mt-8 rounded-2xl border border-border bg-white p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-text-primary">Reset password</h2>
+        <p className="mt-1 text-sm text-text-muted">Choose a new password for this account.</p>
+        <div className="mt-5">
+          <ChangePasswordForm email={user.email} />
+        </div>
+      </div>
     </div>
   );
 }
