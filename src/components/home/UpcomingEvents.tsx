@@ -14,7 +14,7 @@ export default function UpcomingEvents() {
     .slice(0, 3);
 
   return (
-    <section className="section" aria-labelledby="upcoming-events-heading">
+    <section className="section-paper" aria-labelledby="upcoming-events-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Events"

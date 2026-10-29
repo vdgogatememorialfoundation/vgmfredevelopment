@@ -125,7 +125,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-white/95 backdrop-blur">
       {/* Top bar */}
-      <div className="border-b border-border bg-white text-text-muted">
+      <div className="border-b border-ink-soft bg-ink text-stone-300">
         <div className="container flex items-center justify-between py-2 text-xs">
           <p className="hidden gap-4 sm:flex">
             <a
@@ -151,7 +151,7 @@ export default function Header() {
 
           <div className="ml-auto flex items-center gap-4">
             {isAuthenticated ? (
-              <span className="hidden text-text-primary md:inline">
+              <span className="hidden text-stone-200 md:inline">
                 {user?.accountId}
               </span>
             ) : (

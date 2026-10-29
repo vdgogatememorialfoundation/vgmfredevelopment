@@ -230,6 +230,9 @@ export interface Notice {
   category: string;
   description: string;
   attachment?: string;
+  fileName?: string;
+  fileType?: string;
+  pinned?: boolean;
   href: string;
 }
 

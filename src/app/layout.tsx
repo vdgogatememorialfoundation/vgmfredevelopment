@@ -1,9 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Baloo_2 } from "next/font/google";
+import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const baloo = Baloo_2({
-  variable: "--font-baloo",
+const sans = Source_Sans_3({
+  variable: "--font-sans-body",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const serif = Source_Serif_4({
+  variable: "--font-serif-display",
   subsets: ["latin"],
   display: "swap",
 });
@@ -48,7 +54,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#165A3A",
+  themeColor: "#1A2332",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -62,7 +68,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${baloo.variable} scroll-smooth`}
+      className={`${sans.variable} ${serif.variable} scroll-smooth`}
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">

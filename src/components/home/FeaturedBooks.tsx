@@ -9,7 +9,7 @@ export default function FeaturedBooks() {
   const featured = useLiveBooks().filter((book) => book.active !== false).slice(0, 4);
 
   return (
-    <section className="section" aria-labelledby="books-heading">
+    <section className="section-paper" aria-labelledby="books-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Shop"

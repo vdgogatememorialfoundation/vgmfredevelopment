@@ -255,12 +255,12 @@ function AnnouncementForm({
         <div className="grid gap-3 sm:grid-cols-2">
           <input className={field} value={category} onChange={(event) => setCategory(event.target.value)} />
           <select className={field} value={priority} onChange={(event) => setPriority(event.target.value as "high" | "normal")}>
-            <option value="high">Homepage</option>
-            <option value="normal">Ticker only</option>
+            <option value="high">Show in ticker</option>
+            <option value="normal">Lower priority</option>
           </select>
         </div>
         <button type="button" className={button} onClick={publish}>{current ? "Update announcement" : "Publish announcement"}</button>
-        {saved && <p className="text-sm text-emerald-700">Saved. The homepage ticker uses this list.</p>}
+        {saved && <p className="text-sm text-emerald-700">Saved. It appears in the site ticker, not as a second homepage block.</p>}
       </div>
       <ul className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         {items.map((item) => (

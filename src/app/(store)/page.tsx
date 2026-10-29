@@ -1,5 +1,5 @@
 import HeroSection from "@/components/home/HeroSection";
-import Announcements from "@/components/home/Announcements";
+import FoundationDirectory from "@/components/home/FoundationDirectory";
 import NoticeBoard from "@/components/home/NoticeBoard";
 import UpcomingEvents from "@/components/home/UpcomingEvents";
 import LegacySection from "@/components/home/LegacySection";
@@ -12,9 +12,9 @@ export default function HomePage() {
   return (
     <>
       <HeroSection />
+      <FoundationDirectory />
       <NoticeBoard />
       <SupportUs />
-      <Announcements />
       <UpcomingEvents />
       <LegacySection />
       <FeaturedBooks />

@@ -6,28 +6,36 @@ import PageHeader from "@/components/common/PageHeader";
 import ClinicCard from "@/components/clinics/ClinicCard";
 import VideosGrid from "@/components/videos/VideosGrid";
 import { getYouTubeId } from "@/data/videos";
-import { useLiveAnnouncements, useLiveClinics, useLiveNotices, useLiveVideos } from "@/lib/use-cms";
+import { useLiveAnnouncements, useLiveClinics, useLiveVideos } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 import { clinicDirectionsUrl, clinicMapEmbed } from "@/lib/maps";
+import { NoticesGazette } from "@/components/site/NoticesGazette";
 
 export function AnnouncementsIndex() {
   const items = [...useLiveAnnouncements()].sort((a, b) => b.date.localeCompare(a.date));
   return (
     <main>
-      <PageHeader eyebrow="Announcements" title="All Announcements" description="News and updates from the Vaidya Gogate Memorial Foundation." />
-      <section className="section bg-background">
-        <div className="container max-w-4xl space-y-4">
-          {items.map((announcement) => (
-            <article key={announcement.id} className="card p-6">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge tone="burgundy">{announcement.category}</Badge>
-                <time className="text-sm text-text-muted" dateTime={announcement.date}>{formatDate(announcement.date)}</time>
-              </div>
-              <h2 className="mt-3 text-xl font-semibold text-text-primary">{announcement.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-text-muted">{announcement.description}</p>
-              <Link href={announcement.href} className="mt-4 inline-block text-sm font-semibold text-burgundy">Read more</Link>
-            </article>
-          ))}
+      <PageHeader
+        eyebrow="Archive"
+        title="Announcement archive"
+        description="Full wording of items that also run in the site-wide ticker. This page is the archive — the homepage does not repeat this list."
+        breadcrumb={[{ name: "Announcements", href: "/announcements" }]}
+      />
+      <section className="section-paper">
+        <div className="container max-w-4xl">
+          <ul className="overflow-hidden rounded-xl border border-stone-300 bg-white">
+            {items.map((announcement) => (
+              <li key={announcement.id} className="border-b border-stone-200 px-5 py-5 last:border-b-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge tone="gold">{announcement.category}</Badge>
+                  <time className="text-xs text-stone-500" dateTime={announcement.date}>{formatDate(announcement.date)}</time>
+                </div>
+                <h2 className="mt-2 font-serif text-lg font-semibold text-ink">{announcement.title}</h2>
+                <p className="mt-2 text-sm leading-6 text-stone-600">{announcement.description}</p>
+                <Link href={announcement.href} className="mt-3 inline-block text-sm font-semibold text-burgundy">Open linked page</Link>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
     </main>
@@ -35,34 +43,7 @@ export function AnnouncementsIndex() {
 }
 
 export function NoticesIndex() {
-  const items = [...useLiveNotices()].sort((a, b) => b.date.localeCompare(a.date));
-  return (
-    <main>
-      <PageHeader eyebrow="Notice Board" title="All Notices" description="Official notices, deadlines and important updates from the Foundation." />
-      <section className="section bg-background">
-        <div className="container max-w-4xl space-y-4">
-          {items.map((notice) => (
-            <article key={notice.id} className="card p-6">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge tone="burgundy">{notice.category}</Badge>
-                <time className="text-sm text-text-muted" dateTime={notice.date}>{formatDate(notice.date)}</time>
-              </div>
-              <h2 className="mt-3 text-base font-semibold text-text-primary">{notice.title}</h2>
-              {notice.description ? <p className="mt-2 text-sm leading-6 text-text-muted">{notice.description}</p> : null}
-              <div className="mt-3 flex flex-wrap gap-3">
-                {notice.href && <Link href={notice.href} className="text-xs font-semibold text-burgundy">Open notice</Link>}
-                {notice.attachment && (
-                  <a href={/^(https?:|\/)/.test(notice.attachment) ? notice.attachment : notice.href} className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
-                    Download PDF
-                  </a>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-    </main>
-  );
+  return <NoticesGazette />;
 }
 
 export function VideosIndex() {

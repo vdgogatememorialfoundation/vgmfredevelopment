@@ -61,24 +61,26 @@ export const notices: Notice[] = [
     category: "Deadline",
     description: "Case Presentation Deadline Extended till 1 September 2026, 11PM",
     href: "/notices",
+    pinned: true,
   },
   {
     id: "ntc-home-002",
     title: "Viddhakarma Day Candidate Eligibility List",
     date: "2026-09-10",
     category: "List",
-    description: "",
-    attachment: "/notices",
-    href: "/notices",
+    description:
+      "The candidate eligibility list for Viddhakarma Day is available from the Foundation office. Email info@vaidyagogate.org to request a copy.",
+    href: "/notices#ntc-home-002",
+    pinned: true,
   },
   {
     id: "ntc-home-003",
-    title: "Vaidya Gogate Memorial Foundation National Seminar 2026 Brochure",
+    title: "National Seminar 2026 Brochure",
     date: "2026-08-20",
     category: "Brochure",
-    description: "Vaidya Gogate Memorial Foundation National Seminar 2026 Brochure",
-    attachment: "/events/national-seminar-2026",
+    description: "The official brochure for the Vaidya Gogate Memorial Foundation National Seminar 2026 is now published.",
     href: "/events/national-seminar-2026",
+    pinned: true,
   },
   {
     id: "ntc-001",
@@ -87,7 +89,6 @@ export const notices: Notice[] = [
     category: "Events",
     description:
       "The registration deadline for National Seminar 2026 has been extended to 20th September 2026. Limited seats available.",
-    attachment: "/events/national-seminar-2026",
     href: "/events/national-seminar-2026",
   },
   {
@@ -97,7 +98,6 @@ export const notices: Notice[] = [
     category: "Fellowship",
     description:
       "Congratulations to the selected fellows for the 2026-27 academic year. Individual notifications have been sent via email.",
-    attachment: "/events/fellowship-program-2026",
     href: "/events/fellowship-program-2026",
   },
   {
@@ -116,7 +116,6 @@ export const notices: Notice[] = [
     category: "Publications",
     description:
       "The second volume of our Ayurveda Pharmacology series is now available for pre-order. Expected shipping: October 2026.",
-    attachment: "pharmacology-vol2-preview.pdf",
     href: "/shop/ayurveda-pharmacology-vol-2",
   },
   {
@@ -126,7 +125,6 @@ export const notices: Notice[] = [
     category: "Clinics",
     description:
       "Revised consultation timings for Vaidya Gogate Memorial Clinic, Pune effective from 1st October 2026.",
-    attachment: "pune-clinic-schedule-oct-2026.pdf",
     href: "/clinics/vaidya-gogate-memorial-clinic-pune",
   },
 ];

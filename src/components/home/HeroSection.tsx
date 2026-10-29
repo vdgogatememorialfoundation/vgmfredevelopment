@@ -13,7 +13,7 @@ function StaticHero({ tagline }: { tagline?: string }) {
     <section className="relative overflow-hidden border-b border-border bg-white">
       <div className="container grid items-center gap-8 py-10 lg:grid-cols-2 lg:py-12">
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy">Vaidya Gogate Memorial Foundation</p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">Vaidya Gogate Memorial Foundation</p>
           <h1 className="heading-1 max-w-2xl">
             {lines.map((line, index) => (
               <span key={index} className="block">{line}</span>
@@ -77,7 +77,7 @@ export default function HeroSection() {
             <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/60 to-transparent" />
             <div className="container absolute inset-0 flex items-center">
               <div className="max-w-xl">
-                {slide.event && <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-burgundy">{slide.event}</p>}
+                {slide.event && <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-gold">{slide.event}</p>}
                 <h2 className="text-lg font-semibold text-text-primary sm:text-xl">{slide.title}</h2>
                 {slide.href && (
                   <Link href={slide.href} className="btn-primary mt-4" tabIndex={slideIndex === active ? 0 : -1}>

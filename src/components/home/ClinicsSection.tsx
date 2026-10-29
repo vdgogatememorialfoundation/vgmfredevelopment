@@ -9,7 +9,7 @@ export default function ClinicsSection() {
   const shown = useLiveClinics().slice(0, 3);
 
   return (
-    <section className="section" aria-labelledby="clinics-heading">
+    <section className="section-paper" aria-labelledby="clinics-heading">
       <div className="container">
         <SectionHeading
           eyebrow="Clinics"

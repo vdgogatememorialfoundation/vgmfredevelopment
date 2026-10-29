@@ -1,83 +1,71 @@
 "use client";
 
 import Link from "next/link";
-import { useLiveNotices } from "@/lib/use-cms";
-
-function PdfIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function noticeFile(notice: { attachment?: string; href: string }) {
-  if (!notice.attachment) return null;
-  if (/^(https?:|\/|data:)/.test(notice.attachment)) return notice.attachment;
-  return notice.href;
-}
-
-const PINNED = ["ntc-home-001", "ntc-home-002", "ntc-home-003"];
+import { noticeFileHref, noticeHasFile } from "@/lib/notice-display";
+import { useMergedNotices } from "@/lib/use-notices";
+import { formatDate } from "@/lib/utils";
 
 export default function NoticeBoard() {
-  const all = useLiveNotices();
-  const pinned = PINNED.map((id) => all.find((notice) => notice.id === id)).filter(Boolean) as typeof all;
-  const notices = (pinned.length ? pinned : all).slice(0, 3);
+  const { notices: all } = useMergedNotices();
+  const pinned = all.filter((notice) => notice.pinned);
+  const notices = (pinned.length ? pinned : all).slice(0, 6);
 
   return (
-    <section className="section" aria-labelledby="notices-heading">
+    <section className="border-t border-border bg-paper py-10" aria-labelledby="notices-heading">
       <div className="container">
-        <div className="mx-auto max-w-2xl rounded-xl border border-border bg-white px-5 py-5 sm:px-6">
-          <div className="mb-4 flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-text-primary" aria-hidden="true">
-              <path d="M3 11v2a1 1 0 0 0 1 1h1.5l6 4.5V5.5L5.5 10H4a1 1 0 0 0-1 1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-              <path d="M16 8.2a4.8 4.8 0 0 1 0 7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-            <h2 id="notices-heading" className="text-sm font-semibold text-text-primary">
-              Official notices
-            </h2>
+        <div className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-3 bg-ink px-5 py-4 text-white">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">Official gazette</p>
+              <h2 id="notices-heading" className="font-serif text-lg font-semibold">
+                Notice board
+              </h2>
+            </div>
+            <Link href="/notices" className="text-sm font-medium text-stone-200 hover:text-white">
+              All notices
+            </Link>
           </div>
-
-          <ul className="space-y-3">
+          <ul className="divide-y divide-stone-200">
             {notices.map((notice) => {
-              const file = noticeFile(notice);
+              const file = noticeFileHref(notice);
               return (
-                <li
-                  key={notice.id}
-                  className="rounded-lg border border-border border-l-[3px] border-l-burgundy bg-white px-4 py-3.5"
-                >
-                  <p className="text-sm font-semibold leading-5 text-text-primary">{notice.title}</p>
-                  {notice.description ? (
-                    <p className="mt-1 text-xs leading-5 text-text-muted">{notice.description}</p>
-                  ) : null}
-                  {file ? (
-                    <a
-                      href={file}
-                      target={file.startsWith("http") ? "_blank" : undefined}
-                      rel={file.startsWith("http") ? "noopener noreferrer" : undefined}
-                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
-                    >
-                      <PdfIcon />
-                      Download PDF
-                    </a>
-                  ) : null}
+                <li key={notice.id} id={notice.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[7rem_1fr_auto] sm:items-start">
+                  <time className="text-xs font-medium text-stone-500" dateTime={notice.date}>
+                    {formatDate(notice.date)}
+                  </time>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gold">{notice.category}</p>
+                      {notice.pinned ? (
+                        <span className="rounded bg-ink/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink">
+                          Pinned
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 font-serif text-sm font-semibold text-ink">{notice.title}</p>
+                    {notice.description ? <p className="mt-1 text-sm leading-6 text-stone-600">{notice.description}</p> : null}
+                  </div>
+                  <div className="sm:text-right">
+                    {file ? (
+                      <a
+                        href={file}
+                        className="inline-flex items-center rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:border-gold hover:text-burgundy"
+                      >
+                        {notice.fileName ? `Download ${notice.fileName}` : "Download file"}
+                      </a>
+                    ) : noticeHasFile(notice) ? (
+                      <a href={`/api/notices/${notice.id}/file`} className="inline-flex items-center rounded-md border border-stone-300 px-3 py-1.5 text-xs font-semibold text-ink">
+                        Download file
+                      </a>
+                    ) : (
+                      <span className="text-xs text-stone-400">Text only</span>
+                    )}
+                  </div>
                 </li>
               );
             })}
           </ul>
         </div>
-
-        <p className="mt-3 text-center">
-          <Link href="/notices" className="text-xs font-medium text-burgundy hover:underline">
-            All notices
-          </Link>
-        </p>
       </div>
     </section>
   );

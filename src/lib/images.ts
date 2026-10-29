@@ -39,6 +39,16 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+export async function fileToStoredUrl(file: File, maxBytes = 2_000_000) {
+  if (file.size > maxBytes) {
+    throw new Error("Use a file under 2 MB, or a public file URL.");
+  }
+  if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
+    return fileToDataUrl(file);
+  }
+  return readAsDataUrl(file);
+}
+
 export function isStorageFull(error: unknown) {
   return error instanceof DOMException && (error.name === "QuotaExceededError" || error.code === 22);
 }

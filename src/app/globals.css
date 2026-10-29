@@ -1,21 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #165A3A;
-  --color-burgundy-dark: #0E3D28;
-  --color-gold: #8B6914;
+  --color-burgundy: #7A2E3A;
+  --color-burgundy-dark: #541F28;
+  --color-gold: #9A7B32;
   --color-saffron: #B45309;
-  --color-warm-cream: #FFFFFF;
+  --color-ink: #1A2332;
+  --color-ink-soft: #2A3545;
+  --color-paper: #F6F1E7;
+  --color-warm-cream: #F6F1E7;
   --color-background: #FFFFFF;
-  --color-text-primary: #111827;
-  --color-text-muted: #4B5563;
-  --color-border: #E5E7EB;
+  --color-text-primary: #1A2332;
+  --color-text-muted: #5C564C;
+  --color-border: #E4DDD0;
   --color-white: #FFFFFF;
-  --font-serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, "Times New Roman", serif;
+  --font-serif: var(--font-serif-display), "Source Serif 4", Palatino, Georgia, serif;
+  --font-sans: var(--font-sans-body), "Source Sans 3", "Segoe UI", system-ui, sans-serif;
 }
 
 :root {
-  --font-sans: var(--font-baloo), "Baloo 2", "Inter", system-ui, sans-serif;
+  --font-sans: var(--font-sans-body), "Source Sans 3", "Segoe UI", system-ui, sans-serif;
 }
 
 * {
@@ -63,44 +67,48 @@ body {
     @apply border-t border-border bg-white py-10 sm:py-12;
   }
 
+  .section-paper {
+    @apply border-t border-border bg-paper py-10 sm:py-12;
+  }
+
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-burgundy-dark;
+    @apply inline-flex items-center justify-center rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-ink-soft;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy;
+    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:border-gold hover:text-burgundy;
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy hover:bg-burgundy/5;
+    @apply inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-ink transition hover:border-gold hover:text-burgundy hover:bg-paper;
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-burgundy focus:ring-2 focus:ring-burgundy/10;
+    @apply w-full rounded-xl border border-border bg-white px-4 py-3.5 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-gold focus:ring-2 focus:ring-gold/15;
   }
 
   .card {
-    @apply rounded-xl border border-border bg-white shadow-none transition hover:border-burgundy/30 hover:shadow-sm;
+    @apply rounded-xl border border-border bg-white shadow-none transition hover:border-gold/40 hover:shadow-sm;
   }
 
   .heading-1 {
-    @apply text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl;
+    @apply font-serif text-2xl font-semibold tracking-tight text-ink sm:text-3xl;
   }
 
   .heading-2 {
-    @apply text-xl font-semibold tracking-tight text-text-primary sm:text-2xl;
+    @apply font-serif text-xl font-semibold tracking-tight text-ink sm:text-2xl;
   }
 
   .heading-3 {
-    @apply text-lg font-semibold tracking-tight text-text-primary;
+    @apply font-serif text-lg font-semibold tracking-tight text-ink;
   }
 
   .heading-4 {
-    @apply text-base font-semibold tracking-tight text-text-primary;
+    @apply font-serif text-base font-semibold tracking-tight text-ink;
   }
 
   .eyebrow {
-    @apply mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy;
+    @apply mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold;
   }
 
   .text-body {
@@ -124,5 +132,15 @@ body {
 }
 
 :focus-visible {
-  @apply outline-none ring-2 ring-burgundy ring-offset-2 ring-offset-background;
+  @apply outline-none ring-2 ring-gold ring-offset-2 ring-offset-background;
+}
+
+@media print {
+  header,
+  footer,
+  [aria-label="Scrolling announcements"],
+  .btn-primary,
+  .btn-outline {
+    display: none !important;
+  }
 }
