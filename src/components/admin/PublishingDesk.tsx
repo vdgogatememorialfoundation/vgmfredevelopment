@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { certificates, getCertificate } from "@/data/content";
+import { verifyCertificate } from "@/lib/certificates-client";
 import { AccountsSection } from "@/components/admin/AdminAccounts";
 import {
   blankEvent,
@@ -657,53 +657,62 @@ export function SupportUsDesk() {
 
 export function CertificateApiDesk() {
   const [number, setNumber] = useState("VGMF-CERT-2026-0001");
-  const [found, setFound] = useState<ReturnType<typeof getCertificate>>();
-  const [checked, setChecked] = useState(false);
+  const [siteId, setSiteId] = useState<(typeof partnerSites)[number]["id"]>("seminar");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const site = partnerSites.find((item) => item.id === siteId) ?? partnerSites[0];
+
+  const run = async () => {
+    setBusy(true);
+    try {
+      const data = await verifyCertificate(number, site.apiKey);
+      setNote(
+        data.verified && data.certificate
+          ? `${site.origin} accepted the key and verified ${data.certificate.certificateNumber} · ${data.certificate.name} · ${data.certificate.event}.`
+          : `${site.origin} accepted the key. No issued certificate matches ${number.trim() || "(empty)"}.`
+      );
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "The verification API did not respond.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Certificate verification API</h1>
         <p className="mt-1 text-sm text-slate-500">
-          seminar.vaidyagogate.org and autism.vaidyagogate.org call <span className="font-mono">GET /api/certificates/verify?number=</span> with header <span className="font-mono">x-api-key</span>.
+          The public Certificate Verification page looks up the same records. seminar.vaidyagogate.org and
+          autism.vaidyagogate.org call <span className="font-mono">GET /api/certificates/verify?number=</span> with header{" "}
+          <span className="font-mono">x-api-key</span>.
         </p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        {partnerSites.map((site) => (
-          <div key={site.id} className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{site.name}</p>
-            <p className="mt-1 text-sm text-slate-700">{site.origin}</p>
-            <p className="mt-2 font-mono text-sm text-burgundy">{site.apiKey}</p>
+        {partnerSites.map((item) => (
+          <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{item.name}</p>
+            <p className="mt-1 text-sm text-slate-700">{item.origin}</p>
+            <p className="mt-2 font-mono text-sm text-burgundy">{item.apiKey}</p>
           </div>
         ))}
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <p className="text-sm font-semibold text-slate-800">Issued certificates</p>
-        <ul className="mt-3 space-y-2 text-sm text-slate-600">
-          {certificates.map((certificate) => (
-            <li key={certificate.certificateNumber}>
-              {certificate.certificateNumber} · {certificate.name} · {certificate.event}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <input className={field} value={number} onChange={(event) => setNumber(event.target.value)} />
-          <button
-            type="button"
-            className={button}
-            onClick={() => {
-              setFound(getCertificate(number));
-              setChecked(true);
-            }}
-          >
-            Look up
+        <p className="text-sm font-semibold text-slate-800">Test GET /api/certificates/verify</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_12rem_auto]">
+          <input className={field} value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Certificate number" />
+          <select className={field} value={siteId} onChange={(event) => setSiteId(event.target.value as typeof siteId)}>
+            {partnerSites.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <button type="button" disabled={busy} className={button} onClick={() => void run()}>
+            {busy ? "Checking…" : "Call API"}
           </button>
         </div>
-        {checked && (
-          <p className="mt-3 text-sm text-slate-700">
-            {found ? `${found.name} · ${found.certificateType} · ${found.event}` : "No certificate matches that number."}
-          </p>
-        )}
+        {note && <p className="mt-3 text-sm text-slate-700">{note}</p>}
       </div>
     </div>
   );

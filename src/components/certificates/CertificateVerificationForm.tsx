@@ -2,39 +2,50 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { findIssuedCertificate, type IssuedCertificate } from "@/lib/cms";
+import { verifyCertificate, type PublicCertificate } from "@/lib/certificates-client";
 
 type Result = {
-  status: "idle" | "verified" | "not-found";
+  status: "idle" | "verified" | "not-found" | "error";
   certificateNumber: string;
-  certificate?: IssuedCertificate;
+  certificate?: PublicCertificate;
+  message?: string;
 };
 
 export default function CertificateVerificationForm() {
   const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result>({
     status: "idle",
     certificateNumber: "",
   });
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const certificateNumber = value.trim();
-
     if (!certificateNumber) return;
-
-    const certificate = findIssuedCertificate(certificateNumber);
-    setResult({
-      status: certificate ? "verified" : "not-found",
-      certificateNumber,
-      certificate,
-    });
+    setBusy(true);
+    try {
+      const data = await verifyCertificate(certificateNumber);
+      setResult({
+        status: data.verified && data.certificate ? "verified" : "not-found",
+        certificateNumber,
+        certificate: data.certificate,
+      });
+    } catch (error) {
+      setResult({
+        status: "error",
+        certificateNumber,
+        message: error instanceof Error ? error.message : "Could not reach the verification service.",
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <div className="mx-auto max-w-2xl">
       <form
-        onSubmit={handleSubmit}
+        onSubmit={(event) => void handleSubmit(event)}
         className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8"
       >
         <label
@@ -55,43 +66,36 @@ export default function CertificateVerificationForm() {
         />
 
         <p id="certificate-help" className="mt-3 text-center text-sm text-text-muted">
-          Enter the certificate number printed on your certificate. seminar.vaidyagogate.org
-          and autism.vaidyagogate.org confirm the same record through GET /api/certificates/verify.
+          Enter the number printed on the certificate. The same record is confirmed here and by
+          seminar.vaidyagogate.org and autism.vaidyagogate.org through GET /api/certificates/verify
+          with their API key.
         </p>
 
-        <button type="submit" className="btn-primary mt-6 w-full">
-          Verify Certificate
+        <button type="submit" disabled={busy} className="btn-primary mt-6 w-full disabled:opacity-50">
+          {busy ? "Verifying…" : "Verify Certificate"}
         </button>
       </form>
 
-      {result.status === "verified" && (
+      {result.status === "verified" && result.certificate && (
         <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-3xl text-white">
             ✓
           </div>
 
-          <h2 className="mt-6 text-2xl font-bold text-text-primary">
+          <h2 className="mt-6 font-serif text-2xl font-bold text-text-primary">
             Certificate Verified
           </h2>
 
           <p className="mt-2 text-sm text-text-muted">
-            The following certificate is genuine and was issued by the
-            Vaidya Gogate Memorial Foundation.
+            This certificate is genuine and was issued by the Vaidya Gogate Memorial Foundation.
           </p>
 
           <dl className="mx-auto mt-8 max-w-md space-y-3 rounded-2xl border border-emerald-200 bg-white p-6 text-left text-sm">
-            <CertificateRow
-              label="Certificate Number"
-              value={result.certificateNumber.toUpperCase()}
-            />
-            {result.certificate && (
-              <>
-                <CertificateRow label="Name" value={result.certificate.name} />
-                <CertificateRow label="Event" value={result.certificate.event} />
-                <CertificateRow label="Certificate Type" value={result.certificate.certificateType} />
-                <CertificateRow label="Issued On" value={result.certificate.issueDate} />
-              </>
-            )}
+            <CertificateRow label="Certificate Number" value={result.certificate.certificateNumber} />
+            <CertificateRow label="Name" value={result.certificate.name} />
+            <CertificateRow label="Event" value={result.certificate.event} />
+            <CertificateRow label="Certificate Type" value={result.certificate.certificateType} />
+            <CertificateRow label="Issued On" value={result.certificate.issueDate} />
             <CertificateRow label="Issued By" value="Vaidya Gogate Memorial Foundation" />
           </dl>
         </div>
@@ -103,7 +107,7 @@ export default function CertificateVerificationForm() {
             !
           </div>
 
-          <h2 className="mt-6 text-2xl font-bold text-text-primary">
+          <h2 className="mt-6 font-serif text-2xl font-bold text-text-primary">
             Certificate Not Found
           </h2>
 
@@ -119,6 +123,10 @@ export default function CertificateVerificationForm() {
             Contact the Foundation
           </Link>
         </div>
+      )}
+
+      {result.status === "error" && (
+        <p className="mt-6 text-center text-sm text-red-700">{result.message}</p>
       )}
     </div>
   );

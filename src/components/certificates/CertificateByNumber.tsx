@@ -1,20 +1,44 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { findIssuedCertificate } from "@/lib/cms";
+import { verifyCertificate, type PublicCertificate } from "@/lib/certificates-client";
 import { formatDate } from "@/lib/utils";
 
 export default function CertificateByNumber({ number }: { number: string }) {
-  const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
-  const certificate = ready ? findIssuedCertificate(number) : undefined;
+  const [certificate, setCertificate] = useState<PublicCertificate | null>(null);
+  const [ready, setReady] = useState(false);
 
-  if (!ready) return null;
+  useEffect(() => {
+    let cancelled = false;
+    verifyCertificate(number)
+      .then((data) => {
+        if (!cancelled) setCertificate(data.verified && data.certificate ? data.certificate : null);
+      })
+      .catch(() => {
+        if (!cancelled) setCertificate(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [number]);
+
+  if (!ready) {
+    return (
+      <main className="section bg-background">
+        <div className="container max-w-2xl text-center text-sm text-text-muted">Checking the certificate…</div>
+      </main>
+    );
+  }
+
   if (!certificate) {
     return (
       <main className="section bg-background">
         <div className="container max-w-2xl text-center">
-          <h1 className="text-3xl font-bold text-text-primary">Certificate Not Found</h1>
+          <h1 className="font-serif text-3xl font-bold text-text-primary">Certificate Not Found</h1>
           <p className="mt-3 text-sm text-text-muted">No certificate matches {number.toUpperCase()}.</p>
           <Link href="/certificate-verification" className="btn-outline mt-8">Verify Another Certificate</Link>
         </div>
@@ -31,38 +55,22 @@ export default function CertificateByNumber({ number }: { number: string }) {
               ✓
             </div>
 
-            <h1 className="mt-6 text-3xl font-bold text-text-primary">
+            <h1 className="mt-6 font-serif text-3xl font-bold text-text-primary">
               Certificate Verified
             </h1>
 
             <p className="mt-3 text-sm text-text-muted">
-              This certificate is recorded as issued by the Vaidya Gogate
-              Memorial Foundation.
+              This certificate is recorded as issued by the Vaidya Gogate Memorial Foundation.
             </p>
 
             <dl className="mx-auto mt-10 grid max-w-md gap-4 rounded-2xl border border-emerald-200 bg-white p-8 text-left">
-              <CertificateRow
-                label="Certificate Number"
-                value={certificate.certificateNumber}
-              />
+              <CertificateRow label="Certificate Number" value={certificate.certificateNumber} />
               <CertificateRow label="Name" value={certificate.name} />
               <CertificateRow label="Event" value={certificate.event} />
-              <CertificateRow
-                label="Certificate Type"
-                value={certificate.certificateType}
-              />
-              <CertificateRow
-                label="Event Date"
-                value={formatDate(certificate.eventDate)}
-              />
-              <CertificateRow
-                label="Issue Date"
-                value={formatDate(certificate.issueDate)}
-              />
-              <CertificateRow
-                label="Signed by"
-                value={certificate.signature}
-              />
+              <CertificateRow label="Certificate Type" value={certificate.certificateType} />
+              <CertificateRow label="Event Date" value={formatDate(certificate.eventDate)} />
+              <CertificateRow label="Issue Date" value={formatDate(certificate.issueDate)} />
+              <CertificateRow label="Signed by" value={certificate.signature} />
             </dl>
 
             <Link href="/certificate-verification" className="btn-outline mt-8">

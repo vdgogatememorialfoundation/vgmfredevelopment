@@ -11,9 +11,7 @@ import {
   hideEventRecord,
   getEventRecords,
   nextCertificateNumber,
-  revokeCertificate,
   saveEventRecord,
-  saveIssuedCertificate,
   saveSectionSettings,
   type EventRecord,
   type EventRecordKind,
@@ -29,6 +27,7 @@ import {
 import { getOrders } from "@/lib/store";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { certificates as seededCertificates } from "@/data/content";
+import { deleteCertificate, publishCertificate } from "@/lib/certificates-client";
 import type { Order } from "@/types";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -214,13 +213,13 @@ export function CertificateRegistry({ mode, eventName }: { mode: "list" | "issue
         }}
         onSave={(record) => {
           const existing = records.some((item) => item.id === record.id);
-          saveIssuedCertificate({
+          void publishCertificate({
             ...record,
             issueDate: mode === "reissue" && existing ? new Date().toISOString().slice(0, 10) : record.issueDate,
             reissuedAt: mode === "reissue" && existing ? new Date().toISOString() : record.reissuedAt,
           });
         }}
-        onHide={revokeCertificate}
+        onHide={deleteCertificate}
         hideLabel="Revoke"
       />
       <p className="text-xs text-slate-500">
