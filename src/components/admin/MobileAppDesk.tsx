@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getIntegrations } from "@/lib/integrations";
 import {
+  appFlavors,
   defaultMobileAppConfig,
   getMobileAppConfig,
   mobileModules,
@@ -11,6 +12,7 @@ import {
   type MobileModuleId,
 } from "@/lib/mobile-config";
 import { collectMobileSnapshot } from "@/lib/mobile-publish";
+import { ImageField } from "@/components/admin/ImageField";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
 const primary = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -96,6 +98,63 @@ export function MobileAppDesk() {
       </div>
 
       {note ? <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{note}</p> : null}
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">App name and logo</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          These appear inside the installed apps on the next refresh. You do not submit a Play Store or App Store update to
+          rename an app or change its logo. Publish after saving.
+        </p>
+        <div className="mt-4 grid gap-5 lg:grid-cols-2">
+          {appFlavors.map((app) => {
+            const brand = config.apps[app.id];
+            return (
+              <div key={app.id} className="rounded-xl border border-slate-100 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{app.label}</p>
+                <label className="mt-3 block text-sm font-medium text-slate-700">
+                  Display name
+                  <input
+                    className={`${input} mt-1`}
+                    value={brand.name}
+                    onChange={(event) =>
+                      patch({
+                        apps: {
+                          ...config.apps,
+                          [app.id]: { ...brand, name: event.target.value },
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <div className="mt-3">
+                  <ImageField
+                    label="Logo"
+                    value={brand.logoUrl}
+                    maxWidth={400}
+                    hint="Shown in the app header. PNG or SVG."
+                    onChange={(logoUrl) =>
+                      patch({
+                        apps: {
+                          ...config.apps,
+                          [app.id]: { ...brand, logoUrl },
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <a className="mt-3 inline-block text-sm font-semibold text-burgundy" href={app.download}>
+                  Download {app.defaultName} APK
+                </a>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <button type="button" className={primary} onClick={save}>
+            Save names and logos
+          </button>
+        </div>
+      </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Live feed</h2>

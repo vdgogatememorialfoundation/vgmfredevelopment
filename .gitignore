@@ -48,6 +48,11 @@ next-env.d.ts
 /mobile/android/app/build
 /mobile/android/build
 /mobile/ios/Pods
+/native/android-apps/.gradle
+/native/android-apps/build
+/native/android-apps/app/build
+/native/android-apps/local.properties
 *.apk
 *.aab
 *.ipa
+!public/apps/*.apk

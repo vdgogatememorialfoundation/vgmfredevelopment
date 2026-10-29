@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.VGMF" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">#8F2D2D</item>
+        <item name="colorPrimaryVariant">#6A1F1F</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#0B1F3A</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowBackground">#F7F3EA</item>
+    </style>
+</resources>

@@ -166,6 +166,9 @@ export default function App() {
 
   const site = feed?.site;
   const about = feed?.about as { title?: string; intro?: string; sections?: { title: string; body: string }[] } | null;
+  const brand = (feed?.mobile as { apps?: Record<string, { name?: string; logoUrl?: string }> } | undefined)?.apps?.customer;
+  const logoUrl = brand?.logoUrl || site?.logoUrl;
+  const appName = brand?.name || site?.name || "Memorial Foundation";
 
   const moreLinks = useMemo(
     () =>
@@ -187,10 +190,10 @@ export default function App() {
 
   const header = (
     <View style={styles.header}>
-      {site?.logoUrl ? <Image source={{ uri: site.logoUrl }} style={styles.logo} /> : <View style={styles.badge} />}
+      {logoUrl ? <Image source={{ uri: logoUrl }} style={styles.logo} /> : <View style={styles.badge} />}
       <View style={{ flex: 1 }}>
         <Text style={styles.kicker}>Vaidya Gogate</Text>
-        <Text style={styles.title}>{site?.name ?? "Memorial Foundation"}</Text>
+        <Text style={styles.title}>{appName}</Text>
       </View>
       <Pressable onPress={() => open("cart")} style={styles.cartBtn}>
         <Text style={styles.cartText}>Bag {cart.reduce((sum, item) => sum + item.quantity, 0)}</Text>

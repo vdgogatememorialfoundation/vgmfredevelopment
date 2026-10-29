@@ -67,7 +67,17 @@ export function readMobileFeed(): MobileFeed {
     site: { ...base.site, ...snapshot.site },
     flags: { ...base.flags, ...snapshot.flags },
     visibility: { ...base.visibility, ...snapshot.visibility },
-    mobile: { ...base.mobile, ...snapshot.mobile, modules: { ...base.mobile.modules, ...snapshot.mobile?.modules } },
+    mobile: {
+      ...base.mobile,
+      ...snapshot.mobile,
+      modules: { ...base.mobile.modules, ...snapshot.mobile?.modules },
+      apps: {
+        customer: { ...base.mobile.apps.customer, ...snapshot.mobile?.apps?.customer },
+        admin: { ...base.mobile.apps.admin, ...snapshot.mobile?.apps?.admin },
+        staff: { ...base.mobile.apps.staff, ...snapshot.mobile?.apps?.staff },
+        support: { ...base.mobile.apps.support, ...snapshot.mobile?.apps?.support },
+      },
+    },
     events: snapshot.events ?? base.events,
     articles: snapshot.articles ?? base.articles,
     books: snapshot.books ?? base.books,

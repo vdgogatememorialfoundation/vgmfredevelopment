@@ -1,0 +1,85 @@
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+}
+
+android {
+    namespace "org.vaidyagogate.portal"
+    compileSdk 35
+    defaultConfig {
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+        buildConfigField "String", "SITE_URL", "\"https://vaidyagogate.org\""
+    }
+    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+        release {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+    flavorDimensions "role"
+    productFlavors {
+        customer {
+            dimension "role"
+            applicationId "org.vaidyagogate.customer"
+            versionNameSuffix "-customer"
+            resValue "string", "app_name", "VGMF"
+            buildConfigField "String", "VGMF_FLAVOR", "\"customer\""
+            buildConfigField "String", "START_PATH", "\"/\""
+        }
+        admin {
+            dimension "role"
+            applicationId "org.vaidyagogate.admin"
+            versionNameSuffix "-admin"
+            resValue "string", "app_name", "VGMF Admin"
+            buildConfigField "String", "VGMF_FLAVOR", "\"admin\""
+            buildConfigField "String", "START_PATH", "\"/admin\""
+        }
+        staff {
+            dimension "role"
+            applicationId "org.vaidyagogate.staff"
+            versionNameSuffix "-staff"
+            resValue "string", "app_name", "VGMF Staff"
+            buildConfigField "String", "VGMF_FLAVOR", "\"staff\""
+            buildConfigField "String", "START_PATH", "\"/staff\""
+        }
+        support {
+            dimension "role"
+            applicationId "org.vaidyagogate.support"
+            versionNameSuffix "-support"
+            resValue "string", "app_name", "VGMF Support"
+            buildConfigField "String", "VGMF_FLAVOR", "\"support\""
+            buildConfigField "String", "START_PATH", "\"/account/tickets\""
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.debug }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+    buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "com.google.android.material:material:1.12.0"
+    implementation "androidx.webkit:webkit:1.12.1"
+}

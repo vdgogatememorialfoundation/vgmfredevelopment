@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    return [
+      { source: "/vgmf-foundation.apk", destination: "/api/mobile/apk/customer", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;
