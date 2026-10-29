@@ -47,9 +47,16 @@ export function NoticesIndex() {
                 <Badge tone="burgundy">{notice.category}</Badge>
                 <time className="text-sm text-text-muted" dateTime={notice.date}>{formatDate(notice.date)}</time>
               </div>
-              <h2 className="mt-3 text-xl font-semibold text-text-primary">{notice.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-text-muted">{notice.description}</p>
-              {notice.href && <Link href={notice.href} className="mt-4 inline-block text-sm font-semibold text-burgundy">Open notice</Link>}
+              <h2 className="mt-3 text-base font-semibold text-text-primary">{notice.title}</h2>
+              {notice.description ? <p className="mt-2 text-sm leading-6 text-text-muted">{notice.description}</p> : null}
+              <div className="mt-3 flex flex-wrap gap-3">
+                {notice.href && <Link href={notice.href} className="text-xs font-semibold text-burgundy">Open notice</Link>}
+                {notice.attachment && (
+                  <a href={/^(https?:|\/)/.test(notice.attachment) ? notice.attachment : notice.href} className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+                    Download PDF
+                  </a>
+                )}
+              </div>
             </article>
           ))}
         </div>

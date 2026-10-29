@@ -65,7 +65,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
       {/* Price */}
       <div className="flex flex-wrap items-end gap-3">
-        <p className="text-3xl font-bold text-text-primary">
+        <p className="text-2xl font-semibold text-text-primary">
           ₹{(book.price * quantity).toLocaleString("en-IN")}
         </p>
         {book.originalPrice && book.originalPrice > book.price && (

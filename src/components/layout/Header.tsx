@@ -178,7 +178,7 @@ export default function Header() {
             <SiteLogo size={48} />
 
             <div className="min-w-0">
-              <div className="truncate text-[17px] font-bold leading-tight text-text-primary sm:text-[19px]">
+              <div className="truncate text-[15px] font-semibold leading-tight text-text-primary sm:text-base">
                 Vaidya Gogate
               </div>
               <div className="truncate text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted sm:text-xs">

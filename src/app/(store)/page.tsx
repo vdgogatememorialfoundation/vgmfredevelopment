@@ -12,8 +12,8 @@ export default function HomePage() {
   return (
     <>
       <HeroSection />
-      <SupportUs />
       <NoticeBoard />
+      <SupportUs />
       <Announcements />
       <UpcomingEvents />
       <LegacySection />

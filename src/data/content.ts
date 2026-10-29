@@ -55,13 +55,39 @@ export const announcements: Announcement[] = [
 
 export const notices: Notice[] = [
   {
+    id: "ntc-home-001",
+    title: "Deadline",
+    date: "2026-09-01",
+    category: "Deadline",
+    description: "Case Presentation Deadline Extended till 1 September 2026, 11PM",
+    href: "/notices",
+  },
+  {
+    id: "ntc-home-002",
+    title: "Viddhakarma Day Candidate Eligibility List",
+    date: "2026-09-10",
+    category: "List",
+    description: "",
+    attachment: "/notices",
+    href: "/notices",
+  },
+  {
+    id: "ntc-home-003",
+    title: "Vaidya Gogate Memorial Foundation National Seminar 2026 Brochure",
+    date: "2026-08-20",
+    category: "Brochure",
+    description: "Vaidya Gogate Memorial Foundation National Seminar 2026 Brochure",
+    attachment: "/events/national-seminar-2026",
+    href: "/events/national-seminar-2026",
+  },
+  {
     id: "ntc-001",
     title: "National Seminar 2026 — Registration Deadline Extended",
     date: "2026-09-15",
     category: "Events",
     description:
       "The registration deadline for National Seminar 2026 has been extended to 20th September 2026. Limited seats available.",
-    attachment: "seminar-2026-brochure.pdf",
+    attachment: "/events/national-seminar-2026",
     href: "/events/national-seminar-2026",
   },
   {
@@ -71,7 +97,7 @@ export const notices: Notice[] = [
     category: "Fellowship",
     description:
       "Congratulations to the selected fellows for the 2026-27 academic year. Individual notifications have been sent via email.",
-    attachment: "fellowship-results-2026.pdf",
+    attachment: "/events/fellowship-program-2026",
     href: "/events/fellowship-program-2026",
   },
   {

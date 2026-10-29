@@ -1,73 +1,83 @@
 "use client";
 
 import Link from "next/link";
-import Badge from "@/components/common/Badge";
 import { useLiveNotices } from "@/lib/use-cms";
-import { formatDate } from "@/lib/utils";
+
+function PdfIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function noticeFile(notice: { attachment?: string; href: string }) {
+  if (!notice.attachment) return null;
+  if (/^(https?:|\/|data:)/.test(notice.attachment)) return notice.attachment;
+  return notice.href;
+}
+
+const PINNED = ["ntc-home-001", "ntc-home-002", "ntc-home-003"];
 
 export default function NoticeBoard() {
-  const notices = useLiveNotices();
+  const all = useLiveNotices();
+  const pinned = PINNED.map((id) => all.find((notice) => notice.id === id)).filter(Boolean) as typeof all;
+  const notices = (pinned.length ? pinned : all).slice(0, 3);
+
   return (
-    <section className="section bg-background py-10" aria-labelledby="notices-heading">
+    <section className="bg-background py-8" aria-labelledby="notices-heading">
       <div className="container">
-        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-burgundy/5 text-burgundy">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-                </svg>
-              </span>
-              <div>
-                <h2
-                  id="notices-heading"
-                  className="text-lg font-bold text-text-primary"
-                >
-                  Important Notices
-                </h2>
-                <p className="text-sm text-text-muted">
-                  Announcements, deadlines and updates from the Foundation.
-                </p>
-              </div>
-            </div>
-
-            <Link
-              href="/notices"
-              className="flex items-center gap-1.5 text-sm font-semibold text-burgundy transition hover:text-burgundy-dark"
-            >
-              View All Notices
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14" />
-                <path d="M12 5l7 7-7 7" />
-              </svg>
-            </Link>
+        <div className="mx-auto max-w-xl rounded-[28px] border border-border bg-white px-5 py-5 shadow-sm sm:px-6">
+          <div className="mb-4 flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-text-primary" aria-hidden="true">
+              <path d="M3 11v2a1 1 0 0 0 1 1h1.5l6 4.5V5.5L5.5 10H4a1 1 0 0 0-1 1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M16 8.2a4.8 4.8 0 0 1 0 7.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            <h2 id="notices-heading" className="text-sm font-semibold text-text-primary">
+              Official notices
+            </h2>
           </div>
 
-          <div className="mt-5 divide-y divide-border rounded-xl border border-border bg-warm-cream">
-            {notices.slice(0, 4).map((notice) => (
-              <Link
-                key={notice.id}
-                href={notice.href}
-                aria-label={`${notice.title} (${formatDate(notice.date)})`}
-                className="flex flex-col gap-2 px-5 py-4 transition hover:bg-white sm:flex-row sm:items-center sm:gap-4"
-              >
-                <span className="flex w-fit shrink-0 items-center gap-2 text-xs font-medium text-text-muted sm:w-32">
-                  <Badge tone="burgundy">{notice.category}</Badge>
-                </span>
-                <span className="min-w-0 flex-1 text-sm font-medium text-text-primary line-clamp-1">
-                  {notice.title}
-                </span>
-                <time
-                  className="shrink-0 text-xs text-text-muted"
-                  dateTime={notice.date}
+          <ul className="space-y-3">
+            {notices.map((notice) => {
+              const file = noticeFile(notice);
+              return (
+                <li
+                  key={notice.id}
+                  className="rounded-2xl border-l-[3px] border-burgundy bg-[#F4FBF7] px-4 py-3.5"
                 >
-                  {formatDate(notice.date)}
-                </time>
-              </Link>
-            ))}
-          </div>
+                  <p className="text-sm font-semibold leading-5 text-text-primary">{notice.title}</p>
+                  {notice.description ? (
+                    <p className="mt-1 text-xs leading-5 text-text-muted">{notice.description}</p>
+                  ) : null}
+                  {file ? (
+                    <a
+                      href={file}
+                      target={file.startsWith("http") ? "_blank" : undefined}
+                      rel={file.startsWith("http") ? "noopener noreferrer" : undefined}
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-red-600 hover:text-red-700"
+                    >
+                      <PdfIcon />
+                      Download PDF
+                    </a>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         </div>
+
+        <p className="mt-3 text-center">
+          <Link href="/notices" className="text-xs font-medium text-burgundy hover:underline">
+            All notices
+          </Link>
+        </p>
       </div>
     </section>
   );

@@ -40,7 +40,7 @@ export default function EventCard({ event }: { event: Event }) {
           {eventTimeText(event) ? ` · ${eventTimeText(event)}` : ""}
         </time>
 
-        <h3 className="mt-2 text-lg font-semibold text-text-primary leading-snug">
+        <h3 className="mt-2 text-base font-semibold text-text-primary leading-snug">
           <Link
             href={`/events/${event.slug}`}
             className="transition hover:text-burgundy"

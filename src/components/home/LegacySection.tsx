@@ -13,9 +13,9 @@ const pillars = [
       "Training the next generation of Ayurveda physicians and scholars.",
   },
   {
-    title: "Research",
+    title: "Service",
     description:
-      "Strengthening evidence and scholarship for the science of Ayurveda.",
+      "Clinics and community care in the tradition of Vaidya R. B. Gogate.",
   },
 ];
 
@@ -29,7 +29,7 @@ export default function LegacySection() {
               align="left"
               eyebrow="Our Legacy"
               title="The Legacy of Vaidya R. B. Gogate"
-              description="Vaidya R. B. Gogate devoted his life to the study, practice and teaching of Ayurveda. The Foundation built in his memory carries this work forward — through clinical care, education, research and publications."
+              description="Vaidya R. B. Gogate devoted his life to the study, practice and teaching of Ayurveda. The Foundation built in his memory continues this work through clinical care, education and publications."
             />
 
             <ul className="grid gap-4 sm:grid-cols-3" role="list">
@@ -65,7 +65,7 @@ export default function LegacySection() {
                       VGMF
                     </span>
                   </div>
-                  <h2 className="text-xl font-bold text-text-primary">
+                  <h2 className="text-base font-semibold text-text-primary">
                     Vaidya R. B. Gogate
                   </h2>
                   <p className="mt-2 text-sm text-text-muted">

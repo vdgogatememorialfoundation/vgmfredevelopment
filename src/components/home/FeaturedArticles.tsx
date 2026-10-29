@@ -17,7 +17,7 @@ export default function FeaturedArticles() {
         <SectionHeading
           eyebrow="Articles"
           title="From Our Journal"
-          description="Perspectives on Ayurveda, research, education and the Foundation's work."
+          description="Perspectives on Ayurveda, education and the Foundation's work."
         />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

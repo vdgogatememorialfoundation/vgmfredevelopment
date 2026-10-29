@@ -89,7 +89,7 @@ export default function SignupFlow() {
           Create Account
         </p>
 
-        <h2 className="text-3xl font-bold text-text-primary sm:text-4xl">
+        <h2 className="text-xl font-semibold text-text-primary">
           Welcome to VGMF
         </h2>
 

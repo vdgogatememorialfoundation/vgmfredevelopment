@@ -18,12 +18,12 @@ export default function SectionHeading({
   return (
     <div
       className={classNames(
-        "mb-10 max-w-3xl",
+        "mb-6 max-w-2xl",
         alignCenter && "mx-auto text-center"
       )}
     >
       {eyebrow && (
-        <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy">
+        <p className="eyebrow">
           {eyebrow}
         </p>
       )}
@@ -31,7 +31,7 @@ export default function SectionHeading({
       <h2 className="heading-2">{title}</h2>
 
       {description && (
-        <p className="mt-4 text-body-lg">{description}</p>
+        <p className="mt-2 text-sm leading-6 text-text-muted">{description}</p>
       )}
     </div>
   );

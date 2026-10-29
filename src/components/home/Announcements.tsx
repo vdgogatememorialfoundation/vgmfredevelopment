@@ -17,8 +17,8 @@ export default function AnnouncementsSection() {
       <div className="container">
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-burgundy">Announcements</p>
-            <h2 id="announcements-heading" className="mt-1 text-lg font-bold text-text-primary">
+            <p className="eyebrow">Announcements</p>
+            <h2 id="announcements-heading" className="mt-1 text-base font-semibold text-text-primary">
               Latest updates
             </h2>
           </div>

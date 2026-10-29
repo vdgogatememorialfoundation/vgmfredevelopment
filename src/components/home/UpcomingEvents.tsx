@@ -22,7 +22,7 @@ export default function UpcomingEvents() {
         <SectionHeading
           eyebrow="Upcoming Events"
           title="Events & Programmes"
-          description="Seminars, workshops, fellowships and public programmes from the Foundation."
+          description="Upcoming programmes from the Foundation."
         />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

@@ -58,7 +58,7 @@ export default function SignInFlow() {
           Signed In
         </p>
 
-        <h2 className="mt-2 text-3xl font-bold text-text-primary">
+        <h2 className="mt-2 text-xl font-semibold text-text-primary">
           Welcome back
         </h2>
 
@@ -93,7 +93,7 @@ export default function SignInFlow() {
           Sign In
         </p>
 
-        <h2 className="text-3xl font-bold text-text-primary sm:text-4xl">
+        <h2 className="text-xl font-semibold text-text-primary">
           Welcome back
         </h2>
 

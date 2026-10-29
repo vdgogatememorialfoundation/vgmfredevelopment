@@ -1,21 +1,21 @@
 @import "tailwindcss";
 
 @theme {
-  --color-burgundy: #2F7A57;
-  --color-burgundy-dark: #256447;
-  --color-gold: #B08D3E;
-  --color-saffron: #C9822F;
-  --color-warm-cream: #F6F3EC;
-  --color-background: #FDFCF9;
-  --color-text-primary: #1F2A24;
-  --color-text-muted: #5E6B64;
-  --color-border: #E7E2D7;
-  --color-white: #FFFFFF;
-  --font-serif: var(--font-display), "Iowan Old Style", Palatino, Georgia, "Times New Roman", serif;
+  --color-burgundy: #1E4636;
+  --color-burgundy-dark: #143328;
+  --color-gold: #A6843D;
+  --color-saffron: #C47B2B;
+  --color-warm-cream: #F4EFE4;
+  --color-background: #FBF8F2;
+  --color-text-primary: #1C1712;
+  --color-text-muted: #6A5E52;
+  --color-border: #E4D8C4;
+  --color-white: #FFFCF7;
+  --font-serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, "Times New Roman", serif;
 }
 
 :root {
-  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: var(--font-baloo), "Baloo 2", "Inter", system-ui, sans-serif;
 }
 
 * {
@@ -60,19 +60,19 @@ body {
   }
 
   .section {
-    @apply py-10 sm:py-12 lg:py-14;
+    @apply py-8 sm:py-10;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-burgundy-dark;
+    @apply inline-flex items-center justify-center rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-burgundy-dark;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy;
+    @apply inline-flex items-center justify-center rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy;
   }
 
   .btn-outline {
-    @apply inline-flex items-center justify-center rounded-lg border border-border px-6 py-3 font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy hover:bg-burgundy/5;
+    @apply inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-primary transition hover:border-burgundy hover:text-burgundy hover:bg-burgundy/5;
   }
 
   .input-field {
@@ -84,31 +84,31 @@ body {
   }
 
   .heading-1 {
-    @apply font-serif text-4xl font-bold tracking-tight text-text-primary sm:text-5xl lg:text-6xl;
+    @apply text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl;
   }
 
   .heading-2 {
-    @apply font-serif text-3xl font-bold tracking-tight text-text-primary sm:text-4xl;
+    @apply text-xl font-semibold tracking-tight text-text-primary sm:text-2xl;
   }
 
   .heading-3 {
-    @apply font-serif text-2xl font-bold tracking-tight text-text-primary sm:text-3xl;
+    @apply text-lg font-semibold tracking-tight text-text-primary;
   }
 
   .heading-4 {
-    @apply font-serif text-xl font-bold tracking-tight text-text-primary;
+    @apply text-base font-semibold tracking-tight text-text-primary;
   }
 
   .eyebrow {
-    @apply mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy;
+    @apply mb-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy;
   }
 
   .text-body {
-    @apply text-base leading-7 text-text-muted;
+    @apply text-sm leading-6 text-text-muted;
   }
 
   .text-body-lg {
-    @apply text-lg leading-8 text-text-muted;
+    @apply text-sm leading-6 text-text-muted;
   }
 }
 

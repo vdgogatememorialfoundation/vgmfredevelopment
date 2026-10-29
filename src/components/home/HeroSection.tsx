@@ -11,29 +11,26 @@ function StaticHero({ tagline }: { tagline?: string }) {
   const lines = (tagline || "Preserving Ayurveda. Advancing Knowledge. Serving Society.").split(/(?<=\.)\s+/);
   return (
     <section className="relative overflow-hidden bg-warm-cream">
-      <div className="container grid items-center gap-8 py-10 lg:grid-cols-2 lg:py-14">
+      <div className="container grid items-center gap-6 py-8 lg:grid-cols-2 lg:py-10">
         <div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-burgundy">Vaidya Gogate Memorial Foundation</p>
-          <h1 className="heading-1 max-w-3xl">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-burgundy">Vaidya Gogate Memorial Foundation</p>
+          <h1 className="heading-1 max-w-2xl">
             {lines.map((line, index) => (
               <span key={index} className="block">{line}</span>
             ))}
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-text-muted">
-            A foundation dedicated to Ayurveda, education, research, professional development and the enduring legacy of Vaidya R. B. Gogate.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-4">
+          <div className="mt-5 flex flex-wrap gap-3">
             <Link href="/events" className="btn-primary">Explore Events</Link>
             <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-secondary">Discover Our Legacy</Link>
           </div>
         </div>
         <div className="relative">
           <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-            <div className="flex h-full items-center justify-center bg-gradient-to-br from-warm-cream via-white to-gold/20 p-8 text-center">
+            <div className="flex h-full items-center justify-center bg-gradient-to-br from-warm-cream via-white to-gold/20 p-6 text-center">
               <div>
-                <SiteLogo size={96} className="mx-auto mb-5" />
-                <h2 className="text-2xl font-bold text-text-primary">Vaidya Gogate Memorial Foundation</h2>
-                <p className="mt-2 text-text-muted">Ayurveda • Education • Research</p>
+                <SiteLogo size={72} className="mx-auto mb-3" />
+                <h2 className="text-base font-semibold text-text-primary">Vaidya Gogate Memorial Foundation</h2>
+                <p className="mt-1 text-xs text-text-muted">Ayurveda • Education</p>
               </div>
             </div>
           </div>
@@ -68,7 +65,7 @@ export default function HeroSection() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="relative aspect-[16/9] w-full sm:aspect-[21/8] lg:max-h-[380px]">
+      <div className="relative aspect-[16/9] w-full sm:aspect-[21/8] lg:max-h-[280px]">
         {slides.map((slide, slideIndex) => (
           <div
             key={slide.id}
@@ -81,9 +78,9 @@ export default function HeroSection() {
             <div className="container absolute inset-0 flex items-center">
               <div className="max-w-xl">
                 {slide.event && <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-burgundy">{slide.event}</p>}
-                <h2 className="heading-1 text-text-primary">{slide.title}</h2>
+                <h2 className="text-lg font-semibold text-text-primary sm:text-xl">{slide.title}</h2>
                 {slide.href && (
-                  <Link href={slide.href} className="btn-primary mt-6" tabIndex={slideIndex === active ? 0 : -1}>
+                  <Link href={slide.href} className="btn-primary mt-4" tabIndex={slideIndex === active ? 0 : -1}>
                     {slide.cta || "Learn more"}
                   </Link>
                 )}

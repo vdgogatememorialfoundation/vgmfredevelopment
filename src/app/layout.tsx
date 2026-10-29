@@ -1,15 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Source_Serif_4 } from "next/font/google";
+import { Baloo_2 } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const display = Source_Serif_4({
-  variable: "--font-display",
+const baloo = Baloo_2({
+  variable: "--font-baloo",
   subsets: ["latin"],
   display: "swap",
 });
@@ -20,8 +14,8 @@ export const metadata: Metadata = {
     default: "Vaidya Gogate Memorial Foundation",
     template: "%s | Vaidya Gogate Memorial Foundation",
   },
-  description: "Preserving Ayurveda. Advancing Knowledge. Serving Society. A foundation dedicated to Ayurveda, education, research, professional development and the enduring legacy of Vaidya R. B. Gogate.",
-  keywords: ["Vaidya Gogate", "Ayurveda", "Foundation", "Memorial", "Education", "Research", "Events", "Seminars", "Books", "Publications"],
+  description: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
+  keywords: ["Vaidya Gogate", "Ayurveda", "Foundation", "Memorial", "Education", "Events", "Books", "Publications"],
   authors: [{ name: "Vaidya Gogate Memorial Foundation" }],
   creator: "Vaidya Gogate Memorial Foundation",
   publisher: "Vaidya Gogate Memorial Foundation",
@@ -54,7 +48,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#FFFFFF",
+  themeColor: "#1E4636",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -68,7 +62,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${inter.variable} ${display.variable} scroll-smooth`}
+      className={`${baloo.variable} scroll-smooth`}
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">
