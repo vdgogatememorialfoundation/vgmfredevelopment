@@ -165,9 +165,6 @@ export function LiveEventPage({ slug }: { slug: string }) {
             <Link href="/certificate-verification" className="btn-outline mt-3 w-full">
               Verify a certificate
             </Link>
-            <p className="mt-3 text-xs leading-5 text-text-muted">
-              seminar.vaidyagogate.org confirms certificates through the Foundation verification API.
-            </p>
           </aside>
         </div>
       </section>

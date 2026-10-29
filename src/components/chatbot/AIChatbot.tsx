@@ -47,12 +47,12 @@ const knowledgeBase: KnowledgeBaseEntry[] = [
   {
     keywords: ["register", "registration", "fee", "book", "seat", "attend"],
     answer: () =>
-      "To register for an event, open the event and continue on seminar.vaidyagogate.org. Certificate checks from that site use the Foundation verification API.",
+      "To register for an event, open the event and continue on seminar.vaidyagogate.org.",
   },
   {
     keywords: ["certificate", "verify", "verification"],
     answer: () =>
-      "Certificates are verified on the Certificate Verification page. seminar.vaidyagogate.org and autism.vaidyagogate.org use GET /api/certificates/verify with their API key.",
+      "Certificates are verified on the Certificate Verification page.",
   },
   {
     keywords: ["support", "donate", "contribute", "donation", "help"],
