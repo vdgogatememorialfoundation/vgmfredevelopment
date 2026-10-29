@@ -62,14 +62,7 @@ export default function CertificateVerificationForm() {
           onChange={(event) => setValue(event.target.value)}
           placeholder="e.g. VGMF-CERT-2026-0001"
           className="input-field mt-3 text-center text-lg tracking-wider"
-          aria-describedby="certificate-help"
         />
-
-        <p id="certificate-help" className="mt-3 text-center text-sm text-text-muted">
-          Enter the number printed on the certificate. The same record is confirmed here and by
-          seminar.vaidyagogate.org and autism.vaidyagogate.org through GET /api/certificates/verify
-          with their API key.
-        </p>
 
         <button type="submit" disabled={busy} className="btn-primary mt-6 w-full disabled:opacity-50">
           {busy ? "Verifying…" : "Verify Certificate"}
