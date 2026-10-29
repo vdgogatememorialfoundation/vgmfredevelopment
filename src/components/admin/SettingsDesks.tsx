@@ -193,7 +193,7 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
-      <Card title="Social media" text="Icons appear in the footer and on Contact only for networks with an https link. Leave a field blank to hide it.">
+      <Card title="Social media" text="Footer always shows these icons. Paste an https URL to make an icon open that profile. Leave a field blank to keep the icon visible but inactive.">
         <div className="grid gap-4 sm:grid-cols-2">
           {SOCIAL_NETWORKS.map((network) => (
             <Text

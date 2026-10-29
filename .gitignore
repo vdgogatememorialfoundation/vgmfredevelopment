@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# mobile app
+/mobile/node_modules
+/mobile/package-lock.json
+/mobile/.expo
+/mobile/android/.gradle
+/mobile/android/app/build
+/mobile/android/build
+/mobile/ios/Pods
+*.apk
+*.aab
+*.ipa

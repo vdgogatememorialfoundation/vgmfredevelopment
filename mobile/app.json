@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "VGMF",
+    "slug": "vgmf-foundation",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "scheme": "vgmf",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7F3EA"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.vaidyagogate.app",
+      "infoPlist": {
+        "CFBundleDisplayName": "VGMF"
+      }
+    },
+    "android": {
+      "package": "org.vaidyagogate.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#8F2D2D"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": ["expo-secure-store"],
+    "extra": {
+      "apiUrl": "https://vaidyagogate.org"
+    }
+  }
+}

@@ -1,0 +1,185 @@
+import * as SecureStore from "expo-secure-store";
+import { DEFAULT_API } from "./theme";
+
+export type Feed = {
+  publishedAt: string;
+  site: {
+    name: string;
+    tagline: string;
+    logoUrl?: string;
+    email: string;
+    phone: string;
+    address: string;
+    social?: Record<string, string>;
+  };
+  flags: { supportUs?: boolean; supportUsTitle?: string; supportUsText?: string; supportUsHref?: string };
+  visibility: Record<string, boolean>;
+  mobile: {
+    minVersion: string;
+    latestVersion: string;
+    forceUpdate: boolean;
+    playStoreUrl?: string;
+    appStoreUrl?: string;
+    apiBaseUrl?: string;
+    modules: Record<string, boolean>;
+  };
+  events: Array<Record<string, unknown>>;
+  articles: Array<Record<string, unknown>>;
+  books: Array<Record<string, unknown>>;
+  clinics: Array<Record<string, unknown>>;
+  videos: Array<Record<string, unknown>>;
+  notices: Array<Record<string, unknown>>;
+  announcements: Array<Record<string, unknown>>;
+  gallery: Array<Record<string, unknown>>;
+  about: Record<string, unknown> | null;
+  policies: Record<string, { title?: string; description?: string; sections?: { title: string; body: string }[] }>;
+  faqs: Array<{ question?: string; answer?: string }>;
+};
+
+export type Session = { token: string; email: string; name: string };
+
+const SESSION_KEY = "vgmf-session";
+let apiBase = DEFAULT_API;
+let session: Session | null = null;
+
+export function getApiBase() {
+  return apiBase.replace(/\/$/, "");
+}
+
+export function setApiBase(url?: string) {
+  if (url && /^https?:\/\//i.test(url)) apiBase = url.replace(/\/$/, "");
+}
+
+export function getSession() {
+  return session;
+}
+
+export async function loadSession() {
+  try {
+    const raw = await SecureStore.getItemAsync(SESSION_KEY);
+    session = raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    session = null;
+  }
+  return session;
+}
+
+export async function saveSession(next: Session | null) {
+  session = next;
+  try {
+    if (next) await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(next));
+    else await SecureStore.deleteItemAsync(SESSION_KEY);
+  } catch {
+    /* device storage unavailable */
+  }
+}
+
+function headers(json = true): Record<string, string> {
+  const value: Record<string, string> = { accept: "application/json" };
+  if (json) value["content-type"] = "application/json";
+  if (session?.token) value.authorization = `Bearer ${session.token}`;
+  return value;
+}
+
+async function parse(response: Response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return { ok: false, error: text || `HTTP ${response.status}` };
+  }
+}
+
+export async function fetchFeed(): Promise<Feed> {
+  const urls = [`${getApiBase()}/api/mobile/feed?t=${Date.now()}`, `${getApiBase()}/app-feed.json?t=${Date.now()}`];
+  let lastError = "Could not reach the Foundation app feed.";
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { headers: { accept: "application/json" } });
+      const data = await parse(response);
+      const feed = (data.feed ?? data) as Feed;
+      if (feed?.site?.name) {
+        if (feed.mobile?.apiBaseUrl) setApiBase(feed.mobile.apiBaseUrl);
+        return feed;
+      }
+      lastError = data.error || lastError;
+    } catch (error) {
+      lastError = (error as Error).message || lastError;
+    }
+  }
+  throw new Error(lastError);
+}
+
+export async function sendEmailOtp(email: string, name?: string) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/otp`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "send", email, name }),
+    })
+  );
+  if (!data.ok) throw new Error(data.error || "Could not send the email code.");
+  return data as { ok: true; message?: string };
+}
+
+export async function verifyEmailOtp(email: string, code: string, name?: string) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/otp`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "verify", email, code, name }),
+    })
+  );
+  if (!data.ok || !data.token) throw new Error(data.error || "That code is not valid.");
+  const next = { token: String(data.token), email: String(data.email || email), name: String(data.name || name || "") };
+  await saveSession(next);
+  return next;
+}
+
+export async function listTickets() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/tickets`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(data.error || "Could not load tickets.");
+  return (data.tickets ?? []) as Array<Record<string, unknown>>;
+}
+
+export async function createTicket(input: { name: string; email: string; phone?: string; subject: string; body: string }) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/tickets`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(input),
+    })
+  );
+  if (!data.ok) throw new Error(data.error || "Could not create the ticket.");
+  return data.ticket as Record<string, unknown>;
+}
+
+export async function listOrders() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/orders`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(data.error || "Could not load orders.");
+  return (data.orders ?? []) as Array<Record<string, unknown>>;
+}
+
+export async function placeOrder(input: {
+  name?: string;
+  email?: string;
+  phone?: string;
+  items: { id: string; title: string; quantity: number; price: number }[];
+}) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/orders`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(input),
+    })
+  );
+  if (!data.ok) throw new Error(data.error || "Could not place the order.");
+  return data.order as Record<string, unknown>;
+}
+
+export async function verifyCertificate(number: string) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/certificates/verify?number=${encodeURIComponent(number)}`, { headers: headers(false) })
+  );
+  return data as { ok?: boolean; verified?: boolean; error?: string; certificate?: Record<string, unknown>; sourceLabel?: string };
+}

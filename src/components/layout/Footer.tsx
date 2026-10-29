@@ -126,7 +126,12 @@ export default function Footer() {
             </ul>
             <div className="mt-8">
               <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">{t("footer.connect")}</p>
-              <SocialLinks />
+              <SocialLinks tone="dark" always />
+              <p className="mt-4">
+                <Link href="/app" className="text-sm font-semibold text-burgundy transition hover:text-ink">
+                  Get the Android app
+                </Link>
+              </p>
               <div className="mt-4">
                 <LanguageSwitcher />
               </div>
