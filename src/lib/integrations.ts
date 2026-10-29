@@ -61,6 +61,15 @@ export interface IntegrationSettings {
     liveKeySecret: string;
     webhookSecret: string;
     linkExpiryHours: number;
+    posDeviceId: string;
+    posDeviceMode: "wired" | "wireless";
+  };
+  paytm: {
+    mode: PaymentMode | "staging";
+    mid: string;
+    merchantKey: string;
+    tid: string;
+    channelId: string;
   };
   email: {
     provider: EmailProvider;
@@ -148,6 +157,15 @@ export const defaultIntegrations: IntegrationSettings = {
     liveKeySecret: "",
     webhookSecret: "",
     linkExpiryHours: 72,
+    posDeviceId: "",
+    posDeviceMode: "wireless",
+  },
+  paytm: {
+    mode: "demo",
+    mid: "",
+    merchantKey: "",
+    tid: "",
+    channelId: "",
   },
   email: {
     provider: "zeptomail",
@@ -334,6 +352,17 @@ export function razorpayKeys(settings = getIntegrations()) {
   if (mode === "live") return { mode, keyId: settings.razorpay.liveKeyId, keySecret: settings.razorpay.liveKeySecret };
   if (mode === "test") return { mode, keyId: settings.razorpay.testKeyId, keySecret: settings.razorpay.testKeySecret };
   return { mode, keyId: "", keySecret: "" };
+}
+
+export function paytmKeys(settings = getIntegrations()) {
+  const { mode } = settings.paytm;
+  return {
+    mode,
+    mid: settings.paytm.mid,
+    merchantKey: settings.paytm.merchantKey,
+    tid: settings.paytm.tid,
+    channelId: settings.paytm.channelId,
+  };
 }
 
 export function shippingFeeFor(

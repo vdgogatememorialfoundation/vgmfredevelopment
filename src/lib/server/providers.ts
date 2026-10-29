@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
  * Provider clients used by the API routes. Each call takes credentials from
@@ -55,10 +55,17 @@ function razorpayAuth(creds: { keyId: string; keySecret: string }) {
   return `Basic ${Buffer.from(`${creds.keyId}:${creds.keySecret}`).toString("base64")}`;
 }
 
-export async function razorpayOrder(creds: { keyId: string; keySecret: string }, amountRupees: number, receipt: string) {
+export async function razorpayOrder(
+  creds: { keyId: string; keySecret: string },
+  amountRupees: number,
+  receipt: string,
+  deviceMode?: "wired" | "wireless"
+) {
+  const headers: Record<string, string> = { authorization: razorpayAuth(creds) };
+  if (deviceMode) headers["X-Razorpay-Device-Mode"] = deviceMode;
   const data = await call("https://api.razorpay.com/v1/orders", {
     method: "POST",
-    headers: { authorization: razorpayAuth(creds) },
+    headers,
     json: { amount: Math.round(amountRupees * 100), currency: "INR", receipt: receipt.slice(0, 40) },
   });
   return { orderId: String(data.id), keyId: creds.keyId };
@@ -110,6 +117,195 @@ export async function razorpayRefund(creds: { keyId: string; keySecret: string }
     json: amountRupees ? { amount: Math.round(amountRupees * 100) } : {},
   });
   return { refundId: String(data.id), status: String(data.status) };
+}
+
+export async function razorpayDeviceActivity(
+  creds: { keyId: string; keySecret: string },
+  input: {
+    action: "initiate_checkout" | "close_checkout";
+    deviceMode: "wired" | "wireless";
+    deviceId?: string;
+    amountRupees?: number;
+    orderId?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    method?: "upi" | "card";
+    description?: string;
+  }
+) {
+  if (input.deviceMode === "wireless" && !input.deviceId) {
+    throw new ProviderError("Add the Razorpay POS device ID in Settings → Payments.");
+  }
+  const payload: Json = { action: input.action };
+  if (input.deviceId) payload.device_id = input.deviceId;
+  if (input.action === "initiate_checkout") {
+    payload.initiate_checkout = {
+      name: "Vaidya Gogate Memorial Foundation",
+      amount: Math.round((input.amountRupees ?? 0) * 100),
+      currency: "INR",
+      description: (input.description ?? "POS sale").slice(0, 255),
+      type: "in_person",
+      order_id: input.orderId,
+      prefill: {
+        name: input.name || undefined,
+        email: input.email || undefined,
+        contact: input.phone || undefined,
+        method: input.method,
+      },
+    };
+  }
+  const data = await call("https://api.razorpay.com/v1/devices/activity", {
+    method: "POST",
+    headers: { authorization: razorpayAuth(creds), "X-Razorpay-Device-Mode": input.deviceMode },
+    json: payload,
+  });
+  const error = data.error as Json | undefined;
+  return {
+    activityId: String(data.id ?? ""),
+    status: String(data.status ?? ""),
+    error: error ? String(error.description ?? error.reason ?? error.code ?? "Device error") : undefined,
+  };
+}
+
+export async function razorpayDeviceActivityStatus(
+  creds: { keyId: string; keySecret: string },
+  activityId: string,
+  deviceMode: "wired" | "wireless"
+) {
+  const data = await call(`https://api.razorpay.com/v1/devices/activity/${encodeURIComponent(activityId)}`, {
+    headers: { authorization: razorpayAuth(creds), "X-Razorpay-Device-Mode": deviceMode },
+  });
+  const error = data.error as Json | undefined;
+  return {
+    activityId: String(data.id ?? activityId),
+    status: String(data.status ?? ""),
+    error: error ? String(error.description ?? error.reason ?? error.code ?? "Device error") : undefined,
+  };
+}
+
+export async function razorpayOrderPayments(
+  creds: { keyId: string; keySecret: string },
+  orderId: string,
+  deviceMode?: "wired" | "wireless"
+) {
+  const headers: Record<string, string> = { authorization: razorpayAuth(creds) };
+  if (deviceMode) headers["X-Razorpay-Device-Mode"] = deviceMode;
+  const data = await call(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}?expand[]=payments`, { headers });
+  const collection = data.payments as Json | undefined;
+  const items = (Array.isArray(collection) ? collection : (collection?.items as Json[] | undefined)) ?? [];
+  const paid = items.find((item) => item.status === "captured" || item.status === "authorized");
+  return {
+    status: String(data.status ?? ""),
+    amountPaid: Number(data.amount_paid ?? 0),
+    paymentId: paid?.id ? String(paid.id) : undefined,
+    method: paid?.method ? String(paid.method) : undefined,
+  };
+}
+
+/* ---------------- Paytm EDC ---------------- */
+
+export function paytmCreds(input: Json) {
+  const mid = pick(input.mid, "PAYTM_MID");
+  const merchantKey = pick(input.merchantKey, "PAYTM_MERCHANT_KEY");
+  const tid = pick(input.tid, "PAYTM_TID");
+  const channelId = pick(input.channelId, "PAYTM_CHANNEL_ID") || "WEB";
+  const mode = pick(input.mode, "PAYTM_MODE") || "staging";
+  return mid && merchantKey && tid ? { mid, merchantKey, tid, channelId, mode } : null;
+}
+
+function paytmHost(mode: string) {
+  return mode === "live" ? "https://securegw-edc.paytmpayments.in" : "https://securestage.paytmpayments.com";
+}
+
+function paytmStamp(date = new Date()) {
+  const ist = new Date(date.getTime() + 330 * 60 * 1000);
+  return ist.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function paytmChecksum(body: unknown, key: string) {
+  const params = typeof body === "string" ? body : JSON.stringify(body);
+  const salt = randomBytes(2).toString("hex");
+  const hashedString = createHash("sha256").update(`${params}|${salt}`).digest("hex") + salt;
+  const key16 = key.length >= 16 ? key.slice(0, 16) : key.padEnd(16, " ");
+  const cipher = createCipheriv("aes-128-cbc", key16, "@@@@&&&&####$$$$");
+  return cipher.update(hashedString, "utf8", "base64") + cipher.final("base64");
+}
+
+export async function paytmEdcSale(
+  creds: { mid: string; merchantKey: string; tid: string; channelId: string; mode: string },
+  input: { amountRupees: number; merchantTransactionId: string; merchantReferenceNo?: string }
+) {
+  const transactionDateTime = paytmStamp();
+  const body = {
+    paytmMid: creds.mid,
+    paytmTid: creds.tid,
+    transactionDateTime,
+    merchantTransactionId: input.merchantTransactionId.replace(/[^A-Za-z0-9]/g, "").slice(0, 32),
+    merchantReferenceNo: input.merchantReferenceNo?.replace(/[^A-Za-z0-9]/g, "").slice(0, 32),
+    transactionAmount: String(Math.round(input.amountRupees * 100)),
+    merchantExtendedInfo: { PaymentMode: "All" },
+    timeoutConfig: "60",
+  };
+  const payload = {
+    head: {
+      requestTimeStamp: transactionDateTime,
+      channelId: creds.channelId,
+      checksum: paytmChecksum(body, creds.merchantKey),
+      version: "3.1",
+    },
+    body,
+  };
+  const data = await call(`${paytmHost(creds.mode)}/ecr/payment/request`, { method: "POST", json: payload });
+  const result = ((data.body as Json)?.resultInfo as Json) ?? (data.resultInfo as Json) ?? {};
+  const status = String(result.resultStatus ?? "").toUpperCase();
+  const failed = status === "F" || status === "FAILED" || String(result.resultCode ?? "").includes("FAIL");
+  if (failed) throw new ProviderError(String(result.resultMsg ?? result.resultCode ?? "Paytm EDC refused the sale."));
+  return {
+    merchantTransactionId: body.merchantTransactionId,
+    transactionDateTime,
+    status: status || "A",
+    message: String(result.resultMsg ?? "Accepted. Complete the payment on the Paytm EDC."),
+  };
+}
+
+export async function paytmEdcStatus(
+  creds: { mid: string; merchantKey: string; tid: string; channelId: string; mode: string },
+  input: { merchantTransactionId: string; transactionDateTime: string }
+) {
+  const body = {
+    paytmMid: creds.mid,
+    paytmTid: creds.tid,
+    transactionDateTime: input.transactionDateTime,
+    merchantTransactionId: input.merchantTransactionId,
+  };
+  const requestTimeStamp = paytmStamp();
+  const payload = {
+    head: {
+      requestTimeStamp,
+      channelId: creds.channelId,
+      checksum: paytmChecksum(body, creds.merchantKey),
+      version: "3.1",
+    },
+    body,
+  };
+  const data = await call(`${paytmHost(creds.mode)}/ecr/V2/payment/status`, { method: "POST", json: payload });
+  const resultBody = (data.body as Json) ?? data;
+  const result = (resultBody.resultInfo as Json) ?? {};
+  const status = String(result.resultStatus ?? "").toUpperCase();
+  const code = String(result.resultCode ?? result.resultCodeId ?? "");
+  const paid = status === "S" || status === "SUCCESS" || code === "0000" || code === "SUCCESS";
+  const failed = status === "F" || status === "FAILED" || code === "0011" || code === "FAIL";
+  return {
+    paid,
+    failed,
+    pending: !paid && !failed,
+    status,
+    message: String(result.resultMsg ?? result.resultCode ?? "Pending on the EDC."),
+    paymentId: resultBody.acquirementId ? String(resultBody.acquirementId) : undefined,
+    reference: resultBody.retrievalReferenceNo ? String(resultBody.retrievalReferenceNo) : undefined,
+    method: resultBody.payMethod ? String(resultBody.payMethod) : undefined,
+  };
 }
 
 /* ---------------- Email ---------------- */

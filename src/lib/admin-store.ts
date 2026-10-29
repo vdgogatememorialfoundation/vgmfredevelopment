@@ -428,6 +428,7 @@ export function computeOrderPlan(order: Order): OrderPlan {
 }
 
 export function createAdminOrder(input: {
+  id?: string;
   userEmail?: string;
   userId?: string;
   deliverTo: DeliveryAddress;
@@ -436,6 +437,8 @@ export function createAdminOrder(input: {
   payment?: "collect" | "link" | "cod" | "paid";
   paymentMethod?: string;
   paymentRef?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   courierChoice?: Order["courierChoice"];
   shippingOverride?: number;
   channel?: Order["channel"];
@@ -476,7 +479,7 @@ export function createAdminOrder(input: {
   const codFee = cod && settings.codEnabled ? settings.codFee : 0;
   const paid = input.payment === "paid";
   const order: Order = {
-    id: generateOrderId(),
+    id: input.id ?? generateOrderId(),
     userId: input.userId ?? "admin",
     date: new Date().toISOString(),
     items: orderItems,
@@ -489,6 +492,8 @@ export function createAdminOrder(input: {
     paymentStatus: paid ? "Paid" : "Pending",
     paymentMethod: paid ? input.paymentMethod ?? "Recorded by admin" : cod ? "Cash on delivery" : undefined,
     paymentRef: input.paymentRef,
+    razorpayOrderId: input.razorpayOrderId,
+    razorpayPaymentId: input.razorpayPaymentId,
     paidAt: paid ? new Date().toISOString() : undefined,
     status: paid || cod ? "Ordered" : "Pending",
     channel: input.channel ?? "admin",

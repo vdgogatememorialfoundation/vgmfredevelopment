@@ -19,7 +19,7 @@ import {
 } from "@/lib/integrations";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
-import { testRazorpay } from "@/lib/payments-client";
+import { testPaytmEdc, testRazorpay } from "@/lib/payments-client";
 import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { subscribeCms } from "@/lib/cms";
@@ -211,15 +211,33 @@ function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
 /* ---------------- Payments ---------------- */
 
 export function PaymentSettingsDesk() {
-  const { value, setValue, note, setNote, save } = useIntegrationSlice("razorpay");
-  const [busy, setBusy] = useState(false);
+  const razorpay = useIntegrationSlice("razorpay");
+  const paytm = useIntegrationSlice("paytm");
+  const { value, setValue, note, setNote, save } = razorpay;
+  const [busy, setBusy] = useState("");
   const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
+  const setPaytm = (patch: Partial<typeof paytm.value>) => paytm.setValue({ ...paytm.value, ...patch });
+
+  const saveAll = () => {
+    save();
+    paytm.save();
+    setNote("Saved.");
+  };
 
   const test = async () => {
-    save();
-    setBusy(true);
+    saveAll();
+    setBusy("razorpay");
     const result = await testRazorpay().catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
-    setBusy(false);
+    setBusy("");
+    setNote(result.ok ? result.message || "Connected." : `Test failed: ${result.error}`);
+  };
+
+  const testPaytm = async () => {
+    saveAll();
+    setBusy("paytm");
+    const result = await testPaytmEdc().catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
+    setBusy("");
+    paytm.setNote(result.ok ? result.message || "Connected." : `Test failed: ${result.error}`);
     setNote(result.ok ? result.message || "Connected." : `Test failed: ${result.error}`);
   };
 
@@ -231,7 +249,7 @@ export function PaymentSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="Payments & Razorpay" text="Choose demo, test or live mode and store the Razorpay keys used by checkout, payment links and refunds." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
+      <Header title="Payments & Razorpay" text="Choose demo, test or live mode and store the Razorpay keys used by checkout, POS UPI, payment links and refunds. Add Razorpay and Paytm EDC details for the counter." action={<button type="button" className={primary} onClick={() => saveAll()}>Save</button>} />
       <Saved text={note} />
       <Card title="Mode">
         <div className="grid gap-3 md:grid-cols-3">
@@ -268,12 +286,59 @@ export function PaymentSettingsDesk() {
           <Secret label="Webhook secret" value={value.webhookSecret} onChange={(webhookSecret) => set({ webhookSecret })} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button type="button" className={ghost} disabled={busy || value.mode === "demo"} onClick={test}>
-            {busy ? "Testing…" : "Test connection"}
+          <button type="button" className={ghost} disabled={Boolean(busy) || value.mode === "demo"} onClick={() => void test()}>
+            {busy === "razorpay" ? "Testing…" : "Test connection"}
           </button>
           <p className="text-xs text-slate-500">
             Customers on other devices use the keys set on the host as RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, because these settings are saved in this browser.
           </p>
+        </div>
+      </Card>
+      <Card title="Razorpay EDC" text="In-store POS pushes the bill to this Razorpay POS machine. Device ID is required for wireless mode.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Text label="POS device ID" value={value.posDeviceId} placeholder="2841158834" onChange={(posDeviceId) => set({ posDeviceId })} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Device mode</span>
+            <select
+              className={input}
+              value={value.posDeviceMode}
+              onChange={(event) => set({ posDeviceMode: event.target.value === "wired" ? "wired" : "wireless" })}
+            >
+              <option value="wireless">Wireless</option>
+              <option value="wired">Wired</option>
+            </select>
+          </label>
+        </div>
+      </Card>
+      <Card title="Paytm EDC" text="Counter sales on Paytm card machines use Sale + Status Enquiry. Amount is in paise. Staging: securestage.paytmpayments.com · Live: securegw-edc.paytmpayments.in.">
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          {([
+            { id: "demo", title: "Demo", text: "POS records a simulated Paytm EDC payment." },
+            { id: "staging", title: "Staging", text: "Paytm test MID, key and TID." },
+            { id: "live", title: "Live", text: "Production Paytm EDC credentials." },
+          ] as const).map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => setPaytm({ mode: mode.id })}
+              className={`rounded-xl border-2 p-4 text-left transition ${paytm.value.mode === mode.id ? "border-burgundy bg-burgundy/5" : "border-slate-200 hover:border-burgundy/40"}`}
+            >
+              <p className="font-semibold text-slate-900">{mode.title}</p>
+              <p className="mt-1 text-xs text-slate-500">{mode.text}</p>
+            </button>
+          ))}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Text label="Merchant ID (MID)" value={paytm.value.mid} placeholder="YOURMID" onChange={(mid) => setPaytm({ mid })} />
+          <Text label="Terminal ID (TID)" value={paytm.value.tid} placeholder="12345678" onChange={(tid) => setPaytm({ tid })} />
+          <Secret label="Merchant key" value={paytm.value.merchantKey} onChange={(merchantKey) => setPaytm({ merchantKey })} />
+          <Text label="Channel ID" value={paytm.value.channelId} placeholder="WEB" onChange={(channelId) => setPaytm({ channelId })} />
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" className={ghost} disabled={Boolean(busy) || paytm.value.mode === "demo"} onClick={() => void testPaytm()}>
+            {busy === "paytm" ? "Testing…" : "Test Paytm EDC"}
+          </button>
+          <p className="text-xs text-slate-500">Host keys: PAYTM_MID, PAYTM_MERCHANT_KEY, PAYTM_TID, PAYTM_CHANNEL_ID.</p>
         </div>
       </Card>
     </div>

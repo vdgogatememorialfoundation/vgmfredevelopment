@@ -12,12 +12,22 @@ import {
 } from "@/lib/admin-store";
 import { storeConfig } from "@/lib/constants";
 import { getPickupLocation } from "@/lib/fulfillment";
+import { payOnPaytmEdc, payOnRazorpayEdc, payWithRazorpay } from "@/lib/payments-client";
+import { generateOrderId } from "@/lib/store";
 import { useLiveBooks } from "@/lib/use-cms";
 import type { Book, DeliveryAddress, Order } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { canOrder, isPurchasable } from "@/lib/product-data";
 
-const METHODS = ["Cash", "UPI", "Card (POS)"];
+const METHODS = [
+  { id: "cash", label: "Cash" },
+  { id: "upi", label: "UPI (Razorpay)" },
+  { id: "razorpay-edc", label: "Razorpay EDC" },
+  { id: "paytm-edc", label: "Paytm EDC" },
+] as const;
+
+type MethodId = (typeof METHODS)[number]["id"];
+
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
 type Line = { bookId: string; quantity: number };
@@ -29,7 +39,7 @@ export function PosDesk() {
   const [cart, setCart] = useState<Line[]>([]);
   const [accountEmail, setAccountEmail] = useState("");
   const [walkIn, setWalkIn] = useState({ name: "", phone: "", email: "" });
-  const [method, setMethod] = useState("Cash");
+  const [method, setMethod] = useState<MethodId>("cash");
   const [reference, setReference] = useState("");
   const [useCredit, setUseCredit] = useState(false);
   const [message, setMessage] = useState("");
@@ -82,7 +92,7 @@ export function PosDesk() {
     setCart((list) => list.map((row) => (row.bookId === bookId ? { ...row, quantity } : row)));
   };
 
-  const checkout = () => {
+  const checkout = async () => {
     const name = account ? displayName(account, true) : walkIn.name.trim();
     const phone = account?.phone || walkIn.phone.trim();
     if (!name || !phone) {
@@ -97,6 +107,55 @@ export function PosDesk() {
     setError("");
     setMessage("");
     try {
+      const saleId = generateOrderId();
+      let paymentMethod: string = METHODS.find((item) => item.id === method)?.label ?? "Cash";
+      let paymentRef = reference.trim() || undefined;
+      let razorpayOrderId: string | undefined;
+      let razorpayPaymentId: string | undefined;
+
+      if (total > 0 && method !== "cash") {
+        if (method === "upi") {
+          setMessage("Opening Razorpay UPI…");
+          const outcome = await payWithRazorpay({
+            amount: total,
+            receipt: saleId,
+            name,
+            email: account?.email || walkIn.email,
+            phone,
+            description: `VGMF POS ${saleId}`,
+            method: "upi",
+            skipDemo: true,
+          });
+          paymentMethod = outcome.live ? "Razorpay UPI" : "Razorpay UPI (demo)";
+          paymentRef = outcome.paymentId;
+          razorpayPaymentId = outcome.paymentId;
+          razorpayOrderId = outcome.kind === "paid" ? outcome.razorpayOrderId : undefined;
+        } else if (method === "razorpay-edc") {
+          setMessage("Sending the amount to the Razorpay EDC. Complete the payment on the machine.");
+          const outcome = await payOnRazorpayEdc({
+            amount: total,
+            receipt: saleId,
+            name,
+            email: account?.email || walkIn.email,
+            phone,
+            description: `VGMF POS ${saleId}`,
+          });
+          paymentMethod = outcome.method;
+          paymentRef = outcome.reference ?? outcome.paymentId;
+          razorpayPaymentId = outcome.paymentId;
+          razorpayOrderId = outcome.razorpayOrderId;
+        } else {
+          setMessage("Sending the amount to the Paytm EDC. Complete the payment on the machine.");
+          const outcome = await payOnPaytmEdc({
+            amount: total,
+            receipt: saleId,
+            description: `VGMF POS ${saleId}`,
+          });
+          paymentMethod = outcome.method;
+          paymentRef = outcome.reference ?? outcome.paymentId;
+        }
+      }
+
       const pickup = getPickupLocation();
       const deliverTo: DeliveryAddress = {
         fullName: name,
@@ -108,14 +167,17 @@ export function PosDesk() {
         pincode: "411005",
       };
       const order = createAdminOrder({
+        id: saleId,
         userEmail: deliverTo.email,
         userId: account?.id,
         deliverTo,
         items: cart,
         deliveryMode: "store_pickup",
         payment: "paid",
-        paymentMethod: method,
-        paymentRef: reference || undefined,
+        paymentMethod,
+        paymentRef,
+        razorpayOrderId,
+        razorpayPaymentId,
         channel: "pos",
         shippingOverride: 0,
       });
@@ -131,15 +193,16 @@ export function PosDesk() {
       } else {
         patchOrder(order.id, updates, "Collected at counter");
       }
-      const paid = { ...order, ...updates };
+      const paid = { ...order, ...updates, paymentMethod, paymentRef, razorpayOrderId, razorpayPaymentId };
       setLastOrder(paid);
       setCart([]);
       setReference("");
       setUseCredit(false);
-      setMessage(`Sale ${paid.id} recorded · ${rupees(paid.total)}.`);
+      setMessage(`Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}.`);
       printPosReceipt(paid);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not complete the sale.");
+      setMessage("");
     } finally {
       setBusy(false);
     }
@@ -248,18 +311,42 @@ export function PosDesk() {
               </label>
             )}
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <SelectInput value={method} onChange={(event) => setMethod(event.target.value)}>
+              <SelectInput
+                value={method}
+                onChange={(event) => setMethod(event.target.value as MethodId)}
+                disabled={busy}
+              >
                 {METHODS.map((item) => (
-                  <option key={item}>{item}</option>
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
                 ))}
               </SelectInput>
-              <TextInput placeholder="Reference / UTR" value={reference} onChange={(event) => setReference(event.target.value)} />
+              {method === "cash" ? (
+                <TextInput placeholder="Reference / UTR (optional)" value={reference} onChange={(event) => setReference(event.target.value)} />
+              ) : (
+                <p className="self-center text-xs text-text-muted">
+                  {method === "upi"
+                    ? "Creates a Razorpay UPI payment. The customer pays in the Razorpay window."
+                    : method === "razorpay-edc"
+                      ? "Pushes the amount to the Razorpay EDC machine."
+                      : "Pushes the amount to the Paytm EDC machine."}
+                </p>
+              )}
             </div>
             <div className="mt-4 flex gap-2">
-              <Button onClick={checkout} disabled={busy || rows.length === 0}>
-                {busy ? "Saving…" : `Collect ${rupees(total)}`}
+              <Button onClick={() => void checkout()} disabled={busy || rows.length === 0}>
+                {busy
+                  ? method === "cash"
+                    ? "Saving…"
+                    : "Waiting for payment…"
+                  : method === "cash"
+                    ? `Collect ${rupees(total)}`
+                    : `Charge ${rupees(total)}`}
               </Button>
-              <Button variant="outline" onClick={() => setCart([])}>Clear</Button>
+              <Button variant="outline" onClick={() => setCart([])} disabled={busy}>
+                Clear
+              </Button>
             </div>
             {lastOrder && (
               <Button className="mt-2" variant="ghost" onClick={() => printPosReceipt(lastOrder)}>
