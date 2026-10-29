@@ -100,6 +100,29 @@ export function MobileAppDesk() {
       {note ? <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{note}</p> : null}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Download APKs</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          Always available here. Public visitors do not see these until you turn on the switch below.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {appFlavors.map((app) => (
+            <a
+              key={app.id}
+              href={app.download}
+              download={`vgmf-${app.id}.apk`}
+              className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-burgundy hover:border-burgundy/40"
+            >
+              <span>
+                {app.defaultName}
+                <span className="mt-0.5 block text-xs font-normal text-slate-500">{app.androidPackage}</span>
+              </span>
+              <span>Download</span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Public download</h2>
         <p className="mt-0.5 text-sm text-slate-500">
           Hidden on the website until you turn this on. The footer link and /app download cards stay off by default.
@@ -163,7 +186,11 @@ export function MobileAppDesk() {
                     }
                   />
                 </div>
-                <a className="mt-3 inline-block text-sm font-semibold text-burgundy" href={app.download}>
+                <a
+                  className="mt-3 inline-block text-sm font-semibold text-burgundy"
+                  href={app.download}
+                  download={`vgmf-${app.id}.apk`}
+                >
                   Download {app.defaultName} APK
                 </a>
               </div>

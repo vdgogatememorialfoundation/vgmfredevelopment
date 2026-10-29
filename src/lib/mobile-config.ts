@@ -45,10 +45,10 @@ export const appFlavors: {
   startPath: string;
   download: string;
 }[] = [
-  { id: "customer", label: "Customer app", defaultName: "VGMF", androidPackage: "org.vaidyagogate.customer", iosBundle: "org.vaidyagogate.customer", startPath: "/", download: "/api/mobile/apk/customer" },
-  { id: "admin", label: "Admin app", defaultName: "VGMF Admin", androidPackage: "org.vaidyagogate.admin", iosBundle: "org.vaidyagogate.admin", startPath: "/admin", download: "/api/mobile/apk/admin" },
-  { id: "staff", label: "Staff app", defaultName: "VGMF Staff", androidPackage: "org.vaidyagogate.staff", iosBundle: "org.vaidyagogate.staff", startPath: "/staff", download: "/api/mobile/apk/staff" },
-  { id: "support", label: "Support app", defaultName: "VGMF Support", androidPackage: "org.vaidyagogate.support", iosBundle: "org.vaidyagogate.support", startPath: "/account/tickets", download: "/api/mobile/apk/support" },
+  { id: "customer", label: "Customer app", defaultName: "VGMF", androidPackage: "org.vaidyagogate.customer", iosBundle: "org.vaidyagogate.customer", startPath: "/", download: "/apps/vgmf-customer.apk" },
+  { id: "admin", label: "Admin app", defaultName: "VGMF Admin", androidPackage: "org.vaidyagogate.admin", iosBundle: "org.vaidyagogate.admin", startPath: "/admin", download: "/apps/vgmf-admin.apk" },
+  { id: "staff", label: "Staff app", defaultName: "VGMF Staff", androidPackage: "org.vaidyagogate.staff", iosBundle: "org.vaidyagogate.staff", startPath: "/staff", download: "/apps/vgmf-staff.apk" },
+  { id: "support", label: "Support app", defaultName: "VGMF Support", androidPackage: "org.vaidyagogate.support", iosBundle: "org.vaidyagogate.support", startPath: "/account/tickets", download: "/apps/vgmf-support.apk" },
 ];
 
 export const defaultAppBrands: Record<AppFlavorId, MobileAppBrand> = {
