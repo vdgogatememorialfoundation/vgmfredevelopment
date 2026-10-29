@@ -1,10 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { books } from "@/data/books";
 import { getLiveBooks, updateStock } from "@/lib/product-data";
-import { getIntegrations } from "@/lib/integrations";
+import {
+  getIntegrations,
+  getShippingConnection,
+  hasShippingCredentials,
+  saveIntegrations,
+  shippingProviderId,
+} from "@/lib/integrations";
+import { subscribeCms } from "@/lib/cms";
+import { testShippingProvider } from "@/lib/shipping-client";
+import { ConnectionBadge } from "@/components/admin/AdminUI";
 import {
   checkPincode,
   getCarriers,
@@ -23,32 +32,80 @@ function splitList(value: string) {
   return value.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
 }
 
+const fieldClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
+
+type CredDraft = Record<string, string>;
+
+function credsFor(id: string): CredDraft {
+  const shipping = getIntegrations().shipping;
+  if (id === "shiprocket") {
+    return { email: shipping.shiprocket.email, password: shipping.shiprocket.password, channelId: shipping.shiprocket.channelId };
+  }
+  if (id === "nimbuspost") {
+    return { email: shipping.nimbuspost.email, password: shipping.nimbuspost.password };
+  }
+  if (id === "ithink") {
+    return {
+      accessToken: shipping.ithink.accessToken,
+      secretKey: shipping.ithink.secretKey,
+      host: shipping.ithink.host,
+      pickupAddressId: shipping.ithink.pickupAddressId,
+    };
+  }
+  if (id === "tookan" || id === "tookan-parcel") {
+    return { apiKey: shipping.tookan.apiKey, teamId: shipping.tookan.teamId };
+  }
+  if (id === "shipday") return { apiKey: shipping.shipday.apiKey };
+  return {};
+}
+
+function persistCreds(id: string, fields: CredDraft, enabled: boolean) {
+  const settings = getIntegrations();
+  const shipping = settings.shipping;
+  if (id === "shiprocket") {
+    shipping.shiprocket = { ...shipping.shiprocket, email: fields.email ?? "", password: fields.password ?? "", channelId: fields.channelId ?? "", enabled };
+  } else if (id === "nimbuspost") {
+    shipping.nimbuspost = { ...shipping.nimbuspost, email: fields.email ?? "", password: fields.password ?? "", enabled };
+  } else if (id === "ithink") {
+    shipping.ithink = {
+      ...shipping.ithink,
+      accessToken: fields.accessToken ?? "",
+      secretKey: fields.secretKey ?? "",
+      host: fields.host || shipping.ithink.host,
+      pickupAddressId: fields.pickupAddressId ?? shipping.ithink.pickupAddressId,
+      enabled,
+    };
+  } else if (id === "tookan") {
+    shipping.tookan = { ...shipping.tookan, apiKey: fields.apiKey ?? "", teamId: fields.teamId ?? "", hyperlocal: enabled };
+  } else if (id === "tookan-parcel") {
+    shipping.tookan = { ...shipping.tookan, apiKey: fields.apiKey ?? shipping.tookan.apiKey, teamId: fields.teamId ?? shipping.tookan.teamId, parcel: enabled };
+  } else if (id === "shipday") {
+    shipping.shipday = { ...shipping.shipday, apiKey: fields.apiKey ?? "", enabled };
+  }
+  saveIntegrations(settings);
+}
+
 export function CarrierDesk() {
   const [carriers, setCarriers] = useState<CarrierAccount[]>(() => getCarriers());
   const [notice, setNotice] = useState("");
+  const [tone, setTone] = useState<"ok" | "bad">("ok");
 
-  const save = (carrier: CarrierAccount, message: string) => {
-    saveCarrier(carrier);
-    setCarriers(getCarriers());
-    setNotice(message);
-  };
+  useEffect(() => subscribeCms(() => setCarriers(getCarriers())), []);
 
   return (
     <div className="space-y-6">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Delivery partners</p>
-        <h1 className="mt-2 text-3xl font-bold text-slate-900">Courier partners</h1>
+        <h1 className="mt-2 text-2xl font-bold text-slate-900">Courier APIs</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-          Enable the aggregators offered at checkout. Live credentials are entered under{" "}
-          <Link href="/admin/settings/shipping-apis" className="font-semibold text-burgundy">Settings → Shipping APIs</Link>
-          {" "}or{" "}
-          <Link href="/admin/delivery-partners/apis" className="font-semibold text-burgundy">Delivery Partners → APIs</Link>.
-          Last-mile names such as Delhivery, Blue Dart, Ekart, DTDC, Shadowfax and India Post are not APIs on this site. They appear as courier options after Shiprocket or iThink returns live rates.
+          Connect Shipday, Shiprocket, iThink, Tookan and Nimbuspost. Save a real API key, then test it — the badge
+          becomes Success or Failed from the live response. Last-mile names such as Delhivery, Blue Dart, Ekart, DTDC,
+          Shadowfax and India Post are not accounts on this site; they appear inside Shiprocket or iThink rates.
         </p>
       </div>
 
       {notice && (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <p className={`rounded-xl border px-4 py-3 text-sm ${tone === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}>
           {notice}
         </p>
       )}
@@ -58,7 +115,11 @@ export function CarrierDesk() {
           <CarrierCard
             key={carrier.id}
             carrier={carrier}
-            onChange={(next, message) => save(next, message)}
+            onNotice={(message, nextTone) => {
+              setNotice(message);
+              setTone(nextTone);
+              setCarriers(getCarriers());
+            }}
           />
         ))}
       </div>
@@ -66,63 +127,167 @@ export function CarrierDesk() {
   );
 }
 
-function partnerConnected(id: string) {
-  const shipping = getIntegrations().shipping;
-  if (id === "shiprocket") return Boolean(shipping.shiprocket.email && shipping.shiprocket.password);
-  if (id === "nimbuspost") return Boolean(shipping.nimbuspost.email && shipping.nimbuspost.password);
-  if (id === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
-  if (id === "tookan") return Boolean(shipping.tookan.apiKey && shipping.tookan.hyperlocal);
-  if (id === "tookan-parcel") return Boolean(shipping.tookan.apiKey && shipping.tookan.parcel);
-  if (id === "shipday") return Boolean(shipping.shipday.apiKey && shipping.shipday.enabled);
-  return false;
+function SecretField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <label className="block">
+      <span className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+        {value && (
+          <button type="button" className="normal-case tracking-normal text-burgundy" onClick={() => setShow((current) => !current)}>
+            {show ? "Hide" : "Show"}
+          </button>
+        )}
+      </span>
+      <input className={fieldClass} type={show ? "text" : "password"} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="new-password" />
+    </label>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  hint?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
+      <input className={fieldClass} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="off" />
+      {hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>}
+    </label>
+  );
 }
 
 function CarrierCard({
   carrier,
-  onChange,
+  onNotice,
 }: {
   carrier: CarrierAccount;
-  onChange: (carrier: CarrierAccount, message: string) => void;
+  onNotice: (message: string, tone: "ok" | "bad") => void;
 }) {
-  const [draft, setDraft] = useState(carrier);
-  const connected = partnerConnected(draft.id);
+  const [enabled, setEnabled] = useState(carrier.enabled);
+  const [fields, setFields] = useState<CredDraft>(() => credsFor(carrier.id));
+  const [busy, setBusy] = useState(false);
+  const [, setStamp] = useState(0);
+  const provider = shippingProviderId(carrier.id);
+
+  useEffect(() => subscribeCms(() => setStamp((value) => value + 1)), []);
+
+  const connection = provider ? getShippingConnection(provider) : { status: "untested" as const, message: "", at: "" };
+  const hasKeys = provider ? hasShippingCredentials(provider) : false;
+
+  const setField = (key: string, value: string) => setFields((current) => ({ ...current, [key]: value }));
+
+  const persist = () => {
+    saveCarrier({ ...carrier, enabled });
+    persistCreds(carrier.id, fields, enabled);
+  };
+
+  const testProvider = carrier.id === "tookan-parcel" ? "tookan" : carrier.id;
 
   return (
     <form
       className="rounded-2xl border border-slate-200 bg-white p-5"
       onSubmit={(event) => {
         event.preventDefault();
-        onChange(draft, `${draft.name} saved.`);
+        persist();
+        onNotice(`${carrier.name} saved.`, "ok");
       }}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{draft.kind}</p>
-          <h2 className="text-lg font-bold text-slate-900">{draft.name}</h2>
-          <p className="mt-1 text-sm text-slate-500">{draft.blurb}</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{carrier.kind}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900">{carrier.name}</h2>
+            <ConnectionBadge status={connection.status} hasKeys={hasKeys} />
+          </div>
+          <p className="mt-1 text-sm text-slate-500">{carrier.blurb}</p>
         </div>
         <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <input
-            type="checkbox"
-            checked={draft.enabled}
-            onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })}
-          />
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
           Offer on storefront
         </label>
       </div>
 
       <p className="mt-3 text-xs text-slate-500">
-        {draft.prefixes.length ? `Pin prefixes ${draft.prefixes.join(", ")}` : "All standard postal zones"}
+        {carrier.prefixes.length ? `Pin prefixes ${carrier.prefixes.join(", ")}` : "All standard postal zones"}
         {" · "}
-        same-city {draft.sameCityDays === 0 ? "same day after dispatch" : `${draft.sameCityDays} business day transit`}
+        same-city {carrier.sameCityDays === 0 ? "same day after dispatch" : `${carrier.sameCityDays} business day transit`}
       </p>
-      <p className={`mt-2 text-xs font-semibold ${connected ? "text-emerald-700" : "text-amber-700"}`}>
-        {connected ? "Connected — credentials saved in Settings → Shipping APIs" : "Not connected. Add credentials in Settings → Shipping APIs to book live."}
-      </p>
+      {connection.message && (connection.status === "success" || connection.status === "failed") && (
+        <p className={`mt-2 text-xs ${connection.status === "success" ? "text-emerald-700" : "text-red-700"}`}>{connection.message}</p>
+      )}
+
+      <div className="mt-4 space-y-3">
+        {carrier.id === "shipday" && (
+          <SecretField label="Shipday API key" value={fields.apiKey ?? ""} onChange={(value) => setField("apiKey", value)} />
+        )}
+        {carrier.id === "shiprocket" && (
+          <>
+            <TextField label="API user email" value={fields.email ?? ""} onChange={(value) => setField("email", value)} />
+            <SecretField label="API user password" value={fields.password ?? ""} onChange={(value) => setField("password", value)} />
+            <TextField label="Channel ID (optional)" value={fields.channelId ?? ""} onChange={(value) => setField("channelId", value)} />
+          </>
+        )}
+        {carrier.id === "ithink" && (
+          <>
+            <SecretField label="Access token" value={fields.accessToken ?? ""} onChange={(value) => setField("accessToken", value)} />
+            <SecretField label="Secret key" value={fields.secretKey ?? ""} onChange={(value) => setField("secretKey", value)} />
+            <TextField label="API host" value={fields.host ?? ""} onChange={(value) => setField("host", value)} hint="https://my.ithinklogistics.com/api_v3/" />
+          </>
+        )}
+        {(carrier.id === "tookan" || carrier.id === "tookan-parcel") && (
+          <>
+            <SecretField label="Tookan API key" value={fields.apiKey ?? ""} onChange={(value) => setField("apiKey", value)} />
+            <TextField label="Team ID" value={fields.teamId ?? ""} onChange={(value) => setField("teamId", value)} />
+          </>
+        )}
+        {carrier.id === "nimbuspost" && (
+          <>
+            <TextField label="Email" value={fields.email ?? ""} onChange={(value) => setField("email", value)} />
+            <SecretField label="Password" value={fields.password ?? ""} onChange={(value) => setField("password", value)} />
+          </>
+        )}
+      </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
-          Save {draft.name}
+          Save {carrier.name}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+          onClick={async () => {
+            persist();
+            setBusy(true);
+            const result = await testShippingProvider(testProvider).catch((error: Error) => ({
+              ok: false,
+              error: error.message,
+              message: "",
+            }));
+            setBusy(false);
+            onNotice(
+              result.ok ? `${carrier.name}: ${result.message || "Connected."}` : `${carrier.name} failed: ${result.error || "The provider rejected the credentials."}`,
+              result.ok ? "ok" : "bad"
+            );
+          }}
+        >
+          {busy ? "Testing…" : "Test credentials"}
         </button>
         <Link href="/admin/settings/shipping-apis" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
           Open Shipping APIs

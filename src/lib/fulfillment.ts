@@ -1,5 +1,5 @@
 import { books } from "@/data/books";
-import { getIntegrations } from "@/lib/integrations";
+import { getIntegrations, hasShippingCredentials, shippingProviderId } from "@/lib/integrations";
 import type { Book, ProcessingTimeline, ProductOverride, SiteSettings } from "@/types";
 import { formatDate } from "@/lib/utils";
 
@@ -109,6 +109,14 @@ const LAST_MILE_IDS = new Set([
   "india-post",
 ]);
 
+const LAST_MILE_NAME = /shadowfax|delhivery|blue\s*dart|ekart|e-?kart|dtdc|india\s*post|pidge/i;
+
+function isLastMile(carrier: { id?: string; name?: string }) {
+  const id = String(carrier.id ?? "").toLowerCase();
+  const name = String(carrier.name ?? "");
+  return LAST_MILE_IDS.has(id) || LAST_MILE_NAME.test(id) || LAST_MILE_NAME.test(name);
+}
+
 function defaultCarriers(): CarrierAccount[] {
   const national = (near: number, mid: number, far: number): Record<string, number> => ({
     "1": mid,
@@ -123,6 +131,21 @@ function defaultCarriers(): CarrierAccount[] {
 
   return [
     {
+      id: "shipday",
+      name: "Shipday",
+      kind: "hyperlocal",
+      enabled: true,
+      priority: 6,
+      apiKey: "",
+      apiSecret: "",
+      webhookUrl: "",
+      prefixes: ["411"],
+      zoneDays: { "4": 1 },
+      sameCityDays: 0,
+      charge: 45,
+      blurb: "On-demand local delivery. Book, assign and track with the Shipday API key.",
+    },
+    {
       id: "shiprocket",
       name: "Shiprocket",
       kind: "aggregator",
@@ -136,21 +159,6 @@ function defaultCarriers(): CarrierAccount[] {
       sameCityDays: 1,
       charge: 49,
       blurb: "Multi-courier checkout for surface and express across India.",
-    },
-    {
-      id: "nimbuspost",
-      name: "Nimbuspost",
-      kind: "aggregator",
-      enabled: true,
-      priority: 2,
-      apiKey: "",
-      apiSecret: "",
-      webhookUrl: "",
-      prefixes: [],
-      zoneDays: national(2, 3, 5),
-      sameCityDays: 1,
-      charge: 45,
-      blurb: "Shipping aggregator with prepaid and COD serviceability.",
     },
     {
       id: "ithink",
@@ -198,19 +206,19 @@ function defaultCarriers(): CarrierAccount[] {
       blurb: "Tookan parcel delivery: pickup and delivery tasks for intercity parcels.",
     },
     {
-      id: "shipday",
-      name: "Shipday",
-      kind: "hyperlocal",
+      id: "nimbuspost",
+      name: "Nimbuspost",
+      kind: "aggregator",
       enabled: true,
-      priority: 6,
+      priority: 2,
       apiKey: "",
       apiSecret: "",
       webhookUrl: "",
-      prefixes: ["411"],
-      zoneDays: { "4": 1 },
-      sameCityDays: 0,
+      prefixes: [],
+      zoneDays: national(2, 3, 5),
+      sameCityDays: 1,
       charge: 45,
-      blurb: "Local delivery dispatch with your own or Shipday partner drivers.",
+      blurb: "Shipping aggregator with prepaid and COD serviceability.",
     },
   ];
 }
@@ -231,52 +239,50 @@ function writeJSON(key: string, value: unknown) {
 }
 
 export function credentialsSaved(carrier: CarrierAccount) {
-  const shipping = getIntegrations().shipping;
-  if (carrier.id === "shiprocket") return Boolean(shipping.shiprocket.email && shipping.shiprocket.password);
-  if (carrier.id === "nimbuspost") return Boolean(shipping.nimbuspost.email && shipping.nimbuspost.password);
-  if (carrier.id === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
-  if (carrier.id === "tookan") return Boolean(shipping.tookan.apiKey && shipping.tookan.hyperlocal);
-  if (carrier.id === "tookan-parcel") return Boolean(shipping.tookan.apiKey && shipping.tookan.parcel);
-  if (carrier.id === "shipday") return Boolean(shipping.shipday.apiKey && shipping.shipday.enabled);
-  return false;
+  const provider = shippingProviderId(carrier.id);
+  return provider ? hasShippingCredentials(provider) : false;
 }
 
 export function getCarriers(): CarrierAccount[] {
   const stored = readJSON<CarrierAccount[] | null>(CARRIERS_KEY, null);
   const allowed = new Set(defaultCarriers().map((carrier) => carrier.id));
-  const cleaned = (stored ?? []).filter((carrier) => allowed.has(carrier.id) && !LAST_MILE_IDS.has(carrier.id));
-  if (!stored?.length || cleaned.length !== stored.length) {
-    const seeded = defaultCarriers();
-    const byId = new Map(cleaned.map((carrier) => [carrier.id, carrier]));
-    const next = seeded.map((carrier) => {
-      const saved = byId.get(carrier.id);
-      return saved ? { ...carrier, ...saved, id: carrier.id, name: carrier.name, kind: carrier.kind, blurb: carrier.blurb } : carrier;
-    });
-    writeJSON(CARRIERS_KEY, next);
-    return next;
-  }
+  const cleaned = (stored ?? []).filter((carrier) => allowed.has(carrier.id) && !isLastMile(carrier));
+  const seeded = defaultCarriers();
   const byId = new Map(cleaned.map((carrier) => [carrier.id, carrier]));
-  const next = defaultCarriers().map((carrier) => {
+  const next = seeded.map((carrier) => {
     const saved = byId.get(carrier.id);
-    return saved ? { ...carrier, ...saved, id: carrier.id, name: carrier.name, kind: carrier.kind, blurb: carrier.blurb } : carrier;
+    return saved
+      ? { ...carrier, ...saved, id: carrier.id, name: carrier.name, kind: carrier.kind, blurb: carrier.blurb, apiKey: "", apiSecret: "", webhookUrl: "" }
+      : carrier;
   });
   writeJSON(CARRIERS_KEY, next);
   return next;
 }
 
+function officialOnly(carriers: CarrierAccount[]) {
+  const allowed = new Set(defaultCarriers().map((carrier) => carrier.id));
+  return carriers
+    .filter((carrier) => allowed.has(carrier.id) && !isLastMile(carrier))
+    .map((carrier) => ({ ...carrier, apiKey: "", apiSecret: "", webhookUrl: "" }));
+}
+
 export function saveCarriers(carriers: CarrierAccount[]) {
-  writeJSON(CARRIERS_KEY, carriers);
+  const next = officialOnly(carriers);
+  writeJSON(CARRIERS_KEY, next);
   const settings = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
   if (settings) {
-    settings.couriers = carriers.filter((carrier) => carrier.enabled).map((carrier) => carrier.name);
-    const shiprocket = carriers.find((carrier) => carrier.id === "shiprocket");
-    if (shiprocket) settings.apiKeys = { ...settings.apiKeys, shiprocket: shiprocket.apiKey };
+    settings.couriers = next.filter((carrier) => carrier.enabled).map((carrier) => carrier.name);
     writeJSON(SETTINGS_KEY, settings);
   }
 }
 
 export function saveCarrier(carrier: CarrierAccount) {
-  const next = getCarriers().map((item) => (item.id === carrier.id ? carrier : item));
+  if (isLastMile(carrier) || !defaultCarriers().some((item) => item.id === carrier.id)) return;
+  const next = getCarriers().map((item) =>
+    item.id === carrier.id
+      ? { ...carrier, id: item.id, name: item.name, kind: item.kind, blurb: item.blurb, apiKey: "", apiSecret: "", webhookUrl: "" }
+      : item
+  );
   saveCarriers(next);
 }
 

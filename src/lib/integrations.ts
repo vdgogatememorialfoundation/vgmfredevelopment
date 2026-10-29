@@ -8,6 +8,8 @@ export type EmailProvider = "zeptomail" | "zoho";
 export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
 export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink";
 export type HyperlocalId = "tookan" | "shipday";
+export type ShippingProviderId = AggregatorId | HyperlocalId;
+export type ShippingConnection = { status: "success" | "failed" | "untested"; message: string; at: string };
 
 export interface WhatsAppTemplate {
   name: string;
@@ -97,6 +99,7 @@ export interface IntegrationSettings {
     ithink: { accessToken: string; secretKey: string; pickupAddressId: string; host: string; enabled: boolean };
     tookan: { apiKey: string; teamId: string; hyperlocal: boolean; parcel: boolean };
     shipday: { apiKey: string; enabled: boolean };
+    connection: Partial<Record<ShippingProviderId, ShippingConnection>>;
     pickup: PickupAddress;
     defaultWeightKg: number;
     packageCm: { length: number; breadth: number; height: number };
@@ -179,7 +182,8 @@ export const defaultIntegrations: IntegrationSettings = {
     nimbuspost: { email: "", password: "", enabled: true },
     ithink: { accessToken: "", secretKey: "", pickupAddressId: "", host: "https://my.ithinklogistics.com/api_v3/", enabled: false },
     tookan: { apiKey: "", teamId: "", hyperlocal: false, parcel: false },
-    shipday: { apiKey: "", enabled: false },
+    shipday: { apiKey: "", enabled: true },
+    connection: {},
     pickup: {
       nickname: "VGMF-PUNE",
       contactName: "VGMF Dispatch",
@@ -251,15 +255,67 @@ function merge<T extends object>(base: T, saved: Partial<T> | null | undefined):
   return out as T;
 }
 
+export function shippingProviderId(id: string): ShippingProviderId | null {
+  if (id === "tookan-parcel") return "tookan";
+  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "tookan" || id === "shipday") return id;
+  return null;
+}
+
+function credentialFingerprint(shipping: IntegrationSettings["shipping"], provider: ShippingProviderId) {
+  if (provider === "shiprocket") return `${shipping.shiprocket.email}\0${shipping.shiprocket.password}\0${shipping.shiprocket.channelId}`;
+  if (provider === "nimbuspost") return `${shipping.nimbuspost.email}\0${shipping.nimbuspost.password}`;
+  if (provider === "ithink") return `${shipping.ithink.accessToken}\0${shipping.ithink.secretKey}\0${shipping.ithink.host}`;
+  if (provider === "tookan") return `${shipping.tookan.apiKey}\0${shipping.tookan.teamId}`;
+  return shipping.shipday.apiKey;
+}
+
+export function hasShippingCredentials(provider: ShippingProviderId, settings = getIntegrations()) {
+  const shipping = settings.shipping;
+  if (provider === "shiprocket") return Boolean(shipping.shiprocket.email && shipping.shiprocket.password);
+  if (provider === "nimbuspost") return Boolean(shipping.nimbuspost.email && shipping.nimbuspost.password);
+  if (provider === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
+  if (provider === "tookan") return Boolean(shipping.tookan.apiKey);
+  if (provider === "shipday") return Boolean(shipping.shipday.apiKey);
+  return false;
+}
+
+export function getShippingConnection(provider: ShippingProviderId): ShippingConnection {
+  return getIntegrations().shipping.connection[provider] ?? { status: "untested", message: "", at: "" };
+}
+
 export function getIntegrations(): IntegrationSettings {
   const merged = merge(defaultIntegrations, readJSON<Partial<IntegrationSettings> | null>(INTEGRATIONS_KEY, null));
   const tookan = merged.shipping.tookan as typeof merged.shipping.tookan & { enabled?: boolean };
   if (tookan.enabled && !tookan.hyperlocal && !tookan.parcel) tookan.hyperlocal = true;
+  if (merged.shipping.shipday.apiKey && merged.shipping.shipday.enabled === false) {
+    /* keep an explicit off; empty key stays available to turn on */
+  }
+  if (!merged.shipping.connection) merged.shipping.connection = {};
   return merged;
 }
 
-export function saveIntegrations(settings: IntegrationSettings) {
+export function recordShippingConnection(provider: ShippingProviderId, status: ShippingConnection["status"], message: string) {
+  const settings = getIntegrations();
+  settings.shipping.connection = {
+    ...settings.shipping.connection,
+    [provider]: { status, message, at: new Date().toISOString() },
+  };
   writeJSON(INTEGRATIONS_KEY, settings);
+  return settings.shipping.connection[provider]!;
+}
+
+export function saveIntegrations(settings: IntegrationSettings) {
+  const previous = getIntegrations();
+  const next = merge(defaultIntegrations, settings);
+  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "tookan", "shipday"];
+  const connection = { ...next.shipping.connection, ...previous.shipping.connection };
+  for (const provider of providers) {
+    if (credentialFingerprint(previous.shipping, provider) !== credentialFingerprint(next.shipping, provider)) {
+      connection[provider] = { status: "untested", message: "", at: "" };
+    }
+  }
+  next.shipping.connection = connection;
+  writeJSON(INTEGRATIONS_KEY, next);
 }
 
 export function getOrderSettings(): OrderSettings {

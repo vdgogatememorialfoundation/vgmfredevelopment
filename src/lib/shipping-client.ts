@@ -1,6 +1,6 @@
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { checkPincode } from "@/lib/fulfillment";
-import { getIntegrations, type IntegrationSettings } from "@/lib/integrations";
+import { getIntegrations, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
 import {
   generateAWB,
   getOrder,
@@ -546,7 +546,16 @@ export async function cancelShipment(shipmentId: string) {
 }
 
 export async function testShippingProvider(provider: string) {
-  return post<{ message?: string }>({ action: "test", provider, creds: credsFrom(getIntegrations()) });
+  const result = await post<{ message?: string }>({ action: "test", provider, creds: credsFrom(getIntegrations()) });
+  const id = (provider === "tookan-parcel" ? "tookan" : provider) as ShippingProviderId;
+  if (["shiprocket", "nimbuspost", "ithink", "tookan", "shipday"].includes(id)) {
+    recordShippingConnection(
+      id,
+      result.ok ? "success" : "failed",
+      result.ok ? result.message || "Connected." : result.error || "The provider rejected the credentials."
+    );
+  }
+  return result;
 }
 
 export async function syncPickupAddress() {

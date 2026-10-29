@@ -127,6 +127,41 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return <textarea {...props} className="input-field" />;
 }
 
+export function ConnectionBadge({
+  status,
+  hasKeys,
+}: {
+  status?: "success" | "failed" | "untested";
+  hasKeys: boolean;
+}) {
+  if (status === "success") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+        Success — connected
+      </span>
+    );
+  }
+  if (!hasKeys) {
+    return (
+      <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+        Awaiting credentials
+      </span>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-800">
+        Failed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+      Saved — test to verify
+    </span>
+  );
+}
+
 export function StatusBadge({
   status,
   mapping,
