@@ -1,12 +1,5 @@
-"use client";
-
-import ClientOnly from "@/components/common/ClientOnly";
-import { CarrierDesk } from "@/components/admin/FulfillmentDesk";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <ClientOnly>
-      <CarrierDesk />
-    </ClientOnly>
-  );
+  redirect("/admin/settings/shipping-apis");
 }

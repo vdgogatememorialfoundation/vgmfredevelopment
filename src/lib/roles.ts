@@ -15,7 +15,7 @@ export const staffModules = [
   { id: "events", label: "Events", paths: ["/admin/events"] },
   { id: "certificates", label: "Certificates", paths: ["/admin/certificates", "/admin/events/certificates"] },
   { id: "support", label: "Support", paths: ["/admin/support"] },
-  { id: "delivery", label: "Delivery partners", paths: ["/admin/delivery-partners", "/admin/accounts/delivery-partners"] },
+  { id: "delivery", label: "Shipping APIs", paths: ["/admin/settings/shipping-apis", "/admin/delivery-partners"] },
   { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications"] },
   { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles"] },
   { id: "settings", label: "Site settings", paths: ["/admin/settings"] },

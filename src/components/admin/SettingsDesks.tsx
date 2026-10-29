@@ -20,7 +20,7 @@ import {
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
 import { testRazorpay } from "@/lib/payments-client";
-import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
+import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { subscribeCms } from "@/lib/cms";
 import type { SiteSettings } from "@/types";
@@ -583,7 +583,23 @@ export function ShippingApisDesk() {
     setBusy(provider);
     const result = await testShippingProvider(provider).catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
     setBusy("");
-    setNote(result.ok ? `${provider}: ${result.message}` : `${provider} test failed: ${result.error}`);
+    setNote(result.ok ? `${provider}: ${result.message}` : `${provider} failed from this site: ${result.error}`);
+    setStamp((current) => current + 1);
+    return result;
+  };
+
+  const saveAndTestAll = async () => {
+    save();
+    setBusy("all");
+    const results = await testConfiguredShippingProviders().catch((error: Error) => [{ id: "shipping", ok: false, error: error.message }]);
+    setBusy("");
+    if (!results.length) {
+      setNote("Save a key first, then Save & test. The check runs through /api/shipping on this site.");
+      return;
+    }
+    const ok = results.filter((item) => item.ok).map((item) => item.id);
+    const bad = results.filter((item) => !item.ok).map((item) => `${item.id}: ${item.error || "failed"}`);
+    setNote(bad.length ? `Live check: ${bad.join(" · ")}${ok.length ? ` · OK: ${ok.join(", ")}` : ""}` : `Live from this site: ${ok.join(", ")}.`);
     setStamp((current) => current + 1);
   };
 
@@ -594,8 +610,15 @@ export function ShippingApisDesk() {
     <div className="space-y-5">
       <Header
         title="Shipping APIs"
-        text="Connect the APIs that book shipments: Shipday, Shiprocket, iThink Logistics, Tookan and Nimbuspost. After you save a real key, Test credentials talks to that API and the badge becomes Success or Failed. Last-mile names such as Delhivery, Blue Dart, Ekart, DTDC, Shadowfax and India Post are not accounts here — they appear inside Shiprocket or iThink rates."
-        action={<button type="button" className={primary} onClick={() => save()}>Save</button>}
+        text="This is the only courier integration page. Save a key, then Save & test — the request goes through this site’s /api/shipping route first, so Success or Failed is a live check from our server. Hyperlocal orders book Tookan create_task; standard orders book Tookan create_multiple_tasks (parcel)."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={ghost} onClick={() => save()}>Save</button>
+            <button type="button" className={primary} disabled={Boolean(busy)} onClick={() => saveAndTestAll()}>
+              {busy === "all" ? "Checking live…" : "Save & test all"}
+            </button>
+          </div>
+        }
       />
       <Saved text={note} />
 
@@ -603,7 +626,7 @@ export function ShippingApisDesk() {
         <Card title="Shipday" text="docs.shipday.com — POST /orders to create, GET /orders to track, DELETE /orders/{id} to cancel. Authorization: Basic {API key}." badge={<ProviderStatus id="shipday" />} right={<Check label="Use" checked={value.shipday.enabled} onChange={(enabled) => set({ shipday: { ...value.shipday, enabled } })} />}>
           <div className="space-y-3">
             <Secret label="Shipday API key" value={value.shipday.apiKey} onChange={(apiKey) => set({ shipday: { ...value.shipday, apiKey } })} />
-            <button type="button" className={ghost} disabled={busy === "shipday"} onClick={() => test("shipday")}>{busy === "shipday" ? "Testing…" : "Test credentials"}</button>
+            <button type="button" className={primary} disabled={busy === "shipday"} onClick={() => test("shipday")}>{busy === "shipday" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
         <Card title="Shiprocket" text="apidocs.shiprocket.in — Settings → API → Create an API user. Login, serviceability, adhoc order, assign AWB, generate pickup, label, invoice, manifest, track AWB, cancel and reverse pickup all use this account." badge={<ProviderStatus id="shiprocket" />} right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
@@ -611,7 +634,7 @@ export function ShippingApisDesk() {
             <Text label="API user email" value={value.shiprocket.email} onChange={(email) => set({ shiprocket: { ...value.shiprocket, email } })} />
             <Secret label="API user password" value={value.shiprocket.password} onChange={(password) => set({ shiprocket: { ...value.shiprocket, password } })} />
             <Text label="Channel ID (optional)" value={value.shiprocket.channelId} onChange={(channelId) => set({ shiprocket: { ...value.shiprocket, channelId } })} />
-            <button type="button" className={ghost} disabled={busy === "shiprocket"} onClick={() => test("shiprocket")}>{busy === "shiprocket" ? "Testing…" : "Test credentials"}</button>
+            <button type="button" className={primary} disabled={busy === "shiprocket"} onClick={() => test("shiprocket")}>{busy === "shiprocket" ? "Checking live…" : "Save & test"}</button>
             <p className="text-xs text-slate-500">
               Webhook URL for Shiprocket Settings → API → Webhooks:{" "}
               <span className="font-mono break-all text-slate-700">{typeof window === "undefined" ? "/api/shipping/webhook" : `${window.location.origin}/api/shipping/webhook`}</span>
@@ -637,23 +660,23 @@ export function ShippingApisDesk() {
             <Secret label="Secret key" value={value.ithink.secretKey} onChange={(secretKey) => set({ ithink: { ...value.ithink, secretKey } })} />
             <Text label="Pickup warehouse / address ID" value={value.ithink.pickupAddressId} onChange={(pickupAddressId) => set({ ithink: { ...value.ithink, pickupAddressId } })} />
             <Text label="API host" value={value.ithink.host} onChange={(host) => set({ ithink: { ...value.ithink, host } })} hint="https://my.ithinklogistics.com/api_v3/" />
-            <button type="button" className={ghost} disabled={busy === "ithink"} onClick={() => test("ithink")}>{busy === "ithink" ? "Testing…" : "Test credentials"}</button>
+            <button type="button" className={primary} disabled={busy === "ithink"} onClick={() => test("ithink")}>{busy === "ithink" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
-        <Card title="Tookan" text="tookanapi.docs.apiary.io — one API key. Hyperlocal is a delivery-only task (has_pickup=0). Parcel is pickup plus delivery (has_pickup=1). Test pings get_all_fleets." badge={<ProviderStatus id="tookan" />}>
+        <Card title="Tookan" text="One API key. Hyperlocal (same-city) books Tookan create_task. Standard / intercity books Tookan create_multiple_tasks (parcel: pickup + delivery). Save & test calls get_all_fleets through this site." badge={<ProviderStatus id="tookan" />}>
           <div className="space-y-3">
             <Secret label="Tookan API key" value={value.tookan.apiKey} onChange={(apiKey) => set({ tookan: { ...value.tookan, apiKey } })} />
             <Text label="Team ID" value={value.tookan.teamId} onChange={(teamId) => set({ tookan: { ...value.tookan, teamId } })} />
-            <Check label="Hyperlocal (same-city delivery)" checked={value.tookan.hyperlocal} onChange={(hyperlocal) => set({ tookan: { ...value.tookan, hyperlocal } })} />
-            <Check label="Parcel (pickup + delivery)" checked={value.tookan.parcel} onChange={(parcel) => set({ tookan: { ...value.tookan, parcel } })} />
-            <button type="button" className={ghost} disabled={busy === "tookan"} onClick={() => test("tookan")}>{busy === "tookan" ? "Testing…" : "Test credentials"}</button>
+            <Check label="Offer hyperlocal as Tookan tasks" hint="Same-city pincodes book create_task (delivery only)." checked={value.tookan.hyperlocal} onChange={(hyperlocal) => set({ tookan: { ...value.tookan, hyperlocal } })} />
+            <Check label="Offer standard as Tookan parcel" hint="Other pincodes book create_multiple_tasks with pickup + delivery." checked={value.tookan.parcel} onChange={(parcel) => set({ tookan: { ...value.tookan, parcel } })} />
+            <button type="button" className={primary} disabled={busy === "tookan"} onClick={() => test("tookan")}>{busy === "tookan" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
         <Card title="Nimbuspost" text="Nimbuspost login email and password, used as a second aggregator if you keep that account." badge={<ProviderStatus id="nimbuspost" />} right={<Check label="Use" checked={value.nimbuspost.enabled} onChange={(enabled) => set({ nimbuspost: { ...value.nimbuspost, enabled } })} />}>
           <div className="space-y-3">
             <Text label="Email" value={value.nimbuspost.email} onChange={(email) => set({ nimbuspost: { ...value.nimbuspost, email } })} />
             <Secret label="Password" value={value.nimbuspost.password} onChange={(password) => set({ nimbuspost: { ...value.nimbuspost, password } })} />
-            <button type="button" className={ghost} disabled={busy === "nimbuspost"} onClick={() => test("nimbuspost")}>{busy === "nimbuspost" ? "Testing…" : "Test credentials"}</button>
+            <button type="button" className={primary} disabled={busy === "nimbuspost"} onClick={() => test("nimbuspost")}>{busy === "nimbuspost" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
       </div>

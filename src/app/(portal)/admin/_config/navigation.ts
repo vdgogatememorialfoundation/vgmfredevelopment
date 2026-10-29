@@ -25,6 +25,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Inventory Management", href: "/admin/commerce/inventory" },
       { label: "Product Management", href: "/admin/commerce/products" },
       { label: "Serviceability", href: "/admin/commerce/serviceability" },
+      { label: "Courier performance", href: "/admin/delivery-partners/performance" },
       { label: "Payments", href: "/admin/commerce/payments" },
     ],
   },
@@ -34,7 +35,6 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Staff Accounts", href: "/admin/accounts/staff" },
       { label: "Customers", href: "/admin/accounts/customers" },
-      { label: "Delivery Partners", href: "/admin/accounts/delivery-partners" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
     ],
   },
@@ -99,18 +99,6 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Support Tickets", href: "/admin/support/tickets" },
       { label: "Contact Enquiries", href: "/admin/support/contact" },
-    ],
-  },
-
-  {
-    label: "Delivery Partners",
-    items: [
-      { label: "Partners", href: "/admin/delivery-partners" },
-      { label: "Onboarding", href: "/admin/delivery-partners/onboarding" },
-      { label: "APIs", href: "/admin/delivery-partners/apis" },
-      { label: "Shipments", href: "/admin/delivery-partners/shipments" },
-      { label: "Assignments", href: "/admin/delivery-partners/assignments" },
-      { label: "Performance", href: "/admin/delivery-partners/performance" },
     ],
   },
 

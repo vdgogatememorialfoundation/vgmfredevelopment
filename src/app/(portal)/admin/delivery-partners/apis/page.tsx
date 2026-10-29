@@ -1,12 +1,5 @@
-﻿"use client";
-
-import ClientOnly from "@/components/common/ClientOnly";
-import { ShippingApisDesk } from "@/components/admin/SettingsDesks";
+﻿import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <ClientOnly>
-      <ShippingApisDesk />
-    </ClientOnly>
-  );
+  redirect("/admin/settings/shipping-apis");
 }

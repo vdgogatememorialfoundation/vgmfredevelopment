@@ -82,11 +82,17 @@ export async function fetchCourierRates(input: {
   }
   const extra: CourierRate[] = [];
   const pin = input.deliveryPincode;
-  if (shipping.tookan.apiKey && (shipping.tookan.hyperlocal || shipping.tookan.parcel) && pin.startsWith("411")) {
-    if (shipping.tookan.hyperlocal) extra.push({ provider: "tookan", courierId: "tookan-hyperlocal", courierName: "Tookan Hyperlocal", rate: 39, etaDays: 0, live: true });
-    if (shipping.tookan.parcel) extra.push({ provider: "tookan-parcel", courierId: "tookan-parcel", courierName: "Tookan Parcel", rate: 45, etaDays: 1, live: true });
+  const originPrefix = (shipping.pickup.pincode || "411005").slice(0, 3);
+  const sameCity = pin.startsWith(originPrefix);
+  if (shipping.tookan.apiKey && /^\d{6}$/.test(pin)) {
+    if (shipping.tookan.hyperlocal && sameCity) {
+      extra.push({ provider: "tookan", courierId: "tookan", courierName: "Tookan hyperlocal (task)", rate: 39, etaDays: 0, live: true });
+    }
+    if (shipping.tookan.parcel) {
+      extra.push({ provider: "tookan-parcel", courierId: "tookan-parcel", courierName: "Tookan parcel", rate: sameCity ? 45 : 69, etaDays: sameCity ? 1 : 3, live: true });
+    }
   }
-  if (shipping.shipday.enabled && shipping.shipday.apiKey && pin.startsWith("411")) {
+  if (shipping.shipday.enabled && shipping.shipday.apiKey && sameCity) {
     extra.push({ provider: "shipday", courierId: "shipday", courierName: "Shipday", rate: 45, etaDays: 0, live: true });
   }
   if (live.length || extra.length) return { rates: [...live, ...extra].sort((a, b) => a.rate - b.rate), live: true, notes };
@@ -552,10 +558,27 @@ export async function testShippingProvider(provider: string) {
     recordShippingConnection(
       id,
       result.ok ? "success" : "failed",
-      result.ok ? result.message || "Connected." : result.error || "The provider rejected the credentials."
+      result.ok ? result.message || "Connected from this site." : result.error || "The provider rejected the credentials."
     );
   }
   return result;
+}
+
+export async function testConfiguredShippingProviders() {
+  const settings = getIntegrations();
+  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost"] as const).filter((id) => {
+    if (id === "shiprocket") return Boolean(settings.shipping.shiprocket.email && settings.shipping.shiprocket.password);
+    if (id === "nimbuspost") return Boolean(settings.shipping.nimbuspost.email && settings.shipping.nimbuspost.password);
+    if (id === "ithink") return Boolean(settings.shipping.ithink.accessToken && settings.shipping.ithink.secretKey);
+    if (id === "tookan") return Boolean(settings.shipping.tookan.apiKey);
+    return Boolean(settings.shipping.shipday.apiKey);
+  });
+  const results: { id: string; ok: boolean; message?: string; error?: string }[] = [];
+  for (const id of wanted) {
+    const result = await testShippingProvider(id);
+    results.push({ id, ok: result.ok, message: result.message, error: result.error });
+  }
+  return results;
 }
 
 export async function syncPickupAddress() {

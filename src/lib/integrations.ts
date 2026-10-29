@@ -181,7 +181,7 @@ export const defaultIntegrations: IntegrationSettings = {
     shiprocket: { email: "", password: "", channelId: "", enabled: true },
     nimbuspost: { email: "", password: "", enabled: true },
     ithink: { accessToken: "", secretKey: "", pickupAddressId: "", host: "https://my.ithinklogistics.com/api_v3/", enabled: false },
-    tookan: { apiKey: "", teamId: "", hyperlocal: false, parcel: false },
+    tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
     shipday: { apiKey: "", enabled: true },
     connection: {},
     pickup: {
@@ -286,7 +286,10 @@ export function getShippingConnection(provider: ShippingProviderId): ShippingCon
 export function getIntegrations(): IntegrationSettings {
   const merged = merge(defaultIntegrations, readJSON<Partial<IntegrationSettings> | null>(INTEGRATIONS_KEY, null));
   const tookan = merged.shipping.tookan as typeof merged.shipping.tookan & { enabled?: boolean };
-  if (tookan.enabled && !tookan.hyperlocal && !tookan.parcel) tookan.hyperlocal = true;
+  if ((tookan.enabled || tookan.apiKey) && !tookan.hyperlocal && !tookan.parcel) {
+    tookan.hyperlocal = true;
+    tookan.parcel = true;
+  }
   if (merged.shipping.shipday.apiKey && merged.shipping.shipday.enabled === false) {
     /* keep an explicit off; empty key stays available to turn on */
   }

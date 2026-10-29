@@ -871,7 +871,7 @@ export async function tookanTest(input: Json) {
   });
   if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan rejected the API key."));
   const fleets = Array.isArray(data.data) ? data.data : [];
-  return { message: `Connected. Tookan returned ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}.` };
+  return { message: `Connected from this site. Tookan returned ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}. Hyperlocal will book create_task; standard will book create_multiple_tasks.` };
 }
 
 /* ---------------- iThink Logistics ---------------- */

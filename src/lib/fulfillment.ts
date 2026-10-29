@@ -189,7 +189,7 @@ function defaultCarriers(): CarrierAccount[] {
       zoneDays: { "4": 1 },
       sameCityDays: 0,
       charge: 39,
-      blurb: "Tookan hyperlocal: same-city delivery tasks for Pune store pincodes.",
+      blurb: "Tookan hyperlocal: same-city create_task for store pincodes.",
     },
     {
       id: "tookan-parcel",
@@ -204,7 +204,7 @@ function defaultCarriers(): CarrierAccount[] {
       zoneDays: national(2, 3, 5),
       sameCityDays: 1,
       charge: 45,
-      blurb: "Tookan parcel delivery: pickup and delivery tasks for intercity parcels.",
+      blurb: "Tookan standard parcel: create_multiple_tasks with pickup and delivery.",
     },
     {
       id: "nimbuspost",
