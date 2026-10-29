@@ -427,7 +427,8 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
   security: {
     heading: "Security settings",
     fields: [
-      { key: "sessionMinutes", label: "Admin session length (minutes)", fallback: "60" },
+      { key: "persistUntilLogout", label: "Keep sessions signed in until Logout", kind: "toggle", fallback: "true" },
+      { key: "mfaRequired", label: "Require email OTP after password (MFA)", kind: "toggle", fallback: "true" },
       { key: "strongPasswords", label: "Require strong staff passwords", kind: "toggle", fallback: "true" },
       { key: "allowedDomain", label: "Staff email domain", fallback: "vaidyagogate.org" },
     ],

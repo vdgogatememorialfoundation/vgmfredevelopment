@@ -5,7 +5,10 @@ import { useState } from "react";
 import OtpForm from "@/components/account/OtpForm";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
 import { useAuth } from "@/components/auth/AuthContext";
-import { findAccountByIdentifier, loginBlockReason, setSession } from "@/lib/auth";
+import { findAccountByIdentifier, loginBlockReason } from "@/lib/auth";
+import { sendEmail } from "@/lib/admin-store";
+import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
+import type { User } from "@/types";
 
 type Step = "identifier" | "otp" | "forgot" | "complete";
 
@@ -16,11 +19,10 @@ export default function SignInFlow() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [otpHint, setOtpHint] = useState("");
+  const [pending, setPending] = useState<User | null>(null);
 
-  const enterAccount = () => {
-    const account = findAccountByIdentifier(identifier);
-    if (!account || loginBlockReason(account)) return;
-    setSession(account);
+  const enterAccount = (account: User) => {
     signIn(account);
     const next = new URLSearchParams(window.location.search).get("next");
     if (next?.startsWith("/") && !next.startsWith("//")) {
@@ -30,13 +32,26 @@ export default function SignInFlow() {
     setStep("complete");
   };
 
+  const sendMfa = (account: User) => {
+    const code = issueEmailOtp(account.email, "customer");
+    sendEmail({
+      to: account.email,
+      phone: account.phone,
+      name: account.firstName,
+      subject: "VGMF sign-in verification code",
+      template: "custom",
+      body: `Hi ${account.firstName || "there"},\n\nYour VGMF verification code is ${code}. It expires in 10 minutes.\n\nIf you did not try to sign in, ignore this message.\n\n– VGMF`,
+    });
+    setPending(account);
+    setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+    setStep("otp");
+  };
+
   const handleIdentifier = (event: React.FormEvent) => {
     event.preventDefault();
     const account = findAccountByIdentifier(identifier);
     if (!account) {
-      setError(
-        "No account found with these details. Please create an account first."
-      );
+      setError("No account found with these details. Please create an account first.");
       return;
     }
     const blocked = loginBlockReason(account);
@@ -44,21 +59,32 @@ export default function SignInFlow() {
       setError(blocked);
       return;
     }
-    if (password) {
-      if (!account.password || account.password !== password) {
-        setError("Incorrect password. Use forgot password or request an email code.");
-        return;
-      }
-      setError("");
-      enterAccount();
+    if (!password) {
+      setError("Enter your password, then we will send a one-time code to your email.");
+      return;
+    }
+    if (!account.password || account.password !== password) {
+      setError("Incorrect password. Use forgot password if you need a reset.");
       return;
     }
     setError("");
-    setStep("otp");
+    sendMfa(account);
   };
 
-  const handleOtp = () => {
-    enterAccount();
+  const handleOtp = (code: string) => {
+    const account = pending ?? findAccountByIdentifier(identifier);
+    if (!account) {
+      setError("Sign in again so we can send a new code.");
+      setStep("identifier");
+      return;
+    }
+    const invalid = verifyEmailOtp(account.email, "customer", code);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError("");
+    enterAccount(account);
   };
 
   if (step === "forgot") {
@@ -67,7 +93,6 @@ export default function SignInFlow() {
         role="customer"
         onBack={() => setStep("identifier")}
         onComplete={(account) => {
-          setSession(account);
           signIn(account);
           setStep("complete");
         }}
@@ -104,13 +129,20 @@ export default function SignInFlow() {
 
   if (step === "otp") {
     return (
-      <OtpForm
-        title="Verify your identity"
-        description={`We sent a verification code to your registered email and WhatsApp.`}
-        onSubmit={handleOtp}
-        onBack={() => setStep("identifier")}
-        onResend={() => undefined}
-      />
+      <div>
+        {otpHint && <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
+        {error && <p className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+        <OtpForm
+          title="Multi-factor verification"
+          description="Password accepted. Enter the 6-digit code emailed to your registered address to finish signing in."
+          onSubmit={handleOtp}
+          onBack={() => setStep("identifier")}
+          onResend={() => {
+            const account = pending ?? findAccountByIdentifier(identifier);
+            if (account) sendMfa(account);
+          }}
+        />
+      </div>
     );
   }
 
@@ -126,7 +158,7 @@ export default function SignInFlow() {
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
-          Sign in with your password, or leave it blank to receive an email and WhatsApp code.
+          Sign in with your password. We then email a one-time code — both are required.
         </p>
       </div>
 
@@ -156,10 +188,11 @@ export default function SignInFlow() {
           <input
             id="signin-password"
             type="password"
+            required
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             className="input-field"
-            placeholder="Optional if you prefer a one-time code"
+            placeholder="Your password"
             autoComplete="current-password"
           />
         </div>
@@ -171,7 +204,7 @@ export default function SignInFlow() {
         )}
 
         <button type="submit" className="btn-primary w-full">
-          {password ? "Sign in" : "Send Codes to Email & WhatsApp"}
+          Continue to verification
         </button>
         <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => setStep("forgot")}>
           Forgot password?

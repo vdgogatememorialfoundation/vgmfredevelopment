@@ -480,7 +480,7 @@ export interface ReturnShipment {
 }
 
 export interface CourierRate {
-  provider: "shiprocket" | "nimbuspost" | "ithink" | "tookan" | "tookan-parcel" | "shipday" | "local";
+  provider: "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "tookan" | "tookan-parcel" | "shipday" | "local";
   courierId: string;
   courierName: string;
   rate: number;
@@ -645,6 +645,7 @@ export interface ShipmentRecord {
   courierCost?: number;
   customerPaid?: number;
   tracking?: { at: string; status: string; location?: string }[];
+  trackingUrl?: string;
   note?: string;
 }
 

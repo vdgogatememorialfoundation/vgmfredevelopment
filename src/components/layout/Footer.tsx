@@ -1,29 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
 import SocialLinks from "@/components/layout/SocialLinks";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
 import { siteConfig } from "@/lib/constants";
-
-const quickLinks = [
-  { key: "nav.about" as MessageKey, href: "/about" },
-  { key: "nav.events" as MessageKey, href: "/events" },
-  { key: "nav.gallery" as MessageKey, href: "/gallery" },
-  { key: "nav.articles" as MessageKey, href: "/articles" },
-  { key: "nav.shop" as MessageKey, href: "/shop" },
-  { key: "nav.clinics" as MessageKey, href: "/clinics" },
-  { key: "nav.contact" as MessageKey, href: "/contact" },
-];
-
-const programmeLinks = [
-  { key: "nav.events" as MessageKey, href: "/events" },
-  { key: "nav.articles" as MessageKey, href: "/articles" },
-  { key: "nav.videos" as MessageKey, href: "/videos" },
-  { key: "nav.gallery" as MessageKey, href: "/gallery" },
-];
+import { getLiveCmsPages, subscribeCmsPages } from "@/lib/cms-pages";
+import { getSiteVisibility, subscribeSiteVisibility, visiblePublicNav } from "@/lib/site-visibility";
 
 const legalLinks: { key: MessageKey; href: string }[] = [
   { key: "footer.privacy", href: "/privacy" },
@@ -34,47 +20,61 @@ const legalLinks: { key: MessageKey; href: string }[] = [
   { key: "footer.cancellation", href: "/cancellation-policy" },
 ];
 
+function cmsSnapshot() {
+  return `${window.localStorage.getItem("vgmf_cms_pages") ?? ""}|${window.localStorage.getItem("vgmf_site_visibility") ?? ""}`;
+}
+
 export default function Footer() {
   const { t } = useI18n();
+  useSyncExternalStore(
+    (onChange) => {
+      const unsubPages = subscribeCmsPages(onChange);
+      const unsubVis = subscribeSiteVisibility(onChange);
+      return () => {
+        unsubPages();
+        unsubVis();
+      };
+    },
+    cmsSnapshot,
+    () => ""
+  );
+  const visibility = getSiteVisibility();
+  const explore = visiblePublicNav(visibility);
+  const custom = getLiveCmsPages().filter((page) => page.showInFooter);
+
   return (
-    <footer className="border-t-2 border-gold bg-ink text-stone-200">
-      <div className="container py-12 sm:py-14">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="sm:col-span-2 lg:col-span-1">
-            <div className="flex items-center gap-3">
-              <SiteLogo size={44} />
+    <footer className="relative mt-8 overflow-hidden border-t border-gold/40 bg-paper text-ink">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ink via-gold to-burgundy" />
+      <div className="container py-14 sm:py-16">
+        <div className="grid gap-12 lg:grid-cols-[1.4fr_1fr_1fr]">
+          <div>
+            <div className="flex items-center gap-4">
+              <SiteLogo size={52} />
               <div>
-                <p className="font-serif text-base font-semibold leading-tight text-white">Vaidya Gogate</p>
-                <p className="text-[11px] uppercase tracking-[0.16em] text-gold">Memorial Foundation</p>
+                <p className="font-serif text-2xl font-medium leading-none tracking-tight text-ink">Vaidya Gogate</p>
+                <p className="mt-1 font-serif italic text-sm text-gold">Memorial Foundation</p>
               </div>
             </div>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-stone-400">{t("footer.tagline")}</p>
-            <p className="mt-4 text-sm leading-6 text-stone-400">{siteConfig.address}</p>
-            <div className="mt-5">
-              <LanguageSwitcher tone="dark" />
+            <p className="mt-6 max-w-md font-serif text-lg leading-8 text-ink/80">{t("footer.tagline")}</p>
+            <p className="mt-4 max-w-sm text-sm leading-6 text-text-muted">{siteConfig.address}</p>
+            <p className="mt-2 text-sm text-text-muted">{t("footer.hours")}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <a href={`mailto:${siteConfig.email}`} className="rounded-full bg-ink px-4 py-2 text-xs font-semibold tracking-wide text-paper transition hover:bg-burgundy">
+                {siteConfig.email}
+              </a>
+              <a href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className="rounded-full border border-ink/20 px-4 py-2 text-xs font-semibold tracking-wide text-ink transition hover:border-gold hover:text-burgundy">
+                {siteConfig.phone}
+              </a>
             </div>
           </div>
 
-          <nav aria-label="Footer quick links">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">{t("footer.explore")}</p>
-            <ul className="mt-4 grid gap-2.5 text-sm">
-              {quickLinks.map((link) => (
+          <nav aria-label="Footer explore">
+            <p className="font-serif text-xl text-ink">{t("footer.explore")}</p>
+            <ul className="mt-5 space-y-2.5">
+              {explore.map((link) => (
                 <li key={link.href}>
-                  <Link href={link.href} className="text-stone-200 transition hover:text-gold">
-                    {t(navMessageKey[link.href] ?? link.key)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          <nav aria-label="Footer programmes">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">{t("footer.programmes")}</p>
-            <ul className="mt-4 grid gap-2.5 text-sm">
-              {programmeLinks.map((link) => (
-                <li key={`p-${link.href}`}>
-                  <Link href={link.href} className="text-stone-200 transition hover:text-gold">
-                    {t(navMessageKey[link.href] ?? link.key)}
+                  <Link href={link.href} className="text-sm text-text-muted transition hover:text-burgundy">
+                    {t(navMessageKey[link.href] ?? "nav.about")}
                   </Link>
                 </li>
               ))}
@@ -82,30 +82,54 @@ export default function Footer() {
           </nav>
 
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">{t("footer.office")}</p>
-            <div className="mt-4 grid gap-2 text-sm text-stone-200">
-              <a href={`mailto:${siteConfig.email}`} className="transition hover:text-gold">
-                {siteConfig.email}
-              </a>
-              <a href={`tel:${siteConfig.phone.replace(/\s/g, "")}`} className="transition hover:text-gold">
-                {siteConfig.phone}
-              </a>
+            <p className="font-serif text-xl text-ink">{t("footer.pages")}</p>
+            <ul className="mt-5 space-y-2.5">
+              {custom.length === 0 ? (
+                <>
+                  <li>
+                    <Link href="/about" className="text-sm text-text-muted transition hover:text-burgundy">
+                      {t("nav.about")}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link href="/contact" className="text-sm text-text-muted transition hover:text-burgundy">
+                      {t("nav.contact")}
+                    </Link>
+                  </li>
+                </>
+              ) : (
+                custom.map((page) => (
+                  <li key={page.id}>
+                    <Link href={`/p/${page.slug}`} className="text-sm text-text-muted transition hover:text-burgundy">
+                      {page.title}
+                    </Link>
+                  </li>
+                ))
+              )}
+            </ul>
+            <div className="mt-8">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">{t("footer.connect")}</p>
+              <SocialLinks />
+              <div className="mt-4">
+                <LanguageSwitcher />
+              </div>
             </div>
-            <SocialLinks className="mt-5" />
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-white/10 pt-6 text-xs text-stone-400 sm:flex-row sm:items-center">
-          <p>© {new Date().getFullYear()} {siteConfig.name}. {t("footer.rights")}</p>
-          <nav aria-label="Footer legal links" className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div className="mt-12 flex flex-col gap-4 border-t border-gold/30 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-text-muted">
+            © {new Date().getFullYear()} {siteConfig.name}. {t("footer.rights")}
+          </p>
+          <nav aria-label="Footer legal links" className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
             {legalLinks.map((link) => (
-              <Link key={link.href} href={link.href} className="transition hover:text-gold">
+              <Link key={link.href} href={link.href} className="text-text-muted transition hover:text-burgundy">
                 {t(link.key)}
               </Link>
             ))}
           </nav>
         </div>
-        <p className="mt-4 text-xs tracking-wide text-stone-500">{t("footer.developed")}</p>
+        <p className="mt-4 font-serif italic text-xs text-ink/50">{t("footer.developed")}</p>
       </div>
     </footer>
   );

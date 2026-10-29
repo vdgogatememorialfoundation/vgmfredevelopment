@@ -5,9 +5,12 @@ import { useAuth } from "@/components/auth/AuthContext";
 import ClientOnly from "@/components/common/ClientOnly";
 import { PortalLogin } from "@/components/admin/PortalLogin";
 import { ChangePasswordForm } from "@/components/account/PasswordResetForm";
+import { LoginStamp } from "@/components/layout/LoginStamp";
+import { useRouter } from "next/navigation";
 
 function DoctorHome() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
   if (!user || user.role !== "doctor") {
     return <PortalLogin portal="doctor" />;
   }
@@ -20,9 +23,12 @@ function DoctorHome() {
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">Welcome, {user.firstName}</h1>
           <p className="mt-1 text-sm text-slate-500">Update clinic pages and your public consulting details.</p>
         </div>
-        <button type="button" className="text-sm text-slate-500 hover:text-burgundy" onClick={() => signOut()}>
-          Sign out
-        </button>
+        <LoginStamp
+          onLogout={() => {
+            signOut();
+            router.push("/doctor/login");
+          }}
+        />
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <h2 className="text-lg font-semibold text-slate-900">Reset password</h2>

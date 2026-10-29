@@ -8,7 +8,7 @@ export const staffModules = [
   { id: "catalog", label: "Products & inventory", paths: ["/admin/commerce/products", "/admin/commerce/inventory", "/admin/commerce/serviceability"] },
   { id: "payments", label: "Payments", paths: ["/admin/payments", "/admin/commerce/payments"] },
   { id: "customers", label: "Customers", paths: ["/admin/accounts/customers"] },
-  { id: "website", label: "Website & homepage", paths: ["/admin/website"] },
+  { id: "website", label: "Website & homepage", paths: ["/admin/website", "/admin/website/pages", "/admin/website/visibility"] },
   { id: "about", label: "About Us pages", paths: ["/admin/website/about"] },
   { id: "articles", label: "Articles", paths: ["/admin/articles"] },
   { id: "clinics", label: "Clinics", paths: ["/admin/website/clinics"] },

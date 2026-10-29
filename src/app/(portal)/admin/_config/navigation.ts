@@ -44,6 +44,8 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Website & CMS",
     items: [
       { label: "Homepage", href: "/admin/website/homepage" },
+      { label: "Pages", href: "/admin/website/pages" },
+      { label: "Site & portal switches", href: "/admin/website/visibility" },
       { label: "About Us", href: "/admin/website/about" },
       { label: "Announcements", href: "/admin/website/announcements" },
       { label: "Notice Board", href: "/admin/website/notices" },

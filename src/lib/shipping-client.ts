@@ -16,8 +16,41 @@ import { getLiveBooks } from "@/lib/product-data";
 type ShippingCreds = Record<string, Record<string, unknown>>;
 
 function credsFrom(settings: IntegrationSettings): ShippingCreds {
-  const { shiprocket, nimbuspost, ithink, tookan, shipday } = settings.shipping;
-  return { shiprocket, nimbuspost, ithink, tookan, shipday };
+  const { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday } = settings.shipping;
+  return { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday };
+}
+
+const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
+
+export function publicTrackingUrl(shipment: Pick<ShipmentRecord, "awb" | "provider" | "trackingUrl">) {
+  if (shipment.trackingUrl) return shipment.trackingUrl;
+  const awb = shipment.awb;
+  if (!awb) return "";
+  if (shipment.provider === "shiprocket") return `https://shiprocket.co/tracking/${awb}`;
+  if (shipment.provider === "nimbuspost") return `https://ship.nimbuspost.com/?awb=${awb}`;
+  if (shipment.provider === "ithink") return `https://www.ithinklogistics.com/track-order?awb=${awb}`;
+  if (shipment.provider === "shipyaari") return `https://shipyaari.com/track/${awb}`;
+  return "";
+}
+
+export async function checkCourierWallet(provider: string, needed = 0) {
+  if (!WALLET_PROVIDERS.includes(provider as (typeof WALLET_PROVIDERS)[number])) {
+    return { ok: true as const, skipped: true };
+  }
+  const settings = getIntegrations();
+  const floor = Math.max(settings.shipping.minWalletRupees || 0, needed);
+  const result = await post<{ balance?: number }>({ action: "wallet", provider, creds: credsFrom(settings) });
+  if (!result.ok) {
+    if (result.configured === false) return { ok: true as const, skipped: true };
+    throw new Error(`Could not read ${label(provider)} credits: ${result.error ?? "unknown error"}. Booking is blocked until the wallet can be checked.`);
+  }
+  const balance = Number(result.balance ?? 0);
+  if (!Number.isFinite(balance) || balance < floor) {
+    throw new Error(
+      `${label(provider)} credits are too low (₹${Number.isFinite(balance) ? balance : 0}). Top up the wallet to at least ₹${floor} before booking a shipment.`
+    );
+  }
+  return { ok: true as const, balance };
 }
 
 async function post<T>(body: Record<string, unknown>): Promise<T & { ok: boolean; configured?: boolean; error?: string }> {
@@ -52,7 +85,7 @@ export async function fetchCourierRates(input: {
   const settings = getIntegrations();
   const { shipping } = settings;
   const notes: string[] = [];
-  const wanted = (["shiprocket", "nimbuspost", "ithink"] as const).filter(
+  const wanted = (["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const).filter(
     (id) => shipping[id].enabled && hasShippingCredentials(id, settings)
   );
   let live: CourierRate[] = [];
@@ -189,6 +222,9 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
     choice = pickRate(quote.rates);
   }
   if (!choice) throw new Error("No courier services this pincode. Check Delivery Partners or the shipping API settings.");
+  if (choice.provider !== "local") {
+    await checkCourierWallet(choice.provider === "tookan-parcel" ? "tookan" : choice.provider, choice.rate);
+  }
 
   const base: ShipmentRecord = {
     id: `SHP${Date.now()}`,
@@ -221,6 +257,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
       pickupScheduledFor?: string;
       pickupReference?: string;
       courierCost?: number;
+      trackingUrl?: string;
     }>({
       action: "book",
       provider: choice.provider,
@@ -244,6 +281,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
         pickupScheduledFor: result.pickupScheduledFor || undefined,
         pickupReference: result.pickupReference || undefined,
         courierCost: result.courierCost ?? choice.rate,
+        trackingUrl: result.trackingUrl || undefined,
         note: `Booked on ${label(choice.provider)}. The courier charge is debited from the ${label(choice.provider)} wallet.`,
       };
       message = `Booked on ${label(choice.provider)} with ${shipment.courier}. AWB ${shipment.awb}.`;
@@ -500,7 +538,11 @@ export async function trackShipment(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
   if (shipment.live && shipment.provider && shipment.provider !== "local") {
-    const result = await post<{ status: string; events: { at: string; status: string; location?: string }[] }>({
+    const result = await post<{
+      status: string;
+      events: { at: string; status: string; location?: string }[];
+      trackingUrl?: string;
+    }>({
       action: "track",
       provider: shipment.provider,
       creds: credsFrom(getIntegrations()),
@@ -509,11 +551,55 @@ export async function trackShipment(shipmentId: string) {
     });
     if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
     const mapped = mapCourierStatus(result.status);
-    patchShipment(shipmentId, { tracking: result.events.length ? result.events : shipment.tracking, status: mapped ?? shipment.status });
+    patchShipment(shipmentId, {
+      tracking: result.events.length ? result.events : shipment.tracking,
+      status: mapped ?? shipment.status,
+      trackingUrl: result.trackingUrl || shipment.trackingUrl,
+    });
     if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
     return result.status || "No scan yet.";
   }
   return shipment.status;
+}
+
+export async function pingLiveAgent(shipmentId: string) {
+  const shipment = getShipments().find((item) => item.id === shipmentId);
+  if (!shipment) throw new Error("Shipment not found.");
+  if (!shipment.live || !shipment.provider || shipment.provider === "local") {
+    return {
+      status: shipment.status,
+      events: shipment.tracking ?? [],
+      trackingUrl: publicTrackingUrl(shipment),
+    };
+  }
+  const result = await post<{
+    status: string;
+    events: { at: string; status: string; location?: string }[];
+    lat?: number;
+    lng?: number;
+    trackingUrl?: string;
+  }>({
+    action: "track",
+    provider: shipment.provider,
+    creds: credsFrom(getIntegrations()),
+    awb: shipment.awb,
+    providerOrderId: shipment.providerOrderId,
+  });
+  if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
+  const mapped = mapCourierStatus(result.status);
+  patchShipment(shipmentId, {
+    tracking: result.events.length ? result.events : shipment.tracking,
+    status: mapped ?? shipment.status,
+    trackingUrl: result.trackingUrl || shipment.trackingUrl,
+  });
+  if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
+  return {
+    status: result.status || shipment.status,
+    events: result.events.length ? result.events : shipment.tracking ?? [],
+    lat: result.lat,
+    lng: result.lng,
+    trackingUrl: result.trackingUrl || publicTrackingUrl(shipment),
+  };
 }
 
 export function advanceDemoShipment(shipmentId: string) {
@@ -556,7 +642,7 @@ export async function cancelShipment(shipmentId: string) {
 export async function testShippingProvider(provider: string) {
   const result = await post<{ message?: string }>({ action: "test", provider, creds: credsFrom(getIntegrations()) });
   const id = (provider === "tookan-parcel" ? "tookan" : provider) as ShippingProviderId;
-  if (["shiprocket", "nimbuspost", "ithink", "tookan", "shipday"].includes(id)) {
+  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "tookan", "shipday"].includes(id)) {
     recordShippingConnection(
       id,
       result.ok ? "success" : "failed",
@@ -568,13 +654,7 @@ export async function testShippingProvider(provider: string) {
 
 export async function testConfiguredShippingProviders() {
   const settings = getIntegrations();
-  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost"] as const).filter((id) => {
-    if (id === "shiprocket") return Boolean(settings.shipping.shiprocket.email && settings.shipping.shiprocket.password);
-    if (id === "nimbuspost") return Boolean(settings.shipping.nimbuspost.email && settings.shipping.nimbuspost.password);
-    if (id === "ithink") return Boolean(settings.shipping.ithink.accessToken && settings.shipping.ithink.secretKey);
-    if (id === "tookan") return Boolean(settings.shipping.tookan.apiKey);
-    return Boolean(settings.shipping.shipday.apiKey);
-  });
+  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari"] as const).filter((id) => hasShippingCredentials(id, settings));
   const results: { id: string; ok: boolean; message?: string; error?: string }[] = [];
   for (const id of wanted) {
     const result = await testShippingProvider(id);

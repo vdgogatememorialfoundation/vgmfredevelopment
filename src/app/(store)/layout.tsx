@@ -6,6 +6,7 @@ import { AIChatbot } from "@/components/chatbot/AIChatbot";
 import { AuthProvider } from "@/components/auth/AuthContext";
 import { MaintenanceGate } from "@/components/admin/MaintenanceGate";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
+import { SiteVisibilityGate } from "@/components/layout/SiteVisibilityGate";
 
 export default function StoreLayout({
   children,
@@ -19,7 +20,7 @@ export default function StoreLayout({
           <Header />
           <AnnouncementTicker />
           <main id="main-content" className="flex-1">
-            {children}
+            <SiteVisibilityGate>{children}</SiteVisibilityGate>
           </main>
           <Footer />
           <BannerPopup />

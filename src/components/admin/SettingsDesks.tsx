@@ -804,6 +804,14 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "nimbuspost"} onClick={() => test("nimbuspost")}>{busy === "nimbuspost" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="Shipyaari" text="API key or email/password. Wallet is checked before every booking — low credits block the AWB." badge={<ProviderStatus id="shipyaari" />} right={<Check label="Use" checked={value.shipyaari.enabled} onChange={(enabled) => set({ shipyaari: { ...value.shipyaari, enabled } })} />}>
+          <div className="space-y-3">
+            <Secret label="API key" value={value.shipyaari.apiKey} onChange={(apiKey) => set({ shipyaari: { ...value.shipyaari, apiKey } })} />
+            <Text label="Email (if no API key)" value={value.shipyaari.email} onChange={(email) => set({ shipyaari: { ...value.shipyaari, email } })} />
+            <Secret label="Password" value={value.shipyaari.password} onChange={(password) => set({ shipyaari: { ...value.shipyaari, password } })} />
+            <button type="button" className={primary} disabled={busy === "shipyaari"} onClick={() => test("shipyaari")}>{busy === "shipyaari" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
       </div>
 
       <Card
@@ -870,6 +878,20 @@ export function ShippingApisDesk() {
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <Check label="Book the courier when an order is packed" hint="Uses the courier the customer chose, or the rule below." checked={value.autoBookOnPack} onChange={(autoBookOnPack) => set({ autoBookOnPack })} />
           <Check label="Schedule pickup automatically" hint="Shiprocket gets a pickup request right after the AWB." checked={value.autoSchedulePickup} onChange={(autoSchedulePickup) => set({ autoSchedulePickup })} />
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
+          <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.max(8, Number(seconds) || 20) })} hint="Tookan and Shipday agent location refresh." />
+        </div>
+        <div className="mt-4">
+          <ImageField
+            label="Scooter marker for Tookan / Shipday maps"
+            value={value.scooterImage}
+            onChange={(scooterImage) => set({ scooterImage })}
+            hint="Shown only on hyperlocal Google Maps tracking. Other couriers embed their own tracking page."
+          />
+        </div>
+        <div className="mt-4">
           <label className="block text-sm">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">When the customer did not choose</span>
             <select className={input} value={value.rateChoice} onChange={(event) => set({ rateChoice: event.target.value as typeof value.rateChoice })}>

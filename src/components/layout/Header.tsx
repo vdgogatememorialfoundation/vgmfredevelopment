@@ -3,15 +3,18 @@
 import Link from "next/link";
 import SiteLogo from "@/components/common/SiteLogo";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCart } from "@/lib/use-cart";
-import { accountNavigation, navigation, siteConfig } from "@/lib/constants";
+import { siteConfig } from "@/lib/constants";
 import { classNames } from "@/lib/utils";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey } from "@/lib/i18n/messages";
+import { getLiveCmsPages } from "@/lib/cms-pages";
+import { getSiteVisibility, visibleAccountNav, visiblePublicNav } from "@/lib/site-visibility";
+import { subscribeCms } from "@/lib/cms";
 
 function CartIcon() {
   return (
@@ -94,6 +97,15 @@ export default function Header() {
   const { count } = useCart();
   const { t } = useI18n();
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  useSyncExternalStore(
+    subscribeCms,
+    () => `${window.localStorage.getItem("vgmf_site_visibility") ?? ""}|${window.localStorage.getItem("vgmf_cms_pages") ?? ""}`,
+    () => ""
+  );
+  const visibility = getSiteVisibility();
+  const navItems = visiblePublicNav(visibility);
+  const accountItems = visibleAccountNav(visibility);
+  const extraPages = getLiveCmsPages().filter((page) => page.showInNav);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -173,11 +185,7 @@ export default function Header() {
               <span className="hidden text-stone-200 md:inline">
                 {user?.accountId}
               </span>
-            ) : (
-              <Link href="/login" className="hover:underline">
-                {t("common.signIn")}
-              </Link>
-            )}
+            ) : null}
             <Link href="/contact" className="hover:underline">
               {t("common.contact")}
             </Link>
@@ -212,7 +220,7 @@ export default function Header() {
             aria-label="Main navigation"
             className="hidden items-center lg:flex lg:gap-3 xl:gap-6"
           >
-            {navigation.map((item) => {
+            {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
                 pathname.startsWith(`${item.href}/`);
@@ -232,6 +240,25 @@ export default function Header() {
                 </Link>
               );
             })}
+            {extraPages.map((page) => {
+              const href = `/p/${page.slug}`;
+              const isActive = pathname === href;
+              return (
+                <Link
+                  key={page.id}
+                  href={href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={classNames(
+                    "relative whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
+                    isActive
+                      ? "text-burgundy after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:bg-gold"
+                      : "text-text-primary hover:text-burgundy"
+                  )}
+                >
+                  {page.title}
+                </Link>
+              );
+            })}
           </nav>
 
           {/* Actions */}
@@ -239,11 +266,11 @@ export default function Header() {
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
-              className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary transition hover:border-burgundy hover:bg-burgundy/5 hover:text-burgundy"
+              className="relative flex h-10 w-10 items-center justify-center text-ink transition hover:text-burgundy"
             >
               <CartIcon />
               {count > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-burgundy px-1 text-[10px] font-bold text-white">
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center bg-burgundy px-1 text-[10px] font-bold text-white">
                   {count > 99 ? "99+" : count}
                 </span>
               )}
@@ -256,27 +283,13 @@ export default function Header() {
                   onClick={() => setAccountMenuOpen((open) => !open)}
                   aria-expanded={accountMenuOpen}
                   aria-haspopup="menu"
-                  className="flex items-center gap-2 rounded-full border border-border py-1.5 pr-3 pl-1.5 transition hover:border-burgundy"
+                  aria-label="Account"
+                  className="flex h-10 items-center gap-1.5 text-ink transition hover:text-burgundy"
                 >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-burgundy text-xs font-bold text-white">
-                    {initials}
+                  <UserIcon />
+                  <span className="max-w-[90px] truncate text-sm font-medium">
+                    {user.firstName || initials}
                   </span>
-                  <span className="max-w-[100px] truncate text-sm font-medium text-text-primary">
-                    {user.firstName}
-                  </span>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-text-muted"
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
                 </button>
 
                 {accountMenuOpen && (
@@ -297,7 +310,7 @@ export default function Header() {
                     </div>
 
                     <nav aria-label="Account menu" className="max-h-80 overflow-y-auto py-2">
-                      {accountNavigation.map((item) => {
+                      {accountItems.map((item) => {
                         const active = pathname === item.href;
                         return (
                           <Link
@@ -342,22 +355,13 @@ export default function Header() {
                 )}
               </div>
             ) : (
-              <>
-                <Link
-                  href="/login"
-                  aria-label="Login or create account"
-                  className="group flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary transition hover:border-burgundy hover:bg-burgundy/5 hover:text-burgundy"
-                >
-                  <UserIcon />
-                </Link>
-
-                <Link
-                  href="/login"
-                  className="btn-primary py-2.5 text-sm"
-                >
-                  {t("header.getStarted")}
-                </Link>
-              </>
+              <Link
+                href="/login"
+                aria-label="Account — sign in or create an account"
+                className="flex h-10 w-10 items-center justify-center text-ink transition hover:text-burgundy"
+              >
+                <UserIcon />
+              </Link>
             )}
           </div>
 
@@ -366,11 +370,11 @@ export default function Header() {
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
-              className="relative flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary"
+              className="relative flex h-10 w-10 items-center justify-center text-ink"
             >
               <CartIcon />
               {count > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-burgundy px-1 text-[10px] font-bold text-white">
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center bg-burgundy px-1 text-[10px] font-bold text-white">
                   {count > 99 ? "99+" : count}
                 </span>
               )}
@@ -378,16 +382,10 @@ export default function Header() {
 
             <Link
               href={isAuthenticated ? "/account" : "/login"}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary"
-              aria-label={isAuthenticated ? "My account" : "Login"}
+              className="flex h-10 w-10 items-center justify-center text-ink"
+              aria-label={isAuthenticated ? "My account" : "Account"}
             >
-              {isAuthenticated && user ? (
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-burgundy text-xs font-bold text-white">
-                  {initials}
-                </span>
-              ) : (
-                <UserIcon />
-              )}
+              <UserIcon />
             </Link>
 
             <button
@@ -426,7 +424,7 @@ export default function Header() {
                   </button>
                 </div>
                 <nav aria-label="Mobile navigation" className="flex-1 overflow-y-auto px-2 py-2">
-                  {navigation.map((item) => {
+                  {navItems.map((item) => {
                     const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                     return (
                       <Link
@@ -443,15 +441,25 @@ export default function Header() {
                       </Link>
                     );
                   })}
+                  {extraPages.map((page) => (
+                    <Link
+                      key={page.id}
+                      href={`/p/${page.slug}`}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block border-b border-border px-3 py-3.5 text-sm font-medium text-text-primary hover:text-burgundy"
+                    >
+                      {page.title}
+                    </Link>
+                  ))}
                 </nav>
                 <div className="flex flex-col gap-3 border-t border-border p-4">
                   {isAuthenticated ? (
-                    <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="btn-primary">
+                    <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-burgundy">
                       {t("header.myAccount")}
                     </Link>
                   ) : (
-                    <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="btn-primary">
-                      {t("header.createAccount")}
+                    <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-burgundy">
+                      {t("common.signIn")}
                     </Link>
                   )}
                   <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="btn-outline">

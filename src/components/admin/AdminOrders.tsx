@@ -41,6 +41,7 @@ import {
 } from "@/lib/shipping-client";
 import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
+import LiveTracking from "@/components/store/LiveTracking";
 import { formatDate } from "@/lib/utils";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
@@ -694,6 +695,29 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             </div>
             <Button onClick={applyStatus} disabled={busy === "status" || status === order.status}>{busy === "status" ? "Saving…" : "Update status"}</Button>
           </div>
+          {order.status !== "Cancelled" && (
+            <div className="mt-3 rounded-lg border border-red-100 bg-red-50/60 p-3">
+              <p className="text-xs font-semibold text-red-800">Cancel this order</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <div className="min-w-48 flex-1"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
+                <Button
+                  variant="danger"
+                  disabled={busy === "cancel"}
+                  onClick={() => {
+                    if (!window.confirm("Cancel this order? The customer is notified.")) return;
+                    run("cancel", async () => {
+                      if (shipment) await cancelShipment(shipment.id).catch(() => undefined);
+                      cancelOrder(order.id, cancelReason || "Cancelled by admin");
+                      setStatus("Cancelled");
+                      return "Order cancelled.";
+                    });
+                  }}
+                >
+                  {busy === "cancel" ? "Cancelling…" : "Cancel order"}
+                </Button>
+              </div>
+            </div>
+          )}
           {status === "Cancelled" && status !== order.status && (
             <div className="mt-2"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
           )}
@@ -782,7 +806,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
-                  With Shiprocket or Nimbuspost connected, booking assigns the AWB and the courier charge is debited from that aggregator wallet. Without credentials a demo AWB is created.
+                  Booking checks Shiprocket, Nimbuspost, iThink Logistics and Shipyaari wallets first. If credits are low the AWB is not created. Tookan and Shipday hyperlocal orders ping the agent on Google Maps.
                 </p>
               </div>
             ) : (
@@ -856,6 +880,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ))}
                   </ol>
                 )}
+                <div className="lg:col-span-2">
+                  <LiveTracking order={order} />
+                </div>
               </div>
             )}
           </Section>

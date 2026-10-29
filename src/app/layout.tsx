@@ -1,24 +1,24 @@
 import type { Metadata, Viewport } from "next";
 import {
+  Fraunces,
   Noto_Sans_Devanagari,
   Noto_Sans_Gujarati,
   Noto_Sans_Kannada,
   Noto_Sans_Malayalam,
   Noto_Sans_Tamil,
-  Source_Sans_3,
-  Source_Serif_4,
+  Outfit,
 } from "next/font/google";
 import JsonLd from "@/components/seo/JsonLd";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
 
-const sans = Source_Sans_3({
+const sans = Outfit({
   variable: "--font-sans-body",
   subsets: ["latin"],
   display: "swap",
 });
 
-const serif = Source_Serif_4({
+const serif = Fraunces({
   variable: "--font-serif-display",
   subsets: ["latin"],
   display: "swap",

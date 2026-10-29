@@ -7,10 +7,12 @@ import {
   ithinkManifest,
   ithinkRates,
   ithinkTrack,
+  ithinkWallet,
   nimbusBook,
   nimbusCancel,
   nimbusRates,
   nimbusTrack,
+  nimbusWallet,
   shipdayBook,
   shipdayCancel,
   shipdayTest,
@@ -26,6 +28,13 @@ import {
   shiprocketRates,
   shiprocketReturn,
   shiprocketTrack,
+  shiprocketWallet,
+  shipyaariBook,
+  shipyaariCancel,
+  shipyaariRates,
+  shipyaariTest,
+  shipyaariTrack,
+  shipyaariWallet,
   tookanBookMode,
   tookanCancel,
   tookanTest,
@@ -59,12 +68,13 @@ export async function POST(request: NextRequest) {
         const parcel = body.parcel as Parameters<typeof shiprocketRates>[1];
         const wanted = Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink"];
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari"];
         const jobs: Promise<{ provider: string; rates: RateOut[] | null; error?: string }>[] = wanted.map(async (id) => {
           try {
             if (id === "shiprocket") return { provider: id, rates: await shiprocketRates(creds.shiprocket ?? {}, parcel) };
             if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(creds.nimbuspost ?? {}, parcel) };
             if (id === "ithink") return { provider: id, rates: await ithinkRates(creds.ithink ?? {}, parcel) };
+            if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(creds.shipyaari ?? {}, parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -92,7 +102,9 @@ export async function POST(request: NextRequest) {
                     ? await tookanBookMode(creds.tookan ?? own, order, "parcel")
                     : provider === "shipday"
                       ? await shipdayBook(own, order)
-                      : undefined;
+                      : provider === "shipyaari"
+                        ? await shipyaariBook(creds.shipyaari ?? own, order)
+                        : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -158,7 +170,9 @@ export async function POST(request: NextRequest) {
                   ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId ?? awb))
                   : provider === "shipday"
                     ? await shipdayTrack(own, String(body.providerOrderId ?? awb))
-                    : undefined;
+                    : provider === "shipyaari"
+                      ? await shipyaariTrack(creds.shipyaari ?? own, awb)
+                      : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -175,7 +189,9 @@ export async function POST(request: NextRequest) {
                   ? await tookanCancel(creds.tookan ?? own, String(body.providerOrderId ?? body.awb ?? ""))
                   : provider === "shipday"
                     ? await shipdayCancel(own, String(body.providerOrderId ?? body.awb ?? ""))
-                    : undefined;
+                    : provider === "shipyaari"
+                      ? await shipyaariCancel(creds.shipyaari ?? own, String(body.awb ?? ""))
+                      : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -217,6 +233,21 @@ export async function POST(request: NextRequest) {
       case "webhook-events": {
         return NextResponse.json({ ok: true, events: listWebhooks("shiprocket") });
       }
+      case "wallet": {
+        const result =
+          provider === "shiprocket"
+            ? await shiprocketWallet(own)
+            : provider === "nimbuspost"
+              ? await nimbusWallet(own)
+              : provider === "ithink"
+                ? await ithinkWallet(creds.ithink ?? own)
+                : provider === "shipyaari"
+                  ? await shipyaariWallet(creds.shipyaari ?? own)
+                  : undefined;
+        if (result === undefined) return unsupported(provider);
+        if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
+        return NextResponse.json({ ok: true, configured: true, ...result });
+      }
       case "test": {
         const parcel = { pickupPincode: "411005", deliveryPincode: "110001", weightKg: 0.5, cod: false, declaredValue: 500, length: 20, breadth: 15, height: 5 };
         if (provider === "tookan" || provider === "tookan-parcel") {
@@ -227,6 +258,11 @@ export async function POST(request: NextRequest) {
         if (provider === "shipday") {
           const result = await shipdayTest(own);
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipday API key is not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
+        if (provider === "shipyaari") {
+          const result = await shipyaariTest(creds.shipyaari ?? own);
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipyaari credentials are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
         const rates =

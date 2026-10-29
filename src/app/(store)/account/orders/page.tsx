@@ -5,6 +5,7 @@ import Link from "next/link";
 import SectionHeader from "@/components/account/SectionHeader";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
+import LiveTracking from "@/components/store/LiveTracking";
 import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getOrdersByEmail, formatPrice } from "@/lib/store";
@@ -135,6 +136,7 @@ export default function OrdersPage() {
                     </div>
 
                     <OrderTrackingTimeline order={order} />
+                    <LiveTracking order={order} />
                   </div>
 
                   {/* All order details */}

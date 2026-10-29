@@ -5,10 +5,14 @@ import { useAuth } from "@/components/auth/AuthContext";
 import ClientOnly from "@/components/common/ClientOnly";
 import { PortalLogin } from "@/components/admin/PortalLogin";
 import { adminNavigation } from "@/app/(portal)/admin/_config/navigation";
-import { allStaffModules, canOpen, firstPathFor, getRole, modulesFor } from "@/lib/roles";
+import { allStaffModules, canOpen, firstPathFor, getRole, moduleForPath, modulesFor } from "@/lib/roles";
+import { LoginStamp } from "@/components/layout/LoginStamp";
+import { isStaffModuleEnabled } from "@/lib/site-visibility";
+import { useRouter } from "next/navigation";
 
 function StaffHome() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
   if (!user || user.role !== "staff") {
     return <PortalLogin portal="staff" />;
   }
@@ -17,7 +21,11 @@ function StaffHome() {
   const role = user.role === "staff" ? getRole(user.staffRoleId) : null;
   const cards = adminNavigation
     .flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
-    .filter((item) => item.href !== "/admin" && canOpen(user, item.href));
+    .filter((item) => {
+      if (item.href === "/admin" || !canOpen(user, item.href)) return false;
+      const owner = moduleForPath(item.href);
+      return owner ? isStaffModuleEnabled(owner) : true;
+    });
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-6">
@@ -29,18 +37,21 @@ function StaffHome() {
             {`${role?.name} (${role?.category}). These are the modules assigned to your role.`}
           </p>
         </div>
-        <div className="flex gap-3 text-sm">
+        <div className="flex flex-col items-end gap-2 text-sm">
           <Link href="/staff/profile" className="font-semibold text-burgundy hover:underline">Edit profile</Link>
-          <button type="button" className="text-slate-500 hover:text-burgundy" onClick={() => signOut()}>
-            Sign out
-          </button>
+          <LoginStamp
+            onLogout={() => {
+              signOut();
+              router.push("/staff/login");
+            }}
+          />
         </div>
       </div>
 
       {user.role === "staff" && allowed !== "all" && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {allStaffModules()
-            .filter((moduleItem) => allowed.includes(moduleItem.id))
+            .filter((moduleItem) => allowed.includes(moduleItem.id) && isStaffModuleEnabled(moduleItem.id))
             .map((moduleItem) => (
               <Link key={moduleItem.id} href={firstPathFor(moduleItem.id)} className="rounded-2xl border border-slate-200 bg-white p-6 transition hover:border-burgundy/40">
                 <h2 className="text-lg font-semibold text-slate-900">{moduleItem.label}</h2>

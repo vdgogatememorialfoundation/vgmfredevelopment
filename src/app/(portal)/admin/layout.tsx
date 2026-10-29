@@ -6,9 +6,11 @@ import { useState } from "react"
 import { adminNavigation } from "./_config/navigation"
 import { useAuth } from "@/components/auth/AuthContext"
 import ClientOnly from "@/components/common/ClientOnly"
-import { canOpen, getRole } from "@/lib/roles"
+import { canOpen, getRole, moduleForPath } from "@/lib/roles"
 import { getAccounts } from "@/lib/admin-store"
 import { loginBlockReason } from "@/lib/auth"
+import { LoginStamp } from "@/components/layout/LoginStamp"
+import { isStaffModuleEnabled } from "@/lib/site-visibility"
 
 export default function AdminLayout({
   children,
@@ -73,9 +75,20 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   const isDoctor = user.role === "doctor"
   const role = isStaff ? getRole(user.staffRoleId) : null
   const groups = adminNavigation
-    .map((group) => ({ ...group, items: group.items.filter((item) => canOpen(user, item.href)) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (!canOpen(user, item.href)) return false
+        if (user.role === "admin") return true
+        const owner = moduleForPath(item.href)
+        return owner ? isStaffModuleEnabled(owner) : true
+      }),
+    }))
     .filter((group) => group.items.length > 0)
-  const allowed = canOpen(user, pathname)
+  const owner = moduleForPath(pathname)
+  const allowed =
+    canOpen(user, pathname) &&
+    (user.role === "admin" || !owner || isStaffModuleEnabled(owner))
 
   const nav = (
     <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -148,21 +161,18 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                   <div className="font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : "Administration"}</div>
                 </div>
               </div>
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex flex-wrap items-center justify-end gap-3 text-sm">
                 <span className="hidden text-gray-600 sm:inline">
                   {user.firstName} {user.lastName} · {isDoctor ? "Doctor" : isStaff ? role?.name : "Administrator"}
                 </span>
                 <Link href="/" className="text-burgundy hover:underline">View website</Link>
-                <button
-                  type="button"
-                  className="text-gray-500 hover:text-burgundy"
-                  onClick={() => {
+                <LoginStamp
+                  compact
+                  onLogout={() => {
                     signOut()
                     router.push(isDoctor ? "/doctor/login" : isStaff ? "/staff/login" : "/admin/login")
                   }}
-                >
-                  Sign out
-                </button>
+                />
               </div>
             </div>
             {menuOpen && <div className="max-h-[70vh] overflow-y-auto border-t border-slate-200 bg-white lg:hidden">{nav}</div>}

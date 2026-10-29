@@ -16,7 +16,7 @@ const copy = {
   doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
 } as const;
 
-type Mode = "password" | "otp" | "forgot";
+type Mode = "password" | "mfa" | "otp" | "forgot";
 
 export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }) {
   const router = useRouter();
@@ -28,6 +28,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
   const [otpSent, setOtpSent] = useState(false);
   const [otpHint, setOtpHint] = useState("");
   const [error, setError] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
   const { label, target, hint } = copy[portal];
   const signedIn = user?.role === portal;
 
@@ -74,8 +75,18 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
       return;
     }
     setError("");
-    signIn(account);
-    router.push(target);
+    const code = issueEmailOtp(account.email, portal);
+    sendEmail({
+      to: account.email,
+      phone: account.phone,
+      name: account.firstName,
+      subject: `${label} verification code`,
+      template: "custom",
+      body: `Hi ${account.firstName},\n\nYour ${label.toLowerCase()} verification code is ${code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the email.\n\n– VGMF`,
+    });
+    setPendingEmail(account.email);
+    setOtpHint(`Password accepted. Code sent to ${account.email}. Demo code: ${code}`);
+    setMode("mfa");
   };
 
   const sendCode = (event: React.FormEvent) => {
@@ -126,6 +137,28 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     router.push(target);
   };
 
+  const submitMfa = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
+      setError(`No ${label.toLowerCase()} account found for this email.`);
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    const invalid = verifyEmailOtp(account.email, portal, otp);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError("");
+    signIn(account);
+    router.push(target);
+  };
+
   if (mode === "forgot") {
     return (
       <Card portal={portal}>
@@ -136,26 +169,38 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
 
   return (
     <Card portal={portal}>
-      {portal === "staff" && (
-        <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-warm-cream p-1 text-sm font-semibold">
-          <button
-            type="button"
-            className={`rounded-lg px-3 py-2 ${mode === "password" ? "bg-white text-burgundy shadow-sm" : "text-text-muted"}`}
-            onClick={() => { setMode("password"); setError(""); }}
-          >
-            Password
+      {mode === "mfa" ? (
+        <form onSubmit={submitMfa} className="space-y-5">
+          <p className="text-sm text-text-muted">
+            Multi-factor step for {pendingEmail || email}. Enter the code from email to finish signing in. The session then stays open until you log out.
+          </p>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-mfa`}>
+              6-digit verification code
+            </label>
+            <input
+              id={`${portal}-mfa`}
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              required
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="input-field tracking-[0.3em]"
+              placeholder="••••••"
+              autoComplete="one-time-code"
+            />
+          </div>
+          {otpHint && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
+          {error && <ErrorText text={error} />}
+          <button type="submit" className="btn-primary w-full">
+            Verify and open portal
           </button>
-          <button
-            type="button"
-            className={`rounded-lg px-3 py-2 ${mode === "otp" ? "bg-white text-burgundy shadow-sm" : "text-text-muted"}`}
-            onClick={() => { setMode("otp"); setError(""); }}
-          >
-            Email OTP
+          <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => { setMode("password"); setError(""); setOtp(""); }}>
+            Back to password
           </button>
-        </div>
-      )}
-
-      {mode === "password" || portal !== "staff" ? (
+        </form>
+      ) : mode === "password" || portal !== "staff" ? (
         <form onSubmit={submitPassword} className="space-y-5">
           <EmailField portal={portal} email={email} setEmail={setEmail} />
           <div>
@@ -286,7 +331,7 @@ function Card({
           <p className="mt-2 text-center text-sm text-text-muted">
             {portal === "staff"
               ? "Use your registered staff email and password, or a one-time code emailed to that address."
-              : `Use your ${hint} email and password.`}
+              : `Use your ${hint} email and password, then the email verification code. Sessions stay signed in until Logout.`}
           </p>
           <div className="mt-7">{children}</div>
         </div>
