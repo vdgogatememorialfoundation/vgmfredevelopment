@@ -24,6 +24,7 @@ import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPi
 import { ImageField } from "@/components/admin/ImageField";
 import { subscribeCms } from "@/lib/cms";
 import type { SiteSettings } from "@/types";
+import { SOCIAL_NETWORKS, emptySocial } from "@/lib/social";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
 const primary = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -169,6 +170,20 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
+      <Card title="Social media" text="Icons appear in the footer and on Contact only for networks with an https link. Leave a field blank to hide it.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {SOCIAL_NETWORKS.map((network) => (
+            <Text
+              key={network.id}
+              label={network.label}
+              value={settings.social?.[network.id] ?? ""}
+              placeholder={network.placeholder}
+              onChange={(value) => set({ social: { ...emptySocial(), ...settings.social, [network.id]: value } })}
+            />
+          ))}
+        </div>
+      </Card>
+
       <Card title="Google Maps" text="Used on Create Event to search a venue. Paste a Maps URL if you leave this blank.">
         <Text
           label="Google Maps JavaScript API key"
@@ -217,8 +232,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social };
 }
 
 /* ---------------- Payments ---------------- */

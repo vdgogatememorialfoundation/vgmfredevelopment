@@ -7,9 +7,11 @@ import {
   getAccounts,
   removeAccount,
   sendAccountDetails,
+  sendPeopleEmail,
   setAccountStatus,
   updateAccount,
 } from "@/lib/admin-store";
+import { matchesAccountQuery } from "@/lib/account-search";
 import { activitiesFor, currentActorEmail, recordActivity, type AccountActivity } from "@/lib/activity";
 import { getSession } from "@/lib/auth";
 import { generatePassword } from "@/lib/passwords";
@@ -48,10 +50,36 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
   const [createdPassword, setCreatedPassword] = useState("");
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [mail, setMail] = useState({ subject: "", body: "" });
+  const [mailNote, setMailNote] = useState("");
   const label = role === "staff" ? "staff" : "doctor";
+  const people = role === "staff" ? "staff" : "doctors";
   const loginPath = role === "staff" ? "/staff/login" : "/doctor/login";
   const refresh = () => setAccounts(refreshRole(role));
+  const shown = useMemo(
+    () => accounts.filter((account) => matchesAccountQuery(account, query)),
+    [accounts, query]
+  );
   const selected = accounts.find((account) => account.email === selectedEmail) ?? null;
+  const selectedEmails = Object.entries(picked).filter(([, on]) => on).map(([email]) => email);
+  const mailRecipients = selectedEmails.length
+    ? accounts.filter((account) => selectedEmails.includes(account.email))
+    : shown;
+
+  const sendMail = (recipients: User[]) => {
+    if (!mail.subject.trim() || !mail.body.trim()) {
+      setMailNote("Add a subject and message.");
+      return;
+    }
+    if (recipients.length === 0) {
+      setMailNote(`No ${people} accounts to email.`);
+      return;
+    }
+    const count = sendPeopleEmail(recipients, mail.subject, mail.body);
+    setMailNote(`Queued ${count} email${count === 1 ? "" : "s"}.`);
+  };
 
   const create = () => {
     if (!form.firstName.trim() || !form.email.trim() || !form.phone.trim()) {
@@ -83,7 +111,7 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">{role === "staff" ? "Staff accounts" : "Doctor accounts"}</h1>
         <p className="mt-1 text-sm text-slate-500">
-          The system sets a password automatically and emails it. You can view the password, edit the account, disable, ban or delete it, and open a full activity log.
+          Search by name, phone or email. Email one person or everyone shown. The system sets a password automatically and emails it. You can view the password, edit the account, disable, ban or delete it, and open a full activity log.
         </p>
       </div>
 
@@ -115,13 +143,54 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
         )}
       </section>
 
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Email {people}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Send a single mail to the selected accounts, or a bulk mail to everyone matching the search. Use {"{name}"} to insert each person’s name.
+        </p>
+        <div className="mt-3 grid gap-3">
+          <input className={field} placeholder="Subject" value={mail.subject} onChange={(event) => setMail({ ...mail, subject: event.target.value })} />
+          <textarea className={field} rows={4} placeholder="Message" value={mail.body} onChange={(event) => setMail({ ...mail, body: event.target.value })} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" className={primary} onClick={() => sendMail(mailRecipients.filter((account) => selectedEmails.includes(account.email)))} disabled={selectedEmails.length === 0}>
+            Email selected ({selectedEmails.length})
+          </button>
+          <button type="button" className={ghost} onClick={() => sendMail(shown)}>
+            Email all shown ({shown.length})
+          </button>
+        </div>
+        {mailNote && <p className="mt-3 text-sm text-emerald-700">{mailNote}</p>}
+      </section>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          className={field}
+          placeholder={`Search ${people} by name, phone or email`}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <button
+          type="button"
+          className={`${ghost} shrink-0`}
+          onClick={() => {
+            const allOn = shown.length > 0 && shown.every((account) => picked[account.email]);
+            setPicked(allOn ? {} : Object.fromEntries(shown.map((account) => [account.email, true])));
+          }}
+        >
+          {shown.length > 0 && shown.every((account) => picked[account.email]) ? "Clear selection" : "Select shown"}
+        </button>
+      </div>
+
       <ul className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {accounts.length === 0 && <li className="px-5 py-8 text-center text-sm text-slate-500">No {label} accounts yet.</li>}
-        {accounts.map((account) => (
+        {shown.length === 0 && <li className="px-5 py-8 text-center text-sm text-slate-500">{accounts.length === 0 ? `No ${label} accounts yet.` : `No ${label}s match that search.`}</li>}
+        {shown.map((account) => (
           <PeopleRow
             key={account.email}
             account={account}
             roles={roles}
+            checked={Boolean(picked[account.email])}
+            onToggle={(on) => setPicked((current) => ({ ...current, [account.email]: on }))}
             onChange={refresh}
             onView={() => {
               setSelectedEmail(account.email);
@@ -130,6 +199,14 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
             onEdit={() => {
               setSelectedEmail(account.email);
               setEditing(true);
+            }}
+            onEmail={() => {
+              setPicked({ [account.email]: true });
+              setMail((current) => ({
+                subject: current.subject || `Message from VGMF`,
+                body: current.body,
+              }));
+              setMailNote(`Selected ${displayName(account)} for a single email. Add a subject and message above.`);
             }}
           />
         ))}
@@ -155,15 +232,21 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
 function PeopleRow({
   account,
   roles,
+  checked,
+  onToggle,
   onChange,
   onView,
   onEdit,
+  onEmail,
 }: {
   account: User;
   roles: StaffRole[];
+  checked: boolean;
+  onToggle: (on: boolean) => void;
   onChange: () => void;
   onView: () => void;
   onEdit: () => void;
+  onEmail: () => void;
 }) {
   const [reveal, setReveal] = useState(false);
   const [note, setNote] = useState("");
@@ -186,7 +269,15 @@ function PeopleRow({
   return (
     <li className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 last:border-b-0">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
+        <div className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-1.5"
+            checked={checked}
+            onChange={(event) => onToggle(event.target.checked)}
+            aria-label={`Select ${displayName(account)}`}
+          />
+          <div>
           <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
             {displayName(account)}
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${STATUS_TONE[status]}`}>{status}</span>
@@ -204,10 +295,12 @@ function PeopleRow({
           </p>
           <p className="text-xs text-slate-400">Last login: {lastLogin ? new Date(lastLogin.at).toLocaleString("en-IN") : "Never"}</p>
           {account.statusReason && status !== "active" && <p className="text-xs text-red-600">Reason: {account.statusReason}</p>}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={ghost} onClick={onView}>View</button>
           <button type="button" className={ghost} onClick={onEdit}>Edit</button>
+          <button type="button" className={ghost} onClick={onEmail}>Email</button>
           <button type="button" className={ghost} onClick={() => { sendAccountDetails(account.email); setNote("Login details emailed."); }}>
             Email login
           </button>
@@ -263,6 +356,7 @@ function AccountDetail({
     password: account.password ?? "",
   });
   const [note, setNote] = useState("");
+  const [mail, setMail] = useState({ subject: "", body: "" });
   const lastLogin = activity.find((row) => row.kind === "login");
   const lastLogout = activity.find((row) => row.kind === "logout");
 
@@ -338,6 +432,29 @@ function AccountDetail({
         </dl>
       )}
       {note && <p className="mt-3 text-sm text-emerald-700">{note}</p>}
+
+      <div className="mt-6 rounded-lg border border-slate-100 p-4">
+        <h3 className="text-sm font-semibold text-slate-900">Email {displayName(account)}</h3>
+        <div className="mt-3 grid gap-2">
+          <input className={field} placeholder="Subject" value={mail.subject} onChange={(event) => setMail({ ...mail, subject: event.target.value })} />
+          <textarea className={field} rows={3} placeholder="Message" value={mail.body} onChange={(event) => setMail({ ...mail, body: event.target.value })} />
+        </div>
+        <button
+          type="button"
+          className={`${primary} mt-3`}
+          onClick={() => {
+            if (!mail.subject.trim() || !mail.body.trim()) {
+              setNote("Add a subject and message.");
+              return;
+            }
+            sendPeopleEmail([account], mail.subject, mail.body);
+            setNote(`Email queued to ${account.email}.`);
+            setMail({ subject: "", body: "" });
+          }}
+        >
+          Send email
+        </button>
+      </div>
 
       <h3 className="mt-6 text-sm font-semibold uppercase tracking-wider text-slate-400">Activity</h3>
       <ul className="mt-3 max-h-72 overflow-auto rounded-lg border border-slate-100">

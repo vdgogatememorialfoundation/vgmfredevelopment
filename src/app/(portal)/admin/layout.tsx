@@ -36,12 +36,10 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
           <p className="text-xs font-semibold uppercase tracking-widest text-burgundy">VGMF</p>
           <h1 className="mt-2 text-2xl font-semibold text-gray-900">Sign in to continue</h1>
           <p className="mt-2 text-sm text-gray-600">
-            The admin console is for Foundation administrators and staff.
+            This page is for Foundation administrators. Staff and doctors sign in on their own portals.
           </p>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <div className="mt-6">
             <Link href="/admin/login" className="btn-primary">Admin sign in</Link>
-            <Link href="/staff/login" className="btn-outline">Staff sign in</Link>
-            <Link href="/doctor/login" className="btn-outline">Doctor sign in</Link>
           </div>
         </div>
       </div>

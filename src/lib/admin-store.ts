@@ -21,6 +21,7 @@ import { getNotifications, queueNotification } from "@/lib/notify";
 import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
+import { emptySocial } from "@/lib/social";
 
 export type OrderStatus = Order["status"];
 
@@ -58,6 +59,7 @@ function defaultSettings(): SiteSettings {
     maintenanceMode: false,
     maintenanceMessage:
       "The site is under scheduled maintenance. We will be back shortly.",
+    social: emptySocial(),
     apiKeys: {
       googleMaps: "",
       shiprocket: "",
@@ -121,6 +123,7 @@ export function getSettings(): SiteSettings {
     ...current,
     apiKeys: { ...defaults.apiKeys, ...current.apiKeys },
     processing: { ...defaults.processing, ...current.processing },
+    social: { ...defaults.social, ...current.social },
   };
 }
 
@@ -999,6 +1002,24 @@ export function sendEmail(input: {
   params?: string[];
 }) {
   return queueNotification(input);
+}
+
+export function sendPeopleEmail(recipients: User[], subject: string, body: string) {
+  const text = body.trim();
+  const title = subject.trim();
+  if (!title || !text || recipients.length === 0) return 0;
+  for (const account of recipients) {
+    const name = displayName(account, true) || account.firstName || "there";
+    sendEmail({
+      to: account.email,
+      phone: account.phone,
+      name,
+      subject: title,
+      template: "custom",
+      body: text.split("{name}").join(name),
+    });
+  }
+  return recipients.length;
 }
 
 export function sendOrderStatusEmail(order: Order, status: OrderStatus) {

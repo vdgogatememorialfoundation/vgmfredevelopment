@@ -14,6 +14,7 @@ import {
   updateCustomer,
 } from "@/lib/admin-store";
 import { useAccounts } from "@/lib/use-cms";
+import { matchesAccountQuery } from "@/lib/account-search";
 import type { AccountStatus, User } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 
@@ -43,15 +44,10 @@ export function CustomerDesk() {
   const [error, setError] = useState("");
   const [picked, setPicked] = useState<Record<string, boolean>>({});
 
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return accounts;
-    return accounts.filter((account) =>
-      [account.accountId, account.email, account.phone, displayName(account), account.firstName, account.lastName]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q))
-    );
-  }, [accounts, query]);
+  const shown = useMemo(
+    () => accounts.filter((account) => matchesAccountQuery(account, query)),
+    [accounts, query]
+  );
 
   const selected = accounts.find((account) => account.email === selectedEmail);
 

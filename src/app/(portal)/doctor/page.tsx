@@ -3,19 +3,12 @@
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
 import ClientOnly from "@/components/common/ClientOnly";
+import { PortalLogin } from "@/components/admin/PortalLogin";
 
 function DoctorHome() {
   const { user, signOut } = useAuth();
   if (!user || user.role !== "doctor") {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <div className="max-w-md rounded-2xl border border-border bg-white p-8 text-center">
-          <h1 className="text-2xl font-semibold text-text-primary">Doctor workspace</h1>
-          <p className="mt-2 text-sm text-text-muted">Sign in with the doctor account an administrator created for you.</p>
-          <Link href="/doctor/login" className="btn-primary mt-6">Doctor sign in</Link>
-        </div>
-      </div>
-    );
+    return <PortalLogin portal="doctor" />;
   }
 
   return (

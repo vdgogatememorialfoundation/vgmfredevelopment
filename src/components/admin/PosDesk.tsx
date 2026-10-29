@@ -17,6 +17,7 @@ import { generateOrderId } from "@/lib/store";
 import { useLiveBooks } from "@/lib/use-cms";
 import type { Book, DeliveryAddress, Order } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
+import { AccountSearch } from "@/components/admin/AccountSearch";
 import { canOrder, isPurchasable } from "@/lib/product-data";
 
 const METHODS = [
@@ -250,20 +251,23 @@ export function PosDesk() {
         <div className="space-y-4 xl:col-span-2">
           <Panel title="Customer">
             <Field label="Account">
-              <SelectInput
-                value={accountEmail}
-                onChange={(event) => {
-                  setAccountEmail(event.target.value);
+              <AccountSearch
+                accounts={customers}
+                selectedEmail={accountEmail}
+                onSelect={(item) => {
+                  setAccountEmail(item?.email ?? "");
                   setUseCredit(false);
+                  if (item) {
+                    setWalkIn({
+                      name: displayName(item, true),
+                      phone: item.phone,
+                      email: item.email,
+                    });
+                  }
                 }}
-              >
-                <option value="">Walk-in</option>
-                {customers.map((item) => (
-                  <option key={item.email} value={item.email}>
-                    {displayName(item)} · {item.accountId}
-                  </option>
-                ))}
-              </SelectInput>
+                placeholder="Search by name, phone or email"
+                emptyLabel="Walk-in"
+              />
             </Field>
             {!account && (
               <div className="mt-3 grid gap-2">

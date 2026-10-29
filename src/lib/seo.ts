@@ -1,6 +1,8 @@
 import { siteConfig } from "@/lib/constants";
+import { configuredSocial } from "@/lib/social";
 
 export const siteUrl = siteConfig.url;
+const socialSameAs = configuredSocial(siteConfig.social).map((link) => link.href);
 
 export const organizationJsonLd = {
   "@context": "https://schema.org",
@@ -21,6 +23,7 @@ export const organizationJsonLd = {
         streetAddress: siteConfig.address,
       },
       description: siteConfig.tagline,
+      ...(socialSameAs.length ? { sameAs: socialSameAs } : {}),
     },
     {
       "@type": "WebSite",

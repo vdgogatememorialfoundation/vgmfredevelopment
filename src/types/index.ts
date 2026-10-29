@@ -513,6 +513,15 @@ export interface PackagingOption {
   description: string;
 }
 
+export interface SocialLinks {
+  facebook?: string;
+  instagram?: string;
+  linkedin?: string;
+  youtube?: string;
+  twitter?: string;
+  whatsapp?: string;
+}
+
 export interface SiteSettings {
   siteName: string;
   tagline: string;
@@ -525,6 +534,7 @@ export interface SiteSettings {
   /** ISO time when maintenance ends automatically; empty keeps it on until switched off. */
   maintenanceUntil?: string;
   faviconUrl?: string;
+  social: SocialLinks;
   apiKeys: ApiKeys;
   processing: ProcessingTimeline;
   packagingOptions: PackagingOption[];

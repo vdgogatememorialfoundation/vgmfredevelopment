@@ -1,5 +1,6 @@
 import Link from "next/link";
 import SiteLogo from "@/components/common/SiteLogo";
+import SocialLinks from "@/components/layout/SocialLinks";
 
 const quickLinks = [
   { name: "About", href: "/about" },
@@ -60,6 +61,7 @@ export default function Footer() {
               </a>
               <span>+91 20 1234 5678</span>
             </div>
+            <SocialLinks className="mt-4" />
           </div>
         </div>
 

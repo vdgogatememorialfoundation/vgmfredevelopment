@@ -3,21 +3,14 @@
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
 import ClientOnly from "@/components/common/ClientOnly";
+import { PortalLogin } from "@/components/admin/PortalLogin";
 import { adminNavigation } from "@/app/(portal)/admin/_config/navigation";
 import { canOpen, firstPathFor, getRole, modulesFor, staffModules } from "@/lib/roles";
 
 function StaffHome() {
   const { user, signOut } = useAuth();
-  if (!user || (user.role !== "staff" && user.role !== "admin")) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <div className="max-w-md rounded-2xl border border-border bg-white p-8 text-center">
-          <h1 className="text-2xl font-semibold text-text-primary">Staff workspace</h1>
-          <p className="mt-2 text-sm text-text-muted">Sign in with the staff account an administrator created for you.</p>
-          <Link href="/staff/login" className="btn-primary mt-6">Staff sign in</Link>
-        </div>
-      </div>
-    );
+  if (!user || user.role !== "staff") {
+    return <PortalLogin portal="staff" />;
   }
 
   const allowed = modulesFor(user);
@@ -33,15 +26,10 @@ function StaffHome() {
           <p className="text-xs font-semibold uppercase tracking-wider text-burgundy">Staff portal</p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">Welcome, {user.firstName}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {user.role === "admin"
-              ? "You have administrator access. Open any module below, or use the full admin console."
-              : `${role?.name} (${role?.category}). These are the modules assigned to your role.`}
+            {`${role?.name} (${role?.category}). These are the modules assigned to your role.`}
           </p>
         </div>
         <div className="flex gap-3 text-sm">
-          {user.role === "admin" && (
-            <Link href="/admin" className="font-semibold text-burgundy hover:underline">Admin console</Link>
-          )}
           <button type="button" className="text-slate-500 hover:text-burgundy" onClick={() => signOut()}>
             Sign out
           </button>

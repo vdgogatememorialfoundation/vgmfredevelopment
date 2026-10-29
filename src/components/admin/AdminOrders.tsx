@@ -42,8 +42,10 @@ import {
 import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import { formatDate } from "@/lib/utils";
-import type { CourierRate, DeliveryAddress, Order } from "@/types";
+import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
+import { AccountSearch } from "@/components/admin/AccountSearch";
+import { accountToDelivery } from "@/lib/account-search";
 import { classNames, formatDateTime } from "@/lib/utils";
 
 const ALL_STATUSES: Order["status"][] = [
@@ -305,10 +307,9 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const setRow = (index: number, patch: Partial<{ bookId: string; quantity: number }>) =>
     setItems((list) => list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
-  const pickAccount = (email: string) => {
-    setAccountEmail(email);
-    const account = customers.find((item) => item.email === email);
-    if (account) setCustomer((current) => ({ ...current, fullName: `${account.firstName} ${account.lastName}`.trim(), email: account.email, phone: account.phone || current.phone }));
+  const pickAccount = (account: User | null) => {
+    setAccountEmail(account?.email ?? "");
+    if (account) setCustomer((current) => accountToDelivery(account, current));
   };
 
   const subtotal = items.reduce((sum, row) => sum + (books.find((book) => book.id === row.bookId)?.price ?? 0) * row.quantity, 0);
@@ -375,12 +376,13 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-3">
           <Field label="Customer account (optional)">
-            <SelectInput value={accountEmail} onChange={(event) => pickAccount(event.target.value)}>
-              <option value="">Guest / new customer</option>
-              {customers.map((account) => (
-                <option key={account.email} value={account.email}>{account.firstName} {account.lastName} · {account.email}</option>
-              ))}
-            </SelectInput>
+            <AccountSearch
+              accounts={customers}
+              selectedEmail={accountEmail}
+              onSelect={pickAccount}
+              placeholder="Search by name, phone or email"
+              emptyLabel="Guest / new customer"
+            />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name"><TextInput value={customer.fullName} onChange={(event) => setCustomer({ ...customer, fullName: event.target.value })} /></Field>

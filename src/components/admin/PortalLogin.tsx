@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
-import { ensureAdminCredentials, getAccounts } from "@/lib/admin-store";
+import { ensureAdminCredentials, getAccounts, sendEmail } from "@/lib/admin-store";
 import { loginBlockReason } from "@/lib/auth";
+import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 
 const copy = {
   admin: { label: "Admin", target: "/admin", hint: "administrator" },
@@ -14,14 +15,20 @@ const copy = {
   doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
 } as const;
 
+type Mode = "password" | "otp";
+
 export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }) {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [mode, setMode] = useState<Mode>("password");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpHint, setOtpHint] = useState("");
   const [error, setError] = useState("");
   const { label, target, hint } = copy[portal];
-  const signedIn = user?.role === portal || (portal === "staff" && user?.role === "admin");
+  const signedIn = user?.role === portal;
 
   if (signedIn && user) {
     return (
@@ -42,14 +49,17 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     );
   }
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
+  const findPortalAccount = () => {
     ensureAdminCredentials();
-    const account = getAccounts().find(
-      (a) => a.email.toLowerCase() === email.trim().toLowerCase()
+    return getAccounts().find(
+      (account) => account.email.toLowerCase() === email.trim().toLowerCase() && account.role === portal
     );
-    const allowed = account?.role === portal || (portal === "staff" && account?.role === "admin");
-    if (!account || !allowed) {
+  };
+
+  const submitPassword = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
       return;
     }
@@ -64,62 +74,140 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     }
     setError("");
     signIn(account);
-    router.push(account.role === "admin" && portal === "staff" ? "/admin" : target);
+    router.push(target);
+  };
+
+  const sendCode = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
+      setError(`No ${label.toLowerCase()} account found for this email.`);
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    const code = issueEmailOtp(account.email, portal);
+    sendEmail({
+      to: account.email,
+      phone: account.phone,
+      name: account.firstName,
+      subject: `${label} sign-in code`,
+      template: "custom",
+      body: `Hi ${account.firstName},\n\nYour ${label.toLowerCase()} sign-in code is ${code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the email.\n\n– VGMF`,
+    });
+    setOtpSent(true);
+    setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+    setError("");
+  };
+
+  const submitOtp = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = findPortalAccount();
+    if (!account) {
+      setError(`No ${label.toLowerCase()} account found for this email.`);
+      return;
+    }
+    const blocked = loginBlockReason(account);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
+    const invalid = verifyEmailOtp(account.email, portal, otp);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setError("");
+    signIn(account);
+    router.push(target);
   };
 
   return (
     <Card portal={portal}>
-      <form onSubmit={submit} className="space-y-5">
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-email`}>
-            Email id
-          </label>
-          <input
-            id={`${portal}-email`}
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input-field"
-            placeholder="you@vaidyagogate.org"
-            autoComplete="username"
-          />
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-password`}>
+      {portal === "staff" && (
+        <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-warm-cream p-1 text-sm font-semibold">
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-2 ${mode === "password" ? "bg-white text-burgundy shadow-sm" : "text-text-muted"}`}
+            onClick={() => { setMode("password"); setError(""); }}
+          >
             Password
-          </label>
-          <input
-            id={`${portal}-password`}
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="input-field"
-            placeholder="Enter your password"
-            autoComplete="current-password"
-          />
+          </button>
+          <button
+            type="button"
+            className={`rounded-lg px-3 py-2 ${mode === "otp" ? "bg-white text-burgundy shadow-sm" : "text-text-muted"}`}
+            onClick={() => { setMode("otp"); setError(""); }}
+          >
+            Email OTP
+          </button>
         </div>
+      )}
 
-        {error && (
-          <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </p>
-        )}
+      {mode === "password" || portal !== "staff" ? (
+        <form onSubmit={submitPassword} className="space-y-5">
+          <EmailField portal={portal} email={email} setEmail={setEmail} />
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-password`}>
+              Password
+            </label>
+            <input
+              id={`${portal}-password`}
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input-field"
+              placeholder="Enter your password"
+              autoComplete="current-password"
+            />
+          </div>
+          {error && <ErrorText text={error} />}
+          <button type="submit" className="btn-primary w-full">
+            Sign in to {label} portal
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={otpSent ? submitOtp : sendCode} className="space-y-5">
+          <EmailField portal={portal} email={email} setEmail={setEmail} />
+          {otpSent && (
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="staff-otp">
+                6-digit code
+              </label>
+              <input
+                id="staff-otp"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="input-field tracking-[0.3em]"
+                placeholder="••••••"
+                autoComplete="one-time-code"
+              />
+            </div>
+          )}
+          {otpHint && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{otpHint}</p>}
+          {error && <ErrorText text={error} />}
+          <button type="submit" className="btn-primary w-full">
+            {otpSent ? "Verify code" : "Send email code"}
+          </button>
+          {otpSent && (
+            <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={sendCode}>
+              Resend code
+            </button>
+          )}
+        </form>
+      )}
 
-        <button type="submit" className="btn-primary w-full">
-          Sign in to {label} portal
-        </button>
-      </form>
-
-      {portal !== "doctor" && (
+      {portal === "admin" && (
         <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
           <p className="font-semibold text-text-primary">Demo credentials</p>
-          <p>
-            {portal === "admin" ? "admin@vaidyagogate.org" : "care@vaidyagogate.org"} · password{" "}
-            {portal === "admin" ? "admin123" : "staff123"}
-          </p>
+          <p>admin@vaidyagogate.org · password admin123</p>
         </div>
       )}
 
@@ -128,6 +216,38 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
       </Link>
     </Card>
   );
+}
+
+function EmailField({
+  portal,
+  email,
+  setEmail,
+}: {
+  portal: string;
+  email: string;
+  setEmail: (value: string) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-email`}>
+        Email id
+      </label>
+      <input
+        id={`${portal}-email`}
+        type="email"
+        required
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="input-field"
+        placeholder="you@vaidyagogate.org"
+        autoComplete="username"
+      />
+    </div>
+  );
+}
+
+function ErrorText({ text }: { text: string }) {
+  return <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{text}</p>;
 }
 
 function Card({
@@ -152,7 +272,9 @@ function Card({
             {label} sign in
           </h1>
           <p className="mt-2 text-center text-sm text-text-muted">
-            Use your {hint} email and password.
+            {portal === "staff"
+              ? "Use your registered staff email and password, or a one-time code emailed to that address."
+              : `Use your ${hint} email and password.`}
           </p>
           <div className="mt-7">{children}</div>
         </div>

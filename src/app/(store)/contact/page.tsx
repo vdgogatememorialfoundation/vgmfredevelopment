@@ -3,6 +3,7 @@ import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import { siteConfig } from "@/lib/constants";
 import ContactForm from "@/components/store/ContactForm";
+import SocialLinks from "@/components/layout/SocialLinks";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -66,6 +67,8 @@ export default function ContactPage() {
                 Browse publications
               </Link>
             </div>
+
+            <SocialLinks className="card p-6 sm:col-span-2" tone="dark" title="Follow us" />
           </div>
 
           <ContactForm />

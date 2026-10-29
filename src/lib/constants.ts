@@ -8,11 +8,12 @@ export const siteConfig = {
   whatsapp: "+91 98765 43210",
   address: "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
   social: {
-    facebook: "#",
-    instagram: "#",
-    linkedin: "#",
-    youtube: "#",
-    twitter: "#",
+    facebook: "",
+    instagram: "",
+    linkedin: "",
+    youtube: "",
+    twitter: "",
+    whatsapp: "",
   },
 };
 
