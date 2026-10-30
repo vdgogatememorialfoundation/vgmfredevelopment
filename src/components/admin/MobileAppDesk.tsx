@@ -11,7 +11,7 @@ import {
   type MobileAppConfig,
   type MobileModuleId,
 } from "@/lib/mobile-config";
-import { collectMobileSnapshot } from "@/lib/mobile-publish";
+import { collectMobileSnapshot, publishLiveSite } from "@/lib/mobile-publish";
 import { ImageField } from "@/components/admin/ImageField";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
@@ -38,7 +38,13 @@ export function MobileAppDesk() {
 
   const save = () => {
     saveMobileAppConfig(config);
-    setNote("App settings saved on this browser. Publish to app to push them to phones.");
+    void publishLiveSite().then((result) => {
+      setNote(
+        result?.ok
+          ? "Saved and published. Phones and other browsers pick up the logo and name on the next refresh."
+          : "Saved on this browser. Use Publish to app so phones and other devices receive it."
+      );
+    });
   };
 
   const publish = async () => {

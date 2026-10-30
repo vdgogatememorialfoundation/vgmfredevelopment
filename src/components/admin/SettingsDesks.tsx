@@ -26,6 +26,7 @@ import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPi
 import { ImageField } from "@/components/admin/ImageField";
 import { fileToDataUrl } from "@/lib/images";
 import { subscribeCms } from "@/lib/cms";
+import { publishLiveSite } from "@/lib/mobile-publish";
 import type { SiteSettings } from "@/types";
 import { SOCIAL_NETWORKS, emptySocial } from "@/lib/social";
 
@@ -166,7 +167,12 @@ export function GeneralSettingsDesk() {
         },
       });
       window.dispatchEvent(new Event("vgmf-cms"));
-      setNote(settings.maintenanceMode ? "Saved. Visitors now see the maintenance page; admins and staff still see the site." : "Saved. The site is live.");
+      void publishLiveSite();
+      setNote(
+        settings.maintenanceMode
+          ? "Saved. Visitors now see the maintenance page; admins and staff still see the site."
+          : "Saved. The logo and site details now load on phones and other devices."
+      );
     } catch {
       setNote("Could not save: browser storage is full. Use a smaller logo.");
     }

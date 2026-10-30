@@ -32,6 +32,7 @@ import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, 
 import { getSettings } from "@/lib/admin-store";
 import { books as seededBooks } from "@/data/books";
 import { getAllProducts } from "@/lib/product-data";
+import { getPublishedFeed, publishedStamp } from "@/lib/hydrate-public";
 
 let articleRaw = "\0";
 let articleList: Article[] = seededArticles;
@@ -119,7 +120,25 @@ export function collectionHook<T>(editsKey: string, customKey: string, seed: T[]
 }
 
 export const useLiveNotices = collectionHook<Notice>(noticeKeys.edits, noticeKeys.custom, seededNotices, getLiveNotices);
-export const useLiveFlyers = collectionHook<Flyer>(flyerKeys.edits, flyerKeys.custom, seededFlyers, getLiveFlyers);
+
+let flyerRaw = "\0";
+let flyerList: Flyer[] = seededFlyers;
+
+export function useLiveFlyers() {
+  return useSyncExternalStore(
+    subscribeCms,
+    () => {
+      const raw = `${window.localStorage.getItem(flyerKeys.edits) ?? ""}|${window.localStorage.getItem(flyerKeys.custom) ?? ""}|${publishedStamp()}`;
+      if (raw === flyerRaw) return flyerList;
+      flyerRaw = raw;
+      const hasLocal = Boolean(window.localStorage.getItem(flyerKeys.edits) || window.localStorage.getItem(flyerKeys.custom));
+      const published = getPublishedFeed()?.flyers;
+      flyerList = hasLocal || !published?.length ? getLiveFlyers() : (published as Flyer[]);
+      return flyerList;
+    },
+    () => seededFlyers
+  );
+}
 export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners);
 export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos);
 export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics);
@@ -145,10 +164,20 @@ export function useSiteSettings(): SiteSettings | null {
   return useSyncExternalStore(
     subscribeCms,
     () => {
-      const raw = window.localStorage.getItem("vgmf_settings") ?? "";
+      const raw = `${window.localStorage.getItem("vgmf_settings") ?? ""}|${publishedStamp()}`;
       if (raw === settingsRaw) return settingsValue;
       settingsRaw = raw;
-      settingsValue = getSettings();
+      const local = getSettings();
+      const published = getPublishedFeed()?.site;
+      const hasLocal = Boolean(window.localStorage.getItem("vgmf_settings"));
+      settingsValue = {
+        ...local,
+        siteName: hasLocal ? local.siteName : published?.name || local.siteName,
+        tagline: hasLocal ? local.tagline : published?.tagline || local.tagline,
+        logoUrl: local.logoUrl || published?.logoUrl || "",
+        logoText: local.logoText || published?.logoText || local.logoText,
+        faviconUrl: local.faviconUrl || published?.faviconUrl || "",
+      };
       return settingsValue;
     },
     () => null
