@@ -685,9 +685,13 @@ async function pullDatabase(portal: PartnerPortalId) {
   )) ?? [];
   const tickets = (await queryRows(
     portal,
-    `SELECT t.id, t.user_id, t.ticket_id_string, t.is_valid, t.is_scanned, u.email AS user_email
-       FROM tickets t
-       LEFT JOIN users u ON u.id = t.user_id`
+    portal === "autism"
+      ? `SELECT t.id, t.user_id, t.ticket_id_string, t.is_valid, t.is_scanned, t.order_id, t.scan_time, u.email AS user_email
+           FROM tickets t
+           LEFT JOIN users u ON u.id = t.user_id`
+      : `SELECT t.id, t.user_id, t.ticket_id_string, t.is_valid, t.is_scanned, t.event_id, t.order_id, t.scan_time, u.email AS user_email
+           FROM tickets t
+           LEFT JOIN users u ON u.id = t.user_id`
   )) ?? [];
   const registrations = (await queryRows(
     portal,
@@ -763,14 +767,25 @@ async function pullDatabase(portal: PartnerPortalId) {
   const eventName = (id?: unknown) => str(seminarById.get(String(id || "")) ?? {}, ["title"]) || `${partnerCategory(portal)} programme`;
 
   const addPayment = (email: string, item: Record<string, unknown>) => {
+    const amount = asNumber(item.amount);
+    const status = str(item, ["status"], "Recorded");
+    const applicationNo = str(item, ["application_no", "eventName", "event"]);
+    if ((/fail|creat|pending|init/i.test(status) && amount <= 0) || (amount <= 0 && !applicationNo && !/success|paid|captured|issued/i.test(status))) {
+      return;
+    }
+    const id = `${portal}-pay-${item.id}`;
+    const existing = (paymentsByEmail[email.toLowerCase()] ?? []).find(
+      (row) => row.id === id || (`${row.status}|${row.amount}|${row.eventName}` === `${status}|${amount}|${applicationNo || eventName(item.seminar_id)}`)
+    );
+    if (existing) return;
     pushByEmail(paymentsByEmail, email, {
-      id: `${portal}-pay-${item.id}`,
+      id,
       portal,
-      amount: asNumber(item.amount),
+      amount,
       currency: "INR",
-      status: str(item, ["status"], "Recorded"),
+      status,
       at: iso(item.created_at) || undefined,
-      eventName: str(item, ["application_no", "eventName", "event"]) || eventName(item.seminar_id),
+      eventName: applicationNo || eventName(item.seminar_id),
       portalUrl: origin,
     });
   };
@@ -791,13 +806,16 @@ async function pullDatabase(portal: PartnerPortalId) {
       hasProfile: asNumber(row.has_profile) === 1,
     });
     if (!account) continue;
+    const fallbackEvent = userRegs[0] ? eventName(userRegs[0].seminar_id) : eventName();
     for (const item of userTickets) {
       pushByEmail(ticketsByEmail, account.email, {
         id: `${portal}-tkt-${item.id}`,
         portal,
-        eventName: eventName(item.event_id || item.seminar_id),
+        eventName: eventName(item.event_id || item.seminar_id) !== `${partnerCategory(portal)} programme`
+          ? eventName(item.event_id || item.seminar_id)
+          : fallbackEvent,
         status: asNumber(item.is_valid) === 0 ? "Invalid" : item.is_scanned ? "Checked in" : "Issued",
-        applicationNo: str(item, ["ticket_id_string"]) || undefined,
+        applicationNo: str(item, ["ticket_id_string"]) || str(userRegs[0] ?? {}, ["application_no"]) || undefined,
         issuedAt: iso(item.scan_time || item.created_at) || undefined,
         portalUrl: partnerTicketHref(portal),
         kind: "ticket",
@@ -940,6 +958,8 @@ function mergeAccounts(list: SanitizedPartnerAccount[]) {
       ...account,
       id: existing.id,
       accountId: existing.accountId,
+      firstName: existing.firstName && existing.firstName !== "Member" ? existing.firstName : account.firstName,
+      lastName: existing.lastName || account.lastName,
       role: protectedRole ? existing.role : "customer",
       password: undefined,
       partnerPasswordSet: false,
