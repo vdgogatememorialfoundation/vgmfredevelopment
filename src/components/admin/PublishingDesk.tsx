@@ -911,7 +911,7 @@ export function SupportUsDesk() {
 }
 
 export function CertificateApiDesk() {
-  const [number, setNumber] = useState("VGMF-CERT-2026-0001");
+  const [number, setNumber] = useState("");
   const [siteId, setSiteId] = useState<(typeof partnerSites)[number]["id"]>("seminar");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -923,11 +923,11 @@ export function CertificateApiDesk() {
       const data = await verifyCertificate(number, site.apiKey);
       setNote(
         data.verified && data.certificate
-          ? `${site.origin} accepted the key and verified ${data.certificate.certificateNumber} · ${data.certificate.name} · ${data.certificate.event}.`
-          : `${site.origin} accepted the key. No issued certificate matches ${number.trim() || "(empty)"}.`
+          ? `Verified ${data.certificate.certificateNumber} · ${data.certificate.name} · ${data.certificate.event}.`
+          : `No issued certificate matches that number.`
       );
     } catch (error) {
-      setNote(error instanceof Error ? error.message : "The verification API did not respond.");
+      setNote(error instanceof Error ? error.message : "Verification did not complete.");
     } finally {
       setBusy(false);
     }
@@ -936,26 +936,11 @@ export function CertificateApiDesk() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Certificate verification API</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          The public Certificate Verification page checks this site, then the seminar and autism public APIs.
-          Seminar IDs are 12 digits. Autism IDs look like CERT-P-12-345, CERT-V-12-345 or older CERT-12-345.
-          Partner sites may still call <span className="font-mono">GET /api/certificates/verify?number=</span> with{" "}
-          <span className="font-mono">x-api-key</span> for Foundation-issued certificates.
-        </p>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {partnerSites.map((item) => (
-          <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{item.name}</p>
-            <p className="mt-1 text-sm text-slate-700">{item.origin}</p>
-            <p className="mt-2 font-mono text-sm text-burgundy">{item.apiKey}</p>
-          </div>
-        ))}
+        <h1 className="text-2xl font-bold text-slate-900">Certificate verification</h1>
+        <p className="mt-1 text-sm text-slate-500">Check a certificate number against this site, the seminar site, or the autism site.</p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <p className="text-sm font-semibold text-slate-800">Test GET /api/certificates/verify</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_12rem_auto]">
+        <div className="grid gap-3 sm:grid-cols-[1fr_12rem_auto]">
           <input className={field} value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Certificate number" />
           <select className={field} value={siteId} onChange={(event) => setSiteId(event.target.value as typeof siteId)}>
             {partnerSites.map((item) => (
@@ -965,7 +950,7 @@ export function CertificateApiDesk() {
             ))}
           </select>
           <button type="button" disabled={busy} className={button} onClick={() => void run()}>
-            {busy ? "Checking…" : "Call API"}
+            {busy ? "Checking…" : "Check"}
           </button>
         </div>
         {note && <p className="mt-3 text-sm text-slate-700">{note}</p>}
@@ -987,7 +972,7 @@ export function ZeptoDesk() {
         <p className="mt-1 text-sm text-slate-500">Foundation mail goes through ZeptoMail. WhatsApp messaging is not connected.</p>
       </div>
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-        <input className={field} placeholder="ZeptoMail token" value={token} onChange={(event) => setToken(event.target.value)} />
+        <input className={field} type="password" placeholder="ZeptoMail token" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="new-password" />
         <input className={field} placeholder="Send a test to" value={to} onChange={(event) => setTo(event.target.value)} />
         <div className="flex gap-2">
           <button

@@ -42,7 +42,6 @@ export const publicSitemapPaths = [
   "/about",
   "/about/history",
   "/about/legacy-of-vaidya-rb-gogate",
-  "/notices",
   "/events",
   "/gallery",
   "/videos",

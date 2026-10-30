@@ -46,7 +46,7 @@ export default function SignInFlow() {
       purpose: "sign-in",
     });
     setPending(account);
-    setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+    setOtpHint(`A code was sent to ${account.email}.`);
     setStep("otp");
   };
 
@@ -59,7 +59,7 @@ export default function SignInFlow() {
       purpose: "SMS sign-in",
     });
     setPending(account);
-    setOtpHint(`Code sent by SMS to ${account.phone}. Demo code: ${code}`);
+    setOtpHint(`A code was sent by SMS to ${account.phone}.`);
     setStep("otp");
   };
 

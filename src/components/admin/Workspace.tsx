@@ -10,6 +10,7 @@ import { getIntegrations } from "@/lib/integrations";
 import { allStaffModules, firstPathFor, getRole, modulesFor } from "@/lib/roles";
 import { adminNavigation } from "@/app/(portal)/admin/_config/navigation";
 import { canOpen } from "@/lib/roles";
+import { NoticeDesk } from "@/components/admin/NoticeDesk";
 
 export function WorkspaceHome() {
   const { user } = useAuth();
@@ -69,6 +70,12 @@ export function WorkspaceHome() {
             <Link href="/admin/reports" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-gray-800">Reports</Link>
           </div>
         </div>
+      )}
+
+      {isAdmin && (
+        <section id="notices" className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+          <NoticeDesk compact />
+        </section>
       )}
 
       {isAdmin && (

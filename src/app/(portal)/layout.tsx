@@ -13,7 +13,7 @@ export default function PortalLayout({
   const feed = readMobileFeed();
   const initial = { site: feed.site, flyers: feed.flyers ?? [], publishedAt: feed.publishedAt };
   return (
-    <AuthProvider>
+    <AuthProvider scope="portal">
       <LanguageProvider>
         <HydratePublishedSite initial={initial}>
           <div className="min-h-screen bg-background">{children}</div>

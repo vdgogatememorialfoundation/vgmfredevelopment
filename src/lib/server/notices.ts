@@ -2,23 +2,29 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { notices as seededNotices } from "@/data/content";
 import { isPublishedNow } from "@/lib/schedule";
+import { dataFile } from "@/lib/server/paths";
 import type { Notice } from "@/types";
 
 export type StoredNotice = Notice & { updatedAt: string };
 
-const FILE = join("/tmp", "vgmf-notices.json");
+const LEGACY_FILE = join("/tmp", "vgmf-notices.json");
+
+function filePath() {
+  return dataFile("notices.json");
+}
 
 function seed(): StoredNotice[] {
   return seededNotices.map((notice) => ({ ...notice, updatedAt: `${notice.date}T00:00:00.000Z` }));
 }
 
 function read(): StoredNotice[] {
-  try {
-    const raw = readFileSync(FILE, "utf8");
-    const parsed = JSON.parse(raw) as StoredNotice[];
-    if (Array.isArray(parsed) && parsed.length) return parsed;
-  } catch {
-    /* first run */
+  for (const file of [filePath(), LEGACY_FILE]) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as StoredNotice[];
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch {
+      /* try the next path */
+    }
   }
   const next = seed();
   write(next);
@@ -27,8 +33,9 @@ function read(): StoredNotice[] {
 
 function write(notices: StoredNotice[]) {
   try {
-    mkdirSync(dirname(FILE), { recursive: true });
-    writeFileSync(FILE, JSON.stringify(notices));
+    const file = filePath();
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(notices));
   } catch {
     /* ephemeral host */
   }
@@ -75,7 +82,7 @@ export function upsertNotice(input: Partial<Notice> & Pick<Notice, "title">) {
     fileName: input.fileName === undefined ? existing?.fileName : input.fileName,
     fileType: input.fileType === undefined ? existing?.fileType : input.fileType,
     pinned: input.pinned ?? existing?.pinned ?? false,
-    href: input.href?.trim() || existing?.href || `/notices#${id}`,
+    href: input.href?.trim() || existing?.href || `/#notices`,
     publishAt: input.publishAt === undefined ? existing?.publishAt : input.publishAt || undefined,
     unpublishAt: input.unpublishAt === undefined ? existing?.unpublishAt : input.unpublishAt || undefined,
     updatedAt: new Date().toISOString(),
@@ -92,13 +99,19 @@ export function upsertNotice(input: Partial<Notice> & Pick<Notice, "title">) {
 export async function fileFromForm(form: FormData) {
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) return {};
-  if (file.size > 2_000_000) throw new Error("Use a file under 2 MB.");
-  const buffer = Buffer.from(await file.arrayBuffer());
-  return {
-    attachment: `data:${file.type || "application/octet-stream"};base64,${buffer.toString("base64")}`,
-    fileName: file.name,
-    fileType: file.type || "application/octet-stream",
-  };
+  try {
+    const { storeUploadedFile } = await import("@/lib/server/media-upload");
+    const stored = await storeUploadedFile(file);
+    return { attachment: stored.url, fileName: stored.name, fileType: stored.type };
+  } catch {
+    if (file.size > 2_000_000) throw new Error("Use a file under 2 MB, or connect media storage.");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    return {
+      attachment: `data:${file.type || "application/octet-stream"};base64,${buffer.toString("base64")}`,
+      fileName: file.name,
+      fileType: file.type || "application/octet-stream",
+    };
+  }
 }
 
 export function asBoolean(value: FormDataEntryValue | null) {

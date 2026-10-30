@@ -104,8 +104,8 @@ const modules: {
   {
     id: "notices",
     label: "Notice board",
-    publicHref: "/notices",
-    adminHref: "/admin/website/notices",
+    publicHref: "/#notices",
+    adminHref: "/admin",
     count: notices.length,
     records: notices.map((item) => ({
       id: item.id,

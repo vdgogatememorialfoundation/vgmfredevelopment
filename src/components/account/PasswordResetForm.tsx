@@ -26,9 +26,9 @@ export function ForgotPasswordForm({
   const [account, setAccount] = useState<User | null>(null);
 
   const sendCode = (target: User) => {
-    const issued = sendPasswordResetCode(target, role);
+    sendPasswordResetCode(target, role);
     setAccount(target);
-    setHint(`Code sent to ${target.email}. Demo code: ${issued}`);
+    setHint(`A code was sent to ${target.email}.`);
     setError("");
     setStep("code");
   };

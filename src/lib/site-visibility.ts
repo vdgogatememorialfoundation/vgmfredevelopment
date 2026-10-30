@@ -23,7 +23,6 @@ export const publicSitePages = [
   { id: "contact", label: "Contact", href: "/contact" },
   { id: "support", label: "Support", href: "/support" },
   { id: "announcements", label: "Announcements", href: "/announcements" },
-  { id: "notices", label: "Notice board", href: "/notices" },
   { id: "certificates", label: "Certificate verification", href: "/certificate-verification" },
 ] as const;
 

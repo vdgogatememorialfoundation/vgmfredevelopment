@@ -1,11 +1,18 @@
 import type { User } from "@/types";
-import { clearSession, getSession, persistUntilLogoutEnabled, saveAccount, setSession } from "@/lib/auth";
+import {
+  clearSession,
+  getSession,
+  persistUntilLogoutEnabled,
+  saveAccount,
+  setSession,
+  type SessionScope,
+} from "@/lib/auth";
 import { recordActivity } from "@/lib/activity";
 
 type Listener = () => void;
 
-let snapshot: User | null = null;
-let snapshotReady = false;
+const snapshots: Record<SessionScope, User | null> = { public: null, portal: null };
+const ready: Record<SessionScope, boolean> = { public: false, portal: false };
 let browserBound = false;
 const listeners = new Set<Listener>();
 
@@ -14,12 +21,12 @@ function withLoginStamp(user: User): User {
   return { ...user, lastLoginAt: new Date().toISOString() };
 }
 
-function resolveSnapshot(): User | null {
-  const session = getSession();
+function resolveSnapshot(scope: SessionScope): User | null {
+  const session = getSession(scope);
   if (!session) return null;
   if (session.lastLoginAt) return session;
   const stamped = withLoginStamp(session);
-  setSession(stamped);
+  setSession(stamped, scope);
   return stamped;
 }
 
@@ -28,26 +35,33 @@ function notify() {
 }
 
 function refreshFromStorage() {
-  snapshot = resolveSnapshot();
-  snapshotReady = true;
+  snapshots.public = resolveSnapshot("public");
+  snapshots.portal = resolveSnapshot("portal");
+  ready.public = true;
+  ready.portal = true;
   notify();
 }
 
-/** Re-apply the in-memory session if storage was emptied without Logout. */
-function healIfMissing() {
+function healScope(scope: SessionScope) {
   if (!persistUntilLogoutEnabled()) {
-    refreshFromStorage();
+    snapshots[scope] = resolveSnapshot(scope);
+    ready[scope] = true;
     return;
   }
-  const session = resolveSnapshot();
+  const session = resolveSnapshot(scope);
   if (session) {
-    snapshot = session;
-  } else if (snapshot) {
-    setSession(snapshot);
+    snapshots[scope] = session;
+  } else if (snapshots[scope]) {
+    setSession(snapshots[scope] as User, scope);
   } else {
-    snapshot = null;
+    snapshots[scope] = null;
   }
-  snapshotReady = true;
+  ready[scope] = true;
+}
+
+function healIfMissing() {
+  healScope("public");
+  healScope("portal");
   notify();
 }
 
@@ -63,44 +77,47 @@ function bindBrowser() {
   });
 }
 
+function ensureScope(scope: SessionScope) {
+  bindBrowser();
+  if (!ready[scope]) {
+    snapshots[scope] = resolveSnapshot(scope);
+    ready[scope] = true;
+  }
+}
+
 export function storeSubscribe(listener: () => void) {
   bindBrowser();
-  if (!snapshotReady) {
-    snapshot = resolveSnapshot();
-    snapshotReady = true;
-  }
+  ensureScope("public");
+  ensureScope("portal");
   listeners.add(listener);
   return function unsubscribe() {
     listeners.delete(listener);
   };
 }
 
-export function storeSnapshot(): User | null {
-  bindBrowser();
-  if (!snapshotReady) {
-    snapshot = resolveSnapshot();
-    snapshotReady = true;
-  }
-  return snapshot;
+export function storeSnapshot(scope: SessionScope = "public"): User | null {
+  ensureScope(scope);
+  return snapshots[scope];
 }
 
-export function storeSignIn(user: User) {
+export function storeSignIn(user: User, scope?: SessionScope) {
   const next = { ...user, lastLoginAt: new Date().toISOString(), lastLogoutAt: undefined };
+  const resolved = scope ?? (next.role === "admin" || next.role === "coadmin" || next.role === "staff" || next.role === "doctor" ? "portal" : "public");
   saveAccount(next);
-  setSession(next);
-  snapshot = next;
-  snapshotReady = true;
+  setSession(next, resolved);
+  snapshots[resolved] = next;
+  ready[resolved] = true;
   notify();
   recordActivity({ email: next.email, kind: "login", detail: "Signed in" });
 }
 
-export function storeSignOut() {
-  const email = snapshot?.email;
-  snapshot = null;
-  snapshotReady = true;
+export function storeSignOut(scope: SessionScope = "public") {
+  const email = snapshots[scope]?.email;
+  snapshots[scope] = null;
+  ready[scope] = true;
   if (email) {
     recordActivity({ email, kind: "logout", detail: "Signed out" });
   }
-  clearSession();
+  clearSession(scope);
   notify();
 }

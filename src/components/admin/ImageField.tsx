@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { fileToDataUrl } from "@/lib/images";
+import { fileToDataUrl, fileToStoredUrl } from "@/lib/images";
 import type { CaptionedImage } from "@/types";
 
 const input = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -28,7 +28,7 @@ export function ImageField({
     setBusy(true);
     setError("");
     try {
-      onChange(await fileToDataUrl(file, Math.min(maxWidth, 640), 0.6));
+      onChange(await fileToStoredUrl(file).catch(() => fileToDataUrl(file, Math.max(maxWidth, 1200), 0.82)));
     } catch (problem) {
       const quota = problem instanceof DOMException && (problem.name === "QuotaExceededError" || problem.code === 22);
       setError(quota ? "Storage is full. Use a smaller image or paste an image URL." : problem instanceof Error ? problem.message : "Upload failed.");
@@ -45,7 +45,7 @@ export function ImageField({
         <div className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50">
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt="" className="h-full w-full object-cover" />
+            <img src={value} alt="" className="h-full w-full object-contain" />
           ) : (
             <span className="text-[11px] text-slate-400">No image</span>
           )}
@@ -99,7 +99,7 @@ export function GalleryField({
     try {
       const added: CaptionedImage[] = [];
       for (const file of Array.from(files)) {
-        added.push({ src: await fileToDataUrl(file, 640, 0.6), caption: "" });
+        added.push({ src: await fileToStoredUrl(file).catch(() => fileToDataUrl(file, 640, 0.6)), caption: "" });
       }
       onChange([...images, ...added]);
     } catch (problem) {
@@ -143,7 +143,7 @@ export function GalleryField({
             <div className="h-20 w-24 shrink-0 overflow-hidden rounded-md bg-slate-50">
               {image.src && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={image.src} alt="" className="h-full w-full object-cover" />
+                <img src={image.src} alt="" className="h-full w-full object-contain" />
               )}
             </div>
             <div className="min-w-0 flex-1 space-y-1.5">

@@ -2,14 +2,13 @@
  * Browser storage holds roughly 5 MB per site, so uploads are downscaled and
  * re-encoded before they are saved alongside the content that uses them.
  */
-export async function fileToDataUrl(file: File, maxWidth = 640, quality = 0.6): Promise<string> {
+export async function fileToDataUrl(file: File, maxWidth = 1600, quality = 0.82): Promise<string> {
   if (file.type === "image/svg+xml" || file.type === "image/x-icon") {
     return readAsDataUrl(file);
   }
   const source = await readAsDataUrl(file);
   const image = await loadImage(source);
-  const maxHeight = Math.round(maxWidth * 0.48);
-  const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+  const scale = Math.min(1, maxWidth / Math.max(image.naturalWidth, image.naturalHeight));
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
   const canvas = document.createElement("canvas");
@@ -40,14 +39,22 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function fileToStoredUrl(file: File, maxBytes = 2_000_000) {
+export async function fileToStoredUrl(file: File, maxBytes = 25_000_000) {
   if (file.size > maxBytes) {
-    throw new Error("Use a file under 2 MB, or a public file URL.");
+    throw new Error("Use a file under 25 MB.");
   }
-  if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
-    return fileToDataUrl(file);
+  try {
+    const { uploadMediaFile } = await import("@/lib/media-client");
+    return await uploadMediaFile(file);
+  } catch (remoteError) {
+    if (file.size > 2_000_000) {
+      throw remoteError instanceof Error ? remoteError : new Error("Use a file under 2 MB, or connect media storage.");
+    }
+    if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
+      return fileToDataUrl(file);
+    }
+    return readAsDataUrl(file);
   }
-  return readAsDataUrl(file);
 }
 
 export function isStorageFull(error: unknown) {

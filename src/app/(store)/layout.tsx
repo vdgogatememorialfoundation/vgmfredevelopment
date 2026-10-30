@@ -23,7 +23,7 @@ export default function StoreLayout({
   const initial = { site: feed.site, flyers: feed.flyers ?? [], publishedAt: feed.publishedAt };
 
   return (
-    <AuthProvider>
+    <AuthProvider scope="public">
       <LanguageProvider>
         <MaintenanceGate>
           <HydratePublishedSite initial={initial}>

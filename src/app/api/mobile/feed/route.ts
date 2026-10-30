@@ -14,7 +14,6 @@ export async function GET() {
     {
       ok: true,
       feed,
-      hint: "The Android/iOS apps load this feed on launch. Publish from Admin → Mobile app after you change content — no Play Store or App Store release is required.",
     },
     { headers: { ...corsHeaders, "cache-control": "no-store" } }
   );

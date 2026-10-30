@@ -215,7 +215,7 @@ export function GeneralSettingsDesk() {
       </Card>
 
       <Card title="Google Maps" text="Used on clinics, events, live tracking and the analytics live map. Paste a Maps URL if you leave this blank.">
-        <Text
+        <Secret
           label="Google Maps JavaScript API key"
           value={settings.apiKeys.googleMaps}
           onChange={(googleMaps) => set({ apiKeys: { ...settings.apiKeys, googleMaps } })}

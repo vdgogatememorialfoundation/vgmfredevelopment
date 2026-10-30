@@ -13,6 +13,7 @@ export interface GalleryItem {
   title: string;
   caption?: string;
   category: string;
+  album?: string;
   date?: string;
 }
 
@@ -40,6 +41,10 @@ export function saveGallery(items: GalleryItem[]) {
 export function galleryCategories(items = read()) {
   const extra = items.map((item) => item.category).filter(Boolean);
   return [...new Set([...GALLERY_CATEGORIES, ...extra])];
+}
+
+export function galleryAlbums(items = read()) {
+  return [...new Set(items.map((item) => item.album?.trim()).filter(Boolean) as string[])];
 }
 
 let cachedRaw: string | null = "\0";

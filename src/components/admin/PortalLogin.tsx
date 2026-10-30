@@ -85,7 +85,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
       purpose: `${label.toLowerCase()} sign-in`,
     });
     setPendingEmail(account.email);
-    setOtpHint(`Password accepted. Code sent to ${account.email}. Demo code: ${code}`);
+    setOtpHint(`Password accepted. A code was sent to ${account.email}.`);
     setMode("mfa");
   };
 
@@ -110,7 +110,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
       purpose: `${label.toLowerCase()} sign-in`,
     });
     setOtpSent(true);
-    setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+    setOtpHint(`A code was sent to ${account.email}.`);
     setError("");
   };
 
@@ -207,7 +207,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
                   code,
                   purpose: `${label.toLowerCase()} sign-in`,
                 });
-                setOtpHint(`Code sent to ${account.email}. Demo code: ${code}`);
+                setOtpHint(`A code was sent to ${account.email}.`);
               }
             }}
           />
@@ -272,13 +272,6 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
             <ResendButton onResend={() => sendCode()} />
           )}
         </form>
-      )}
-
-      {portal === "admin" && (
-        <div className="mt-5 rounded-xl bg-warm-cream p-4 text-xs leading-5 text-text-muted">
-          <p className="font-semibold text-text-primary">Demo credentials</p>
-          <p>admin@vaidyagogate.org · password admin123</p>
-        </div>
       )}
 
       <Link href="/" className="mt-6 block text-center text-sm font-medium text-text-muted transition hover:text-burgundy">

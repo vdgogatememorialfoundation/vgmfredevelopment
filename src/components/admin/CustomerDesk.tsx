@@ -17,6 +17,7 @@ import { useAccounts } from "@/lib/use-cms";
 import { matchesAccountQuery } from "@/lib/account-search";
 import type { AccountStatus, User } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
+import { AdminModal } from "@/components/admin/AdminModal";
 
 ensureBootstrapped();
 
@@ -90,7 +91,7 @@ export function CustomerDesk() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => setCreating((value) => !value)}>{creating ? "Close" : "+ Create customer"}</Button>
+          <Button onClick={() => setCreating(true)}>+ Create customer</Button>
           <Button
             variant="outline"
             disabled={!selectedEmails.length}
@@ -107,16 +108,22 @@ export function CustomerDesk() {
       {error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
       {creating && (
-        <Panel title="New customer" description="Salutation, name, phone, email and address. A 12-digit Account ID is generated and emailed with how to sign in.">
+        <AdminModal title="New customer" wide onClose={() => setCreating(false)}>
           <CustomerFields form={form} setForm={setForm} />
           <div className="mt-4">
             <Button onClick={create}>Create account & email details</Button>
           </div>
-        </Panel>
+        </AdminModal>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-5">
-        <div className="xl:col-span-2">
+      {selected ? (
+        <AdminModal title={`${displayName(selected, true)} · ${selected.accountId}`} wide onClose={() => setSelectedEmail(null)}>
+          <CustomerDetail key={selected.email} account={selected} onNote={setNote} />
+        </AdminModal>
+      ) : null}
+
+      <div className="grid gap-5">
+        <div>
           <Panel title={`Accounts (${shown.length})`}>
             <TextInput placeholder="Search name, email, phone or 12-digit ID" value={query} onChange={(event) => setQuery(event.target.value)} />
             {shown.length === 0 ? (
@@ -141,13 +148,6 @@ export function CustomerDesk() {
               </ul>
             )}
           </Panel>
-        </div>
-        <div className="xl:col-span-3">
-          {selected ? <CustomerDetail key={selected.email} account={selected} onNote={setNote} /> : (
-            <Panel title="Customer details">
-              <EmptyState text="Select a customer to update their information, store credit or login email." />
-            </Panel>
-          )}
         </div>
       </div>
     </div>

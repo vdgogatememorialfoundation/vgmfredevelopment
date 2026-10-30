@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ImageField } from "@/components/admin/ImageField";
+import { fileToStoredUrl } from "@/lib/images";
 
 type Field = {
   key: string;
   label: string;
-  kind?: "text" | "textarea" | "select" | "image";
+  kind?: "text" | "textarea" | "select" | "image" | "file";
   options?: string[];
 };
 
@@ -41,6 +42,7 @@ export default function RecordDesk<T extends { id: string }>({
   const [draft, setDraft] = useState<T>(() => blank());
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const update = (key: string, value: string) => {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -100,6 +102,33 @@ export default function RecordDesk<T extends { id: string }>({
               hint="Uploads are resized so they can be saved and shown on phones."
               onChange={(value) => update(field.key, value)}
             />
+          ) : field.kind === "file" ? (
+            <label key={field.key} className="block text-xs font-semibold text-slate-500">
+              {field.label}
+              <input
+                className={`${fieldClass} mt-1`}
+                type="file"
+                accept="video/*,.pdf,image/*"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  setUploading(true);
+                  setMessage("");
+                  try {
+                    update(field.key, await fileToStoredUrl(file));
+                    setMessage("File uploaded.");
+                  } catch (error) {
+                    setMessage(error instanceof Error ? error.message : "Upload failed.");
+                  } finally {
+                    setUploading(false);
+                    event.target.value = "";
+                  }
+                }}
+              />
+              {String((draft as Record<string, unknown>)[field.key] ?? "") ? (
+                <span className="mt-1 block text-[11px] font-normal text-slate-500">File attached</span>
+              ) : null}
+            </label>
           ) : field.kind === "textarea" ? (
             <textarea
               key={field.key}
@@ -119,8 +148,8 @@ export default function RecordDesk<T extends { id: string }>({
             />
           )
         )}
-        <button type="button" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white" onClick={save}>
-          Save and publish
+        <button type="button" disabled={uploading} className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={save}>
+          {uploading ? "Uploading…" : "Save and publish"}
         </button>
         {message && <p className="text-sm text-emerald-700">{message}</p>}
       </div>

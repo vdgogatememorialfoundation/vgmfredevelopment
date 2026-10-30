@@ -145,7 +145,7 @@ export function GatewayDesk() {
       <h1 className="text-2xl font-bold text-slate-900">Payment gateway</h1>
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <label className="text-sm font-semibold text-slate-800">Razorpay key</label>
-        <input className={field} value={key} onChange={(event) => setKey(event.target.value)} placeholder="rzp_live_..." />
+        <input className={field} type="password" value={key} onChange={(event) => setKey(event.target.value)} placeholder="Razorpay key" autoComplete="new-password" />
         <button
           type="button"
           className={button}
