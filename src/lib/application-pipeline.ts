@@ -21,7 +21,9 @@ export type TrackedApplication = {
 export function normalizeApplicationStatus(raw?: string): Application["status"] {
   const value = (raw ?? "").toLowerCase().replace(/[_-]+/g, " ").trim();
   if (/(reject|declin|invalid|cancel|fail|withdraw)/.test(value)) return "Rejected";
-  if (/(confirm|check.?in|complete|issued|paid|captured|success|registered|valid)/.test(value)) return "Confirmed";
+  if (/(certificate|checked in|check in|confirm|complete|issued|paid|captured|success|registered|\bvalid\b)/.test(value)) {
+    return "Confirmed";
+  }
   if (/(approv|accept|shortlist|selected)/.test(value)) return "Approved";
   if (/(review|process|pending|verify)/.test(value)) return "Under Review";
   return "Submitted";
