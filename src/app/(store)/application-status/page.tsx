@@ -23,7 +23,7 @@ export default async function ApplicationStatusPage({
           <h1 className="heading-2 mt-2">Application Status</h1>
           <p className="mt-3 text-sm leading-6 text-text-muted">
             Enter the Application ID from your Seminar, Autism or Fellowship registration.
-            Live statuses are read from those sites. Seminar tracking opens{" "}
+            Seminar tracking opens{" "}
             <a href="https://seminar.vaidyagogate.org/doctor" className="font-semibold text-burgundy hover:underline">
               seminar.vaidyagogate.org/doctor
             </a>

@@ -6,7 +6,6 @@ import SectionHeader from "@/components/account/SectionHeader";
 import EmptyState from "@/components/account/EmptyState";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
-import LiveTracking from "@/components/store/LiveTracking";
 import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getOrdersByEmail, formatPrice, purgeSampleOrders } from "@/lib/store";
@@ -140,7 +139,6 @@ export default function OrdersPage() {
                       </div>
 
                       <OrderTrackingTimeline order={order} />
-                      <LiveTracking order={order} />
                     </div>
 
                     <div className="mt-5 grid gap-5 lg:grid-cols-2">

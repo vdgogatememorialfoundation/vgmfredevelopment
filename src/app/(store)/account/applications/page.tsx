@@ -12,7 +12,7 @@ export default function ApplicationsPage() {
     <div>
       <SectionHeader
         title="Application Status"
-        description="Live Seminar, Autism and Fellowship statuses on this portal. Seminar applications open the doctor portal at seminar.vaidyagogate.org/doctor."
+        description="Track Seminar, Autism and Fellowship applications on this portal. Seminar tracking opens seminar.vaidyagogate.org/doctor."
       />
       <PartnerPortalBadges user={user} className="mb-5" />
       <ApplicationTracker />

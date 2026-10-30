@@ -41,7 +41,6 @@ import {
 } from "@/lib/shipping-client";
 import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
-import LiveTracking from "@/components/store/LiveTracking";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
@@ -932,7 +931,6 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 )}
                 <div className="lg:col-span-2 space-y-4">
                   <OrderTrackingTimeline order={order} />
-                  <LiveTracking order={order} />
                 </div>
               </div>
             )}

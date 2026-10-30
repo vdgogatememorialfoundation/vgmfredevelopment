@@ -18,7 +18,12 @@ export default function ApplicationPipeline({
   const stages: PipelineStageShape[] = applicationPipelineSteps.map((step, index) => ({
     id: step.key,
     label: step.label,
-    caption: index === 0 ? `Applied on ${formatDate(application.appliedAt)}` : rawStatus && index === Math.max(0, statusIndex) ? rawStatus : "",
+    caption:
+      index === 0
+        ? `Applied on ${formatDate(application.appliedAt)}`
+        : rawStatus && index === Math.max(0, statusIndex)
+          ? rawStatus
+          : "",
     reached: rejected ? index === 0 : statusIndex >= index,
     partial: !rejected && statusIndex === index && application.status !== "Confirmed",
     events:
@@ -65,6 +70,20 @@ export default function ApplicationPipeline({
 
   const visible = rejected ? stages.filter((stage) => stage.reached) : stages;
   const currentIndex = rejected ? visible.length - 1 : Math.max(0, statusIndex);
+  const live = rawStatus || application.status;
+  const note = rejected
+    ? "This application was not approved. The line stops here."
+    : application.status === "Confirmed"
+      ? `Live status: ${live}.`
+      : `The line moves down to ${live}, and it stops before the next step.`;
 
-  return <VerticalPipeline stages={visible} currentIndex={currentIndex} failed={rejected} />;
+  return (
+    <VerticalPipeline
+      stages={visible}
+      currentIndex={currentIndex}
+      failed={rejected}
+      metaFor={(stage) => (stage.id === "Submitted" || stage.reached ? formatDate(application.appliedAt) : "")}
+      note={note}
+    />
+  );
 }

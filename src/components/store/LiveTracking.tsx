@@ -22,7 +22,7 @@ type Ping = {
   events: { at: string; status: string; location?: string }[];
 };
 
-export default function LiveTracking({ order }: { order: Order }) {
+export default function LiveTracking({ order, embedded = false }: { order: Order; embedded?: boolean }) {
   const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
   const [ping, setPing] = useState<Ping | null>(null);
   const [problem, setProblem] = useState("");
@@ -98,6 +98,35 @@ export default function LiveTracking({ order }: { order: Order }) {
   if (!hyperlocal) return null;
   if (!shipment && !order.trackingId) return null;
 
+  const mapBox = mapsKey ? (
+    <div ref={mapRef} className={embedded ? "h-full min-h-[280px] w-full" : "h-72 w-full bg-warm-cream"} />
+  ) : ping?.lat && ping?.lng ? (
+    <iframe
+      title="Delivery map"
+      className={embedded ? "h-full min-h-[280px] w-full border-0" : "h-72 w-full border-0"}
+      src={`https://www.google.com/maps?q=${ping.lat},${ping.lng}&z=15&output=embed`}
+    />
+  ) : (
+    <p className="p-4 text-sm text-text-muted">
+      Waiting for the delivery agent location. Add a Google Maps key in Settings for the live map.
+    </p>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex h-full min-h-[280px] flex-col">
+        <div className="bg-white px-3 py-2">
+          <p className="vgmf-hl-live">
+            {provider === "tookan" ? "Tookan" : "Shipday"}
+            {ping?.status ? ` · ${ping.status}` : " · Live partner location"}
+          </p>
+        </div>
+        <div className="min-h-0 flex-1">{mapBox}</div>
+        {problem ? <p className="px-3 py-2 text-xs text-red-600">{problem}</p> : null}
+      </div>
+    );
+  }
+
   return (
     <div className="mt-5 space-y-4">
       <div className="overflow-hidden rounded-2xl border border-border bg-white">
@@ -110,19 +139,7 @@ export default function LiveTracking({ order }: { order: Order }) {
             </p>
           </div>
         </div>
-        {mapsKey ? (
-          <div ref={mapRef} className="h-72 w-full bg-warm-cream" />
-        ) : ping?.lat && ping?.lng ? (
-          <iframe
-            title="Delivery map"
-            className="h-72 w-full border-0"
-            src={`https://www.google.com/maps?q=${ping.lat},${ping.lng}&z=15&output=embed`}
-          />
-        ) : (
-          <p className="p-4 text-sm text-text-muted">
-            Waiting for the delivery agent location. Add a Google Maps key in Settings for the live map.
-          </p>
-        )}
+        {mapBox}
       </div>
       {problem ? <p className="text-xs text-red-600">{problem}</p> : null}
     </div>

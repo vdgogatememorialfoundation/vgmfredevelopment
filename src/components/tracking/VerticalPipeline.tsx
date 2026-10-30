@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { classNames, formatDateTime } from "@/lib/utils";
+import { useEffect, useState, type CSSProperties } from "react";
+import { formatDateTime } from "@/lib/utils";
 import type { ShipmentEvent } from "@/types";
 
 export type PipelineTone = "emerald" | "sky" | "red";
@@ -13,6 +13,8 @@ export interface PipelineStageShape {
   reached: boolean;
   partial: boolean;
   events: ShipmentEvent[];
+  expected?: string;
+  courierNote?: { title: string; detail: string };
 }
 
 interface VerticalPipelineProps {
@@ -21,6 +23,35 @@ interface VerticalPipelineProps {
   failed?: boolean;
   metaFor?: (stage: PipelineStageShape) => string;
   timingFor?: (stage: PipelineStageShape) => { label: string; tone: PipelineTone } | null;
+  note?: string;
+}
+
+const ICONS: Record<string, string> = {
+  ordered: "M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4",
+  packed: "M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8",
+  shipped: "M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM18 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3z",
+  out: "M5 17a2 2 0 110-4 2 2 0 010 4zM16 17a2 2 0 110-4 2 2 0 010 4zM7 15h7l2-5H10M14 10l2 5M9 8h5",
+  delivered: "M5 12l5 5L20 7",
+  ready: "M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8",
+  picked: "M5 12l5 5L20 7",
+  cancelled: "M6 6l12 12M18 6L6 18",
+  failed: "M6 6l12 12M18 6L6 18",
+  Submitted: "M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4",
+  "Under Review": "M4 6h16M4 12h10M4 18h14",
+  Approved: "M5 12l5 5L20 7",
+  Confirmed: "M5 12l5 5L20 7",
+  Rejected: "M6 6l12 12M18 6L6 18",
+};
+
+function iconPath(id: string) {
+  return ICONS[id] || ICONS.ordered;
+}
+
+function pipeState(stage: PipelineStageShape, isCurrent: boolean): "done" | "active" | "upcoming" {
+  if (stage.partial || (isCurrent && !stage.reached)) return "active";
+  if (stage.reached && isCurrent) return "active";
+  if (stage.reached) return "done";
+  return "upcoming";
 }
 
 export default function VerticalPipeline({
@@ -29,215 +60,143 @@ export default function VerticalPipeline({
   failed,
   metaFor,
   timingFor,
+  note,
 }: VerticalPipelineProps) {
   const lastReachedIdx = stages.map((stage) => stage.reached).lastIndexOf(true);
   const partialIdx = stages.findIndex((stage) => stage.partial);
-  const nodeCurrentIdx =
-    currentIndex ?? (partialIdx !== -1 ? partialIdx : lastReachedIdx);
-  const targetFill = fillFor(stages, nodeCurrentIdx);
-  const [fill, setFill] = useState(0);
+  const nodeCurrentIdx = currentIndex ?? (partialIdx !== -1 ? partialIdx : lastReachedIdx);
+  const signature = `${stages.map((stage) => `${stage.id}:${stage.reached ? 1 : 0}:${stage.partial ? 1 : 0}`).join("|")}#${nodeCurrentIdx}`;
+  const [grows, setGrows] = useState<number[]>(() => stages.map(() => 0));
   const [openIdx, setOpenIdx] = useState(Math.max(0, nodeCurrentIdx));
+  const [drawMs, setDrawMs] = useState<number[]>(() => stages.map(() => 0));
 
   useEffect(() => {
     setOpenIdx(Math.max(0, nodeCurrentIdx));
   }, [nodeCurrentIdx]);
 
   useEffect(() => {
-    let frame = 0;
-    const from = fill;
-    const to = targetFill;
-    if (Math.abs(to - from) < 0.002) {
-      setFill(to);
+    const targets = stages.map((stage, index) => {
+      const state = pipeState(stage, index === nodeCurrentIdx);
+      return state === "done" ? 1 : state === "active" ? 0.55 : 0;
+    });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      setDrawMs(targets.map(() => 0));
+      setGrows(targets);
       return;
     }
-    const started = performance.now();
-    const duration = 2200;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - started) / duration);
-      const eased = 1 - (1 - t) ** 3;
-      setFill(from + (to - from) * eased);
-      if (t < 1) frame = window.requestAnimationFrame(tick);
+    setDrawMs(targets.map(() => 0));
+    setGrows(targets.map(() => 0));
+    let index = 0;
+    let timer = 0;
+    const next = () => {
+      if (index >= targets.length) return;
+      const target = targets[index];
+      if (target <= 0) {
+        index += 1;
+        next();
+        return;
+      }
+      const ms = target >= 1 ? 2200 : 6500;
+      setDrawMs((current) => current.map((value, i) => (i === index ? ms : value)));
+      const step = index;
+      window.requestAnimationFrame(() => {
+        setGrows((current) => current.map((value, i) => (i === step ? target : value)));
+      });
+      index += 1;
+      timer = window.setTimeout(next, ms);
     };
-    frame = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(frame);
-    // Only restart when the courier-driven target changes.
+    const start = window.requestAnimationFrame(next);
+    return () => {
+      window.cancelAnimationFrame(start);
+      window.clearTimeout(timer);
+    };
+    // Restart only when courier/application progress actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetFill]);
+  }, [signature]);
+
+  const firstUpcoming = stages.findIndex((stage, index) => pipeState(stage, index === nodeCurrentIdx) === "upcoming");
 
   return (
-    <ol className="relative" role="list">
-      <span aria-hidden="true" className="absolute top-2 bottom-2 left-[11px] w-0.5 overflow-hidden rounded-full">
-        <span className="absolute inset-0 bg-border" />
-        <span
-          className={classNames(
-            "absolute top-0 left-0 w-full origin-top rounded-full",
-            failed ? "bg-red-500" : "bg-emerald-500"
-          )}
-          style={{ height: `${Math.round(fill * 1000) / 10}%` }}
-        />
-      </span>
-      {stages.map((stage, index) => {
-        const open = openIdx === index;
-        const timing = timingFor?.(stage);
-        const state = nodeState(stage, index === nodeCurrentIdx);
-        return (
-          <li key={stage.id} className="relative flex gap-3 pb-6 last:pb-0">
-            <NodeState state={state} failed={failed && stage.id === "failed"} />
-            <div className="min-w-0 flex-1">
-              <button
-                type="button"
-                onClick={() => setOpenIdx(open ? -1 : index)}
-                aria-expanded={open}
-                className="flex w-full items-start justify-between gap-2 text-left"
-              >
-                <span className="min-w-0">
-                  <span
-                    className={classNames(
-                      "block text-sm font-bold",
-                      open ? "text-burgundy" : stage.reached ? "text-text-primary" : "text-text-muted"
-                    )}
-                  >
-                    {stage.label}
-                  </span>
-                  {stage.caption ? (
-                    <span className="mt-0.5 block text-xs font-medium text-text-muted">{stage.caption}</span>
-                  ) : null}
-                  {(metaFor?.(stage) || timing) && (
-                    <span className="mt-0.5 block text-[11px] leading-snug font-semibold text-text-muted">
-                      {metaFor?.(stage)}
-                      {timing ? <span className={timingToneClass(timing.tone)}> · {timing.label}</span> : null}
-                    </span>
-                  )}
-                </span>
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className={classNames("mt-0.5 shrink-0 text-text-muted transition-transform duration-200", open && "rotate-180")}
-                >
-                  <path d="m6 9 6 6 6-6" />
+    <div className="vgmf-trk">
+      {note ? <p className="vgmf-trk-note">{note}</p> : null}
+      <ol className="vgmf-ship-pipe" role="list">
+        {stages.map((stage, index) => {
+          const state = pipeState(stage, index === nodeCurrentIdx);
+          const open = openIdx === index;
+          const timing = timingFor?.(stage);
+          const stamp = metaFor?.(stage) || "";
+          const kids = stage.events;
+          const failedStep = Boolean(failed && (stage.id === "failed" || stage.id === "Rejected" || stage.id === "cancelled"));
+          const nextHint = index === firstUpcoming && stage.caption ? stage.caption : "";
+          return (
+            <li
+              key={stage.id}
+              className={`${state}${failedStep ? " is-failed" : ""}`}
+              style={
+                {
+                  "--i": index,
+                  "--grow": String(grows[index] ?? 0),
+                  "--draw": `${drawMs[index] ?? 0}ms`,
+                } as CSSProperties
+              }
+            >
+              {state === "active" && !failedStep ? <span className="vgmf-headway" aria-hidden="true" /> : null}
+              <span className="dot" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d={iconPath(stage.id)} />
                 </svg>
-              </button>
-              {open ? (
-                <div className="mt-3 rounded-2xl border border-border bg-white p-4 shadow-sm">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
-                    <p className="font-semibold text-text-primary">{stage.label}</p>
-                    <span
-                      className={classNames(
-                        "rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide",
-                        stage.reached
-                          ? failed && stage.id === "failed"
-                            ? "bg-red-50 text-red-700"
-                            : "bg-emerald-50 text-emerald-700"
-                          : stage.partial
-                            ? "bg-burgundy/10 text-burgundy"
-                            : "bg-warm-cream text-text-muted"
-                      )}
-                    >
-                      {stage.reached ? "Done" : stage.partial ? "In progress" : "Waiting for courier"}
-                    </span>
-                  </div>
-                  {stage.events.length === 0 ? (
-                    <p className="text-xs italic text-text-muted">
-                      {stage.reached ? "Reached." : "This step moves only when the courier posts an update."}
-                    </p>
-                  ) : (
-                    <ul className="space-y-3">
-                      {stage.events.map((event) => (
-                        <EventItem key={event.id} event={event} />
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function fillFor(stages: PipelineStageShape[], currentIdx: number) {
-  if (stages.length <= 1) return stages[0]?.reached ? 1 : 0;
-  const reached = stages.filter((stage) => stage.reached).length;
-  const partial = stages.some((stage) => stage.partial);
-  const index = Math.max(reached - 1, currentIdx >= 0 && stages[currentIdx]?.reached ? currentIdx : reached - 1, 0);
-  const extra = partial ? 0.4 : stages[index]?.id && !stages[index].reached ? 0 : 0;
-  return Math.max(0, Math.min(1, (index + extra) / (stages.length - 1)));
-}
-
-type NodeStatus = "reached" | "current" | "future";
-
-function nodeState(stage: PipelineStageShape, current: boolean): NodeStatus {
-  if (stage.reached) return current ? "current" : "reached";
-  if (stage.partial) return "current";
-  return "future";
-}
-
-function NodeState({ state, failed }: { state: NodeStatus; failed?: boolean }) {
-  return (
-    <span
-      className={classNames(
-        "relative z-[1] flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 bg-white",
-        failed && "border-red-500 text-red-600",
-        !failed && state === "reached" && "border-emerald-500 bg-emerald-500 text-white",
-        !failed && state === "current" && "border-emerald-500 bg-emerald-500/10 text-emerald-600 ring-2 ring-emerald-200",
-        !failed && state === "future" && "border-border text-text-muted"
-      )}
-    >
-      {state === "reached" ? (
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-      ) : state === "current" ? (
-        <span className={classNames("h-2.5 w-2.5 rounded-full", failed ? "bg-red-500" : "bg-emerald-500")} />
-      ) : (
-        <span className="h-2 w-2 rounded-full bg-border" />
-      )}
-    </span>
-  );
-}
-
-function EventItem({ event }: { event: ShipmentEvent }) {
-  const reached = !!event.reached;
-  return (
-    <li className={classNames("flex gap-2.5", reached ? "opacity-100" : "opacity-50")}>
-      <span className={classNames("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", reached ? "bg-emerald-500" : "bg-border")} />
-      <div className="min-w-0">
-        <p className={classNames("text-sm leading-snug font-semibold", reached ? "text-text-primary" : "text-text-muted")}>
-          {event.title}
-        </p>
-        <p className="mt-0.5 text-xs leading-snug text-text-muted">
-          {event.at ? formatDateTime(event.at) : ""}
-          {event.location ? <span> — {event.location}</span> : null}
-        </p>
-        {event.detail ? <p className="mt-0.5 text-xs leading-snug text-text-muted">{event.detail}</p> : null}
-        {event.agent?.name || event.agent?.phone ? (
-          <p className="mt-1.5 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800">
-            Agent: {[event.agent?.name, event.agent?.phone].filter(Boolean).join(" · ")}
-            {event.otp ? (
-              <span>
-                {" "}
-                · Delivery OTP: <span className="font-mono">{event.otp}</span>
               </span>
-            ) : null}
-          </p>
-        ) : null}
-      </div>
-    </li>
+              <div className="vgmf-ship-copy">
+                <div className="vgmf-ship-title">
+                  <b>{stage.label}</b>
+                  {stamp && state !== "upcoming" ? <span className="vgmf-ship-time">{stamp}</span> : null}
+                </div>
+                {stage.caption && state !== "upcoming" ? <div className="vgmf-ship-msg">{stage.caption}</div> : null}
+                {nextHint && state === "upcoming" ? <div className="vgmf-ship-next">Up next · {nextHint}</div> : null}
+                {timing && state !== "upcoming" ? (
+                  <span className={`vgmf-ship-expect${timing.tone === "red" ? " is-late" : ""}`}>{timing.label}</span>
+                ) : null}
+                {stage.expected && state !== "done" ? <span className="vgmf-ship-expect">{stage.expected}</span> : null}
+                {stage.courierNote && state !== "upcoming" ? (
+                  <div className="vgmf-ship-courier">
+                    <b>{stage.courierNote.title}</b>
+                    <span>{stage.courierNote.detail}</span>
+                  </div>
+                ) : null}
+                {kids.length ? (
+                  <button
+                    type="button"
+                    className="vgmf-ship-drawer-btn"
+                    aria-expanded={open}
+                    onClick={() => setOpenIdx(open ? -1 : index)}
+                  >
+                    {kids.length} update{kids.length > 1 ? "s" : ""} {open ? "▴" : "▾"}
+                  </button>
+                ) : null}
+                {open && kids.length ? (
+                  <ul className="vgmf-ship-kids">
+                    {kids.map((event) => (
+                      <li key={event.id} className={/fail|undeliver|rto/i.test(event.title) ? "failed" : ""}>
+                        <b>{event.title}</b>
+                        {event.at ? <div className="when">{formatDateTime(event.at)}</div> : null}
+                        {event.location ? <div className="where">{event.location}</div> : null}
+                        {event.detail ? <div className="where">{event.detail}</div> : null}
+                        {event.agent?.name || event.agent?.phone ? (
+                          <div className="where">
+                            Agent: {[event.agent?.name, event.agent?.phone].filter(Boolean).join(" · ")}
+                            {event.otp ? ` · Delivery OTP ${event.otp}` : ""}
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
-}
-
-const TIMING_TONE_CLASSES: Record<PipelineTone, string> = {
-  emerald: "font-semibold text-emerald-600",
-  sky: "font-semibold text-burgundy",
-  red: "font-semibold text-red-500",
-};
-
-function timingToneClass(tone: PipelineTone) {
-  return TIMING_TONE_CLASSES[tone];
 }

@@ -16,6 +16,9 @@ const DEFAULT_SLIDES: ImageSlide[] = [
   { id: "slide-shop", title: "Books and study materials from VGMF", image: "/slides/shop.svg", href: "/shop" },
 ];
 
+/** Compact strip heights from the current homepage setting. Large images stay inside this box. */
+const SLIDE_BOX = "relative h-[168px] w-full overflow-hidden sm:h-[188px] lg:h-[220px]";
+
 export default function HeroSection() {
   const flyers = useLiveFlyers();
   const settings = useSiteSettings();
@@ -70,13 +73,13 @@ export default function HeroSection() {
 
   return (
     <section
-      className="relative isolate z-0 bg-paper"
+      className="relative isolate z-0 overflow-hidden bg-ink"
       aria-roledescription="carousel"
       aria-label="Foundation slideshow"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="relative mx-auto w-full max-w-6xl bg-stone-100">
+      <div className={SLIDE_BOX}>
         {slides.map((item, slideIndex) => {
           const visible = slideIndex === active;
           const image = (
@@ -84,14 +87,19 @@ export default function HeroSection() {
             <img
               src={item.image}
               alt={item.title || "Slideshow image"}
-              className="mx-auto block h-auto w-auto max-h-[min(85vh,820px)] max-w-full object-contain object-center"
+              className={`absolute inset-0 object-contain object-center ${item.image.includes("/slides/") ? "object-bottom" : ""}`}
+              style={{ width: "100%", height: "100%", maxWidth: "none", maxHeight: "none" }}
               onError={() => setFailed((current) => ({ ...current, [item.id]: true }))}
             />
           );
           return (
-            <div key={item.id} className={visible ? "relative" : "hidden"} aria-hidden={!visible}>
+            <div
+              key={item.id}
+              className={`absolute inset-0 z-0 overflow-hidden bg-ink transition-opacity duration-700 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              aria-hidden={!visible}
+            >
               {item.href ? (
-                <a href={item.href} className="block" tabIndex={visible ? 0 : -1} aria-label={item.title || "Open slide"}>
+                <a href={item.href} className="absolute inset-0" tabIndex={visible ? 0 : -1} aria-label={item.title || "Open slide"}>
                   {image}
                 </a>
               ) : (
@@ -100,9 +108,9 @@ export default function HeroSection() {
             </div>
           );
         })}
-
+        <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
         {slide.title && !slide.image.startsWith("/slides/") ? (
-          <p className="pointer-events-none absolute bottom-12 left-4 right-4 z-10 max-w-3xl font-serif text-base leading-snug text-ink drop-shadow-[0_1px_8px_rgba(255,255,255,0.85)] sm:bottom-14 sm:left-16 sm:text-xl lg:text-2xl">
+          <p className="pointer-events-none absolute bottom-8 left-14 right-14 z-10 font-serif text-base leading-snug text-white drop-shadow sm:bottom-8 sm:left-16 sm:text-xl lg:text-2xl">
             {slide.title}
           </p>
         ) : null}
@@ -133,7 +141,7 @@ export default function HeroSection() {
             >
               ›
             </button>
-            <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+            <div className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
               {slides.map((item, slideIndex) => (
                 <button
                   key={item.id}
@@ -145,7 +153,7 @@ export default function HeroSection() {
                     event.stopPropagation();
                     go(slideIndex);
                   }}
-                  className={`h-2 rounded-full ${slideIndex === active ? "w-5 bg-ink" : "w-2 bg-ink/30"}`}
+                  className={`h-2 rounded-full ${slideIndex === active ? "w-5 bg-white" : "w-2 bg-white/60"}`}
                 />
               ))}
             </div>
