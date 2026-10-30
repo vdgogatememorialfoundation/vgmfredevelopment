@@ -15,10 +15,13 @@ import {
   saveIntegrations,
   saveOrderSettings,
   type IntegrationSettings,
+  type MessageCopy,
+  type NotificationEventId,
   type OrderSettings,
   type ShippingProviderId,
   type WhatsAppTemplate,
 } from "@/lib/integrations";
+import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
 import { testPaytmEdc, testRazorpay } from "@/lib/payments-client";
@@ -443,7 +446,7 @@ export function EmailSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="Email: ZeptoMail & Zoho Mail" text="Pick the provider that sends order, account and support emails, and store its credentials." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
+      <Header title="Email: Zoho CPaaS, ZeptoMail & Zoho Mail" text="Signup, login OTP and account emails go through this provider. The working India endpoint is POST https://cpaas.zoho.in/v1.1/email with Authorization: Zoho-enczapikey." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
       <Card title="Sender">
@@ -451,8 +454,9 @@ export function EmailSettingsDesk() {
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Provider</span>
             <select className={input} value={value.provider} onChange={(event) => set({ provider: event.target.value as typeof value.provider })}>
-              <option value="zeptomail">ZeptoMail (transactional)</option>
-              <option value="zoho">Zoho Mail</option>
+              <option value="cpaas">Zoho CPaaS email (cpaas.zoho.in)</option>
+              <option value="zeptomail">ZeptoMail (api.zeptomail.*)</option>
+              <option value="zoho">Zoho Mail (OAuth)</option>
             </select>
           </label>
           <Text label="From address" value={value.fromAddress} onChange={(fromAddress) => set({ fromAddress })} hint="Must be a verified sender domain." />
@@ -460,15 +464,18 @@ export function EmailSettingsDesk() {
         </div>
       </Card>
       <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="ZeptoMail" text="Mail Agents → SMTP/API → Send Mail token.">
+        <Card title="Zoho CPaaS / ZeptoMail token" text="Same Agent Send Mail token used by curl to https://cpaas.zoho.in/v1.1/email. Signup, OTP and account emails use this automatically after Save.">
           <div className="space-y-3">
             <Secret label="Send mail token" value={value.zeptoToken} placeholder="Zoho-enczapikey …" onChange={(zeptoToken) => set({ zeptoToken })} />
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Data centre</span>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Email API host</span>
               <select className={input} value={value.zeptoHost} onChange={(event) => set({ zeptoHost: event.target.value })}>
-                <option value="api.zeptomail.in">India (api.zeptomail.in)</option>
-                <option value="api.zeptomail.com">Global (api.zeptomail.com)</option>
-                <option value="api.zeptomail.eu">EU (api.zeptomail.eu)</option>
+                <option value="cpaas.zoho.in">India CPaaS (cpaas.zoho.in)</option>
+                <option value="cpaas.zoho.com">Global CPaaS (cpaas.zoho.com)</option>
+                <option value="cpaas.zoho.eu">EU CPaaS (cpaas.zoho.eu)</option>
+                <option value="api.zeptomail.in">ZeptoMail India (api.zeptomail.in)</option>
+                <option value="api.zeptomail.com">ZeptoMail Global</option>
+                <option value="api.zeptomail.eu">ZeptoMail EU</option>
               </select>
             </label>
           </div>
@@ -552,7 +559,20 @@ export function SmsSettingsDesk() {
           <div className="grid gap-3 sm:grid-cols-3">
             <Secret label="Auth key" value={value.msg91AuthKey} onChange={(msg91AuthKey) => set({ msg91AuthKey })} />
             <Text label="Sender ID" value={value.msg91SenderId} onChange={(msg91SenderId) => set({ msg91SenderId })} placeholder="VGMFIN" />
-            <Text label="OTP template ID" value={value.msg91TemplateId} onChange={(msg91TemplateId) => set({ msg91TemplateId })} hint="Required for login OTP." />
+            <Text label="Default OTP template ID" value={value.msg91TemplateId} onChange={(msg91TemplateId) => set({ msg91TemplateId })} hint="Used when an event has no DLT template ID." />
+          </div>
+        </Card>
+        <Card title="SMS template IDs" text="Optional MSG91 / DLT template ID for each automated SMS. Leave blank to use the default OTP template.">
+          <div className="grid gap-3 md:grid-cols-2">
+            {notificationEvents.map((item) => (
+              <Text
+                key={item.id}
+                label={item.label}
+                value={value.mapping?.[item.id] ?? ""}
+                onChange={(next) => set({ mapping: { ...value.mapping, [item.id]: next } })}
+                placeholder="DLT template ID"
+              />
+            ))}
           </div>
         </Card>
         <Card title="Send a test SMS">
@@ -759,6 +779,96 @@ export function WhatsAppSettingsDesk() {
         </div>
       </Card>
       </SettingsSave>
+    </div>
+  );
+}
+
+export function MessageTemplatesDesk() {
+  const [messages, setMessages] = useState<Partial<Record<NotificationEventId, MessageCopy>>>(() => getIntegrations().messages ?? {});
+  const [whatsapp, setWhatsapp] = useState(() => getIntegrations().whatsapp);
+  const [sms, setSms] = useState(() => getIntegrations().sms);
+  const [open, setOpen] = useState<NotificationEventId>("otp");
+  const [note, setNote] = useState("");
+
+  const save = () => {
+    const current = getIntegrations();
+    saveIntegrations({
+      ...current,
+      messages,
+      whatsapp: { ...current.whatsapp, mapping: whatsapp.mapping },
+      sms: { ...current.sms, mapping: sms.mapping },
+    });
+    setNote("Templates saved. Signup, OTP and account emails use these copies.");
+  };
+
+  const copy = (id: NotificationEventId): MessageCopy => ({
+    emailSubject: messages[id]?.emailSubject ?? defaultMessageCopy[id].emailSubject,
+    emailBody: messages[id]?.emailBody ?? defaultMessageCopy[id].emailBody,
+    smsBody: messages[id]?.smsBody ?? defaultMessageCopy[id].smsBody,
+  });
+
+  const setCopy = (id: NotificationEventId, patch: Partial<MessageCopy>) => {
+    setMessages((current) => ({ ...current, [id]: { ...copy(id), ...patch } }));
+  };
+
+  const selected = copy(open);
+
+  return (
+    <div className="space-y-5">
+      <Header
+        title="Email, SMS and WhatsApp templates"
+        text="Every automated message the site sends. Placeholders: {name} {code} {purpose} {email} {phone} {accountId} {signin} {orderId} {status} {amount} {link}."
+        action={<button type="button" className={primary} onClick={save}>Save templates</button>}
+      />
+      <Saved text={note} />
+      <div className="grid gap-5 lg:grid-cols-[16rem_1fr]">
+        <Card title="Events">
+          <div className="space-y-1">
+            {notificationEvents.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${open === item.id ? "bg-burgundy/10 font-semibold text-burgundy" : "text-slate-700 hover:bg-slate-50"}`}
+                onClick={() => setOpen(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+        <div className="space-y-5">
+          <Card title={`${notificationEvents.find((item) => item.id === open)?.label} · Email`}>
+            <div className="space-y-3">
+              <Text label="Email subject" value={selected.emailSubject} onChange={(emailSubject) => setCopy(open, { emailSubject })} />
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Email body</span>
+                <textarea className={input} rows={10} value={selected.emailBody} onChange={(event) => setCopy(open, { emailBody: event.target.value })} />
+              </label>
+            </div>
+          </Card>
+          <Card title="SMS">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">SMS body</span>
+              <textarea className={input} rows={4} value={selected.smsBody} onChange={(event) => setCopy(open, { smsBody: event.target.value })} />
+            </label>
+            <div className="mt-3">
+              <Text
+                label="MSG91 / DLT template ID (optional)"
+                value={sms.mapping?.[open] ?? ""}
+                onChange={(next) => setSms({ ...sms, mapping: { ...sms.mapping, [open]: next } })}
+              />
+            </div>
+          </Card>
+          <Card title="WhatsApp">
+            <Text
+              label="WhatsApp template / campaign / CPaaS alias"
+              value={whatsapp.mapping?.[open] ?? ""}
+              onChange={(next) => setWhatsapp({ ...whatsapp, mapping: { ...whatsapp.mapping, [open]: next } })}
+              hint="Must match an approved template on Meta, Zoho CPaaS or AiSensy."
+            />
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

@@ -69,7 +69,7 @@ export function emptySnapshot(): PartnerSnapshot {
 export function clientPartnerSnapshot(snapshot: PartnerSnapshot, opts?: { includePasswords?: boolean }) {
   return {
     syncedAt: snapshot.syncedAt,
-    events: snapshot.events,
+    events: snapshot.events.filter((event) => !isFellowshipEvent(event)),
     notices: snapshot.notices,
     announcements: snapshot.announcements,
     accounts: snapshot.accounts.map((account) => sanitizeAccountForClient(account, opts)),
@@ -202,10 +202,19 @@ function mapEventType(portal: PartnerPortalId, title: string): EventType {
   return "Seminar";
 }
 
+function isFellowshipEvent(event: { id?: string; source?: string; slug?: string; eventType?: string }) {
+  return (
+    event.source === "fellowship" ||
+    event.eventType === "Fellowship" ||
+    String(event.id || "").startsWith("fellowship-") ||
+    String(event.slug || "").startsWith("fellowship-")
+  );
+}
+
 function publicFeed(snapshot: PartnerSnapshot) {
   return {
     syncedAt: snapshot.syncedAt,
-    events: snapshot.events,
+    events: snapshot.events.filter((event) => !isFellowshipEvent(event)),
     notices: snapshot.notices,
     announcements: snapshot.announcements,
     stats: snapshot.stats,
@@ -549,35 +558,6 @@ async function pullNoticesDatabase(portal: PartnerPortalId): Promise<{ notices: 
   return { notices, announcements };
 }
 
-function fellowshipProgrammeEvent(settings: Record<string, unknown>, notices: Notice[]): Event {
-  const origin = originFor("fellowship");
-  const title = str(settings, ["hero_title", "site_name"], "Vaidya Gogate Memorial Foundation Research Fellowship 2026");
-  const description = str(settings, ["about_content", "site_tagline", "hero_subtitle"]) || notices.map((item) => item.title).join(" · ");
-  const signup = settings.signup_enabled == null ? true : Boolean(settings.signup_enabled);
-  const start = dateOnly(notices[0]?.date) || dateOnly(settings.updated_at) || "2026-06-17";
-  return {
-    id: "fellowship-programme",
-    name: title,
-    slug: slugify(`fellowship-${title}`),
-    shortDescription: (str(settings, ["site_tagline"]) || description).slice(0, 240),
-    description,
-    bannerUrl: mediaUrl(origin, settings.hero_snapshot || settings.logo_url),
-    startDate: start,
-    endDate: start,
-    mode: "Hybrid",
-    eventType: "Fellowship",
-    registrationStart: start,
-    registrationEnd: start,
-    fee: 0,
-    currency: "INR",
-    registrationStatus: signup ? "Open" : "Closed",
-    registrationUrl: origin,
-    source: "fellowship",
-    sourceUrl: origin,
-    tbd: { venue: true, city: true, dates: true, fee: true, registration: false },
-  };
-}
-
 async function pullFellowshipDatabase() {
   const portal: PartnerPortalId = "fellowship";
   if (!poolFor(portal)) return null;
@@ -596,7 +576,7 @@ async function pullFellowshipDatabase() {
       priority: "high",
     });
   }
-  const events = [fellowshipProgrammeEvent(settings, copied.notices)];
+  const events: Event[] = [];
   const users = (await queryRows(
     portal,
     `SELECT u.id, u.user_id AS user_id_string, u.email, u.phone,
@@ -922,6 +902,7 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     };
   }
   snapshot.accounts = mergeAccounts(snapshot.accounts);
+  snapshot.events = snapshot.events.filter((event) => !isFellowshipEvent(event));
   snapshot.syncedAt = new Date().toISOString();
   await persistPartnerNotices(snapshot.notices);
   await writePartnerSnapshot(snapshot);
@@ -982,7 +963,7 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
     }
   }
   const eventRow = asRecord(payload.event) ?? asRecord(payload.seminar);
-  if (eventRow) {
+  if (eventRow && portal !== "fellowship") {
     const event = eventFromSeminar(portal, eventRow, []);
     snapshot.events = upsertList(snapshot.events, event);
   }

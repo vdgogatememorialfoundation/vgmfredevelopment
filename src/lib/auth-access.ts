@@ -21,9 +21,10 @@ export function mailOtpAvailable() {
   if (typeof window === "undefined") {
     return Boolean((process.env.ZEPTOMAIL_TOKEN || "").trim() || (process.env.ZOHO_REFRESH_TOKEN || "").trim());
   }
-  const email = getIntegrations().email;
-  if (email.zeptoToken.trim()) return true;
-  if (email.provider === "zoho" && (email.zohoRefreshToken.trim() || email.zohoClientSecret.trim())) return true;
+  const settings = getIntegrations();
+  const email = settings.email;
+  if (email.zeptoToken.trim() || settings.whatsapp.zohoCpaasApiKey.trim()) return true;
+  if ((email.provider === "zoho" || email.provider === "cpaas") && (email.zohoRefreshToken.trim() || email.zeptoToken.trim() || settings.whatsapp.zohoCpaasApiKey.trim())) return true;
   try {
     if (window.localStorage.getItem(MAIL_READY_KEY) === "true") return true;
   } catch {

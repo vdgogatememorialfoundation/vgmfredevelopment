@@ -12,7 +12,7 @@ import { SiteVisibilityGate } from "@/components/layout/SiteVisibilityGate";
 import { HydratePublishedSite } from "@/components/common/HydratePublishedSite";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default function StoreLayout({
   children,

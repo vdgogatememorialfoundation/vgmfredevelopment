@@ -33,7 +33,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
-    if (user) void hydratePartnerFeed({ full: true })
+    if (user) void hydratePartnerFeed()
   }, [user])
 
   if (!user || (user.role !== "admin" && user.role !== "coadmin" && user.role !== "staff" && user.role !== "doctor")) {
@@ -112,6 +112,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                 <Link
                   key={item.label + item.href}
                   href={item.href}
+                  prefetch
                   onClick={() => setMenuOpen(false)}
                   className={[
                     "block rounded-lg px-3 py-2 text-sm transition",

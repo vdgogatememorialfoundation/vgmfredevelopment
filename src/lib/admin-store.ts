@@ -19,6 +19,7 @@ import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-id
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { getNotifications, queueNotification } from "@/lib/notify";
+import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
 import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { generatePassword } from "@/lib/passwords";
@@ -379,39 +380,25 @@ export function sendAccountDetails(email: string, isNew = false) {
         : role === "doctor"
           ? `${siteOrigin()}/doctor/login`
           : `${siteOrigin()}/admin/login`;
-  const address = account.address
-    ? [account.address.line1, account.address.landmark, account.address.city, account.address.state, account.address.pincode].filter(Boolean).join(", ")
-    : "Not added";
-  const lines = [
-    `Dear ${displayName(account, true) || "Member"},`,
-    "",
-    isNew ? "Your account on the Vaidya Gogate Memorial Foundation portal has been created." : "Here are your account details for the Vaidya Gogate Memorial Foundation portal.",
-    "",
-    `Account ID: ${account.accountId ?? "-"}`,
-    `Name: ${displayName(account, true)}`,
-    `Registered email: ${account.email}`,
-    `Registered mobile: ${account.phone}`,
-    account.alternatePhone ? `Alternate mobile: ${account.alternatePhone}` : "",
-    `Address: ${address}`,
-    role === "customer" ? `Store credit balance: ₹${(account.storeCredit ?? 0).toLocaleString("en-IN")}` : `Role: ${role}`,
-    "",
-    "How to sign in",
+  const signin =
     account.partnerPortals?.length && !account.foundationPasswordSet
       ? `Open ${signIn} and use Forgot password to set a Foundation website password. Seminar, Autism and Fellowship passwords are not used on this site.`
-      : `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`,
-    "",
-    "If you did not expect this email, contact us at support@vaidyagogate.org.",
-    "",
-    "– Vaidya Gogate Memorial Foundation",
-  ];
+      : `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`;
+  const copy = messageCopyFor(isNew ? "account-created" : "account-details", {
+    name: displayName(account, true) || "Member",
+    email: account.email,
+    phone: account.phone,
+    accountId: account.accountId ?? "-",
+    signin,
+  });
   sendEmail({
     to: account.email,
     phone: account.phone,
     name: displayName(account),
     params: [displayName(account) || "Member", account.accountId ?? ""],
-    subject: isNew ? `Welcome to VGMF – your Account ID ${account.accountId}` : `Your VGMF account details (Account ID ${account.accountId})`,
+    subject: copy.emailSubject,
     template: isNew ? "account-created" : "account-details",
-    body: lines.join("\n"),
+    body: copy.emailBody,
   });
   updateAccount(account.email, { lastDetailsSentAt: new Date().toISOString() });
 }
@@ -1040,15 +1027,21 @@ export function sendEmail(input: {
 }
 
 export function sendOtpCode(input: { email?: string; phone?: string; name?: string; code: string; purpose: string }) {
-  const body = `Hi ${input.name || "there"},\n\nYour VGMF ${input.purpose} code is ${input.code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the message.\n\n– VGMF`;
+  const copy = messageCopyFor("otp", {
+    name: input.name || "there",
+    code: input.code,
+    purpose: input.purpose,
+    email: input.email,
+    phone: input.phone,
+  });
   return queueNotification({
     to: input.email ?? "",
     phone: input.phone,
     name: input.name,
     params: [input.code],
-    subject: `VGMF ${input.purpose} code`,
+    subject: copy.emailSubject,
     template: "otp",
-    body,
+    body: copy.emailBody,
   });
 }
 

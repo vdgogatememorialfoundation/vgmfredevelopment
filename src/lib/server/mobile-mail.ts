@@ -1,6 +1,6 @@
 import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { sendZeptoMail, sendZohoMail } from "@/lib/server/providers";
+import { sendTransactionalEmail } from "@/lib/server/providers";
 
 const FILE = join("/tmp", "vgmf-mobile-email.json");
 
@@ -46,7 +46,5 @@ export async function sendMobileEmail(to: string, subject: string, body: string)
     .replace(/>/g, "&gt;")
     .replace(/\n/g, "<br/>")}</div>`;
   const mail = { to, subject, html };
-  const sent =
-    creds.provider === "zoho" ? await sendZohoMail(creds, mail) : await sendZeptoMail(creds, mail);
-  return sent;
+  return sendTransactionalEmail(creds, mail);
 }

@@ -214,16 +214,7 @@ async function pushSeminarLike({ db, portal, origin }) {
 
 async function pushFellowship({ db, portal, origin }) {
   const settings = (await dbAll(db, `SELECT site_name, hero_title, site_tagline, signup_enabled, ticker_text, ticker_enabled FROM site_settings LIMIT 1`))[0];
-  if (settings) {
-    await pushAll(portal, {
-      event: {
-        id: "programme",
-        title: settings.hero_title || settings.site_name || "Research Fellowship 2026",
-        description: settings.site_tagline,
-        registration_enabled: settings.signup_enabled,
-      },
-    });
-  }
+  void settings;
   const notices = await dbAll(
     db,
     `SELECT id, title, content, category::text AS category, published_at, created_at

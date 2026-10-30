@@ -118,9 +118,10 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "General & maintenance", href: "/admin/settings" },
       { label: "Payments & Razorpay", href: "/admin/settings/payments" },
-      { label: "Email: ZeptoMail & Zoho", href: "/admin/settings/email" },
+      { label: "Email: Zoho CPaaS & ZeptoMail", href: "/admin/settings/email" },
       { label: "WhatsApp: Meta & Zoho CPaaS", href: "/admin/settings/whatsapp" },
       { label: "SMS: MSG91", href: "/admin/settings/sms" },
+      { label: "Email, SMS & WhatsApp templates", href: "/admin/settings/templates" },
       { label: "Shipping APIs", href: "/admin/settings/shipping-apis" },
       { label: "Orders, returns & refunds", href: "/admin/settings/orders" },
       { label: "Delivery zones", href: "/admin/settings/shipping" },

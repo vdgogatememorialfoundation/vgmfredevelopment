@@ -310,23 +310,52 @@ export async function paytmEdcStatus(
 
 /* ---------------- Email ---------------- */
 
+function emailApiHost(input: Json) {
+  const raw = String(input.zeptoHost || input.zohoCpaasDomain || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  if (raw.includes("cpaas.zoho.in") || raw === "zoho.in") return "cpaas.zoho.in";
+  if (raw.includes("cpaas.zoho.eu") || raw === "zoho.eu") return "cpaas.zoho.eu";
+  if (raw.includes("cpaas.zoho.com") || raw === "zoho.com") return "cpaas.zoho.com";
+  if (raw.includes("zeptomail")) return raw;
+  if (String(input.provider || "") === "zeptomail" && raw) return raw;
+  return "cpaas.zoho.in";
+}
+
 export async function sendZeptoMail(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
-  const token = pick(input.zeptoToken, "ZEPTOMAIL_TOKEN");
-  const from = pick(input.fromAddress, "MAIL_FROM_ADDRESS");
+  const token = pick(input.zeptoToken, "ZEPTOMAIL_TOKEN") || pick(input.zohoCpaasApiKey, "ZOHO_CPAAS_API_KEY");
+  const from = pick(input.fromAddress, "MAIL_FROM_ADDRESS") || "noreply@vaidyagogate.org";
   if (!token || !from) return null;
-  const host = typeof input.zeptoHost === "string" && input.zeptoHost ? input.zeptoHost : "api.zeptomail.in";
-  const data = await call(`https://${host}/v1.1/email`, {
-    method: "POST",
-    headers: { authorization: token.startsWith("Zoho-enczapikey") ? token : `Zoho-enczapikey ${token}`, accept: "application/json" },
-    json: {
-      from: { address: from, name: String(input.fromName || "VGMF") },
-      to: [{ email_address: { address: mail.to } }],
-      subject: mail.subject,
-      htmlbody: mail.html,
-      ...(mail.replyTo ? { reply_to: [{ address: mail.replyTo }] } : {}),
-    },
-  });
-  return { id: String(data.request_id ?? ""), provider: "zeptomail" };
+  const hosts = [...new Set([emailApiHost(input), "cpaas.zoho.in", "api.zeptomail.in"])];
+  const payload = {
+    from: { address: from, name: String(input.fromName || "Vaidya Gogate Memorial Foundation") },
+    to: [{ email_address: { address: mail.to, name: mail.to } }],
+    subject: mail.subject,
+    htmlbody: mail.html,
+    ...(mail.replyTo ? { reply_to: [{ address: mail.replyTo }] } : {}),
+  };
+  const headers = { authorization: token.startsWith("Zoho-enczapikey") ? token : `Zoho-enczapikey ${token}`, accept: "application/json" };
+  let lastError: unknown;
+  for (const host of hosts) {
+    try {
+      const data = await call(`https://${host}/v1.1/email`, { method: "POST", headers, json: payload });
+      return { id: String(data.request_id ?? data.data ?? ""), provider: host.includes("cpaas") ? "cpaas" : "zeptomail" };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
+  return null;
+}
+
+export async function sendTransactionalEmail(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
+  const provider = String(input.provider || "cpaas");
+  if (provider === "zoho") {
+    const zoho = await sendZohoMail(input, mail);
+    if (zoho) return zoho;
+  }
+  const cpaas = await sendZeptoMail(input, mail);
+  if (cpaas) return cpaas;
+  if (provider !== "zoho") return sendZohoMail(input, mail);
+  return null;
 }
 
 export async function sendZohoMail(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {

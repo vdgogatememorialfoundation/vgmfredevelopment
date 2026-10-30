@@ -188,16 +188,25 @@ export function hideAnnouncement(id: string) {
   writeJSON("vgmf_custom_announcements", custom);
 }
 
+function isFellowshipEvent(event: Pick<Event, "id" | "source" | "slug" | "eventType">) {
+  return (
+    event.source === "fellowship" ||
+    event.eventType === "Fellowship" ||
+    String(event.id || "").startsWith("fellowship-") ||
+    String(event.slug || "").startsWith("fellowship-")
+  );
+}
+
 export function getLiveEvents(): Event[] {
   const edits = readJSON<EventEdit[]>(EVENTS_KEY, []);
   const custom = readJSON<Event[]>("vgmf_custom_events", []);
-  if (!edits.length && !custom.length) return seededEvents;
+  if (!edits.length && !custom.length) return seededEvents.filter((event) => !isFellowshipEvent(event));
   const byId = new Map(edits.map((edit) => [edit.id, edit]));
   const fromSeed = seededEvents
     .map((event) => ({ ...event, ...byId.get(event.id) }))
-    .filter((event) => !byId.get(event.id)?.hidden);
+    .filter((event) => !byId.get(event.id)?.hidden && !isFellowshipEvent(event));
   const seedIds = new Set(seededEvents.map((event) => event.id));
-  return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden), ...fromSeed];
+  return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden && !isFellowshipEvent(event)), ...fromSeed];
 }
 
 export function getLiveEvent(slug: string) {

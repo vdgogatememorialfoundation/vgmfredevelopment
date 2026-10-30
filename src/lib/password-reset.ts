@@ -1,5 +1,6 @@
 import { findAccountByIdentifier, loginBlockReason } from "@/lib/auth";
 import { getAccounts, sendEmail, updateAccount } from "@/lib/admin-store";
+import { messageCopyFor } from "@/lib/message-templates";
 import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import type { User, UserRole } from "@/types";
 
@@ -25,13 +26,21 @@ export function accountForReset(identifier: string, role?: ResetRole) {
 
 export function sendPasswordResetCode(account: User, role: ResetRole) {
   const code = issueEmailOtp(account.email, otpRole(role));
+  const copy = messageCopyFor("otp", {
+    name: account.firstName || "there",
+    code,
+    purpose: "password reset",
+    email: account.email,
+    phone: account.phone,
+  });
   sendEmail({
     to: account.email,
     phone: account.phone,
     name: account.firstName,
-    subject: "Reset your VGMF password",
-    template: "custom",
-    body: `Hi ${account.firstName || "there"},\n\nYour password reset code is ${code}. It expires in 10 minutes.\n\nIf you did not ask to reset your password, ignore this message.\n\n– Vaidya Gogate Memorial Foundation`,
+    params: [code],
+    subject: copy.emailSubject,
+    template: "otp",
+    body: copy.emailBody,
   });
   return code;
 }

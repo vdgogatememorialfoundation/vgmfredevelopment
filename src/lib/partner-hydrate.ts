@@ -127,7 +127,15 @@ export function getPartnerPayments(email: string): PartnerPaymentSummary[] {
 
 export function applyPartnerFeed(feed: PartnerFeed) {
   if (typeof window === "undefined") return;
-  if (feed.events?.length) writeJSON(EVENTS_CUSTOM, mergeById(readJSON<Event[]>(EVENTS_CUSTOM, []), feed.events));
+  if (feed.events?.length) {
+    const incoming = feed.events.filter(
+      (event) => event.source !== "fellowship" && event.eventType !== "Fellowship" && !String(event.id).startsWith("fellowship-")
+    );
+    const current = readJSON<Event[]>(EVENTS_CUSTOM, []).filter(
+      (event) => event.source !== "fellowship" && event.eventType !== "Fellowship" && !String(event.id).startsWith("fellowship-")
+    );
+    writeJSON(EVENTS_CUSTOM, mergeById(current, incoming));
+  }
   if (feed.notices?.length) writeJSON(noticeKeys.custom, mergeById(readJSON<Notice[]>(noticeKeys.custom, []), feed.notices));
   if (feed.announcements?.length) writeJSON(ANN_CUSTOM, mergeById(readJSON<Announcement[]>(ANN_CUSTOM, []), feed.announcements));
   if (feed.ticketsByEmail) writeJSON(TICKETS_KEY, { ...readJSON(TICKETS_KEY, {}), ...feed.ticketsByEmail });
@@ -138,11 +146,13 @@ export function applyPartnerFeed(feed: PartnerFeed) {
   window.dispatchEvent(new Event("vgmf-cms"));
 }
 
-export async function hydratePartnerFeed(opts?: { full?: boolean }) {
+export async function hydratePartnerFeed(opts?: { full?: boolean; force?: boolean }) {
   if (typeof window === "undefined") return;
-  const full = opts?.full ?? (window.location.pathname.startsWith("/admin") || window.location.pathname.startsWith("/staff"));
+  const last = Number(window.sessionStorage.getItem("vgmf_partner_hydrated_at") || 0);
+  if (!opts?.force && last && Date.now() - last < 5 * 60 * 1000) return;
+  window.sessionStorage.setItem("vgmf_partner_hydrated_at", String(Date.now()));
   try {
-    const feedRes = await fetch(`/api/partners/feed${full ? "?full=1" : ""}`, { cache: "no-store", credentials: "same-origin" });
+    const feedRes = await fetch("/api/partners/feed", { cache: "no-store", credentials: "same-origin" });
     if (feedRes.ok) {
       const feed = (await feedRes.json()) as PartnerFeed & { ok?: boolean };
       applyPartnerFeed(feed);
