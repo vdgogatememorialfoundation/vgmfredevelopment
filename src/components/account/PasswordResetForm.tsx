@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { accountForReset, applyPasswordReset, changeAccountPassword, sendPasswordResetCode, type ResetRole } from "@/lib/password-reset";
 import { getAccounts } from "@/lib/admin-store";
+import { lookupPartnerAccount } from "@/lib/partner-hydrate";
 import type { User } from "@/types";
 
 type ForgotStep = "identify" | "code" | "password" | "done";
@@ -33,8 +34,10 @@ export function ForgotPasswordForm({
     setStep("code");
   };
 
-  const submitIdentify = (event: React.FormEvent) => {
+  const submitIdentify = async (event: React.FormEvent) => {
     event.preventDefault();
+    setError("");
+    await lookupPartnerAccount({ identifier });
     const found = accountForReset(identifier, role);
     if ("error" in found && found.error) {
       setError(found.error);
@@ -82,7 +85,7 @@ export function ForgotPasswordForm({
       ) : null}
       <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-burgundy">Reset password</p>
       {step === "identify" ? (
-        <form onSubmit={submitIdentify} className="space-y-5">
+        <form onSubmit={(event) => void submitIdentify(event)} className="space-y-5">
           <h2 className="text-xl font-semibold text-text-primary">Forgot your password?</h2>
           <p className="text-sm text-text-muted">Enter the email, phone or account ID on the account. We will send a reset code.</p>
           <input

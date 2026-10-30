@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders } from "@/lib/server/mobile-feed";
 import { denyUnlessPortal } from "@/lib/server/portal-auth";
-import { loadPartnerSnapshot, publicPartnerFeed } from "@/lib/server/partner-portals";
+import { clientPartnerSnapshot, loadPartnerSnapshot, publicPartnerFeed } from "@/lib/server/partner-portals";
 
 export const runtime = "nodejs";
 
@@ -19,8 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ok: true,
-        ...snapshot,
-        accounts: snapshot.accounts,
+        ...clientPartnerSnapshot(snapshot, { includePasswords: true }),
       },
       { headers: { ...corsHeaders, "cache-control": "no-store" } }
     );

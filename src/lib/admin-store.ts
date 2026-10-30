@@ -15,6 +15,7 @@ import type {
 import { storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, saveOrder } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
+import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { getNotifications, queueNotification } from "@/lib/notify";
@@ -302,17 +303,26 @@ export type CustomerInput = {
   middleName?: string;
   lastName: string;
   phone: string;
+  alternatePhone?: string;
   email: string;
   address?: User["address"];
 };
 
+function phoneInUse(phone: string, exceptEmail?: string) {
+  const digits = phoneDigits(phone);
+  if (!digits) return false;
+  return getAccounts().some((account) => {
+    if (exceptEmail && account.email.toLowerCase() === exceptEmail.toLowerCase()) return false;
+    return samePhone(account.phone, phone) || samePhone(account.alternatePhone, phone) || samePhone(account.whatsapp, phone);
+  });
+}
+
 export function createCustomerAccount(input: CustomerInput, options: { sendDetails?: boolean } = {}) {
   const email = input.email.trim();
-  if (getAccountByEmail(email)) throw new Error("An account with this email already exists.");
+  if (getAccountByEmail(email) || findAccountByIdentifier(email)) throw new Error(ACCOUNT_EXISTS_MESSAGE);
   const phone = input.phone.trim();
-  if (getAccounts().some((account) => account.phone.replace(/\D/g, "").slice(-10) === phone.replace(/\D/g, "").slice(-10))) {
-    throw new Error("An account with this phone number already exists.");
-  }
+  const alternatePhone = (input.alternatePhone || phone).trim();
+  if (phoneInUse(phone) || (alternatePhone && phoneInUse(alternatePhone))) throw new Error(ACCOUNT_EXISTS_MESSAGE);
   const account: User = {
     id: `usr-${Date.now()}`,
     salutation: input.salutation || undefined,
@@ -321,6 +331,7 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
     lastName: input.lastName.trim(),
     email,
     phone,
+    alternatePhone,
     whatsapp: phone,
     accountId: uniqueAccountId(),
     role: "customer",
@@ -341,8 +352,10 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
 export function updateCustomer(email: string, update: Partial<User>) {
   const nextEmail = update.email?.trim();
   if (nextEmail && nextEmail.toLowerCase() !== email.toLowerCase() && getAccountByEmail(nextEmail)) {
-    throw new Error("Another account already uses this email.");
+    throw new Error(ACCOUNT_EXISTS_MESSAGE);
   }
+  if (update.phone && phoneInUse(update.phone, nextEmail || email)) throw new Error(ACCOUNT_EXISTS_MESSAGE);
+  if (update.alternatePhone && phoneInUse(update.alternatePhone, nextEmail || email)) throw new Error(ACCOUNT_EXISTS_MESSAGE);
   updateAccount(email, { ...update, whatsapp: update.phone ?? update.whatsapp });
   recordActivity({ email: nextEmail || email, kind: "updated", by: currentActorEmail(), detail: "Account details updated" });
   notifyCms();
@@ -377,6 +390,7 @@ export function sendAccountDetails(email: string, isNew = false) {
     `Name: ${displayName(account, true)}`,
     `Registered email: ${account.email}`,
     `Registered mobile: ${account.phone}`,
+    account.alternatePhone ? `Alternate mobile: ${account.alternatePhone}` : "",
     `Address: ${address}`,
     role === "customer" ? `Store credit balance: ₹${(account.storeCredit ?? 0).toLocaleString("en-IN")}` : `Role: ${role}`,
     "",
@@ -437,6 +451,9 @@ export function createUserAccount(input: {
   password?: string;
   staffRoleId?: string;
 }) {
+  if (getAccountByEmail(input.email) || findAccountByIdentifier(input.email) || phoneInUse(input.phone)) {
+    throw new Error(ACCOUNT_EXISTS_MESSAGE);
+  }
   const password = input.password?.trim() || generatePassword();
   const account: User = {
     id: `usr-${Date.now()}`,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readKv } from "@/lib/server/db";
 import {
   listMetaTemplates,
   sendAiSensy,
@@ -32,7 +33,8 @@ function toHtml(text: string, html?: boolean, images?: unknown) {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const creds = (body.creds as Record<string, unknown>) ?? {};
+  const storedMail = (await readKv<Record<string, unknown>>("admin", "email-creds")) ?? {};
+  const creds = { ...storedMail, ...((body.creds as Record<string, unknown>) ?? {}) };
   try {
     if (body.action === "templates") {
       return NextResponse.json({ ok: true, templates: await listMetaTemplates(creds) });
@@ -46,8 +48,9 @@ export async function POST(request: NextRequest) {
         replyTo: typeof body.replyTo === "string" && body.replyTo.includes("@") ? String(body.replyTo) : undefined,
       };
       if (!/^\S+@\S+\.\S+$/.test(mail.to)) return NextResponse.json({ ok: false, configured: true, error: "Recipient email is not valid." });
-      const sent = body.provider === "zoho" ? await sendZohoMail(creds, mail) : await sendZeptoMail(creds, mail);
-      if (!sent) return NextResponse.json({ ok: false, configured: false, error: `${body.provider === "zoho" ? "Zoho Mail" : "ZeptoMail"} credentials are not configured.` });
+      const provider = String(body.provider || creds.provider || "zeptomail");
+      const sent = provider === "zoho" ? await sendZohoMail(creds, mail) : await sendZeptoMail(creds, mail);
+      if (!sent) return NextResponse.json({ ok: false, configured: false, error: `${provider === "zoho" ? "Zoho Mail" : "ZeptoMail"} credentials are not configured.` });
       return NextResponse.json({ ok: true, configured: true, ...sent });
     }
 

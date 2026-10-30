@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Pool } from "pg";
+import { accountMatchesIdentifier, phoneDigits } from "@/lib/account-identity";
 import { upsertNotice } from "@/lib/server/notices";
 import { partnerPortalHref, partnerTicketHref, portalBadge } from "@/lib/partner-labels";
 import { AUTISM_ORIGIN, SEMINAR_ORIGIN, asList, asRecord, textField } from "@/lib/partner-certificates";
@@ -21,7 +22,7 @@ const FETCH_MS = 6000;
 const STALE_MS = 10 * 60 * 1000;
 const PRIVATE = /^(email|e-mail|phone|mobile|whatsapp|token|qrtoken|qr|otp|password|secret|authorization|qr_code|qrcode|provider_transaction|provider_order|razorpay|metadata_json|form_data)/i;
 
-export type SanitizedPartnerAccount = Omit<User, "password"> & { sourceId: string };
+export type SanitizedPartnerAccount = User & { sourceId: string };
 
 export type PartnerStats = {
   events: number;
@@ -41,6 +42,8 @@ export type PartnerSnapshot = {
   ticketsByEmail: Record<string, PartnerTicketSummary[]>;
   paymentsByEmail: Record<string, PartnerPaymentSummary[]>;
   stats: Record<PartnerPortalId, PartnerStats>;
+  /** bcrypt / hex hashes keyed as `portal:email`. Never sent to the browser. */
+  passwordHashes?: Record<string, string>;
 };
 
 const emptyStats = (source: PartnerStats["source"] = "none"): PartnerStats => ({
@@ -62,6 +65,67 @@ export function emptySnapshot(): PartnerSnapshot {
     ticketsByEmail: {},
     paymentsByEmail: {},
     stats: { seminar: emptyStats(), autism: emptyStats() },
+    passwordHashes: {},
+  };
+}
+
+export function looksHashedPassword(value: string) {
+  const stored = value.trim();
+  if (!stored) return false;
+  return (
+    /^\$2[aby]\$\d{2}\$/.test(stored) ||
+    /^\$argon2/i.test(stored) ||
+    /^[a-f0-9]{32}$/i.test(stored) ||
+    /^[a-f0-9]{64}$/i.test(stored)
+  );
+}
+
+function safeEqual(left: string, right: string) {
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+export async function verifyStoredPassword(stored: string, given: string) {
+  const secret = stored.trim();
+  const password = given.trim();
+  if (!secret || !password) return false;
+  if (secret === password) return true;
+  const md5 = createHash("md5").update(password).digest("hex");
+  const sha256 = createHash("sha256").update(password).digest("hex");
+  if (/^[a-f0-9]{32}$/i.test(secret) && safeEqual(secret.toLowerCase(), md5)) return true;
+  if (/^[a-f0-9]{64}$/i.test(secret) && safeEqual(secret.toLowerCase(), sha256)) return true;
+  if (/^\$2[aby]\$/.test(secret)) {
+    try {
+      const bcrypt = await import("bcryptjs");
+      return bcrypt.compare(password, secret);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+export function clientPartnerSnapshot(snapshot: PartnerSnapshot, opts?: { includePasswords?: boolean }) {
+  return {
+    syncedAt: snapshot.syncedAt,
+    events: snapshot.events,
+    notices: snapshot.notices,
+    announcements: snapshot.announcements,
+    accounts: snapshot.accounts.map((account) => sanitizeAccountForClient(account, opts)),
+    ticketsByEmail: snapshot.ticketsByEmail,
+    paymentsByEmail: snapshot.paymentsByEmail,
+    stats: snapshot.stats,
+  };
+}
+
+export function sanitizeAccountForClient(account: SanitizedPartnerAccount, opts?: { includePasswords?: boolean }) {
+  const password = opts?.includePasswords && account.password && !looksHashedPassword(account.password) ? account.password : undefined;
+  return {
+    ...account,
+    password,
+    partnerPasswordSet: Boolean(account.partnerPasswordSet || account.password),
   };
 }
 
@@ -415,7 +479,7 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
   ticketCount?: number;
   paymentCount?: number;
   hasProfile?: boolean;
-}): SanitizedPartnerAccount | null {
+}): { account: SanitizedPartnerAccount; passwordHash?: string } | null {
   const email = str(row, ["email"]).toLowerCase();
   if (!email || !email.includes("@")) return null;
   const roleRaw = str(row, ["role"]);
@@ -423,31 +487,40 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
   if (skipStaff(roleRaw, userRole)) return null;
   const sourceId = String(row.id ?? email);
   const doctor = portal === "seminar" || extras.hasProfile || /doctor/i.test(`${roleRaw} ${userRole}`);
-  const role = doctor && portal === "seminar" ? "doctor" : extras.hasProfile ? "doctor" : "customer";
   const disabled = asNumber(row.is_disabled) === 1 || asNumber(row.is_banned) === 1;
+  const rawPassword = str(row, ["password"]);
+  const hashed = looksHashedPassword(rawPassword);
+  const phone = str(row, ["phone", "contact_number"]);
+  const alternatePhone = str(row, ["alternate_phone", "alternatePhone", "whatsapp"]) || phone;
   return {
-    id: `${portal}-usr-${sourceId}`,
-    sourceId,
-    firstName: str(row, ["first_name", "firstName"], "Member"),
-    middleName: str(row, ["middle_name"]) || undefined,
-    lastName: str(row, ["last_name", "lastName"]),
-    email,
-    phone: str(row, ["phone", "contact_number"]),
-    whatsapp: str(row, ["whatsapp"]) || str(row, ["phone"]),
-    accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string"])),
-    role,
-    status: disabled ? "disabled" : "active",
-    statusReason: disabled ? str(row, ["ban_reason"]) || undefined : undefined,
-    createdAt: iso(row.created_at) || undefined,
-    createdBy: `${portal}-sync`,
-    partnerPortals: [
-      portalBadge(portal, {
-        hasTicket: Boolean(extras.hasTicket),
-        ticketCount: extras.ticketCount,
-        paymentCount: extras.paymentCount,
-        role: portal === "autism" && role === "customer" ? "applicant" : doctor ? "doctor" : "registrant",
-      }),
-    ],
+    account: {
+      id: `${portal}-usr-${sourceId}`,
+      sourceId,
+      firstName: str(row, ["first_name", "firstName"], "Member"),
+      middleName: str(row, ["middle_name"]) || undefined,
+      lastName: str(row, ["last_name", "lastName"]),
+      email,
+      phone,
+      whatsapp: str(row, ["whatsapp"]) || phone,
+      alternatePhone,
+      accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string"])),
+      role: "customer",
+      password: hashed || !rawPassword ? undefined : rawPassword,
+      partnerPasswordSet: Boolean(rawPassword),
+      status: disabled ? "disabled" : "active",
+      statusReason: disabled ? str(row, ["ban_reason"]) || undefined : undefined,
+      createdAt: iso(row.created_at) || undefined,
+      createdBy: `${portal}-sync`,
+      partnerPortals: [
+        portalBadge(portal, {
+          hasTicket: Boolean(extras.hasTicket),
+          ticketCount: extras.ticketCount,
+          paymentCount: extras.paymentCount,
+          role: portal === "autism" ? "applicant" : doctor ? "doctor" : "registrant",
+        }),
+      ],
+    },
+    passwordHash: hashed ? rawPassword : undefined,
   };
 }
 
@@ -462,7 +535,7 @@ async function pullDatabase(portal: PartnerPortalId) {
   const users = (await queryRows(
     portal,
     `SELECT u.id, u.user_id_string, u.first_name, u.middle_name, u.last_name, u.email, u.phone, u.whatsapp,
-            u.role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
+            u.password, u.role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
             CASE WHEN d.user_id IS NULL THEN 0 ELSE 1 END AS has_profile
        FROM users u
        LEFT JOIN doctor_profile d ON d.user_id = u.id`
@@ -536,17 +609,20 @@ async function pullDatabase(portal: PartnerPortalId) {
   const accounts: SanitizedPartnerAccount[] = [];
   const ticketsByEmail: Record<string, PartnerTicketSummary[]> = {};
   const paymentsByEmail: Record<string, PartnerPaymentSummary[]> = {};
+  const passwordHashes: Record<string, string> = {};
 
   for (const row of users) {
     const userTickets = ticketsByUser.get(String(row.id)) ?? [];
     const userPayments = paymentsByUser.get(String(row.id)) ?? [];
-    const account = mapAccount(portal, row, {
+    const mapped = mapAccount(portal, row, {
       hasTicket: userTickets.some((item) => asNumber(item.is_valid) !== 0),
       ticketCount: userTickets.length,
       paymentCount: userPayments.length,
       hasProfile: asNumber(row.has_profile) === 1,
     });
-    if (!account) continue;
+    if (!mapped) continue;
+    const account = mapped.account;
+    if (mapped.passwordHash) passwordHashes[`${portal}:${account.email}`] = mapped.passwordHash;
     const email = account.email.toLowerCase();
     const eventName = (id?: unknown) => str(seminarById.get(String(id || "")) ?? {}, ["title"]) || (portal === "seminar" ? "Seminar" : "Autism programme");
     ticketsByEmail[email] = userTickets.map((item) => ({
@@ -588,6 +664,7 @@ async function pullDatabase(portal: PartnerPortalId) {
     accounts,
     ticketsByEmail,
     paymentsByEmail,
+    passwordHashes,
     registrations: registrations.length,
   };
 }
@@ -618,12 +695,16 @@ function mergeAccounts(list: SanitizedPartnerAccount[]) {
         found.paymentCount = (found.paymentCount ?? 0) + (portal.paymentCount ?? 0);
       } else portals.push(portal);
     }
+    const protectedRole = existing.role === "admin" || existing.role === "coadmin" || existing.role === "staff";
     map.set(key, {
       ...existing,
       ...account,
       id: existing.id,
       accountId: existing.accountId,
-      role: existing.role === "doctor" || account.role === "doctor" ? "doctor" : existing.role,
+      role: protectedRole ? existing.role : "customer",
+      password: existing.password || account.password,
+      partnerPasswordSet: Boolean(existing.partnerPasswordSet || account.partnerPasswordSet || existing.password || account.password),
+      alternatePhone: existing.alternatePhone || account.alternatePhone,
       partnerPortals: portals,
     });
   }
@@ -656,6 +737,7 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     snapshot.accounts = previous.accounts;
     snapshot.ticketsByEmail = previous.ticketsByEmail;
     snapshot.paymentsByEmail = previous.paymentsByEmail;
+    snapshot.passwordHashes = previous.passwordHashes ?? {};
   }
   for (const portal of ["seminar", "autism"] as PartnerPortalId[]) {
     const publicData = await pullPublic(portal);
@@ -668,6 +750,7 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
       snapshot.accounts.push(...dbData.accounts);
       Object.assign(snapshot.ticketsByEmail, dbData.ticketsByEmail);
       Object.assign(snapshot.paymentsByEmail, dbData.paymentsByEmail);
+      Object.assign(snapshot.passwordHashes ?? (snapshot.passwordHashes = {}), dbData.passwordHashes);
     }
     snapshot.stats[portal] = {
       events: events.length,
@@ -721,6 +804,7 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
       email: accountRow.email,
       phone: accountRow.phone,
       whatsapp: accountRow.whatsapp || accountRow.phone,
+      password: accountRow.password,
       role: accountRow.role || (portal === "seminar" ? "doctor" : "user"),
       user_role: accountRow.user_role || accountRow.role,
       created_at: accountRow.createdAt,
@@ -731,7 +815,12 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
       paymentCount: asNumber(payload.paymentCount) || (payload.payment ? 1 : 0),
       hasProfile: portal === "seminar",
     });
-    if (mapped) snapshot.accounts = mergeAccounts([mapped, ...snapshot.accounts]);
+    if (mapped) {
+      snapshot.accounts = mergeAccounts([mapped.account, ...snapshot.accounts]);
+      if (mapped.passwordHash) {
+        snapshot.passwordHashes = { ...(snapshot.passwordHashes ?? {}), [`${portal}:${mapped.account.email}`]: mapped.passwordHash };
+      }
+    }
   }
   const eventRow = asRecord(payload.event) ?? asRecord(payload.seminar);
   if (eventRow) {
@@ -799,12 +888,89 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
   return { ok: true as const, portal, syncedAt: snapshot.syncedAt };
 }
 
+export function findPartnerAccount(snapshot: PartnerSnapshot, identifier: string) {
+  const value = identifier.trim();
+  if (!value) return null;
+  return snapshot.accounts.find((item) => accountMatchesIdentifier(item, value)) ?? null;
+}
+
 export function accountsForEmail(snapshot: PartnerSnapshot, email: string) {
   const key = email.trim().toLowerCase();
+  const account = snapshot.accounts.find((item) => item.email.toLowerCase() === key) ?? findPartnerAccount(snapshot, email);
+  const emailKey = account?.email.toLowerCase() ?? key;
   return {
-    account: snapshot.accounts.find((item) => item.email.toLowerCase() === key) ?? null,
-    tickets: snapshot.ticketsByEmail[key] ?? [],
-    payments: snapshot.paymentsByEmail[key] ?? [],
+    account: account ?? null,
+    tickets: snapshot.ticketsByEmail[emailKey] ?? [],
+    payments: snapshot.paymentsByEmail[emailKey] ?? [],
+  };
+}
+
+async function verifyAgainstLiveDatabases(identifier: string, password: string) {
+  const email = identifier.includes("@") ? identifier.trim().toLowerCase() : "";
+  const digits = phoneDigits(identifier);
+  for (const portal of ["seminar", "autism"] as PartnerPortalId[]) {
+    const rows = await queryRows(
+      portal,
+      `SELECT email, phone, password
+         FROM users
+        WHERE ($1 <> '' AND lower(email) = $1)
+           OR ($2 <> '' AND right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = $2)
+        LIMIT 8`,
+      [email, digits]
+    );
+    if (!rows?.length) continue;
+    for (const row of rows) {
+      if (await verifyStoredPassword(str(row, ["password"]), password)) return true;
+    }
+  }
+  return false;
+}
+
+export async function lookupPartnerIdentity(input: {
+  identifier?: string;
+  email?: string;
+  phone?: string;
+  alternatePhone?: string;
+  password?: string;
+}) {
+  const snapshot = await loadPartnerSnapshot();
+  const candidates = [input.identifier, input.email, input.phone, input.alternatePhone]
+    .map((value) => (value ?? "").trim())
+    .filter(Boolean);
+  let account: SanitizedPartnerAccount | null = null;
+  for (const candidate of candidates) {
+    account = findPartnerAccount(snapshot, candidate);
+    if (account) break;
+  }
+  const password = (input.password ?? "").trim();
+  let passwordOk = false;
+  if (account && password) {
+    if (account.password && (await verifyStoredPassword(account.password, password))) passwordOk = true;
+    const hashes = Object.entries(snapshot.passwordHashes ?? {})
+      .filter(([key]) => key === account!.email || key.endsWith(`:${account!.email}`))
+      .map(([, hash]) => hash);
+    if (!passwordOk) {
+      for (const hash of hashes) {
+        if (await verifyStoredPassword(hash, password)) {
+          passwordOk = true;
+          break;
+        }
+      }
+    }
+    if (!passwordOk) passwordOk = await verifyAgainstLiveDatabases(account.email, password);
+  } else if (!account && password) {
+    passwordOk = await verifyAgainstLiveDatabases(candidates[0] ?? "", password);
+  }
+  const email = account?.email ?? "";
+  const related = email ? accountsForEmail(snapshot, email) : { account, tickets: [], payments: [] };
+  const resolved = related.account ?? account;
+  return {
+    found: Boolean(resolved),
+    passwordOk,
+    passwordSet: Boolean(resolved?.partnerPasswordSet || resolved?.password || (resolved && snapshot.passwordHashes && Object.keys(snapshot.passwordHashes).some((key) => key.endsWith(`:${resolved.email}`)))),
+    account: resolved ? sanitizeAccountForClient(resolved, { includePasswords: false }) : null,
+    tickets: related.tickets,
+    payments: related.payments,
   };
 }
 

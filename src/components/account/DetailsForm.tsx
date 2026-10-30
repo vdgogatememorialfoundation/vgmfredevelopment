@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SALUTATIONS } from "@/lib/admin-store";
 
 interface DetailsFormProps {
@@ -9,16 +10,21 @@ interface DetailsFormProps {
     email: string;
     phone: string;
     whatsapp: string;
+    alternatePhone: string;
   };
   onChange: (field: string, value: string) => void;
   onSubmit: () => void;
+  busy?: boolean;
 }
 
 export default function DetailsForm({
   form,
   onChange,
   onSubmit,
+  busy,
 }: DetailsFormProps) {
+  const [sameAsPhone, setSameAsPhone] = useState(true);
+
   return (
     <form
       onSubmit={(event) => {
@@ -113,10 +119,42 @@ export default function DetailsForm({
           onChange={(event) => {
             onChange("phone", event.target.value);
             onChange("whatsapp", event.target.value);
+            if (sameAsPhone) onChange("alternatePhone", event.target.value);
           }}
           required
           className="input-field"
         />
+      </div>
+
+      <div className="mt-5">
+        <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="alternate-phone">
+          Alternate phone number
+        </label>
+        <input
+          id="alternate-phone"
+          type="tel"
+          placeholder="+91 98765 43210"
+          value={form.alternatePhone}
+          onChange={(event) => {
+            setSameAsPhone(false);
+            onChange("alternatePhone", event.target.value);
+          }}
+          disabled={sameAsPhone}
+          className="input-field disabled:bg-paper"
+        />
+        <label className="mt-3 flex items-start gap-3 text-sm text-text-muted">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 rounded border-border"
+            checked={sameAsPhone}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              setSameAsPhone(checked);
+              if (checked) onChange("alternatePhone", form.phone);
+            }}
+          />
+          <span>Same as the phone number above</span>
+        </label>
       </div>
 
       <div className="mt-5">
@@ -134,7 +172,7 @@ export default function DetailsForm({
         />
 
         <p className="mt-2 text-xs text-text-muted">
-          We use this number for order and ticket updates. Email OTP is used to verify the account.
+          We use this number for order and ticket updates. One email and phone can create only one account.
         </p>
       </div>
 
@@ -149,8 +187,8 @@ export default function DetailsForm({
         </span>
       </label>
 
-      <button type="submit" className="btn-primary mt-7 w-full">
-        Continue & Verify
+      <button type="submit" className="btn-primary mt-7 w-full" disabled={busy}>
+        {busy ? "Checking…" : "Continue & Verify"}
       </button>
     </form>
   );

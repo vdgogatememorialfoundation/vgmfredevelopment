@@ -15,8 +15,8 @@ export function accountForReset(identifier: string, role?: ResetRole) {
   if (role && role !== "customer" && account.role !== role) {
     return { error: `No ${role} account found for this email.` as const };
   }
-  if (role === "customer" && account.role && account.role !== "customer") {
-    return { error: "Use the staff, doctor or admin sign-in page for this account." as const };
+  if (role === "customer" && account.role && account.role !== "customer" && account.role !== "doctor") {
+    return { error: "Use the staff or admin sign-in page for this account." as const };
   }
   const blocked = loginBlockReason(account);
   if (blocked) return { error: blocked };

@@ -354,6 +354,20 @@ export function recordShippingConnection(provider: ShippingProviderId, status: S
   return settings.shipping.connection[provider]!;
 }
 
+function persistMailStatus(settings: IntegrationSettings) {
+  if (typeof window === "undefined") return;
+  const email = settings.email;
+  const ready = Boolean(email.zeptoToken.trim() || (email.provider === "zoho" && email.zohoRefreshToken.trim()));
+  window.localStorage.setItem("vgmf_mail_ready", ready ? "true" : "false");
+  window.dispatchEvent(new Event("vgmf-cms"));
+  void fetch("/api/auth/mail-status", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(email),
+  }).catch(() => undefined);
+}
+
 export function saveIntegrations(settings: IntegrationSettings) {
   const previous = getIntegrations();
   const next = merge(defaultIntegrations, settings);
@@ -366,6 +380,7 @@ export function saveIntegrations(settings: IntegrationSettings) {
   }
   next.shipping.connection = connection;
   writeJSON(INTEGRATIONS_KEY, next);
+  persistMailStatus(next);
 }
 
 export function getOrderSettings(): OrderSettings {

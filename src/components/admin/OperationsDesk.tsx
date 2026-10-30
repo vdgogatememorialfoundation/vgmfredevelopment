@@ -388,7 +388,7 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
     fields: [
       { key: "allowSignup", label: "Allow new customer sign-ups", kind: "toggle", fallback: "true" },
       { key: "allowLogin", label: "Allow customer sign-in", kind: "toggle", fallback: "true" },
-      { key: "verifyEmail", label: "Require email OTP for signup and login", kind: "toggle", fallback: "true" },
+      { key: "verifyEmail", label: "Require email OTP for signup and login (on when ZeptoMail is connected)", kind: "toggle", fallback: "true" },
       { key: "smsLogin", label: "Allow login with MSG91 SMS OTP", kind: "toggle", fallback: "false" },
       { key: "welcomeSubject", label: "Welcome email subject", fallback: "Welcome to the Vaidya Gogate Memorial Foundation" },
     ],

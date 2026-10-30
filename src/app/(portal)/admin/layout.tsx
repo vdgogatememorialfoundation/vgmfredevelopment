@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { adminNavigation } from "./_config/navigation"
 import { useAuth } from "@/components/auth/AuthContext"
 import ClientOnly from "@/components/common/ClientOnly"
@@ -11,6 +11,7 @@ import { getAccounts } from "@/lib/admin-store"
 import { loginBlockReason } from "@/lib/auth"
 import { LoginStamp } from "@/components/layout/LoginStamp"
 import { isStaffModuleEnabled } from "@/lib/site-visibility"
+import { hydratePartnerFeed } from "@/lib/partner-hydrate"
 
 export default function AdminLayout({
   children,
@@ -30,6 +31,10 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (user) void hydratePartnerFeed({ full: true })
+  }, [user])
 
   if (!user || (user.role !== "admin" && user.role !== "coadmin" && user.role !== "staff" && user.role !== "doctor")) {
     return (

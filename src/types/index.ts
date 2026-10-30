@@ -354,9 +354,13 @@ export interface User {
   email: string;
   phone: string;
   whatsapp: string;
+  /** Second number collected at signup — may match `phone`. */
+  alternatePhone?: string;
   accountId?: string;
   role?: UserRole;
   password?: string;
+  /** Sister portal has a password (often hashed, so VGMF cannot display it). */
+  partnerPasswordSet?: boolean;
   staffRoleId?: string;
   status?: AccountStatus;
   statusReason?: string;

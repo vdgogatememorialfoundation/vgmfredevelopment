@@ -1,12 +1,5 @@
-"use client";
-
-import { PeopleDesk } from "@/components/admin/PeopleDesk";
-import ClientOnly from "@/components/common/ClientOnly";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <ClientOnly>
-      <PeopleDesk role="doctor" />
-    </ClientOnly>
-  );
+  redirect("/admin/accounts/customers");
 }

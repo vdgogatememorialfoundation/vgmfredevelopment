@@ -34,7 +34,6 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Accounts",
     items: [
       { label: "Staff & co-admin", href: "/admin/accounts/staff" },
-      { label: "Doctor Accounts", href: "/admin/accounts/doctors" },
       { label: "Customers", href: "/admin/accounts/customers" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
     ],

@@ -56,11 +56,14 @@ function mergePortals(existing: User, incoming: User): User {
   return {
     ...existing,
     partnerPortals: portals,
-    role: protectedRole ? existing.role : incoming.role === "doctor" || existing.role === "doctor" ? "doctor" : existing.role || incoming.role,
+    role: protectedRole ? existing.role : incoming.partnerPortals?.length ? "customer" : existing.role || incoming.role || "customer",
     firstName: existing.firstName || incoming.firstName,
     lastName: existing.lastName || incoming.lastName,
     phone: existing.phone || incoming.phone,
     whatsapp: existing.whatsapp || incoming.whatsapp || incoming.phone,
+    alternatePhone: existing.alternatePhone || incoming.alternatePhone,
+    password: existing.password || incoming.password,
+    partnerPasswordSet: Boolean(existing.partnerPasswordSet || incoming.partnerPasswordSet || existing.password || incoming.password),
   };
 }
 
@@ -71,7 +74,9 @@ function applyAccounts(incoming: User[]) {
   for (const account of incoming) {
     const key = account.email.toLowerCase();
     const existing = byEmail.get(key);
-    byEmail.set(key, existing ? mergePortals(existing, account) : { ...account, password: undefined });
+    const incomingRole =
+      account.role === "admin" || account.role === "coadmin" || account.role === "staff" ? account.role : "customer";
+    byEmail.set(key, existing ? mergePortals(existing, { ...account, role: incomingRole }) : { ...account, role: incomingRole });
   }
   writeJSON(ACCOUNTS_KEY, [...byEmail.values()]);
 }
@@ -144,6 +149,74 @@ export async function hydratePartnerFeed(opts?: { full?: boolean }) {
     window.dispatchEvent(new Event("vgmf-cms"));
   } catch {
     /* ignore */
+  }
+}
+
+export type PartnerLookupResult = {
+  ok: boolean;
+  found: boolean;
+  account: User | null;
+  tickets: PartnerTicketSummary[];
+  payments: PartnerPaymentSummary[];
+  passwordOk: boolean;
+  passwordSet: boolean;
+};
+
+export async function lookupPartnerAccount(input: {
+  identifier?: string;
+  email?: string;
+  phone?: string;
+  alternatePhone?: string;
+  password?: string;
+}): Promise<PartnerLookupResult> {
+  const empty: PartnerLookupResult = {
+    ok: false,
+    found: false,
+    account: null,
+    tickets: [],
+    payments: [],
+    passwordOk: false,
+    passwordSet: false,
+  };
+  try {
+    const response = await fetch("/api/partners/lookup", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = (await response.json()) as PartnerLookupResult;
+    if (!response.ok) return empty;
+    if (data.account) {
+      const hydrated: User = {
+        ...data.account,
+        role:
+          data.account.role === "admin" || data.account.role === "coadmin" || data.account.role === "staff"
+            ? data.account.role
+            : "customer",
+        password: input.password && data.passwordOk ? input.password : data.account.password,
+        partnerPasswordSet: data.passwordSet || data.account.partnerPasswordSet,
+      };
+      applyAccounts([hydrated]);
+    }
+    if (data.account?.email) {
+      const email = data.account.email.toLowerCase();
+      if (data.tickets) {
+        const tickets = readJSON<Record<string, PartnerTicketSummary[]>>(TICKETS_KEY, {});
+        tickets[email] = data.tickets;
+        writeJSON(TICKETS_KEY, tickets);
+      }
+      if (data.payments) {
+        const payments = readJSON<Record<string, PartnerPaymentSummary[]>>(PAYMENTS_KEY, {});
+        payments[email] = data.payments;
+        writeJSON(PAYMENTS_KEY, payments);
+      }
+    }
+    applySession();
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("vgmf-cms"));
+    return { ...empty, ...data, ok: true };
+  } catch {
+    return empty;
   }
 }
 
