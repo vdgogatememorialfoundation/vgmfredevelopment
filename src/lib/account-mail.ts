@@ -1,4 +1,4 @@
-import { getAllAccounts } from "@/lib/auth";
+import { getAllAccounts, getSession } from "@/lib/auth";
 import { queueNotification } from "@/lib/notify";
 import type { AccountActivity } from "@/lib/activity";
 
@@ -45,11 +45,11 @@ export function emailAccountActivity(row: AccountActivity) {
 
 export function staffReplyTo() {
   try {
-    const session = JSON.parse(window.localStorage.getItem("vgmf_session") ?? "null") as { email?: string; replyToEmail?: string; role?: string } | null;
+    const session = getSession();
     const chosen = session?.replyToEmail?.trim();
     if (chosen && chosen.includes("@")) return chosen;
     if (session?.email) {
-      const account = getAllAccounts().find((item) => item.email.toLowerCase() === session.email!.toLowerCase());
+      const account = getAllAccounts().find((item) => item.email.toLowerCase() === session.email.toLowerCase());
       const fromProfile = account?.replyToEmail?.trim();
       if (fromProfile && fromProfile.includes("@")) return fromProfile;
     }

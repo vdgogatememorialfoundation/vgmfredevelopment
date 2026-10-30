@@ -1,5 +1,5 @@
 import type { User } from "@/types";
-import { clearSession, getSession, saveAccount, setSession } from "@/lib/auth";
+import { clearSession, getSession, persistUntilLogoutEnabled, saveAccount, setSession } from "@/lib/auth";
 import { recordActivity } from "@/lib/activity";
 
 type Listener = () => void;
@@ -33,14 +33,33 @@ function refreshFromStorage() {
   notify();
 }
 
+/** Re-apply the in-memory session if storage was emptied without Logout. */
+function healIfMissing() {
+  if (!persistUntilLogoutEnabled()) {
+    refreshFromStorage();
+    return;
+  }
+  const session = resolveSnapshot();
+  if (session) {
+    snapshot = session;
+  } else if (snapshot) {
+    setSession(snapshot);
+  } else {
+    snapshot = null;
+  }
+  snapshotReady = true;
+  notify();
+}
+
 function bindBrowser() {
   if (typeof window === "undefined" || browserBound) return;
   browserBound = true;
   window.addEventListener("storage", refreshFromStorage);
   window.addEventListener("vgmf-cms", refreshFromStorage);
-  window.addEventListener("focus", refreshFromStorage);
+  window.addEventListener("focus", healIfMissing);
+  window.addEventListener("pageshow", healIfMissing);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") refreshFromStorage();
+    if (document.visibilityState === "visible") healIfMissing();
   });
 }
 
@@ -77,11 +96,11 @@ export function storeSignIn(user: User) {
 
 export function storeSignOut() {
   const email = snapshot?.email;
+  snapshot = null;
+  snapshotReady = true;
   if (email) {
     recordActivity({ email, kind: "logout", detail: "Signed out" });
   }
   clearSession();
-  snapshot = null;
-  snapshotReady = true;
   notify();
 }

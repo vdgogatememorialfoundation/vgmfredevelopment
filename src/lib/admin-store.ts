@@ -15,7 +15,7 @@ import type {
 import { storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, saveOrder } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
-import { findAccountByIdentifier, saveAccount } from "@/lib/auth";
+import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { pushInbox } from "@/lib/inbox";
@@ -244,16 +244,16 @@ export function updateAccount(email: string, update: Partial<User>) {
   accounts[index] = { ...accounts[index], ...update };
   writeJSON("vgmf_accounts", accounts);
   if (typeof window !== "undefined") {
-    const session = readJSON<User | null>("vgmf_session", null);
-    if (session?.email.toLowerCase() === email.toLowerCase()) writeJSON("vgmf_session", { ...session, ...update });
+    const session = getSession();
+    if (session?.email.toLowerCase() === email.toLowerCase()) setSession({ ...session, ...update });
   }
 }
 
 export function removeAccount(email: string) {
   recordActivity({ email, kind: "deleted", by: currentActorEmail() });
   writeJSON("vgmf_accounts", getAccounts().filter((account) => account.email.toLowerCase() !== email.toLowerCase()));
-  const session = readJSON<User | null>("vgmf_session", null);
-  if (session?.email.toLowerCase() === email.toLowerCase()) window.localStorage.removeItem("vgmf_session");
+  const session = getSession();
+  if (session?.email.toLowerCase() === email.toLowerCase()) clearSession();
   notifyCms();
 }
 
@@ -1097,8 +1097,7 @@ function withHistory(order: Order, status: string, note?: string): Order {
 function currentActor() {
   if (typeof window === "undefined") return undefined;
   try {
-    const session = JSON.parse(window.localStorage.getItem("vgmf_session") ?? "null") as User | null;
-    return session?.email;
+    return getSession()?.email;
   } catch {
     return undefined;
   }

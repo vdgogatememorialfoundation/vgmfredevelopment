@@ -43,6 +43,10 @@ Enable `nginx-ssl-default.conf` (`ssl_reject_handshake` on the default HTTPS ser
 
 `https://demo.vaidyagogate.org` uses Let’s Encrypt, HTTP→HTTPS, HSTS, and the headers in `nginx-security-headers.conf` (`nosniff`, `SAMEORIGIN`, Referrer-Policy, `upgrade-insecure-requests`). Copy that file to `/etc/nginx/snippets/vgmf-security-headers.conf`.
 
+`http://staging.vaidyagogate.org` and `http://stagging.vaidyagogate.org` 301 to `https://staging.vaidyagogate.org` so admin `localStorage` and the session cookie share one origin. Admin stays signed in until Logout (cookie + localStorage; Security → “Keep sessions signed in until Logout” defaults on).
+
+App sign-in tokens live in `/VGMF-PLATFORM/data/{env}/mobile-sessions.json` and are not dropped on PM2 restart.
+
 Admin → Settings → Domains & DNS holds hostname, CNAME, A, TTL, nameserver, per-app URL and sister-site (fellowship / autism / seminar) fields.
 
 ## Sister demos (fellowship + autism)
