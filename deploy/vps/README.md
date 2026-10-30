@@ -41,6 +41,8 @@ certbot --nginx -d demo.autism.vaidyagogate.org
 
 Enable `nginx-ssl-default.conf` (`ssl_reject_handshake` on the default HTTPS server). Without it, a hostname that has an A record but no certificate is served by the first SSL vhost on this machine (`autism.vaidyagogate.org`). That is why `https://demo.vaidyagogate.org` briefly showed the live autism site until its own Let's Encrypt certificate was issued.
 
+`https://demo.vaidyagogate.org` uses Let’s Encrypt, HTTP→HTTPS, HSTS, and the headers in `nginx-security-headers.conf` (`nosniff`, `SAMEORIGIN`, Referrer-Policy, `upgrade-insecure-requests`). Copy that file to `/etc/nginx/snippets/vgmf-security-headers.conf`.
+
 Admin → Settings → Domains & DNS holds hostname, CNAME, A, TTL, nameserver, per-app URL and sister-site (fellowship / autism / seminar) fields.
 
 ## Sister demos (fellowship + autism)
