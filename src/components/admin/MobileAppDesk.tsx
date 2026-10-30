@@ -82,9 +82,9 @@ export function MobileAppDesk() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Mobile app</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
-            The Android and iOS apps load events, articles, shop, clinics, notices, about pages and more from this website.
-            Publish after you change content. That updates phones immediately — you do not submit a new Play Store or App Store
-            build for ordinary publishing.
+            Android apps are Flutter. iOS apps are Swift. Both load this website and the live name/logo from the published
+            feed. Publish after you change content — that updates phones immediately. You do not submit a Play Store or App
+            Store build to rename an app or change its logo.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -102,22 +102,34 @@ export function MobileAppDesk() {
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Download APKs</h2>
         <p className="mt-0.5 text-sm text-slate-500">
-          Always available here. Public visitors do not see these until you turn on the switch below.
+          Flutter Android builds. Always available here. Gmail blocks `.apk` files — email these page links, never attach the
+          APK. iOS is built from the Swift project in Xcode.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {appFlavors.map((app) => (
-            <a
-              key={app.id}
-              href={app.download}
-              download={`vgmf-${app.id}.apk`}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-burgundy hover:border-burgundy/40"
-            >
-              <span>
-                {app.defaultName}
-                <span className="mt-0.5 block text-xs font-normal text-slate-500">{app.androidPackage}</span>
-              </span>
-              <span>Download</span>
-            </a>
+            <div key={app.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm font-semibold text-slate-900">{app.defaultName}</p>
+              <p className="mt-0.5 break-all text-xs font-normal text-slate-500">{app.androidPackage}</p>
+              <p className="mt-1 break-all text-xs text-slate-400">{app.download}</p>
+              <div className="mt-3 flex flex-wrap gap-3 text-sm font-semibold text-burgundy">
+                <a href={app.download} download={`vgmf-${app.id}.apk`}>
+                  Download
+                </a>
+                <button
+                  type="button"
+                  className="text-burgundy"
+                  onClick={() => {
+                    const url = `${window.location.origin}${app.download}`;
+                    void navigator.clipboard.writeText(url).then(
+                      () => setNote(`Copied ${url}. Paste that into Gmail — do not attach the APK.`),
+                      () => setNote(url)
+                    );
+                  }}
+                >
+                  Copy link
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       </section>

@@ -1,0 +1,75 @@
+name: VGMF
+options:
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: "1.0.0"
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: NO
+schemes:
+  VGMF:
+    build:
+      targets:
+        VGMF: all
+  VGMFAdmin:
+    build:
+      targets:
+        VGMFAdmin: all
+  VGMFStaff:
+    build:
+      targets:
+        VGMFStaff: all
+  VGMFSupport:
+    build:
+      targets:
+        VGMFSupport: all
+targets:
+  VGMF:
+    type: application
+    platform: iOS
+    sources: [Shared]
+    info:
+      path: Customer/Info.plist
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: org.vaidyagogate.customer
+      PRODUCT_NAME: VGMF
+      INFOPLIST_FILE: Customer/Info.plist
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  VGMFAdmin:
+    type: application
+    platform: iOS
+    sources: [Shared]
+    info:
+      path: Admin/Info.plist
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: org.vaidyagogate.admin
+      PRODUCT_NAME: VGMF Admin
+      INFOPLIST_FILE: Admin/Info.plist
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  VGMFStaff:
+    type: application
+    platform: iOS
+    sources: [Shared]
+    info:
+      path: Staff/Info.plist
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: org.vaidyagogate.staff
+      PRODUCT_NAME: VGMF Staff
+      INFOPLIST_FILE: Staff/Info.plist
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  VGMFSupport:
+    type: application
+    platform: iOS
+    sources: [Shared]
+    info:
+      path: Support/Info.plist
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: org.vaidyagogate.support
+      PRODUCT_NAME: VGMF Support
+      INFOPLIST_FILE: Support/Info.plist
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

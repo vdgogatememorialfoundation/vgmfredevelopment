@@ -43,9 +43,10 @@ export default function AppDownloadPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">{siteConfig.shortName}</p>
         <h1 className="mt-2 font-serif text-4xl text-ink">Android apps</h1>
         <p className="mt-4 text-sm leading-7 text-text-muted">
-          Four separate apps: customer, admin, staff and support. After install, each app loads its live name and logo from
-          this website. Changing those in <strong>Admin → Mobile app</strong> and publishing updates phones immediately — no
-          Play Store or App Store release.
+          Four Flutter Android apps: customer, admin, staff and support. iOS is built in Swift from the same live website.
+          After install, each app loads its name and logo from this site. Changing those in <strong>Admin → Mobile app</strong>{" "}
+          and publishing updates phones immediately — no Play Store or App Store release. Do not email the APK files; Gmail
+          blocks them. Share these download links instead.
         </p>
         <div className="mt-10">
           <ApkDownloadGrid />

@@ -52,6 +52,14 @@ next-env.d.ts
 /native/android-apps/build
 /native/android-apps/app/build
 /native/android-apps/local.properties
+/native/flutter/.dart_tool
+/native/flutter/.flutter-plugins
+/native/flutter/.flutter-plugins-dependencies
+/native/flutter/build
+/native/flutter/.idea
+/native/flutter/android/.gradle
+/native/flutter/android/local.properties
+/native/flutter/android/app/src/main/java/io/flutter/plugins/
 *.apk
 *.aab
 *.ipa
