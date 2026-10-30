@@ -35,6 +35,10 @@ yarn-error.log*
 !.env.example
 !mobile/.env.example
 
+# VPS data written at runtime
+/data
+/VGMF-PLATFORM
+
 # vercel
 .vercel
 

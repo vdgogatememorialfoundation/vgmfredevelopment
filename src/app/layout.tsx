@@ -9,6 +9,8 @@ import {
   Outfit,
 } from "next/font/google";
 import JsonLd from "@/components/seo/JsonLd";
+import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
+import { platformEnv, publicSiteUrl } from "@/lib/platform";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
 
@@ -59,56 +61,63 @@ const gujarati = Noto_Sans_Gujarati({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteConfig.url),
-  title: {
-    default: siteConfig.name,
-    template: `%s | ${siteConfig.name}`,
-  },
-  description: siteConfig.tagline,
-  keywords: [
-    "Vaidya Gogate Memorial Foundation",
-    "Ayurveda",
-    "Pune",
-    "Ayurveda education",
-    "Ayurveda seminars",
-    "Ayurveda publications",
-    "Ayurveda clinics",
-    "VGMF",
-  ],
-  authors: [{ name: siteConfig.name, url: siteConfig.url }],
-  creator: "Capture Visual Studios",
-  publisher: siteConfig.name,
-  category: "education",
-  applicationName: siteConfig.shortName,
-  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
-  alternates: { canonical: siteConfig.url },
-  openGraph: {
-    type: "website",
-    locale: "en_IN",
-    url: siteConfig.url,
-    siteName: siteConfig.name,
-    title: siteConfig.name,
+export function generateMetadata(): Metadata {
+  const url = publicSiteUrl();
+  const hosted = platformEnv();
+  const noIndex = hosted === "demo" || hosted === "staging";
+  return {
+    metadataBase: new URL(url),
+    title: {
+      default: siteConfig.name,
+      template: `%s | ${siteConfig.name}`,
+    },
     description: siteConfig.tagline,
-    images: [
-      {
-        url: "/images/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: siteConfig.name,
-      },
+    keywords: [
+      "Vaidya Gogate Memorial Foundation",
+      "Ayurveda",
+      "Pune",
+      "Ayurveda education",
+      "Ayurveda seminars",
+      "Ayurveda publications",
+      "Ayurveda clinics",
+      "VGMF",
     ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: siteConfig.name,
-    description: siteConfig.tagline,
-    images: ["/images/og-image.jpg"],
-  },
-  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
-    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
-    : undefined,
-};
+    authors: [{ name: siteConfig.name, url }],
+    creator: "Capture Visual Studios",
+    publisher: siteConfig.name,
+    category: "education",
+    applicationName: siteConfig.shortName,
+    robots: noIndex
+      ? { index: false, follow: false, googleBot: { index: false, follow: false } }
+      : { index: true, follow: true, googleBot: { index: true, follow: true } },
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      locale: "en_IN",
+      url,
+      siteName: siteConfig.name,
+      title: siteConfig.name,
+      description: siteConfig.tagline,
+      images: [
+        {
+          url: "/images/og-image.jpg",
+          width: 1200,
+          height: 630,
+          alt: siteConfig.name,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: siteConfig.name,
+      description: siteConfig.tagline,
+      images: ["/images/og-image.jpg"],
+    },
+    verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+      : undefined,
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#0B1F3A",
@@ -130,6 +139,7 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">
+        <EnvironmentBanner />
         <JsonLd />
         {children}
       </body>

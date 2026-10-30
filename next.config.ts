@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  serverExternalPackages: ["pg"],
+  outputFileTracingExcludes: {
+    "/*": ["./mobile/**/*", "./native/**/*", "./admin-backups/**/*", "./deploy/**/*"],
+  },
   async redirects() {
     return [
       { source: "/vgmf-foundation.apk", destination: "/apps/vgmf-customer.apk", permanent: false },

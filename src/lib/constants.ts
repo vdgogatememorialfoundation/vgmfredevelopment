@@ -2,7 +2,7 @@ export const siteConfig = {
   name: "Vaidya Gogate Memorial Foundation",
   shortName: "VGMF",
   tagline: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
-  url: "https://vaidyagogate.org",
+  url: process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://vaidyagogate.org",
   email: "info@vaidyagogate.org",
   phone: "+91 20 1234 5678",
   whatsapp: "+91 98765 43210",
