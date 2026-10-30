@@ -18,6 +18,7 @@ import { matchesAccountQuery } from "@/lib/account-search";
 import type { AccountStatus, User } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 
 ensureBootstrapped();
 
@@ -140,6 +141,7 @@ export function CustomerDesk() {
                     />
                     <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedEmail(account.email)}>
                       <p className="font-semibold text-text-primary">{displayName(account, true) || account.email}</p>
+                      <PartnerPortalBadges user={account} className="mt-1" />
                       <p className="font-mono text-xs text-text-muted">{account.accountId} · {account.email}</p>
                       <p className="text-xs text-text-muted">{account.phone} · {(account.status ?? "active")}</p>
                     </button>

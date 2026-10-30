@@ -26,8 +26,11 @@ export default function EventCard({ event }: { event: Event }) {
           src={event.bannerUrl}
           aspectClassName="aspect-[16/9]"
         />
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-4 left-4 flex flex-col gap-1">
           <Badge tone="burgundy">{event.eventType}</Badge>
+          {event.source === "seminar" || event.source === "autism" ? (
+            <Badge tone="ink">{event.source === "seminar" ? "Seminar Portal" : "Autism Portal"}</Badge>
+          ) : null}
         </div>
         <div className="absolute top-4 right-4">
           <Badge tone={statusTone[event.registrationStatus] ?? "neutral"}>

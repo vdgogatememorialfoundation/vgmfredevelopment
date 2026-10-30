@@ -8,6 +8,7 @@ import {
   seedAccounts,
 } from "@/lib/admin-store";
 import type { User } from "@/types";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import {
   Button,
   EmptyState,
@@ -98,7 +99,10 @@ export function AccountsSection({
               <tbody>
                 {(fixedRole ? accounts.filter((account) => account.role === fixedRole) : accounts).map((account) => (
                   <tr key={account.id || account.email} className="border-b border-border/60">
-                    <td className="py-2.5 pr-3 font-medium text-text-primary">{account.firstName} {account.lastName}</td>
+                    <td className="py-2.5 pr-3 font-medium text-text-primary">
+                      <span>{account.firstName} {account.lastName}</span>
+                      <PartnerPortalBadges user={account} className="mt-1 block" />
+                    </td>
                     <td className="px-3 text-text-muted">{account.email}<br /><span className="text-xs">{account.phone}</span></td>
                     <td className="px-3 font-mono text-xs">{account.accountId ?? "—"}</td>
                     <td className="px-3"><StatusBadge status={account.role ?? "customer"} mapping={ROLE_TONES} /></td>

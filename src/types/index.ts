@@ -15,6 +15,8 @@ export type RegistrationStatus =
 
 export type EventMode = "Online" | "Offline" | "Hybrid";
 
+export type PartnerPortalId = "seminar" | "autism";
+
 export interface Event {
   id: string;
   name: string;
@@ -53,6 +55,43 @@ export interface Event {
   publishAt?: string;
   /** ISO datetime — hidden on the public site after this time. */
   unpublishAt?: string;
+  /** Sister portal this event was synced from. Omitted for events created on VGMF. */
+  source?: PartnerPortalId | "vgmf";
+  sourceUrl?: string;
+}
+
+export interface PartnerPortal {
+  id: PartnerPortalId;
+  label: string;
+  href: string;
+  hasTicket?: boolean;
+  ticketCount?: number;
+  paymentCount?: number;
+  role?: "doctor" | "applicant" | "registrant";
+}
+
+/** E-ticket summary stored on VGMF. The QR itself stays on the sister portal. */
+export interface PartnerTicketSummary {
+  id: string;
+  portal: PartnerPortalId;
+  eventName: string;
+  status: string;
+  paymentStatus?: string;
+  amount?: number;
+  currency?: string;
+  issuedAt?: string;
+  portalUrl: string;
+}
+
+export interface PartnerPaymentSummary {
+  id: string;
+  portal: PartnerPortalId;
+  amount: number;
+  currency: string;
+  status: string;
+  at?: string;
+  eventName?: string;
+  portalUrl: string;
 }
 
 export interface EventTbd {
@@ -330,6 +369,7 @@ export interface User {
   lastLogoutAt?: string;
   /** Reply-To used when this staff member sends mail. Empty uses care@vaidyagogate.org. */
   replyToEmail?: string;
+  partnerPortals?: PartnerPortal[];
 }
 
 export interface Certificate {

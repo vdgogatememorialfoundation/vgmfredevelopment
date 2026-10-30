@@ -77,4 +77,6 @@ Fellowship is rebuilt so `NEXT_PUBLIC_APP_URL` is `https://demo.fellowship.vaidy
 
 Copy `deploy/vps/ecosystem.config.cjs` to `/VGMF-PLATFORM/ecosystem.config.cjs` and run `pm2 start /VGMF-PLATFORM/ecosystem.config.cjs`. Sister demos use `ecosystem-sister-demos.config.cjs`.
 
+Sister portal sync (seminar + autism) reads public schedule APIs and, when `SEMINAR_DATABASE_URL` / `AUTISM_DATABASE_URL` are set in `/VGMF-PLATFORM/secrets/{staging,demo}.env`, imports doctor/applicant accounts, e-tickets and payments. QR codes are never stored on VGMF. `deploy/vps/vgmf-ingest.js` is copied onto the live seminar and autism apps so new registrations are pushed to staging and demo.
+
 Do not deploy this repo on Vercel. `vercel.json` skips Git auto-deploys. Disconnect the Vercel GitHub app in the Vercel dashboard if older PR branches still trigger iad1 builds.

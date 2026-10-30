@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { emptyFeedFallback } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
 import { hydratePublishedSite, setPublishedFeed } from "@/lib/hydrate-public";
+import { hydratePartnerFeed } from "@/lib/partner-hydrate";
 
 export type PublishedBrand = Pick<MobileFeed, "site" | "flyers" | "publishedAt">;
 
@@ -28,6 +29,7 @@ export function HydratePublishedSite({
 
   useEffect(() => {
     void hydratePublishedSite();
+    void hydratePartnerFeed();
   }, []);
 
   return <>{children}</>;

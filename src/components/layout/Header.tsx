@@ -15,6 +15,7 @@ import { getLiveCmsPages } from "@/lib/cms-pages";
 import { getSiteVisibility, visibleAccountNav, visiblePublicNav } from "@/lib/site-visibility";
 import { subscribeCms } from "@/lib/cms";
 import { useSiteSettings } from "@/lib/use-cms";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 
 function CartIcon() {
   return (
@@ -269,6 +270,7 @@ export default function Header() {
                       <p className="mt-1 text-xs font-mono tracking-[0.08em] text-burgundy">
                         {user.accountId}
                       </p>
+                      <PartnerPortalBadges user={user} className="mt-2" />
                     </div>
 
                     <nav aria-label="Account menu" className="max-h-80 overflow-y-auto py-2">

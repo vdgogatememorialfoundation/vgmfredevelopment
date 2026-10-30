@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getAllApplications } from "@/lib/applications";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import { getPartnerTickets } from "@/lib/partner-hydrate";
 
 interface Stat {
   label: string;
@@ -25,7 +27,8 @@ export default function AccountDashboardPage() {
             .toLowerCase()
             .includes(`${user.firstName} ${user.lastName}`.toLowerCase())
       );
-      setApplicationCount(apps.length);
+      const partnerTickets = getPartnerTickets(user.email);
+      setApplicationCount(apps.length + partnerTickets.length);
     }, 0);
     return () => clearTimeout(timer);
   }, [user]);
@@ -57,6 +60,9 @@ export default function AccountDashboardPage() {
         <h1 className="heading-3 mt-2">
           Welcome back, {user.firstName}
         </h1>
+        <div className="mt-3">
+          <PartnerPortalBadges user={user} />
+        </div>
         <p className="mt-3 text-sm text-text-muted">
           Manage your registrations, subscriptions, orders, payments and
           profile from one place.

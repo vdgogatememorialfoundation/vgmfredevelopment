@@ -12,13 +12,13 @@ export default function HomePage() {
   return (
     <>
       <HeroSection />
-      <NoticeBoard />
       <FoundationDirectory />
       <SupportUs />
       <UpcomingEvents />
       <LegacySection />
       <FeaturedBooks />
       <FeaturedArticles />
+      <NoticeBoard />
       <ClinicsSection />
     </>
   );

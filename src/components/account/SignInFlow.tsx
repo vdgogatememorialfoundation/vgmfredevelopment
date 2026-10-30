@@ -88,7 +88,15 @@ export default function SignInFlow() {
       setError("Enter your password, then we will send a one-time code to your email.");
       return;
     }
-    if (!account.password || account.password !== password) {
+    if (!account.password) {
+      setError(
+        account.partnerPortals?.length
+          ? "This account is linked from a sister portal. Use forgot password to set a Foundation password, or open the Seminar / Autism portal for the e-ticket QR."
+          : "Incorrect password. Use forgot password if you need a reset."
+      );
+      return;
+    }
+    if (account.password !== password) {
       setError("Incorrect password. Use forgot password if you need a reset.");
       return;
     }
