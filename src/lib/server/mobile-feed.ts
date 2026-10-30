@@ -1,6 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { siteConfig } from "@/lib/constants";
+import { writePublishedFeed } from "@/lib/server/db";
+import { dataFile } from "@/lib/server/paths";
 import { defaultAppearance, sanitizeAppearance } from "@/lib/mobile-appearance";
 import { defaultMobileAppConfig } from "@/lib/mobile-config";
 import { type MobileFeed } from "@/lib/mobile-types";
@@ -10,6 +12,7 @@ export type { MobileFeed } from "@/lib/mobile-types";
 
 const TMP_FILE = join("/tmp", "vgmf-mobile-snapshot.json");
 const PUBLIC_FILE = join(process.cwd(), "public", "app-feed.json");
+const DATA_FILE = dataFile("app-feed.json");
 
 let memory: MobileFeed | null = null;
 
@@ -63,7 +66,7 @@ export function defaultMobileFeed(): MobileFeed {
 }
 
 export function readMobileFeed(): MobileFeed {
-  const snapshot = memory ?? readFile(TMP_FILE) ?? readFile(PUBLIC_FILE);
+  const snapshot = memory ?? readFile(DATA_FILE) ?? readFile(TMP_FILE) ?? readFile(PUBLIC_FILE);
   const base = defaultMobileFeed();
   if (!snapshot) return base;
   return {
@@ -146,7 +149,7 @@ function persistFeedAssets(feed: MobileFeed): MobileFeed {
 
 export function saveMobileFeed(feed: MobileFeed) {
   memory = persistFeedAssets(feed);
-  for (const file of [TMP_FILE, PUBLIC_FILE]) {
+  for (const file of [DATA_FILE, TMP_FILE, PUBLIC_FILE]) {
     try {
       mkdirSync(join(file, ".."), { recursive: true });
       writeFileSync(file, JSON.stringify(memory));
@@ -154,6 +157,7 @@ export function saveMobileFeed(feed: MobileFeed) {
       /* read-only host */
     }
   }
+  void writePublishedFeed(memory).catch(() => undefined);
   return memory;
 }
 

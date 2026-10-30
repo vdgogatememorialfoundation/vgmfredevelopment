@@ -20,7 +20,7 @@ export const staffModules = [
   { id: "delivery", label: "Shipping APIs", paths: ["/admin/settings/shipping-apis", "/admin/delivery-partners"] },
   { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications", "/admin/settings/email", "/admin/settings/whatsapp", "/admin/settings/sms"] },
   { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles", "/admin/accounts/doctors"] },
-  { id: "settings", label: "Site settings", paths: ["/admin/settings"] },
+  { id: "settings", label: "Site settings", paths: ["/admin/settings", "/admin/settings/domains"] },
   { id: "mobile", label: "Mobile app", paths: ["/admin/settings/mobile", "/admin/settings/appearance"] },
 ] as const;
 

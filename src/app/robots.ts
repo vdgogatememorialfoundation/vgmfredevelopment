@@ -1,7 +1,17 @@
 import type { MetadataRoute } from "next";
-import { siteUrl } from "@/lib/seo";
+import { platformEnv, publicSiteUrl } from "@/lib/platform";
+
+export const dynamic = "force-dynamic";
 
 export default function robots(): MetadataRoute.Robots {
+  const env = platformEnv();
+  const host = publicSiteUrl();
+  if (env === "demo" || env === "staging") {
+    return {
+      rules: { userAgent: "*", disallow: "/" },
+      host,
+    };
+  }
   return {
     rules: [
       {
@@ -10,7 +20,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/admin", "/staff", "/doctor", "/account", "/checkout", "/cart", "/api/"],
       },
     ],
-    sitemap: `${siteUrl}/sitemap.xml`,
-    host: siteUrl,
+    sitemap: `${host}/sitemap.xml`,
+    host,
   };
 }

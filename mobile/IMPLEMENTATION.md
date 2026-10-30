@@ -215,9 +215,9 @@ eas build --profile preview-staff --platform android
 eas build --profile preview-support --platform android
 ```
 
-API base: `extra.apiUrl` / `EXPO_PUBLIC_API_URL` (default `https://vgmfredevelopment.vercel.app`). Flavor: `EXPO_PUBLIC_FLAVOR=customer|admin|staff|support` (`mobile/app.config.ts`).
+API base: `extra.apiUrl` / `EXPO_PUBLIC_API_URL` (default `https://staging.vaidyagogate.org`). Flavor: `EXPO_PUBLIC_FLAVOR=customer|admin|staff|support` (`mobile/app.config.ts`).
 
-`https://vaidyagogate.org` is still the previous Wix website. `GET /api/mobile/feed` there returns HTML 400/404 (`parastorage.com`). The Next.js feed is live at `https://vgmfredevelopment.vercel.app/api/mobile/feed`. Expo tries the configured origin, then Vercel, then the public domain. HTML error pages are never shown in the UI.
+`https://vaidyagogate.org` is still the previous Wix website. The Next.js feed is on the Mumbai VPS at `https://staging.vaidyagogate.org/api/mobile/feed` (demo: `https://demo.vaidyagogate.org`). Expo tries the configured origin, then staging, then demo, then the public domain. HTML error pages are never shown in the UI.
 
 Store signing, Play/App Store listings and push certificates are **not** in this repo. Admin must still **Publish to app** from the website so phones receive logo and content.
 
@@ -229,10 +229,10 @@ Open these links **on the phone** (Chrome). Allow installs from the browser if A
 
 | App | Download |
 |---|---|
-| VGMF (customer) | https://vgmfredevelopment.vercel.app/apps/vgmf-customer.apk |
-| VGMF Admin | https://vgmfredevelopment.vercel.app/apps/vgmf-admin.apk |
-| VGMF Staff | https://vgmfredevelopment.vercel.app/apps/vgmf-staff.apk |
-| VGMF Support | https://vgmfredevelopment.vercel.app/apps/vgmf-support.apk |
+| VGMF (customer) | https://staging.vaidyagogate.org/apps/vgmf-customer.apk |
+| VGMF Admin | https://staging.vaidyagogate.org/apps/vgmf-admin.apk |
+| VGMF Staff | https://staging.vaidyagogate.org/apps/vgmf-staff.apk |
+| VGMF Support | https://staging.vaidyagogate.org/apps/vgmf-support.apk |
 
 Until this branch is on the Vercel production host, the same files are on the PR branch:
 
