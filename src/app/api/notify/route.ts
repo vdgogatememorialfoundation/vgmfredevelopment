@@ -8,6 +8,7 @@ import {
   sendTransactionalEmail,
   sendZohoCpaas,
 } from "@/lib/server/providers";
+import { applyFoundationBrand, wrapFoundationEmail } from "@/lib/email-layout";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
@@ -26,8 +27,9 @@ function imageHtml(images: unknown) {
 }
 
 function toHtml(text: string, html?: boolean, images?: unknown) {
-  const body = html || /<(img|p|br|div|strong|em|a)\b/i.test(text) ? text : escapeHtml(text).replace(/\n/g, "<br/>");
-  return `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#1f2a24">${body}${imageHtml(images)}</div>`;
+  const branded = applyFoundationBrand(text);
+  const body = html || /<(img|p|br|div|strong|em|a)\b/i.test(branded) ? branded : escapeHtml(branded).replace(/\n/g, "<br/>");
+  return wrapFoundationEmail(`${body}${imageHtml(images)}`);
 }
 
 function asRecord(value: unknown) {

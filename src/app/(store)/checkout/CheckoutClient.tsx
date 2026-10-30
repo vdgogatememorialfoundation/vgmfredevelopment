@@ -310,7 +310,7 @@ export default function CheckoutClient() {
         params: [deliveryAddress.fullName, id, `₹${totals.total}`],
         subject: `Order ${id} placed`,
         template: "order-placed",
-        body: `Thank you for your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${deliveryMode === "delivery" ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""} via ${courierName}.` : `Pickup from ${pickupLocation.name}.`}\n\n– VGMF Store`,
+        body: `Dear Guest,\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nWe received your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${deliveryMode === "delivery" ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""} via ${courierName}.` : `Pickup from ${pickupLocation.name}.`}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
       });
     }
     setOrderId(id);

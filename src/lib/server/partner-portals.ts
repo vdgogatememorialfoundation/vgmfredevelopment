@@ -609,8 +609,10 @@ async function pullFellowshipDatabase() {
           portal,
           eventName: str(row, ["application_number"]) || "Research Fellowship 2026",
           status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+          applicationNo: str(row, ["application_number"]) || undefined,
           issuedAt: iso(row.submitted_at) || undefined,
           portalUrl: partnerTicketHref(portal),
+          kind: "application" as const,
         };
         const list = ticketsByEmail[email] ?? [];
         if (!list.some((item) => item.id === extra.id)) ticketsByEmail[email] = [extra, ...list];
@@ -633,8 +635,10 @@ async function pullFellowshipDatabase() {
           portal,
           eventName: str(row, ["application_number"]) ? `Fellowship ${str(row, ["application_number"])}` : "Research Fellowship 2026",
           status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+          applicationNo: str(row, ["application_number"]) || undefined,
           issuedAt: iso(row.submitted_at) || undefined,
           portalUrl: partnerTicketHref(portal),
+          kind: "application",
         },
       ];
     }
@@ -737,62 +741,137 @@ async function pullDatabase(portal: PartnerPortalId) {
     ticketsByUser.set(key, list);
   }
   const paymentsByUser = new Map<string, Record<string, unknown>[]>();
+  const paymentsByUserEmail = new Map<string, Record<string, unknown>[]>();
   for (const row of payments) {
     const key = String(row.user_id || "");
-    if (!key) continue;
-    const list = paymentsByUser.get(key) ?? [];
-    list.push(row);
-    paymentsByUser.set(key, list);
+    const email = str(row, ["user_email"]).toLowerCase();
+    if (key) {
+      const list = paymentsByUser.get(key) ?? [];
+      list.push(row);
+      paymentsByUser.set(key, list);
+    }
+    if (email) {
+      const list = paymentsByUserEmail.get(email) ?? [];
+      list.push(row);
+      paymentsByUserEmail.set(email, list);
+    }
   }
 
   const accounts: SanitizedPartnerAccount[] = [];
   const ticketsByEmail: Record<string, PartnerTicketSummary[]> = {};
   const paymentsByEmail: Record<string, PartnerPaymentSummary[]> = {};
+  const eventName = (id?: unknown) => str(seminarById.get(String(id || "")) ?? {}, ["title"]) || `${partnerCategory(portal)} programme`;
 
-  for (const row of users) {
-    const userTickets = ticketsByUser.get(String(row.id)) ?? [];
-    const userPayments = paymentsByUser.get(String(row.id)) ?? [];
-    const account = mapAccount(portal, row, {
-      hasTicket: userTickets.some((item) => asNumber(item.is_valid) !== 0),
-      ticketCount: userTickets.length,
-      paymentCount: userPayments.length,
-      hasProfile: asNumber(row.has_profile) === 1,
-    });
-    if (!account) continue;
-    const email = account.email.toLowerCase();
-    const eventName = (id?: unknown) => str(seminarById.get(String(id || "")) ?? {}, ["title"]) || `${partnerCategory(portal)} programme`;
-    ticketsByEmail[email] = userTickets.map((item) => ({
-      id: `${portal}-tkt-${item.id}`,
-      portal,
-      eventName: eventName(item.event_id),
-      status: asNumber(item.is_valid) === 0 ? "Invalid" : item.is_scanned ? "Checked in" : "Issued",
-      issuedAt: iso(item.scan_time) || undefined,
-      portalUrl: partnerTicketHref(portal),
-    }));
-    paymentsByEmail[email] = userPayments.map((item) => ({
+  const addPayment = (email: string, item: Record<string, unknown>) => {
+    pushByEmail(paymentsByEmail, email, {
       id: `${portal}-pay-${item.id}`,
       portal,
       amount: asNumber(item.amount),
       currency: "INR",
       status: str(item, ["status"], "Recorded"),
       at: iso(item.created_at) || undefined,
-      eventName: str(item, ["application_no"]) || eventName(),
+      eventName: str(item, ["application_no", "eventName", "event"]) || eventName(item.seminar_id),
       portalUrl: origin,
-    }));
-    if (!account.partnerPortals?.[0]?.hasTicket) {
-      const regs = registrations.filter((item) => String(item.user_id) === String(row.id));
-      if (regs.length && account.partnerPortals?.[0]) account.partnerPortals[0].hasTicket = true;
+    });
+  };
+
+  for (const row of users) {
+    const userTickets = ticketsByUser.get(String(row.id)) ?? [];
+    const userRegs = registrations.filter((item) => String(item.user_id) === String(row.id) || str(item, ["user_email"]).toLowerCase() === str(row, ["email"]).toLowerCase());
+    const userPrereg = prereg.filter((item) => String(item.user_id) === String(row.id) || str(item, ["user_email"]).toLowerCase() === str(row, ["email"]).toLowerCase());
+    const email = str(row, ["email"]).toLowerCase();
+    const userPayments = [
+      ...(paymentsByUser.get(String(row.id)) ?? []),
+      ...(email ? paymentsByUserEmail.get(email) ?? [] : []),
+    ].filter((item, index, list) => list.findIndex((rowItem) => String(rowItem.id) === String(item.id)) === index);
+    const account = mapAccount(portal, row, {
+      hasTicket: userTickets.some((item) => asNumber(item.is_valid) !== 0) || userRegs.length > 0 || userPrereg.length > 0,
+      ticketCount: userTickets.length + userRegs.length + userPrereg.length,
+      paymentCount: userPayments.length,
+      hasProfile: asNumber(row.has_profile) === 1,
+    });
+    if (!account) continue;
+    for (const item of userTickets) {
+      pushByEmail(ticketsByEmail, account.email, {
+        id: `${portal}-tkt-${item.id}`,
+        portal,
+        eventName: eventName(item.event_id || item.seminar_id),
+        status: asNumber(item.is_valid) === 0 ? "Invalid" : item.is_scanned ? "Checked in" : "Issued",
+        applicationNo: str(item, ["ticket_id_string"]) || undefined,
+        issuedAt: iso(item.scan_time || item.created_at) || undefined,
+        portalUrl: partnerTicketHref(portal),
+        kind: "ticket",
+      });
+    }
+    for (const item of userRegs) {
+      pushByEmail(ticketsByEmail, account.email, {
+        id: `${portal}-reg-${item.id}`,
+        portal,
+        eventName: eventName(item.seminar_id),
+        status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+        applicationNo: str(item, ["application_no"]) || undefined,
+        issuedAt: iso(item.created_at) || undefined,
+        portalUrl: partnerTicketHref(portal),
+        kind: "registration",
+      });
+    }
+    for (const item of userPrereg) {
+      pushByEmail(ticketsByEmail, account.email, {
+        id: `${portal}-app-${item.id}`,
+        portal,
+        eventName: eventName(item.seminar_id),
+        status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+        applicationNo: str(item, ["application_no"]) || undefined,
+        issuedAt: iso(item.created_at) || undefined,
+        portalUrl: partnerTicketHref(portal),
+        kind: "application",
+      });
+    }
+    for (const item of userPayments) addPayment(account.email, item);
+    if (account.partnerPortals?.[0]) {
+      account.partnerPortals[0].hasTicket = Boolean(
+        account.partnerPortals[0].hasTicket || userRegs.length || userPrereg.length || userTickets.length
+      );
+      account.partnerPortals[0].ticketCount = ticketsByEmail[account.email.toLowerCase()]?.length ?? 0;
+      account.partnerPortals[0].paymentCount = paymentsByEmail[account.email.toLowerCase()]?.length ?? 0;
     }
     accounts.push(account);
   }
 
-  if (portal === "autism") {
-    for (const row of prereg) {
-      const email = str(row, ["user_email"]).toLowerCase();
-      if (!email) continue;
-      const existing = accounts.find((account) => account.email === email);
-      if (existing?.partnerPortals?.[0]) existing.partnerPortals[0].role = "applicant";
-    }
+  for (const row of registrations) {
+    const email = str(row, ["user_email"]).toLowerCase();
+    if (!email) continue;
+    pushByEmail(ticketsByEmail, email, {
+      id: `${portal}-reg-${row.id}`,
+      portal,
+      eventName: eventName(row.seminar_id),
+      status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+      applicationNo: str(row, ["application_no"]) || undefined,
+      issuedAt: iso(row.created_at) || undefined,
+      portalUrl: partnerTicketHref(portal),
+      kind: "registration",
+    });
+  }
+
+  for (const row of prereg) {
+    const email = str(row, ["user_email"]).toLowerCase();
+    if (!email) continue;
+    pushByEmail(ticketsByEmail, email, {
+      id: `${portal}-app-${row.id}`,
+      portal,
+      eventName: eventName(row.seminar_id),
+      status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+      applicationNo: str(row, ["application_no"]) || undefined,
+      issuedAt: iso(row.created_at) || undefined,
+      portalUrl: partnerTicketHref(portal),
+      kind: "application",
+    });
+    const existing = accounts.find((account) => account.email.toLowerCase() === email);
+    if (existing?.partnerPortals?.[0]) existing.partnerPortals[0].role = "applicant";
+  }
+
+  for (const [email, rows] of paymentsByUserEmail.entries()) {
+    for (const item of rows) addPayment(email, item);
   }
 
   const copied = await pullNoticesDatabase(portal);
@@ -814,6 +893,27 @@ function mergeById<T extends { id: string }>(primary: T[], extra: T[]) {
     if (!map.has(item.id)) map.set(item.id, item);
   }
   return [...map.values()];
+}
+
+function mergeKeyedLists<T extends { id: string }>(target: Record<string, T[]>, extra?: Record<string, T[]>) {
+  if (!extra) return target;
+  for (const [key, rows] of Object.entries(extra)) {
+    const email = key.toLowerCase();
+    const map = new Map((target[email] ?? []).map((row) => [row.id, row]));
+    for (const row of rows) map.set(row.id, row);
+    target[email] = [...map.values()];
+  }
+  return target;
+}
+
+function pushByEmail<T extends { id: string }>(map: Record<string, T[]>, email: string, item: T) {
+  const key = email.trim().toLowerCase();
+  if (!key) return;
+  const list = map[key] ?? [];
+  const index = list.findIndex((row) => row.id === item.id);
+  if (index >= 0) list[index] = { ...list[index], ...item };
+  else list.push(item);
+  map[key] = list;
 }
 
 function mergeAccounts(list: SanitizedPartnerAccount[]) {
@@ -889,8 +989,8 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     snapshot.announcements.push(...announcements);
     if (dbData) {
       snapshot.accounts.push(...dbData.accounts);
-      Object.assign(snapshot.ticketsByEmail, dbData.ticketsByEmail);
-      Object.assign(snapshot.paymentsByEmail, dbData.paymentsByEmail);
+      mergeKeyedLists(snapshot.ticketsByEmail, dbData.ticketsByEmail);
+      mergeKeyedLists(snapshot.paymentsByEmail, dbData.paymentsByEmail);
     }
     snapshot.stats[portal] = {
       events: events.length,
@@ -997,6 +1097,8 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
       currency: "INR",
       issuedAt: iso(ticketRow.issuedAt || ticketRow.issued_at) || undefined,
       portalUrl: partnerTicketHref(portal),
+      applicationNo: str(ticketRow, ["application_no", "application_number", "applicationNo"]) || undefined,
+      kind: payload.application ? "application" : payload.ticket ? "ticket" : "registration",
     };
     snapshot.ticketsByEmail[email] = upsertList(snapshot.ticketsByEmail[email] ?? [], ticket);
   }
@@ -1044,6 +1146,26 @@ export function accountsForEmail(snapshot: PartnerSnapshot, email: string) {
     tickets: snapshot.ticketsByEmail[emailKey] ?? [],
     payments: snapshot.paymentsByEmail[emailKey] ?? [],
   };
+}
+
+export function findPartnerApplication(snapshot: PartnerSnapshot, query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return null;
+  const compact = needle.replace(/\s+/g, "");
+  for (const [email, rows] of Object.entries(snapshot.ticketsByEmail)) {
+    for (const ticket of rows) {
+      const applicationNo = (ticket.applicationNo ?? "").toLowerCase();
+      if (
+        ticket.id.toLowerCase() === needle ||
+        ticket.id.toLowerCase().endsWith(`-${needle}`) ||
+        applicationNo === needle ||
+        applicationNo.replace(/\s+/g, "") === compact
+      ) {
+        return { email, ticket };
+      }
+    }
+  }
+  return null;
 }
 
 export async function lookupPartnerIdentity(input: {

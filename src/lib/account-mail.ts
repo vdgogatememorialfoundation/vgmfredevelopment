@@ -36,10 +36,10 @@ export function emailAccountActivity(row: AccountActivity) {
     to,
     phone: account?.phone,
     name,
-    subject: `VGMF account ${row.kind}: ${name}`,
+    subject: `Your Vaidya Gogate Memorial Foundation account ${row.kind}`,
     template: "account-activity",
     replyTo: CARE,
-    body: `Dear ${name},\n\nYour VGMF account ${action} on ${when}.${by}${extra}\n\nIf this was not you, write to ${CARE}.\n\n– Vaidya Gogate Memorial Foundation`,
+    body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour account ${action} on ${when}.${by}${extra}\n\nIf this was not you, write to ${CARE}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
 }
 

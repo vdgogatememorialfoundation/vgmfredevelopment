@@ -70,7 +70,7 @@ export interface PartnerPortal {
   role?: "doctor" | "applicant" | "registrant" | "fellow";
 }
 
-/** E-ticket summary stored on VGMF. The QR itself stays on the sister portal. */
+/** E-ticket / application summary stored on the Foundation site. The QR itself stays on the sister portal. */
 export interface PartnerTicketSummary {
   id: string;
   portal: PartnerPortalId;
@@ -81,6 +81,8 @@ export interface PartnerTicketSummary {
   currency?: string;
   issuedAt?: string;
   portalUrl: string;
+  applicationNo?: string;
+  kind?: "ticket" | "registration" | "application";
 }
 
 export interface PartnerPaymentSummary {

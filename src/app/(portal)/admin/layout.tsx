@@ -40,7 +40,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#FFFFFF] p-6">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-widest text-burgundy">VGMF</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-burgundy">Foundation</p>
           <h1 className="mt-2 text-2xl font-semibold text-gray-900">Sign in to continue</h1>
           <p className="mt-2 text-sm text-gray-600">
             This page is for Foundation administrators. Staff and doctors sign in on their own portals.
@@ -137,7 +137,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
         <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:block">
           <div className="sticky top-0 flex h-screen flex-col">
             <div className="border-b border-slate-200 px-6 py-5">
-              <div className="text-xs font-semibold uppercase tracking-widest text-burgundy">VGMF</div>
+              <div className="text-xs font-semibold uppercase tracking-widest text-burgundy">Foundation</div>
               <div className="mt-1 text-lg font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin workspace" : "Admin Console"}</div>
               <div className="mt-1 text-xs text-gray-500">
                 {isStaff ? `${role?.name} · ${role?.category}` : isDoctor ? "Clinic pages" : isCoadmin ? "Higher-authority access via /staff" : "Vaidya Gogate Memorial Foundation"}
@@ -164,7 +164,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                   Menu
                 </button>
                 <div>
-                  <div className="text-xs font-medium uppercase tracking-wider text-gray-400">VGMF</div>
+                  <div className="text-xs font-medium uppercase tracking-wider text-gray-400">Foundation</div>
                   <div className="font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin" : "Administration"}</div>
                 </div>
               </div>

@@ -307,7 +307,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, shipment.courier, shipment.awb],
     subject: `Order ${order.id} is packed and booked with ${shipment.courier}`,
     template: "shipment-booked",
-    body: `Your order ${order.id} is packed. Courier: ${shipment.courier}. Tracking number: ${shipment.awb}.\n\n– VGMF Store`,
+    body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is packed. Courier: ${shipment.courier}. Tracking number: ${shipment.awb}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return { shipment, live: Boolean(shipment.live), message };
 }

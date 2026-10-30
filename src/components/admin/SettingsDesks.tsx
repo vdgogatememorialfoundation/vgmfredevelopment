@@ -191,7 +191,7 @@ export function GeneralSettingsDesk() {
       <Header title="General & maintenance" text="Site name, logo and contact details shown in the header and footer, and the maintenance switch with an automatic end time." action={<button type="button" className={primary} onClick={save}>Save settings</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
-      <Card title="Branding" text="The logo replaces the VGMF badge in the header, footer, sign-in and maintenance pages.">
+      <Card title="Branding" text="The logo replaces the Foundation badge in the header, footer, sign-in and maintenance pages.">
         <div className="grid gap-5 lg:grid-cols-2">
           <ImageField label="Site logo" value={settings.logoUrl} maxWidth={400} hint="Square or wide PNG/SVG works best. Uploads are resized to 400px." onChange={(logoUrl) => set({ logoUrl })} />
           <ImageField label="Favicon / app icon" value={settings.faviconUrl} maxWidth={128} hint="Shown in the browser tab." onChange={(faviconUrl) => set({ faviconUrl })} />
@@ -426,7 +426,7 @@ export function PaymentSettingsDesk() {
 /* ---------------- Email ---------------- */
 
 async function sendTest(to: string, template: string, subject: string, phone?: string) {
-  const record = queueNotification({ to, phone, name: "Test", params: ["Test", "VGMF-TEST", "Test"], subject, template, body: "This is a test message from the VGMF admin console." });
+  const record = queueNotification({ to, phone, name: "Test", params: ["Test", "FOUNDATION-TEST", "Test"], subject, template, body: "This is a test message from Vaidya Gogate Memorial Foundation." });
   if (!record) return "Nothing was queued. For WhatsApp, map a template to this event first.";
   for (let i = 0; i < 20; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -507,7 +507,7 @@ export function EmailSettingsDesk() {
             onClick={async () => {
               save();
               setBusy(true);
-              setNote(await sendTest(to, "zeptomail-test", "VGMF email test"));
+              setNote(await sendTest(to, "zeptomail-test", "Foundation email test"));
               setBusy(false);
             }}
           >
@@ -585,7 +585,7 @@ export function SmsSettingsDesk() {
               onClick={async () => {
                 save();
                 setBusy(true);
-                setNote(await sendTest("", "otp", "VGMF SMS test", phone));
+                setNote(await sendTest("", "otp", "Foundation SMS test", phone));
                 setBusy(false);
               }}
             >
@@ -801,6 +801,11 @@ export function MessageTemplatesDesk() {
     setNote("Templates saved. Signup, OTP and account emails use these copies.");
   };
 
+  const restoreDefaults = () => {
+    setMessages(defaultMessageCopy);
+    setNote("Restored Vaidya Gogate Memorial Foundation greeting templates. Click Save templates to keep them.");
+  };
+
   const copy = (id: NotificationEventId): MessageCopy => ({
     emailSubject: messages[id]?.emailSubject ?? defaultMessageCopy[id].emailSubject,
     emailBody: messages[id]?.emailBody ?? defaultMessageCopy[id].emailBody,
@@ -817,8 +822,13 @@ export function MessageTemplatesDesk() {
     <div className="space-y-5">
       <Header
         title="Email, SMS and WhatsApp templates"
-        text="Every automated message the site sends. Placeholders: {name} {code} {purpose} {email} {phone} {accountId} {signin} {orderId} {status} {amount} {link}."
-        action={<button type="button" className={primary} onClick={save}>Save templates</button>}
+        text="Greet the customer by name and sign as Vaidya Gogate Memorial Foundation — not VGMF. Placeholders: {name} {code} {purpose} {email} {phone} {accountId} {signin} {orderId} {status} {amount} {link}."
+        action={
+          <span className="flex flex-wrap gap-2">
+            <button type="button" className={ghost} onClick={restoreDefaults}>Restore Foundation defaults</button>
+            <button type="button" className={primary} onClick={save}>Save templates</button>
+          </span>
+        }
       />
       <Saved text={note} />
       <div className="grid gap-5 lg:grid-cols-[16rem_1fr]">

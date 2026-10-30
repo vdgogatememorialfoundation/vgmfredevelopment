@@ -203,7 +203,7 @@ export async function createPaymentLink(orderId: string) {
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`, link.url],
     subject: `Pay for your VGMF order ${order.id}`,
     template: "payment-link",
-    body: `Hi ${order.deliveryAddress?.fullName ?? ""},\n\nPlease complete the payment of ₹${order.total.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\n– VGMF Store`,
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${order.total.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
 }

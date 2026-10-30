@@ -162,7 +162,7 @@ export function transferChat(threadId: string, assignedTo: string, assignedName:
     id: `m${Date.now().toString(36)}`,
     threadId,
     from: "staff",
-    name: "VGMF Support",
+    name: "Foundation Support",
     text: `${byName} transferred this chat to ${assignedName}.`,
     at: now,
   });
@@ -190,7 +190,7 @@ export function escalateIfUnanswered(threadId: string) {
       id: `m${Date.now().toString(36)}`,
       threadId,
       from: "staff",
-      name: "VGMF Support",
+      name: "Foundation Support",
       text: "No one has picked this up yet. Please share your details so we can open a support ticket and keep you updated.",
       at: now,
       form: true,
@@ -211,7 +211,7 @@ export function escalateIfUnanswered(threadId: string) {
       id: `m${Date.now().toString(36)}form`,
       threadId,
       from: "staff",
-      name: "VGMF Support",
+      name: "Foundation Support",
       text: `Ticket ${ticket.id} is open. We will send updates to ${ticket.email}.`,
       at: now,
     });
@@ -253,7 +253,7 @@ export function submitChatTicketForm(
     id: `m${Date.now().toString(36)}`,
     threadId,
     from: "staff",
-    name: "VGMF Support",
+    name: "Foundation Support",
     text: `Ticket ${thread.ticketId} is linked to ${thread.email}. You will receive updates by email.`,
     at: now,
   });

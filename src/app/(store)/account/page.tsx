@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getAllApplications } from "@/lib/applications";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
-import { getPartnerTickets } from "@/lib/partner-hydrate";
+import { getAllApplications } from "@/lib/applications";
+import { getOrdersByEmail } from "@/lib/store";
+import { usePartnerRecords } from "@/lib/use-partner-records";
 
 interface Stat {
   label: string;
@@ -15,7 +16,9 @@ interface Stat {
 
 export default function AccountDashboardPage() {
   const { user } = useAuth();
-  const [applicationCount, setApplicationCount] = useState(0);
+  const { tickets, payments } = usePartnerRecords(user?.email, user?.phone);
+  const [orderCount, setOrderCount] = useState(0);
+  const [localApps, setLocalApps] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -27,8 +30,8 @@ export default function AccountDashboardPage() {
             .toLowerCase()
             .includes(`${user.firstName} ${user.lastName}`.toLowerCase())
       );
-      const partnerTickets = getPartnerTickets(user.email);
-      setApplicationCount(apps.length + partnerTickets.length);
+      setLocalApps(apps.length);
+      setOrderCount(getOrdersByEmail(user.email).length);
     }, 0);
     return () => clearTimeout(timer);
   }, [user]);
@@ -36,17 +39,17 @@ export default function AccountDashboardPage() {
   if (!user) return null;
 
   const stats: Stat[] = [
-    { label: "Event Registrations", value: applicationCount, href: "/account/registrations" },
-    { label: "Orders", value: 2, href: "/account/orders" },
-    { label: "Loyalty Points", value: 120, href: "/account/loyalty" },
+    { label: "Event Registrations", value: localApps + tickets.length, href: "/account/registrations" },
+    { label: "Orders", value: orderCount, href: "/account/orders" },
+    { label: "Payments", value: payments.length, href: "/account/payments" },
     { label: "Support Tickets", value: 0, href: "/account/tickets" },
   ];
 
   const quickLinks = [
-    { title: "My Event Registrations", description: "Track Application IDs and status for events you registered for.", href: "/account/registrations", icon: "events" },
+    { title: "My Event Registrations", description: "Track Application IDs and status for Seminar, Autism and Fellowship programmes.", href: "/account/registrations", icon: "events" },
     { title: "My Orders", description: "Track book orders, shipments and deliveries.", href: "/account/orders", icon: "orders" },
-    { title: "My Payments & Receipts", description: "View payment history and download receipts.", href: "/account/payments", icon: "payments" },
-    { title: "View Application Status", description: "Check the live status of your event applications.", href: "/account/applications", icon: "tracking" },
+    { title: "My Payments & Receipts", description: "View payment history from sister portals and the Foundation shop.", href: "/account/payments", icon: "payments" },
+    { title: "View Application Status", description: "Check the live status of Fellowship, Autism and Seminar applications.", href: "/account/applications", icon: "tracking" },
     { title: "Support Tickets", description: "Raise and track support requests with the Foundation.", href: "/account/tickets", icon: "tickets" },
     { title: "Edit Profile", description: "Update your details, contact information and preferences.", href: "/account/profile", icon: "profile" },
   ];

@@ -321,7 +321,7 @@ export function notifyBackInStock(book: Book) {
       params: [alert.name ?? "Reader", book.title],
       subject: `Back in stock: ${book.title}`,
       template: "back-in-stock",
-      body: `Hello${alert.name ? ` ${alert.name}` : ""},\n\n${book.title} is back in stock at the VGMF store.\n\nPrice: ₹${book.price.toLocaleString("en-IN")}\nOrder here: ${origin}/shop/${book.slug}\n\nStock is limited, so order soon.\n\n– VGMF Store`,
+      body: `Dear${alert.name ? ` ${alert.name}` : " Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${book.title} is back in stock at the Foundation shop.\n\nPrice: ₹${book.price.toLocaleString("en-IN")}\nOrder here: ${origin}/shop/${book.slug}\n\nStock is limited, so order soon.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
     });
     pushInbox({
       audience: "customer",

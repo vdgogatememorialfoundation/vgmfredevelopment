@@ -588,7 +588,7 @@ export function createAdminOrder(input: {
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`],
     subject: `Order ${order.id} placed`,
     template: "order-placed",
-    body: `Your order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\nExpected delivery: ${formatDate(order.plan.deliveredBy)}\n\n– VGMF Store`,
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\nExpected delivery: ${formatDate(order.plan.deliveredBy)}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return order;
 }
@@ -674,7 +674,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${refundAmount}`],
     subject: `Store credit of ₹${refundAmount} for order ${order.id}`,
     template: "store-credit",
-    body: `A store credit of ₹${refundAmount.toLocaleString("en-IN")} has been added to your VGMF account for order ${order.id}. Current balance: ₹${balance.toLocaleString("en-IN")}.\n\n– VGMF Store`,
+    body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA store credit of ₹${refundAmount.toLocaleString("en-IN")} has been added to your account for order ${order.id}. Current balance: ₹${balance.toLocaleString("en-IN")}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return next;
 }
@@ -713,7 +713,7 @@ export function printOrdersPdf(orders: Order[]) {
     .join("");
   printHtml(
     "Orders",
-    `<h1>VGMF orders</h1><table><tr><th>ID</th><th>Customer</th><th>Status</th><th>Payment</th><th>Total</th></tr>${rows}</table>`
+    `<h1>Vaidya Gogate Memorial Foundation orders</h1><table><tr><th>ID</th><th>Customer</th><th>Status</th><th>Payment</th><th>Total</th></tr>${rows}</table>`
   );
 }
 
@@ -768,7 +768,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${refundAmount}`],
     subject: `Refund initiated for order ${order.id}`,
     template: "refund",
-    body: `A refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\n– VGMF Store`,
+    body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
 }
 
@@ -964,7 +964,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     .map((i) => `<tr><td>${i.title}</td><td>${i.quantity}</td><td>${i.price.toLocaleString("en-IN")}</td><td>${(i.price * i.quantity).toLocaleString("en-IN")}</td></tr>`)
     .join("");
   const html = `<h1>Tax Invoice</h1>
-  <p class="muted">VGMF Store · Invoice for order ${order.id}</p>
+  <p class="muted">Vaidya Gogate Memorial Foundation · Invoice for order ${order.id}</p>
   <div class="row"><div><b>Billed to:</b><br/>${order.deliveryAddress?.fullName ?? "—"}<br/>${order.deliveryAddress?.line1 ?? ""}, ${order.deliveryAddress?.city ?? ""}</div>
   ${shipment ? `<div><b>Shipped via ${shipment.courier}</b><br/>AWB ${shipment.awb}</div>` : ""}</div>
   <table><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr>${itemsHtml}</table>
@@ -983,7 +983,7 @@ export function printPosReceipt(order: Order) {
     .join("");
   printHtml(
     `Receipt ${order.id}`,
-    `<h1>VGMF Store</h1>
+    `<h1>Vaidya Gogate Memorial Foundation</h1>
     <p class="muted">In-store receipt · ${formatDate(order.date)}</p>
     <p><b>Order ${order.id}</b><br/>${order.deliveryAddress?.fullName ?? "Walk-in"} · ${order.deliveryAddress?.phone ?? ""}</p>
     <table><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>${itemsHtml}</table>
@@ -1077,7 +1077,7 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
     params: [name, order.id, status],
     subject: `Order ${order.id} — ${status}`,
     template: "order-status",
-    body: `Hi ${name},\n\nYour order ${order.id} is now ${status}.${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\n– VGMF Store`,
+    body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is now ${status}.${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   if (to) {
     pushInbox({
@@ -1136,7 +1136,7 @@ export function sendAbandonedCartEmail(email: string, items: string[]) {
     to: email,
     subject: "Did you forget something in your cart?",
     template: "abandoned-cart",
-    body: `You left items in your cart: ${items.join(", ")}.\n\nComplete your order now before the deal ends.\n\n– VGMF Store`,
+    body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYou left items in your cart: ${items.join(", ")}.\n\nComplete your order now before the deal ends.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return true;
 }
@@ -1146,7 +1146,7 @@ export function sendSupportReply(message: SupportMessage) {
     to: message.email,
     subject: `Re: ${message.subject}`,
     template: "support-reply",
-    body: `Hi ${message.name},\n\n${message.reply ?? ""}\n\n– VGMF Support`,
+    body: `Dear ${message.name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${message.reply ?? ""}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
 }
 
@@ -1284,7 +1284,7 @@ export function addTicket(input: {
     params: [ticket.name, ticket.id, ticket.status],
     subject: `Support ticket ${ticket.id} opened`,
     template: "ticket-update",
-    body: `Hi ${ticket.name},\n\nWe have opened ticket ${ticket.id}: ${ticket.subject}.\n\n${ticket.body}\n\nYou will receive updates on this ticket at ${ticket.email}.\n\n– VGMF Support`,
+    body: `Dear ${ticket.name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nWe have opened ticket ${ticket.id}: ${ticket.subject}.\n\n${ticket.body}\n\nYou will receive updates on this ticket at ${ticket.email}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   pushInbox({
     audience: "customer",
@@ -1327,7 +1327,7 @@ export function respondToTicket(id: string, from: string, text: string) {
     to: ticket.email,
     subject: `Update on your ticket ${ticket.id}`,
     template: "ticket-update",
-    body: `Hi ${ticket.name},\n\n${text}\n\n– VGMF Support`,
+    body: `Dear ${ticket.name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${text}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   pushInbox({
     audience: "customer",

@@ -115,9 +115,23 @@ function applySession() {
   setSession({ ...session, partnerPortals: live.partnerPortals });
 }
 
+function mergeEmailMaps<T extends { id: string }>(current: Record<string, T[]>, incoming: Record<string, T[]>) {
+  const next = { ...current };
+  for (const [email, rows] of Object.entries(incoming)) {
+    const key = email.toLowerCase();
+    const map = new Map((next[key] ?? []).map((row) => [row.id, row]));
+    for (const row of rows) map.set(row.id, row);
+    next[key] = [...map.values()];
+  }
+  return next;
+}
+
+export function listStoredPartnerTickets(): Record<string, PartnerTicketSummary[]> {
+  return readJSON<Record<string, PartnerTicketSummary[]>>(TICKETS_KEY, {});
+}
+
 export function getPartnerTickets(email: string): PartnerTicketSummary[] {
-  const all = readJSON<Record<string, PartnerTicketSummary[]>>(TICKETS_KEY, {});
-  return all[email.toLowerCase()] ?? [];
+  return listStoredPartnerTickets()[email.toLowerCase()] ?? [];
 }
 
 export function getPartnerPayments(email: string): PartnerPaymentSummary[] {
@@ -138,8 +152,8 @@ export function applyPartnerFeed(feed: PartnerFeed) {
   }
   if (feed.notices?.length) writeJSON(noticeKeys.custom, mergeById(readJSON<Notice[]>(noticeKeys.custom, []), feed.notices));
   if (feed.announcements?.length) writeJSON(ANN_CUSTOM, mergeById(readJSON<Announcement[]>(ANN_CUSTOM, []), feed.announcements));
-  if (feed.ticketsByEmail) writeJSON(TICKETS_KEY, { ...readJSON(TICKETS_KEY, {}), ...feed.ticketsByEmail });
-  if (feed.paymentsByEmail) writeJSON(PAYMENTS_KEY, { ...readJSON(PAYMENTS_KEY, {}), ...feed.paymentsByEmail });
+  if (feed.ticketsByEmail) writeJSON(TICKETS_KEY, mergeEmailMaps(readJSON(TICKETS_KEY, {}), feed.ticketsByEmail));
+  if (feed.paymentsByEmail) writeJSON(PAYMENTS_KEY, mergeEmailMaps(readJSON(PAYMENTS_KEY, {}), feed.paymentsByEmail));
   if (feed.accounts?.length) applyAccounts(feed.accounts);
   applySession();
   if (feed.syncedAt) writeJSON(APPLIED_KEY, feed.syncedAt);
@@ -148,9 +162,13 @@ export function applyPartnerFeed(feed: PartnerFeed) {
 
 export async function hydratePartnerFeed(opts?: { full?: boolean; force?: boolean }) {
   if (typeof window === "undefined") return;
+  const session = getSession();
+  const email = session?.email?.trim().toLowerCase() || "";
   const last = Number(window.sessionStorage.getItem("vgmf_partner_hydrated_at") || 0);
-  if (!opts?.force && last && Date.now() - last < 5 * 60 * 1000) return;
+  const lastEmail = window.sessionStorage.getItem("vgmf_partner_hydrated_email") || "";
+  if (!opts?.force && last && lastEmail === email && Date.now() - last < 5 * 60 * 1000) return;
   window.sessionStorage.setItem("vgmf_partner_hydrated_at", String(Date.now()));
+  window.sessionStorage.setItem("vgmf_partner_hydrated_email", email);
   try {
     const feedRes = await fetch("/api/partners/feed", { cache: "no-store", credentials: "same-origin" });
     if (feedRes.ok) {
@@ -159,6 +177,10 @@ export async function hydratePartnerFeed(opts?: { full?: boolean; force?: boolea
     }
   } catch {
     /* public site still works without partner data */
+  }
+  if (email) {
+    await lookupPartnerAccount({ email, phone: session?.phone, identifier: email });
+    return;
   }
   try {
     const meRes = await fetch("/api/partners/me", { cache: "no-store", credentials: "same-origin" });
@@ -253,6 +275,15 @@ export async function lookupPartnerAccount(input: {
   } catch {
     return empty;
   }
+}
+
+export async function refreshPartnerAccount(input: { email?: string; phone?: string }) {
+  if (!input.email && !input.phone) return;
+  return lookupPartnerAccount({
+    identifier: input.email || input.phone,
+    email: input.email,
+    phone: input.phone,
+  });
 }
 
 export async function syncPartnerPortalsNow() {

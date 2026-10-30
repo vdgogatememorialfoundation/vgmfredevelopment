@@ -270,7 +270,7 @@ export default function Header() {
                       <p className="mt-1 text-xs font-mono tracking-[0.08em] text-burgundy">
                         {user.accountId}
                       </p>
-                      <PartnerPortalBadges user={user} className="mt-2" />
+                      <PartnerPortalBadges user={user} className="mt-2" onOpen={() => setAccountMenuOpen(false)} />
                     </div>
 
                     <nav aria-label="Account menu" className="max-h-80 overflow-y-auto py-2">

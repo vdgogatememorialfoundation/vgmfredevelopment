@@ -221,7 +221,7 @@ function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: (
       )}
       <div className="mt-3 flex gap-2">
         <TextInput value={response} onChange={(e) => setResponse(e.target.value)} placeholder="Add a response (emailed to customer)" className="flex-1" />
-        <Button onClick={() => { respondToTicket(ticket.id, "VGMF Support", response); setResponse(""); onChanged(); }}>Send</Button>
+        <Button onClick={() => { respondToTicket(ticket.id, "Foundation Support", response); setResponse(""); onChanged(); }}>Send</Button>
       </div>
     </li>
   );
@@ -294,7 +294,7 @@ export function LiveChatDesk() {
                 onChange={(event) => {
                   const agent = listSupportAgents().find((item) => item.email === event.target.value);
                   if (!agent) return;
-                  transferChat(active.id, agent.email, `${agent.firstName} ${agent.lastName}`.trim(), "VGMF Support");
+                  transferChat(active.id, agent.email, `${agent.firstName} ${agent.lastName}`.trim(), "Foundation Support");
                 }}
               >
                 <option value="">Transfer chat…</option>
@@ -315,10 +315,10 @@ export function LiveChatDesk() {
               ))}
             </div>
             <div className="mt-3 flex gap-2">
-              <TextInput value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Reply as VGMF Support" className="flex-1" />
+              <TextInput value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Reply as Foundation Support" className="flex-1" />
               <Button
                 onClick={() => {
-                  postChatMessage({ threadId: active.id, from: "staff", name: "VGMF Support", text: reply });
+                  postChatMessage({ threadId: active.id, from: "staff", name: "Foundation Support", text: reply });
                   setReply("");
                 }}
               >

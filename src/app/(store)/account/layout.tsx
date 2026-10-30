@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { LoginStamp } from "@/components/layout/LoginStamp";
 import { visibleAccountNav } from "@/lib/site-visibility";
 import { InboxBell } from "@/components/notifications/InboxBell";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 
 export default function AccountLayout({
   children,
@@ -57,6 +58,8 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                   </div>
                 </div>
               )}
+
+              {user ? <PartnerPortalBadges user={user} className="mt-4" /> : null}
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <LoginStamp

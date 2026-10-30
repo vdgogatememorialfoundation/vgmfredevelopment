@@ -59,6 +59,9 @@ export const navigation = [
 ] as const;
 
 export const accountNavigation = [
+  { name: "My Account", href: "/account", icon: "dashboard" },
+  { name: "My Event Registrations", href: "/account/registrations", icon: "events" },
+  { name: "Application Status", href: "/account/applications", icon: "tracking" },
   { name: "Notifications", href: "/account/notifications", icon: "bell" },
   { name: "My Orders", href: "/account/orders", icon: "orders" },
   { name: "Subscriptions", href: "/account/subscriptions", icon: "subs" },

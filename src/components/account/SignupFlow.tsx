@@ -163,7 +163,7 @@ export default function SignupFlow() {
         </p>
 
         <h2 className="text-xl font-semibold text-text-primary">
-          Welcome to VGMF
+          Welcome to Vaidya Gogate Memorial Foundation
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
