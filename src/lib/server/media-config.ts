@@ -18,7 +18,7 @@ function filePath() {
 
 export function readMediaConfig(): MediaConfig {
   try {
-    const parsed = JSON.parse(readFileSync(filePath(), "utf8")) as MediaConfig;
+    const parsed = JSON.parse(readFileSync(/* turbopackIgnore: true */ filePath(), "utf8")) as MediaConfig;
     return {
       cloudflare: { ...EMPTY.cloudflare, ...parsed.cloudflare },
       googleDrive: { ...EMPTY.googleDrive, ...parsed.googleDrive },

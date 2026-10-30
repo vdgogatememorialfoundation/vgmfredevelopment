@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { notices as seededNotices } from "@/data/content";
 import { isPublishedNow } from "@/lib/schedule";
 import { dataFile } from "@/lib/server/paths";
@@ -7,7 +7,7 @@ import type { Notice } from "@/types";
 
 export type StoredNotice = Notice & { updatedAt: string };
 
-const LEGACY_FILE = join("/tmp", "vgmf-notices.json");
+const LEGACY_FILE = "/tmp/vgmf-notices.json";
 
 function filePath() {
   return dataFile("notices.json");
@@ -20,7 +20,7 @@ function seed(): StoredNotice[] {
 function read(): StoredNotice[] {
   for (const file of [filePath(), LEGACY_FILE]) {
     try {
-      const parsed = JSON.parse(readFileSync(file, "utf8")) as StoredNotice[];
+      const parsed = JSON.parse(readFileSync(/* turbopackIgnore: true */ file, "utf8")) as StoredNotice[];
       if (Array.isArray(parsed) && parsed.length) return parsed;
     } catch {
       /* try the next path */
