@@ -6,6 +6,9 @@ import type {
   ReturnRequest,
   ShipmentEvent,
 } from "@/types";
+import { buildTrackingStages as buildCourierStages, isSampleOrder } from "@/lib/order-pipeline";
+export type { TrackingStage, TrackingStageId } from "@/lib/order-pipeline";
+export { pickupOtp } from "@/lib/order-pipeline";
 import { storeConfig } from "@/lib/constants";
 import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";
@@ -197,9 +200,18 @@ export function getOrdersByEmail(email?: string) {
   const value = email.toLowerCase();
   return getOrders().filter(
     (order) =>
-      order.deliveryAddress?.email?.toLowerCase() === value ||
-      order.deliveryAddress?.phone?.replace(/\D/g, "") === value.replace(/\D/g, "")
+      !isSampleOrder(order) &&
+      (order.deliveryAddress?.email?.toLowerCase() === value ||
+        order.deliveryAddress?.phone?.replace(/\D/g, "") === value.replace(/\D/g, ""))
   );
+}
+
+export function purgeSampleOrders() {
+  if (typeof window === "undefined") return;
+  const kept = getOrders().filter((order) => !isSampleOrder(order));
+  if (kept.length === getOrders().length) return;
+  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(kept));
+  window.dispatchEvent(new Event("vgmf-cms"));
 }
 
 // ---------- Tracking ----------
@@ -229,334 +241,8 @@ export function generateTrackingId(courierName?: string) {
   )}`;
 }
 
-export type TrackingStageId =
-  | "ordered"
-  | "packed"
-  | "shipped"
-  | "out"
-  | "delivered"
-  | "ready"
-  | "picked"
-  | "cancelled";
-
-export interface TrackingStage {
-  id: TrackingStageId;
-  label: string;
-  caption: string;
-  events: ShipmentEvent[];
-  reached: boolean;
-  partial: boolean;
-}
-
-const STATUS_ORDER: Order["status"][] = [
-  "Pending",
-  "Paid",
-  "Ordered",
-  "Processing",
-  "Packed",
-  "Shipped",
-  "Out for Delivery",
-  "Delivered",
-  "Cancelled",
-];
-
-function statusRank(status: Order["status"]) {
-  const rank = STATUS_ORDER.indexOf(status);
-  if (status === "Cancelled" || status === "Pending" || status === "Paid") {
-    return 2; // behave like "Ordered" — only the placed event is reached
-  }
-  return rank;
-}
-
-/** Deterministic 6-digit pickup OTP derived from the order id. */
-export function pickupOtp(orderId: string): string {
-  let hash = 0;
-  for (const char of orderId) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return String(100000 + (hash % 900000));
-}
-
-/**
- * Builds the parcel tracking feed grouped by pipeline stage. Event timestamps
- * are simulated relative to the order placed date; swap this for live
- * Shiprocket API scan events when integrated.
- */
-export function buildTrackingStages(order: Order): {
-  stages: TrackingStage[];
-  reachedEvents: number;
-  totalEvents: number;
-} {
-  const placed = new Date(order.date);
-  const at = (offsetMinutes: number) =>
-    new Date(placed.getTime() + offsetMinutes * 60000).toISOString();
-
-  const courier = order.courierName ?? storeConfig.courierName;
-  const trackingId = order.trackingId ?? "-";
-  const orderRank = statusRank(order.status);
-
-  // A cancelled order jumps straight from Ordered → Cancelled.
-  if (order.status === "Cancelled") {
-    return {
-      stages: [
-        {
-          id: "ordered",
-          label: "Ordered",
-          caption: "Order placed",
-          reached: true,
-          partial: false,
-          events: [
-            {
-              id: "placed",
-              title: "Your order has been placed",
-              at: order.date,
-              location: "Pune, Maharashtra, India",
-              reached: true,
-            },
-          ],
-        },
-        {
-          id: "cancelled",
-          label: "Cancelled",
-          caption: "Order cancelled",
-          reached: true,
-          partial: false,
-          events: [
-            {
-              id: "cancelled",
-              title: "Your order was cancelled",
-              at: at(120),
-              location: "Pune, Maharashtra, India",
-              reached: true,
-              detail:
-                "Refund will be initiated to your original payment method within 3–5 business days.",
-            },
-          ],
-        },
-      ],
-      reachedEvents: 2,
-      totalEvents: 2,
-    };
-  }
-
-  const makeStage = (
-    id: TrackingStageId,
-    label: string,
-    caption: string,
-    entries: Array<{ reachedAt: Order["status"]; event: ShipmentEvent }>
-  ): TrackingStage => {
-    const events = entries.map((entry) => ({
-      ...entry.event,
-      reached: orderRank >= statusRank(entry.reachedAt),
-    }));
-    const reached = events.every((event) => event.reached);
-    const partial = !reached && events.some((event) => event.reached);
-    return { id, label, caption, events, reached, partial };
-  };
-
-  const stages: TrackingStage[] = [];
-
-  if (order.deliveryMode === "store_pickup") {
-    stages.push(
-      makeStage(
-        "ordered",
-        "Ordered",
-        "Order placed",
-        [
-          {
-            reachedAt: "Ordered",
-            event: {
-              id: "placed",
-              title: "Your order has been placed",
-              at: order.date,
-              location: "Pune, Maharashtra, India",
-            },
-          },
-        ]
-      ),
-      makeStage("packed", "Packed", "Packing at store", [
-        {
-          reachedAt: "Processing",
-          event: {
-            id: "processing",
-            title: "We are processing your order",
-            at: at(150),
-            location: "Pune, Maharashtra, India",
-          },
-        },
-        {
-          reachedAt: "Packed",
-          event: {
-            id: "dispatched",
-            title: "Your item is packed at our facility",
-            at: at(1470),
-            location: "Pune, Maharashtra, India",
-          },
-        },
-      ]),
-      makeStage("ready", "Ready for Pickup", "Ready at store", [
-        {
-          reachedAt: "Packed",
-          event: {
-            id: "ready",
-            title: "Your item is ready for store pickup",
-            at: at(1500),
-            location:
-              "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
-            detail: `Pickup OTP: ${pickupOtp(order.id)} — share it with the front desk to collect your order. Your item is held for ${storeConfig.pickupHoldingDays} days from this date. Carry a valid ID.`,
-          },
-        },
-      ]),
-      makeStage("picked", "Picked Up", "Collected from store", [
-        {
-          reachedAt: "Delivered",
-          event: {
-            id: "picked-up",
-            title: "Item collected from store",
-            at: at(3090),
-            location: "Pune, Maharashtra, India",
-            detail: "Thank you for shopping with us.",
-          },
-        },
-      ])
-    );
-  } else {
-    const destCity = order.deliveryAddress?.city || "Pune";
-    const destState = order.deliveryAddress?.state || "Maharashtra";
-    const dest = `${destCity}, ${destState}, India`;
-    const pincode = order.deliveryAddress?.pincode;
-
-    stages.push(
-      makeStage("ordered", "Ordered", "Order placed", [
-        {
-          reachedAt: "Ordered",
-          event: {
-            id: "placed",
-            title: "Your order has been placed",
-            at: order.date,
-            location: "Pune, Maharashtra, India",
-          },
-        },
-      ]),
-      makeStage(
-        "packed",
-        "Packed",
-        "Packed at our facility",
-        [
-          {
-            reachedAt: "Processing",
-            event: {
-              id: "processing",
-              title: "We are processing your order",
-              at: at(150),
-              location: "Pune, Maharashtra, India",
-            },
-          },
-          {
-            reachedAt: "Packed",
-            event: {
-              id: "dispatched",
-              title: "Your item has been packed at our facility",
-              at: at(1470),
-              location: "Pune, Maharashtra, India",
-            },
-          },
-        ]
-      ),
-      makeStage(
-        "shipped",
-        "Shipped",
-        "Handed to courier",
-        [
-          {
-            reachedAt: "Shipped",
-            event: {
-              id: "shipped",
-              title: "Your item has been shipped",
-              at: at(1590),
-              location: "Pune, Maharashtra, India",
-              detail: `Courier: ${courier} · Tracking id: ${trackingId}`,
-            },
-          },
-          {
-            reachedAt: "Shipped",
-            event: {
-              id: "arrive-hub",
-              title: "Item arrived at Courier Facility",
-              at: at(1680),
-              location: "Pune, Maharashtra, India",
-            },
-          },
-          {
-            reachedAt: "Shipped",
-            event: {
-              id: "left-hub",
-              title: "Item left a Courier Facility",
-              at: at(2370),
-              location: "Nagpur, Maharashtra, India",
-            },
-          },
-          {
-            reachedAt: "Shipped",
-            event: {
-              id: "arrive-dest",
-              title: "Item arrived at Courier Facility",
-              at: at(2940),
-              location: dest,
-            },
-          },
-        ]
-      ),
-      makeStage("out", "Out for Delivery", "Agent on the way", [
-        {
-          reachedAt: "Out for Delivery",
-          event: {
-            id: "out",
-            title: "Your order is Out for delivery",
-            at: at(3030),
-            location: dest,
-            agent: { name: "Ramesh Kumar", phone: "+91 98220 14487" },
-            otp: pincode ? pincode.slice(-4) : "2981",
-          },
-        },
-      ]),
-      makeStage(
-        "delivered",
-        "Delivered",
-        "Delivered",
-        [
-          {
-            reachedAt: "Delivered",
-            event: {
-              id: "pod",
-              title: "Shipment delivery update",
-              at: at(3050),
-              location: dest,
-              detail:
-                "Delivery confirmed at the address. Agent details are now hidden after delivery.",
-            },
-          },
-          {
-            reachedAt: "Delivered",
-            event: {
-              id: "delivered",
-              title: "Item is Delivered",
-              at: at(3090),
-              location: dest,
-              detail:
-                "Updated on the courier site · delivered within the expected delivery timeline.",
-            },
-          },
-        ]
-      )
-    );
-  }
-
-  const totalEvents = stages.reduce((sum, stage) => sum + stage.events.length, 0);
-  const reachedEvents = stages.reduce(
-    (sum, stage) => sum + stage.events.filter((event) => event.reached).length,
-    0
-  );
-
-  return { stages, reachedEvents, totalEvents };
+export function buildTrackingStages(order: Order, scans?: Parameters<typeof buildCourierStages>[1], shipment?: Parameters<typeof buildCourierStages>[2]) {
+  return buildCourierStages(order, scans, shipment);
 }
 
 // ---------- Returns & replacements ----------

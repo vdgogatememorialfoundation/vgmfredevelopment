@@ -129,7 +129,7 @@ function reports(): { group: string; items: Report[] }[] {
           headers: ["Account ID", "Name", "Email", "Phone", "Status", "Store credit", "Created"],
           rows: () =>
             accounts
-              .filter((account) => !account.role || account.role === "customer")
+              .filter((account) => !account.role || account.role === "customer" || account.role === "doctor" || Boolean(account.partnerPortals?.length))
               .map((account) => [
                 account.accountId ?? "",
                 displayName(account),
@@ -142,13 +142,13 @@ function reports(): { group: string; items: Report[] }[] {
         },
         {
           id: "doctors",
-          title: "All doctor report",
-          description: "Doctor logins, contact details and account status.",
-          file: "vgmf-doctors",
+          title: "Sister-portal customers",
+          description: "Seminar doctors, Autism applicants and Fellowship applicants listed with other customers.",
+          file: "vgmf-sister-customers",
           headers: ["Account ID", "Name", "Email", "Phone", "Status", "Created"],
           rows: () =>
             accounts
-              .filter((account) => account.role === "doctor")
+              .filter((account) => Boolean(account.partnerPortals?.length) || account.role === "doctor")
               .map((account) => [
                 account.accountId ?? "",
                 displayName(account),

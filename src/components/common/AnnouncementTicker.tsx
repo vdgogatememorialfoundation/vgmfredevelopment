@@ -25,22 +25,22 @@ export default function AnnouncementTicker() {
   return (
     <div
       aria-label="Scrolling announcements"
-      className="overflow-hidden border-b border-ink-soft bg-ink text-stone-100"
+      className="overflow-hidden border-b border-burgundy/15 bg-[#f7f1e8] text-ink"
     >
-      <div className="flex w-max items-center gap-10 py-2.5 pl-10 animate-marquee">
+      <div className="flex w-max items-center gap-10 py-2 pl-10 animate-marquee">
         {row.map((item, index) => (
           <Link
             key={`${item.id}-${index}`}
             href={item.href}
-            className="flex shrink-0 items-center gap-2.5 text-xs font-medium text-slate-100 transition hover:text-white"
+            className="flex shrink-0 items-center gap-2.5 text-xs font-medium text-ink/80 transition hover:text-burgundy"
           >
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] text-white">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-burgundy/10 text-[10px] text-burgundy">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
                 <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
               </svg>
             </span>
-            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold">
+            <span className="rounded bg-burgundy/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-burgundy">
               {item.category}
             </span>
             <span className="max-w-[28rem] truncate">{item.title}</span>

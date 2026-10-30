@@ -1,5 +1,6 @@
 import { findAccountByIdentifier, loginBlockReason } from "@/lib/auth";
 import { getAccounts, sendEmail, updateAccount } from "@/lib/admin-store";
+import { messageCopyFor } from "@/lib/message-templates";
 import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import type { User, UserRole } from "@/types";
 
@@ -15,8 +16,8 @@ export function accountForReset(identifier: string, role?: ResetRole) {
   if (role && role !== "customer" && account.role !== role) {
     return { error: `No ${role} account found for this email.` as const };
   }
-  if (role === "customer" && account.role && account.role !== "customer") {
-    return { error: "Use the staff, doctor or admin sign-in page for this account." as const };
+  if (role === "customer" && account.role && account.role !== "customer" && account.role !== "doctor") {
+    return { error: "Use the staff or admin sign-in page for this account." as const };
   }
   const blocked = loginBlockReason(account);
   if (blocked) return { error: blocked };
@@ -25,13 +26,21 @@ export function accountForReset(identifier: string, role?: ResetRole) {
 
 export function sendPasswordResetCode(account: User, role: ResetRole) {
   const code = issueEmailOtp(account.email, otpRole(role));
+  const copy = messageCopyFor("otp", {
+    name: account.firstName || "there",
+    code,
+    purpose: "password reset",
+    email: account.email,
+    phone: account.phone,
+  });
   sendEmail({
     to: account.email,
     phone: account.phone,
     name: account.firstName,
-    subject: "Reset your VGMF password",
-    template: "custom",
-    body: `Hi ${account.firstName || "there"},\n\nYour password reset code is ${code}. It expires in 10 minutes.\n\nIf you did not ask to reset your password, ignore this message.\n\n– Vaidya Gogate Memorial Foundation`,
+    params: [code],
+    subject: copy.emailSubject,
+    template: "otp",
+    body: copy.emailBody,
   });
   return code;
 }
@@ -41,7 +50,7 @@ export function applyPasswordReset(email: string, role: ResetRole, code: string,
   if (next.length < 6) return "Use at least 6 characters.";
   const invalid = verifyEmailOtp(email, otpRole(role), code);
   if (invalid) return invalid;
-  updateAccount(email, { password: next });
+  updateAccount(email, { password: next, foundationPasswordSet: true, partnerPasswordSet: false });
   return null;
 }
 
@@ -50,7 +59,9 @@ export function changeAccountPassword(email: string, current: string, nextPasswo
   if (!account) return "Account not found.";
   const next = nextPassword.trim();
   if (next.length < 6) return "Use at least 6 characters.";
-  if (account.password && account.password !== current) return "Current password is incorrect.";
-  updateAccount(email, { password: next });
+  if (account.foundationPasswordSet || !account.partnerPortals?.length) {
+    if (account.password && account.password !== current) return "Current password is incorrect.";
+  }
+  updateAccount(email, { password: next, foundationPasswordSet: true, partnerPasswordSet: false });
   return null;
 }

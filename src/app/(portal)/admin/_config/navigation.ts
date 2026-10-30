@@ -17,6 +17,13 @@ export const adminNavigation: AdminNavGroup[] = [
   },
 
   {
+    label: "Notices",
+    items: [
+      { label: "Notice board", href: "/admin/notices" },
+    ],
+  },
+
+  {
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/commerce/orders" },
@@ -34,7 +41,6 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Accounts",
     items: [
       { label: "Staff & co-admin", href: "/admin/accounts/staff" },
-      { label: "Doctor Accounts", href: "/admin/accounts/doctors" },
       { label: "Customers", href: "/admin/accounts/customers" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
     ],
@@ -112,9 +118,10 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "General & maintenance", href: "/admin/settings" },
       { label: "Payments & Razorpay", href: "/admin/settings/payments" },
-      { label: "Email: ZeptoMail & Zoho", href: "/admin/settings/email" },
+      { label: "Email: Zoho CPaaS & ZeptoMail", href: "/admin/settings/email" },
       { label: "WhatsApp: Meta & Zoho CPaaS", href: "/admin/settings/whatsapp" },
       { label: "SMS: MSG91", href: "/admin/settings/sms" },
+      { label: "Email, SMS & WhatsApp templates", href: "/admin/settings/templates" },
       { label: "Shipping APIs", href: "/admin/settings/shipping-apis" },
       { label: "Orders, returns & refunds", href: "/admin/settings/orders" },
       { label: "Delivery zones", href: "/admin/settings/shipping" },
@@ -123,6 +130,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Registration", href: "/admin/settings/registration" },
       { label: "Events", href: "/admin/settings/events" },
       { label: "Certificate verification", href: "/admin/settings/api-keys" },
+      { label: "Sister portals", href: "/admin/settings/portals" },
       { label: "Media storage", href: "/admin/settings/media" },
       { label: "Mobile app", href: "/admin/settings/mobile" },
       { label: "App appearance", href: "/admin/settings/appearance" },

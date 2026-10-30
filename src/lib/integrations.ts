@@ -4,7 +4,12 @@ const INTEGRATIONS_KEY = "vgmf_integrations";
 const ORDER_SETTINGS_KEY = "vgmf_order_settings";
 
 export type PaymentMode = "demo" | "test" | "live";
-export type EmailProvider = "zeptomail" | "zoho";
+export type EmailProvider = "cpaas" | "zeptomail" | "zoho";
+export type MessageCopy = {
+  emailSubject: string;
+  emailBody: string;
+  smsBody: string;
+};
 export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
 export type SmsProvider = "none" | "msg91";
 export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari";
@@ -85,6 +90,7 @@ export interface IntegrationSettings {
     zohoAccountId: string;
     zohoDomain: string;
   };
+  messages: Partial<Record<NotificationEventId, MessageCopy>>;
   whatsapp: {
     provider: WhatsAppProvider;
     metaAppId: string;
@@ -109,6 +115,7 @@ export interface IntegrationSettings {
     msg91AuthKey: string;
     msg91SenderId: string;
     msg91TemplateId: string;
+    mapping: Partial<Record<NotificationEventId, string>>;
   };
   shipping: {
     shiprocket: { email: string; password: string; channelId: string; enabled: boolean };
@@ -184,11 +191,11 @@ export const defaultIntegrations: IntegrationSettings = {
     channelId: "",
   },
   email: {
-    provider: "zeptomail",
+    provider: "cpaas",
     fromAddress: "noreply@vaidyagogate.org",
     fromName: "Vaidya Gogate Memorial Foundation",
     zeptoToken: "",
-    zeptoHost: "api.zeptomail.in",
+    zeptoHost: "cpaas.zoho.in",
     zohoClientId: "",
     zohoClientSecret: "",
     zohoRefreshToken: "",
@@ -206,7 +213,7 @@ export const defaultIntegrations: IntegrationSettings = {
     aisensyProjectId: "",
     zohoCpaasApiKey: "",
     zohoCpaasFrom: "",
-    zohoCpaasDomain: "zoho.com",
+    zohoCpaasDomain: "zoho.in",
     templates: [],
     templatesSyncedAt: "",
     mapping: {},
@@ -216,7 +223,9 @@ export const defaultIntegrations: IntegrationSettings = {
     msg91AuthKey: "",
     msg91SenderId: "VGMFIN",
     msg91TemplateId: "",
+    mapping: {},
   },
+  messages: {},
   shipping: {
     shiprocket: { email: "", password: "", channelId: "", enabled: true },
     nimbuspost: { email: "", password: "", enabled: true },
@@ -354,6 +363,40 @@ export function recordShippingConnection(provider: ShippingProviderId, status: S
   return settings.shipping.connection[provider]!;
 }
 
+function persistMailStatus(settings: IntegrationSettings) {
+  if (typeof window === "undefined") return;
+  const email = settings.email;
+  const ready = Boolean(
+    email.zeptoToken.trim() ||
+      settings.whatsapp.zohoCpaasApiKey.trim() ||
+      (email.provider === "zoho" && email.zohoRefreshToken.trim())
+  );
+  window.localStorage.setItem("vgmf_mail_ready", ready ? "true" : "false");
+  window.dispatchEvent(new Event("vgmf-cms"));
+  void fetch("/api/auth/mail-status", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...email,
+      zohoCpaasApiKey: settings.whatsapp.zohoCpaasApiKey,
+      zohoCpaasDomain: settings.whatsapp.zohoCpaasDomain,
+    }),
+  }).catch(() => undefined);
+  void fetch("/api/notify", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "save-creds",
+      email: { ...email, zohoCpaasApiKey: settings.whatsapp.zohoCpaasApiKey, zohoCpaasDomain: settings.whatsapp.zohoCpaasDomain },
+      whatsapp: settings.whatsapp,
+      sms: settings.sms,
+      messages: settings.messages,
+    }),
+  }).catch(() => undefined);
+}
+
 export function saveIntegrations(settings: IntegrationSettings) {
   const previous = getIntegrations();
   const next = merge(defaultIntegrations, settings);
@@ -366,6 +409,7 @@ export function saveIntegrations(settings: IntegrationSettings) {
   }
   next.shipping.connection = connection;
   writeJSON(INTEGRATIONS_KEY, next);
+  persistMailStatus(next);
 }
 
 export function getOrderSettings(): OrderSettings {

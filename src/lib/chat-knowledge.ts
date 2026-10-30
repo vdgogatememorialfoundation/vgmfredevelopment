@@ -262,7 +262,9 @@ function formatOrderStatus(order: Order): string {
   const done =
     order.status === "Delivered"
       ? `Order ${order.id} was delivered (placed ${formatDate(order.date)}).`
-      : `Order ${order.id} placed on ${formatDate(order.date)} is at the “${reachedLabel || order.status}” stage (${order.status}).`;
+      : order.status === "Failed"
+        ? `Order ${order.id} failed in courier delivery (placed ${formatDate(order.date)}).`
+        : `Order ${order.id} placed on ${formatDate(order.date)} is at the “${reachedLabel || order.status}” stage (${order.status}).`;
   return `${done}${courierLine} Estimated delivery: ${eta}. You can tap the order card in My Orders for the full journey — delivery agent OTP shows when out for delivery.`;
 }
 
@@ -341,7 +343,7 @@ export function answerQuestion(question: string): string {
     return "Guests can still shop, chat and raise tickets. If we have an email or phone that already belongs to a member we use that account; if not, we create one and send the Account ID and sign-in details.";
   }
   if (/\b(account|login|register|create account|sign in|sign-in|signup|sign up)\b/i.test(question)) {
-    return "Create a foundation account from the Login page. The administrator can turn signup and login on or off independently. Signup verifies email with OTP. Sign-in uses password plus email OTP, or SMS OTP when that is enabled. Your 12-digit Account ID ties together shop orders and tickets.";
+    return "Create a foundation account from the Login page. The administrator can turn signup and login on or off independently. Signup verifies email with OTP. Sign-in uses your Foundation website password — Seminar, Autism and Fellowship passwords are not used here, so imported members must use Forgot password to set a new one. Email OTP or SMS OTP can also be used when those are enabled. Your 12-digit Account ID ties together shop orders and tickets.";
   }
   if (/\b(language|hindi|marathi|tamil|kannada|gujarati)\b|भाषा|मराठी|हिन्दी/i.test(question)) {
     return "Use the language control in the header or footer to read the site in English, Hindi, Marathi and other Indian languages. Article translations, when the writer has added them, follow the language you choose.";

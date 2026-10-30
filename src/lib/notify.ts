@@ -1,5 +1,6 @@
 import type { OutboxEmail } from "@/types";
 import { getIntegrations, notificationEvents, type NotificationEventId } from "@/lib/integrations";
+import { messageCopyFor } from "@/lib/message-templates";
 
 const OUTBOX_KEY = "vgmf_outbox";
 const MAX_LOG = 500;
@@ -58,6 +59,7 @@ export function queueNotification(input: {
 }) {
   const now = new Date().toISOString();
   const settings = getIntegrations();
+  const copy = resolvedCopy(input);
   const records: NotificationRecord[] = [];
   if (input.to) {
     records.push({
@@ -65,9 +67,9 @@ export function queueNotification(input: {
       channel: "email",
       provider: settings.email.provider,
       to: input.to,
-      subject: input.subject,
+      subject: input.subject || copy.emailSubject,
       template: input.template,
-      body: input.body,
+      body: input.body || copy.emailBody,
       status: "Queued",
       sentAt: now,
       replyTo: input.replyTo,
@@ -101,9 +103,9 @@ export function queueNotification(input: {
       phone: input.phone,
       name: input.name,
       params: input.params ?? [],
-      subject: input.subject,
+      subject: input.subject || copy.emailSubject,
       template: input.template,
-      body: input.body,
+      body: copy.smsBody || input.body,
       status: "Queued",
       sentAt: now,
     });
@@ -112,6 +114,18 @@ export function queueNotification(input: {
   write([...records, ...read()]);
   for (const record of records) void deliver(record.id);
   return records[0];
+}
+
+function resolvedCopy(input: { template: string; body: string; subject: string; name?: string; to: string; phone?: string; params?: string[] }) {
+  return messageCopyFor(input.template, {
+    name: input.name,
+    email: input.to,
+    phone: input.phone,
+    code: input.params?.[0],
+    purpose: input.template === "otp" ? "verification" : input.template,
+    subject: input.subject,
+    body: input.body,
+  });
 }
 
 export function eventLabel(template: string) {
@@ -146,7 +160,10 @@ export async function deliver(id: string) {
         to: record.phone ?? record.to,
         body: record.body,
         otp: record.template === "otp" ? record.params?.[0] : undefined,
-        creds: settings.sms,
+        creds: {
+          ...settings.sms,
+          msg91TemplateId: settings.sms.mapping[record.template as NotificationEventId] || settings.sms.msg91TemplateId,
+        },
       };
     } else {
       payload = {

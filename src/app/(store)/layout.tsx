@@ -10,9 +10,10 @@ import { MaintenanceGate } from "@/components/admin/MaintenanceGate";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 import { SiteVisibilityGate } from "@/components/layout/SiteVisibilityGate";
 import { HydratePublishedSite } from "@/components/common/HydratePublishedSite";
+import { PartnerDrawerProvider } from "@/components/account/PartnerPortalDrawer";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default function StoreLayout({
   children,
@@ -27,6 +28,7 @@ export default function StoreLayout({
       <LanguageProvider>
         <MaintenanceGate>
           <HydratePublishedSite initial={initial}>
+            <PartnerDrawerProvider>
             <Header />
             <AnnouncementTicker />
             <main id="main-content" className="flex-1">
@@ -37,6 +39,7 @@ export default function StoreLayout({
             <VisitorBeacon />
             <GoogleAnalytics />
             <SiteChat />
+            </PartnerDrawerProvider>
           </HydratePublishedSite>
         </MaintenanceGate>
       </LanguageProvider>

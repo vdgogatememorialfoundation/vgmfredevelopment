@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { getSettings, getShipments } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
-import { pingLiveAgent, publicTrackingUrl } from "@/lib/shipping-client";
+import { pingLiveAgent } from "@/lib/shipping-client";
+import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import { loadGooglePlaces, type GoogleMapsWindow } from "@/lib/maps-place";
-import { formatDateTime } from "@/lib/utils";
 import type { Order } from "@/types";
 
 const DEFAULT_SCOOTER =
@@ -22,11 +22,7 @@ type Ping = {
   events: { at: string; status: string; location?: string }[];
 };
 
-function isHyperlocal(provider?: string) {
-  return provider === "tookan" || provider === "shipday";
-}
-
-export default function LiveTracking({ order }: { order: Order }) {
+export default function LiveTracking({ order, embedded = false }: { order: Order; embedded?: boolean }) {
   const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
   const [ping, setPing] = useState<Ping | null>(null);
   const [problem, setProblem] = useState("");
@@ -36,11 +32,12 @@ export default function LiveTracking({ order }: { order: Order }) {
   const mapsKey = typeof window === "undefined" ? "" : getSettings().apiKeys.googleMaps;
   const scooter = settings?.shipping.scooterImage || DEFAULT_SCOOTER;
   const provider = shipment?.provider ?? order.courierChoice?.provider;
-  const hyperlocal = isHyperlocal(provider);
-  const embedUrl = ping?.trackingUrl || (shipment ? publicTrackingUrl(shipment) : "");
+  const hyperlocal = isHyperlocalProvider(provider);
 
   useEffect(() => {
-    if (!shipment || order.status === "Cancelled" || order.status === "Delivered") return;
+    if (!hyperlocal || !shipment || order.status === "Cancelled" || order.status === "Delivered" || order.status === "Failed") {
+      return;
+    }
     let cancelled = false;
     const run = async () => {
       try {
@@ -54,7 +51,7 @@ export default function LiveTracking({ order }: { order: Order }) {
     };
     run();
     const ms = Math.max(8, settings?.shipping.hyperlocalPingSeconds ?? 20) * 1000;
-    const timer = window.setInterval(run, hyperlocal ? ms : Math.max(ms, 45000));
+    const timer = window.setInterval(run, ms);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -98,62 +95,53 @@ export default function LiveTracking({ order }: { order: Order }) {
   }, [hyperlocal, mapsKey, ping?.lat, ping?.lng, scooter]);
 
   if (order.deliveryMode !== "delivery") return null;
+  if (!hyperlocal) return null;
   if (!shipment && !order.trackingId) return null;
+
+  const mapBox = mapsKey ? (
+    <div ref={mapRef} className={embedded ? "h-full min-h-[280px] w-full" : "h-72 w-full bg-warm-cream"} />
+  ) : ping?.lat && ping?.lng ? (
+    <iframe
+      title="Delivery map"
+      className={embedded ? "h-full min-h-[280px] w-full border-0" : "h-72 w-full border-0"}
+      src={`https://www.google.com/maps?q=${ping.lat},${ping.lng}&z=15&output=embed`}
+    />
+  ) : (
+    <p className="p-4 text-sm text-text-muted">
+      Waiting for the delivery agent location. Add a Google Maps key in Settings for the live map.
+    </p>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex h-full min-h-[280px] flex-col">
+        <div className="bg-white px-3 py-2">
+          <p className="vgmf-hl-live">
+            {provider === "tookan" ? "Tookan" : "Shipday"}
+            {ping?.status ? ` · ${ping.status}` : " · Live partner location"}
+          </p>
+        </div>
+        <div className="min-h-0 flex-1">{mapBox}</div>
+        {problem ? <p className="px-3 py-2 text-xs text-red-600">{problem}</p> : null}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-5 space-y-4">
-      {hyperlocal ? (
-        <div className="overflow-hidden rounded-2xl border border-border bg-white">
-          <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-            <div>
-              <p className="font-semibold text-text-primary">Live hyperlocal map</p>
-              <p className="text-xs text-text-muted">
-                {provider === "tookan" ? "Tookan" : "Shipday"} agent location, refreshed automatically.
-                {ping?.status ? ` Status: ${ping.status}.` : ""}
-              </p>
-            </div>
+      <div className="overflow-hidden rounded-2xl border border-border bg-white">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <div>
+            <p className="font-semibold text-text-primary">Live hyperlocal map</p>
+            <p className="text-xs text-text-muted">
+              {provider === "tookan" ? "Tookan" : "Shipday"} agent location, refreshed from courier GPS.
+              {ping?.status ? ` Status: ${ping.status}.` : ""}
+            </p>
           </div>
-          {mapsKey ? (
-            <div ref={mapRef} className="h-72 w-full bg-warm-cream" />
-          ) : ping?.lat && ping?.lng ? (
-            <iframe
-              title="Delivery map"
-              className="h-72 w-full border-0"
-              src={`https://www.google.com/maps?q=${ping.lat},${ping.lng}&z=15&output=embed`}
-            />
-          ) : (
-            <p className="p-4 text-sm text-text-muted">Waiting for the delivery agent location. Add a Google Maps key in Settings for the live map.</p>
-          )}
         </div>
-      ) : (
-        embedUrl && (
-          <div className="overflow-hidden rounded-2xl border border-border bg-white">
-            <div className="border-b border-border px-4 py-3">
-              <p className="font-semibold text-text-primary">Courier tracking</p>
-              <p className="text-xs text-text-muted">Live page from {shipment?.courier || order.courierName}. All scans appear below.</p>
-            </div>
-            <iframe title="Courier tracking" src={embedUrl} className="h-80 w-full border-0" />
-          </div>
-        )
-      )}
-
-      {(ping?.events.length || shipment?.tracking?.length) && (
-        <div className="rounded-2xl border border-border bg-white p-4">
-          <p className="mb-3 text-sm font-semibold text-text-primary">All courier updates</p>
-          <ul className="space-y-2">
-            {(ping?.events.length ? ping.events : shipment?.tracking ?? []).map((event, index) => (
-              <li key={`${event.at}-${index}`} className="text-sm">
-                <span className="font-semibold text-ink">{event.status}</span>
-                <span className="ml-2 text-xs text-text-muted">
-                  {event.at ? formatDateTime(event.at) : ""}
-                  {event.location ? ` · ${event.location}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {problem && <p className="text-xs text-red-600">{problem}</p>}
+        {mapBox}
+      </div>
+      {problem ? <p className="text-xs text-red-600">{problem}</p> : null}
     </div>
   );
 }

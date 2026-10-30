@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./commerce-track.css";
 
 @theme {
   --color-burgundy: #8F2D2D;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createUserAccount,
   displayName,
@@ -14,10 +14,12 @@ import {
 import { matchesAccountQuery } from "@/lib/account-search";
 import { activitiesFor, currentActorEmail, recordActivity, type AccountActivity } from "@/lib/activity";
 import { getSession } from "@/lib/auth";
+import { subscribeCms } from "@/lib/cms";
 import { generatePassword } from "@/lib/passwords";
 import { getRoles, type StaffRole } from "@/lib/roles";
 import type { AccountStatus, User, UserRole } from "@/types";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const primary = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -60,6 +62,7 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
   const people = role === "staff" ? "staff" : "doctors";
   const loginPath = role === "staff" ? "/staff/login" : "/doctor/login";
   const refresh = () => setAccounts(refreshRole(role));
+  useEffect(() => subscribeCms(refresh), [role]);
   const shown = useMemo(
     () => accounts.filter((account) => matchesAccountQuery(account, query)),
     [accounts, query]
@@ -297,6 +300,7 @@ function PeopleRow({
           <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-900">
             {displayName(account)}
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold capitalize ${STATUS_TONE[status]}`}>{status}</span>
+            <PartnerPortalBadges user={account} />
           </p>
           <p className="text-xs text-slate-500">
             {account.email} · {account.phone}
@@ -408,6 +412,7 @@ function AccountDetail({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">{editing ? "Edit account" : "Account details"}</h2>
           <p className="text-sm text-slate-500">{displayName(account)} · {account.role}</p>
+          <PartnerPortalBadges user={account} className="mt-2" />
         </div>
         <div className="flex gap-2">
           {!editing && <button type="button" className={ghost} onClick={onEdit}>Edit</button>}

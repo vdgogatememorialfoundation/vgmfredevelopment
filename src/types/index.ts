@@ -15,6 +15,8 @@ export type RegistrationStatus =
 
 export type EventMode = "Online" | "Offline" | "Hybrid";
 
+export type PartnerPortalId = "seminar" | "autism" | "fellowship";
+
 export interface Event {
   id: string;
   name: string;
@@ -53,6 +55,45 @@ export interface Event {
   publishAt?: string;
   /** ISO datetime — hidden on the public site after this time. */
   unpublishAt?: string;
+  /** Sister portal this event was synced from. Omitted for events created on VGMF. */
+  source?: PartnerPortalId | "vgmf";
+  sourceUrl?: string;
+}
+
+export interface PartnerPortal {
+  id: PartnerPortalId;
+  label: string;
+  href: string;
+  hasTicket?: boolean;
+  ticketCount?: number;
+  paymentCount?: number;
+  role?: "doctor" | "applicant" | "registrant" | "fellow";
+}
+
+/** E-ticket / application summary stored on the Foundation site. The QR itself stays on the sister portal. */
+export interface PartnerTicketSummary {
+  id: string;
+  portal: PartnerPortalId;
+  eventName: string;
+  status: string;
+  paymentStatus?: string;
+  amount?: number;
+  currency?: string;
+  issuedAt?: string;
+  portalUrl: string;
+  applicationNo?: string;
+  kind?: "ticket" | "registration" | "application";
+}
+
+export interface PartnerPaymentSummary {
+  id: string;
+  portal: PartnerPortalId;
+  amount: number;
+  currency: string;
+  status: string;
+  at?: string;
+  eventName?: string;
+  portalUrl: string;
 }
 
 export interface EventTbd {
@@ -315,9 +356,15 @@ export interface User {
   email: string;
   phone: string;
   whatsapp: string;
+  /** Second number collected at signup — may match `phone`. */
+  alternatePhone?: string;
   accountId?: string;
   role?: UserRole;
   password?: string;
+  /** True only after a password is set on this Foundation website (forgot-password, signup, or admin). */
+  foundationPasswordSet?: boolean;
+  /** @deprecated Sister-site passwords are never used on VGMF. */
+  partnerPasswordSet?: boolean;
   staffRoleId?: string;
   status?: AccountStatus;
   statusReason?: string;
@@ -330,6 +377,7 @@ export interface User {
   lastLogoutAt?: string;
   /** Reply-To used when this staff member sends mail. Empty uses care@vaidyagogate.org. */
   replyToEmail?: string;
+  partnerPortals?: PartnerPortal[];
 }
 
 export interface Certificate {
@@ -428,6 +476,7 @@ export interface Order {
     | "Shipped"
     | "Out for Delivery"
     | "Delivered"
+    | "Failed"
     | "Cancelled";
   channel?: "online" | "admin" | "pos";
   stockCommitted?: boolean;
@@ -634,7 +683,7 @@ export interface ShipmentRecord {
   charges: number;
   toAddress: DeliveryAddress & { orderId?: string };
   items: { sku: string; title: string; quantity: number; barcode?: string }[];
-  status: "Booked" | "Picked Up" | "In Transit" | "Out for Delivery" | "Delivered";
+  status: "Booked" | "Picked Up" | "In Transit" | "Out for Delivery" | "Delivered" | "Failed";
   generatedAt: string;
   pickedUpAt?: string;
   provider?: CourierRate["provider"];

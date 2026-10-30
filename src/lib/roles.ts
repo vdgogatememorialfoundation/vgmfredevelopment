@@ -9,6 +9,7 @@ export const staffModules = [
   { id: "payments", label: "Payments", paths: ["/admin/payments", "/admin/commerce/payments"] },
   { id: "customers", label: "Customers", paths: ["/admin/accounts/customers"] },
   { id: "website", label: "Website & homepage", paths: ["/admin/website", "/admin/website/pages", "/admin/website/visibility"] },
+  { id: "notices", label: "Notice board", paths: ["/admin/notices", "/admin/website/notices"] },
   { id: "about", label: "About Us pages", paths: ["/admin/website/about"] },
   { id: "articles", label: "Articles", paths: ["/admin/articles"] },
   { id: "clinics", label: "Clinics", paths: ["/admin/website/clinics"] },
@@ -19,8 +20,8 @@ export const staffModules = [
   { id: "analytics", label: "Analytics", paths: ["/admin/analytics"] },
   { id: "delivery", label: "Shipping APIs", paths: ["/admin/settings/shipping-apis", "/admin/delivery-partners"] },
   { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications", "/admin/settings/email", "/admin/settings/whatsapp", "/admin/settings/sms"] },
-  { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles", "/admin/accounts/doctors"] },
-  { id: "settings", label: "Site settings", paths: ["/admin/settings", "/admin/settings/domains", "/admin/settings/media"] },
+  { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles", "/admin/accounts/customers"] },
+  { id: "settings", label: "Site settings", paths: ["/admin/settings", "/admin/settings/domains", "/admin/settings/media", "/admin/settings/portals"] },
   { id: "mobile", label: "Mobile app", paths: ["/admin/settings/mobile", "/admin/settings/appearance"] },
 ] as const;
 
@@ -80,7 +81,7 @@ export const roleCategories = ["Content", "Events", "Commerce", "Finance", "Supp
 export const defaultRoles: StaffRole[] = [
   { id: "general-staff", name: "General Staff", category: "Operations", description: "Orders, customers and support.", modules: ["orders", "customers", "support"] },
   { id: "article-writer", name: "Article writer", category: "Content", description: "Only the Articles module — write and edit articles. New pieces wait for admin approval before they go live.", modules: ["articles"] },
-  { id: "content-editor", name: "Content Editor", category: "Content", description: "Articles, homepage, announcements and About Us.", modules: ["articles", "website", "about"] },
+  { id: "content-editor", name: "Content Editor", category: "Content", description: "Articles, homepage, notices, announcements and About Us.", modules: ["articles", "website", "about", "notices"] },
   { id: "event-coordinator", name: "Event Coordinator", category: "Events", description: "Events, speakers and schedule.", modules: ["events"] },
   { id: "order-manager", name: "Order Manager", category: "Commerce", description: "Orders, shipping, couriers and inventory.", modules: ["orders", "pos", "catalog", "delivery", "customers"] },
   { id: "accounts", name: "Accounts & Payments", category: "Finance", description: "Payments, refunds and reconciliation.", modules: ["payments", "orders"] },
@@ -101,8 +102,14 @@ function read(): StaffRole[] {
 
 export function getRoles() {
   const saved = read();
-  if (saved.some((role) => role.id === "article-writer")) return saved;
-  return [...saved, defaultRoles.find((role) => role.id === "article-writer")!];
+  const withWriter = saved.some((role) => role.id === "article-writer")
+    ? saved
+    : [...saved, defaultRoles.find((role) => role.id === "article-writer")!];
+  return withWriter.map((role) =>
+    role.id === "content-editor" && !role.modules.includes("notices")
+      ? { ...role, modules: [...role.modules, "notices"] }
+      : role
+  );
 }
 
 export function saveRoles(roles: StaffRole[]) {

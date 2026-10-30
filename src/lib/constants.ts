@@ -18,7 +18,14 @@ export const siteConfig = {
 };
 
 export const seminarSiteUrl = "https://seminar.vaidyagogate.org";
+export const autismSiteUrl = "https://autism.vaidyagogate.org";
 export const fellowshipSiteUrl = "https://fellowship.vaidyagogate.org";
+
+export const partnerPortalMeta = {
+  seminar: { id: "seminar" as const, label: "Seminar Portal", href: seminarSiteUrl, ticketsPath: "/doctor", trackPath: "/doctor" },
+  autism: { id: "autism" as const, label: "Autism Portal", href: autismSiteUrl, ticketsPath: "/dashboard", trackPath: "/dashboard" },
+  fellowship: { id: "fellowship" as const, label: "Fellowship Portal", href: fellowshipSiteUrl, ticketsPath: "/dashboard", trackPath: "/dashboard" },
+};
 
 export const storeConfig = {
   currency: "INR",
@@ -52,6 +59,9 @@ export const navigation = [
 ] as const;
 
 export const accountNavigation = [
+  { name: "My Account", href: "/account", icon: "dashboard" },
+  { name: "My Event Registrations", href: "/account/registrations", icon: "events" },
+  { name: "Application Status", href: "/account/applications", icon: "tracking" },
   { name: "Notifications", href: "/account/notifications", icon: "bell" },
   { name: "My Orders", href: "/account/orders", icon: "orders" },
   { name: "Subscriptions", href: "/account/subscriptions", icon: "subs" },

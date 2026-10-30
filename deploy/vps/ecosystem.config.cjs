@@ -14,6 +14,8 @@ function loadEnv(file) {
 }
 
 const secrets = "/VGMF-PLATFORM/secrets";
+const stagingEnv = loadEnv(path.join(secrets, "staging.env"));
+const demoEnv = loadEnv(path.join(secrets, "demo.env"));
 
 module.exports = {
   apps: [
@@ -27,7 +29,7 @@ module.exports = {
         NODE_ENV: "production",
         HOSTNAME: "127.0.0.1",
         PORT: "3005",
-        ...loadEnv(path.join(secrets, "staging.env")),
+        ...stagingEnv,
       },
     },
     {
@@ -40,7 +42,19 @@ module.exports = {
         NODE_ENV: "production",
         HOSTNAME: "127.0.0.1",
         PORT: "3012",
-        ...loadEnv(path.join(secrets, "demo.env")),
+        ...demoEnv,
+      },
+    },
+    {
+      name: "vgmf-ingest-fellowship",
+      cwd: "/VGMF-PLATFORM",
+      script: "bin/vgmf-ingest.js",
+      instances: 1,
+      exec_mode: "fork",
+      env: {
+        NODE_ENV: "production",
+        VGMF_INGEST_PORTAL: "fellowship",
+        DATABASE_URL: stagingEnv.FELLOWSHIP_DATABASE_URL || "",
       },
     },
   ],

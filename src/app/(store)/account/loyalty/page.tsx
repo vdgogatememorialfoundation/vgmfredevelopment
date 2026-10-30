@@ -1,15 +1,9 @@
+"use client";
+
+import EmptyState from "@/components/account/EmptyState";
 import SectionHeader from "@/components/account/SectionHeader";
 
-const demoTransactions = [
-  { label: "Shop order VGMF-ORD-2026-1201", points: 69, date: "2026-09-02" },
-  { label: "Shop order VGMF-ORD-2026-1042", points: 85, date: "2026-08-30" },
-  { label: "Event registration bonus", points: 50, date: "2026-07-12" },
-  { label: "Redeemed against registration", points: -84, date: "2026-06-20" },
-];
-
 export default function LoyaltyPage() {
-  const balance = 120;
-
   return (
     <div>
       <SectionHeader
@@ -21,37 +15,18 @@ export default function LoyaltyPage() {
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-text-muted">
           Available Points
         </p>
-        <p className="mt-2 text-5xl font-bold text-burgundy">{balance}</p>
+        <p className="mt-2 text-5xl font-bold text-burgundy">0</p>
         <p className="mt-2 text-sm text-text-muted">
-          Equivalent to ₹{balance} in credits to redeem at checkout.
+          Points appear here after a qualifying shop order or registration.
         </p>
       </div>
 
-      <h2 className="heading-3 mb-4 mt-8">Points History</h2>
-      <div className="space-y-3">
-        {demoTransactions.map((tx) => (
-          <div
-            key={tx.label}
-            className="card flex items-center justify-between gap-4 p-5"
-          >
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                {tx.label}
-              </p>
-              <p className="mt-0.5 text-xs text-text-muted">{tx.date}</p>
-            </div>
-            <span
-              className={
-                tx.points >= 0
-                  ? "text-sm font-bold text-emerald-600"
-                  : "text-sm font-bold text-red-600"
-              }
-            >
-              {tx.points >= 0 ? "+" : ""}
-              {tx.points} pts
-            </span>
-          </div>
-        ))}
+      <div className="mt-8">
+        <EmptyState
+          title="No points history yet"
+          description="Sample loyalty transactions are not shown. Real points from Foundation shop orders will be listed here."
+          cta={{ label: "Visit the shop", href: "/shop" }}
+        />
       </div>
     </div>
   );

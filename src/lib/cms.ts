@@ -121,11 +121,12 @@ export function saveArticle(article: Article) {
     const edits = readJSON<ArticleEdit[]>(ARTICLES_KEY, []).filter((item) => item.id !== article.id);
     edits.push({ ...record, hidden: false });
     writeJSON(ARTICLES_KEY, edits);
-    return;
+  } else {
+    const custom = readJSON<Article[]>(CUSTOM_ARTICLES_KEY, []).filter((item) => item.id !== article.id);
+    custom.unshift(record);
+    writeJSON(CUSTOM_ARTICLES_KEY, custom);
   }
-  const custom = readJSON<Article[]>(CUSTOM_ARTICLES_KEY, []).filter((item) => item.id !== article.id);
-  custom.unshift(record);
-  writeJSON(CUSTOM_ARTICLES_KEY, custom);
+  void import("@/lib/publish-mirrors").then((mod) => mod.mirrorArticle(record));
 }
 
 export function getArticleAssignments(): ArticleAssignment[] {
@@ -151,6 +152,7 @@ export function hideArticle(id: string) {
   writeJSON(ARTICLES_KEY, edits);
   const custom = readJSON<Article[]>(CUSTOM_ARTICLES_KEY, []).filter((item) => item.id !== id);
   writeJSON(CUSTOM_ARTICLES_KEY, custom);
+  void import("@/lib/publish-mirrors").then((mod) => mod.unmirrorArticle(id));
 }
 
 export function getLiveAnnouncements(): Announcement[] {
@@ -186,16 +188,25 @@ export function hideAnnouncement(id: string) {
   writeJSON("vgmf_custom_announcements", custom);
 }
 
+function isFellowshipEvent(event: Pick<Event, "id" | "source" | "slug" | "eventType">) {
+  return (
+    event.source === "fellowship" ||
+    event.eventType === "Fellowship" ||
+    String(event.id || "").startsWith("fellowship-") ||
+    String(event.slug || "").startsWith("fellowship-")
+  );
+}
+
 export function getLiveEvents(): Event[] {
   const edits = readJSON<EventEdit[]>(EVENTS_KEY, []);
   const custom = readJSON<Event[]>("vgmf_custom_events", []);
-  if (!edits.length && !custom.length) return seededEvents;
+  if (!edits.length && !custom.length) return seededEvents.filter((event) => !isFellowshipEvent(event));
   const byId = new Map(edits.map((edit) => [edit.id, edit]));
   const fromSeed = seededEvents
     .map((event) => ({ ...event, ...byId.get(event.id) }))
-    .filter((event) => !byId.get(event.id)?.hidden);
+    .filter((event) => !byId.get(event.id)?.hidden && !isFellowshipEvent(event));
   const seedIds = new Set(seededEvents.map((event) => event.id));
-  return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden), ...fromSeed];
+  return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden && !isFellowshipEvent(event)), ...fromSeed];
 }
 
 export function getLiveEvent(slug: string) {
@@ -208,11 +219,12 @@ export function saveEvent(event: Event) {
     const edits = readJSON<EventEdit[]>(EVENTS_KEY, []).filter((edit) => edit.id !== event.id);
     edits.push({ ...event, hidden: false });
     writeJSON(EVENTS_KEY, edits);
-    return;
+  } else {
+    const custom = readJSON<Event[]>("vgmf_custom_events", []).filter((item) => item.id !== event.id);
+    custom.unshift(event);
+    writeJSON("vgmf_custom_events", custom);
   }
-  const custom = readJSON<Event[]>("vgmf_custom_events", []).filter((item) => item.id !== event.id);
-  custom.unshift(event);
-  writeJSON("vgmf_custom_events", custom);
+  void import("@/lib/publish-mirrors").then((mod) => mod.mirrorEvent(event));
 }
 
 export function deleteEvent(id: string) {
@@ -220,6 +232,7 @@ export function deleteEvent(id: string) {
   edits.push({ id, hidden: true });
   writeJSON(EVENTS_KEY, edits);
   writeJSON("vgmf_custom_events", readJSON<Event[]>("vgmf_custom_events", []).filter((item) => item.id !== id));
+  void import("@/lib/publish-mirrors").then((mod) => mod.unmirrorEvent(id));
 }
 
 export function blankEvent(name: string): Event {

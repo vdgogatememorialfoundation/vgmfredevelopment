@@ -191,6 +191,7 @@ export const ORDER_STATUS_TONES: Record<string, string> = {
   Shipped: "bg-warm-cream text-burgundy",
   "Out for Delivery": "bg-burgundy/10 text-burgundy",
   Delivered: "bg-emerald-50 text-emerald-700",
+  Failed: "bg-red-50 text-red-600",
   Cancelled: "bg-red-50 text-red-600",
   Processing: "bg-amber-50 text-amber-700",
 };
@@ -203,6 +204,7 @@ export const ORDER_STATUS_FLOW = [
   "Shipped",
   "Out for Delivery",
   "Delivered",
+  "Failed",
 ] as const;
 
 export function EmptyState({ text }: { text: string }) {

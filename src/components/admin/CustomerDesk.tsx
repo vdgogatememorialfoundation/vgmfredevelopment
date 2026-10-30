@@ -18,6 +18,7 @@ import { matchesAccountQuery } from "@/lib/account-search";
 import type { AccountStatus, User } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 
 ensureBootstrapped();
 
@@ -27,6 +28,7 @@ const emptyForm = {
   middleName: "",
   lastName: "",
   phone: "",
+  alternatePhone: "",
   email: "",
   line1: "",
   landmark: "",
@@ -36,7 +38,10 @@ const emptyForm = {
 };
 
 export function CustomerDesk() {
-  const accounts = useAccounts().filter((account) => !account.role || account.role === "customer");
+  const accounts = useAccounts().filter((account) => {
+    if (account.role === "admin" || account.role === "coadmin" || account.role === "staff") return false;
+    return !account.role || account.role === "customer" || account.role === "doctor" || Boolean(account.partnerPortals?.length);
+  });
   const [query, setQuery] = useState("");
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -61,6 +66,7 @@ export function CustomerDesk() {
         middleName: form.middleName,
         lastName: form.lastName,
         phone: form.phone,
+        alternatePhone: form.alternatePhone || form.phone,
         email: form.email,
         address: {
           line1: form.line1,
@@ -87,7 +93,7 @@ export function CustomerDesk() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Customers</h1>
           <p className="text-sm text-text-muted">
-            Create an account with a 12-digit ID, search or update details, and resend login information to one or many customers.
+            Seminar doctors, Autism applicants, Fellowship applicants and website customers in one list. Search, update details, and resend login information.
           </p>
         </div>
         <div className="flex gap-2">
@@ -138,11 +144,15 @@ export function CustomerDesk() {
                       checked={Boolean(picked[account.email])}
                       onChange={(event) => setPicked((current) => ({ ...current, [account.email]: event.target.checked }))}
                     />
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelectedEmail(account.email)}>
-                      <p className="font-semibold text-text-primary">{displayName(account, true) || account.email}</p>
-                      <p className="font-mono text-xs text-text-muted">{account.accountId} · {account.email}</p>
-                      <p className="text-xs text-text-muted">{account.phone} · {(account.status ?? "active")}</p>
-                    </button>
+                    <div className="min-w-0 flex-1">
+                      <button type="button" className="w-full text-left" onClick={() => setSelectedEmail(account.email)}>
+                        <p className="font-semibold text-text-primary">{displayName(account, true) || account.email}</p>
+                        <PartnerPortalBadges user={account} className="mt-1" />
+                        <p className="font-mono text-xs text-text-muted">{account.accountId} · {account.email}</p>
+                        <p className="text-xs text-text-muted">{account.phone}{account.alternatePhone && account.alternatePhone !== account.phone ? ` · Alt ${account.alternatePhone}` : ""} · {(account.status ?? "active")}</p>
+                      </button>
+                      <PasswordReveal account={account} />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -172,7 +182,8 @@ function CustomerFields({
       <Field label="First name"><TextInput value={form.firstName} onChange={(event) => set({ firstName: event.target.value })} /></Field>
       <Field label="Middle name (optional)"><TextInput value={form.middleName} onChange={(event) => set({ middleName: event.target.value })} /></Field>
       <Field label="Last name"><TextInput value={form.lastName} onChange={(event) => set({ lastName: event.target.value })} /></Field>
-      <Field label="Phone"><TextInput value={form.phone} onChange={(event) => set({ phone: event.target.value })} /></Field>
+      <Field label="Phone"><TextInput value={form.phone} onChange={(event) => set({ phone: event.target.value, alternatePhone: form.alternatePhone || event.target.value })} /></Field>
+      <Field label="Alternate phone"><TextInput value={form.alternatePhone} onChange={(event) => set({ alternatePhone: event.target.value })} /></Field>
       <Field label="Email"><TextInput value={form.email} onChange={(event) => set({ email: event.target.value })} /></Field>
       <Field label="Address"><TextInput value={form.line1} onChange={(event) => set({ line1: event.target.value })} /></Field>
       <Field label="Landmark"><TextInput value={form.landmark} onChange={(event) => set({ landmark: event.target.value })} /></Field>
@@ -183,6 +194,28 @@ function CustomerFields({
   );
 }
 
+function PasswordReveal({ account }: { account: User }) {
+  const [open, setOpen] = useState(false);
+  const sisterOnly = Boolean(account.partnerPortals?.length && !account.foundationPasswordSet);
+  return (
+    <p className="mt-1 text-xs text-text-muted">
+      Password:{" "}
+      {sisterOnly ? (
+        <span>not set on this website. Seminar / Autism / Fellowship passwords are not used here — the customer must use Forgot password on this site.</span>
+      ) : open ? (
+        <span className="font-mono">{account.password || "Not set"}</span>
+      ) : (
+        "••••••••"
+      )}{" "}
+      {!sisterOnly && (
+        <button type="button" className="font-semibold text-burgundy" onClick={() => setOpen((value) => !value)}>
+          {open ? "Hide" : "Show"}
+        </button>
+      )}
+    </p>
+  );
+}
+
 function CustomerDetail({ account, onNote }: { account: User; onNote: (text: string) => void }) {
   const [form, setForm] = useState({
     salutation: account.salutation ?? "Dr.",
@@ -190,6 +223,7 @@ function CustomerDetail({ account, onNote }: { account: User; onNote: (text: str
     middleName: account.middleName ?? "",
     lastName: account.lastName,
     phone: account.phone,
+    alternatePhone: account.alternatePhone ?? account.phone,
     email: account.email,
     line1: account.address?.line1 ?? "",
     landmark: account.address?.landmark ?? "",
@@ -214,6 +248,7 @@ function CustomerDetail({ account, onNote }: { account: User; onNote: (text: str
               middleName: form.middleName,
               lastName: form.lastName,
               phone: form.phone,
+              alternatePhone: form.alternatePhone || form.phone,
               email: form.email,
               address: { line1: form.line1, landmark: form.landmark, city: form.city, state: form.state, pincode: form.pincode },
             });
@@ -222,6 +257,7 @@ function CustomerDetail({ account, onNote }: { account: User; onNote: (text: str
         >
           Save changes
         </Button>
+        <PasswordReveal account={account} />
         <Button variant="outline" onClick={() => { sendAccountDetails(account.email); onNote(`Login details emailed to ${account.email}.`); }}>
           Resend login details
         </Button>

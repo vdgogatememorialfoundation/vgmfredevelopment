@@ -6,6 +6,7 @@ import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
 import { eventDateText, eventPlaceText, eventTimeText } from "@/lib/event-display";
+import { partnerPortalLabel } from "@/lib/partner-labels";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral"> = {
@@ -26,8 +27,11 @@ export default function EventCard({ event }: { event: Event }) {
           src={event.bannerUrl}
           aspectClassName="aspect-[16/9]"
         />
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-4 left-4 flex flex-col gap-1">
           <Badge tone="burgundy">{event.eventType}</Badge>
+          {event.source && event.source !== "vgmf" ? (
+            <Badge tone="ink">{partnerPortalLabel(event.source)}</Badge>
+          ) : null}
         </div>
         <div className="absolute top-4 right-4">
           <Badge tone={statusTone[event.registrationStatus] ?? "neutral"}>

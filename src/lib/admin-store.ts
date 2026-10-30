@@ -15,9 +15,11 @@ import type {
 import { storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, saveOrder } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
+import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { getNotifications, queueNotification } from "@/lib/notify";
+import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
 import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { generatePassword } from "@/lib/passwords";
@@ -302,17 +304,26 @@ export type CustomerInput = {
   middleName?: string;
   lastName: string;
   phone: string;
+  alternatePhone?: string;
   email: string;
   address?: User["address"];
 };
 
+function phoneInUse(phone: string, exceptEmail?: string) {
+  const digits = phoneDigits(phone);
+  if (!digits) return false;
+  return getAccounts().some((account) => {
+    if (exceptEmail && account.email.toLowerCase() === exceptEmail.toLowerCase()) return false;
+    return samePhone(account.phone, phone) || samePhone(account.alternatePhone, phone) || samePhone(account.whatsapp, phone);
+  });
+}
+
 export function createCustomerAccount(input: CustomerInput, options: { sendDetails?: boolean } = {}) {
   const email = input.email.trim();
-  if (getAccountByEmail(email)) throw new Error("An account with this email already exists.");
+  if (getAccountByEmail(email) || findAccountByIdentifier(email)) throw new Error(ACCOUNT_EXISTS_MESSAGE);
   const phone = input.phone.trim();
-  if (getAccounts().some((account) => account.phone.replace(/\D/g, "").slice(-10) === phone.replace(/\D/g, "").slice(-10))) {
-    throw new Error("An account with this phone number already exists.");
-  }
+  const alternatePhone = (input.alternatePhone || phone).trim();
+  if (phoneInUse(phone) || (alternatePhone && phoneInUse(alternatePhone))) throw new Error(ACCOUNT_EXISTS_MESSAGE);
   const account: User = {
     id: `usr-${Date.now()}`,
     salutation: input.salutation || undefined,
@@ -321,6 +332,7 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
     lastName: input.lastName.trim(),
     email,
     phone,
+    alternatePhone,
     whatsapp: phone,
     accountId: uniqueAccountId(),
     role: "customer",
@@ -330,6 +342,7 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
     createdAt: new Date().toISOString(),
     createdBy: currentActor(),
     password: generatePassword(),
+    foundationPasswordSet: true,
   };
   saveAccount(account);
   recordActivity({ email: account.email, kind: "created", by: currentActorEmail(), detail: "Customer account created" });
@@ -341,8 +354,10 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
 export function updateCustomer(email: string, update: Partial<User>) {
   const nextEmail = update.email?.trim();
   if (nextEmail && nextEmail.toLowerCase() !== email.toLowerCase() && getAccountByEmail(nextEmail)) {
-    throw new Error("Another account already uses this email.");
+    throw new Error(ACCOUNT_EXISTS_MESSAGE);
   }
+  if (update.phone && phoneInUse(update.phone, nextEmail || email)) throw new Error(ACCOUNT_EXISTS_MESSAGE);
+  if (update.alternatePhone && phoneInUse(update.alternatePhone, nextEmail || email)) throw new Error(ACCOUNT_EXISTS_MESSAGE);
   updateAccount(email, { ...update, whatsapp: update.phone ?? update.whatsapp });
   recordActivity({ email: nextEmail || email, kind: "updated", by: currentActorEmail(), detail: "Account details updated" });
   notifyCms();
@@ -365,36 +380,25 @@ export function sendAccountDetails(email: string, isNew = false) {
         : role === "doctor"
           ? `${siteOrigin()}/doctor/login`
           : `${siteOrigin()}/admin/login`;
-  const address = account.address
-    ? [account.address.line1, account.address.landmark, account.address.city, account.address.state, account.address.pincode].filter(Boolean).join(", ")
-    : "Not added";
-  const lines = [
-    `Dear ${displayName(account, true) || "Member"},`,
-    "",
-    isNew ? "Your account on the Vaidya Gogate Memorial Foundation portal has been created." : "Here are your account details for the Vaidya Gogate Memorial Foundation portal.",
-    "",
-    `Account ID: ${account.accountId ?? "-"}`,
-    `Name: ${displayName(account, true)}`,
-    `Registered email: ${account.email}`,
-    `Registered mobile: ${account.phone}`,
-    `Address: ${address}`,
-    role === "customer" ? `Store credit balance: ₹${(account.storeCredit ?? 0).toLocaleString("en-IN")}` : `Role: ${role}`,
-    "",
-    "How to sign in",
-    `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`,
-    "",
-    "If you did not expect this email, contact us at support@vaidyagogate.org.",
-    "",
-    "– Vaidya Gogate Memorial Foundation",
-  ];
+  const signin =
+    account.partnerPortals?.length && !account.foundationPasswordSet
+      ? `Open ${signIn} and use Forgot password to set a Foundation website password. Seminar, Autism and Fellowship passwords are not used on this site.`
+      : `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`;
+  const copy = messageCopyFor(isNew ? "account-created" : "account-details", {
+    name: displayName(account, true) || "Member",
+    email: account.email,
+    phone: account.phone,
+    accountId: account.accountId ?? "-",
+    signin,
+  });
   sendEmail({
     to: account.email,
     phone: account.phone,
     name: displayName(account),
     params: [displayName(account) || "Member", account.accountId ?? ""],
-    subject: isNew ? `Welcome to VGMF – your Account ID ${account.accountId}` : `Your VGMF account details (Account ID ${account.accountId})`,
+    subject: copy.emailSubject,
     template: isNew ? "account-created" : "account-details",
-    body: lines.join("\n"),
+    body: copy.emailBody,
   });
   updateAccount(account.email, { lastDetailsSentAt: new Date().toISOString() });
 }
@@ -437,6 +441,9 @@ export function createUserAccount(input: {
   password?: string;
   staffRoleId?: string;
 }) {
+  if (getAccountByEmail(input.email) || findAccountByIdentifier(input.email) || phoneInUse(input.phone)) {
+    throw new Error(ACCOUNT_EXISTS_MESSAGE);
+  }
   const password = input.password?.trim() || generatePassword();
   const account: User = {
     id: `usr-${Date.now()}`,
@@ -581,7 +588,7 @@ export function createAdminOrder(input: {
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`],
     subject: `Order ${order.id} placed`,
     template: "order-placed",
-    body: `Your order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\nExpected delivery: ${formatDate(order.plan.deliveredBy)}\n\n– VGMF Store`,
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\nExpected delivery: ${formatDate(order.plan.deliveredBy)}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return order;
 }
@@ -667,7 +674,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${refundAmount}`],
     subject: `Store credit of ₹${refundAmount} for order ${order.id}`,
     template: "store-credit",
-    body: `A store credit of ₹${refundAmount.toLocaleString("en-IN")} has been added to your VGMF account for order ${order.id}. Current balance: ₹${balance.toLocaleString("en-IN")}.\n\n– VGMF Store`,
+    body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA store credit of ₹${refundAmount.toLocaleString("en-IN")} has been added to your account for order ${order.id}. Current balance: ₹${balance.toLocaleString("en-IN")}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return next;
 }
@@ -706,7 +713,7 @@ export function printOrdersPdf(orders: Order[]) {
     .join("");
   printHtml(
     "Orders",
-    `<h1>VGMF orders</h1><table><tr><th>ID</th><th>Customer</th><th>Status</th><th>Payment</th><th>Total</th></tr>${rows}</table>`
+    `<h1>Vaidya Gogate Memorial Foundation orders</h1><table><tr><th>ID</th><th>Customer</th><th>Status</th><th>Payment</th><th>Total</th></tr>${rows}</table>`
   );
 }
 
@@ -761,7 +768,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${refundAmount}`],
     subject: `Refund initiated for order ${order.id}`,
     template: "refund",
-    body: `A refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\n– VGMF Store`,
+    body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
 }
 
@@ -957,7 +964,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     .map((i) => `<tr><td>${i.title}</td><td>${i.quantity}</td><td>${i.price.toLocaleString("en-IN")}</td><td>${(i.price * i.quantity).toLocaleString("en-IN")}</td></tr>`)
     .join("");
   const html = `<h1>Tax Invoice</h1>
-  <p class="muted">VGMF Store · Invoice for order ${order.id}</p>
+  <p class="muted">Vaidya Gogate Memorial Foundation · Invoice for order ${order.id}</p>
   <div class="row"><div><b>Billed to:</b><br/>${order.deliveryAddress?.fullName ?? "—"}<br/>${order.deliveryAddress?.line1 ?? ""}, ${order.deliveryAddress?.city ?? ""}</div>
   ${shipment ? `<div><b>Shipped via ${shipment.courier}</b><br/>AWB ${shipment.awb}</div>` : ""}</div>
   <table><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr>${itemsHtml}</table>
@@ -976,7 +983,7 @@ export function printPosReceipt(order: Order) {
     .join("");
   printHtml(
     `Receipt ${order.id}`,
-    `<h1>VGMF Store</h1>
+    `<h1>Vaidya Gogate Memorial Foundation</h1>
     <p class="muted">In-store receipt · ${formatDate(order.date)}</p>
     <p><b>Order ${order.id}</b><br/>${order.deliveryAddress?.fullName ?? "Walk-in"} · ${order.deliveryAddress?.phone ?? ""}</p>
     <table><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>${itemsHtml}</table>
@@ -1020,15 +1027,21 @@ export function sendEmail(input: {
 }
 
 export function sendOtpCode(input: { email?: string; phone?: string; name?: string; code: string; purpose: string }) {
-  const body = `Hi ${input.name || "there"},\n\nYour VGMF ${input.purpose} code is ${input.code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the message.\n\n– VGMF`;
+  const copy = messageCopyFor("otp", {
+    name: input.name || "there",
+    code: input.code,
+    purpose: input.purpose,
+    email: input.email,
+    phone: input.phone,
+  });
   return queueNotification({
     to: input.email ?? "",
     phone: input.phone,
     name: input.name,
     params: [input.code],
-    subject: `VGMF ${input.purpose} code`,
+    subject: copy.emailSubject,
     template: "otp",
-    body,
+    body: copy.emailBody,
   });
 }
 
@@ -1064,7 +1077,7 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
     params: [name, order.id, status],
     subject: `Order ${order.id} — ${status}`,
     template: "order-status",
-    body: `Hi ${name},\n\nYour order ${order.id} is now ${status}.${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\n– VGMF Store`,
+    body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is now ${status}.${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   if (to) {
     pushInbox({
@@ -1123,7 +1136,7 @@ export function sendAbandonedCartEmail(email: string, items: string[]) {
     to: email,
     subject: "Did you forget something in your cart?",
     template: "abandoned-cart",
-    body: `You left items in your cart: ${items.join(", ")}.\n\nComplete your order now before the deal ends.\n\n– VGMF Store`,
+    body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYou left items in your cart: ${items.join(", ")}.\n\nComplete your order now before the deal ends.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return true;
 }
@@ -1133,7 +1146,7 @@ export function sendSupportReply(message: SupportMessage) {
     to: message.email,
     subject: `Re: ${message.subject}`,
     template: "support-reply",
-    body: `Hi ${message.name},\n\n${message.reply ?? ""}\n\n– VGMF Support`,
+    body: `Dear ${message.name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${message.reply ?? ""}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
 }
 
@@ -1271,7 +1284,7 @@ export function addTicket(input: {
     params: [ticket.name, ticket.id, ticket.status],
     subject: `Support ticket ${ticket.id} opened`,
     template: "ticket-update",
-    body: `Hi ${ticket.name},\n\nWe have opened ticket ${ticket.id}: ${ticket.subject}.\n\n${ticket.body}\n\nYou will receive updates on this ticket at ${ticket.email}.\n\n– VGMF Support`,
+    body: `Dear ${ticket.name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nWe have opened ticket ${ticket.id}: ${ticket.subject}.\n\n${ticket.body}\n\nYou will receive updates on this ticket at ${ticket.email}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   pushInbox({
     audience: "customer",
@@ -1314,7 +1327,7 @@ export function respondToTicket(id: string, from: string, text: string) {
     to: ticket.email,
     subject: `Update on your ticket ${ticket.id}`,
     template: "ticket-update",
-    body: `Hi ${ticket.name},\n\n${text}\n\n– VGMF Support`,
+    body: `Dear ${ticket.name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${text}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   pushInbox({
     audience: "customer",

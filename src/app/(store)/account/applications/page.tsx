@@ -1,34 +1,21 @@
-import Link from "next/link";
-import SectionHeader from "@/components/account/SectionHeader";
-import { seminarSiteUrl } from "@/lib/constants";
+"use client";
 
-export const metadata = {
-  title: "View Application Status",
-  description:
-    "Track the status of your seminar and event applications on the official seminar website.",
-};
+import SectionHeader from "@/components/account/SectionHeader";
+import { useAuth } from "@/components/auth/AuthContext";
+import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import ApplicationTracker from "@/components/applications/ApplicationTracker";
 
 export default function ApplicationsPage() {
+  const { user } = useAuth();
+
   return (
     <div>
       <SectionHeader
-        title="View Application Status"
-        description="Applications for Foundation events are processed on the official seminar website."
+        title="Application Status"
+        description="Track Seminar, Autism and Fellowship applications on this portal. Seminar tracking opens seminar.vaidyagogate.org/doctor."
       />
-      <div className="rounded-2xl border border-burgundy/20 bg-burgundy/5 p-8 text-center">
-        <p className="text-sm text-text-muted">
-          Track your Application ID and registration status on the
-          official seminar website.
-        </p>
-        <Link
-          href={seminarSiteUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-primary mt-6"
-        >
-          Track on Seminar Website
-        </Link>
-      </div>
+      <PartnerPortalBadges user={user} className="mb-5" />
+      <ApplicationTracker />
     </div>
   );
 }

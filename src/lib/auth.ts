@@ -1,3 +1,4 @@
+import { accountMatchesIdentifier } from "@/lib/account-identity";
 import type { User } from "@/types";
 
 export const SESSION_KEY = "vgmf_session";
@@ -190,15 +191,9 @@ export function getAllAccounts(): User[] {
 }
 
 export function findAccountByIdentifier(identifier: string): User | null {
-  const value = identifier.trim().toLowerCase();
-  return (
-    getAllAccounts().find(
-      (account) =>
-        account.email.toLowerCase() === value ||
-        (account.phone ?? "").replace(/\D/g, "") === value.replace(/\D/g, "") ||
-        account.accountId === identifier.trim()
-    ) ?? null
-  );
+  const value = identifier.trim();
+  if (!value) return null;
+  return getAllAccounts().find((account) => accountMatchesIdentifier(account, value)) ?? null;
 }
 
 /** Why this account may not sign in, or null when it can. */

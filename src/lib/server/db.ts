@@ -127,6 +127,11 @@ export async function writeKv(app: PlatformApp, key: string, value: unknown) {
   );
 }
 
+export async function readKv<T = unknown>(app: PlatformApp, key: string): Promise<T | null> {
+  const result = await query<{ value: T }>(app, "SELECT value FROM app_kv WHERE key = $1", [key]);
+  return result?.rows[0]?.value ?? null;
+}
+
 export async function writePublishedFeed(feed: unknown) {
   const body = JSON.stringify(feed);
   await Promise.all(

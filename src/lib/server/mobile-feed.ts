@@ -176,5 +176,5 @@ export function mergePublishedBrand(partial: { site?: Partial<MobileFeed["site"]
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "content-type, authorization",
+  "Access-Control-Allow-Headers": "content-type, authorization, x-api-key",
 };

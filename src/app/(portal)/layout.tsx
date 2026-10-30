@@ -3,7 +3,7 @@ import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 import { HydratePublishedSite } from "@/components/common/HydratePublishedSite";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 export default function PortalLayout({
   children,
