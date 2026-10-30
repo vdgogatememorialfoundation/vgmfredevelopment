@@ -7,7 +7,7 @@ export default function ArticlesScreen() {
   return (
     <CatalogList
       title="Articles"
-      empty="Articles appear here after Admin publishes the live site."
+      empty="No articles are in the published app feed yet. Pull to refresh after Admin publishes."
       items={feed?.articles ?? []}
       href={(id) => `/article/${id}`}
       nameKey="title"

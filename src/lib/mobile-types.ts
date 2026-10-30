@@ -1,3 +1,4 @@
+import type { MobileAppearance } from "@/lib/mobile-appearance";
 import type { MobileAppConfig } from "@/lib/mobile-config";
 import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, SocialLinks, Video } from "@/types";
 
@@ -38,4 +39,5 @@ export type MobileFeed = {
   } | null;
   policies: Record<string, { title?: string; description?: string; sections?: { title: string; body: string }[] }>;
   faqs: FAQItem[];
+  appearance?: MobileAppearance | null;
 };

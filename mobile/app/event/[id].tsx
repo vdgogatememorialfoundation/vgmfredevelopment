@@ -1,8 +1,8 @@
 import { useLocalSearchParams } from "expo-router";
-import { Linking, Text } from "react-native";
-import { findRow, mediaUrl, money, str } from "../../src/api";
+import { Linking } from "react-native";
+import { findRow, formatDate, mediaUrl, money, str } from "../../src/api";
 import { useFeed } from "../../src/feed";
-import { Button, Cover, Empty, Loading, Muted, Screen, Title } from "../../src/ui";
+import { Button, Cover, Empty, Heading, Loading, Muted, Screen, StatusChip, Title } from "../../src/ui";
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -20,17 +20,14 @@ export default function EventDetail() {
   const maps = str(item.mapsUrl);
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <Cover uri={mediaUrl(item.bannerUrl) || undefined} height={180} />
+      <Cover uri={mediaUrl(item.bannerUrl) || undefined} height={200} />
+      <StatusChip label={str(item.registrationStatus)} />
       <Title>{str(item.name)}</Title>
-      <Muted>
-        {str(item.city)} {str(item.venue) ? `· ${str(item.venue)}` : ""} {str(item.startDate) ? `· ${str(item.startDate).slice(0, 10)}` : ""}
-      </Muted>
-      <Muted>
-        {str(item.mode)} {str(item.eventType) ? `· ${str(item.eventType)}` : ""} {str(item.registrationStatus) ? `· ${str(item.registrationStatus)}` : ""}
-      </Muted>
-      {Number(item.fee) ? <Text style={{ fontWeight: "800", marginTop: 8 }}>{money(item.fee)}</Text> : null}
-      <Text style={{ marginTop: 12, lineHeight: 22 }}>{str(item.description, str(item.shortDescription))}</Text>
-      {register ? <Button label="Register" onPress={() => void Linking.openURL(register)} /> : <Muted>Registration opens on the Foundation seminar site when a link is published.</Muted>}
+      <Muted>{[str(item.city), str(item.venue), formatDate(item.startDate)].filter(Boolean).join(" · ")}</Muted>
+      <Muted>{[str(item.mode), str(item.eventType)].filter(Boolean).join(" · ")}</Muted>
+      {Number(item.fee) ? <Heading>{money(item.fee)}</Heading> : null}
+      <Muted>{str(item.description, str(item.shortDescription))}</Muted>
+      {register ? <Button label="Register" onPress={() => void Linking.openURL(register)} /> : <Muted>Registration opens when a link is published.</Muted>}
       {maps ? <Button kind="ghost" label="Open map" onPress={() => void Linking.openURL(maps)} /> : null}
     </Screen>
   );

@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Text } from "react-native";
 import { createTicket, listTickets, str, type Row } from "./api";
 import { useAuth } from "./auth";
-import { Banner, Button, Card, Field, Muted, Screen, Title } from "./ui";
+import { Banner, Button, Card, Field, Heading, Muted, Screen, Title } from "./ui";
 
-export function TicketForm({ heading = "Support ticket", embedded = false }: { heading?: string; embedded?: boolean }) {
+export function TicketForm({ heading = "Support", embedded = false }: { heading?: string; embedded?: boolean }) {
   const { session } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -12,6 +12,7 @@ export function TicketForm({ heading = "Support ticket", embedded = false }: { h
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [note, setNote] = useState("");
+  const [tone, setTone] = useState<"note" | "error" | "success">("note");
   const [busy, setBusy] = useState(false);
   const [tickets, setTickets] = useState<Row[]>([]);
   const requestName = name || session?.name || "";
@@ -26,7 +27,10 @@ export function TicketForm({ heading = "Support ticket", embedded = false }: { h
         if (!cancelled) setTickets(rows);
       })
       .catch((err) => {
-        if (!cancelled) setNote((err as Error).message);
+        if (!cancelled) {
+          setTone("error");
+          setNote((err as Error).message);
+        }
       });
     return () => {
       cancelled = true;
@@ -36,30 +40,27 @@ export function TicketForm({ heading = "Support ticket", embedded = false }: { h
   const form = (
     <>
       <Title>{heading}</Title>
-      <Muted>
-        Mobile tickets are stored on the mobile API for this email. Website account tickets stay in that browser and are not
-        listed here. Signed-in staff and support flavors still only see this inbox — there is no server-side admin role on
-        mobile OTP sessions.
-      </Muted>
-      <Banner text={note} />
+      <Muted>We reply by email. Sign in to see tickets already opened from this app.</Muted>
+      <Banner text={note} tone={tone} />
       {inbox.map((item) => (
         <Card key={str(item.id)}>
-          <Text style={{ fontWeight: "700" }}>{str(item.subject)}</Text>
+          <Heading>{str(item.subject)}</Heading>
           <Muted>
-            {str(item.id)} · {str(item.status)}
+            {str(item.status)} · {str(item.id)}
           </Muted>
         </Card>
       ))}
-      <Field label="Your name" value={requestName} onChange={setName} />
+      <Field label="Your name" value={requestName} onChange={setName} autoCapitalize="words" />
       {session ? <Muted>{session.email}</Muted> : <Field label="Email" value={requestEmail} onChange={setEmail} keyboard="email-address" />}
       <Field label="Phone (optional)" value={phone} onChange={setPhone} keyboard="phone-pad" />
-      <Field label="Subject" value={subject} onChange={setSubject} />
-      <Field label="Message" value={body} onChange={setBody} multiline />
+      <Field label="Subject" value={subject} onChange={setSubject} autoCapitalize="sentences" />
+      <Field label="Message" value={body} onChange={setBody} multiline autoCapitalize="sentences" />
       <Button
         label={busy ? "Sending…" : "Send ticket"}
         disabled={busy}
         onPress={async () => {
           if (!requestName.trim() || (!session && !requestEmail.trim()) || !subject.trim() || !body.trim()) {
+            setTone("error");
             setNote("Enter your name, email, subject and message.");
             return;
           }
@@ -74,9 +75,11 @@ export function TicketForm({ heading = "Support ticket", embedded = false }: { h
             });
             setSubject("");
             setBody("");
-            setNote(`Ticket ${String(ticket.id ?? "")} opened on the mobile API. We will email updates.`);
+            setTone("success");
+            setNote(`Ticket ${String(ticket.id ?? "")} opened. We will email updates.`);
             if (session) setTickets(await listTickets());
           } catch (err) {
+            setTone("error");
             setNote((err as Error).message);
           } finally {
             setBusy(false);

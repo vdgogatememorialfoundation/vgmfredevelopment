@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { siteConfig } from "@/lib/constants";
+import { defaultAppearance, sanitizeAppearance } from "@/lib/mobile-appearance";
 import { defaultMobileAppConfig } from "@/lib/mobile-config";
 import { type MobileFeed } from "@/lib/mobile-types";
 import { listNotices } from "@/lib/server/notices";
@@ -57,6 +58,7 @@ export function defaultMobileFeed(): MobileFeed {
     about: null,
     policies: {},
     faqs: [],
+    appearance: defaultAppearance,
   };
 }
 
@@ -95,6 +97,7 @@ export function readMobileFeed(): MobileFeed {
     policies: { ...base.policies, ...snapshot.policies },
     faqs: snapshot.faqs ?? base.faqs,
     publishedAt: snapshot.publishedAt || base.publishedAt,
+    appearance: sanitizeAppearance(snapshot.appearance ?? base.appearance ?? defaultAppearance),
   };
 }
 

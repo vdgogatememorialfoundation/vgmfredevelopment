@@ -17,7 +17,7 @@ export default function GalleryScreen() {
           <Muted>{str(item.caption, str(item.category))}</Muted>
         </Card>
       ))}
-      {!items.length ? <Empty label="Gallery photos appear here after Admin publishes the live site." /> : null}
+      {!items.length ? <Empty label="No gallery photos are in the published app feed yet." actionLabel="Refresh" onAction={() => void refresh()} /> : null}
     </Screen>
   );
 }

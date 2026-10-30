@@ -21,7 +21,7 @@ export default function VideosScreen() {
           </Card>
         );
       })}
-      {!items.length ? <Empty label="Videos appear here after Admin publishes the live site." /> : null}
+      {!items.length ? <Empty label="No videos are in the published app feed yet." actionLabel="Refresh" onAction={() => void refresh()} /> : null}
     </Screen>
   );
 }

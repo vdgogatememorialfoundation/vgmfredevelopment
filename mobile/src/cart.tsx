@@ -7,6 +7,7 @@ type CartContextValue = {
   count: number;
   total: number;
   add: (item: Omit<CartItem, "quantity">) => void;
+  setQuantity: (id: string, quantity: number) => void;
   remove: (id: string) => void;
   clear: () => void;
 };
@@ -27,6 +28,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
           const found = current.find((row) => row.id === item.id);
           if (found) return current.map((row) => (row.id === item.id ? { ...row, quantity: row.quantity + 1 } : row));
           return [...current, { ...item, quantity: 1 }];
+        }),
+      setQuantity: (id, quantity) =>
+        setItems((current) => {
+          if (quantity <= 0) return current.filter((row) => row.id !== id);
+          return current.map((row) => (row.id === id ? { ...row, quantity } : row));
         }),
       remove: (id) =>
         setItems((current) =>

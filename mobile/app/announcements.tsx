@@ -19,7 +19,7 @@ export default function AnnouncementsScreen() {
           <Muted>{str(item.description)}</Muted>
         </Card>
       ))}
-      {!items.length ? <Empty label="Announcements appear here after Admin publishes the live site." /> : null}
+      {!items.length ? <Empty label="No announcements are in the published app feed yet." actionLabel="Refresh" onAction={() => void refresh()} /> : null}
     </Screen>
   );
 }
