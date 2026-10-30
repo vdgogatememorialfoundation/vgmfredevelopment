@@ -1,0 +1,36 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview-customer": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_FLAVOR": "customer", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+    },
+    "preview-admin": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_FLAVOR": "admin", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+    },
+    "preview-staff": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_FLAVOR": "staff", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+    },
+    "preview-support": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": { "EXPO_PUBLIC_FLAVOR": "support", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+    },
+    "production": {
+      "android": { "buildType": "app-bundle" },
+      "env": { "EXPO_PUBLIC_FLAVOR": "customer", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+    }
+  }
+}

@@ -98,17 +98,73 @@ export function readMobileFeed(): MobileFeed {
   };
 }
 
+function persistDataUrl(value: string | undefined, name: string) {
+  if (!value) return value ?? "";
+  const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!match) return value;
+  const mime = match[1].toLowerCase();
+  const ext = mime.includes("svg") ? "svg" : mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
+  const file = `${name}.${ext}`;
+  const dest = join(process.cwd(), "public", "uploads", file);
+  try {
+    mkdirSync(join(dest, ".."), { recursive: true });
+    writeFileSync(dest, Buffer.from(match[2].replace(/\s/g, ""), "base64"));
+    return `/uploads/${file}`;
+  } catch {
+    return value;
+  }
+}
+
+function persistFeedAssets(feed: MobileFeed): MobileFeed {
+  const apps = { ...defaultMobileAppConfig.apps, ...feed.mobile?.apps };
+  return {
+    ...feed,
+    site: {
+      ...feed.site,
+      logoUrl: persistDataUrl(feed.site?.logoUrl, "site-logo"),
+      faviconUrl: persistDataUrl(feed.site?.faviconUrl, "site-favicon"),
+    },
+    flyers: (feed.flyers ?? []).map((flyer, index) => ({
+      ...flyer,
+      image: persistDataUrl(flyer.image, `flyer-${String(flyer.id || index).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || index}`),
+    })),
+    mobile: {
+      ...defaultMobileAppConfig,
+      ...feed.mobile,
+      apps: {
+        customer: { ...apps.customer, logoUrl: persistDataUrl(apps.customer?.logoUrl, "app-customer") },
+        admin: { ...apps.admin, logoUrl: persistDataUrl(apps.admin?.logoUrl, "app-admin") },
+        staff: { ...apps.staff, logoUrl: persistDataUrl(apps.staff?.logoUrl, "app-staff") },
+        support: { ...apps.support, logoUrl: persistDataUrl(apps.support?.logoUrl, "app-support") },
+      },
+    },
+  };
+}
+
 export function saveMobileFeed(feed: MobileFeed) {
-  memory = feed;
+  memory = persistFeedAssets(feed);
   for (const file of [TMP_FILE, PUBLIC_FILE]) {
     try {
       mkdirSync(join(file, ".."), { recursive: true });
-      writeFileSync(file, JSON.stringify(feed));
+      writeFileSync(file, JSON.stringify(memory));
     } catch {
       /* read-only host */
     }
   }
-  return feed;
+  return memory;
+}
+
+export function mergePublishedBrand(partial: { site?: Partial<MobileFeed["site"]>; flyers?: MobileFeed["flyers"] }) {
+  const current = readMobileFeed();
+  const patch = Object.fromEntries(
+    Object.entries(partial.site ?? {}).filter(([, value]) => value != null && String(value).length > 0)
+  ) as Partial<MobileFeed["site"]>;
+  return saveMobileFeed({
+    ...current,
+    publishedAt: new Date().toISOString(),
+    site: { ...current.site, ...patch },
+    flyers: partial.flyers ?? current.flyers,
+  });
 }
 
 export const corsHeaders = {

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asBoolean, fileFromForm, listNotices, publicNotice, queryNotices, scheduleFromForm, upsertNotice } from "@/lib/server/notices";
+import { corsHeaders } from "@/lib/server/mobile-feed";
 
 export const runtime = "nodejs";
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q") ?? "";
@@ -13,10 +18,13 @@ export async function GET(request: NextRequest) {
     q || category || kind || year
       ? queryNotices({ q, category, kind, year, includeScheduled })
       : listNotices({ includeScheduled });
-  return NextResponse.json({
-    ok: true,
-    notices: notices.map(publicNotice),
-  });
+  return NextResponse.json(
+    {
+      ok: true,
+      notices: notices.map(publicNotice),
+    },
+    { headers: { ...corsHeaders, "cache-control": "no-store" } }
+  );
 }
 
 export async function POST(request: NextRequest) {

@@ -1,18 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import { useSiteSettings } from "@/lib/use-cms";
 
 export default function SiteLogo({ size = 48, className = "" }: { size?: number; className?: string }) {
   const settings = useSiteSettings();
   const name = settings?.siteName || "VGMF";
-  if (settings?.logoUrl) {
+  const logoUrl = settings?.logoUrl || "";
+  const [broken, setBroken] = useState(false);
+
+  if (logoUrl && !broken) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={settings.logoUrl}
+        src={logoUrl}
         alt={name}
-        className={`h-9 w-auto max-w-[7.5rem] shrink-0 object-contain object-left sm:h-12 sm:max-w-[10.5rem] ${className}`}
+        className={`h-10 w-auto max-w-[9rem] shrink-0 object-contain object-left sm:h-12 sm:max-w-[10.5rem] ${className}`}
         style={{ maxHeight: size }}
+        onError={() => setBroken(true)}
       />
     );
   }

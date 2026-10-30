@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F7F3EA"
+      "backgroundColor": "#0B1F3A"
     },
     "ios": {
       "supportsTablet": true,
@@ -24,13 +24,17 @@
       "package": "org.vaidyagogate.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#8F2D2D"
+        "backgroundColor": "#0B1F3A"
       },
       "predictiveBackGestureEnabled": false
     },
-    "plugins": ["expo-secure-store"],
+    "plugins": ["expo-router", "expo-secure-store"],
     "extra": {
-      "apiUrl": "https://vaidyagogate.org"
+      "apiUrl": "https://vaidyagogate.org",
+      "flavor": "customer",
+      "router": {
+        "origin": false
+      }
     }
   }
 }

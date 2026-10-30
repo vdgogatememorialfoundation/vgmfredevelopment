@@ -1,12 +1,15 @@
 import * as SecureStore from "expo-secure-store";
 import { DEFAULT_API } from "./theme";
 
+export type Row = Record<string, unknown>;
+
 export type Feed = {
   publishedAt: string;
   site: {
     name: string;
     tagline: string;
     logoUrl?: string;
+    logoText?: string;
     email: string;
     phone: string;
     address: string;
@@ -15,23 +18,25 @@ export type Feed = {
   flags: { supportUs?: boolean; supportUsTitle?: string; supportUsText?: string; supportUsHref?: string };
   visibility: Record<string, boolean>;
   mobile: {
-    minVersion: string;
-    latestVersion: string;
-    forceUpdate: boolean;
+    minVersion?: string;
+    latestVersion?: string;
+    forceUpdate?: boolean;
     playStoreUrl?: string;
     appStoreUrl?: string;
     apiBaseUrl?: string;
     modules: Record<string, boolean>;
+    apps?: Record<string, { name?: string; logoUrl?: string }>;
   };
-  events: Array<Record<string, unknown>>;
-  articles: Array<Record<string, unknown>>;
-  books: Array<Record<string, unknown>>;
-  clinics: Array<Record<string, unknown>>;
-  videos: Array<Record<string, unknown>>;
-  notices: Array<Record<string, unknown>>;
-  announcements: Array<Record<string, unknown>>;
-  gallery: Array<Record<string, unknown>>;
-  about: Record<string, unknown> | null;
+  events: Row[];
+  articles: Row[];
+  books: Row[];
+  clinics: Row[];
+  videos: Row[];
+  notices: Row[];
+  announcements: Row[];
+  flyers?: Row[];
+  gallery: Row[];
+  about: Row | null;
   policies: Record<string, { title?: string; description?: string; sections?: { title: string; body: string }[] }>;
   faqs: Array<{ question?: string; answer?: string }>;
 };
@@ -110,6 +115,12 @@ export async function fetchFeed(): Promise<Feed> {
   throw new Error(lastError);
 }
 
+export async function fetchLiveNotices() {
+  const data = await parse(await fetch(`${getApiBase()}/api/notices`, { headers: { accept: "application/json" } }));
+  if (!data.ok) return [] as Row[];
+  return (data.notices ?? []) as Row[];
+}
+
 export async function sendEmailOtp(email: string, name?: string) {
   const data = await parse(
     await fetch(`${getApiBase()}/api/mobile/otp`, {
@@ -139,7 +150,7 @@ export async function verifyEmailOtp(email: string, code: string, name?: string)
 export async function listTickets() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/tickets`, { headers: headers(false) }));
   if (!data.ok) throw new Error(data.error || "Could not load tickets.");
-  return (data.tickets ?? []) as Array<Record<string, unknown>>;
+  return (data.tickets ?? []) as Row[];
 }
 
 export async function createTicket(input: { name: string; email: string; phone?: string; subject: string; body: string }) {
@@ -151,13 +162,13 @@ export async function createTicket(input: { name: string; email: string; phone?:
     })
   );
   if (!data.ok) throw new Error(data.error || "Could not create the ticket.");
-  return data.ticket as Record<string, unknown>;
+  return data.ticket as Row;
 }
 
 export async function listOrders() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/orders`, { headers: headers(false) }));
   if (!data.ok) throw new Error(data.error || "Could not load orders.");
-  return (data.orders ?? []) as Array<Record<string, unknown>>;
+  return (data.orders ?? []) as Row[];
 }
 
 export async function placeOrder(input: {
@@ -174,12 +185,41 @@ export async function placeOrder(input: {
     })
   );
   if (!data.ok) throw new Error(data.error || "Could not place the order.");
-  return data.order as Record<string, unknown>;
+  return data.order as Row;
 }
 
 export async function verifyCertificate(number: string) {
   const data = await parse(
     await fetch(`${getApiBase()}/api/certificates/verify?number=${encodeURIComponent(number)}`, { headers: headers(false) })
   );
-  return data as { ok?: boolean; verified?: boolean; error?: string; certificate?: Record<string, unknown>; sourceLabel?: string };
+  return data as { ok?: boolean; verified?: boolean; error?: string; certificate?: Row; sourceLabel?: string };
+}
+
+export function str(value: unknown, fallback = "") {
+  if (value == null) return fallback;
+  const text = String(value).trim();
+  return text || fallback;
+}
+
+export function mediaUrl(value?: unknown) {
+  const raw = str(value);
+  if (!raw) return "";
+  if (/^(https?:|data:|file:|content:)/i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${getApiBase()}${raw}`;
+  return raw;
+}
+
+export function findRow(rows: Row[] | undefined, id: string) {
+  return (rows ?? []).find((row) => str(row.id) === id || str(row.slug) === id);
+}
+
+export function money(value: unknown) {
+  return `₹${(Number(value) || 0).toLocaleString("en-IN")}`;
+}
+
+export function moduleOn(feed: Feed | null, id: string) {
+  if (!feed) return true;
+  if (feed.visibility?.[id] === false) return false;
+  if (feed.mobile?.modules?.[id] === false) return false;
+  return true;
 }

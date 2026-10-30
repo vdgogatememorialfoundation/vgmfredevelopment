@@ -103,16 +103,36 @@ export function setAppliedFeedAt(value: string) {
   window.localStorage.setItem(APPLIED_KEY, value);
 }
 
+/** Push only the header logo and slideshow so phones get branding even if the full snapshot is large. */
+export function publishBrand() {
+  if (typeof window === "undefined") return Promise.resolve({ ok: false as const });
+  const snapshot = collectMobileSnapshot();
+  return fetch("/api/mobile/brand", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ site: snapshot.site, flyers: snapshot.flyers }),
+  })
+    .then(async (response) => (await response.json().catch(() => null)) as { ok?: boolean; publishedAt?: string } | null)
+    .then((data) => {
+      if (data?.publishedAt) setAppliedFeedAt(data.publishedAt);
+      return data ?? { ok: false as const };
+    })
+    .catch(() => ({ ok: false as const }));
+}
+
 /** Push logo, slideshow and other public CMS fields so phones and other browsers can load them. */
 export function publishLiveSite() {
   if (typeof window === "undefined") return Promise.resolve({ ok: false as const });
   markLiveDirty(true);
   const snapshot = collectMobileSnapshot();
-  return fetch("/api/mobile/publish", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(snapshot),
-  })
+  return publishBrand()
+    .then(() =>
+      fetch("/api/mobile/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(snapshot),
+      })
+    )
     .then(async (response) => {
       const data = (await response.json().catch(() => null)) as { ok?: boolean; publishedAt?: string; error?: string } | null;
       if (data?.publishedAt) setAppliedFeedAt(data.publishedAt);

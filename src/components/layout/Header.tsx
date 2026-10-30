@@ -161,7 +161,7 @@ export default function Header() {
           {/* Logo */}
           <Link
             href="/"
-            className="flex min-w-0 items-center gap-3"
+            className="flex min-w-0 shrink items-center gap-2 sm:gap-3"
             aria-label="Vaidya Gogate Memorial Foundation — Home"
           >
             <SiteLogo size={48} />
@@ -375,7 +375,10 @@ export default function Header() {
               />
               <div className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col bg-white shadow-2xl">
                 <div className="flex items-center justify-between border-b border-border px-4 py-4">
-                  <p className="font-serif text-lg font-semibold text-ink">Menu</p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <SiteLogo size={40} />
+                    <p className="font-serif text-lg font-semibold text-ink">Menu</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setMobileMenuOpen(false)}

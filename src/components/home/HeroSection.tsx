@@ -115,7 +115,7 @@ export default function HeroSection() {
               type="button"
               aria-label={t("hero.prev")}
               onClick={() => go(active - 1)}
-              className="absolute left-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg text-ink shadow sm:flex"
+              className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-2xl leading-none text-ink shadow sm:h-8 sm:w-8 sm:text-lg"
             >
               ‹
             </button>
@@ -123,7 +123,7 @@ export default function HeroSection() {
               type="button"
               aria-label={t("hero.next")}
               onClick={() => go(active + 1)}
-              className="absolute right-2 top-1/2 z-10 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-lg text-ink shadow sm:flex"
+              className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-2xl leading-none text-ink shadow sm:h-8 sm:w-8 sm:text-lg"
             >
               ›
             </button>
