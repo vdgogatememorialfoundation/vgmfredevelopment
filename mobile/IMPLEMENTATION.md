@@ -2,7 +2,7 @@
 
 The Next.js website in this repository is the source of truth. This Expo (React Native) app is a **native** customer, admin, staff and support client. It is not a WebView wrapper and it is not Flutter.
 
-Last updated: 30 October 2026, 8:20 PM IST (Asia/Calcutta).
+Last updated: 30 October 2026, 9:15 PM IST (Asia/Calcutta).
 
 Active application: `mobile/` (Expo SDK 54, React Native 0.81.5, Expo Router 6, `main: expo-router/entry`).
 Archived backups (not shipped): `native/flutter`, `native/ios`, `native/android-apps`.
@@ -28,7 +28,8 @@ Four installed app flavors: Customer, Admin, Staff, Support (`src/lib/mobile-con
 
 | Endpoint | Use in the app |
 |---|---|
-| `GET /api/mobile/feed` | Published name, logo, modules, events, articles, books, clinics, videos, notices, announcements, flyers, gallery, about, policies, FAQs |
+| `GET /api/mobile/feed` | Published name, logo, modules, events, articles, books, clinics, videos, notices, announcements, flyers, gallery, about, policies, FAQs, **appearance** |
+| `GET /api/mobile/config` | Public theme + layout tokens only (version, colors, type scale, home sections, labels, app names/logos). ETag / `If-None-Match`. No secrets. |
 | `POST /api/mobile/otp` | Email OTP send / verify / session / logout |
 | `GET/POST /api/mobile/tickets` | Support tickets. GET requires Bearer and lists only that email. POST is public (contact) or uses the session email when signed in. |
 | `GET/POST /api/mobile/orders` | Unpaid publication requests. **GET and POST both require Bearer.** POST prices come from the published catalogue. Status is always `Recorded` / `unpaid`. |
@@ -147,6 +148,26 @@ Four Expo apps share `mobile/`. `EXPO_PUBLIC_FLAVOR` selects the name and store 
 
 EAS: `eas build --profile preview-customer|preview-admin|preview-staff|preview-support --platform android`. Flutter in `native/flutter` is an archived backup only.
 
+## Remote theme and layout (Category 1)
+
+Phones apply a **bundled default light theme**, then the last cached published appearance, then `GET /api/mobile/config` and the `appearance` object on `GET /api/mobile/feed`. Invalid payloads are rejected (`sanitizeAppearance`). Drafts live only in the admin browser (`vgmf_mobile_appearance_draft`). **Publish to app** copies the draft to `vgmf_mobile_appearance_published` and writes it into `public/app-feed.json` through the existing publish path.
+
+Admin: **Settings → App appearance** (`/admin/settings/appearance`). Save draft does not change the live app. Restore defaults affects the draft only until Publish. Staff need the Mobile app module.
+
+Carousel aspect is fixed at **1:1**. Notices stay on Home. Wishlist, website checkout and CMS editing stay website-only.
+
+### Update categories
+
+| Category | What | How it reaches phones | Needs Play/App Store? |
+|---|---|---|---|
+| 1. Remote config & content | Colors, section order/visibility, labels, logos, flyers, catalogue | `GET /api/mobile/config` and `/api/mobile/feed` after Admin **Publish** | No |
+| 2. Compatible JS/assets (OTA) | Screen layout JS that matches the current native runtime | Expo EAS Update — **not configured in this repo** (no EAS project ID in `app.json`, `expo-updates` not installed). Do not invent a fake update URL. After `eas init` and a **new binary** that includes `expo-updates`, use preview/production channels. Rollback: `eas update:rollback` or publish the previous update. | No, once OTA is in a shipped binary |
+| 3. Native / incompatible | New native modules, permissions, SDK bumps, package IDs | New Android/iOS build (`eas build` / Gradle) and store submission where required | **Yes** |
+
+This UI redesign is JavaScript. Installed APKs that were built **before** this branch do not contain it and cannot receive it via OTA until Category 2 is configured **and** those devices install a binary that includes `expo-updates`. Sideload a new Expo APK from `/apps/*.apk` after this branch is built.
+
+Appearance cache: `SecureStore` key `vgmf-appearance`. If storage is full, the in-memory theme still applies for the session.
+
 ## Device capabilities used
 
 - SecureStore for the session token (revoked on sign-out; validated on launch).
@@ -171,6 +192,8 @@ EAS: `eas build --profile preview-customer|preview-admin|preview-staff|preview-s
 | `GET` tickets without Bearer | 401 |
 | OTP `action=session` without token | 401 |
 | Certificate verify without number | 400 |
+| `GET /api/mobile/config` on local Next | 200 JSON with theme tokens only; `If-None-Match` → 304; no mail/payment secrets |
+| Draft vs publish | Save draft writes `vgmf_mobile_appearance_draft` only; Publish writes published key + feed |
 | Android emulator / physical device | None attached (`adb devices` empty) |
 | iOS simulator / IPA | Cannot compile on Linux |
 | Live OTP / paid checkout against production | Not executed |
@@ -232,3 +255,5 @@ These APKs are Expo release builds (`org.vaidyagogate.customer|admin|staff|suppo
 9. Mobile OTP sessions have no admin/staff role, so the support/admin flavors cannot list every ticket — only the signed-in email.
 10. `vaidyagogate.org` is still Wix. Install Expo APKs from the Next.js `/apps/*.apk` links, not from the Wix site.
 11. Sideloaded APKs use the debug signing key. Play/App Store listing still needs a release keystore.
+12. Expo OTA (`expo-updates`) is **not** enabled: there is no EAS project ID and no fake update URL. Theme/content still update without a store release (Category 1).
+13. Native wishlist is not implemented — website account wishlist stays in browser localStorage.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getIntegrations } from "@/lib/integrations";
 import {
   appFlavors,
@@ -94,6 +95,9 @@ export function MobileAppDesk() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/admin/settings/appearance" className={ghost}>
+            App appearance
+          </Link>
           <button type="button" className={ghost} onClick={save}>
             Save settings
           </button>

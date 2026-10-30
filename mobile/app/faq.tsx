@@ -16,7 +16,7 @@ export default function FaqScreen() {
           <Muted>{str(item.answer)}</Muted>
         </Card>
       ))}
-      {!items.length ? <Empty label="FAQs appear here after Admin publishes the live site." /> : null}
+      {!items.length ? <Empty label="No FAQs are in the published app feed yet." actionLabel="Refresh" onAction={() => void refresh()} /> : null}
     </Screen>
   );
 }

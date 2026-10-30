@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store";
-import { DEFAULT_API, FEED_ORIGINS } from "./theme";
+import { DEFAULT_API, FEED_ORIGINS } from "./host";
 
 export type Row = Record<string, unknown>;
 
@@ -39,6 +39,7 @@ export type Feed = {
   about: Row | null;
   policies: Record<string, { title?: string; description?: string; sections?: { title: string; body: string }[] }>;
   faqs: Array<{ question?: string; answer?: string }>;
+  appearance?: Record<string, unknown> | null;
 };
 
 export type Session = { token: string; email: string; name: string };
@@ -161,6 +162,12 @@ export async function fetchFeed(): Promise<Feed> {
     }
   }
   throw new Error(lastError);
+}
+
+export async function fetchConfig() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/config`, { headers: { accept: "application/json" } }), "public");
+  if (!data.ok) return null;
+  return data as { ok: true; version?: number; publishedAt?: string; appearance?: Record<string, unknown> };
 }
 
 export async function fetchLiveNotices() {
@@ -299,6 +306,22 @@ export function findRow(rows: Row[] | undefined, id: string) {
 
 export function money(value: unknown) {
   return `₹${(Number(value) || 0).toLocaleString("en-IN")}`;
+}
+
+export function formatDate(value: unknown) {
+  const text = str(value);
+  if (!text) return "";
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text.slice(0, 10);
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+export function isPastDate(value: unknown) {
+  const text = str(value);
+  if (!text) return false;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getTime() < Date.now() - 24 * 60 * 60 * 1000;
 }
 
 export function moduleOn(feed: Feed | null, id: string) {

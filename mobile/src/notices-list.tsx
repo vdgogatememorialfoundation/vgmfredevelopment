@@ -1,22 +1,23 @@
 import { Linking, Text } from "react-native";
 import { getApiBase, str } from "./api";
 import { useFeed } from "./feed";
-import { Button, Card, Empty, Muted, Title } from "./ui";
+import { Button, Card, Muted, Title } from "./ui";
 
-export function NoticesBoard() {
+export function NoticesBoard({ title }: { title?: string }) {
   const { notices, feed } = useFeed();
   const items = notices.length ? notices : feed?.notices ?? [];
+  if (!items.length) return null;
   return (
     <>
-      <Title>Notice board</Title>
+      <Title>{title || "Notice board"}</Title>
       {items.map((item) => (
         <Card key={str(item.id)}>
           <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(item.title)}</Text>
           <Muted>
-            {str(item.date)} {str(item.category) ? `· ${str(item.category)}` : ""}
+            {str(item.date)} {str(item.category) ? `· ${str(item.category)}` : ""} {str(item.priority) === "high" ? "· Priority" : ""}
           </Muted>
-          <Muted>{str(item.description)}</Muted>
-          {str(item.attachment) || str(item.id) ? (
+          {str(item.description) ? <Muted>{str(item.description)}</Muted> : null}
+          {str(item.attachment) ? (
             <Button
               kind="ghost"
               label={str(item.fileName, "Open attachment")}
@@ -25,7 +26,6 @@ export function NoticesBoard() {
           ) : null}
         </Card>
       ))}
-      {!items.length ? <Empty label="Notices appear here after they are published." /> : null}
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { getAbout } from "@/lib/about";
+import { defaultAppearance, getPublishedAppearance } from "@/lib/mobile-appearance";
 import { getFaqs, getSettings } from "@/lib/admin-store";
 import {
   getLiveAnnouncements,
@@ -49,6 +50,7 @@ export function collectMobileSnapshot(): MobileFeed {
     about: getAbout(),
     policies: getPolicies(),
     faqs: getFaqs().filter((item) => item.active !== false),
+    appearance: getPublishedAppearance(),
   };
 }
 
@@ -81,6 +83,7 @@ export function emptyFeedFallback(mobile: MobileAppConfig = defaultMobileAppConf
     about: null,
     policies: {},
     faqs: [],
+    appearance: defaultAppearance,
   };
 }
 

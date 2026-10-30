@@ -21,7 +21,7 @@ export const staffModules = [
   { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications", "/admin/settings/email", "/admin/settings/whatsapp", "/admin/settings/sms"] },
   { id: "staff", label: "Staff & roles", paths: ["/admin/accounts/staff", "/admin/accounts/roles", "/admin/accounts/doctors"] },
   { id: "settings", label: "Site settings", paths: ["/admin/settings"] },
-  { id: "mobile", label: "Mobile app", paths: ["/admin/settings/mobile"] },
+  { id: "mobile", label: "Mobile app", paths: ["/admin/settings/mobile", "/admin/settings/appearance"] },
 ] as const;
 
 export type StaffModuleId = string;

@@ -1,6 +1,8 @@
 import * as Application from "expo-application";
 import Constants from "expo-constants";
-import { colors } from "./theme";
+import { defaultAppearance } from "./appearance";
+
+const colors = defaultAppearance.colors;
 
 function flavorIdFromPackage(pkg: string): FlavorId {
   const id = pkg.toLowerCase();
@@ -25,7 +27,7 @@ const ALL: Record<FlavorId, Flavor> = {
   customer: {
     id: "customer",
     displayName: "VGMF",
-    accent: colors.ink,
+    accent: colors.secondary,
     tabs: [
       { id: "home", title: "Home", icon: "home" },
       { id: "events", title: "Events", icon: "calendar" },
@@ -37,7 +39,7 @@ const ALL: Record<FlavorId, Flavor> = {
   admin: {
     id: "admin",
     displayName: "VGMF Admin",
-    accent: colors.burgundyDark,
+    accent: colors.primary,
     tabs: [
       { id: "home", title: "Desk", icon: "grid" },
       { id: "events", title: "Events", icon: "calendar" },

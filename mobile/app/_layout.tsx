@@ -4,17 +4,18 @@ import { StatusBar } from "expo-status-bar";
 import { AuthProvider } from "../src/auth";
 import { CartProvider } from "../src/cart";
 import { FeedProvider } from "../src/feed";
-import { colors } from "../src/theme";
+import { ThemeProvider, colors } from "../src/theme";
 
 export default function RootLayout() {
   return (
     <FeedProvider>
+      <ThemeProvider>
       <AuthProvider>
         <CartProvider>
           <StatusBar style="dark" />
           <Stack
             screenOptions={{
-              headerTintColor: colors.ink,
+              headerTintColor: colors.text,
               headerStyle: { backgroundColor: colors.background },
               headerShadowVisible: false,
               contentStyle: { backgroundColor: colors.background },
@@ -37,9 +38,11 @@ export default function RootLayout() {
             <Stack.Screen name="faq" options={{ title: "FAQ" }} />
             <Stack.Screen name="cart" options={{ title: "Bag" }} />
             <Stack.Screen name="policy/[id]" options={{ title: "Policy" }} />
+            <Stack.Screen name="search" options={{ title: "Search" }} />
           </Stack>
         </CartProvider>
       </AuthProvider>
+      </ThemeProvider>
     </FeedProvider>
   );
 }

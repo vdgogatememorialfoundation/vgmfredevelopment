@@ -125,6 +125,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Events", href: "/admin/settings/events" },
       { label: "Certificate API keys", href: "/admin/settings/api-keys" },
       { label: "Mobile app", href: "/admin/settings/mobile" },
+      { label: "App appearance", href: "/admin/settings/appearance" },
       { label: "Security", href: "/admin/settings/security" },
     ],
   },
