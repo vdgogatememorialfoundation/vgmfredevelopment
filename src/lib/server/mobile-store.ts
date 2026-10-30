@@ -1,16 +1,22 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
+import { dataFile } from "@/lib/server/paths";
 
 const OTP_FILE = join("/tmp", "vgmf-mobile-otp.json");
 const TICKETS_FILE = join("/tmp", "vgmf-mobile-tickets.json");
 const ORDERS_FILE = join("/tmp", "vgmf-mobile-orders.json");
-const SESSIONS_FILE = join("/tmp", "vgmf-mobile-sessions.json");
+const LEGACY_SESSIONS_FILE = join("/tmp", "vgmf-mobile-sessions.json");
 
 const OTP_RESEND_MS = 60 * 1000;
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Sessions stay valid until Logout; this stamp is informational only. */
+const SESSION_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
+
+function sessionsFile() {
+  return dataFile("mobile-sessions.json");
+}
 const TICKET_WINDOW_MS = 10 * 60 * 1000;
 const TICKET_MAX_PER_WINDOW = 3;
 const ORDER_IDEM_MS = 2 * 60 * 1000;
@@ -74,14 +80,24 @@ function codesMatch(left: string, right: string) {
   return timingSafeEqual(a, b);
 }
 
+function loadSessions(): MobileSession[] {
+  if (memory.sessions) return memory.sessions;
+  const primary = readFile<MobileSession[]>(sessionsFile(), []);
+  const sessions = primary.length ? primary : readFile<MobileSession[]>(LEGACY_SESSIONS_FILE, []);
+  memory.sessions = sessions;
+  if (!primary.length && sessions.length) writeFile(sessionsFile(), sessions);
+  return sessions;
+}
+
 function load<T>(key: keyof typeof memory, file: string, fallback: T): T {
+  if (key === "sessions") return loadSessions() as T;
   if (memory[key] == null) (memory[key] as T) = readFile(file, fallback);
   return memory[key] as T;
 }
 
 function persist<T>(key: "otp" | "tickets" | "orders" | "sessions", file: string, value: T) {
   (memory[key] as T) = value;
-  writeFile(file, value);
+  writeFile(key === "sessions" ? sessionsFile() : file, value);
 }
 
 function newId() {
@@ -143,34 +159,23 @@ export function createMobileSession(email: string, name = "") {
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + SESSION_TTL_MS).toISOString(),
   };
-  const list = load<MobileSession[]>("sessions", SESSIONS_FILE, []).filter((item) => item.email !== session.email);
+  const list = loadSessions();
   list.push(session);
-  persist("sessions", SESSIONS_FILE, list);
+  persist("sessions", sessionsFile(), list);
   return session;
 }
 
 export function sessionFromToken(token?: string | null) {
   if (!token) return null;
-  const list = load<MobileSession[]>("sessions", SESSIONS_FILE, []);
-  const session = list.find((item) => item.token === token);
-  if (!session) return null;
-  if (Date.parse(session.expiresAt || "") < Date.now()) {
-    persist(
-      "sessions",
-      SESSIONS_FILE,
-      list.filter((item) => item.token !== token)
-    );
-    return null;
-  }
-  return session;
+  return loadSessions().find((item) => item.token === token) ?? null;
 }
 
 export function revokeMobileSession(token?: string | null) {
   if (!token) return;
   persist(
     "sessions",
-    SESSIONS_FILE,
-    load<MobileSession[]>("sessions", SESSIONS_FILE, []).filter((item) => item.token !== token)
+    sessionsFile(),
+    loadSessions().filter((item) => item.token !== token)
   );
 }
 

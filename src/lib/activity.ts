@@ -1,4 +1,4 @@
-import type { User } from "@/types";
+import { getSession } from "@/lib/auth";
 import { emailAccountActivity } from "@/lib/account-mail";
 
 const KEY = "vgmf_account_activity";
@@ -55,10 +55,5 @@ export function activitiesFor(email: string) {
 
 export function currentActorEmail() {
   if (typeof window === "undefined") return "system";
-  try {
-    const session = JSON.parse(window.localStorage.getItem("vgmf_session") ?? "null") as User | null;
-    return session?.email ?? "system";
-  } catch {
-    return "system";
-  }
+  return getSession()?.email ?? "system";
 }

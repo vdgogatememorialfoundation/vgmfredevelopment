@@ -133,7 +133,6 @@ async function parse(response: Response, mode: "public" | "auth" = "auth") {
     }
   }
   if (mode === "auth" && response.status === 401) {
-    await saveSession(null);
     data.ok = false;
     data.error = data.error || "Sign in again.";
   }
@@ -215,8 +214,7 @@ export async function checkSession() {
     "auth"
   );
   if (!data.ok) {
-    await saveSession(null);
-    return null;
+    return session;
   }
   return session;
 }
