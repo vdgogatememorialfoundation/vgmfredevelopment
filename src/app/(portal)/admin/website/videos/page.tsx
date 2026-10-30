@@ -18,6 +18,8 @@ export default function Page() {
         { key: "title", label: "Title" },
         { key: "category", label: "Category" },
         { key: "youtubeUrl", label: "YouTube link" },
+        { key: "src", label: "Video file", kind: "file" },
+        { key: "poster", label: "Poster", kind: "image" },
         { key: "description", label: "Description", kind: "textarea" },
         { key: "date", label: "Date" },
       ]}
@@ -29,8 +31,15 @@ export default function Page() {
         category: "Foundation",
         kind: "youtube",
         youtubeUrl: "",
+        src: "",
       })}
-      onSave={(record) => saveVideo({ ...record, kind: "youtube", youtubeUrl: record.youtubeUrl || "" })}
+      onSave={(record) =>
+        saveVideo({
+          ...record,
+          kind: record.youtubeUrl ? "youtube" : "upload",
+          youtubeUrl: record.youtubeUrl || "",
+        })
+      }
       onHide={hideVideo}
     />
   );

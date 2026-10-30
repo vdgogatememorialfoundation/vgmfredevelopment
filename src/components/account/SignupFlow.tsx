@@ -50,7 +50,7 @@ export default function SignupFlow() {
       code,
       purpose: "email verification",
     });
-    setOtpHint(`Code sent to ${form.email}. Demo code: ${code}`);
+    setOtpHint(`A code was sent to ${form.email}.`);
   };
 
   const submitDetails = () => {

@@ -10,7 +10,7 @@ import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/schedule";
 
 const field = "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-ink";
 
-export function NoticeDesk() {
+export function NoticeDesk({ compact = false }: { compact?: boolean }) {
   const records = useLiveNotices();
   const [editing, setEditing] = useState<Notice | null>(null);
   const [title, setTitle] = useState("");
@@ -89,11 +89,7 @@ export function NoticeDesk() {
         fileName: storedName,
         fileType: storedType,
       });
-      setNote(
-        file || attachment
-          ? "Published with a file. It appears on the homepage notice board (if pinned), /notices, and the announcement ticker once live."
-          : "Published as text. It appears on the homepage notice board (if pinned), /notices, and the announcement ticker once live."
-      );
+      setNote(file || attachment ? "Published with a file." : "Published as text.");
       reset();
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Could not publish the notice.");
@@ -103,21 +99,17 @@ export function NoticeDesk() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className={compact ? "space-y-3" : "space-y-5"}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-serif text-2xl font-bold text-ink">Notice board</h1>
-          <p className="mt-1 max-w-2xl text-sm text-stone-500">
-            Publish text only, or text plus a PDF/image. Admin posts to{" "}
-            <code className="rounded bg-paper px-1">POST /api/notices</code> and{" "}
-            <code className="rounded bg-paper px-1">PATCH /api/notices/[id]</code>. The public board reads{" "}
-            <code className="rounded bg-paper px-1">GET /api/notices</code>. Files download from{" "}
-            <code className="rounded bg-paper px-1">GET /api/notices/[id]/file</code>.
-          </p>
+          <h2 className={compact ? "text-lg font-semibold text-ink" : "font-serif text-2xl font-bold text-ink"}>Notices</h2>
+          <p className="mt-1 max-w-2xl text-sm text-stone-500">Pinned notices appear on the homepage.</p>
         </div>
-        <Link href="/notices" className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-ink">
-          View on the site
-        </Link>
+        {!compact ? (
+          <Link href="/" className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-ink">
+            View homepage
+          </Link>
+        ) : null}
       </div>
 
       <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-5">
@@ -192,7 +184,7 @@ export function NoticeDesk() {
               </button>
             )}
           </div>
-          <p className="mt-1 text-xs text-stone-400">PDF, Word, image or text, under 2 MB. Text-only notices need no file.</p>
+          <p className="mt-1 text-xs text-stone-400">Optional PDF or image.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={busy} className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => void save()}>

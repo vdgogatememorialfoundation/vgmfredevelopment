@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asBoolean, fileFromForm, listNotices, publicNotice, queryNotices, scheduleFromForm, upsertNotice } from "@/lib/server/notices";
 import { corsHeaders } from "@/lib/server/mobile-feed";
+import { denyUnlessPortal } from "@/lib/server/portal-auth";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,10 @@ export async function GET(request: NextRequest) {
   const kind = request.nextUrl.searchParams.get("kind") ?? "";
   const year = request.nextUrl.searchParams.get("year") ?? "";
   const includeScheduled = request.nextUrl.searchParams.get("scheduled") === "1";
+  if (includeScheduled) {
+    const denied = denyUnlessPortal(request);
+    if (denied) return denied;
+  }
   const notices =
     q || category || kind || year
       ? queryNotices({ q, category, kind, year, includeScheduled })
@@ -28,6 +33,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
   try {
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("multipart/form-data")) {

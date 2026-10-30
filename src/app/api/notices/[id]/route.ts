@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { asBoolean, fileFromForm, getNotice, publicNotice, removeNotice, scheduleFromForm, upsertNotice } from "@/lib/server/notices";
+import { denyUnlessPortal } from "@/lib/server/portal-auth";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -11,6 +12,8 @@ export async function GET(_request: NextRequest, context: Params) {
 }
 
 export async function PATCH(request: NextRequest, context: Params) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
   const { id } = await context.params;
   const existing = getNotice(id);
   if (!existing) return NextResponse.json({ ok: false, error: "Notice not found." }, { status: 404 });
@@ -58,7 +61,9 @@ export async function PUT(request: NextRequest, context: Params) {
   return PATCH(request, context);
 }
 
-export async function DELETE(_request: NextRequest, context: Params) {
+export async function DELETE(request: NextRequest, context: Params) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
   const { id } = await context.params;
   if (!removeNotice(id)) return NextResponse.json({ ok: false, error: "Notice not found." }, { status: 404 });
   return NextResponse.json({ ok: true });

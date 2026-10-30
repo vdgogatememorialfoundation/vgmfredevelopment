@@ -49,6 +49,7 @@ import { AccountSearch } from "@/components/admin/AccountSearch";
 import { accountToDelivery } from "@/lib/account-search";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesFor } from "@/lib/geo";
 import { classNames, formatDateTime } from "@/lib/utils";
+import { AdminModal } from "@/components/admin/AdminModal";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
@@ -133,7 +134,7 @@ export function OrdersDashboard() {
           <p className="text-sm text-text-muted">Create orders, collect payment, book couriers, schedule pickups, print AWB labels, and handle returns and refunds.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setShowCreate((value) => !value)}>{showCreate ? "Close" : "+ Create order"}</Button>
+          <Button onClick={() => setShowCreate(true)}>+ Create order</Button>
           <Button variant="outline" onClick={() => exportOrdersCsv(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>Excel</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>PDF</Button>
           <Button variant="outline" onClick={refresh}>Refresh</Button>
@@ -189,17 +190,25 @@ export function OrdersDashboard() {
       )}
 
       {showCreate && (
-        <CreateOrderForm
-          onDone={(id) => {
-            refresh();
-            setShowCreate(false);
-            if (id) setSelectedId(id);
-          }}
-        />
+        <AdminModal title="Create order" wide onClose={() => setShowCreate(false)}>
+          <CreateOrderForm
+            onDone={(id) => {
+              refresh();
+              setShowCreate(false);
+              if (id) setSelectedId(id);
+            }}
+          />
+        </AdminModal>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-5">
-        <div className="xl:col-span-2">
+      {selected ? (
+        <AdminModal title={`Order #${selected.id}`} wide onClose={() => setSelectedId(null)}>
+          <OrderDetail key={`${selected.id}-${version}`} order={selected} onChanged={refresh} />
+        </AdminModal>
+      ) : null}
+
+      <div className="grid gap-5">
+        <div>
           <Panel
             title="All orders"
             description={`${filtered.length} of ${orders.length} orders`}
@@ -270,16 +279,6 @@ export function OrdersDashboard() {
               </ul>
             )}
           </Panel>
-        </div>
-
-        <div className="xl:col-span-3">
-          {selected ? (
-            <OrderDetail key={`${selected.id}-${version}`} order={selected} onChanged={refresh} />
-          ) : (
-            <Panel title="Order details">
-              <EmptyState text="Select an order to manage payment, courier booking, pickup, labels, returns and refunds." />
-            </Panel>
-          )}
         </div>
       </div>
     </div>

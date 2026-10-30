@@ -18,7 +18,7 @@ import {
   updateStock,
 } from "@/lib/product-data";
 import { useAllProducts } from "@/lib/use-cms";
-import { fileToDataUrl } from "@/lib/images";
+import { fileToStoredUrl } from "@/lib/images";
 import type { AdminCategory, Book, ProductMedia, PublisherInfo } from "@/types";
 import {
   Button,
@@ -489,7 +489,7 @@ function VideoFields({ videos, onChange }: { videos: ProductMedia[]; onChange: (
     if (!file) return;
     setBusy(true);
     try {
-      const src = await fileToDataUrl(file, 800, 0.7);
+      const src = await fileToStoredUrl(file);
       onChange([...videos, { type: "video", src, label: file.name }]);
     } finally {
       setBusy(false);
@@ -515,7 +515,7 @@ function VideoFields({ videos, onChange }: { videos: ProductMedia[]; onChange: (
         <Button variant="outline" onClick={() => fileRef.current?.click()}>{busy ? "Uploading…" : "Upload video still"}</Button>
       </div>
       <input ref={fileRef} type="file" accept="video/*,image/*" className="hidden" onChange={(event) => addFile(event.target.files?.[0])} />
-      <p className="text-xs text-text-muted">Paste a YouTube link, or upload a still. Large video files will not fit in browser storage.</p>
+      <p className="text-xs text-text-muted">Paste a YouTube link, or upload a file to media storage.</p>
     </div>
   );
 }

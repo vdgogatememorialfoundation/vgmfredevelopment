@@ -15,7 +15,7 @@ function noticeItems(notices: Notice[]): TickerItem[] {
     id: `notice-${notice.id}`,
     title: notice.title,
     category: notice.category || "Notice",
-    href: notice.href || `/notices#${notice.id}`,
+    href: notice.href || `/#notices`,
     date: notice.date,
   }));
 }

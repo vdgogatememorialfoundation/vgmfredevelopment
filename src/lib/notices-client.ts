@@ -11,7 +11,7 @@ export async function fetchNotices(query?: { q?: string; category?: string; kind
   if (query?.kind) params.set("kind", query.kind);
   if (query?.year) params.set("year", query.year);
   const suffix = params.size ? `?${params}` : "";
-  const response = await fetch(`/api/notices${suffix}`, { cache: "no-store" });
+  const response = await fetch(`/api/notices${suffix}`, { cache: "no-store", credentials: "same-origin" });
   const data = (await response.json()) as { ok: boolean; notices?: PublicNotice[]; error?: string };
   if (!response.ok || !data.ok) throw new Error(data.error || "Could not load notices.");
   return data.notices ?? [];
@@ -54,7 +54,7 @@ function persistLocal(notice: PublicNotice, extra?: { attachment?: string; publi
     fileName: notice.fileName,
     fileType: notice.fileType,
     pinned: notice.pinned,
-    href: notice.href || `/notices#${notice.id}`,
+    href: notice.href || `/#notices`,
     publishAt: extra?.publishAt ?? notice.publishAt,
     unpublishAt: extra?.unpublishAt ?? notice.unpublishAt,
   };
@@ -78,7 +78,7 @@ export async function publishNotice(input: {
 }) {
   const path = input.id ? `/api/notices/${input.id}` : "/api/notices";
   const method = input.id ? "PATCH" : "POST";
-  const response = await fetch(path, { method, body: toForm(input) });
+  const response = await fetch(path, { method, body: toForm(input), credentials: "same-origin" });
   const data = (await response.json()) as { ok: boolean; notice?: PublicNotice; error?: string };
   if (!response.ok || !data.ok || !data.notice) throw new Error(data.error || "Could not publish the notice.");
   persistLocal(data.notice, {
@@ -90,6 +90,6 @@ export async function publishNotice(input: {
 }
 
 export async function deleteNotice(id: string) {
-  await fetch(`/api/notices/${id}`, { method: "DELETE" }).catch(() => undefined);
+  await fetch(`/api/notices/${id}`, { method: "DELETE", credentials: "same-origin" }).catch(() => undefined);
   hideNotice(id);
 }

@@ -196,8 +196,8 @@ export function ensureBootstrapped() {
   writeJSON(BOOT_KEY, "1");
 }
 
-export const ADMIN_PASSWORD = "admin123";
-export const STAFF_PASSWORD = "staff123";
+const ADMIN_PASSWORD = "admin123";
+const STAFF_PASSWORD = "staff123";
 
 export function ensureAdminCredentials() {
   if (typeof window === "undefined") return;

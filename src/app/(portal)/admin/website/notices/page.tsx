@@ -1,12 +1,12 @@
 ﻿"use client";
 
-import ClientOnly from "@/components/common/ClientOnly";
-import { NoticeDesk } from "@/components/admin/NoticeDesk";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Page() {
-  return (
-    <ClientOnly>
-      <NoticeDesk />
-    </ClientOnly>
-  );
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/admin");
+  }, [router]);
+  return null;
 }

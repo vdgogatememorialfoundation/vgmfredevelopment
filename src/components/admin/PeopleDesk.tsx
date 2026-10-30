@@ -17,6 +17,7 @@ import { getSession } from "@/lib/auth";
 import { generatePassword } from "@/lib/passwords";
 import { getRoles, type StaffRole } from "@/lib/roles";
 import type { AccountStatus, User, UserRole } from "@/types";
+import { AdminModal } from "@/components/admin/AdminModal";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const primary = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -48,11 +49,11 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
   const [accounts, setAccounts] = useState<User[]>(() => refreshRole(role));
   const [form, setForm] = useState({ ...emptyForm });
   const [message, setMessage] = useState("");
-  const [createdPassword, setCreatedPassword] = useState("");
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [creating, setCreating] = useState(false);
   const [mail, setMail] = useState({ subject: "", body: "" });
   const [mailNote, setMailNote] = useState("");
   const label = role === "staff" ? "staff" : "doctor";
@@ -100,26 +101,31 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
       role: createdRole,
       staffRoleId: createdRole === "staff" ? form.staffRoleId : undefined,
     });
-    setCreatedPassword(created.password ?? "");
     setMessage(`Created. ${created.firstName} can sign in at ${loginPath}${createdRole === "coadmin" ? " as a co-administrator" : ""}. The password was emailed to ${created.email}.`);
     setForm({ ...emptyForm, staffRoleId: form.staffRoleId });
     refresh();
+    setCreating(false);
     setSelectedEmail(created.email);
     setEditing(false);
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">{role === "staff" ? "Staff & co-admin accounts" : "Doctor accounts"}</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Search by name, phone or email. Co-administrators sign in at /staff with full module access. The system sets a password automatically and emails it.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">{role === "staff" ? "Staff & co-admin accounts" : "Doctor accounts"}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Search by name, phone or email. Co-administrators sign in on the staff portal with full module access.
+          </p>
+        </div>
+        <button type="button" className={primary} onClick={() => setCreating(true)}>
+          + Add {label}
+        </button>
       </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold text-slate-900">Add {label}</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      {creating && (
+        <AdminModal title={`Add ${label}`} wide onClose={() => setCreating(false)}>
+        <div className="grid gap-3 sm:grid-cols-3">
           <input className={field} placeholder="First name" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
           <input className={field} placeholder="Last name" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
           <input className={field} placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
@@ -148,12 +154,8 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
           Create {label} account
         </button>
         {message && <p className="mt-3 text-sm text-emerald-700">{message}</p>}
-        {createdPassword && (
-          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Generated password: <span className="font-mono font-semibold">{createdPassword}</span>
-          </p>
-        )}
-      </section>
+        </AdminModal>
+      )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Email {people}</h2>
@@ -225,17 +227,19 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
       </ul>
 
       {selected && (
-        <AccountDetail
-          account={selected}
-          roles={roles}
-          editing={editing}
-          onClose={() => setSelectedEmail(null)}
-          onEdit={() => setEditing(true)}
-          onSaved={() => {
-            refresh();
-            setEditing(false);
-          }}
-        />
+        <AdminModal title={editing ? "Edit account" : "Account"} wide onClose={() => setSelectedEmail(null)}>
+          <AccountDetail
+            account={selected}
+            roles={roles}
+            editing={editing}
+            onClose={() => setSelectedEmail(null)}
+            onEdit={() => setEditing(true)}
+            onSaved={() => {
+              refresh();
+              setEditing(false);
+            }}
+          />
+        </AdminModal>
       )}
     </div>
   );
@@ -366,7 +370,7 @@ function AccountDetail({
     email: account.email,
     phone: account.phone,
     staffRoleId: account.staffRoleId ?? "general-staff",
-    password: account.password ?? "",
+    password: "",
   });
   const [note, setNote] = useState("");
   const [mail, setMail] = useState({ subject: "", body: "" });
@@ -392,9 +396,9 @@ function AccountDetail({
     const password = generatePassword();
     updateAccount(account.email, { password });
     recordActivity({ email: account.email, kind: "password", by: currentActorEmail(), detail: "Password reset" });
-    setDraft({ ...draft, password });
+    setDraft({ ...draft, password: "" });
     sendAccountDetails(draft.email.trim() || account.email);
-    setNote(`Password reset to ${password} and emailed.`);
+    setNote("A new password was emailed.");
     onSaved();
   };
 
@@ -426,7 +430,7 @@ function AccountDetail({
               ))}
             </select>
           )}
-          <input className={field} value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} />
+          <input className={field} type="password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} placeholder="Leave blank to keep the current password" autoComplete="new-password" />
           <div className="sm:col-span-2 flex flex-wrap gap-2">
             <button type="button" className={primary} onClick={save}>Save changes</button>
             <button type="button" className={ghost} onClick={resetPassword}>Reset password and email</button>
@@ -437,7 +441,7 @@ function AccountDetail({
           <Detail label="Account ID" value={account.accountId ?? "—"} />
           <Detail label="Email" value={account.email} />
           <Detail label="Phone" value={account.phone} />
-          <Detail label="Password" value={account.password || "—"} />
+          <Detail label="Password" value="••••••••" />
           <Detail label="Status" value={account.status ?? "active"} />
           <Detail label="Created" value={account.createdAt ? new Date(account.createdAt).toLocaleString("en-IN") : "—"} />
           <Detail label="Last login" value={lastLogin ? new Date(lastLogin.at).toLocaleString("en-IN") : "Never"} />

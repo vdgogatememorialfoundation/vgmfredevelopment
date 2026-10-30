@@ -8,7 +8,7 @@ const links = [
   ["Slideshow images", "/admin/website/flyers", "/"],
   ["Banners", "/admin/website/banners", "/"],
   ["Articles", "/admin/articles", "/articles"],
-  ["Notices", "/admin/website/notices", "/notices"],
+  ["Notices", "/admin", "/#notices"],
 ];
 
 export default function Page() {

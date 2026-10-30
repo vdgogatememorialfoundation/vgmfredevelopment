@@ -1,6 +1,9 @@
 import type { User } from "@/types";
 
 export const SESSION_KEY = "vgmf_session";
+export const PORTAL_SESSION_KEY = "vgmf_admin_session";
+export type SessionScope = "public" | "portal";
+
 const ACCOUNTS_KEY = "vgmf_accounts";
 const SECURITY_SETTINGS_KEY = "vgmf_settings_security";
 /** Chrome caps Max-Age at 400 days; keep the cookie for that full window. */
@@ -9,6 +12,23 @@ const COOKIE_MAX_BYTES = 3500;
 
 function browser() {
   return typeof globalThis.window !== "undefined" && typeof globalThis.window.localStorage !== "undefined";
+}
+
+export function isPortalRole(role?: string | null) {
+  return role === "admin" || role === "coadmin" || role === "staff" || role === "doctor";
+}
+
+export function scopeFromPath(pathname = browser() ? globalThis.window.location.pathname : "") {
+  if (pathname.startsWith("/admin") || pathname.startsWith("/staff") || pathname.startsWith("/doctor")) return "portal" as const;
+  return "public" as const;
+}
+
+export function scopeForUser(user: Pick<User, "role">) {
+  return isPortalRole(user.role) ? "portal" : "public";
+}
+
+function storageKey(scope: SessionScope) {
+  return scope === "portal" ? PORTAL_SESSION_KEY : SESSION_KEY;
 }
 
 export function persistUntilLogoutEnabled() {
@@ -33,8 +53,9 @@ function parseUser(raw: string | null | undefined): User | null {
 }
 
 function stripPassword(user: User): User {
-  const { password: _password, ...rest } = user;
-  return rest;
+  const copy = { ...user };
+  delete copy.password;
+  return copy;
 }
 
 function readCookie(name: string) {
@@ -57,16 +78,16 @@ function cookieFlags(maxAge: number) {
   return `Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
-function writeSessionCookie(user: User) {
+function writeSessionCookie(scope: SessionScope, user: User) {
   if (typeof globalThis.document === "undefined") return;
   const value = encodeURIComponent(JSON.stringify(stripPassword(user)));
   if (value.length > COOKIE_MAX_BYTES) return;
-  globalThis.document.cookie = `${SESSION_KEY}=${value}; ${cookieFlags(SESSION_COOKIE_MAX_AGE)}`;
+  globalThis.document.cookie = `${storageKey(scope)}=${value}; ${cookieFlags(SESSION_COOKIE_MAX_AGE)}`;
 }
 
-function clearSessionCookie() {
+function clearSessionCookie(scope: SessionScope) {
   if (typeof globalThis.document === "undefined") return;
-  globalThis.document.cookie = `${SESSION_KEY}=; ${cookieFlags(0)}`;
+  globalThis.document.cookie = `${storageKey(scope)}=; ${cookieFlags(0)}`;
 }
 
 let notifyingSession = false;
@@ -81,42 +102,80 @@ function notifySessionChanged() {
   }
 }
 
-function restoreFromCookie(): User | null {
-  const fromCookie = parseUser(readCookie(SESSION_KEY));
-  if (!fromCookie) return null;
-  const account = getAllAccounts().find(
-    (item) => item.email.toLowerCase() === fromCookie.email.toLowerCase()
-  );
-  const restored = account ? { ...account, ...fromCookie, password: account.password } : fromCookie;
+function mergeAccount(user: User): User {
+  const account = getAllAccounts().find((item) => item.email.toLowerCase() === user.email.toLowerCase());
+  return account ? { ...account, ...user, password: account.password } : user;
+}
+
+let migrated = false;
+
+function migrateLegacyAdminSession() {
+  if (!browser() || migrated) return;
+  migrated = true;
+  const legacy = parseUser(globalThis.window.localStorage.getItem(SESSION_KEY)) ?? parseUser(readCookie(SESSION_KEY));
+  if (!legacy || !isPortalRole(legacy.role)) return;
+  if (parseUser(globalThis.window.localStorage.getItem(PORTAL_SESSION_KEY)) || parseUser(readCookie(PORTAL_SESSION_KEY))) {
+    globalThis.window.localStorage.removeItem(SESSION_KEY);
+    clearSessionCookie("public");
+    return;
+  }
   try {
-    globalThis.window.localStorage.setItem(SESSION_KEY, JSON.stringify(restored));
+    globalThis.window.localStorage.setItem(PORTAL_SESSION_KEY, JSON.stringify(legacy));
+  } catch {
+    /* quota */
+  }
+  writeSessionCookie("portal", legacy);
+  globalThis.window.localStorage.removeItem(SESSION_KEY);
+  clearSessionCookie("public");
+}
+
+function restoreFromCookie(scope: SessionScope): User | null {
+  const fromCookie = parseUser(readCookie(storageKey(scope)));
+  if (!fromCookie) return null;
+  if (scope === "public" && isPortalRole(fromCookie.role)) return null;
+  if (scope === "portal" && !isPortalRole(fromCookie.role)) return null;
+  const restored = mergeAccount(fromCookie);
+  try {
+    globalThis.window.localStorage.setItem(storageKey(scope), JSON.stringify(stripPassword(restored)));
   } catch {
     /* quota / private mode — cookie still holds the session */
   }
   return restored;
 }
 
-export function getSession(): User | null {
+export function getSession(scope?: SessionScope): User | null {
   if (!browser()) return null;
-  const fromStorage = parseUser(globalThis.window.localStorage.getItem(SESSION_KEY));
+  migrateLegacyAdminSession();
+  const resolved = scope ?? scopeFromPath();
+  const fromStorage = parseUser(globalThis.window.localStorage.getItem(storageKey(resolved)));
   if (fromStorage) {
-    if (persistUntilLogoutEnabled() && !readCookie(SESSION_KEY)) writeSessionCookie(fromStorage);
+    if (resolved === "public" && isPortalRole(fromStorage.role)) {
+      migrateLegacyAdminSession();
+      return null;
+    }
+    if (resolved === "portal" && !isPortalRole(fromStorage.role)) return null;
+    if (persistUntilLogoutEnabled() && !readCookie(storageKey(resolved))) writeSessionCookie(resolved, fromStorage);
     return fromStorage;
   }
-  return persistUntilLogoutEnabled() ? restoreFromCookie() : null;
+  return persistUntilLogoutEnabled() ? restoreFromCookie(resolved) : null;
 }
 
-export function setSession(user: User) {
+export function setSession(user: User, scope?: SessionScope) {
   if (!browser()) return;
-  globalThis.window.localStorage.setItem(SESSION_KEY, JSON.stringify(user));
-  writeSessionCookie(user);
+  let resolved = scope ?? scopeForUser(user);
+  if (isPortalRole(user.role)) resolved = "portal";
+  else if (resolved === "portal") resolved = "public";
+  const stored = stripPassword(user);
+  globalThis.window.localStorage.setItem(storageKey(resolved), JSON.stringify(stored));
+  writeSessionCookie(resolved, stored);
   notifySessionChanged();
 }
 
-export function clearSession() {
+export function clearSession(scope?: SessionScope) {
   if (!browser()) return;
-  globalThis.window.localStorage.removeItem(SESSION_KEY);
-  clearSessionCookie();
+  const resolved = scope ?? scopeFromPath();
+  globalThis.window.localStorage.removeItem(storageKey(resolved));
+  clearSessionCookie(resolved);
   notifySessionChanged();
 }
 
