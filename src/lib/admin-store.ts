@@ -341,6 +341,7 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
     createdAt: new Date().toISOString(),
     createdBy: currentActor(),
     password: generatePassword(),
+    foundationPasswordSet: true,
   };
   saveAccount(account);
   recordActivity({ email: account.email, kind: "created", by: currentActorEmail(), detail: "Customer account created" });
@@ -395,7 +396,9 @@ export function sendAccountDetails(email: string, isNew = false) {
     role === "customer" ? `Store credit balance: ₹${(account.storeCredit ?? 0).toLocaleString("en-IN")}` : `Role: ${role}`,
     "",
     "How to sign in",
-    `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`,
+    account.partnerPortals?.length && !account.foundationPasswordSet
+      ? `Open ${signIn} and use Forgot password to set a Foundation website password. Seminar, Autism and Fellowship passwords are not used on this site.`
+      : `Open ${signIn} and sign in with ${account.email}${account.password ? ` and password ${account.password}` : ""}. Please change the password after you sign in.`,
     "",
     "If you did not expect this email, contact us at support@vaidyagogate.org.",
     "",

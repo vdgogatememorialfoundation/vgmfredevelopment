@@ -196,18 +196,18 @@ function CustomerFields({
 
 function PasswordReveal({ account }: { account: User }) {
   const [open, setOpen] = useState(false);
-  const hashedOnly = Boolean(account.partnerPasswordSet && !account.password);
+  const sisterOnly = Boolean(account.partnerPortals?.length && !account.foundationPasswordSet);
   return (
     <p className="mt-1 text-xs text-text-muted">
       Password:{" "}
-      {hashedOnly ? (
-        <span>set on the Seminar / Autism portal (not shown — hashed). Sign-in accepts that password, Email OTP, or a Foundation reset.</span>
+      {sisterOnly ? (
+        <span>not set on this website. Seminar / Autism / Fellowship passwords are not used here — the customer must use Forgot password on this site.</span>
       ) : open ? (
         <span className="font-mono">{account.password || "Not set"}</span>
       ) : (
         "••••••••"
       )}{" "}
-      {!hashedOnly && (
+      {!sisterOnly && (
         <button type="button" className="font-semibold text-burgundy" onClick={() => setOpen((value) => !value)}>
           {open ? "Hide" : "Show"}
         </button>

@@ -87,7 +87,9 @@ export function ForgotPasswordForm({
       {step === "identify" ? (
         <form onSubmit={(event) => void submitIdentify(event)} className="space-y-5">
           <h2 className="text-xl font-semibold text-text-primary">Forgot your password?</h2>
-          <p className="text-sm text-text-muted">Enter the email, phone or account ID on the account. We will send a reset code.</p>
+          <p className="text-sm text-text-muted">
+            Enter the email, phone or account ID. We will send a reset code for this Foundation website. Seminar, Autism and Fellowship passwords stay on those sites and cannot be used here.
+          </p>
           <input
             className="input-field"
             value={identifier}
@@ -124,7 +126,8 @@ export function ForgotPasswordForm({
       ) : null}
       {step === "password" ? (
         <form onSubmit={submitPassword} className="space-y-5">
-          <h2 className="text-xl font-semibold text-text-primary">Choose a new password</h2>
+          <h2 className="text-xl font-semibold text-text-primary">Choose a new Foundation password</h2>
+          <p className="text-sm text-text-muted">This password is only for this website. It does not change your Seminar, Autism or Fellowship login.</p>
           <input
             className="input-field"
             type="password"
@@ -150,7 +153,8 @@ export function ForgotPasswordForm({
       {step === "done" ? (
         <div className="text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-burgundy">Password updated</p>
-          <h2 className="mt-2 text-xl font-semibold text-text-primary">You can sign in with the new password.</h2>
+          <h2 className="mt-2 text-xl font-semibold text-text-primary">You can sign in with the new Foundation password.</h2>
+          <p className="mt-2 text-sm text-text-muted">Your Seminar, Autism and Fellowship passwords are unchanged.</p>
           {onBack ? (
             <button type="button" className="btn-primary mt-6" onClick={onBack}>
               Return to sign in

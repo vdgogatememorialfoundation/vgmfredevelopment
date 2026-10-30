@@ -1,6 +1,6 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { Pool } from "pg";
-import { accountMatchesIdentifier, phoneDigits } from "@/lib/account-identity";
+import { accountMatchesIdentifier } from "@/lib/account-identity";
 import { upsertNotice } from "@/lib/server/notices";
 import { partnerCategory, partnerPortalHref, partnerPortalIds, partnerTicketHref, portalBadge } from "@/lib/partner-labels";
 import { AUTISM_ORIGIN, FELLOWSHIP_ORIGIN, SEMINAR_ORIGIN, asList, asRecord, textField } from "@/lib/partner-certificates";
@@ -69,44 +69,6 @@ export function emptySnapshot(): PartnerSnapshot {
   };
 }
 
-export function looksHashedPassword(value: string) {
-  const stored = value.trim();
-  if (!stored) return false;
-  return (
-    /^\$2[aby]\$\d{2}\$/.test(stored) ||
-    /^\$argon2/i.test(stored) ||
-    /^[a-f0-9]{32}$/i.test(stored) ||
-    /^[a-f0-9]{64}$/i.test(stored)
-  );
-}
-
-function safeEqual(left: string, right: string) {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
-export async function verifyStoredPassword(stored: string, given: string) {
-  const secret = stored.trim();
-  const password = given.trim();
-  if (!secret || !password) return false;
-  if (secret === password) return true;
-  const md5 = createHash("md5").update(password).digest("hex");
-  const sha256 = createHash("sha256").update(password).digest("hex");
-  if (/^[a-f0-9]{32}$/i.test(secret) && safeEqual(secret.toLowerCase(), md5)) return true;
-  if (/^[a-f0-9]{64}$/i.test(secret) && safeEqual(secret.toLowerCase(), sha256)) return true;
-  if (/^\$2[aby]\$/.test(secret)) {
-    try {
-      const bcrypt = await import("bcryptjs");
-      return bcrypt.compare(password, secret);
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
 export function clientPartnerSnapshot(snapshot: PartnerSnapshot, opts?: { includePasswords?: boolean }) {
   return {
     syncedAt: snapshot.syncedAt,
@@ -121,11 +83,12 @@ export function clientPartnerSnapshot(snapshot: PartnerSnapshot, opts?: { includ
 }
 
 export function sanitizeAccountForClient(account: SanitizedPartnerAccount, opts?: { includePasswords?: boolean }) {
-  const password = opts?.includePasswords && account.password && !looksHashedPassword(account.password) ? account.password : undefined;
+  void opts;
   return {
     ...account,
-    password,
-    partnerPasswordSet: Boolean(account.partnerPasswordSet || account.password),
+    password: undefined,
+    partnerPasswordSet: false,
+    foundationPasswordSet: Boolean(account.foundationPasswordSet),
   };
 }
 
@@ -502,8 +465,6 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
   const sourceId = String(row.id ?? email);
   const doctor = portal === "seminar" || extras.hasProfile || /doctor/i.test(`${roleRaw} ${userRole}`);
   const disabled = asNumber(row.is_disabled) === 1 || asNumber(row.is_banned) === 1;
-  const rawPassword = str(row, ["password", "password_hash"]);
-  const hashed = looksHashedPassword(rawPassword);
   const phone = str(row, ["phone", "contact_number", "mobile"]);
   const named = splitPersonName(str(row, ["full_name", "name"]));
   const firstName = str(row, ["first_name", "firstName"]) || named.first || "Member";
@@ -523,8 +484,9 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
       alternatePhone,
       accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string", "user_id"])),
       role: "customer",
-      password: hashed || !rawPassword ? undefined : rawPassword,
-      partnerPasswordSet: Boolean(rawPassword),
+      password: undefined,
+      partnerPasswordSet: false,
+      foundationPasswordSet: false,
       status: disabled ? "disabled" : "active",
       statusReason: disabled ? str(row, ["ban_reason"]) || undefined : undefined,
       createdAt: iso(row.created_at) || undefined,
@@ -538,7 +500,7 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
         }),
       ],
     },
-    passwordHash: hashed ? rawPassword : undefined,
+    passwordHash: undefined,
   };
 }
 
@@ -912,8 +874,9 @@ function mergeAccounts(list: SanitizedPartnerAccount[]) {
       id: existing.id,
       accountId: existing.accountId,
       role: protectedRole ? existing.role : "customer",
-      password: existing.password || account.password,
-      partnerPasswordSet: Boolean(existing.partnerPasswordSet || account.partnerPasswordSet || existing.password || account.password),
+      password: undefined,
+      partnerPasswordSet: false,
+      foundationPasswordSet: Boolean(existing.foundationPasswordSet || account.foundationPasswordSet),
       alternatePhone: existing.alternatePhone || account.alternatePhone,
       partnerPortals: portals,
     });
@@ -1018,7 +981,6 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
       email: accountRow.email,
       phone: accountRow.phone,
       whatsapp: accountRow.whatsapp || accountRow.phone,
-      password: accountRow.password || accountRow.password_hash,
       full_name: accountRow.name || accountRow.full_name,
       role: accountRow.role || (portal === "seminar" ? "doctor" : "user"),
       user_role: accountRow.user_role || accountRow.role,
@@ -1121,28 +1083,6 @@ export function accountsForEmail(snapshot: PartnerSnapshot, email: string) {
   };
 }
 
-async function verifyAgainstLiveDatabases(identifier: string, password: string) {
-  const email = identifier.includes("@") ? identifier.trim().toLowerCase() : "";
-  const digits = phoneDigits(identifier);
-  for (const portal of partnerPortalIds) {
-    const passwordSql = portal === "fellowship" ? "password_hash AS password" : "password";
-    const rows = await queryRows(
-      portal,
-      `SELECT email, phone, ${passwordSql}
-         FROM users
-        WHERE ($1 <> '' AND lower(email) = $1)
-           OR ($2 <> '' AND right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = $2)
-        LIMIT 8`,
-      [email, digits]
-    );
-    if (!rows?.length) continue;
-    for (const row of rows) {
-      if (await verifyStoredPassword(str(row, ["password"]), password)) return true;
-    }
-  }
-  return false;
-}
-
 export async function lookupPartnerIdentity(input: {
   identifier?: string;
   email?: string;
@@ -1150,6 +1090,7 @@ export async function lookupPartnerIdentity(input: {
   alternatePhone?: string;
   password?: string;
 }) {
+  void input.password;
   const snapshot = await loadPartnerSnapshot();
   const candidates = [input.identifier, input.email, input.phone, input.alternatePhone]
     .map((value) => (value ?? "").trim())
@@ -1159,32 +1100,13 @@ export async function lookupPartnerIdentity(input: {
     account = findPartnerAccount(snapshot, candidate);
     if (account) break;
   }
-  const password = (input.password ?? "").trim();
-  let passwordOk = false;
-  if (account && password) {
-    if (account.password && (await verifyStoredPassword(account.password, password))) passwordOk = true;
-    const hashes = Object.entries(snapshot.passwordHashes ?? {})
-      .filter(([key]) => key === account!.email || key.endsWith(`:${account!.email}`))
-      .map(([, hash]) => hash);
-    if (!passwordOk) {
-      for (const hash of hashes) {
-        if (await verifyStoredPassword(hash, password)) {
-          passwordOk = true;
-          break;
-        }
-      }
-    }
-    if (!passwordOk) passwordOk = await verifyAgainstLiveDatabases(account.email, password);
-  } else if (!account && password) {
-    passwordOk = await verifyAgainstLiveDatabases(candidates[0] ?? "", password);
-  }
   const email = account?.email ?? "";
   const related = email ? accountsForEmail(snapshot, email) : { account, tickets: [], payments: [] };
   const resolved = related.account ?? account;
   return {
     found: Boolean(resolved),
-    passwordOk,
-    passwordSet: Boolean(resolved?.partnerPasswordSet || resolved?.password || (resolved && snapshot.passwordHashes && Object.keys(snapshot.passwordHashes).some((key) => key.endsWith(`:${resolved.email}`)))),
+    passwordOk: false,
+    passwordSet: false,
     account: resolved ? sanitizeAccountForClient(resolved, { includePasswords: false }) : null,
     tickets: related.tickets,
     payments: related.payments,

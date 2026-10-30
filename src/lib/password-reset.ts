@@ -41,7 +41,7 @@ export function applyPasswordReset(email: string, role: ResetRole, code: string,
   if (next.length < 6) return "Use at least 6 characters.";
   const invalid = verifyEmailOtp(email, otpRole(role), code);
   if (invalid) return invalid;
-  updateAccount(email, { password: next });
+  updateAccount(email, { password: next, foundationPasswordSet: true, partnerPasswordSet: false });
   return null;
 }
 
@@ -50,7 +50,9 @@ export function changeAccountPassword(email: string, current: string, nextPasswo
   if (!account) return "Account not found.";
   const next = nextPassword.trim();
   if (next.length < 6) return "Use at least 6 characters.";
-  if (account.password && account.password !== current) return "Current password is incorrect.";
-  updateAccount(email, { password: next });
+  if (account.foundationPasswordSet || !account.partnerPortals?.length) {
+    if (account.password && account.password !== current) return "Current password is incorrect.";
+  }
+  updateAccount(email, { password: next, foundationPasswordSet: true, partnerPasswordSet: false });
   return null;
 }

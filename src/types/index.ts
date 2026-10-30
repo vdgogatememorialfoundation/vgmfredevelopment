@@ -359,7 +359,9 @@ export interface User {
   accountId?: string;
   role?: UserRole;
   password?: string;
-  /** Sister portal has a password (often hashed, so VGMF cannot display it). */
+  /** True only after a password is set on this Foundation website (forgot-password, signup, or admin). */
+  foundationPasswordSet?: boolean;
+  /** @deprecated Sister-site passwords are never used on VGMF. */
   partnerPasswordSet?: boolean;
   staffRoleId?: string;
   status?: AccountStatus;

@@ -5,12 +5,12 @@ import { useEffect, useState } from "react";
 import OtpForm from "@/components/account/OtpForm";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
 import { useAuth } from "@/components/auth/AuthContext";
-import { findAccountByIdentifier, loginBlockReason, saveAccount } from "@/lib/auth";
+import { findAccountByIdentifier, loginBlockReason } from "@/lib/auth";
 import { sendOtpCode } from "@/lib/admin-store";
 import { getAuthAccess } from "@/lib/auth-access";
 import { subscribeCms } from "@/lib/cms";
 import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
-import { lookupPartnerAccount } from "@/lib/partner-hydrate";
+import { hasFoundationPassword, lookupPartnerAccount, SISTER_PASSWORD_HINT } from "@/lib/partner-hydrate";
 import type { User } from "@/types";
 
 type Step = "identifier" | "otp" | "forgot" | "complete";
@@ -83,20 +83,13 @@ export default function SignInFlow() {
 
   const resolveAccount = async () => {
     const local = findAccountByIdentifier(identifier);
-    const remote = await lookupPartnerAccount({
-      identifier,
-      password: method === "password" ? password : undefined,
-    });
+    const remote = await lookupPartnerAccount({ identifier });
     const account = findAccountByIdentifier(identifier) || remote.account || local;
-    if (account && remote.passwordOk && password) {
-      const next = { ...account, password, partnerPasswordSet: true, role: account.role === "admin" || account.role === "coadmin" || account.role === "staff" ? account.role : "customer" as const };
-      saveAccount(next);
-      return { account: next, passwordOk: true, passwordSet: true };
-    }
+    const vgmfReady = hasFoundationPassword(account);
     return {
       account,
-      passwordOk: remote.passwordOk || Boolean(local?.password && password && local.password === password),
-      passwordSet: remote.passwordSet || Boolean(account?.password || account?.partnerPasswordSet),
+      passwordOk: Boolean(vgmfReady && account?.password && password && account.password === password),
+      needsFoundationPassword: Boolean(account?.partnerPortals?.length && !vgmfReady),
     };
   };
 
@@ -137,15 +130,11 @@ export default function SignInFlow() {
         return;
       }
       if (!resolved.passwordOk) {
-        if (!account.password && resolved.passwordSet) {
-          setError(
-            access.emailOtp
-              ? "This account is linked from a sister portal. Use Email OTP, forgot password, or the original Seminar / Autism / Fellowship password."
-              : "This account is linked from a sister portal. Use forgot password to set a Foundation password, or sign in with the original Seminar / Autism / Fellowship password."
-          );
+        if (resolved.needsFoundationPassword) {
+          setError(SISTER_PASSWORD_HINT);
           return;
         }
-        setError("Incorrect password. Use forgot password if you need a reset.");
+        setError("Incorrect password. Use Forgot password if you need a reset.");
         return;
       }
       if (!access.emailOtp) {
@@ -276,8 +265,8 @@ export default function SignInFlow() {
             : method === "otp"
               ? "Sign in with a one-time code emailed to your registered address."
               : access.emailOtp
-                ? "Sign in with your password. We then email a one-time code — both are required."
-                : "Sign in with your registered email, phone or account ID and password."}
+                ? "Sign in with your Foundation website password. We then email a one-time code — both are required. Seminar, Autism and Fellowship passwords are not used here."
+                : "Sign in with your Foundation website password. Seminar, Autism and Fellowship passwords are not used here — use Forgot password to set a new one."}
         </p>
       </div>
 

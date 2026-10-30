@@ -45,6 +45,25 @@ function mergeById<T extends { id: string }>(current: T[], incoming: T[], partne
   return [...map.values()];
 }
 
+export const SISTER_PASSWORD_HINT =
+  "Seminar, Autism and Fellowship passwords are not used on this website. Use Forgot password to set a new password for the Foundation site.";
+
+export function hasFoundationPassword(account: Pick<User, "password" | "foundationPasswordSet" | "partnerPortals" | "role"> | null | undefined) {
+  if (!account) return false;
+  if (account.role === "admin" || account.role === "coadmin" || account.role === "staff") return Boolean(account.password);
+  if (account.foundationPasswordSet && account.password) return true;
+  if (account.partnerPortals?.length) return false;
+  return Boolean(account.password);
+}
+
+function scrubSisterLogin(account: User): User {
+  const protectedRole = account.role === "admin" || account.role === "coadmin" || account.role === "staff";
+  if (protectedRole) return account;
+  if (!account.partnerPortals?.length) return account;
+  if (account.foundationPasswordSet) return { ...account, partnerPasswordSet: false };
+  return { ...account, password: undefined, partnerPasswordSet: false };
+}
+
 function mergePortals(existing: User, incoming: User): User {
   const portals = [...(existing.partnerPortals ?? [])];
   for (const portal of incoming.partnerPortals ?? []) {
@@ -53,6 +72,10 @@ function mergePortals(existing: User, incoming: User): User {
     else portals.push(portal);
   }
   const protectedRole = existing.role === "admin" || existing.role === "coadmin" || existing.role === "staff";
+  const keepPassword =
+    protectedRole ||
+    Boolean(existing.foundationPasswordSet) ||
+    Boolean(existing.password && !existing.partnerPortals?.length);
   return {
     ...existing,
     partnerPortals: portals,
@@ -62,8 +85,9 @@ function mergePortals(existing: User, incoming: User): User {
     phone: existing.phone || incoming.phone,
     whatsapp: existing.whatsapp || incoming.whatsapp || incoming.phone,
     alternatePhone: existing.alternatePhone || incoming.alternatePhone,
-    password: existing.password || incoming.password,
-    partnerPasswordSet: Boolean(existing.partnerPasswordSet || incoming.partnerPasswordSet || existing.password || incoming.password),
+    password: keepPassword ? existing.password : undefined,
+    foundationPasswordSet: Boolean(existing.foundationPasswordSet || (keepPassword && existing.password)),
+    partnerPasswordSet: false,
   };
 }
 
@@ -74,11 +98,12 @@ function applyAccounts(incoming: User[]) {
   for (const account of incoming) {
     const key = account.email.toLowerCase();
     const existing = byEmail.get(key);
-    const incomingRole =
+    const incomingRole: User["role"] =
       account.role === "admin" || account.role === "coadmin" || account.role === "staff" ? account.role : "customer";
-    byEmail.set(key, existing ? mergePortals(existing, { ...account, role: incomingRole }) : { ...account, role: incomingRole });
+    const incomingClean: User = { ...account, role: incomingRole, password: undefined, partnerPasswordSet: false };
+    byEmail.set(key, existing ? mergePortals(existing, incomingClean) : incomingClean);
   }
-  writeJSON(ACCOUNTS_KEY, [...byEmail.values()]);
+  writeJSON(ACCOUNTS_KEY, [...byEmail.values()].map(scrubSisterLogin));
 }
 
 function applySession() {
@@ -194,8 +219,8 @@ export async function lookupPartnerAccount(input: {
           data.account.role === "admin" || data.account.role === "coadmin" || data.account.role === "staff"
             ? data.account.role
             : "customer",
-        password: input.password && data.passwordOk ? input.password : data.account.password,
-        partnerPasswordSet: data.passwordSet || data.account.partnerPasswordSet,
+        password: undefined,
+        partnerPasswordSet: false,
       };
       applyAccounts([hydrated]);
     }
