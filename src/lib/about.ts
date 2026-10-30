@@ -2,6 +2,8 @@ import { subscribeCms } from "@/lib/cms";
 import { useSyncExternalStore } from "react";
 
 const KEY = "vgmf_about";
+/** Bump when default copy changes so stale browser drafts do not keep invented text. */
+export const ABOUT_REVISION = 2;
 
 export type AboutSection = { id: string; title: string; body: string; image?: string; href?: string };
 export type AboutPhoto = { id: string; src: string; title: string; description: string };
@@ -18,6 +20,7 @@ export type FamilyNode = {
 };
 
 export type AboutContent = {
+  revision?: number;
   title: string;
   intro: string;
   heroImage?: string;
@@ -56,35 +59,56 @@ export type AboutContent = {
 };
 
 export const defaultAbout: AboutContent = {
-  title: "About the Foundation",
+  revision: ABOUT_REVISION,
+  title: "About Vaidya Gogate Memorial Foundation",
   intro:
-    "Vaidya Gogate Memorial Foundation preserves the classical traditions of Ayurveda, advances knowledge through education and research, and serves society through clinical and community programmes.",
+    "Vaidya Gogate Memorial Foundation is a website with a sole motto: Propagation of knowledge. This is a platform to share our grandfather’s, Vd. Ramchandra Ballal Gogate’s work and carry forward his vision ‘knowledge for all’. We are creating this platform as an authentic source of information. Our purpose is to ignite young minds through his writings and teachings. We plan to reach out to all vaidyas, students of Ayurved as well as disseminating the knowledge across all pathies and common people. Fortunately, our family has been blessed with renowned vaidyas for many generations.\n\nStarting from Vd. Mahadev (Bapu) Gogate who was the rajavaidya to the king of Jawhar, next generation being Vd. Vishnu Mahadev Gogate (Dravyaguna) and Vd. Trimbak Mahadev Gogate (Panchakarma), next generation being Vd. Ramchandra Ballal Gogate (Shalya tantra), and this legacy still continues. They have made huge contributions to the field of Ayurved of which many remain under appreciated. This website is in their honor and remembrance. We intend to pass on the wisdom of these great professors. Vd. R. B. Gogate will always inspire us, not only as a grandfather but also through his lifetime of study, work and research.\n\nWe, his grandchildren on behalf of the Gogate family are creating this platform to promote our grandfather’s lifetime work and for our strong passion towards the field of Ayurved. We would definitely love to have your suggestions, guidelines and support in our endeavour!\n\nRegards,\nthe grandchildren of Vd. R. B. Gogate, on behalf of the Gogate family",
   sections: [
-    { id: "s-foundation", title: "About the Foundation", body: "Our mission, vision and programmes — from clinical care to research and publication.", href: "/about/foundation" },
-    { id: "s-legacy", title: "Legacy of Vaidya R. B. Gogate", body: "The life, scholarship and enduring influence of the physician and teacher the Foundation honours.", href: "/about/legacy-of-vaidya-rb-gogate" },
-    { id: "s-history", title: "Our History", body: "How the Foundation was established and the efforts that shaped its early years.", href: "/about/history" },
-    { id: "s-trustees", title: "Trustees & Team", body: "The trustees, scholars and staff who guide and carry forward the Foundation's work.", href: "/about/trustees" },
+    {
+      id: "s-foundation",
+      title: "About the Foundation",
+      body: "A platform with a sole motto — Propagation of knowledge — sharing Vd. Ramchandra Ballal Gogate’s work and carrying forward his vision ‘knowledge for all’.",
+      href: "/about/foundation",
+    },
+    {
+      id: "s-legacy",
+      title: "Legacy of Vaidya R. B. Gogate",
+      body: "Vd. R. B. Gogate (Shalya tantra) inspires this Foundation as a grandfather and through his lifetime of study, work and research.",
+      href: "/about/legacy-of-vaidya-rb-gogate",
+    },
+    {
+      id: "s-history",
+      title: "Our History",
+      body: "Renowned vaidyas for many generations: Vd. Mahadev (Bapu) Gogate, Vd. Vishnu Mahadev Gogate, Vd. Trimbak Mahadev Gogate, and Vd. Ramchandra Ballal Gogate.",
+      href: "/about/history",
+    },
+    {
+      id: "s-trustees",
+      title: "Trustees & Team",
+      body: "His grandchildren, on behalf of the Gogate family, are creating this platform. Suggestions, guidelines and support are welcome.",
+      href: "/about/trustees",
+    },
   ],
   gallery: [],
   foundation: {
     title: "About the Foundation",
     intro:
-      "The Vaidya Gogate Memorial Foundation was established to preserve and advance the classical knowledge of Ayurveda for the benefit of present and future generations.",
+      "Vaidya Gogate Memorial Foundation is a website with a sole motto: Propagation of knowledge. This is a platform to share our grandfather’s, Vd. Ramchandra Ballal Gogate’s work and carry forward his vision ‘knowledge for all’. We are creating this platform as an authentic source of information.",
     sections: [
       {
-        id: "f-mission",
-        title: "Mission",
-        body: "To preserve the classical traditions of Ayurveda, advance knowledge through rigorous education and research, and serve society through accessible clinical and community programmes — guided always by the example of Vaidya R. B. Gogate.",
+        id: "f-purpose",
+        title: "Our purpose",
+        body: "Our purpose is to ignite young minds through his writings and teachings. We plan to reach out to all vaidyas, students of Ayurved as well as disseminating the knowledge across all pathies and common people.",
       },
       {
-        id: "f-vision",
-        title: "Vision",
-        body: "A future in which Ayurveda is practiced, taught and researched with integrity, where every student has access to genuine scholarship, and where the benefits of classical knowledge are available to all who seek them.",
+        id: "f-family",
+        title: "A family of vaidyas",
+        body: "Fortunately, our family has been blessed with renowned vaidyas for many generations. They have made huge contributions to the field of Ayurved of which many remain under appreciated. This website is in their honor and remembrance. We intend to pass on the wisdom of these great professors.",
       },
       {
-        id: "f-objectives",
-        title: "Objectives",
-        body: "Provide education and training in classical Ayurveda\nSupport research with sound methodology and ethical practice\nPublish authoritative clinical and scholarly works\nOperate clinics offering authentic consultation and therapy\nOrganise seminars, workshops and public education programmes\nPreserve the archives, writings and legacy of Vaidya R. B. Gogate",
+        id: "f-invitation",
+        title: "From the family",
+        body: "We, his grandchildren on behalf of the Gogate family are creating this platform to promote our grandfather’s lifetime work and for our strong passion towards the field of Ayurved. We would definitely love to have your suggestions, guidelines and support in our endeavour!",
       },
     ],
     activities: [
@@ -116,61 +140,120 @@ export const defaultAbout: AboutContent = {
   },
   history: {
     title: "Our History",
-    intro: "From the legacy of a single physician to a modern institution of education, research and care.",
+    intro:
+      "Fortunately, our family has been blessed with renowned vaidyas for many generations. They have made huge contributions to the field of Ayurved of which many remain under appreciated. This website is in their honor and remembrance.",
     timeline: [
-      { id: "h1", year: "1935", title: "R. B. Gogate begins practice", description: "Vaidya R. B. Gogate begins his lifelong practice of Ayurveda, combining classical study with clinical care." },
-      { id: "h2", year: "1958", title: "Early teaching & mentorship", description: "Gogate begins formally teaching and mentoring the next generation of Ayurveda physicians." },
-      { id: "h3", year: "1974", title: "Publication of classical works", description: "His landmark pharmacology texts are published, preserving classical formulations for future practitioners." },
-      { id: "h4", year: "1992", title: "Foundation established", description: "Following Vaidya R. B. Gogate's passing, the Foundation is established by his family, colleagues and students." },
-      { id: "h5", year: "2001", title: "First clinic & library", description: "The Foundation opens its first clinic and public library dedicated to classical Ayurveda texts." },
-      { id: "h6", year: "2026", title: "Education, research & digital services", description: "The Foundation runs seminars, fellowships, clinics, publications and digital services, including account and event management." },
+      {
+        id: "h1",
+        year: "Lineage",
+        title: "Vd. Mahadev (Bapu) Gogate",
+        description: "Rajavaidya to the king of Jawhar.",
+      },
+      {
+        id: "h2",
+        year: "Next generation",
+        title: "Vd. Vishnu Mahadev Gogate and Vd. Trimbak Mahadev Gogate",
+        description: "Vd. Vishnu Mahadev Gogate (Dravyaguna) and Vd. Trimbak Mahadev Gogate (Panchakarma).",
+      },
+      {
+        id: "h3",
+        year: "Next generation",
+        title: "Vd. Ramchandra Ballal Gogate",
+        description:
+          "Shalya tantra. Vd. R. B. Gogate will always inspire us, not only as a grandfather but also through his lifetime of study, work and research.",
+      },
+      {
+        id: "h4",
+        year: "This platform",
+        title: "Grandchildren of the Gogate family",
+        description:
+          "We, his grandchildren on behalf of the Gogate family are creating this platform to promote our grandfather’s lifetime work and for our strong passion towards the field of Ayurved.",
+      },
     ],
   },
   trustees: {
     title: "Trustees & Team",
-    intro: "The trustees, scholars and staff who guide the Foundation's work and carry forward the legacy of Vaidya R. B. Gogate.",
-    trusteesHeading: "Trustees",
+    intro:
+      "We, his grandchildren on behalf of the Gogate family are creating this platform to promote our grandfather’s lifetime work and for our strong passion towards the field of Ayurved. We would definitely love to have your suggestions, guidelines and support in our endeavour!",
+    trusteesHeading: "The Gogate family",
     teamHeading: "Our Team",
-    trustees: [
-      { id: "tr1", name: "Dr. Ananya Deshpande", role: "Director & Trustee", bio: "Leads the Foundation's education, research and clinical programmes." },
-      { id: "tr2", name: "Vaidya Sunil Khandekar", role: "Chief Physician", bio: "Directs the Panchakarma Centre and clinical training programmes." },
-      { id: "tr3", name: "Dr. Meera Joshi", role: "Head of Education", bio: "Oversees the curriculum, seminars and continuing education programmes." },
-    ],
-    team: [
-      { id: "tm1", name: "Vaidya Prakash Vaidya", role: "Research Scholar" },
-      { id: "tm2", name: "Dr. Nitin Patil", role: "Research Associate" },
-      { id: "tm3", name: "Dr. Shalini Bhagat", role: "Consultant Physician" },
-    ],
+    trustees: [],
+    team: [],
   },
   legacy: {
     title: "The Legacy of Vaidya R. B. Gogate",
     intro:
-      "Vaidya R. B. Gogate was a physician, teacher and scholar whose life exemplified the highest ideals of classical Ayurveda. The Foundation built in his memory is a living continuation of that work.",
+      "This platform shares our grandfather’s, Vd. Ramchandra Ballal Gogate’s work and carries forward his vision ‘knowledge for all’. This website is in honor and remembrance of the great professors of this family.",
     biography:
-      "Vaidya R. B. Gogate devoted his life to the study, practice and teaching of Ayurveda. He believed that classical knowledge was not a relic of the past but a living science — one that must be practised with precision, taught with care and examined with scholarly rigour.\n\nHis approach combined a deep reverence for the classical samhitas with an openness to systematic observation and scientific inquiry. He treated colleagues, students and patients alike with respect, and he held himself to the highest standard of intellectual honesty.",
+      "Vd. Ramchandra Ballal Gogate (Shalya tantra) belongs to a family blessed with renowned vaidyas for many generations — starting from Vd. Mahadev (Bapu) Gogate, rajavaidya to the king of Jawhar; then Vd. Vishnu Mahadev Gogate (Dravyaguna) and Vd. Trimbak Mahadev Gogate (Panchakarma).\n\nThey have made huge contributions to the field of Ayurved of which many remain under appreciated. We intend to pass on the wisdom of these great professors. Vd. R. B. Gogate will always inspire us, not only as a grandfather but also through his lifetime of study, work and research.",
     philosophy:
-      "Gogate's philosophy was simple and enduring: preserve what is true, teach what you know, and serve those who need help. Those three commitments — preservation, education and service — continue to define the Foundation that bears his name.",
+      "His vision is ‘knowledge for all’. Vaidya Gogate Memorial Foundation’s sole motto is Propagation of knowledge — an authentic source of information, to ignite young minds through his writings and teachings, and to reach vaidyas, students of Ayurved, all pathies and common people.",
     timeline: [
-      { id: "t1", year: "1912", title: "Early Life", description: "Born into a family with a deep tradition of learning, R. B. Gogate developed an early passion for the classical sciences of India." },
-      { id: "t2", year: "1930", title: "Education", description: "Trained in classical Ayurveda under respected teachers, mastering the samhitas and the practical clinical arts." },
-      { id: "t3", year: "1935", title: "Ayurveda Practice", description: "Began a lifetime of clinical practice combining deep textual grounding with careful, systematic observation of patients." },
-      { id: "t4", year: "1952", title: "Research & Scholarship", description: "Conducted and published research on classical formulations, drawing attention to the scientific basis of Ayurveda." },
-      { id: "t5", year: "1974", title: "Publications", description: "Published landmark works including his renowned pharmacology texts, preserving classical knowledge for future generations." },
-      { id: "t6", year: "1985", title: "Teaching", description: "Trained and mentored a generation of physicians, emphasising integrity, precision and lifelong learning." },
+      {
+        id: "t1",
+        year: "Lineage",
+        title: "Vd. Mahadev (Bapu) Gogate",
+        description: "Rajavaidya to the king of Jawhar.",
+      },
+      {
+        id: "t2",
+        year: "Next generation",
+        title: "Vd. Vishnu Mahadev Gogate",
+        description: "Dravyaguna.",
+      },
+      {
+        id: "t3",
+        year: "Next generation",
+        title: "Vd. Trimbak Mahadev Gogate",
+        description: "Panchakarma.",
+      },
+      {
+        id: "t4",
+        year: "Next generation",
+        title: "Vd. Ramchandra Ballal Gogate",
+        description: "Shalya tantra. Grandfather whose lifetime of study, work and research this platform shares.",
+      },
     ],
     treeTitle: "Family & lineage",
-    treeIntro: "The family and the line of teachers and students who carry the tradition forward.",
+    treeIntro:
+      "Renowned vaidyas for many generations, in whose honor and remembrance this website is created.",
     tree: [
-      { id: "f-root", name: "Vaidya R. B. Gogate", relation: "Founder of the tradition", years: "1912 – " },
+      { id: "f-mahadev", name: "Vd. Mahadev (Bapu) Gogate", relation: "Rajavaidya to the king of Jawhar" },
+      { id: "f-vishnu", parentId: "f-mahadev", name: "Vd. Vishnu Mahadev Gogate", relation: "Dravyaguna" },
+      { id: "f-trimbak", parentId: "f-mahadev", name: "Vd. Trimbak Mahadev Gogate", relation: "Panchakarma" },
+      {
+        id: "f-rb",
+        name: "Vd. Ramchandra Ballal Gogate",
+        relation: "Shalya tantra",
+        note: "Grandfather whose work this platform shares. His grandchildren created this site on behalf of the Gogate family.",
+      },
     ],
   },
 };
 
+function mergeMedia(saved: Partial<AboutContent> | null): AboutContent {
+  const priorTree = saved?.legacy?.tree ?? [];
+  return {
+    ...defaultAbout,
+    heroImage: saved?.heroImage || defaultAbout.heroImage,
+    gallery: saved?.gallery?.length ? saved.gallery : defaultAbout.gallery,
+    legacy: {
+      ...defaultAbout.legacy,
+      portrait: saved?.legacy?.portrait || defaultAbout.legacy.portrait,
+      tree: defaultAbout.legacy.tree.map((node) => {
+        const prior = priorTree.find((item) => item.id === node.id);
+        return prior?.photo ? { ...node, photo: prior.photo } : node;
+      }),
+    },
+  };
+}
+
 function merge(saved: Partial<AboutContent> | null): AboutContent {
-  if (!saved) return defaultAbout;
+  if (!saved || (saved.revision ?? 0) < ABOUT_REVISION) return mergeMedia(saved);
   return {
     ...defaultAbout,
     ...saved,
+    revision: ABOUT_REVISION,
     sections: saved.sections ?? defaultAbout.sections,
     gallery: saved.gallery ?? defaultAbout.gallery,
     foundation: { ...defaultAbout.foundation, ...(saved.foundation ?? {}) },
@@ -191,7 +274,7 @@ export function getAbout(): AboutContent {
 }
 
 export function saveAbout(content: AboutContent) {
-  window.localStorage.setItem(KEY, JSON.stringify(content));
+  window.localStorage.setItem(KEY, JSON.stringify({ ...content, revision: ABOUT_REVISION }));
   window.dispatchEvent(new Event("vgmf-cms"));
 }
 

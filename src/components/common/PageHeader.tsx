@@ -61,7 +61,9 @@ export default function PageHeader({
         <h1 className="heading-1">{title}</h1>
 
         {description && (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">{description}</p>
+          <p className="mt-3 max-w-3xl whitespace-pre-line text-sm leading-7 text-text-muted sm:text-base">
+            {description}
+          </p>
         )}
       </div>
     </section>

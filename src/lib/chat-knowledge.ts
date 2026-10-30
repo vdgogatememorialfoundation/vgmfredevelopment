@@ -67,8 +67,8 @@ function summariseClinics() {
 function summariseAbout() {
   const about = getAbout();
   const trustees = about.trustees.trustees.slice(0, 3).map((person) => person.name).filter(Boolean).join(", ");
-  const mission = about.foundation.sections.find((section) => /mission/i.test(section.title))?.body;
-  return `${about.intro}${mission ? ` Mission: ${mission.slice(0, 220)}` : ""}${trustees ? ` Trustees include ${trustees}.` : ""} Open About Us for the Foundation, history, trustees and the legacy of Vaidya R. B. Gogate.`;
+  const purpose = about.foundation.sections.find((section) => /purpose|mission/i.test(section.title))?.body;
+  return `${about.intro}${purpose ? ` ${purpose}` : ""}${trustees ? ` Trustees include ${trustees}.` : ""} Open About Us for the Foundation, history, trustees and the legacy of Vaidya R. B. Gogate.`;
 }
 
 function summariseContact() {

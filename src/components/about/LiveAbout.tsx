@@ -13,12 +13,30 @@ function Initials({ name, size }: { name: string; size: string }) {
   );
 }
 
+function paragraphs(text: string) {
+  return text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+}
+
 export function AboutLive() {
   const about = useAbout();
   const { t } = useI18n();
+  const letter = paragraphs(about.intro);
   return (
     <main>
-      <PageHeader eyebrow={t("about.eyebrow")} title={about.title} description={about.intro} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={about.title} />
+      {letter.length > 0 && (
+        <section className="border-b border-border bg-paper">
+          <div className="container py-8 sm:py-10">
+            <article className="mx-auto max-w-3xl space-y-5">
+              {letter.map((paragraph) => (
+                <p key={paragraph.slice(0, 48)} className="text-base leading-7 text-text-muted whitespace-pre-line">
+                  {paragraph}
+                </p>
+              ))}
+            </article>
+          </div>
+        </section>
+      )}
       {about.heroImage && (
         <section className="bg-background pt-10">
           <div className="container">
@@ -261,21 +279,29 @@ export function TrusteesLive() {
       <section className="section bg-background">
         <div className="container">
           <h2 className="heading-3 mb-8">{trustees.trusteesHeading}</h2>
-          <div className="grid gap-6 md:grid-cols-3">
-            {trustees.trustees.map((person) => (
-              <PersonCard key={person.id} person={person} featured />
-            ))}
-          </div>
+          {trustees.trustees.length > 0 ? (
+            <div className="grid gap-6 md:grid-cols-3">
+              {trustees.trustees.map((person) => (
+                <PersonCard key={person.id} person={person} featured />
+              ))}
+            </div>
+          ) : (
+            <p className="max-w-3xl text-body">{t("about.trusteesEmpty")}</p>
+          )}
         </div>
       </section>
       <section className="section bg-warm-cream">
         <div className="container">
           <h2 className="heading-3 mb-8">{trustees.teamHeading}</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {trustees.team.map((person) => (
-              <PersonCard key={person.id} person={person} />
-            ))}
-          </div>
+          {trustees.team.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {trustees.team.map((person) => (
+                <PersonCard key={person.id} person={person} />
+              ))}
+            </div>
+          ) : (
+            <p className="max-w-3xl text-body">{t("about.teamEmpty")}</p>
+          )}
         </div>
       </section>
     </main>

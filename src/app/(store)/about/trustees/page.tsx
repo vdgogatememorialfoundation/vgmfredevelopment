@@ -4,7 +4,7 @@ import { TrusteesLive } from "@/components/about/LiveAbout";
 export const metadata: Metadata = {
   title: "Trustees & Team",
   description:
-    "Meet the trustees, scholars and staff of the Vaidya Gogate Memorial Foundation.",
+    "The grandchildren of Vd. R. B. Gogate are creating this platform on behalf of the Gogate family. Suggestions, guidelines and support are welcome.",
 };
 
 export default function TrusteesPage() {

@@ -4,7 +4,7 @@ import { FoundationLive } from "@/components/about/LiveAbout";
 export const metadata: Metadata = {
   title: "Foundation",
   description:
-    "The mission, vision and objectives of the Vaidya Gogate Memorial Foundation.",
+    "Vaidya Gogate Memorial Foundation’s sole motto is Propagation of knowledge — sharing Vd. Ramchandra Ballal Gogate’s work and carrying forward his vision ‘knowledge for all’.",
 };
 
 export default function FoundationPage() {

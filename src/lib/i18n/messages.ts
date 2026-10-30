@@ -173,6 +173,9 @@ const en = {
   "about.biography": "Biography",
   "about.philosophy": "Philosophy",
   "about.timeline": "Timeline",
+  "about.trusteesEmpty":
+    "The grandchildren of Vd. R. B. Gogate are creating this platform on behalf of the Gogate family. Named trustees will appear here when the family publishes them.",
+  "about.teamEmpty": "Team members will appear here when the family publishes them.",
   "contact.eyebrow": "Contact",
   "contact.title": "Get in Touch",
   "contact.desc": "Reach the Foundation by phone, email, or by visiting our office. We welcome enquiries about events, publications, clinics and the Foundation's programmes.",
@@ -247,7 +250,7 @@ const en = {
   "support.cta": "Support Us",
   "legacy.eyebrow": "Our Legacy",
   "legacy.title": "The Legacy of Vaidya R. B. Gogate",
-  "legacy.desc": "Vaidya R. B. Gogate devoted his life to the study, practice and teaching of Ayurveda. The Foundation built in his memory continues this work through clinical care, education and publications.",
+  "legacy.desc": "Vd. R. B. Gogate (Shalya tantra) will always inspire us, not only as a grandfather but also through his lifetime of study, work and research. This platform shares his work and carries forward his vision ‘knowledge for all’.",
   "legacy.ayurveda": "Ayurveda",
   "legacy.ayurvedaText": "Preserving and advancing classical Ayurveda knowledge and practice.",
   "legacy.education": "Education",
@@ -425,6 +428,9 @@ const hi: Partial<Record<MessageKey, string>> = {
   "about.biography": "जीवनी",
   "about.philosophy": "दर्शन",
   "about.timeline": "समयरेखा",
+  "about.trusteesEmpty":
+    "वैद्य आर. बी. गोगटे के पौत्र-पौत्रियाँ गोगटे परिवार की ओर से यह मंच बना रहे हैं। नामित न्यासी यहाँ तब दिखेंगे जब परिवार उन्हें प्रकाशित करेगा।",
+  "about.teamEmpty": "टीम के सदस्य यहाँ तब दिखेंगे जब परिवार उन्हें प्रकाशित करेगा।",
   "contact.eyebrow": "संपर्क",
   "contact.title": "संपर्क करें",
   "contact.desc": "फ़ोन, ईमेल या कार्यालय आकर फाउंडेशन से जुड़ें। कार्यक्रम, प्रकाशन और चिकित्सालय संबंधी पूछताछ का स्वागत है।",
@@ -674,6 +680,9 @@ const mr: Partial<Record<MessageKey, string>> = {
   "about.biography": "चरित्र",
   "about.philosophy": "तत्त्वज्ञान",
   "about.timeline": "कालरेषा",
+  "about.trusteesEmpty":
+    "वैद्य आर. बी. गोगटे यांचे नातू-नाती गोगटे कुटुंबाच्या वतीने हे व्यासपीठ तयार करत आहेत. नावाने न्यासी येथे तेव्हा दिसतील जेव्हा कुटुंब त्यांना प्रकाशित करेल.",
+  "about.teamEmpty": "संघ सदस्य येथे तेव्हा दिसतील जेव्हा कुटुंब त्यांना प्रकाशित करेल.",
   "contact.eyebrow": "संपर्क",
   "contact.title": "संपर्क साधा",
   "contact.desc": "दूरध्वनी, ईमेल किंवा कार्यालयात येऊन फाउंडेशनशी संपर्क साधा. कार्यक्रम, प्रकाशने आणि चिकित्सालयांबाबत चौकशीचे स्वागत आहे.",
