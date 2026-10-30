@@ -10,8 +10,9 @@ import {
   type DnsRecordType,
   type DomainSettings,
   type EnvironmentDomain,
+  type SisterSiteDomain,
 } from "@/lib/domains";
-import { PLATFORM_APPS, PLATFORM_ENVIRONMENTS, type PlatformApp, type PlatformEnvironment } from "@/lib/platform";
+import { PLATFORM_APPS, PLATFORM_ENVIRONMENTS, SISTER_SITES, type PlatformApp, type PlatformEnvironment, type SisterSite } from "@/lib/platform";
 import { canOpen } from "@/lib/roles";
 import { useAuth } from "@/components/auth/AuthContext";
 
@@ -107,6 +108,13 @@ export function DomainSettingsDesk() {
     );
   const patchApp = (app: PlatformApp, patch: Partial<EnvironmentDomain["apps"][PlatformApp]>) =>
     patchEnv({ apps: { ...env.apps, [app]: { ...env.apps[app], ...patch } } });
+  const patchSister = (id: SisterSite, patch: Partial<SisterSiteDomain>) =>
+    setSettings((current) =>
+      sanitizeDomainSettings({
+        ...current,
+        sisterSites: { ...current.sisterSites, [id]: { ...current.sisterSites[id], ...patch } },
+      })
+    );
 
   const save = async () => {
     setBusy(true);
@@ -179,7 +187,8 @@ export function DomainSettingsDesk() {
           <p className="mt-1 max-w-3xl text-sm text-slate-500">
             Hostnames, CNAME, A records, TTL and nameservers for staging, demo and production. Staging is served at{" "}
             <strong>stagging.vaidyagogate.org</strong> (and the existing <strong>staging.vaidyagogate.org</strong> alias). Demo is a
-            separate copy of all four apps at <strong>demo.vaidyagogate.org</strong>.
+            separate copy of all four apps at <strong>demo.vaidyagogate.org</strong>, plus sister demos at{" "}
+            <strong>demo.fellowship.vaidyagogate.org</strong> and <strong>demo.autism.vaidyagogate.org</strong>.
           </p>
         </div>
         <button type="button" className={primary} onClick={() => void save()} disabled={busy}>
@@ -274,6 +283,36 @@ export function DomainSettingsDesk() {
               <Text label="Public URL" value={env.apps[app].publicUrl} onChange={(publicUrl) => patchApp(app, { publicUrl })} />
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Sister sites</h2>
+        <p className="mt-0.5 text-sm text-slate-500">
+          Live fellowship, autism and seminar stay on this VPS. Each has a separate demo hostname, Postgres folder under
+          /VGMF-PLATFORM/postgres/demo/, and PM2 process. DNS A records for the demo hosts already point at {settings.vpsIpv4}.
+        </p>
+        <div className="mt-4 grid gap-4">
+          {SISTER_SITES.map((id) => {
+            const site = settings.sisterSites[id];
+            return (
+              <div key={id} className="grid gap-3 rounded-lg border border-slate-100 p-3 md:grid-cols-2">
+                <p className="md:col-span-2 text-sm font-semibold text-slate-800">{site.label}</p>
+                <Text label="Production hostname" value={site.productionHostname} onChange={(productionHostname) => patchSister(id, { productionHostname })} />
+                <Text label="Demo hostname" value={site.demoHostname} onChange={(demoHostname) => patchSister(id, { demoHostname })} />
+                <Text label="Production URL" value={site.productionUrl} onChange={(productionUrl) => patchSister(id, { productionUrl })} />
+                <Text label="Demo URL" value={site.demoUrl} onChange={(demoUrl) => patchSister(id, { demoUrl })} />
+                <Text label="A record IPv4" value={site.ipv4} onChange={(ipv4) => patchSister(id, { ipv4 })} />
+                <Text label="CNAME host" value={site.cnameHost} onChange={(cnameHost) => patchSister(id, { cnameHost })} hint="Usually the demo hostname." />
+                <Text label="CNAME target" value={site.cnameTarget} onChange={(cnameTarget) => patchSister(id, { cnameTarget })} />
+                <Text label="TTL (seconds)" value={site.ttl} onChange={(ttl) => patchSister(id, { ttl: Number(ttl) || 300 })} />
+                <Text label="Production port" value={site.productionPort} onChange={(productionPort) => patchSister(id, { productionPort: Number(productionPort) || site.productionPort })} />
+                <Text label="Demo port" value={site.demoPort} onChange={(demoPort) => patchSister(id, { demoPort: Number(demoPort) || site.demoPort })} />
+                <Text label="SSL email" value={site.sslEmail} onChange={(sslEmail) => patchSister(id, { sslEmail })} />
+                <Text label="Postgres folder" value={site.postgresDir} onChange={(postgresDir) => patchSister(id, { postgresDir })} hint="Tablespace directory on this VPS." />
+              </div>
+            );
+          })}
         </div>
       </section>
 

@@ -11,7 +11,7 @@ export function EnvironmentBanner() {
       }`}
     >
       {demo
-        ? "Demo platform — customer, admin, staff and support. No live payments. Data is separate from staging."
+        ? "Demo platform — customer, admin, staff and support at demo.vaidyagogate.org. Sister demos: demo.fellowship.vaidyagogate.org and demo.autism.vaidyagogate.org. No live payments."
         : "Staging — this is not the public website. Publish here before production."}
     </div>
   );

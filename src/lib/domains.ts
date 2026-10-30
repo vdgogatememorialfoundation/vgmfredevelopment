@@ -1,9 +1,16 @@
 import {
   APEX_DOMAIN,
+  AUTISM_DEMO_HOST,
+  AUTISM_HOST,
   DEMO_HOST,
+  FELLOWSHIP_DEMO_HOST,
+  FELLOWSHIP_HOST,
   PLATFORM_APPS,
   PLATFORM_ENVIRONMENTS,
   PRODUCTION_HOST,
+  SEMINAR_DEMO_HOST,
+  SEMINAR_HOST,
+  SISTER_SITE_HOSTS,
   STAGING_ALIAS_HOST,
   STAGING_HOST,
   VPS_HOSTNAME,
@@ -12,6 +19,7 @@ import {
   originFromHost,
   type PlatformApp,
   type PlatformEnvironment,
+  type SisterSite,
 } from "@/lib/platform";
 
 export const DOMAIN_SETTINGS_KEY = "vgmf_domain_settings";
@@ -49,6 +57,24 @@ export type EnvironmentDomain = {
   apps: Record<PlatformApp, { hostname: string; path: string; publicUrl: string }>;
 };
 
+export type SisterSiteDomain = {
+  id: SisterSite;
+  label: string;
+  productionHostname: string;
+  demoHostname: string;
+  productionUrl: string;
+  demoUrl: string;
+  ipv4: string;
+  ipv6: string;
+  cnameHost: string;
+  cnameTarget: string;
+  ttl: number;
+  sslEmail: string;
+  productionPort: number;
+  demoPort: number;
+  postgresDir: string;
+};
+
 export type DomainSettings = {
   apexDomain: string;
   vpsHostname: string;
@@ -58,6 +84,7 @@ export type DomainSettings = {
   sslEmail: string;
   nameservers: string[];
   environments: Record<PlatformEnvironment, EnvironmentDomain>;
+  sisterSites: Record<SisterSite, SisterSiteDomain>;
   records: DnsRecord[];
   updatedAt?: string;
 };
@@ -95,6 +122,35 @@ function environmentDomain(
   };
 }
 
+function defaultSisterSite(id: SisterSite): SisterSiteDomain {
+  const meta = SISTER_SITE_HOSTS[id];
+  return {
+    id,
+    label: meta.label,
+    productionHostname: meta.production,
+    demoHostname: meta.demo,
+    productionUrl: originFromHost(meta.production),
+    demoUrl: originFromHost(meta.demo),
+    ipv4: VPS_IPV4,
+    ipv6: "",
+    cnameHost: meta.demo,
+    cnameTarget: VPS_HOSTNAME,
+    ttl: 300,
+    sslEmail: "admin@vaidyagogate.org",
+    productionPort: meta.productionPort,
+    demoPort: meta.demoPort,
+    postgresDir: `/VGMF-PLATFORM/postgres/demo/${id}`,
+  };
+}
+
+export function defaultSisterSites(): Record<SisterSite, SisterSiteDomain> {
+  return {
+    fellowship: defaultSisterSite("fellowship"),
+    autism: defaultSisterSite("autism"),
+    seminar: defaultSisterSite("seminar"),
+  };
+}
+
 export function defaultDomainSettings(): DomainSettings {
   return {
     apexDomain: APEX_DOMAIN,
@@ -116,6 +172,7 @@ export function defaultDomainSettings(): DomainSettings {
         www: `www.${PRODUCTION_HOST}`,
       }),
     },
+    sisterSites: defaultSisterSites(),
     records: defaultDnsRecords(),
   };
 }
@@ -173,6 +230,66 @@ export function defaultDnsRecords(): DnsRecord[] {
       ttl,
       notes: "Optional CNAME to the VPS hostname instead of an A record.",
     },
+    {
+      id: "demo-fellowship-a",
+      environment: "demo",
+      app: "platform",
+      type: "A",
+      host: FELLOWSHIP_DEMO_HOST,
+      value: VPS_IPV4,
+      ttl,
+      notes: "Demo copy of fellowship.vaidyagogate.org (PM2 fellowship-demo, port 3013).",
+    },
+    {
+      id: "demo-autism-a",
+      environment: "demo",
+      app: "platform",
+      type: "A",
+      host: AUTISM_DEMO_HOST,
+      value: VPS_IPV4,
+      ttl,
+      notes: "Demo copy of autism.vaidyagogate.org (PM2 autism-demo, port 3014).",
+    },
+    {
+      id: "demo-seminar-a",
+      environment: "demo",
+      app: "platform",
+      type: "A",
+      host: SEMINAR_DEMO_HOST,
+      value: VPS_IPV4,
+      ttl,
+      notes: "Existing seminar demo at demo.seminar.vaidyagogate.org (PM2 seminar-demo, port 3010).",
+    },
+    {
+      id: "prod-fellowship-a",
+      environment: "production",
+      app: "platform",
+      type: "A",
+      host: FELLOWSHIP_HOST,
+      value: VPS_IPV4,
+      ttl,
+      notes: "Live fellowship app on this VPS (port 3009).",
+    },
+    {
+      id: "prod-autism-a",
+      environment: "production",
+      app: "platform",
+      type: "A",
+      host: AUTISM_HOST,
+      value: VPS_IPV4,
+      ttl,
+      notes: "Live autism app on this VPS (port 3003).",
+    },
+    {
+      id: "prod-seminar-a",
+      environment: "production",
+      app: "platform",
+      type: "A",
+      host: SEMINAR_HOST,
+      value: VPS_IPV4,
+      ttl,
+      notes: "Live seminar app on this VPS (port 3000).",
+    },
     ...PLATFORM_APPS.flatMap((app) => [
       {
         id: `staging-app-${app}`,
@@ -226,6 +343,46 @@ function sanitizeAppHosts(
     base[app] = { hostname: host, path, publicUrl };
   }
   return base;
+}
+
+function sanitizeSisterSite(id: SisterSite, incoming?: Partial<SisterSiteDomain>): SisterSiteDomain {
+  const defaults = defaultSisterSite(id);
+  if (!incoming) return defaults;
+  const demoHostname = asString(incoming.demoHostname, defaults.demoHostname) || defaults.demoHostname;
+  const productionHostname = asString(incoming.productionHostname, defaults.productionHostname) || defaults.productionHostname;
+  return {
+    ...defaults,
+    ...incoming,
+    id,
+    label: asString(incoming.label, defaults.label) || defaults.label,
+    productionHostname,
+    demoHostname,
+    productionUrl: asString(incoming.productionUrl, originFromHost(productionHostname)) || originFromHost(productionHostname),
+    demoUrl: asString(incoming.demoUrl, originFromHost(demoHostname)) || originFromHost(demoHostname),
+    ipv4: asString(incoming.ipv4, VPS_IPV4) || VPS_IPV4,
+    ipv6: asString(incoming.ipv6),
+    cnameHost: asString(incoming.cnameHost, demoHostname) || demoHostname,
+    cnameTarget: asString(incoming.cnameTarget, VPS_HOSTNAME) || VPS_HOSTNAME,
+    ttl: asNumber(incoming.ttl, 300),
+    sslEmail: asString(incoming.sslEmail, "admin@vaidyagogate.org"),
+    productionPort: asNumber(incoming.productionPort, defaults.productionPort),
+    demoPort: asNumber(incoming.demoPort, defaults.demoPort),
+    postgresDir: asString(incoming.postgresDir, defaults.postgresDir) || defaults.postgresDir,
+  };
+}
+
+function mergeSisterDnsRecords(records: DnsRecord[]): DnsRecord[] {
+  const sisterHosts = new Set<string>([
+    FELLOWSHIP_DEMO_HOST,
+    AUTISM_DEMO_HOST,
+    SEMINAR_DEMO_HOST,
+    FELLOWSHIP_HOST,
+    AUTISM_HOST,
+    SEMINAR_HOST,
+  ]);
+  const have = new Set(records.filter((record) => sisterHosts.has(record.host)).map((record) => `${record.type}:${record.host}`));
+  const extra = defaultDnsRecords().filter((record) => sisterHosts.has(record.host) && !have.has(`${record.type}:${record.host}`));
+  return extra.length ? [...records, ...extra] : records;
 }
 
 function sanitizeEnvironment(label: string, hostname: string, incoming?: Partial<EnvironmentDomain>, indexPublic = false): EnvironmentDomain {
@@ -302,9 +459,16 @@ export function sanitizeDomainSettings(input?: Partial<DomainSettings> | null): 
       demo: sanitizeEnvironment("Demo", DEMO_HOST, input.environments?.demo, false),
       production: sanitizeEnvironment("Production", PRODUCTION_HOST, input.environments?.production, true),
     },
-    records: Array.isArray(input.records)
-      ? input.records.map((record, index) => sanitizeRecord(record, index)).filter((row): row is DnsRecord => Boolean(row))
-      : defaults.records,
+    sisterSites: {
+      fellowship: sanitizeSisterSite("fellowship", input.sisterSites?.fellowship),
+      autism: sanitizeSisterSite("autism", input.sisterSites?.autism),
+      seminar: sanitizeSisterSite("seminar", input.sisterSites?.seminar),
+    },
+    records: mergeSisterDnsRecords(
+      Array.isArray(input.records)
+        ? input.records.map((record, index) => sanitizeRecord(record, index)).filter((row): row is DnsRecord => Boolean(row))
+        : defaults.records
+    ),
     updatedAt: asString(input.updatedAt) || undefined,
   };
 }
