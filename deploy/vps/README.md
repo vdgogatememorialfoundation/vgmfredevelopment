@@ -41,4 +41,6 @@ Admin → Settings → Domains & DNS holds hostname, CNAME, A, TTL, nameserver a
 - Staging: `127.0.0.1:3005` behind nginx (`vgmf-staging`)
 - Demo: `127.0.0.1:3012` behind nginx (`vgmf-demo`)
 
-`pm2 start /VGMF-PLATFORM/apps/staging/../../deploy` is not used; the ecosystem file lives at `/VGMF-PLATFORM/apps/staging/../` wait — copy `deploy/vps/ecosystem.config.cjs` to `/VGMF-PLATFORM/ecosystem.config.cjs` and run `pm2 start /VGMF-PLATFORM/ecosystem.config.cjs`.
+Copy `deploy/vps/ecosystem.config.cjs` to `/VGMF-PLATFORM/ecosystem.config.cjs` and run `pm2 start /VGMF-PLATFORM/ecosystem.config.cjs`.
+
+Do not deploy this repo on Vercel. `vercel.json` skips Git auto-deploys. Disconnect the Vercel GitHub app in the Vercel dashboard if older PR branches still trigger iad1 builds.
