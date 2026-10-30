@@ -111,10 +111,9 @@ function persistDataUrl(value: string | undefined, name: string) {
   const mime = match[1].toLowerCase();
   const ext = mime.includes("svg") ? "svg" : mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : mime.includes("gif") ? "gif" : "jpg";
   const file = `${name}.${ext}`;
-  const dest = join(process.cwd(), "public", "uploads", file);
+  const dest = dataFile("uploads", file);
   try {
-    mkdirSync(join(dest, ".."), { recursive: true });
-    writeFileSync(dest, Buffer.from(match[2].replace(/\s/g, ""), "base64"));
+    writeFileSync(/* turbopackIgnore: true */ dest, Buffer.from(match[2].replace(/\s/g, ""), "base64"));
     return `/uploads/${file}`;
   } catch {
     return value;

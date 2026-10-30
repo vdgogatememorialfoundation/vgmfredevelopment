@@ -84,7 +84,7 @@ export default function HeroSection() {
             <img
               src={item.image}
               alt={item.title || "Slideshow image"}
-              className="mx-auto h-auto max-h-[min(85vh,820px)] w-full object-contain object-center"
+              className="mx-auto block h-auto w-auto max-h-[min(85vh,820px)] max-w-full object-contain object-center"
               onError={() => setFailed((current) => ({ ...current, [item.id]: true }))}
             />
           );
