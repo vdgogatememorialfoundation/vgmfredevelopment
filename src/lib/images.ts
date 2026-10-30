@@ -2,13 +2,14 @@
  * Browser storage holds roughly 5 MB per site, so uploads are downscaled and
  * re-encoded before they are saved alongside the content that uses them.
  */
-export async function fileToDataUrl(file: File, maxWidth = 1400, quality = 0.82): Promise<string> {
+export async function fileToDataUrl(file: File, maxWidth = 640, quality = 0.6): Promise<string> {
   if (file.type === "image/svg+xml" || file.type === "image/x-icon") {
     return readAsDataUrl(file);
   }
   const source = await readAsDataUrl(file);
   const image = await loadImage(source);
-  const scale = Math.min(1, maxWidth / image.naturalWidth);
+  const maxHeight = Math.round(maxWidth * 0.48);
+  const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
   const canvas = document.createElement("canvas");

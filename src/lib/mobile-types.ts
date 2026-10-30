@@ -1,5 +1,5 @@
 import type { MobileAppConfig } from "@/lib/mobile-config";
-import type { Announcement, Article, Book, Clinic, Event, FAQItem, Notice, SocialLinks, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, SocialLinks, Video } from "@/types";
 
 export type MobileFeed = {
   publishedAt: string;
@@ -7,6 +7,8 @@ export type MobileFeed = {
     name: string;
     tagline: string;
     logoUrl?: string;
+    logoText?: string;
+    faviconUrl?: string;
     email: string;
     phone: string;
     address: string;
@@ -27,6 +29,7 @@ export type MobileFeed = {
   videos: Video[];
   notices: Notice[];
   announcements: Announcement[];
+  flyers: Flyer[];
   gallery: { id: string; src: string; title: string; caption?: string; category: string; date?: string }[];
   about: {
     title?: string;

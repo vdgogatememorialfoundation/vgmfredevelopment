@@ -24,6 +24,7 @@ export default function RecordDesk<T extends { id: string }>({
   onSave,
   onHide,
   hideLabel = "Delete",
+  imageMaxWidth = 640,
 }: {
   heading: string;
   description: string;
@@ -35,6 +36,7 @@ export default function RecordDesk<T extends { id: string }>({
   onSave: (record: T) => void;
   onHide: (id: string) => void;
   hideLabel?: string;
+  imageMaxWidth?: number;
 }) {
   const [draft, setDraft] = useState<T>(() => blank());
   const [editing, setEditing] = useState(false);
@@ -94,6 +96,8 @@ export default function RecordDesk<T extends { id: string }>({
               key={field.key}
               label={field.label}
               value={String((draft as Record<string, unknown>)[field.key] ?? "")}
+              maxWidth={imageMaxWidth}
+              hint="Uploads are resized so they can be saved and shown on phones."
               onChange={(value) => update(field.key, value)}
             />
           ) : field.kind === "textarea" ? (

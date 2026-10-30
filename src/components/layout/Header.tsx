@@ -14,6 +14,7 @@ import { navMessageKey } from "@/lib/i18n/messages";
 import { getLiveCmsPages } from "@/lib/cms-pages";
 import { getSiteVisibility, visibleAccountNav, visiblePublicNav } from "@/lib/site-visibility";
 import { subscribeCms } from "@/lib/cms";
+import { useSiteSettings } from "@/lib/use-cms";
 
 function CartIcon() {
   return (
@@ -95,10 +96,11 @@ export default function Header() {
   const { user, isAuthenticated, signOut } = useAuth();
   const { count } = useCart();
   const { t } = useI18n();
+  const settings = useSiteSettings();
   const accountMenuRef = useRef<HTMLDivElement>(null);
   useSyncExternalStore(
     subscribeCms,
-    () => `${window.localStorage.getItem("vgmf_site_visibility") ?? ""}|${window.localStorage.getItem("vgmf_cms_pages") ?? ""}`,
+    () => `${window.localStorage.getItem("vgmf_site_visibility") ?? ""}|${window.localStorage.getItem("vgmf_cms_pages") ?? ""}|${window.localStorage.getItem("vgmf_settings") ?? ""}`,
     () => ""
   );
   const visibility = getSiteVisibility();
@@ -165,8 +167,8 @@ export default function Header() {
             <SiteLogo size={48} />
             <span className="hidden h-10 w-px bg-gold/50 sm:block" aria-hidden />
             <div className="min-w-0">
-              <div className="truncate font-serif text-[15px] font-semibold leading-tight text-ink sm:text-base">
-                Vaidya Gogate
+              <div className="truncate font-serif text-[14px] font-semibold leading-tight text-ink sm:text-base">
+                {settings?.siteName?.replace(/Memorial Foundation/i, "").trim() || "Vaidya Gogate"}
               </div>
               <div className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-gold sm:text-[11px]">
                 Memorial Foundation

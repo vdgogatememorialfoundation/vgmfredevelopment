@@ -4,6 +4,7 @@ import {
   getLiveAnnouncements,
   getLiveClinics,
   getLiveEvents,
+  getLiveFlyers,
   getLiveNotices,
   getLiveVideos,
   getPublishedArticles,
@@ -26,6 +27,8 @@ export function collectMobileSnapshot(): MobileFeed {
       name: settings.siteName || siteConfig.name,
       tagline: settings.tagline || siteConfig.tagline,
       logoUrl: settings.logoUrl || "",
+      logoText: settings.logoText || "",
+      faviconUrl: settings.faviconUrl || "",
       email: settings.supportEmail || siteConfig.email,
       phone: settings.supportPhone || siteConfig.phone,
       address: siteConfig.address,
@@ -41,6 +44,7 @@ export function collectMobileSnapshot(): MobileFeed {
     videos: getLiveVideos(),
     notices: getLiveNotices(),
     announcements: getLiveAnnouncements(),
+    flyers: getLiveFlyers(),
     gallery: getGallery(),
     about: getAbout(),
     policies: getPolicies(),
@@ -55,6 +59,8 @@ export function emptyFeedFallback(mobile: MobileAppConfig = defaultMobileAppConf
       name: siteConfig.name,
       tagline: siteConfig.tagline,
       logoUrl: "",
+      logoText: "",
+      faviconUrl: "",
       email: siteConfig.email,
       phone: siteConfig.phone,
       address: siteConfig.address,
@@ -70,9 +76,48 @@ export function emptyFeedFallback(mobile: MobileAppConfig = defaultMobileAppConf
     videos: [],
     notices: [],
     announcements: [],
+    flyers: [],
     gallery: [],
     about: null,
     policies: {},
     faqs: [],
   };
+}
+
+const APPLIED_KEY = "vgmf_applied_feed_at";
+const DIRTY_KEY = "vgmf_live_dirty";
+
+export function markLiveDirty(dirty: boolean) {
+  if (typeof window === "undefined") return;
+  if (dirty) window.localStorage.setItem(DIRTY_KEY, "1");
+  else window.localStorage.removeItem(DIRTY_KEY);
+}
+
+export function appliedFeedAt() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(APPLIED_KEY) ?? "";
+}
+
+export function setAppliedFeedAt(value: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(APPLIED_KEY, value);
+}
+
+/** Push logo, slideshow and other public CMS fields so phones and other browsers can load them. */
+export function publishLiveSite() {
+  if (typeof window === "undefined") return Promise.resolve({ ok: false as const });
+  markLiveDirty(true);
+  const snapshot = collectMobileSnapshot();
+  return fetch("/api/mobile/publish", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(snapshot),
+  })
+    .then(async (response) => {
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; publishedAt?: string; error?: string } | null;
+      if (data?.publishedAt) setAppliedFeedAt(data.publishedAt);
+      return data ?? { ok: false as const };
+    })
+    .catch(() => ({ ok: false as const }))
+    .finally(() => markLiveDirty(false));
 }

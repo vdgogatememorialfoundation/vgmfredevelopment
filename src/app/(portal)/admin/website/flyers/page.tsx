@@ -2,6 +2,7 @@
 
 import RecordDesk from "@/components/admin/RecordDesk";
 import { hideFlyer, saveFlyer } from "@/lib/cms";
+import { publishLiveSite } from "@/lib/mobile-publish";
 import { useLiveFlyers } from "@/lib/use-cms";
 import type { Flyer } from "@/types";
 
@@ -10,12 +11,12 @@ export default function Page() {
   return (
     <RecordDesk<Flyer>
       heading="Slideshow, images and posters"
-      description="Add images and posters here. They play in the homepage slideshow. Notices are not shown in the slideshow — publish those on the Notice board. Banners that should pop up on the site belong under Banners."
+      description="Add wide photos or posters here. They play in the compact homepage slideshow on phones and desktops after save. Images are shrunk automatically so they can be stored. Notices are not shown in the slideshow."
       publicHref="/"
       records={records}
       label={(record) => record.title || "Untitled slide"}
       fields={[
-        { key: "image", label: "Slideshow image (wide, about 1600 × 700)", kind: "image" },
+        { key: "image", label: "Slideshow image (wide photo or poster)", kind: "image" },
         { key: "title", label: "Title (admin label)" },
         { key: "href", label: "Optional link when the slide is clicked" },
       ]}
@@ -30,8 +31,15 @@ export default function Page() {
         isDesktop: true,
         isMobile: true,
       })}
-      onSave={(record) => saveFlyer({ ...record, href: record.href.trim(), cta: record.cta || "View" })}
-      onHide={hideFlyer}
+      imageMaxWidth={520}
+      onSave={(record) => {
+        saveFlyer({ ...record, href: record.href.trim(), cta: record.cta || "View" });
+        void publishLiveSite();
+      }}
+      onHide={(id) => {
+        hideFlyer(id);
+        void publishLiveSite();
+      }}
     />
   );
 }

@@ -10,7 +10,7 @@ export function ImageField({
   label,
   value,
   onChange,
-  maxWidth,
+  maxWidth = 640,
   hint,
 }: {
   label: string;
@@ -28,9 +28,10 @@ export function ImageField({
     setBusy(true);
     setError("");
     try {
-      onChange(await fileToDataUrl(file, maxWidth));
+      onChange(await fileToDataUrl(file, Math.min(maxWidth, 640), 0.6));
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : "Upload failed.");
+      const quota = problem instanceof DOMException && (problem.name === "QuotaExceededError" || problem.code === 22);
+      setError(quota ? "Storage is full. Use a smaller image or paste an image URL." : problem instanceof Error ? problem.message : "Upload failed.");
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -98,7 +99,7 @@ export function GalleryField({
     try {
       const added: CaptionedImage[] = [];
       for (const file of Array.from(files)) {
-        added.push({ src: await fileToDataUrl(file, 1200, 0.8), caption: "" });
+        added.push({ src: await fileToDataUrl(file, 640, 0.6), caption: "" });
       }
       onChange([...images, ...added]);
     } catch (problem) {
