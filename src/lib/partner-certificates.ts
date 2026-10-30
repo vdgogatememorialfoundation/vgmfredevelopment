@@ -66,6 +66,7 @@ export function normalizeCertificateId(id: string) {
 
 export const SEMINAR_ORIGIN = "https://seminar.vaidyagogate.org";
 export const AUTISM_ORIGIN = "https://autism.vaidyagogate.org";
+export const FELLOWSHIP_ORIGIN = "https://fellowship.vaidyagogate.org";
 
 export function seminarDigits(id: string) {
   return String(id || "").replace(/\D/g, "");

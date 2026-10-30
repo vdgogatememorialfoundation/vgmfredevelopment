@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { partnerPortalMeta } from "@/lib/constants";
 import { hydratePartnerFeed, syncPartnerPortalsNow } from "@/lib/partner-hydrate";
+import type { PartnerPortalId } from "@/types";
 
 type Stats = {
   events: number;
@@ -11,6 +13,10 @@ type Stats = {
   payments: number;
   source: string;
 };
+
+function portalHeading(id: string) {
+  return partnerPortalMeta[id as PartnerPortalId]?.label ?? id;
+}
 
 export function PartnerSyncDesk() {
   const [busy, setBusy] = useState(false);
@@ -41,7 +47,7 @@ export function PartnerSyncDesk() {
       setSyncedAt(result.syncedAt ?? "");
       setStats((result.stats as Record<string, Stats>) ?? null);
       setNote(
-        `Synced ${result.events ?? 0} events, ${result.notices ?? 0} notices and ${result.accounts ?? 0} accounts from the Seminar and Autism portals.`
+        `Synced ${result.events ?? 0} events, ${result.notices ?? 0} notices and ${result.accounts ?? 0} accounts from the Seminar, Autism and Fellowship portals.`
       );
       load();
     } catch (error) {
@@ -57,7 +63,7 @@ export function PartnerSyncDesk() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Sister portals</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Seminar and Autism events, notices, doctor accounts, applicants, e-tickets and payments are copied here. QR codes stay on those portals.
+            Seminar, Autism and Fellowship events, notices, doctor and applicant accounts, applications, e-tickets and payments are copied here. QR codes stay on those portals.
           </p>
         </div>
         <button
@@ -77,10 +83,10 @@ export function PartnerSyncDesk() {
         <p className="text-xs text-slate-500">No sister-portal copy yet. Use Sync now.</p>
       )}
       {stats ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Object.entries(stats).map(([id, row]) => (
             <section key={id} className="rounded-xl border border-slate-200 bg-white p-5">
-              <h2 className="font-semibold capitalize text-slate-900">{id === "seminar" ? "Seminar Portal" : "Autism Portal"}</h2>
+              <h2 className="font-semibold text-slate-900">{portalHeading(id)}</h2>
               <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
                 <div><dt className="text-slate-500">Events</dt><dd className="font-semibold">{row.events}</dd></div>
                 <div><dt className="text-slate-500">Notices</dt><dd className="font-semibold">{row.notices}</dd></div>

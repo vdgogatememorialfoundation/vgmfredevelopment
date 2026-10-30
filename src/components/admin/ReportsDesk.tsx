@@ -143,7 +143,7 @@ function reports(): { group: string; items: Report[] }[] {
         {
           id: "doctors",
           title: "Sister-portal customers",
-          description: "Seminar doctors and Autism applicants listed with other customers.",
+          description: "Seminar doctors, Autism applicants and Fellowship applicants listed with other customers.",
           file: "vgmf-sister-customers",
           headers: ["Account ID", "Name", "Email", "Phone", "Status", "Created"],
           rows: () =>

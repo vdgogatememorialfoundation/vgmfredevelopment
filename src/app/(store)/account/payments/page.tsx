@@ -6,6 +6,7 @@ import SectionHeader from "@/components/account/SectionHeader";
 import { useAuth } from "@/components/auth/AuthContext";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import { getPartnerPayments } from "@/lib/partner-hydrate";
+import { partnerPortalLabel } from "@/lib/partner-labels";
 
 const demoPayments = [
   {
@@ -45,11 +46,11 @@ export default function PaymentsPage() {
               <div>
                 <p className="font-mono text-sm font-semibold text-text-primary">{payment.id}</p>
                 <p className="mt-0.5 text-sm text-text-muted">
-                  {payment.eventName || (payment.portal === "seminar" ? "Seminar Portal" : "Autism Portal")}
+                  {payment.eventName || partnerPortalLabel(payment.portal)}
                   {payment.at ? ` · ${new Date(payment.at).toLocaleDateString("en-IN")}` : ""}
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
-                  {payment.portal === "seminar" ? "Seminar Portal" : "Autism Portal"} · Receipt on that portal
+                  {partnerPortalLabel(payment.portal)} · Receipt on that portal
                 </p>
               </div>
               <div className="text-right">

@@ -38,7 +38,7 @@ function writeJSON(key: string, value: unknown) {
   }
 }
 
-function mergeById<T extends { id: string }>(current: T[], incoming: T[], partnerPrefix = /^(seminar|autism)-/) {
+function mergeById<T extends { id: string }>(current: T[], incoming: T[], partnerPrefix = /^(seminar|autism|fellowship)-/) {
   const keep = current.filter((item) => !partnerPrefix.test(item.id));
   const map = new Map(keep.map((item) => [item.id, item]));
   for (const item of incoming) map.set(item.id, item);

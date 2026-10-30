@@ -1,17 +1,25 @@
-import { autismSiteUrl, partnerPortalMeta, seminarSiteUrl } from "@/lib/constants";
+import { partnerPortalMeta } from "@/lib/constants";
 import type { PartnerPortal, PartnerPortalId, User } from "@/types";
+
+export const partnerPortalIds: PartnerPortalId[] = ["seminar", "autism", "fellowship"];
 
 export function partnerPortalLabel(id: PartnerPortalId) {
   return partnerPortalMeta[id].label;
 }
 
 export function partnerPortalHref(id: PartnerPortalId) {
-  return id === "seminar" ? seminarSiteUrl : autismSiteUrl;
+  return partnerPortalMeta[id].href;
 }
 
 export function partnerTicketHref(id: PartnerPortalId) {
   const meta = partnerPortalMeta[id];
   return `${meta.href}${meta.ticketsPath}`;
+}
+
+export function partnerCategory(id: PartnerPortalId) {
+  if (id === "seminar") return "Seminar";
+  if (id === "autism") return "Autism";
+  return "Fellowship";
 }
 
 export function portalBadge(id: PartnerPortalId, extra?: Partial<PartnerPortal>): PartnerPortal {

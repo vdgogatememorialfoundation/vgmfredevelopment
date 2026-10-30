@@ -15,7 +15,7 @@ export type RegistrationStatus =
 
 export type EventMode = "Online" | "Offline" | "Hybrid";
 
-export type PartnerPortalId = "seminar" | "autism";
+export type PartnerPortalId = "seminar" | "autism" | "fellowship";
 
 export interface Event {
   id: string;
@@ -67,7 +67,7 @@ export interface PartnerPortal {
   hasTicket?: boolean;
   ticketCount?: number;
   paymentCount?: number;
-  role?: "doctor" | "applicant" | "registrant";
+  role?: "doctor" | "applicant" | "registrant" | "fellow";
 }
 
 /** E-ticket summary stored on VGMF. The QR itself stays on the sister portal. */

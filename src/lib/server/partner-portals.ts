@@ -2,8 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { Pool } from "pg";
 import { accountMatchesIdentifier, phoneDigits } from "@/lib/account-identity";
 import { upsertNotice } from "@/lib/server/notices";
-import { partnerPortalHref, partnerTicketHref, portalBadge } from "@/lib/partner-labels";
-import { AUTISM_ORIGIN, SEMINAR_ORIGIN, asList, asRecord, textField } from "@/lib/partner-certificates";
+import { partnerCategory, partnerPortalHref, partnerPortalIds, partnerTicketHref, portalBadge } from "@/lib/partner-labels";
+import { AUTISM_ORIGIN, FELLOWSHIP_ORIGIN, SEMINAR_ORIGIN, asList, asRecord, textField } from "@/lib/partner-certificates";
 import { partnerForKey, readApiKey } from "@/lib/partner-keys";
 import type {
   Announcement,
@@ -64,7 +64,7 @@ export function emptySnapshot(): PartnerSnapshot {
     accounts: [],
     ticketsByEmail: {},
     paymentsByEmail: {},
-    stats: { seminar: emptyStats(), autism: emptyStats() },
+    stats: { seminar: emptyStats(), autism: emptyStats(), fellowship: emptyStats() },
     passwordHashes: {},
   };
 }
@@ -132,8 +132,13 @@ export function sanitizeAccountForClient(account: SanitizedPartnerAccount, opts?
 const pools = new Map<PartnerPortalId, Pool>();
 
 function dbUrl(portal: PartnerPortalId) {
-  const key = portal === "seminar" ? "SEMINAR_DATABASE_URL" : "AUTISM_DATABASE_URL";
+  const key =
+    portal === "seminar" ? "SEMINAR_DATABASE_URL" : portal === "autism" ? "AUTISM_DATABASE_URL" : "FELLOWSHIP_DATABASE_URL";
   return (process.env[key] || "").trim();
+}
+
+function anyDbConfigured() {
+  return partnerPortalIds.some((portal) => Boolean(dbUrl(portal)));
 }
 
 function poolFor(portal: PartnerPortalId) {
@@ -147,7 +152,9 @@ function poolFor(portal: PartnerPortalId) {
 }
 
 function originFor(portal: PartnerPortalId) {
-  return portal === "seminar" ? SEMINAR_ORIGIN : AUTISM_ORIGIN;
+  if (portal === "seminar") return SEMINAR_ORIGIN;
+  if (portal === "autism") return AUTISM_ORIGIN;
+  return FELLOWSHIP_ORIGIN;
 }
 
 function slugify(value: string) {
@@ -199,7 +206,13 @@ function accountIdFor(portal: PartnerPortalId, sourceId: string, existing?: stri
 
 function skipStaff(role: string, userRole: string) {
   const values = `${role} ${userRole}`.toLowerCase();
-  return ["admin", "co_admin", "coadmin", "staff", "scanner_portal_user", "judge_user"].some((item) => values.includes(item));
+  return ["admin", "co_admin", "coadmin", "staff", "scanner_portal_user", "judge_user", "committee"].some((item) => values.includes(item));
+}
+
+function splitPersonName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { first: "", last: "" };
+  return { first: parts[0], last: parts.slice(1).join(" ") };
 }
 
 function registrationStatus(start?: string, end?: string, enabled = true): RegistrationStatus {
@@ -224,7 +237,7 @@ function mapEventType(portal: PartnerPortalId, title: string): EventType {
   const text = title.toLowerCase();
   if (text.includes("workshop")) return "Workshop";
   if (text.includes("webinar")) return "Webinar";
-  if (text.includes("fellowship")) return "Fellowship";
+  if (portal === "fellowship" || text.includes("fellowship")) return "Fellowship";
   if (portal === "autism") return "Other Foundation Events";
   return "Seminar";
 }
@@ -293,7 +306,7 @@ function eventFromSeminar(
 ): Event {
   const origin = originFor(portal);
   const idNum = String(seminar.id ?? seminar.seminar_id ?? "0");
-  const title = str(seminar, ["title", "seminar_title", "name"], portal === "seminar" ? "Seminar" : "Programme");
+  const title = str(seminar, ["title", "seminar_title", "name"], portal === "seminar" ? "Seminar" : portal === "fellowship" ? "Fellowship" : "Programme");
   const slug = str(seminar, ["event_slug"]) || slugify(`${portal}-${title}-${idNum}`);
   const start = iso(seminar.event_date) || iso(sessions[0]?.start_time);
   const end = iso(seminar.event_end_date) || iso(sessions[sessions.length - 1]?.end_time) || start;
@@ -320,7 +333,7 @@ function eventFromSeminar(
     id: `${portal}-${idNum}`,
     name: title,
     slug,
-    shortDescription: str(seminar, ["description"]).slice(0, 240) || `${title} on the ${portal === "seminar" ? "Seminar" : "Autism"} portal.`,
+    shortDescription: str(seminar, ["description"]).slice(0, 240) || `${title} on the ${partnerCategory(portal)} portal.`,
     description: str(seminar, ["description"]) || str(seminar, ["terms_conditions"]),
     bannerUrl: mediaUrl(origin, seminar.hero_image_path || seminar.flyer_path),
     startDate: start || dateOnly(),
@@ -390,7 +403,7 @@ function noticesFromPublic(portal: PartnerPortalId, payload: unknown): { notices
       id,
       title,
       date: dateOnly(record.updatedAt),
-      category: portal === "seminar" ? "Seminar" : "Autism",
+      category: partnerCategory(portal),
       description: body,
       href: pdf ? mediaUrl(origin, pdf) : `${origin}/#notices`,
       attachment: pdf ? mediaUrl(origin, pdf) : undefined,
@@ -407,7 +420,7 @@ function noticesFromPublic(portal: PartnerPortalId, payload: unknown): { notices
       title: body,
       description: body,
       date: dateOnly(record.updatedAt),
-      category: portal === "seminar" ? "Seminar" : "Autism",
+      category: partnerCategory(portal),
       href: origin,
       priority: "high",
     });
@@ -419,7 +432,7 @@ function noticesFromPublic(portal: PartnerPortalId, payload: unknown): { notices
       title: ticker,
       description: ticker,
       date: dateOnly(record.updatedAt),
-      category: portal === "seminar" ? "Seminar" : "Autism",
+      category: partnerCategory(portal),
       href: origin,
       priority: "high",
     });
@@ -428,6 +441,7 @@ function noticesFromPublic(portal: PartnerPortalId, payload: unknown): { notices
 }
 
 async function pullPublic(portal: PartnerPortalId) {
+  if (portal === "fellowship") return { events: [] as Event[], notices: [] as Notice[], announcements: [] as Announcement[] };
   const origin = originFor(portal);
   const [schedules, announcements, seminars, vgmfFeed] = await Promise.all([
     fetchJson(`${origin}/api/event-schedules`),
@@ -488,22 +502,26 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
   const sourceId = String(row.id ?? email);
   const doctor = portal === "seminar" || extras.hasProfile || /doctor/i.test(`${roleRaw} ${userRole}`);
   const disabled = asNumber(row.is_disabled) === 1 || asNumber(row.is_banned) === 1;
-  const rawPassword = str(row, ["password"]);
+  const rawPassword = str(row, ["password", "password_hash"]);
   const hashed = looksHashedPassword(rawPassword);
-  const phone = str(row, ["phone", "contact_number"]);
-  const alternatePhone = str(row, ["alternate_phone", "alternatePhone", "whatsapp"]) || phone;
+  const phone = str(row, ["phone", "contact_number", "mobile"]);
+  const named = splitPersonName(str(row, ["full_name", "name"]));
+  const firstName = str(row, ["first_name", "firstName"]) || named.first || "Member";
+  const lastName = str(row, ["last_name", "lastName"]) || named.last;
+  const alternatePhone = str(row, ["alternate_phone", "alternatePhone", "alternate_mobile", "whatsapp"]) || phone;
+  const portalRole = portal === "seminar" ? (doctor ? "doctor" : "registrant") : portal === "fellowship" ? "applicant" : "applicant";
   return {
     account: {
       id: `${portal}-usr-${sourceId}`,
       sourceId,
-      firstName: str(row, ["first_name", "firstName"], "Member"),
+      firstName,
       middleName: str(row, ["middle_name"]) || undefined,
-      lastName: str(row, ["last_name", "lastName"]),
+      lastName,
       email,
       phone,
       whatsapp: str(row, ["whatsapp"]) || phone,
       alternatePhone,
-      accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string"])),
+      accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string", "user_id"])),
       role: "customer",
       password: hashed || !rawPassword ? undefined : rawPassword,
       partnerPasswordSet: Boolean(rawPassword),
@@ -516,7 +534,7 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
           hasTicket: Boolean(extras.hasTicket),
           ticketCount: extras.ticketCount,
           paymentCount: extras.paymentCount,
-          role: portal === "autism" ? "applicant" : doctor ? "doctor" : "registrant",
+          role: portalRole,
         }),
       ],
     },
@@ -524,8 +542,196 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
   };
 }
 
+function noticeFromRow(portal: PartnerPortalId, row: Record<string, unknown>, index = 0): Notice {
+  const origin = originFor(portal);
+  const title = str(row, ["title", "heading", "message"], "Notice");
+  const body = str(row, ["content", "description", "body", "message"], title);
+  const pdf = str(row, ["pdf_path", "attachment", "link_url"]);
+  const id = str(row, ["id"]) || `${portal}-notice-${index}-${slugify(title)}`;
+  return {
+    id: `${portal}-notice-${id}`,
+    title,
+    date: dateOnly(row.published_at || row.created_at),
+    category: str(row, ["category"]) && !["GENERAL", "EVENT"].includes(str(row, ["category"]))
+      ? str(row, ["category"])
+      : partnerCategory(portal),
+    description: body,
+    href: pdf ? mediaUrl(origin, pdf) : `${origin}/#notices`,
+    attachment: pdf ? mediaUrl(origin, pdf) : undefined,
+  };
+}
+
+async function pullNoticesDatabase(portal: PartnerPortalId): Promise<{ notices: Notice[]; announcements: Announcement[] }> {
+  const origin = originFor(portal);
+  const notices: Notice[] = [];
+  const announcements: Announcement[] = [];
+  const sql =
+    portal === "fellowship"
+      ? `SELECT id, title, content, category::text AS category, link_url, attachment_file_name, is_active, published_at, created_at
+           FROM notices
+          WHERE coalesce(is_active, true) = true
+          ORDER BY published_at DESC NULLS LAST, created_at DESC`
+      : portal === "autism"
+        ? `SELECT id, message, pdf_path, created_at FROM notices ORDER BY created_at DESC`
+        : `SELECT id, title, content, pdf_path, created_at FROM notices ORDER BY created_at DESC`;
+  const rows = (await queryRows(portal, sql)) ?? [];
+  rows.forEach((row, index) => {
+    const notice = noticeFromRow(portal, row, index);
+    notices.push(notice);
+    if (notice.description) {
+      announcements.push({
+        id: `${portal}-ann-db-${notice.id}`,
+        title: notice.title,
+        description: notice.description,
+        date: notice.date,
+        category: partnerCategory(portal),
+        href: origin,
+        priority: "high",
+      });
+    }
+  });
+  return { notices, announcements };
+}
+
+function fellowshipProgrammeEvent(settings: Record<string, unknown>, notices: Notice[]): Event {
+  const origin = originFor("fellowship");
+  const title = str(settings, ["hero_title", "site_name"], "Vaidya Gogate Memorial Foundation Research Fellowship 2026");
+  const description = str(settings, ["about_content", "site_tagline", "hero_subtitle"]) || notices.map((item) => item.title).join(" · ");
+  const signup = settings.signup_enabled == null ? true : Boolean(settings.signup_enabled);
+  const start = dateOnly(notices[0]?.date) || dateOnly(settings.updated_at) || "2026-06-17";
+  return {
+    id: "fellowship-programme",
+    name: title,
+    slug: slugify(`fellowship-${title}`),
+    shortDescription: (str(settings, ["site_tagline"]) || description).slice(0, 240),
+    description,
+    bannerUrl: mediaUrl(origin, settings.hero_snapshot || settings.logo_url),
+    startDate: start,
+    endDate: start,
+    mode: "Hybrid",
+    eventType: "Fellowship",
+    registrationStart: start,
+    registrationEnd: start,
+    fee: 0,
+    currency: "INR",
+    registrationStatus: signup ? "Open" : "Closed",
+    registrationUrl: origin,
+    source: "fellowship",
+    sourceUrl: origin,
+    tbd: { venue: true, city: true, dates: true, fee: true, registration: false },
+  };
+}
+
+async function pullFellowshipDatabase() {
+  const portal: PartnerPortalId = "fellowship";
+  if (!poolFor(portal)) return null;
+  const origin = originFor(portal);
+  const settings = ((await queryRows(portal, "SELECT * FROM site_settings LIMIT 1")) ?? [])[0] ?? {};
+  const copied = await pullNoticesDatabase(portal);
+  const ticker = str(settings, ["ticker_text"]);
+  if (ticker && settings.ticker_enabled !== false) {
+    copied.announcements.unshift({
+      id: "fellowship-ticker",
+      title: ticker,
+      description: ticker,
+      date: dateOnly(settings.updated_at),
+      category: "Fellowship",
+      href: origin,
+      priority: "high",
+    });
+  }
+  const events = [fellowshipProgrammeEvent(settings, copied.notices)];
+  const users = (await queryRows(
+    portal,
+    `SELECT u.id, u.user_id AS user_id_string, u.email, u.phone, u.password_hash AS password,
+            u.role::text AS role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
+            a.name AS full_name, a.mobile, a.alternate_mobile, a.application_number, a.status::text AS application_status,
+            a.id AS application_id, a.submitted_at
+       FROM users u
+       LEFT JOIN applications a ON a.user_id = u.id`
+  )) ?? [];
+  const orders = (await queryRows(
+    portal,
+    `SELECT o.id, o.amount, o.status, o.payment_date AS created_at, o.payment_gateway AS gateway,
+            r.user_id, u.email AS user_email
+       FROM orders o
+       LEFT JOIN registrations r ON r.id = o.registration_id
+       LEFT JOIN users u ON u.id::text = r.user_id::text`
+  )) ?? [];
+
+  const accounts: SanitizedPartnerAccount[] = [];
+  const ticketsByEmail: Record<string, PartnerTicketSummary[]> = {};
+  const paymentsByEmail: Record<string, PartnerPaymentSummary[]> = {};
+  const passwordHashes: Record<string, string> = {};
+  const seen = new Set<string>();
+
+  for (const row of users) {
+    const email = str(row, ["email"]).toLowerCase();
+    if (!email || seen.has(email)) {
+      if (email && str(row, ["application_id"])) {
+        const extra = {
+          id: `fellowship-app-${str(row, ["application_id"])}`,
+          portal,
+          eventName: str(row, ["application_number"]) || "Research Fellowship 2026",
+          status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+          issuedAt: iso(row.submitted_at) || undefined,
+          portalUrl: partnerTicketHref(portal),
+        };
+        const list = ticketsByEmail[email] ?? [];
+        if (!list.some((item) => item.id === extra.id)) ticketsByEmail[email] = [extra, ...list];
+      }
+      continue;
+    }
+    seen.add(email);
+    const hasApplication = Boolean(str(row, ["application_id"]));
+    const userOrders = orders.filter((item) => str(item, ["user_email"]).toLowerCase() === email || String(item.user_id) === String(row.id));
+    const mapped = mapAccount(portal, row, {
+      hasTicket: hasApplication,
+      ticketCount: hasApplication ? 1 : 0,
+      paymentCount: userOrders.length,
+    });
+    if (!mapped) continue;
+    if (mapped.passwordHash) passwordHashes[`${portal}:${mapped.account.email}`] = mapped.passwordHash;
+    if (hasApplication) {
+      ticketsByEmail[email] = [
+        {
+          id: `fellowship-app-${str(row, ["application_id"])}`,
+          portal,
+          eventName: str(row, ["application_number"]) ? `Fellowship ${str(row, ["application_number"])}` : "Research Fellowship 2026",
+          status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+          issuedAt: iso(row.submitted_at) || undefined,
+          portalUrl: partnerTicketHref(portal),
+        },
+      ];
+    }
+    paymentsByEmail[email] = userOrders.map((item) => ({
+      id: `fellowship-pay-${item.id}`,
+      portal,
+      amount: asNumber(item.amount),
+      currency: "INR",
+      status: str(item, ["status"], "Recorded"),
+      at: iso(item.created_at) || undefined,
+      eventName: "Research Fellowship 2026",
+      portalUrl: origin,
+    }));
+    accounts.push(mapped.account);
+  }
+
+  return {
+    events,
+    accounts,
+    ticketsByEmail,
+    paymentsByEmail,
+    passwordHashes,
+    notices: copied.notices,
+    announcements: copied.announcements,
+    registrations: Object.values(ticketsByEmail).length,
+  };
+}
+
 async function pullDatabase(portal: PartnerPortalId) {
   if (!poolFor(portal)) return null;
+  if (portal === "fellowship") return pullFellowshipDatabase();
   const origin = originFor(portal);
   const seminars = (await queryRows(portal, "SELECT * FROM seminars ORDER BY event_date DESC NULLS LAST, id DESC")) ?? [];
   const schedules = (await queryRows(
@@ -624,7 +830,7 @@ async function pullDatabase(portal: PartnerPortalId) {
     const account = mapped.account;
     if (mapped.passwordHash) passwordHashes[`${portal}:${account.email}`] = mapped.passwordHash;
     const email = account.email.toLowerCase();
-    const eventName = (id?: unknown) => str(seminarById.get(String(id || "")) ?? {}, ["title"]) || (portal === "seminar" ? "Seminar" : "Autism programme");
+    const eventName = (id?: unknown) => str(seminarById.get(String(id || "")) ?? {}, ["title"]) || `${partnerCategory(portal)} programme`;
     ticketsByEmail[email] = userTickets.map((item) => ({
       id: `${portal}-tkt-${item.id}`,
       portal,
@@ -659,12 +865,16 @@ async function pullDatabase(portal: PartnerPortalId) {
     }
   }
 
+  const copied = await pullNoticesDatabase(portal);
+
   return {
     events,
     accounts,
     ticketsByEmail,
     paymentsByEmail,
     passwordHashes,
+    notices: copied.notices,
+    announcements: copied.announcements,
     registrations: registrations.length,
   };
 }
@@ -739,13 +949,15 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     snapshot.paymentsByEmail = previous.paymentsByEmail;
     snapshot.passwordHashes = previous.passwordHashes ?? {};
   }
-  for (const portal of ["seminar", "autism"] as PartnerPortalId[]) {
+  for (const portal of partnerPortalIds) {
     const publicData = await pullPublic(portal);
     const dbData = mode === "full" ? await pullDatabase(portal) : null;
     const events = dbData?.events?.length ? mergeById(dbData.events, publicData.events) : publicData.events;
+    const notices = mergeById(publicData.notices, dbData?.notices ?? []);
+    const announcements = mergeById(publicData.announcements, dbData?.announcements ?? []);
     snapshot.events.push(...events);
-    snapshot.notices.push(...publicData.notices);
-    snapshot.announcements.push(...publicData.announcements);
+    snapshot.notices.push(...notices);
+    snapshot.announcements.push(...announcements);
     if (dbData) {
       snapshot.accounts.push(...dbData.accounts);
       Object.assign(snapshot.ticketsByEmail, dbData.ticketsByEmail);
@@ -754,7 +966,7 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     }
     snapshot.stats[portal] = {
       events: events.length,
-      notices: publicData.notices.length,
+      notices: notices.length,
       accounts: (mode === "full" ? dbData?.accounts.length : snapshot.accounts.filter((account) => account.partnerPortals?.some((item) => item.id === portal)).length) ?? 0,
       tickets: Object.values(mode === "full" ? dbData?.ticketsByEmail ?? {} : snapshot.ticketsByEmail).reduce((sum, rows) => sum + rows.filter((row) => row.portal === portal).length, 0),
       payments: Object.values(mode === "full" ? dbData?.paymentsByEmail ?? {} : snapshot.paymentsByEmail).reduce((sum, rows) => sum + rows.filter((row) => row.portal === portal).length, 0),
@@ -775,11 +987,13 @@ export async function loadPartnerSnapshot(opts?: { refresh?: boolean; full?: boo
   if (opts?.refresh) return syncPartnerPortals("public");
   if (!current?.syncedAt) {
     const light = await syncPartnerPortals("public");
-    if (dbUrl("seminar") || dbUrl("autism")) void syncPartnerPortals("full");
+    if (anyDbConfigured()) void syncPartnerPortals("full");
     return light;
   }
   const age = Date.now() - Date.parse(current.syncedAt);
-  if (!Number.isFinite(age) || age > (opts?.maxAgeMs ?? STALE_MS)) return syncPartnerPortals("public");
+  if (!Number.isFinite(age) || age > (opts?.maxAgeMs ?? STALE_MS)) {
+    return anyDbConfigured() ? syncPartnerPortals("full") : syncPartnerPortals("public");
+  }
   return current;
 }
 
@@ -804,14 +1018,15 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
       email: accountRow.email,
       phone: accountRow.phone,
       whatsapp: accountRow.whatsapp || accountRow.phone,
-      password: accountRow.password,
+      password: accountRow.password || accountRow.password_hash,
+      full_name: accountRow.name || accountRow.full_name,
       role: accountRow.role || (portal === "seminar" ? "doctor" : "user"),
       user_role: accountRow.user_role || accountRow.role,
       created_at: accountRow.createdAt,
       has_profile: portal === "seminar" ? 1 : 0,
     }, {
-      hasTicket: Boolean(payload.ticket || payload.hasTicket),
-      ticketCount: asNumber(payload.ticketCount) || (payload.ticket ? 1 : 0),
+      hasTicket: Boolean(payload.ticket || payload.application || payload.hasTicket),
+      ticketCount: asNumber(payload.ticketCount) || (payload.ticket || payload.application ? 1 : 0),
       paymentCount: asNumber(payload.paymentCount) || (payload.payment ? 1 : 0),
       hasProfile: portal === "seminar",
     });
@@ -833,7 +1048,7 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
       id: str(noticeRow, ["id"]) || `${portal}-notice-${Date.now()}`,
       title: str(noticeRow, ["title"], "Notice"),
       date: dateOnly(noticeRow.date),
-      category: portal === "seminar" ? "Seminar" : "Autism",
+      category: partnerCategory(portal),
       description: str(noticeRow, ["description", "body"], str(noticeRow, ["title"], "Notice")),
       href: str(noticeRow, ["href"]) || partnerPortalHref(portal),
     };
@@ -845,12 +1060,12 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
     }
   }
   const email = str(accountRow ?? {}, ["email"]).toLowerCase() || str(payload, ["email"]).toLowerCase();
-  const ticketRow = asRecord(payload.ticket);
+  const ticketRow = asRecord(payload.ticket) ?? asRecord(payload.application);
   if (email && ticketRow) {
     const ticket: PartnerTicketSummary = {
       id: str(ticketRow, ["id"]) || `${portal}-tkt-${Date.now()}`,
       portal,
-      eventName: str(ticketRow, ["eventName", "event", "title"], portal === "seminar" ? "Seminar" : "Autism programme"),
+      eventName: str(ticketRow, ["eventName", "event", "title", "application_number"], `${partnerCategory(portal)} programme`),
       status: str(ticketRow, ["status"], "Issued"),
       paymentStatus: str(ticketRow, ["paymentStatus"]) || undefined,
       amount: asNumber(ticketRow.amount) || undefined,
@@ -878,6 +1093,7 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
   snapshot.stats[portal] = {
     ...snapshot.stats[portal],
     events: snapshot.events.filter((event) => event.source === portal).length,
+    notices: snapshot.notices.filter((notice) => notice.id.startsWith(`${portal}-`)).length,
     accounts: snapshot.accounts.filter((account) => account.partnerPortals?.some((item) => item.id === portal)).length,
     tickets: Object.values(snapshot.ticketsByEmail).reduce((sum, rows) => sum + rows.filter((row) => row.portal === portal).length, 0),
     payments: Object.values(snapshot.paymentsByEmail).reduce((sum, rows) => sum + rows.filter((row) => row.portal === portal).length, 0),
@@ -908,10 +1124,11 @@ export function accountsForEmail(snapshot: PartnerSnapshot, email: string) {
 async function verifyAgainstLiveDatabases(identifier: string, password: string) {
   const email = identifier.includes("@") ? identifier.trim().toLowerCase() : "";
   const digits = phoneDigits(identifier);
-  for (const portal of ["seminar", "autism"] as PartnerPortalId[]) {
+  for (const portal of partnerPortalIds) {
+    const passwordSql = portal === "fellowship" ? "password_hash AS password" : "password";
     const rows = await queryRows(
       portal,
-      `SELECT email, phone, password
+      `SELECT email, phone, ${passwordSql}
          FROM users
         WHERE ($1 <> '' AND lower(email) = $1)
            OR ($2 <> '' AND right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = $2)

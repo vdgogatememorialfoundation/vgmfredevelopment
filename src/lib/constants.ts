@@ -24,6 +24,7 @@ export const fellowshipSiteUrl = "https://fellowship.vaidyagogate.org";
 export const partnerPortalMeta = {
   seminar: { id: "seminar" as const, label: "Seminar Portal", href: seminarSiteUrl, ticketsPath: "/dashboard" },
   autism: { id: "autism" as const, label: "Autism Portal", href: autismSiteUrl, ticketsPath: "/dashboard" },
+  fellowship: { id: "fellowship" as const, label: "Fellowship Portal", href: fellowshipSiteUrl, ticketsPath: "/dashboard" },
 };
 
 export const storeConfig = {

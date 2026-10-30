@@ -4,7 +4,7 @@ import Link from "next/link";
 import { articles } from "@/data/articles";
 import { books } from "@/data/books";
 import { clinics } from "@/data/clinics";
-import { announcements, flyers, notices } from "@/data/content";
+import { announcements, flyers } from "@/data/content";
 import { events } from "@/data/events";
 import { videos } from "@/data/videos";
 
@@ -95,19 +95,6 @@ const modules: {
     adminHref: "/admin/website/announcements",
     count: announcements.length,
     records: announcements.map((item) => ({
-      id: item.id,
-      title: item.title,
-      meta: `${item.category} · ${item.date}`,
-      href: item.href,
-    })),
-  },
-  {
-    id: "notices",
-    label: "Notice board",
-    publicHref: "/#notices",
-    adminHref: "/admin",
-    count: notices.length,
-    records: notices.map((item) => ({
       id: item.id,
       title: item.title,
       meta: `${item.category} · ${item.date}`,

@@ -17,6 +17,13 @@ export const adminNavigation: AdminNavGroup[] = [
   },
 
   {
+    label: "Notices",
+    items: [
+      { label: "Notice board", href: "/admin/notices" },
+    ],
+  },
+
+  {
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/commerce/orders" },

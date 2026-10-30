@@ -140,8 +140,8 @@ export default function SignInFlow() {
         if (!account.password && resolved.passwordSet) {
           setError(
             access.emailOtp
-              ? "This account is linked from a sister portal. Use Email OTP, forgot password, or the original Seminar / Autism password."
-              : "This account is linked from a sister portal. Use forgot password to set a Foundation password, or sign in with the original Seminar / Autism password."
+              ? "This account is linked from a sister portal. Use Email OTP, forgot password, or the original Seminar / Autism / Fellowship password."
+              : "This account is linked from a sister portal. Use forgot password to set a Foundation password, or sign in with the original Seminar / Autism / Fellowship password."
           );
           return;
         }

@@ -10,7 +10,7 @@ import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/schedule";
 
 const field = "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-ink";
 
-export function NoticeDesk({ compact = false }: { compact?: boolean }) {
+export function NoticeDesk() {
   const records = useLiveNotices();
   const [editing, setEditing] = useState<Notice | null>(null);
   const [title, setTitle] = useState("");
@@ -99,17 +99,23 @@ export function NoticeDesk({ compact = false }: { compact?: boolean }) {
   };
 
   return (
-    <div className={compact ? "space-y-3" : "space-y-5"}>
+    <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className={compact ? "text-lg font-semibold text-ink" : "font-serif text-2xl font-bold text-ink"}>Notices</h2>
-          <p className="mt-1 max-w-2xl text-sm text-stone-500">Pinned notices appear on the homepage.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-burgundy">Notices</p>
+          <h1 className="mt-1 font-serif text-2xl font-bold text-ink">Notice board</h1>
+          <p className="mt-1 max-w-2xl text-sm text-stone-500">
+            Publish circulars and deadlines here. Pinned notices appear on the public homepage board — they are not shown on the admin dashboard.
+          </p>
         </div>
-        {!compact ? (
-          <Link href="/" className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-ink">
-            View homepage
+        <div className="flex flex-wrap gap-2">
+          <Link href="/notices" className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-ink">
+            View notice board
           </Link>
-        ) : null}
+          <Link href="/#notices" className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-ink">
+            Homepage board
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-5">

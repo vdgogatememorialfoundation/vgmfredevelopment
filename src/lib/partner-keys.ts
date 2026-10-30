@@ -13,6 +13,13 @@ export const partnerSites = [
     envKey: "AUTISM_CERT_API_KEY",
     apiKey: "vgmf_live_autism_4b8d1e6a",
   },
+  {
+    id: "fellowship",
+    name: "Fellowship site",
+    origin: "https://fellowship.vaidyagogate.org",
+    envKey: "FELLOWSHIP_CERT_API_KEY",
+    apiKey: "vgmf_live_fellowship_9c2e4a1b",
+  },
 ] as const;
 
 export type PartnerSite = (typeof partnerSites)[number];

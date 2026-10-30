@@ -93,7 +93,7 @@ export function CustomerDesk() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Customers</h1>
           <p className="text-sm text-text-muted">
-            Seminar doctors, Autism applicants and website customers in one list. Search, update details, and resend login information.
+            Seminar doctors, Autism applicants, Fellowship applicants and website customers in one list. Search, update details, and resend login information.
           </p>
         </div>
         <div className="flex gap-2">
