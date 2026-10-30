@@ -8,6 +8,7 @@ export default function SiteLogo({ size = 48, className = "" }: { size?: number;
   const name = settings?.siteName || "VGMF";
   const logoUrl = settings?.logoUrl || "";
   const [broken, setBroken] = useState(false);
+  const height = Math.min(Math.max(size, 36), 56);
 
   if (logoUrl && !broken) {
     return (
@@ -15,18 +16,18 @@ export default function SiteLogo({ size = 48, className = "" }: { size?: number;
       <img
         src={logoUrl}
         alt={name}
-        className={`h-10 w-auto max-w-[9rem] shrink-0 object-contain object-left sm:h-12 sm:max-w-[10.5rem] ${className}`}
-        style={{ maxHeight: size }}
+        className={`block shrink-0 object-contain object-left ${className}`}
+        style={{ height, width: "auto", maxHeight: height, maxWidth: Math.max(height * 3.2, 120) }}
         onError={() => setBroken(true)}
       />
     );
   }
   return (
     <div
-      style={{ height: Math.min(size, 40), width: Math.min(size, 40) }}
-      className={`flex shrink-0 items-center justify-center rounded-full border-2 border-burgundy/30 bg-paper sm:h-12 sm:w-12 ${className}`}
+      style={{ height, width: height }}
+      className={`flex shrink-0 items-center justify-center rounded-full border-2 border-burgundy/30 bg-paper ${className}`}
     >
-      <span className="px-1 text-center font-bold leading-none tracking-tight text-ink" style={{ fontSize: Math.max(9, size / 4.6) }}>
+      <span className="px-1 text-center font-bold leading-none tracking-tight text-ink" style={{ fontSize: Math.max(9, height / 4.6) }}>
         {settings?.logoText || "VGMF"}
       </span>
     </div>

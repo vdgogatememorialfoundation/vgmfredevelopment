@@ -75,7 +75,7 @@ export default function HeroSection() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      <div className="relative h-[148px] w-full sm:h-[188px] lg:h-[220px]">
+      <div className="relative h-[168px] w-full sm:h-[188px] lg:h-[220px]">
         {slides.map((item, slideIndex) => {
           const visible = slideIndex === active;
           const image = (
@@ -83,13 +83,14 @@ export default function HeroSection() {
             <img
               src={item.image}
               alt={item.title || "Slideshow image"}
-              className={`absolute inset-0 h-full w-full object-cover ${item.image.includes("/slides/") ? "object-bottom" : "object-center"}`}
+              className={`absolute inset-0 object-cover ${item.image.includes("/slides/") ? "object-bottom" : "object-center"}`}
+              style={{ width: "100%", height: "100%", maxWidth: "none" }}
             />
           );
           return (
             <div
               key={item.id}
-              className={`absolute inset-0 transition-opacity duration-700 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              className={`absolute inset-0 z-0 transition-opacity duration-700 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
               aria-hidden={!visible}
             >
               {item.href ? (
@@ -102,44 +103,56 @@ export default function HeroSection() {
             </div>
           );
         })}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
+        <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
         {slide.title && !slide.image.startsWith("/slides/") ? (
-          <p className="pointer-events-none absolute bottom-7 left-4 right-14 font-serif text-base leading-snug text-white drop-shadow sm:bottom-8 sm:left-8 sm:text-xl lg:text-2xl">
+          <p className="pointer-events-none absolute bottom-8 left-14 right-14 z-10 font-serif text-base leading-snug text-white drop-shadow sm:bottom-8 sm:left-16 sm:text-xl lg:text-2xl">
             {slide.title}
           </p>
         ) : null}
 
         {count > 1 ? (
-          <>
+          <div className="pointer-events-none absolute inset-0 z-30">
             <button
               type="button"
               aria-label={t("hero.prev")}
-              onClick={() => go(active - 1)}
-              className="absolute left-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-2xl leading-none text-ink shadow sm:h-8 sm:w-8 sm:text-lg"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                go(active - 1);
+              }}
+              className="pointer-events-auto absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/80 bg-white text-2xl leading-none text-ink shadow-md sm:left-3"
             >
               ‹
             </button>
             <button
               type="button"
               aria-label={t("hero.next")}
-              onClick={() => go(active + 1)}
-              className="absolute right-2 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-2xl leading-none text-ink shadow sm:h-8 sm:w-8 sm:text-lg"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                go(active + 1);
+              }}
+              className="pointer-events-auto absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/80 bg-white text-2xl leading-none text-ink shadow-md sm:right-3"
             >
               ›
             </button>
-            <div className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+            <div className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
               {slides.map((item, slideIndex) => (
                 <button
                   key={item.id}
                   type="button"
                   aria-label={`Show slide ${slideIndex + 1}`}
                   aria-current={slideIndex === active}
-                  onClick={() => go(slideIndex)}
-                  className={`h-1.5 rounded-full ${slideIndex === active ? "w-5 bg-white" : "w-1.5 bg-white/50"}`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    go(slideIndex);
+                  }}
+                  className={`h-2 rounded-full ${slideIndex === active ? "w-5 bg-white" : "w-2 bg-white/60"}`}
                 />
               ))}
             </div>
-          </>
+          </div>
         ) : null}
       </div>
       <p className="sr-only" aria-live="polite">

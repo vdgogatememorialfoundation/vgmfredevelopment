@@ -161,7 +161,7 @@ export default function Header() {
           {/* Logo */}
           <Link
             href="/"
-            className="flex min-w-0 shrink items-center gap-2 sm:gap-3"
+            className="flex min-w-0 flex-1 items-center gap-2 overflow-visible sm:gap-3 lg:flex-none"
             aria-label="Vaidya Gogate Memorial Foundation — Home"
           >
             <SiteLogo size={48} />
@@ -328,7 +328,7 @@ export default function Header() {
           </div>
 
           {/* Mobile */}
-          <div className="flex items-center gap-2 lg:hidden">
+          <div className="flex shrink-0 items-center gap-2 lg:hidden">
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}

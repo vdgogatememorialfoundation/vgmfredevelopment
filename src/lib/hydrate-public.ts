@@ -1,7 +1,7 @@
 import { getSettings, saveSettings } from "@/lib/admin-store";
 import { flyerKeys } from "@/lib/cms";
 import { flyers as seededFlyers } from "@/data/content";
-import { appliedFeedAt, setAppliedFeedAt } from "@/lib/mobile-publish";
+import { appliedFeedAt, emptyFeedFallback, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
 import type { Flyer } from "@/types";
 
@@ -35,20 +35,34 @@ function tryWrite(write: () => void) {
 export async function hydratePublishedSite() {
   if (typeof window === "undefined") return;
   const dirty = window.localStorage.getItem(DIRTY_KEY);
-  const urls = ["/api/mobile/feed", "/app-feed.json"];
+  const urls = ["/api/mobile/brand", "/api/mobile/feed", "/app-feed.json"];
   for (const url of urls) {
     try {
       const response = await fetch(`${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`, { cache: "no-store" });
       if (!response.ok) continue;
-      const data = (await response.json()) as { feed?: MobileFeed } & Partial<MobileFeed>;
-      const feed = (data.feed?.site ? data.feed : data.site ? (data as MobileFeed) : null);
-      if (!feed?.site) continue;
-      setPublishedFeed(feed);
-      if (dirty) return;
-      if (appliedFeedAt() !== feed.publishedAt) {
-        applyFeed(feed);
-        if (feed.publishedAt) setAppliedFeedAt(feed.publishedAt);
+      const data = (await response.json()) as { feed?: MobileFeed; flyers?: MobileFeed["flyers"]; publishedAt?: string } & Partial<MobileFeed>;
+      const site = data.feed?.site ?? data.site;
+      if (!site) continue;
+      const base = getPublishedFeed() ?? emptyFeedFallback();
+      const full = data.feed?.site ? data.feed : Array.isArray(data.events) ? (data as MobileFeed) : null;
+      const flyers = data.feed?.flyers ?? data.flyers;
+      const merged: MobileFeed = {
+        ...base,
+        ...(full ?? {}),
+        site: { ...base.site, ...site },
+        flyers: flyers?.length ? flyers : base.flyers,
+        publishedAt: data.feed?.publishedAt || data.publishedAt || base.publishedAt,
+      };
+      setPublishedFeed(merged);
+      if (dirty) {
+        if (url.includes("/brand")) continue;
+        return;
       }
+      if (merged.publishedAt && appliedFeedAt() !== merged.publishedAt) {
+        applyFeed(merged);
+        setAppliedFeedAt(merged.publishedAt);
+      }
+      if (url.includes("/brand")) continue;
       return;
     } catch {
       /* try the next source */
