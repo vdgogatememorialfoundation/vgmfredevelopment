@@ -5,6 +5,8 @@ import {
   bearerToken,
   clearMobileOtp,
   createMobileSession,
+  publicSession,
+  revokeMobileSession,
   issueMobileOtp,
   sessionFromToken,
   verifyMobileOtp,
@@ -24,11 +26,17 @@ function json(body: unknown, status = 200) {
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const action = String(body?.action ?? "send");
+  const token = bearerToken(request.headers.get("authorization")) ?? String(body?.token ?? "");
+
+  if (action === "logout") {
+    revokeMobileSession(token);
+    return json({ ok: true });
+  }
 
   if (action === "session") {
-    const session = sessionFromToken(bearerToken(request.headers.get("authorization")) ?? String(body?.token ?? ""));
+    const session = sessionFromToken(token);
     if (!session) return json({ ok: false, error: "Sign in again." }, 401);
-    return json({ ok: true, session: { email: session.email, name: session.name } });
+    return json({ ok: true, session: publicSession(session) });
   }
 
   const email = String(body?.email ?? "").trim().toLowerCase();
@@ -37,7 +45,7 @@ export async function POST(request: NextRequest) {
   if (action === "send") {
     const issued = issueMobileOtp(email);
     if (issued.error) return json({ ok: false, error: issued.error }, 429);
-    const name = String(body?.name ?? "there");
+    const name = String(body?.name ?? "there").slice(0, 80);
     try {
       const sent = await sendMobileEmail(
         email,
@@ -61,8 +69,8 @@ export async function POST(request: NextRequest) {
   if (action === "verify") {
     const invalid = verifyMobileOtp(email, String(body?.code ?? ""));
     if (invalid) return json({ ok: false, error: invalid }, 400);
-    const session = createMobileSession(email, String(body?.name ?? ""));
-    return json({ ok: true, token: session.token, email: session.email, name: session.name });
+    const session = createMobileSession(email, String(body?.name ?? "").slice(0, 80));
+    return json({ ok: true, token: session.token, email: session.email, name: session.name, expiresAt: session.expiresAt });
   }
 
   return json({ ok: false, error: "Unknown action." }, 400);

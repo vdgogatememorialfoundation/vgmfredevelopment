@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
-import { Dimensions, Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Dimensions, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import { mediaUrl, moduleOn, str } from "../../src/api";
 import { useBrand, useFeed } from "../../src/feed";
 import { currentFlavor } from "../../src/flavor";
-import { Banner, BrandMark, Card, Empty, Loading, Muted, Screen, Title } from "../../src/ui";
+import { Banner, BrandMark, Button, Card, Empty, Loading, Muted, Screen, Title } from "../../src/ui";
 import { colors } from "../../src/theme";
 
 const EXPLORE: { id: string; href: string; label: string }[] = [
@@ -56,6 +56,7 @@ export default function HomeScreen() {
         ) : null}
       </View>
       <Banner text={error} tone="error" />
+      {error ? <Button label="Retry" onPress={() => void refresh()} /> : null}
       {flyers.length ? (
         <View style={{ marginBottom: 14 }}>
           <ScrollView
@@ -68,10 +69,15 @@ export default function HomeScreen() {
             {flyers.map((item) => (
               <Pressable
                 key={str(item.id)}
-                onPress={() => str(item.href) && router.push(str(item.href) as never)}
+                onPress={() => openPublishedHref(str(item.href))}
                 style={{ width, height: 168 }}
               >
-                <Image source={{ uri: mediaUrl(item.image) }} style={{ width: width - 4, height: 168, borderRadius: 18, backgroundColor: colors.paper }} />
+                <Image
+                  accessibilityLabel={str(item.title, "Published flyer")}
+                  alt={str(item.title, "Published flyer")}
+                  source={{ uri: mediaUrl(item.image) }}
+                  style={{ width: width - 4, height: 168, borderRadius: 18, backgroundColor: colors.paper }}
+                />
                 {str(item.title) && !str(item.image).includes("/slides/") ? (
                   <Text style={{ position: "absolute", left: 14, right: 14, bottom: 14, color: "white", fontWeight: "800" }}>{str(item.title)}</Text>
                 ) : null}
@@ -99,6 +105,8 @@ export default function HomeScreen() {
       ) : null}
       <Text style={{ fontSize: 22, lineHeight: 30, color: colors.ink, fontWeight: "700", marginBottom: 14 }}>{brand.tagline}</Text>
       {flavor.id === "admin" ? (
+        <>
+        <Muted>Read-only published snapshot. Creating or editing CMS records stays on the website because that desk is stored in the admin browser.</Muted>
         <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
           {[
             ["Events", events.length],
@@ -112,6 +120,7 @@ export default function HomeScreen() {
             </View>
           ))}
         </View>
+        </>
       ) : null}
       {(feed?.announcements ?? []).slice(0, 3).map((item) => (
         <Card key={str(item.id)} onPress={() => router.push("/announcements")}>
@@ -149,6 +158,32 @@ export default function HomeScreen() {
       <Muted>{feed?.publishedAt ? `Updated ${feed.publishedAt}` : "Pull to refresh after Admin publishes."}</Muted>
     </Screen>
   );
+}
+
+function openPublishedHref(href: string) {
+  if (!href) return;
+  if (/^https?:\/\//i.test(href) || /^(mailto:|tel:)/i.test(href)) {
+    void Linking.openURL(href);
+    return;
+  }
+  const routes: [RegExp, string][] = [
+    [/^\/events\/([^/?#]+)/, "/event/"],
+    [/^\/articles\/([^/?#]+)/, "/article/"],
+    [/^\/shop\/([^/?#]+)/, "/book/"],
+    [/^\/clinics\/([^/?#]+)/, "/clinic/"],
+    [/^\/p\//, ""],
+  ];
+  for (const [pattern, prefix] of routes) {
+    const match = href.match(pattern);
+    if (!match) continue;
+    if (!prefix) return;
+    router.push(`${prefix}${match[1]}` as never);
+    return;
+  }
+  if (href.startsWith("/") && !href.startsWith("//")) {
+    router.push(href as never);
+    return;
+  }
 }
 
 function arrowStyle(side: "left" | "right") {

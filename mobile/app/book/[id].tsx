@@ -29,10 +29,14 @@ export default function BookDetail() {
         {str(item.availability, str(item.stockStatus))} {item.pages ? `· ${item.pages} pages` : ""}
       </Muted>
       <Text style={{ marginTop: 12, lineHeight: 22 }}>{str(item.description)}</Text>
-      <Button
-        label="Add to bag"
-        onPress={() => cart.add({ id: str(item.id), title: str(item.title), price: Number(item.price) || 0 })}
-      />
+      {item.active === false || str(item.stockStatus) === "out_of_stock" ? (
+        <Muted>This publication is not available in the published catalogue right now.</Muted>
+      ) : (
+        <Button
+          label="Add to bag"
+          onPress={() => cart.add({ id: str(item.id), title: str(item.title), price: Number(item.price) || 0 })}
+        />
+      )}
     </Screen>
   );
 }

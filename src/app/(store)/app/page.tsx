@@ -43,10 +43,11 @@ export default function AppDownloadPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">{siteConfig.shortName}</p>
         <h1 className="mt-2 font-serif text-4xl text-ink">Android apps</h1>
         <p className="mt-4 text-sm leading-7 text-text-muted">
-          Four Flutter Android apps: customer, admin, staff and support. iOS is built in Swift from the same live website.
-          After install, each app loads its name and logo from this site. Changing those in <strong>Admin → Mobile app</strong>{" "}
-          and publishing updates phones immediately — no Play Store or App Store release. Do not email the APK files; Gmail
-          blocks them. Share these download links instead.
+          Four Expo (React Native) apps: customer, admin, staff and support. They read the published feed from this website
+          and are not a WebView wrapper. After install, each app loads its name and logo from this site. Changing those in{" "}
+          <strong>Admin → Mobile app</strong> and publishing updates phones immediately — no Play Store or App Store
+          release. APKs currently listed here may still be previous Flutter builds until Expo preview APKs are published. Do
+          not email the APK files; Gmail blocks them. Share these download links instead.
         </p>
         <div className="mt-10">
           <ApkDownloadGrid />

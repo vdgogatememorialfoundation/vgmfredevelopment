@@ -86,13 +86,20 @@ function headers(json = true): Record<string, string> {
   return value;
 }
 
-async function parse(response: Response) {
+async function parse(response: Response, mode: "public" | "auth" = "auth") {
   const text = await response.text();
+  let data: Record<string, unknown> = {};
   try {
-    return text ? JSON.parse(text) : {};
+    data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
   } catch {
-    return { ok: false, error: text || `HTTP ${response.status}` };
+    data = { ok: false, error: text || `HTTP ${response.status}` };
   }
+  if (mode === "auth" && response.status === 401) {
+    await saveSession(null);
+    data.ok = false;
+    data.error = data.error || "Sign in again.";
+  }
+  return data;
 }
 
 export async function fetchFeed(): Promise<Feed> {
@@ -101,13 +108,13 @@ export async function fetchFeed(): Promise<Feed> {
   for (const url of urls) {
     try {
       const response = await fetch(url, { headers: { accept: "application/json" } });
-      const data = await parse(response);
+      const data = await parse(response, "public");
       const feed = (data.feed ?? data) as Feed;
       if (feed?.site?.name) {
         if (feed.mobile?.apiBaseUrl) setApiBase(feed.mobile.apiBaseUrl);
         return feed;
       }
-      lastError = data.error || lastError;
+      lastError = String(data.error || lastError);
     } catch (error) {
       lastError = (error as Error).message || lastError;
     }
@@ -116,7 +123,7 @@ export async function fetchFeed(): Promise<Feed> {
 }
 
 export async function fetchLiveNotices() {
-  const data = await parse(await fetch(`${getApiBase()}/api/notices`, { headers: { accept: "application/json" } }));
+  const data = await parse(await fetch(`${getApiBase()}/api/notices`, { headers: { accept: "application/json" } }), "public");
   if (!data.ok) return [] as Row[];
   return (data.notices ?? []) as Row[];
 }
@@ -129,8 +136,41 @@ export async function sendEmailOtp(email: string, name?: string) {
       body: JSON.stringify({ action: "send", email, name }),
     })
   );
-  if (!data.ok) throw new Error(data.error || "Could not send the email code.");
+  if (!data.ok) throw new Error(String(data.error || "Could not send the email code."));
   return data as { ok: true; message?: string };
+}
+
+export async function logoutSession() {
+  const token = session?.token;
+  await saveSession(null);
+  if (!token) return;
+  try {
+    await fetch(`${getApiBase()}/api/mobile/otp`, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: "logout", token }),
+    });
+  } catch {
+    /* local sign-out still applies */
+  }
+}
+
+export async function checkSession() {
+  await loadSession();
+  if (!session?.token) return null;
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/otp`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "session" }),
+    }),
+    "auth"
+  );
+  if (!data.ok) {
+    await saveSession(null);
+    return null;
+  }
+  return session;
 }
 
 export async function verifyEmailOtp(email: string, code: string, name?: string) {
@@ -141,7 +181,7 @@ export async function verifyEmailOtp(email: string, code: string, name?: string)
       body: JSON.stringify({ action: "verify", email, code, name }),
     })
   );
-  if (!data.ok || !data.token) throw new Error(data.error || "That code is not valid.");
+  if (!data.ok || !data.token) throw new Error(String(data.error || "That code is not valid."));
   const next = { token: String(data.token), email: String(data.email || email), name: String(data.name || name || "") };
   await saveSession(next);
   return next;
@@ -149,7 +189,7 @@ export async function verifyEmailOtp(email: string, code: string, name?: string)
 
 export async function listTickets() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/tickets`, { headers: headers(false) }));
-  if (!data.ok) throw new Error(data.error || "Could not load tickets.");
+  if (!data.ok) throw new Error(String(data.error || "Could not load tickets."));
   return (data.tickets ?? []) as Row[];
 }
 
@@ -161,13 +201,13 @@ export async function createTicket(input: { name: string; email: string; phone?:
       body: JSON.stringify(input),
     })
   );
-  if (!data.ok) throw new Error(data.error || "Could not create the ticket.");
+  if (!data.ok) throw new Error(String(data.error || "Could not create the ticket."));
   return data.ticket as Row;
 }
 
 export async function listOrders() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/orders`, { headers: headers(false) }));
-  if (!data.ok) throw new Error(data.error || "Could not load orders.");
+  if (!data.ok) throw new Error(String(data.error || "Could not load orders."));
   return (data.orders ?? []) as Row[];
 }
 
@@ -175,7 +215,7 @@ export async function placeOrder(input: {
   name?: string;
   email?: string;
   phone?: string;
-  items: { id: string; title: string; quantity: number; price: number }[];
+  items: { id: string; quantity: number }[];
 }) {
   const data = await parse(
     await fetch(`${getApiBase()}/api/mobile/orders`, {
@@ -184,13 +224,16 @@ export async function placeOrder(input: {
       body: JSON.stringify(input),
     })
   );
-  if (!data.ok) throw new Error(data.error || "Could not place the order.");
+  if (!data.ok) throw new Error(String(data.error || "Could not place the order."));
   return data.order as Row;
 }
 
 export async function verifyCertificate(number: string) {
   const data = await parse(
-    await fetch(`${getApiBase()}/api/certificates/verify?number=${encodeURIComponent(number)}`, { headers: headers(false) })
+    await fetch(`${getApiBase()}/api/certificates/verify?number=${encodeURIComponent(number)}`, {
+      headers: { accept: "application/json" },
+    }),
+    "public"
   );
   return data as { ok?: boolean; verified?: boolean; error?: string; certificate?: Row; sourceLabel?: string };
 }

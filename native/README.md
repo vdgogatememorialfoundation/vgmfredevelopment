@@ -1,40 +1,16 @@
-# VGMF mobile apps
+# Archived native shells
 
-Android is **Flutter**. iOS is **Swift**. There are four apps:
+The **active** VGMF mobile application is the Expo (React Native + TypeScript) project in `/mobile`.
 
-| App | Package / bundle | Opens |
+This folder keeps earlier Flutter and Swift trees as a recoverable backup. Do not treat them as the product, and do not ship them as a WebView of the website.
+
+| App flavour | Expo package | Notes |
 | --- | --- | --- |
-| VGMF | `org.vaidyagogate.customer` | `/` |
-| VGMF Admin | `org.vaidyagogate.admin` | `/admin` |
-| VGMF Staff | `org.vaidyagogate.staff` | `/staff` |
-| VGMF Support | `org.vaidyagogate.support` | `/account/tickets` |
+| VGMF | `org.vaidyagogate.app` (customer flavour) | Home, events, shop, clinics, account |
+| VGMF Admin | same codebase, `EXPO_PUBLIC_FLAVOR=admin` | Read-only published snapshot |
+| VGMF Staff | `EXPO_PUBLIC_FLAVOR=staff` | Notices and own-email tickets |
+| VGMF Support | `EXPO_PUBLIC_FLAVOR=support` | Tickets and certificate lookup |
 
-Name and logo are loaded from `/api/mobile/feed` after Admin → Mobile app → Publish. That does not need a Play Store or App Store release.
+Name and logo come from `GET /api/mobile/feed` after **Admin → Mobile app → Publish**.
 
-Gmail blocks `.apk` attachments. Share the website download links instead of emailing the files.
-
-## Android (Flutter)
-
-```bash
-cd native/flutter
-flutter pub get
-./tool/build_apks.sh
-```
-
-APKs are copied to `public/apps/vgmf-{customer,admin,staff,support}.apk`.
-
-Run one flavor on a device:
-
-```bash
-flutter run --flavor customer --dart-define=FLAVOR=customer
-```
-
-## iOS (Swift)
-
-Open `native/ios/VGMF.xcodeproj` in Xcode on a Mac. Select **VGMF**, **VGMFAdmin**, **VGMFStaff** or **VGMFSupport**, set your signing team, and Archive for TestFlight.
-
-If you use [XcodeGen](https://github.com/yonaskolb/XcodeGen):
-
-```bash
-cd native/ios && xcodegen generate
-```
+Build and run from `mobile/IMPLEMENTATION.md`.
