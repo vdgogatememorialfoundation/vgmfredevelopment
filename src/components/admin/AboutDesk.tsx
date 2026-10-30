@@ -100,7 +100,7 @@ export default function AboutDesk() {
         <>
           <div className={card}>
             <input className={field} placeholder="Page title" value={draft.title} onChange={(event) => set({ title: event.target.value })} />
-            <textarea className={field} rows={3} placeholder="Introduction" value={draft.intro} onChange={(event) => set({ intro: event.target.value })} />
+            <textarea className={field} rows={12} placeholder="Introduction from the family" value={draft.intro} onChange={(event) => set({ intro: event.target.value })} />
             <ImageField label="Wide banner image (optional)" value={draft.heroImage} onChange={(heroImage) => set({ heroImage })} />
           </div>
           <div className={card}>

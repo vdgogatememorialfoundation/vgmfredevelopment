@@ -43,10 +43,11 @@ export default function AppDownloadPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">{siteConfig.shortName}</p>
         <h1 className="mt-2 font-serif text-4xl text-ink">Android apps</h1>
         <p className="mt-4 text-sm leading-7 text-text-muted">
-          Four Flutter Android apps: customer, admin, staff and support. iOS is built in Swift from the same live website.
-          After install, each app loads its name and logo from this site. Changing those in <strong>Admin → Mobile app</strong>{" "}
-          and publishing updates phones immediately — no Play Store or App Store release. Do not email the APK files; Gmail
-          blocks them. Share these download links instead.
+          Four Expo (React Native) apps: customer, admin, staff and support. Download them from this Next.js site — not from
+          vaidyagogate.org while that domain is still the previous Wix website. Uninstall the old Flutter app first (the one
+          that showed an Exception HTML page). After install, each app loads its name and logo from the published feed.
+          Changing those in <strong>Admin → Mobile app</strong> and publishing updates phones immediately. Do not email the
+          APK files; Gmail blocks them. Share these download links instead.
         </p>
         <div className="mt-10">
           <ApkDownloadGrid />

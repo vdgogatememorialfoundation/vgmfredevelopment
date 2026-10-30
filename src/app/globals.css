@@ -40,10 +40,12 @@ body {
   overflow-x: clip;
 }
 
-img,
-video {
-  max-width: 100%;
-  height: auto;
+@layer base {
+  /* Keep this layered so Tailwind height/width utilities still apply on phones. */
+  img,
+  video {
+    max-width: 100%;
+  }
 }
 
 iframe {

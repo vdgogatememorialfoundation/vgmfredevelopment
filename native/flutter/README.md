@@ -1,4 +1,6 @@
-# VGMF Flutter (Android)
+# Archived — VGMF Flutter (Android)
+
+**Not the active app.** The live VGMF application is React Native + Expo in `/mobile`. This Dart tree is kept as a recoverable backup.
 
 Four native Android apps share one Dart codebase: Customer, Admin, Staff and Support. The UI is Flutter (home, events, shop, clinics, tickets, certificates, account). It is not a website WebView.
 

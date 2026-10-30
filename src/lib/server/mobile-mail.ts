@@ -19,9 +19,12 @@ export type MobileEmailCreds = {
 
 export function saveMobileEmailCreds(creds: MobileEmailCreds | null | undefined) {
   if (!creds || typeof creds !== "object") return;
+  const hasSecret = Boolean(creds.zeptoToken || creds.zohoClientSecret || creds.zohoRefreshToken);
+  if (!hasSecret) return;
+  const next = { ...readMobileEmailCreds(), ...creds };
   try {
     mkdirSync("/tmp", { recursive: true });
-    writeFileSync(FILE, JSON.stringify(creds));
+    writeFileSync(FILE, JSON.stringify(next));
   } catch {
     /* ephemeral host */
   }

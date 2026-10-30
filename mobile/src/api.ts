@@ -1,5 +1,7 @@
 import * as SecureStore from "expo-secure-store";
-import { DEFAULT_API } from "./theme";
+import { DEFAULT_API, FEED_ORIGINS } from "./theme";
+
+export type Row = Record<string, unknown>;
 
 export type Feed = {
   publishedAt: string;
@@ -7,6 +9,7 @@ export type Feed = {
     name: string;
     tagline: string;
     logoUrl?: string;
+    logoText?: string;
     email: string;
     phone: string;
     address: string;
@@ -15,23 +18,25 @@ export type Feed = {
   flags: { supportUs?: boolean; supportUsTitle?: string; supportUsText?: string; supportUsHref?: string };
   visibility: Record<string, boolean>;
   mobile: {
-    minVersion: string;
-    latestVersion: string;
-    forceUpdate: boolean;
+    minVersion?: string;
+    latestVersion?: string;
+    forceUpdate?: boolean;
     playStoreUrl?: string;
     appStoreUrl?: string;
     apiBaseUrl?: string;
     modules: Record<string, boolean>;
+    apps?: Record<string, { name?: string; logoUrl?: string }>;
   };
-  events: Array<Record<string, unknown>>;
-  articles: Array<Record<string, unknown>>;
-  books: Array<Record<string, unknown>>;
-  clinics: Array<Record<string, unknown>>;
-  videos: Array<Record<string, unknown>>;
-  notices: Array<Record<string, unknown>>;
-  announcements: Array<Record<string, unknown>>;
-  gallery: Array<Record<string, unknown>>;
-  about: Record<string, unknown> | null;
+  events: Row[];
+  articles: Row[];
+  books: Row[];
+  clinics: Row[];
+  videos: Row[];
+  notices: Row[];
+  announcements: Row[];
+  flyers?: Row[];
+  gallery: Row[];
+  about: Row | null;
   policies: Record<string, { title?: string; description?: string; sections?: { title: string; body: string }[] }>;
   faqs: Array<{ question?: string; answer?: string }>;
 };
@@ -81,33 +86,87 @@ function headers(json = true): Record<string, string> {
   return value;
 }
 
-async function parse(response: Response) {
-  const text = await response.text();
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return { ok: false, error: text || `HTTP ${response.status}` };
+function looksLikeHtml(text: string) {
+  const trimmed = text.trim();
+  return (
+    /^<!DOCTYPE html/i.test(trimmed) ||
+    /^<html[\s>]/i.test(trimmed) ||
+    /parastorage\.com/i.test(trimmed) ||
+    /<(title|meta|script)[\s>]/i.test(trimmed)
+  );
+}
+
+function publicError(status: number, text: string) {
+  if (looksLikeHtml(text) || /400 Error: Bad Request|404 Error: Page Not Found/i.test(text)) {
+    return "The public website is not serving the app feed yet. Pull down to retry.";
   }
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 160 || trimmed.includes("<")) {
+    return status ? `Could not load the Foundation app feed (HTTP ${status}).` : "Could not load the Foundation app feed.";
+  }
+  return trimmed;
+}
+
+function feedOrigins() {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const raw of [getApiBase(), ...FEED_ORIGINS]) {
+    const origin = String(raw || "").replace(/\/$/, "");
+    if (!origin || seen.has(origin)) continue;
+    seen.add(origin);
+    list.push(origin);
+  }
+  return list;
+}
+
+async function parse(response: Response, mode: "public" | "auth" = "auth") {
+  const text = await response.text();
+  let data: Record<string, unknown> = {};
+  if (looksLikeHtml(text)) {
+    data = { ok: false, error: publicError(response.status, text) };
+  } else {
+    try {
+      data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      data = { ok: false, error: publicError(response.status, text) };
+    }
+  }
+  if (mode === "auth" && response.status === 401) {
+    await saveSession(null);
+    data.ok = false;
+    data.error = data.error || "Sign in again.";
+  }
+  return data;
 }
 
 export async function fetchFeed(): Promise<Feed> {
-  const urls = [`${getApiBase()}/api/mobile/feed?t=${Date.now()}`, `${getApiBase()}/app-feed.json?t=${Date.now()}`];
+  const stamp = Date.now();
+  const urls = feedOrigins().flatMap((origin) => [
+    `${origin}/api/mobile/feed?t=${stamp}`,
+    `${origin}/app-feed.json?t=${stamp}`,
+  ]);
   let lastError = "Could not reach the Foundation app feed.";
   for (const url of urls) {
     try {
       const response = await fetch(url, { headers: { accept: "application/json" } });
-      const data = await parse(response);
+      const data = await parse(response, "public");
       const feed = (data.feed ?? data) as Feed;
       if (feed?.site?.name) {
-        if (feed.mobile?.apiBaseUrl) setApiBase(feed.mobile.apiBaseUrl);
+        setApiBase(new URL(url).origin);
         return feed;
       }
-      lastError = data.error || lastError;
+      lastError = publicError(response.status, String(data.error || lastError));
     } catch (error) {
-      lastError = (error as Error).message || lastError;
+      lastError = publicError(0, (error as Error).message || lastError);
     }
   }
   throw new Error(lastError);
+}
+
+export async function fetchLiveNotices() {
+  const data = await parse(await fetch(`${getApiBase()}/api/notices`, { headers: { accept: "application/json" } }), "public");
+  if (!data.ok) return [] as Row[];
+  return (data.notices ?? []) as Row[];
 }
 
 export async function sendEmailOtp(email: string, name?: string) {
@@ -118,8 +177,41 @@ export async function sendEmailOtp(email: string, name?: string) {
       body: JSON.stringify({ action: "send", email, name }),
     })
   );
-  if (!data.ok) throw new Error(data.error || "Could not send the email code.");
+  if (!data.ok) throw new Error(String(data.error || "Could not send the email code."));
   return data as { ok: true; message?: string };
+}
+
+export async function logoutSession() {
+  const token = session?.token;
+  await saveSession(null);
+  if (!token) return;
+  try {
+    await fetch(`${getApiBase()}/api/mobile/otp`, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: "logout", token }),
+    });
+  } catch {
+    /* local sign-out still applies */
+  }
+}
+
+export async function checkSession() {
+  await loadSession();
+  if (!session?.token) return null;
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/otp`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "session" }),
+    }),
+    "auth"
+  );
+  if (!data.ok) {
+    await saveSession(null);
+    return null;
+  }
+  return session;
 }
 
 export async function verifyEmailOtp(email: string, code: string, name?: string) {
@@ -130,7 +222,7 @@ export async function verifyEmailOtp(email: string, code: string, name?: string)
       body: JSON.stringify({ action: "verify", email, code, name }),
     })
   );
-  if (!data.ok || !data.token) throw new Error(data.error || "That code is not valid.");
+  if (!data.ok || !data.token) throw new Error(String(data.error || "That code is not valid."));
   const next = { token: String(data.token), email: String(data.email || email), name: String(data.name || name || "") };
   await saveSession(next);
   return next;
@@ -138,8 +230,8 @@ export async function verifyEmailOtp(email: string, code: string, name?: string)
 
 export async function listTickets() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/tickets`, { headers: headers(false) }));
-  if (!data.ok) throw new Error(data.error || "Could not load tickets.");
-  return (data.tickets ?? []) as Array<Record<string, unknown>>;
+  if (!data.ok) throw new Error(String(data.error || "Could not load tickets."));
+  return (data.tickets ?? []) as Row[];
 }
 
 export async function createTicket(input: { name: string; email: string; phone?: string; subject: string; body: string }) {
@@ -150,21 +242,21 @@ export async function createTicket(input: { name: string; email: string; phone?:
       body: JSON.stringify(input),
     })
   );
-  if (!data.ok) throw new Error(data.error || "Could not create the ticket.");
-  return data.ticket as Record<string, unknown>;
+  if (!data.ok) throw new Error(String(data.error || "Could not create the ticket."));
+  return data.ticket as Row;
 }
 
 export async function listOrders() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/orders`, { headers: headers(false) }));
-  if (!data.ok) throw new Error(data.error || "Could not load orders.");
-  return (data.orders ?? []) as Array<Record<string, unknown>>;
+  if (!data.ok) throw new Error(String(data.error || "Could not load orders."));
+  return (data.orders ?? []) as Row[];
 }
 
 export async function placeOrder(input: {
   name?: string;
   email?: string;
   phone?: string;
-  items: { id: string; title: string; quantity: number; price: number }[];
+  items: { id: string; quantity: number }[];
 }) {
   const data = await parse(
     await fetch(`${getApiBase()}/api/mobile/orders`, {
@@ -173,13 +265,45 @@ export async function placeOrder(input: {
       body: JSON.stringify(input),
     })
   );
-  if (!data.ok) throw new Error(data.error || "Could not place the order.");
-  return data.order as Record<string, unknown>;
+  if (!data.ok) throw new Error(String(data.error || "Could not place the order."));
+  return data.order as Row;
 }
 
 export async function verifyCertificate(number: string) {
   const data = await parse(
-    await fetch(`${getApiBase()}/api/certificates/verify?number=${encodeURIComponent(number)}`, { headers: headers(false) })
+    await fetch(`${getApiBase()}/api/certificates/verify?number=${encodeURIComponent(number)}`, {
+      headers: { accept: "application/json" },
+    }),
+    "public"
   );
-  return data as { ok?: boolean; verified?: boolean; error?: string; certificate?: Record<string, unknown>; sourceLabel?: string };
+  return data as { ok?: boolean; verified?: boolean; error?: string; certificate?: Row; sourceLabel?: string };
+}
+
+export function str(value: unknown, fallback = "") {
+  if (value == null) return fallback;
+  const text = String(value).trim();
+  return text || fallback;
+}
+
+export function mediaUrl(value?: unknown) {
+  const raw = str(value);
+  if (!raw) return "";
+  if (/^(https?:|data:|file:|content:)/i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${getApiBase()}${raw}`;
+  return raw;
+}
+
+export function findRow(rows: Row[] | undefined, id: string) {
+  return (rows ?? []).find((row) => str(row.id) === id || str(row.slug) === id);
+}
+
+export function money(value: unknown) {
+  return `₹${(Number(value) || 0).toLocaleString("en-IN")}`;
+}
+
+export function moduleOn(feed: Feed | null, id: string) {
+  if (!feed) return true;
+  if (feed.visibility?.[id] === false) return false;
+  if (feed.mobile?.modules?.[id] === false) return false;
+  return true;
 }

@@ -136,7 +136,7 @@ export function useLiveFlyers() {
       flyerList = hasLocal || !published?.length ? getLiveFlyers() : (published as Flyer[]);
       return flyerList;
     },
-    () => seededFlyers
+    () => (getPublishedFeed()?.flyers as Flyer[] | undefined)?.length ? (getPublishedFeed()!.flyers as Flyer[]) : seededFlyers
   );
 }
 export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners);
@@ -180,7 +180,19 @@ export function useSiteSettings(): SiteSettings | null {
       };
       return settingsValue;
     },
-    () => null
+    () => {
+      const published = getPublishedFeed()?.site;
+      if (!published) return null;
+      const local = getSettings();
+      return {
+        ...local,
+        siteName: published.name || local.siteName,
+        tagline: published.tagline || local.tagline,
+        logoUrl: published.logoUrl || "",
+        logoText: published.logoText || local.logoText,
+        faviconUrl: published.faviconUrl || "",
+      };
+    }
   );
 }
 
