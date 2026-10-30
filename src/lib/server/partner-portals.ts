@@ -42,8 +42,6 @@ export type PartnerSnapshot = {
   ticketsByEmail: Record<string, PartnerTicketSummary[]>;
   paymentsByEmail: Record<string, PartnerPaymentSummary[]>;
   stats: Record<PartnerPortalId, PartnerStats>;
-  /** bcrypt / hex hashes keyed as `portal:email`. Never sent to the browser. */
-  passwordHashes?: Record<string, string>;
 };
 
 const emptyStats = (source: PartnerStats["source"] = "none"): PartnerStats => ({
@@ -65,7 +63,6 @@ export function emptySnapshot(): PartnerSnapshot {
     ticketsByEmail: {},
     paymentsByEmail: {},
     stats: { seminar: emptyStats(), autism: emptyStats(), fellowship: emptyStats() },
-    passwordHashes: {},
   };
 }
 
@@ -456,7 +453,7 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
   ticketCount?: number;
   paymentCount?: number;
   hasProfile?: boolean;
-}): { account: SanitizedPartnerAccount; passwordHash?: string } | null {
+}): SanitizedPartnerAccount | null {
   const email = str(row, ["email"]).toLowerCase();
   if (!email || !email.includes("@")) return null;
   const roleRaw = str(row, ["role"]);
@@ -472,35 +469,32 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
   const alternatePhone = str(row, ["alternate_phone", "alternatePhone", "alternate_mobile", "whatsapp"]) || phone;
   const portalRole = portal === "seminar" ? (doctor ? "doctor" : "registrant") : portal === "fellowship" ? "applicant" : "applicant";
   return {
-    account: {
-      id: `${portal}-usr-${sourceId}`,
-      sourceId,
-      firstName,
-      middleName: str(row, ["middle_name"]) || undefined,
-      lastName,
-      email,
-      phone,
-      whatsapp: str(row, ["whatsapp"]) || phone,
-      alternatePhone,
-      accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string", "user_id"])),
-      role: "customer",
-      password: undefined,
-      partnerPasswordSet: false,
-      foundationPasswordSet: false,
-      status: disabled ? "disabled" : "active",
-      statusReason: disabled ? str(row, ["ban_reason"]) || undefined : undefined,
-      createdAt: iso(row.created_at) || undefined,
-      createdBy: `${portal}-sync`,
-      partnerPortals: [
-        portalBadge(portal, {
-          hasTicket: Boolean(extras.hasTicket),
-          ticketCount: extras.ticketCount,
-          paymentCount: extras.paymentCount,
-          role: portalRole,
-        }),
-      ],
-    },
-    passwordHash: undefined,
+    id: `${portal}-usr-${sourceId}`,
+    sourceId,
+    firstName,
+    middleName: str(row, ["middle_name"]) || undefined,
+    lastName,
+    email,
+    phone,
+    whatsapp: str(row, ["whatsapp"]) || phone,
+    alternatePhone,
+    accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string", "user_id"])),
+    role: "customer",
+    password: undefined,
+    partnerPasswordSet: false,
+    foundationPasswordSet: false,
+    status: disabled ? "disabled" : "active",
+    statusReason: disabled ? str(row, ["ban_reason"]) || undefined : undefined,
+    createdAt: iso(row.created_at) || undefined,
+    createdBy: `${portal}-sync`,
+    partnerPortals: [
+      portalBadge(portal, {
+        hasTicket: Boolean(extras.hasTicket),
+        ticketCount: extras.ticketCount,
+        paymentCount: extras.paymentCount,
+        role: portalRole,
+      }),
+    ],
   };
 }
 
@@ -605,7 +599,7 @@ async function pullFellowshipDatabase() {
   const events = [fellowshipProgrammeEvent(settings, copied.notices)];
   const users = (await queryRows(
     portal,
-    `SELECT u.id, u.user_id AS user_id_string, u.email, u.phone, u.password_hash AS password,
+    `SELECT u.id, u.user_id AS user_id_string, u.email, u.phone,
             u.role::text AS role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
             a.name AS full_name, a.mobile, a.alternate_mobile, a.application_number, a.status::text AS application_status,
             a.id AS application_id, a.submitted_at
@@ -624,7 +618,6 @@ async function pullFellowshipDatabase() {
   const accounts: SanitizedPartnerAccount[] = [];
   const ticketsByEmail: Record<string, PartnerTicketSummary[]> = {};
   const paymentsByEmail: Record<string, PartnerPaymentSummary[]> = {};
-  const passwordHashes: Record<string, string> = {};
   const seen = new Set<string>();
 
   for (const row of users) {
@@ -653,7 +646,6 @@ async function pullFellowshipDatabase() {
       paymentCount: userOrders.length,
     });
     if (!mapped) continue;
-    if (mapped.passwordHash) passwordHashes[`${portal}:${mapped.account.email}`] = mapped.passwordHash;
     if (hasApplication) {
       ticketsByEmail[email] = [
         {
@@ -676,7 +668,7 @@ async function pullFellowshipDatabase() {
       eventName: "Research Fellowship 2026",
       portalUrl: origin,
     }));
-    accounts.push(mapped.account);
+    accounts.push(mapped);
   }
 
   return {
@@ -684,7 +676,6 @@ async function pullFellowshipDatabase() {
     accounts,
     ticketsByEmail,
     paymentsByEmail,
-    passwordHashes,
     notices: copied.notices,
     announcements: copied.announcements,
     registrations: Object.values(ticketsByEmail).length,
@@ -703,7 +694,7 @@ async function pullDatabase(portal: PartnerPortalId) {
   const users = (await queryRows(
     portal,
     `SELECT u.id, u.user_id_string, u.first_name, u.middle_name, u.last_name, u.email, u.phone, u.whatsapp,
-            u.password, u.role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
+            u.role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
             CASE WHEN d.user_id IS NULL THEN 0 ELSE 1 END AS has_profile
        FROM users u
        LEFT JOIN doctor_profile d ON d.user_id = u.id`
@@ -777,20 +768,17 @@ async function pullDatabase(portal: PartnerPortalId) {
   const accounts: SanitizedPartnerAccount[] = [];
   const ticketsByEmail: Record<string, PartnerTicketSummary[]> = {};
   const paymentsByEmail: Record<string, PartnerPaymentSummary[]> = {};
-  const passwordHashes: Record<string, string> = {};
 
   for (const row of users) {
     const userTickets = ticketsByUser.get(String(row.id)) ?? [];
     const userPayments = paymentsByUser.get(String(row.id)) ?? [];
-    const mapped = mapAccount(portal, row, {
+    const account = mapAccount(portal, row, {
       hasTicket: userTickets.some((item) => asNumber(item.is_valid) !== 0),
       ticketCount: userTickets.length,
       paymentCount: userPayments.length,
       hasProfile: asNumber(row.has_profile) === 1,
     });
-    if (!mapped) continue;
-    const account = mapped.account;
-    if (mapped.passwordHash) passwordHashes[`${portal}:${account.email}`] = mapped.passwordHash;
+    if (!account) continue;
     const email = account.email.toLowerCase();
     const eventName = (id?: unknown) => str(seminarById.get(String(id || "")) ?? {}, ["title"]) || `${partnerCategory(portal)} programme`;
     ticketsByEmail[email] = userTickets.map((item) => ({
@@ -834,7 +822,6 @@ async function pullDatabase(portal: PartnerPortalId) {
     accounts,
     ticketsByEmail,
     paymentsByEmail,
-    passwordHashes,
     notices: copied.notices,
     announcements: copied.announcements,
     registrations: registrations.length,
@@ -910,7 +897,6 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     snapshot.accounts = previous.accounts;
     snapshot.ticketsByEmail = previous.ticketsByEmail;
     snapshot.paymentsByEmail = previous.paymentsByEmail;
-    snapshot.passwordHashes = previous.passwordHashes ?? {};
   }
   for (const portal of partnerPortalIds) {
     const publicData = await pullPublic(portal);
@@ -925,7 +911,6 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
       snapshot.accounts.push(...dbData.accounts);
       Object.assign(snapshot.ticketsByEmail, dbData.ticketsByEmail);
       Object.assign(snapshot.paymentsByEmail, dbData.paymentsByEmail);
-      Object.assign(snapshot.passwordHashes ?? (snapshot.passwordHashes = {}), dbData.passwordHashes);
     }
     snapshot.stats[portal] = {
       events: events.length,
@@ -993,10 +978,7 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
       hasProfile: portal === "seminar",
     });
     if (mapped) {
-      snapshot.accounts = mergeAccounts([mapped.account, ...snapshot.accounts]);
-      if (mapped.passwordHash) {
-        snapshot.passwordHashes = { ...(snapshot.passwordHashes ?? {}), [`${portal}:${mapped.account.email}`]: mapped.passwordHash };
-      }
+      snapshot.accounts = mergeAccounts([mapped, ...snapshot.accounts]);
     }
   }
   const eventRow = asRecord(payload.event) ?? asRecord(payload.seminar);
