@@ -10,7 +10,7 @@ Set `EXPO_PUBLIC_FLAVOR` to `customer`, `admin`, `staff` or `support`. All four 
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | Website origin that serves `/api/mobile/*` | `https://vaidyagogate.org` |
+| `EXPO_PUBLIC_API_URL` | Next.js origin that serves `/api/mobile/*` | `https://vgmfredevelopment.vercel.app` (`vaidyagogate.org` is still Wix) |
 | `EXPO_PUBLIC_FLAVOR` | App role | `customer` |
 
 Copy `.env.example` if you add a local file. Do **not** put Razorpay, ZeptoMail, Shiprocket or other server secrets in the app.

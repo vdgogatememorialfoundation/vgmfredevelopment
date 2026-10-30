@@ -31,7 +31,7 @@ const config = {
     extra: {
       ...appJson.expo.extra,
       flavor: flavorId,
-      apiUrl: process.env.EXPO_PUBLIC_API_URL || appJson.expo.extra.apiUrl,
+      apiUrl: process.env.EXPO_PUBLIC_API_URL || appJson.expo.extra.apiUrl || "https://vgmfredevelopment.vercel.app",
     },
   },
 };

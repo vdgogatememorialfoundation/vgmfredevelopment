@@ -11,26 +11,26 @@
     "preview-customer": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_FLAVOR": "customer", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+      "env": { "EXPO_PUBLIC_FLAVOR": "customer", "EXPO_PUBLIC_API_URL": "https://vgmfredevelopment.vercel.app" }
     },
     "preview-admin": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_FLAVOR": "admin", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+      "env": { "EXPO_PUBLIC_FLAVOR": "admin", "EXPO_PUBLIC_API_URL": "https://vgmfredevelopment.vercel.app" }
     },
     "preview-staff": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_FLAVOR": "staff", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+      "env": { "EXPO_PUBLIC_FLAVOR": "staff", "EXPO_PUBLIC_API_URL": "https://vgmfredevelopment.vercel.app" }
     },
     "preview-support": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_FLAVOR": "support", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+      "env": { "EXPO_PUBLIC_FLAVOR": "support", "EXPO_PUBLIC_API_URL": "https://vgmfredevelopment.vercel.app" }
     },
     "production": {
       "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_FLAVOR": "customer", "EXPO_PUBLIC_API_URL": "https://vaidyagogate.org" }
+      "env": { "EXPO_PUBLIC_FLAVOR": "customer", "EXPO_PUBLIC_API_URL": "https://vgmfredevelopment.vercel.app" }
     }
   }
 }

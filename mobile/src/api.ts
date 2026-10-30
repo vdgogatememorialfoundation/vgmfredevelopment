@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store";
-import { DEFAULT_API } from "./theme";
+import { DEFAULT_API, FEED_ORIGINS } from "./theme";
 
 export type Row = Record<string, unknown>;
 
@@ -86,13 +86,50 @@ function headers(json = true): Record<string, string> {
   return value;
 }
 
+function looksLikeHtml(text: string) {
+  const trimmed = text.trim();
+  return (
+    /^<!DOCTYPE html/i.test(trimmed) ||
+    /^<html[\s>]/i.test(trimmed) ||
+    /parastorage\.com/i.test(trimmed) ||
+    /<(title|meta|script)[\s>]/i.test(trimmed)
+  );
+}
+
+function publicError(status: number, text: string) {
+  if (looksLikeHtml(text) || /400 Error: Bad Request|404 Error: Page Not Found/i.test(text)) {
+    return "The public website is not serving the app feed yet. Pull down to retry.";
+  }
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 160 || trimmed.includes("<")) {
+    return status ? `Could not load the Foundation app feed (HTTP ${status}).` : "Could not load the Foundation app feed.";
+  }
+  return trimmed;
+}
+
+function feedOrigins() {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const raw of [getApiBase(), ...FEED_ORIGINS]) {
+    const origin = String(raw || "").replace(/\/$/, "");
+    if (!origin || seen.has(origin)) continue;
+    seen.add(origin);
+    list.push(origin);
+  }
+  return list;
+}
+
 async function parse(response: Response, mode: "public" | "auth" = "auth") {
   const text = await response.text();
   let data: Record<string, unknown> = {};
-  try {
-    data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
-  } catch {
-    data = { ok: false, error: text || `HTTP ${response.status}` };
+  if (looksLikeHtml(text)) {
+    data = { ok: false, error: publicError(response.status, text) };
+  } else {
+    try {
+      data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+    } catch {
+      data = { ok: false, error: publicError(response.status, text) };
+    }
   }
   if (mode === "auth" && response.status === 401) {
     await saveSession(null);
@@ -103,7 +140,11 @@ async function parse(response: Response, mode: "public" | "auth" = "auth") {
 }
 
 export async function fetchFeed(): Promise<Feed> {
-  const urls = [`${getApiBase()}/api/mobile/feed?t=${Date.now()}`, `${getApiBase()}/app-feed.json?t=${Date.now()}`];
+  const stamp = Date.now();
+  const urls = feedOrigins().flatMap((origin) => [
+    `${origin}/api/mobile/feed?t=${stamp}`,
+    `${origin}/app-feed.json?t=${stamp}`,
+  ]);
   let lastError = "Could not reach the Foundation app feed.";
   for (const url of urls) {
     try {
@@ -111,12 +152,12 @@ export async function fetchFeed(): Promise<Feed> {
       const data = await parse(response, "public");
       const feed = (data.feed ?? data) as Feed;
       if (feed?.site?.name) {
-        if (feed.mobile?.apiBaseUrl) setApiBase(feed.mobile.apiBaseUrl);
+        setApiBase(new URL(url).origin);
         return feed;
       }
-      lastError = String(data.error || lastError);
+      lastError = publicError(response.status, String(data.error || lastError));
     } catch (error) {
-      lastError = (error as Error).message || lastError;
+      lastError = publicError(0, (error as Error).message || lastError);
     }
   }
   throw new Error(lastError);

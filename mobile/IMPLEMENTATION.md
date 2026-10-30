@@ -2,7 +2,7 @@
 
 The Next.js website in this repository is the source of truth. This Expo (React Native) app is a **native** customer, admin, staff and support client. It is not a WebView wrapper and it is not Flutter.
 
-Last updated: 30 October 2026, 8:25 PM IST (Asia/Calcutta).
+Last updated: 30 October 2026, 8:20 PM IST (Asia/Calcutta).
 
 Active application: `mobile/` (Expo SDK 54, React Native 0.81.5, Expo Router 6, `main: expo-router/entry`).
 Archived backups (not shipped): `native/flutter`, `native/ios`, `native/android-apps`.
@@ -92,6 +92,7 @@ These were confirmed in code and, where noted, by HTTP checks. They were not inf
 | Website and `native/` still described Flutter/Swift as the live apps | MobileAppDesk, `/app`, `native/README.md` | Copy now names Expo as the active app; Flutter/Swift kept as archived source |
 | Homepage slideshow was a wide 168px rectangle that cropped flyer art | Home carousel `height: 168` | Square 1:1 frame with `resizeMode: "contain"` and centered prev/next |
 | Notices had a tab and a stack page | `(tabs)/notices`, `app/notices`, Explore chip | Notice board on Home only; `/notices` redirects home; staff tab is Clinics |
+| Phone Home showed `Exception:` plus a Wix `400 Error: Bad Request` HTML page | Installed Flutter APK fetches `https://vaidyagogate.org/api/mobile/feed`; that host is still Wix | Expo loads `https://vgmfredevelopment.vercel.app` and never renders HTML error pages |
 | Empty email publish could wipe OTP mail secrets | `saveMobileEmailCreds` wrote `{}` | Secrets are merged and ignored when the payload has no token |
 
 HTTP checks on the local Next server (no production writes): unauthenticated order list/create → 401; unauthenticated ticket list → 401; client price / unknown id → 400; logout → 200.
@@ -191,7 +192,9 @@ eas build --profile preview-staff --platform android
 eas build --profile preview-support --platform android
 ```
 
-API base: `extra.apiUrl` / `EXPO_PUBLIC_API_URL` (default `https://vaidyagogate.org`). Flavor: `EXPO_PUBLIC_FLAVOR=customer|admin|staff|support` (`mobile/app.config.js`).
+API base: `extra.apiUrl` / `EXPO_PUBLIC_API_URL` (default `https://vgmfredevelopment.vercel.app`). Flavor: `EXPO_PUBLIC_FLAVOR=customer|admin|staff|support` (`mobile/app.config.ts`).
+
+`https://vaidyagogate.org` is still the previous Wix website. `GET /api/mobile/feed` there returns HTML 400/404 (`parastorage.com`). The Next.js feed is live at `https://vgmfredevelopment.vercel.app/api/mobile/feed`. Expo tries the configured origin, then Vercel, then the public domain. HTML error pages are never shown in the UI.
 
 Store signing, Play/App Store listings and push certificates are **not** in this repo. Admin must still **Publish to app** from the website so phones receive logo and content.
 
@@ -209,3 +212,4 @@ Hosted files at `/apps/vgmf-*.apk` may still be previous Flutter binaries until 
 8. `POST /api/mobile/publish` and notice writes are callable without a staff login because the CMS lives in the admin browser. A durable publish key needs an approved design so it does not lock the operator out.
 9. Mobile OTP sessions have no admin/staff role, so the support/admin flavors cannot list every ticket — only the signed-in email.
 10. Expo preview APKs have not replaced the Flutter files currently hosted at `/apps/*.apk`.
+11. `vaidyagogate.org` is still Wix. Installed Flutter APKs show a HTML 400 page on Home. Expo apps must use `https://vgmfredevelopment.vercel.app` until the public domain points at this Next.js site.

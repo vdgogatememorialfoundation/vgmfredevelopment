@@ -108,9 +108,11 @@ export function MobileAppDesk() {
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Download APKs</h2>
         <p className="mt-0.5 text-sm text-slate-500">
-          Android APKs currently hosted here are previous Flutter builds. New customer, admin, staff and support apps are
-          built from <code>mobile/</code> with Expo. Gmail blocks <code>.apk</code> files — email these page links, never
-          attach the APK. iOS Expo builds need macOS / EAS.
+          Android APKs currently hosted here are previous Flutter builds. Those builds call vaidyagogate.org, which is still
+          the Wix site, so Home can show a 400 HTML page instead of the feed. New customer, admin, staff and support apps
+          are built from <code>mobile/</code> with Expo and load{" "}
+          <code>https://vgmfredevelopment.vercel.app/api/mobile/feed</code>. Gmail blocks <code>.apk</code> files — email
+          these page links, never attach the APK. iOS Expo builds need macOS / EAS.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {appFlavors.map((app) => (

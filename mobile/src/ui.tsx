@@ -110,9 +110,11 @@ export function Empty({ label }: { label: string }) {
 
 export function Banner({ text, tone = "note" }: { text: string; tone?: "note" | "error" }) {
   if (!text) return null;
+  const html = /<!DOCTYPE|<html[\s>]|parastorage\.com/i.test(text);
+  const shown = html ? "Could not load the Foundation app feed. Pull down to retry." : text;
   return (
     <View style={[styles.banner, tone === "error" && { backgroundColor: "#F8E8E8" }]}>
-      <Text style={{ color: tone === "error" ? colors.burgundy : colors.ink, fontWeight: "600" }}>{text}</Text>
+      <Text style={{ color: tone === "error" ? colors.burgundy : colors.ink, fontWeight: "600" }}>{shown}</Text>
     </View>
   );
 }
