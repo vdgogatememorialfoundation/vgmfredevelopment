@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { mediaUrl, moduleOn, str } from "../../src/api";
 import { useBrand, useFeed } from "../../src/feed";
 import { currentFlavor } from "../../src/flavor";
+import { NoticesBoard } from "../../src/notices-list";
 import { Banner, BrandMark, Button, Card, Empty, Loading, Muted, Screen, Title } from "../../src/ui";
 import { colors } from "../../src/theme";
 
@@ -11,7 +12,6 @@ const EXPLORE: { id: string; href: string; label: string }[] = [
   { id: "articles", href: "/articles", label: "Articles" },
   { id: "videos", href: "/videos", label: "Videos" },
   { id: "gallery", href: "/gallery", label: "Gallery" },
-  { id: "notices", href: "/notices", label: "Notices" },
   { id: "about", href: "/about", label: "About" },
   { id: "support", href: "/support", label: "Support" },
   { id: "certificates", href: "/certificates", label: "Certificates" },
@@ -26,6 +26,7 @@ export default function HomeScreen() {
   const enabled = (id: string) => moduleOn(feed, id);
   const [hero, setHero] = useState(0);
   const width = Dimensions.get("window").width - 32;
+  const size = width;
   const scroller = useRef<ScrollView>(null);
   const flyers = (feed?.flyers ?? []).filter((item) => str(item.image));
   const events = feed?.events ?? [];
@@ -50,7 +51,10 @@ export default function HomeScreen() {
           <Text style={{ color: colors.ink, fontSize: 16, fontWeight: "800" }}>{brand.name}</Text>
         </View>
         {enabled("shop") ? (
-          <Pressable onPress={() => router.push("/cart")} style={{ borderWidth: 1, borderColor: colors.gold, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 }}>
+          <Pressable
+            onPress={() => router.push("/cart")}
+            style={{ borderWidth: 1, borderColor: colors.gold, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 }}
+          >
             <Text style={{ color: colors.burgundy, fontWeight: "700", fontSize: 12 }}>Bag</Text>
           </Pressable>
         ) : null}
@@ -58,7 +62,7 @@ export default function HomeScreen() {
       <Banner text={error} tone="error" />
       {error ? <Button label="Retry" onPress={() => void refresh()} /> : null}
       {flyers.length ? (
-        <View style={{ marginBottom: 14 }}>
+        <View style={{ marginBottom: 14, height: size }}>
           <ScrollView
             ref={scroller}
             horizontal
@@ -67,29 +71,28 @@ export default function HomeScreen() {
             onMomentumScrollEnd={(event) => setHero(Math.round(event.nativeEvent.contentOffset.x / width))}
           >
             {flyers.map((item) => (
-              <Pressable
-                key={str(item.id)}
-                onPress={() => openPublishedHref(str(item.href))}
-                style={{ width, height: 168 }}
-              >
+              <Pressable key={str(item.id)} onPress={() => openPublishedHref(str(item.href))} style={{ width, height: size, alignItems: "center" }}>
                 <Image
                   accessibilityLabel={str(item.title, "Published flyer")}
                   alt={str(item.title, "Published flyer")}
                   source={{ uri: mediaUrl(item.image) }}
-                  style={{ width: width - 4, height: 168, borderRadius: 18, backgroundColor: colors.paper }}
+                  resizeMode="contain"
+                  style={{ width: size, height: size, borderRadius: 18, backgroundColor: colors.paper }}
                 />
                 {str(item.title) && !str(item.image).includes("/slides/") ? (
-                  <Text style={{ position: "absolute", left: 14, right: 14, bottom: 14, color: "white", fontWeight: "800" }}>{str(item.title)}</Text>
+                  <Text style={{ position: "absolute", left: 14, right: 14, bottom: 14, color: colors.ink, fontWeight: "800" }}>
+                    {str(item.title)}
+                  </Text>
                 ) : null}
               </Pressable>
             ))}
           </ScrollView>
           {flyers.length > 1 ? (
             <>
-              <Pressable onPress={() => go(hero - 1)} style={arrowStyle("left")}>
+              <Pressable onPress={() => go(hero - 1)} style={arrowStyle("left", size)}>
                 <Text style={arrowText}>‹</Text>
               </Pressable>
-              <Pressable onPress={() => go(hero + 1)} style={arrowStyle("right")}>
+              <Pressable onPress={() => go(hero + 1)} style={arrowStyle("right", size)}>
                 <Text style={arrowText}>›</Text>
               </Pressable>
             </>
@@ -99,29 +102,44 @@ export default function HomeScreen() {
       {flyers.length > 1 ? (
         <View style={{ flexDirection: "row", gap: 6, marginBottom: 12 }}>
           {flyers.map((item, index) => (
-            <View key={str(item.id)} style={{ width: index === hero ? 16 : 6, height: 6, borderRadius: 3, backgroundColor: index === hero ? colors.burgundy : colors.border }} />
+            <View
+              key={str(item.id)}
+              style={{
+                width: index === hero ? 16 : 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: index === hero ? colors.burgundy : colors.border,
+              }}
+            />
           ))}
         </View>
       ) : null}
       <Text style={{ fontSize: 22, lineHeight: 30, color: colors.ink, fontWeight: "700", marginBottom: 14 }}>{brand.tagline}</Text>
       {flavor.id === "admin" ? (
         <>
-        <Muted>Read-only published snapshot. Creating or editing CMS records stays on the website because that desk is stored in the admin browser.</Muted>
-        <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-          {[
-            ["Events", events.length],
-            ["Shop", feed?.books.length ?? 0],
-            ["Clinics", feed?.clinics.length ?? 0],
-            ["Notices", feed?.notices.length ?? 0],
-          ].map(([label, count]) => (
-            <View key={String(label)} style={{ flex: 1, backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 12 }}>
-              <Text style={{ fontSize: 20, fontWeight: "800", color: colors.ink }}>{count}</Text>
-              <Muted>{label}</Muted>
-            </View>
-          ))}
-        </View>
+          <Muted>
+            Read-only published snapshot. Creating or editing CMS records stays on the website because that desk is stored in
+            the admin browser.
+          </Muted>
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+            {[
+              ["Events", events.length],
+              ["Shop", feed?.books.length ?? 0],
+              ["Clinics", feed?.clinics.length ?? 0],
+              ["Notices", feed?.notices.length ?? 0],
+            ].map(([label, count]) => (
+              <View
+                key={String(label)}
+                style={{ flex: 1, backgroundColor: colors.white, borderColor: colors.border, borderWidth: 1, borderRadius: 16, padding: 12 }}
+              >
+                <Text style={{ fontSize: 20, fontWeight: "800", color: colors.ink }}>{count}</Text>
+                <Muted>{label}</Muted>
+              </View>
+            ))}
+          </View>
         </>
       ) : null}
+      {enabled("notices") ? <NoticesBoard /> : null}
       {(feed?.announcements ?? []).slice(0, 3).map((item) => (
         <Card key={str(item.id)} onPress={() => router.push("/announcements")}>
           <Text style={{ color: colors.gold, fontSize: 11, fontWeight: "800" }}>{str(item.category, "Notice").toUpperCase()}</Text>
@@ -132,7 +150,11 @@ export default function HomeScreen() {
       <Title>Explore</Title>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         {EXPLORE.filter((item) => enabled(item.id)).map((item) => (
-          <Pressable key={item.id} onPress={() => router.push(item.href as never)} style={{ backgroundColor: colors.paper, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border }}>
+          <Pressable
+            key={item.id}
+            onPress={() => router.push(item.href as never)}
+            style={{ backgroundColor: colors.paper, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1, borderColor: colors.border }}
+          >
             <Text style={{ color: colors.burgundy, fontWeight: "700" }}>{item.label}</Text>
           </Pressable>
         ))}
@@ -162,6 +184,7 @@ export default function HomeScreen() {
 
 function openPublishedHref(href: string) {
   if (!href) return;
+  if (/^\/notices(\/|$)/.test(href)) return;
   if (/^https?:\/\//i.test(href) || /^(mailto:|tel:)/i.test(href)) {
     void Linking.openURL(href);
     return;
@@ -182,14 +205,13 @@ function openPublishedHref(href: string) {
   }
   if (href.startsWith("/") && !href.startsWith("//")) {
     router.push(href as never);
-    return;
   }
 }
 
-function arrowStyle(side: "left" | "right") {
+function arrowStyle(side: "left" | "right", size: number) {
   return {
     position: "absolute" as const,
-    top: 64,
+    top: size / 2 - 18,
     [side]: 8,
     width: 36,
     height: 36,

@@ -1,5 +1,5 @@
-import { NoticesList } from "../src/notices-list";
+import { Redirect } from "expo-router";
 
-export default function NoticesScreen() {
-  return <NoticesList />;
+export default function NoticesRedirect() {
+  return <Redirect href="/" />;
 }

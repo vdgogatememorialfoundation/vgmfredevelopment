@@ -2,7 +2,7 @@
 
 The Next.js website in this repository is the source of truth. This Expo (React Native) app is a **native** customer, admin, staff and support client. It is not a WebView wrapper and it is not Flutter.
 
-Last updated: 30 October 2026, 8:45 PM IST (Asia/Calcutta).
+Last updated: 30 October 2026, 8:25 PM IST (Asia/Calcutta).
 
 Active application: `mobile/` (Expo SDK 54, React Native 0.81.5, Expo Router 6, `main: expo-router/entry`).
 Archived backups (not shipped): `native/flutter`, `native/ios`, `native/android-apps`.
@@ -44,7 +44,7 @@ Status: **native** = implemented in Expo against a real API or the published fee
 
 | Feature | Website route | Role | Backend | Mobile screens | Nav | Notes | Status |
 |---|---|---|---|---|---|---|---|
-| Home + slideshow | `/` | public | feed `flyers`, `announcements`, `flags` | `(tabs)/index` | Tab Home | Native carousel with prev/next + explore + retry. Flyer hrefs open native routes or `Linking`. | native |
+| Home + slideshow | `/` | public | feed `flyers`, `announcements`, `flags` | `(tabs)/index` | Tab Home | Native **square** carousel (`contain`, prev/next). Flyer hrefs open native routes or `Linking`. | native |
 | Events list/detail | `/events`, `/events/[slug]` | public | feed `events` | `(tabs)/events`, `event/[id]` | Tab Events | Register opens `registrationUrl` | native |
 | Articles | `/articles`, `/articles/[slug]` | public | feed `articles` | `articles`, `article/[id]` | Explore | | native |
 | Shop + bag | `/shop`, `/shop/[slug]`, `/cart` | signed-in | feed `books`; `POST /api/mobile/orders` | `(tabs)/shop`, `book/[id]`, `cart` | Tab Shop | Records an **unpaid** mobile-API request after email sign-in. Prices from the published catalogue. Out-of-stock items cannot be added. **No Razorpay on device.** | native |
@@ -52,7 +52,7 @@ Status: **native** = implemented in Expo against a real API or the published fee
 | Clinics | `/clinics`, `/clinics/[slug]` | public | feed `clinics` | `(tabs)/clinics`, `clinic/[id]` | Tab Clinics | Call / maps via native links | native |
 | Gallery | `/gallery` | public | feed `gallery` | `gallery` | Explore | | native |
 | Videos | `/videos` | public | feed `videos` | `videos` | Explore | Opens YouTube/source | native |
-| Notices | `/notices` | public | feed + `GET /api/notices` | `notices` | Explore | Attachment via `/api/notices/:id/file` | native |
+| Notices | `/notices` | public | feed + `GET /api/notices` | `(tabs)/index` Notice board | Home only | No separate notices screen or tab. Attachments via `/api/notices/:id/file`. | native |
 | Announcements | `/announcements` | public | feed | `announcements` | Explore | | native |
 | About | `/about` and subpages | public | feed `about` | `about` | Explore | Foundation/history/trustees/legacy are sections in the published about snapshot | native |
 | Policies | `/privacy` `/terms` `/shipping-policy` `/refund-policy` `/return-policy` `/cancellation-policy` | public | feed `policies` | `policy/[id]` | Account / About | | native |
@@ -90,6 +90,8 @@ These were confirmed in code and, where noted, by HTTP checks. They were not inf
 | Flyer `href` was pushed into Expo Router even for `https://` URLs | Home carousel `router.push(item.href)` | Native route map or `Linking.openURL` |
 | Admin flavor looked like a CMS | Counts only | Explicit read-only published-snapshot copy |
 | Website and `native/` still described Flutter/Swift as the live apps | MobileAppDesk, `/app`, `native/README.md` | Copy now names Expo as the active app; Flutter/Swift kept as archived source |
+| Homepage slideshow was a wide 168px rectangle that cropped flyer art | Home carousel `height: 168` | Square 1:1 frame with `resizeMode: "contain"` and centered prev/next |
+| Notices had a tab and a stack page | `(tabs)/notices`, `app/notices`, Explore chip | Notice board on Home only; `/notices` redirects home; staff tab is Clinics |
 | Empty email publish could wipe OTP mail secrets | `saveMobileEmailCreds` wrote `{}` | Secrets are merged and ignored when the payload has no token |
 
 HTTP checks on the local Next server (no production writes): unauthenticated order list/create → 401; unauthenticated ticket list → 401; client price / unknown id → 400; logout → 200.
@@ -129,9 +131,20 @@ Until that store exists and is approved: keep the two stores labelled in the app
 
 **Admin:** Desk · Events · Shop · Tickets · Account (read-only published snapshot).
 
-**Staff:** Home · Events · Notices · Tickets · Account.
+**Staff:** Home · Events · Clinics · Tickets · Account.
 
 **Support:** Home · Tickets · Certificates · Account.
+
+Four Expo apps share `mobile/`. `EXPO_PUBLIC_FLAVOR` selects the name and store IDs:
+
+| Flavor | Display name | Android package | iOS bundle |
+|---|---|---|---|
+| customer | VGMF | `org.vaidyagogate.customer` | `org.vaidyagogate.customer` |
+| admin | VGMF Admin | `org.vaidyagogate.admin` | `org.vaidyagogate.admin` |
+| staff | VGMF Staff | `org.vaidyagogate.staff` | `org.vaidyagogate.staff` |
+| support | VGMF Support | `org.vaidyagogate.support` | `org.vaidyagogate.support` |
+
+EAS: `eas build --profile preview-customer|preview-admin|preview-staff|preview-support --platform android`. Flutter in `native/flutter` is an archived backup only.
 
 ## Device capabilities used
 
@@ -173,9 +186,12 @@ npm start                 # Expo dev
 npx expo run:android      # debug APK via the existing android/ project
 npx expo run:ios          # requires macOS / Xcode
 eas build --profile preview-customer --platform android
+eas build --profile preview-admin --platform android
+eas build --profile preview-staff --platform android
+eas build --profile preview-support --platform android
 ```
 
-API base: `extra.apiUrl` / `EXPO_PUBLIC_API_URL` (default `https://vaidyagogate.org`). Flavor: `EXPO_PUBLIC_FLAVOR=customer|admin|staff|support`.
+API base: `extra.apiUrl` / `EXPO_PUBLIC_API_URL` (default `https://vaidyagogate.org`). Flavor: `EXPO_PUBLIC_FLAVOR=customer|admin|staff|support` (`mobile/app.config.js`).
 
 Store signing, Play/App Store listings and push certificates are **not** in this repo. Admin must still **Publish to app** from the website so phones receive logo and content.
 

@@ -3,7 +3,7 @@ import { colors } from "./theme";
 
 export type FlavorId = "customer" | "admin" | "staff" | "support";
 
-export type TabId = "home" | "events" | "shop" | "clinics" | "account" | "support" | "notices" | "certificates";
+export type TabId = "home" | "events" | "shop" | "clinics" | "account" | "support" | "certificates";
 
 export type Flavor = {
   id: FlavorId;
@@ -44,7 +44,7 @@ const ALL: Record<FlavorId, Flavor> = {
     tabs: [
       { id: "home", title: "Home", icon: "home" },
       { id: "events", title: "Events", icon: "calendar" },
-      { id: "notices", title: "Notices", icon: "megaphone" },
+      { id: "clinics", title: "Clinics", icon: "medical" },
       { id: "support", title: "Tickets", icon: "chatbubbles" },
       { id: "account", title: "Account", icon: "person" },
     ],
@@ -63,10 +63,8 @@ const ALL: Record<FlavorId, Flavor> = {
 };
 
 export function currentFlavor(): Flavor {
-  const raw = String(
-    process.env.EXPO_PUBLIC_FLAVOR || Constants.expoConfig?.extra?.flavor || "customer"
-  )
+  const raw = String(process.env.EXPO_PUBLIC_FLAVOR || Constants.expoConfig?.extra?.flavor || "customer")
     .trim()
     .toLowerCase();
-  return ALL[(raw as FlavorId)] ?? ALL.customer;
+  return ALL[raw as FlavorId] ?? ALL.customer;
 }

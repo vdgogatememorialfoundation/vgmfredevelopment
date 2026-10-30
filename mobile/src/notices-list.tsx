@@ -1,14 +1,13 @@
 import { Linking, Text } from "react-native";
 import { getApiBase, str } from "./api";
 import { useFeed } from "./feed";
-import { Button, Card, Empty, Loading, Muted, Screen, Title } from "./ui";
+import { Button, Card, Empty, Muted, Title } from "./ui";
 
-export function NoticesList() {
-  const { notices, feed, loading, refresh } = useFeed();
+export function NoticesBoard() {
+  const { notices, feed } = useFeed();
   const items = notices.length ? notices : feed?.notices ?? [];
-  if (loading && !feed) return <Loading />;
   return (
-    <Screen refreshing={loading} onRefresh={refresh}>
+    <>
       <Title>Notice board</Title>
       {items.map((item) => (
         <Card key={str(item.id)}>
@@ -27,6 +26,6 @@ export function NoticesList() {
         </Card>
       ))}
       {!items.length ? <Empty label="Notices appear here after they are published." /> : null}
-    </Screen>
+    </>
   );
 }
