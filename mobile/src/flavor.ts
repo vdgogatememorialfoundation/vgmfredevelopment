@@ -1,5 +1,14 @@
+import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { colors } from "./theme";
+
+function flavorIdFromPackage(pkg: string): FlavorId {
+  const id = pkg.toLowerCase();
+  if (id.endsWith(".admin")) return "admin";
+  if (id.endsWith(".staff")) return "staff";
+  if (id.endsWith(".support")) return "support";
+  return "customer";
+}
 
 export type FlavorId = "customer" | "admin" | "staff" | "support";
 
@@ -63,8 +72,8 @@ const ALL: Record<FlavorId, Flavor> = {
 };
 
 export function currentFlavor(): Flavor {
-  const raw = String(process.env.EXPO_PUBLIC_FLAVOR || Constants.expoConfig?.extra?.flavor || "customer")
-    .trim()
-    .toLowerCase();
-  return ALL[raw as FlavorId] ?? ALL.customer;
+  const env = String(process.env.EXPO_PUBLIC_FLAVOR || "").trim().toLowerCase();
+  if (env && ALL[env as FlavorId]) return ALL[env as FlavorId];
+  const pkg = String(Application.applicationId || Constants.expoConfig?.android?.package || "");
+  return ALL[flavorIdFromPackage(pkg)];
 }

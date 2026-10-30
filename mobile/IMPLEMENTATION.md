@@ -165,7 +165,7 @@ EAS: `eas build --profile preview-customer|preview-admin|preview-staff|preview-s
 | `npx expo install --check` | Dependencies up to date (SDK 54) |
 | `npx expo config --type public --json` | SDK 54, platforms ios/android/web, package `org.vaidyagogate.app` |
 | `npx expo export --platform android` | Hermes bundle written (`entry-*.hbc`, 1166 modules) |
-| `./gradlew :app:assembleDebug` | Passed; produced `mobile/android/app/build/outputs/apk/debug/app-debug.apk` (104 MB). **Not installed on a device.** |
+| `./gradlew :app:assembleCustomerRelease` (and admin/staff/support) | Passed; 56 MB Expo APKs copied to `public/apps/vgmf-*.apk`. **Not installed on a device in this agent.** |
 | Expo Router screens for mapped native features | Present; cart/account/tickets/orders call real APIs with split-store labels |
 | `GET`/`POST` orders without Bearer | 401 |
 | `GET` tickets without Bearer | 401 |
@@ -198,7 +198,26 @@ API base: `extra.apiUrl` / `EXPO_PUBLIC_API_URL` (default `https://vgmfredevelop
 
 Store signing, Play/App Store listings and push certificates are **not** in this repo. Admin must still **Publish to app** from the website so phones receive logo and content.
 
-Hosted files at `/apps/vgmf-*.apk` may still be previous Flutter binaries until Expo preview APKs are copied there.
+## Install on an Android phone
+
+Do **not** install from `vaidyagogate.org` (still Wix). Uninstall the Flutter app first (Home showed `Exception:` and **Bag 0**).
+
+Open these links **on the phone** (Chrome). Allow installs from the browser if Android asks.
+
+| App | Download |
+|---|---|
+| VGMF (customer) | https://vgmfredevelopment.vercel.app/apps/vgmf-customer.apk |
+| VGMF Admin | https://vgmfredevelopment.vercel.app/apps/vgmf-admin.apk |
+| VGMF Staff | https://vgmfredevelopment.vercel.app/apps/vgmf-staff.apk |
+| VGMF Support | https://vgmfredevelopment.vercel.app/apps/vgmf-support.apk |
+
+Until this branch is on the Vercel production host, the same files are on the PR branch:
+
+https://github.com/vdgogatememorialfoundation/vgmfredevelopment/raw/cursor/expo-native-app-9792/public/apps/vgmf-customer.apk
+
+Gmail blocks `.apk` attachments. Share the link, never the file.
+
+These APKs are Expo release builds (`org.vaidyagogate.customer|admin|staff|support`), signed with the debug keystore for sideload. They are not Play Store releases.
 
 ## Blockers (explicit)
 
@@ -211,5 +230,5 @@ Hosted files at `/apps/vgmf-*.apk` may still be previous Flutter binaries until 
 7. Phones only receive a new logo after **Save settings** or **Publish to app**.
 8. `POST /api/mobile/publish` and notice writes are callable without a staff login because the CMS lives in the admin browser. A durable publish key needs an approved design so it does not lock the operator out.
 9. Mobile OTP sessions have no admin/staff role, so the support/admin flavors cannot list every ticket — only the signed-in email.
-10. Expo preview APKs have not replaced the Flutter files currently hosted at `/apps/*.apk`.
-11. `vaidyagogate.org` is still Wix. Installed Flutter APKs show a HTML 400 page on Home. Expo apps must use `https://vgmfredevelopment.vercel.app` until the public domain points at this Next.js site.
+10. `vaidyagogate.org` is still Wix. Install Expo APKs from the Next.js `/apps/*.apk` links, not from the Wix site.
+11. Sideloaded APKs use the debug signing key. Play/App Store listing still needs a release keystore.

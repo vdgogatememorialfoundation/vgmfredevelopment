@@ -9,7 +9,7 @@ export function ApkDownloadGrid({ compact = false }: { compact?: boolean }) {
           <h2 className="mt-2 font-serif text-2xl text-ink">{app.defaultName}</h2>
           <p className="mt-2 break-all text-xs text-text-muted">{app.androidPackage}</p>
           <a href={app.download} className="btn-primary mt-5 inline-flex" download={`vgmf-${app.id}.apk`}>
-            Download APK
+            Download Android app
           </a>
         </article>
       ))}
