@@ -10,6 +10,38 @@ export const applicationPipelineSteps: { key: Application["status"]; label: stri
   { key: "Confirmed", label: "Confirmed" },
 ];
 
+export const fallbackApplicationStatuses: Record<PartnerPortalId, string[]> = {
+  seminar: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
+  autism: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
+  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Accepted", "Rejected", "Waitlisted"],
+};
+
+export type PartnerStatusCatalog = Record<PartnerPortalId, string[]>;
+
+export function prettyPartnerStatus(raw?: string) {
+  const value = (raw ?? "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!value) return "";
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export function mergeStatusCatalog(live: Partial<PartnerStatusCatalog> | undefined, extra: string[] = []): PartnerStatusCatalog {
+  const next: PartnerStatusCatalog = {
+    seminar: [...fallbackApplicationStatuses.seminar],
+    autism: [...fallbackApplicationStatuses.autism],
+    fellowship: [...fallbackApplicationStatuses.fellowship],
+  };
+  for (const portal of Object.keys(next) as PartnerPortalId[]) {
+    const set = new Set(next[portal].map(prettyPartnerStatus));
+    for (const value of live?.[portal] ?? []) {
+      const text = prettyPartnerStatus(value);
+      if (text) set.add(text);
+    }
+    next[portal] = [...set];
+  }
+  void extra;
+  return next;
+}
+
 export type TrackedApplication = {
   application: Application;
   ticket?: PartnerTicketSummary;

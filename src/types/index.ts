@@ -476,6 +476,7 @@ export interface Order {
     | "Shipped"
     | "Out for Delivery"
     | "Delivered"
+    | "Failed"
     | "Cancelled";
   channel?: "online" | "admin" | "pos";
   stockCommitted?: boolean;
@@ -682,7 +683,7 @@ export interface ShipmentRecord {
   charges: number;
   toAddress: DeliveryAddress & { orderId?: string };
   items: { sku: string; title: string; quantity: number; barcode?: string }[];
-  status: "Booked" | "Picked Up" | "In Transit" | "Out for Delivery" | "Delivered";
+  status: "Booked" | "Picked Up" | "In Transit" | "Out for Delivery" | "Delivered" | "Failed";
   generatedAt: string;
   pickedUpAt?: string;
   provider?: CourierRate["provider"];

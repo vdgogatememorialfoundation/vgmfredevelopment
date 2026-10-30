@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import ApplicationPipeline from "@/components/applications/ApplicationPipeline";
 import Badge from "@/components/common/Badge";
 import { applicationFromTicket, kindLabel, normalizeApplicationStatus } from "@/lib/application-pipeline";
-import { partnerPortalHref, partnerPortalLabel } from "@/lib/partner-labels";
+import { partnerPortalHref, partnerPortalLabel, partnerTrackHref } from "@/lib/partner-labels";
 import { usePartnerRecords } from "@/lib/use-partner-records";
 import type { PartnerPortalId } from "@/types";
 
@@ -140,8 +140,13 @@ export function PartnerDrawerProvider({ children }: { children: ReactNode }) {
                                 >
                                   Track on this portal
                                 </Link>
-                                <a href={ticket.portalUrl || partnerPortalHref(ticket.portal)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-burgundy hover:underline">
-                                  Open sister portal
+                                <a
+                                  href={ticket.portal === "seminar" ? partnerTrackHref("seminar") : ticket.portalUrl || partnerPortalHref(ticket.portal)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs font-semibold text-burgundy hover:underline"
+                                >
+                                  {ticket.portal === "seminar" ? "Track on Seminar doctor portal" : "Open sister portal"}
                                 </a>
                               </div>
                             </li>

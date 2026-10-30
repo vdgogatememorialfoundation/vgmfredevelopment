@@ -42,6 +42,7 @@ import {
 import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import LiveTracking from "@/components/store/LiveTracking";
+import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
@@ -61,6 +62,7 @@ const ALL_STATUSES: Order["status"][] = [
   "Shipped",
   "Out for Delivery",
   "Delivered",
+  "Failed",
   "Cancelled",
 ];
 const PAYMENT_TONES: Record<string, string> = {
@@ -928,7 +930,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ))}
                   </ol>
                 )}
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 space-y-4">
+                  <OrderTrackingTimeline order={order} />
                   <LiveTracking order={order} />
                 </div>
               </div>

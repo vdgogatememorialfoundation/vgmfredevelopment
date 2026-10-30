@@ -9,7 +9,7 @@ import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import LiveTracking from "@/components/store/LiveTracking";
 import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getOrdersByEmail, formatPrice } from "@/lib/store";
+import { getOrdersByEmail, formatPrice, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import type { Order } from "@/types";
 
@@ -27,6 +27,8 @@ function latestStatusText(order: Order) {
       return "Your order is being processed";
     case "Cancelled":
       return "This order was cancelled";
+    case "Failed":
+      return "Delivery failed";
     default:
       return "Your order is placed";
   }
@@ -36,13 +38,21 @@ export default function OrdersPage() {
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
+    purgeSampleOrders();
     const frame = window.requestAnimationFrame(() => setMounted(true));
-    return () => window.cancelAnimationFrame(frame);
+    const onChange = () => setTick((value) => value + 1);
+    window.addEventListener("vgmf-cms", onChange);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("vgmf-cms", onChange);
+    };
   }, []);
 
   const orders = mounted ? getOrdersByEmail(user?.email) : [];
+  void tick;
 
   return (
     <div>

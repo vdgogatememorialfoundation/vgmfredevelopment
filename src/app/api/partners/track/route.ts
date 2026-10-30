@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders } from "@/lib/server/mobile-feed";
-import { findPartnerApplication, loadPartnerSnapshot } from "@/lib/server/partner-portals";
+import { liveApplicationById, liveStatusCatalogs } from "@/lib/server/partner-portals";
 
 export const runtime = "nodejs";
 
@@ -13,13 +13,14 @@ export async function GET(request: NextRequest) {
   if (!id) {
     return NextResponse.json({ ok: true, found: false, ticket: null }, { headers: { ...corsHeaders, "cache-control": "no-store" } });
   }
-  const snapshot = await loadPartnerSnapshot();
-  const match = findPartnerApplication(snapshot, id);
+  const [match, statuses] = await Promise.all([liveApplicationById(id), liveStatusCatalogs()]);
   return NextResponse.json(
     {
       ok: true,
       found: Boolean(match),
       ticket: match?.ticket ?? null,
+      email: match?.email ?? null,
+      statuses,
     },
     { headers: { ...corsHeaders, "cache-control": "no-store" } }
   );

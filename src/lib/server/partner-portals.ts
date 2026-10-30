@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Pool } from "pg";
 import { accountMatchesIdentifier } from "@/lib/account-identity";
 import { upsertNotice } from "@/lib/server/notices";
-import { partnerCategory, partnerPortalHref, partnerPortalIds, partnerTicketHref, portalBadge } from "@/lib/partner-labels";
+import { partnerCategory, partnerPortalHref, partnerPortalIds, partnerTicketHref, partnerTrackHref, portalBadge } from "@/lib/partner-labels";
 import { AUTISM_ORIGIN, FELLOWSHIP_ORIGIN, SEMINAR_ORIGIN, asList, asRecord, textField } from "@/lib/partner-certificates";
 import { partnerForKey, readApiKey } from "@/lib/partner-keys";
 import type {
@@ -1218,4 +1218,416 @@ export async function lookupPartnerIdentity(input: {
   };
 }
 
-export { partnerPortalHref, partnerTicketHref };
+export { partnerPortalHref, partnerTicketHref, partnerTrackHref };
+
+function prettyStatus(value: string) {
+  return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const FALLBACK_STATUSES: Record<PartnerPortalId, string[]> = {
+  seminar: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
+  autism: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
+  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Accepted", "Rejected", "Waitlisted"],
+};
+
+function uniqueStatuses(values: string[], fallback: string[]) {
+  const set = new Set(fallback.map(prettyStatus).filter(Boolean));
+  for (const value of values) {
+    const text = prettyStatus(value);
+    if (text) set.add(text);
+  }
+  return [...set];
+}
+
+async function seminarTitles(portal: PartnerPortalId) {
+  const rows = (await queryRows(portal, "SELECT id, title FROM seminars")) ?? [];
+  const map = new Map<string, string>();
+  for (const row of rows) map.set(String(row.id), str(row, ["title"]));
+  return map;
+}
+
+async function liveStatusCatalog(portal: PartnerPortalId) {
+  const fallback = FALLBACK_STATUSES[portal];
+  const rows: Record<string, unknown>[] = [];
+  if (portal === "fellowship") {
+    rows.push(...((await queryRows(portal, "SELECT DISTINCT status::text AS status FROM applications")) ?? []));
+  } else {
+    rows.push(...((await queryRows(portal, "SELECT DISTINCT status::text AS status FROM registrations")) ?? []));
+    if (portal === "autism") {
+      rows.push(...((await queryRows(portal, "SELECT DISTINCT status::text AS status FROM preregistrations")) ?? []));
+    }
+  }
+  return uniqueStatuses(rows.map((row) => str(row, ["status"])), fallback);
+}
+
+async function liveSeminarLike(portal: Exclude<PartnerPortalId, "fellowship">, email: string) {
+  const titles = await seminarTitles(portal);
+  const eventName = (id?: unknown) => titles.get(String(id || "")) || `${partnerCategory(portal)} programme`;
+  const tickets: PartnerTicketSummary[] = [];
+  const payments: PartnerPaymentSummary[] = [];
+  const registrations =
+    (await queryRows(
+      portal,
+      `SELECT r.id, r.user_id, r.seminar_id, r.application_no, r.status, r.created_at, u.email AS user_email
+         FROM registrations r
+         LEFT JOIN users u ON u.id = r.user_id
+        WHERE lower(u.email) = $1`,
+      [email]
+    )) ?? [];
+  const prereg =
+    portal === "autism"
+      ? ((await queryRows(
+          portal,
+          `SELECT p.id, p.user_id, p.seminar_id, p.application_no, p.status, p.created_at, u.email AS user_email
+             FROM preregistrations p
+             LEFT JOIN users u ON u.id = p.user_id
+            WHERE lower(u.email) = $1`,
+          [email]
+        )) ?? [])
+      : [];
+  const ticketSql =
+    portal === "autism"
+      ? `SELECT t.id, t.user_id, t.ticket_id_string, t.is_valid, t.is_scanned, t.order_id, t.scan_time, u.email AS user_email
+           FROM tickets t LEFT JOIN users u ON u.id = t.user_id
+          WHERE lower(u.email) = $1`
+      : `SELECT t.id, t.user_id, t.ticket_id_string, t.is_valid, t.is_scanned, t.event_id, t.order_id, t.scan_time, u.email AS user_email
+           FROM tickets t LEFT JOIN users u ON u.id = t.user_id
+          WHERE lower(u.email) = $1`;
+  const siteTickets = (await queryRows(portal, ticketSql, [email])) ?? [];
+  const attempts =
+    (await queryRows(
+      portal,
+      `SELECT id, user_id, user_email, amount, status, gateway, created_at, application_no, registration_id
+         FROM payment_attempts
+        WHERE lower(user_email) = $1`,
+      [email]
+    )) ?? [];
+  const orders =
+    (await queryRows(
+      portal,
+      `SELECT o.id, r.user_id, u.email AS user_email, o.amount, o.status, o.payment_gateway AS gateway,
+              o.payment_date AS created_at, r.application_no, o.registration_id
+         FROM orders o
+         LEFT JOIN registrations r ON r.id = o.registration_id
+         LEFT JOIN users u ON u.id = r.user_id
+        WHERE lower(u.email) = $1`,
+      [email]
+    )) ?? [];
+
+  for (const item of siteTickets) {
+    tickets.push({
+      id: `${portal}-tkt-${item.id}`,
+      portal,
+      eventName: eventName(item.event_id),
+      status: asNumber(item.is_valid) === 0 ? "Invalid" : item.is_scanned ? "Checked in" : "Issued",
+      applicationNo: str(item, ["ticket_id_string"]) || str(registrations[0] ?? {}, ["application_no"]) || undefined,
+      issuedAt: iso(item.scan_time) || undefined,
+      portalUrl: partnerTrackHref(portal),
+      kind: "ticket",
+    });
+  }
+  for (const item of registrations) {
+    tickets.push({
+      id: `${portal}-reg-${item.id}`,
+      portal,
+      eventName: eventName(item.seminar_id),
+      status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+      applicationNo: str(item, ["application_no"]) || undefined,
+      issuedAt: iso(item.created_at) || undefined,
+      portalUrl: partnerTrackHref(portal),
+      kind: "registration",
+    });
+  }
+  for (const item of prereg) {
+    tickets.push({
+      id: `${portal}-app-${item.id}`,
+      portal,
+      eventName: eventName(item.seminar_id),
+      status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+      applicationNo: str(item, ["application_no"]) || undefined,
+      issuedAt: iso(item.created_at) || undefined,
+      portalUrl: partnerTrackHref(portal),
+      kind: "application",
+    });
+  }
+  const payRows: Record<string, unknown>[] = [
+    ...attempts.map((row) => ({ ...row, id: `att-${row.id}` })),
+    ...orders.map((row) => ({ ...row, id: `ord-${row.id}` })),
+  ];
+  for (const item of payRows) {
+    const amount = asNumber(item.amount);
+    const status = str(item, ["status"], "Recorded");
+    if ((/fail|creat|pending|init/i.test(status) && amount <= 0) || (amount <= 0 && !/success|paid|captured|issued/i.test(status))) {
+      continue;
+    }
+    payments.push({
+      id: `${portal}-pay-${item.id}`,
+      portal,
+      amount,
+      currency: "INR",
+      status,
+      at: iso(item.created_at) || undefined,
+      eventName: str(item, ["application_no"]) || eventName(item.registration_id),
+      portalUrl: originFor(portal),
+    });
+  }
+  return { tickets, payments, statuses: await liveStatusCatalog(portal) };
+}
+
+async function liveFellowship(email: string) {
+  const portal: PartnerPortalId = "fellowship";
+  const apps =
+    (await queryRows(
+      portal,
+      `SELECT a.id AS application_id, a.application_number, a.status::text AS application_status, a.submitted_at, u.email
+         FROM applications a
+         LEFT JOIN users u ON u.id = a.user_id
+        WHERE lower(u.email) = $1`,
+      [email]
+    )) ?? [];
+  const orders =
+    (await queryRows(
+      portal,
+      `SELECT o.id, o.amount, o.status, o.payment_date, u.email AS user_email
+         FROM orders o
+         LEFT JOIN registrations r ON r.id = o.registration_id
+         LEFT JOIN users u ON u.id::text = r.user_id::text
+        WHERE lower(u.email) = $1`,
+      [email]
+    )) ?? [];
+  const tickets: PartnerTicketSummary[] = apps
+    .filter((row) => str(row, ["application_id"]))
+    .map((row) => ({
+      id: `fellowship-app-${str(row, ["application_id"])}`,
+      portal,
+      eventName: str(row, ["application_number"]) ? `Fellowship ${str(row, ["application_number"])}` : "Research Fellowship 2026",
+      status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+      applicationNo: str(row, ["application_number"]) || undefined,
+      issuedAt: iso(row.submitted_at) || undefined,
+      portalUrl: partnerTrackHref(portal),
+      kind: "application" as const,
+    }));
+  const payments: PartnerPaymentSummary[] = orders.map((row) => ({
+    id: `fellowship-pay-${row.id}`,
+    portal,
+    amount: asNumber(row.amount),
+    currency: "INR",
+    status: str(row, ["status"], "Recorded"),
+    at: iso(row.payment_date) || undefined,
+    eventName: "Research Fellowship 2026",
+    portalUrl: originFor(portal),
+  }));
+  return { tickets, payments, statuses: await liveStatusCatalog(portal) };
+}
+
+export type LivePartnerRecords = {
+  email: string;
+  tickets: PartnerTicketSummary[];
+  payments: PartnerPaymentSummary[];
+  statuses: Record<PartnerPortalId, string[]>;
+  syncedAt: string;
+  source: "database" | "snapshot";
+};
+
+async function persistLiveEmail(email: string, tickets: PartnerTicketSummary[], payments: PartnerPaymentSummary[]) {
+  try {
+    const { readPartnerSnapshot, writePartnerSnapshot } = await import("@/lib/server/partner-store");
+    const snapshot = (await readPartnerSnapshot()) ?? emptySnapshot();
+    snapshot.ticketsByEmail[email] = tickets;
+    snapshot.paymentsByEmail[email] = payments;
+    snapshot.syncedAt = new Date().toISOString();
+    await writePartnerSnapshot(snapshot);
+  } catch {
+    /* keep serving live rows even if the snapshot file cannot be written */
+  }
+}
+
+export async function liveRecordsForEmail(email: string): Promise<LivePartnerRecords> {
+  const key = email.trim().toLowerCase();
+  const tickets: PartnerTicketSummary[] = [];
+  const payments: PartnerPaymentSummary[] = [];
+  const statuses: Record<PartnerPortalId, string[]> = {
+    seminar: FALLBACK_STATUSES.seminar,
+    autism: FALLBACK_STATUSES.autism,
+    fellowship: FALLBACK_STATUSES.fellowship,
+  };
+  let fromDb = false;
+  if (key && poolFor("seminar")) {
+    const data = await liveSeminarLike("seminar", key);
+    tickets.push(...data.tickets);
+    payments.push(...data.payments);
+    statuses.seminar = data.statuses;
+    fromDb = true;
+  }
+  if (key && poolFor("autism")) {
+    const data = await liveSeminarLike("autism", key);
+    tickets.push(...data.tickets);
+    payments.push(...data.payments);
+    statuses.autism = data.statuses;
+    fromDb = true;
+  }
+  if (key && poolFor("fellowship")) {
+    const data = await liveFellowship(key);
+    tickets.push(...data.tickets);
+    payments.push(...data.payments);
+    statuses.fellowship = data.statuses;
+    fromDb = true;
+  }
+  if (!fromDb) {
+    const snapshot = await loadPartnerSnapshot();
+    return {
+      email: key,
+      tickets: snapshot.ticketsByEmail[key] ?? [],
+      payments: snapshot.paymentsByEmail[key] ?? [],
+      statuses,
+      syncedAt: snapshot.syncedAt || new Date().toISOString(),
+      source: "snapshot",
+    };
+  }
+  if (key) await persistLiveEmail(key, tickets, payments);
+  return { email: key, tickets, payments, statuses, syncedAt: new Date().toISOString(), source: "database" };
+}
+
+export async function liveApplicationById(query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return null;
+  const compact = needle.replace(/\s+/g, "");
+  const tryPortal = async (portal: PartnerPortalId) => {
+    if (portal === "fellowship") {
+      const rows =
+        (await queryRows(
+          portal,
+          `SELECT a.id AS application_id, a.application_number, a.status::text AS application_status, a.submitted_at, u.email
+             FROM applications a
+             LEFT JOIN users u ON u.id = a.user_id
+            WHERE lower(coalesce(a.application_number, '')) = $1
+               OR a.id::text = $1
+               OR lower(replace(coalesce(a.application_number, ''), ' ', '')) = $2
+            LIMIT 5`,
+          [needle, compact]
+        )) ?? [];
+      const row = rows[0];
+      if (!row) return null;
+      const ticket: PartnerTicketSummary = {
+        id: `fellowship-app-${str(row, ["application_id"])}`,
+        portal,
+        eventName: str(row, ["application_number"]) ? `Fellowship ${str(row, ["application_number"])}` : "Research Fellowship 2026",
+        status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+        applicationNo: str(row, ["application_number"]) || undefined,
+        issuedAt: iso(row.submitted_at) || undefined,
+        portalUrl: partnerTrackHref(portal),
+        kind: "application",
+      };
+      return { email: str(row, ["email"]).toLowerCase(), ticket };
+    }
+    const titles = await seminarTitles(portal);
+    const eventName = (id?: unknown) => titles.get(String(id || "")) || `${partnerCategory(portal)} programme`;
+    const registrations =
+      (await queryRows(
+        portal,
+        `SELECT r.id, r.seminar_id, r.application_no, r.status, r.created_at, u.email AS user_email
+           FROM registrations r
+           LEFT JOIN users u ON u.id = r.user_id
+          WHERE lower(coalesce(r.application_no, '')) = $1
+             OR r.id::text = $1
+             OR lower(replace(coalesce(r.application_no, ''), ' ', '')) = $2
+          LIMIT 5`,
+        [needle, compact]
+      )) ?? [];
+    if (registrations[0]) {
+      const row = registrations[0];
+      return {
+        email: str(row, ["user_email"]).toLowerCase(),
+        ticket: {
+          id: `${portal}-reg-${row.id}`,
+          portal,
+          eventName: eventName(row.seminar_id),
+          status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+          applicationNo: str(row, ["application_no"]) || undefined,
+          issuedAt: iso(row.created_at) || undefined,
+          portalUrl: partnerTrackHref(portal),
+          kind: "registration" as const,
+        },
+      };
+    }
+    if (portal === "autism") {
+      const prereg =
+        (await queryRows(
+          portal,
+          `SELECT p.id, p.seminar_id, p.application_no, p.status, p.created_at, u.email AS user_email
+             FROM preregistrations p
+             LEFT JOIN users u ON u.id = p.user_id
+            WHERE lower(coalesce(p.application_no, '')) = $1
+               OR p.id::text = $1
+               OR lower(replace(coalesce(p.application_no, ''), ' ', '')) = $2
+            LIMIT 5`,
+          [needle, compact]
+        )) ?? [];
+      if (prereg[0]) {
+        const row = prereg[0];
+        return {
+          email: str(row, ["user_email"]).toLowerCase(),
+          ticket: {
+            id: `${portal}-app-${row.id}`,
+            portal,
+            eventName: eventName(row.seminar_id),
+            status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+            applicationNo: str(row, ["application_no"]) || undefined,
+            issuedAt: iso(row.created_at) || undefined,
+            portalUrl: partnerTrackHref(portal),
+            kind: "application" as const,
+          },
+        };
+      }
+    }
+    const tickets =
+      (await queryRows(
+        portal,
+        `SELECT t.id, t.ticket_id_string, t.is_valid, t.is_scanned, t.scan_time, u.email AS user_email
+           FROM tickets t
+           LEFT JOIN users u ON u.id = t.user_id
+          WHERE lower(coalesce(t.ticket_id_string, '')) = $1
+             OR t.id::text = $1
+          LIMIT 5`,
+        [needle]
+      )) ?? [];
+    if (tickets[0]) {
+      const row = tickets[0];
+      return {
+        email: str(row, ["user_email"]).toLowerCase(),
+        ticket: {
+          id: `${portal}-tkt-${row.id}`,
+          portal,
+          eventName: eventName(),
+          status: asNumber(row.is_valid) === 0 ? "Invalid" : row.is_scanned ? "Checked in" : "Issued",
+          applicationNo: str(row, ["ticket_id_string"]) || undefined,
+          issuedAt: iso(row.scan_time) || undefined,
+          portalUrl: partnerTrackHref(portal),
+          kind: "ticket" as const,
+        },
+      };
+    }
+    return null;
+  };
+
+  for (const portal of partnerPortalIds) {
+    if (!poolFor(portal)) continue;
+    const match = await tryPortal(portal);
+    if (match?.ticket) return match;
+  }
+  const snapshot = await loadPartnerSnapshot();
+  return findPartnerApplication(snapshot, query);
+}
+
+export async function liveStatusCatalogs() {
+  const statuses: Record<PartnerPortalId, string[]> = {
+    seminar: FALLBACK_STATUSES.seminar,
+    autism: FALLBACK_STATUSES.autism,
+    fellowship: FALLBACK_STATUSES.fellowship,
+  };
+  for (const portal of partnerPortalIds) {
+    if (!poolFor(portal)) continue;
+    statuses[portal] = await liveStatusCatalog(portal);
+  }
+  return statuses;
+}

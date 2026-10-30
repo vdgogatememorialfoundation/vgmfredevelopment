@@ -16,6 +16,11 @@ export function partnerTicketHref(id: PartnerPortalId) {
   return `${meta.href}${meta.ticketsPath}`;
 }
 
+export function partnerTrackHref(id: PartnerPortalId) {
+  const meta = partnerPortalMeta[id];
+  return `${meta.href}${meta.trackPath ?? meta.ticketsPath}`;
+}
+
 export function partnerCategory(id: PartnerPortalId) {
   if (id === "seminar") return "Seminar";
   if (id === "autism") return "Autism";

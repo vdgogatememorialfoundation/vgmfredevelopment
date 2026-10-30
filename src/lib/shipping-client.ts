@@ -527,7 +527,10 @@ const statusOrder: ShipmentRecord["status"][] = ["Booked", "Picked Up", "In Tran
 
 function mapCourierStatus(text: string): ShipmentRecord["status"] | undefined {
   const value = text.toLowerCase();
-  if (value.includes("deliver") && !value.includes("out") && !value.includes("un")) return "Delivered";
+  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed)\b/.test(value)) {
+    return "Failed";
+  }
+  if (value.includes("deliver") && !value.includes("out") && !value.includes("un") && !value.includes("fail")) return "Delivered";
   if (value.includes("out for")) return "Out for Delivery";
   if (value.includes("transit") || value.includes("shipped") || value.includes("dispatch")) return "In Transit";
   if (value.includes("picked")) return "Picked Up";
@@ -618,7 +621,15 @@ function syncOrderFromShipment(orderId: string, status: ShipmentRecord["status"]
   const order = getOrder(orderId);
   if (!order) return;
   const target: Order["status"] =
-    status === "Delivered" ? "Delivered" : status === "Out for Delivery" ? "Out for Delivery" : status === "Booked" ? "Packed" : "Shipped";
+    status === "Failed"
+      ? "Failed"
+      : status === "Delivered"
+        ? "Delivered"
+        : status === "Out for Delivery"
+          ? "Out for Delivery"
+          : status === "Booked"
+            ? "Packed"
+            : "Shipped";
   if (order.status !== target) patchOrder(orderId, { status: target }, target);
 }
 

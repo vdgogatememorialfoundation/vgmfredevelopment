@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders } from "@/lib/server/mobile-feed";
-import { accountsForEmail, loadPartnerSnapshot, sanitizeAccountForClient } from "@/lib/server/partner-portals";
+import { accountsForEmail, liveRecordsForEmail, loadPartnerSnapshot, sanitizeAccountForClient } from "@/lib/server/partner-portals";
 
 export const runtime = "nodejs";
 
@@ -27,11 +27,16 @@ export async function GET(request: NextRequest) {
   }
   const snapshot = await loadPartnerSnapshot();
   const related = accountsForEmail(snapshot, email);
+  const live = await liveRecordsForEmail(email);
   return NextResponse.json(
     {
       ok: true,
       email,
       ...related,
+      tickets: live.tickets.length ? live.tickets : related.tickets,
+      payments: live.payments.length ? live.payments : related.payments,
+      statuses: live.statuses,
+      syncedAt: live.syncedAt,
       account: related.account ? sanitizeAccountForClient(related.account) : null,
     },
     { headers: { ...corsHeaders, "cache-control": "no-store" } }

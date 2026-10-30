@@ -262,7 +262,9 @@ function formatOrderStatus(order: Order): string {
   const done =
     order.status === "Delivered"
       ? `Order ${order.id} was delivered (placed ${formatDate(order.date)}).`
-      : `Order ${order.id} placed on ${formatDate(order.date)} is at the “${reachedLabel || order.status}” stage (${order.status}).`;
+      : order.status === "Failed"
+        ? `Order ${order.id} failed in courier delivery (placed ${formatDate(order.date)}).`
+        : `Order ${order.id} placed on ${formatDate(order.date)} is at the “${reachedLabel || order.status}” stage (${order.status}).`;
   return `${done}${courierLine} Estimated delivery: ${eta}. You can tap the order card in My Orders for the full journey — delivery agent OTP shows when out for delivery.`;
 }
 

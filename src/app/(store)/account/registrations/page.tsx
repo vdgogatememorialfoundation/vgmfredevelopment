@@ -8,7 +8,7 @@ import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import ApplicationPipeline from "@/components/applications/ApplicationPipeline";
 import { autismSiteUrl, fellowshipSiteUrl, seminarSiteUrl } from "@/lib/constants";
 import { applicationFromTicket, kindLabel, normalizeApplicationStatus } from "@/lib/application-pipeline";
-import { partnerPortalHref, partnerPortalLabel } from "@/lib/partner-labels";
+import { partnerPortalHref, partnerPortalLabel, partnerTrackHref } from "@/lib/partner-labels";
 import { usePartnerRecords } from "@/lib/use-partner-records";
 
 export default function RegistrationsPage() {
@@ -62,12 +62,12 @@ export default function RegistrationsPage() {
                     Track application
                   </Link>
                   <a
-                    href={ticket.portalUrl || partnerPortalHref(ticket.portal)}
+                    href={ticket.portal === "seminar" ? partnerTrackHref("seminar") : ticket.portalUrl || partnerPortalHref(ticket.portal)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn-outline"
                   >
-                    Open e-ticket
+                    {ticket.portal === "seminar" ? "Track on Seminar doctor portal" : "Open e-ticket"}
                   </a>
                 </div>
               </li>
