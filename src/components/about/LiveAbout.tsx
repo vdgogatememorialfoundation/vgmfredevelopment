@@ -3,7 +3,7 @@
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import { NaturalImage } from "@/components/common/NaturalImage";
-import { buildTree, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
+import { anaghaPortrait, buildTree, rbPortrait, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 function Initials({ name, size }: { name: string; size: string }) {
@@ -34,6 +34,22 @@ function excerpt(text: string, count = 2) {
   return paragraphs(text).slice(0, count).join("\n\n");
 }
 
+function PortraitSquare({ src, alt, placeholder }: { src?: string; alt: string; placeholder?: string }) {
+  if (!src) {
+    return (
+      <div className="flex h-36 w-36 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-slate-50 sm:h-40 sm:w-40">
+        <Initials name={placeholder || alt} size="h-16 w-16" />
+      </div>
+    );
+  }
+  return (
+    <div className="h-36 w-36 shrink-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:h-40 sm:w-40">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} className="h-full w-full object-cover object-top" />
+    </div>
+  );
+}
+
 function PersonSplit({
   image,
   title,
@@ -51,22 +67,11 @@ function PersonSplit({
 }) {
   const { t } = useI18n();
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(14rem,20rem)_minmax(0,1fr)]">
-      <div className="lg:sticky lg:top-28">
-        {image ? (
-          <NaturalImage src={image} alt={imageAlt} fit="portrait" className="rounded-2xl border border-border bg-white p-2 shadow-sm" />
-        ) : (
-          <div className="flex min-h-56 items-center justify-center rounded-2xl border border-border bg-slate-50 p-8 text-center">
-            <div>
-              <Initials name={placeholder || title} size="mx-auto mb-4 h-20 w-20" />
-              <p className="font-semibold text-text-primary">{title}</p>
-            </div>
-          </div>
-        )}
-      </div>
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-5 sm:gap-8">
+      <PortraitSquare src={image} alt={imageAlt} placeholder={placeholder} />
       <div>
         <h2 className="heading-3">{title}</h2>
-        <div className="mt-4">
+        <div className="mt-3">
           <BioBlock text={body} />
         </div>
         {href ? (
@@ -83,7 +88,7 @@ export function AboutLive() {
   const about = useAbout();
   const { t } = useI18n();
   const letter = paragraphs(about.intro);
-  const portrait = about.heroImage || about.legacy.portrait;
+  const portrait = rbPortrait(about);
   const people = new Set(["s-legacy", "s-anagha"]);
   const others = about.sections.filter((section) => !people.has(section.id));
   return (
@@ -117,7 +122,7 @@ export function AboutLive() {
       <section className="section bg-warm-cream">
         <div className="container">
           <PersonSplit
-            image={about.anagha.portrait}
+            image={anaghaPortrait(about)}
             title={about.anagha.title}
             body={excerpt(about.anagha.biography)}
             href="/about/dr-anagha-gogate"
@@ -382,7 +387,8 @@ export function TrusteesLive() {
 }
 
 export function LegacyLive() {
-  const { legacy } = useAbout();
+  const about = useAbout();
+  const { legacy } = about;
   const { t, locale } = useI18n();
   const primary = locale === "mr" && legacy.biographyMr ? legacy.biographyMr : legacy.biography;
   const other = locale === "mr" ? legacy.biography : legacy.biographyMr;
@@ -394,7 +400,7 @@ export function LegacyLive() {
       <section className="section bg-background">
         <div className="container">
           <PersonSplit
-            image={legacy.portrait}
+            image={rbPortrait(about)}
             title={t("about.biography")}
             body={primary}
             imageAlt="Vaidya R. B. Gogate"
@@ -447,7 +453,7 @@ export function AnaghaLive() {
       <section className="section bg-background">
         <div className="container">
           <PersonSplit
-            image={anagha.portrait}
+            image={anaghaPortrait({ anagha })}
             title={t("about.biography")}
             body={anagha.biography}
             imageAlt={anagha.title}

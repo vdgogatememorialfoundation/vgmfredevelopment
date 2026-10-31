@@ -2,6 +2,13 @@ import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/locales";
 
 const en = {
   "nav.about": "About Us",
+  "nav.aboutFoundation": "Foundation",
+  "nav.aboutLegacy": "Legacy of Vaidya R. B. Gogate",
+  "nav.aboutAnagha": "Dr. Anagha Gogate",
+  "nav.aboutAwards": "Awards & Accolades",
+  "nav.aboutBooks": "Books & Research",
+  "nav.aboutHistory": "Our History",
+  "nav.aboutTrustees": "Trustees & Team",
   "nav.notices": "Notices",
   "nav.events": "Events",
   "nav.gallery": "Gallery",
@@ -272,6 +279,13 @@ export type MessageKey = keyof typeof en;
 
 const hi: Partial<Record<MessageKey, string>> = {
   "nav.about": "हमारे बारे में",
+  "nav.aboutFoundation": "फाउंडेशन",
+  "nav.aboutLegacy": "वैद्य आर. बी. गोगटे की विरासत",
+  "nav.aboutAnagha": "डॉ. अनघा गोगटे",
+  "nav.aboutAwards": "पुरस्कार",
+  "nav.aboutBooks": "पुस्तकें और शोध",
+  "nav.aboutHistory": "हमारा इतिहास",
+  "nav.aboutTrustees": "न्यासी और टीम",
   "nav.notices": "सूचना",
   "nav.events": "कार्यक्रम",
   "nav.gallery": "गैलरी",
@@ -531,6 +545,13 @@ const hi: Partial<Record<MessageKey, string>> = {
 
 const mr: Partial<Record<MessageKey, string>> = {
   "nav.about": "आमच्याबद्दल",
+  "nav.aboutFoundation": "फाउंडेशन",
+  "nav.aboutLegacy": "वैद्य आर. बी. गोगटे यांचा वारसा",
+  "nav.aboutAnagha": "डॉ. अनघा गोगटे",
+  "nav.aboutAwards": "पुरस्कार",
+  "nav.aboutBooks": "पुस्तके आणि संशोधन",
+  "nav.aboutHistory": "आमचा इतिहास",
+  "nav.aboutTrustees": "न्यासी आणि संघ",
   "nav.notices": "सूचना",
   "nav.events": "कार्यक्रम",
   "nav.gallery": "गॅलरी",
@@ -1165,6 +1186,13 @@ export function translate(locale: Locale, key: MessageKey): string {
 
 export const navMessageKey: Record<string, MessageKey> = {
   "/about": "nav.about",
+  "/about/foundation": "nav.aboutFoundation",
+  "/about/legacy-of-vaidya-rb-gogate": "nav.aboutLegacy",
+  "/about/dr-anagha-gogate": "nav.aboutAnagha",
+  "/about/awards": "nav.aboutAwards",
+  "/about/books-and-research": "nav.aboutBooks",
+  "/about/history": "nav.aboutHistory",
+  "/about/trustees": "nav.aboutTrustees",
   "/notices": "nav.notices",
   "/events": "nav.events",
   "/gallery": "nav.gallery",

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { NaturalImage } from "@/components/common/NaturalImage";
-import { useAbout } from "@/lib/about";
+import { rbPortrait, useAbout } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function AboutDirectory() {
   const about = useAbout();
   const { t } = useI18n();
+  const portrait = rbPortrait(about);
   const sections = about.sections.filter((section) => section.href);
 
   if (!sections.length) return null;
@@ -22,14 +23,12 @@ export default function AboutDirectory() {
           </h2>
           <p className="mt-2 text-sm leading-6 text-text-muted">{t("home.aboutText")}</p>
         </div>
-        {(about.heroImage || about.legacy.portrait) && (
-          <div className="mb-10 grid items-start gap-8 lg:grid-cols-[minmax(12rem,18rem)_minmax(0,1fr)]">
-            <NaturalImage
-              src={(about.heroImage || about.legacy.portrait)!}
-              alt="Vaidya R. B. Gogate"
-              fit="portrait"
-              className="rounded-2xl border border-border bg-white p-2 shadow-sm"
-            />
+        {portrait ? (
+          <div className="mb-10 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-5">
+            <div className="h-32 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:h-36 sm:w-36">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={portrait} alt="Vaidya R. B. Gogate" className="h-full w-full object-cover object-top" />
+            </div>
             <div>
               <p className="font-serif text-xl font-semibold text-ink">{about.legacy.title}</p>
               <p className="mt-3 whitespace-pre-line text-sm leading-6 text-text-muted">
@@ -40,7 +39,7 @@ export default function AboutDirectory() {
               </Link>
             </div>
           </div>
-        )}
+        ) : null}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sections.map((section) => (
             <article

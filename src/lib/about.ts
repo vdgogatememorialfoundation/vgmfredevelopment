@@ -126,9 +126,33 @@ She worked as an MO in Matrumandir from 1968–69 and as a clinical assistant fr
 
 In spite of immense responsibilities and difficulties that she had, she continued to share his work and role as and when possible, to the best of her abilities, without a single complaint. She continued to be an epitome of love, care and resilience. We lost her on 12th September 2019 after her long-standing battle with prolonged illness. She will always be remembered for being remarkably virtuous and dutiful, with an incomparable will to stand by her husband through any odds.`;
 
+export const ABOUT_NAV = [
+  { href: "/about", key: "nav.about" },
+  { href: "/about/foundation", key: "nav.aboutFoundation" },
+  { href: "/about/legacy-of-vaidya-rb-gogate", key: "nav.aboutLegacy" },
+  { href: "/about/dr-anagha-gogate", key: "nav.aboutAnagha" },
+  { href: "/about/awards", key: "nav.aboutAwards" },
+  { href: "/about/books-and-research", key: "nav.aboutBooks" },
+  { href: "/about/history", key: "nav.aboutHistory" },
+  { href: "/about/trustees", key: "nav.aboutTrustees" },
+] as const;
+
+export function firstPhoto(...values: Array<string | undefined>) {
+  return values.find((value) => typeof value === "string" && value.trim()) || "";
+}
+
+export function rbPortrait(about: Pick<AboutContent, "heroImage" | "legacy">) {
+  return firstPhoto(about.legacy?.portrait, about.heroImage, "/about/rb-gogate.jpg");
+}
+
+export function anaghaPortrait(about: Pick<AboutContent, "anagha">) {
+  return firstPhoto(about.anagha?.portrait, "/about/anagha-gogate.jpg");
+}
+
 export const defaultAbout: AboutContent = {
   revision: ABOUT_REVISION,
   title: "About Vaidya Gogate Memorial Foundation",
+  heroImage: "/about/rb-gogate.jpg",
   intro:
     "Vaidya Gogate Memorial Foundation is a website with a sole motto: Propagation of knowledge. This is a platform to share our grandfather’s, Vd. Ramchandra Ballal Gogate’s work and carry forward his vision ‘knowledge for all’. We are creating this platform as an authentic source of information. Our purpose is to ignite young minds through his writings and teachings. We plan to reach out to all vaidyas, students of Ayurved as well as disseminating the knowledge across all pathies and common people. Fortunately, our family has been blessed with renowned vaidyas for many generations.\n\nStarting from Vd. Mahadev (Bapu) Gogate who was the rajavaidya to the king of Jawhar, next generation being Vd. Vishnu Mahadev Gogate (Dravyaguna) and Vd. Trimbak Mahadev Gogate (Panchakarma), next generation being Vd. Ramchandra Ballal Gogate (Shalya tantra), and this legacy still continues. They have made huge contributions to the field of Ayurved of which many remain under appreciated. This website is in their honor and remembrance. We intend to pass on the wisdom of these great professors. Vd. R. B. Gogate will always inspire us, not only as a grandfather but also through his lifetime of study, work and research.\n\nWe, his grandchildren on behalf of the Gogate family are creating this platform to promote our grandfather’s lifetime work and for our strong passion towards the field of Ayurved. We would definitely love to have your suggestions, guidelines and support in our endeavour!\n\nRegards,\nthe grandchildren of Vd. R. B. Gogate, on behalf of the Gogate family",
   sections: [
@@ -275,6 +299,7 @@ export const defaultAbout: AboutContent = {
   },
   legacy: {
     title: "The Legacy of Vaidya R. B. Gogate",
+    portrait: "/about/rb-gogate.jpg",
     intro:
       "Vd. Ramchandra Ballal Gogate — Vaidya Ramchandra Ballal Gogate — was born on 4th February 1933 at Atkar gaon and passed away on 28th September 2015 at Pune. This page shares his English biography, the Marathi remembrance by Vidula Gogate, and the posts, research and awards that still carry his work forward.",
     biography: RB_BIOGRAPHY_EN,
@@ -346,6 +371,7 @@ export const defaultAbout: AboutContent = {
   },
   anagha: {
     title: "Dr. Anagha Gogate",
+    portrait: "/about/anagha-gogate.jpg",
     intro:
       "Dr. Anagha Ramchandra Gogate (7th November 1936 – 12th September 2019) gave unwavering support and strength to Vd. Ramchandra B. Gogate.",
     biography: ANAGHA_BIOGRAPHY,
@@ -428,13 +454,22 @@ function merge(saved: Partial<AboutContent> | null): AboutContent {
     ...defaultAbout,
     ...saved,
     revision: ABOUT_REVISION,
+    heroImage: saved.heroImage || defaultAbout.heroImage,
     sections: saved.sections ?? defaultAbout.sections,
     gallery: saved.gallery ?? defaultAbout.gallery,
     foundation: { ...defaultAbout.foundation, ...(saved.foundation ?? {}) },
     history: { ...defaultAbout.history, ...(saved.history ?? {}) },
     trustees: { ...defaultAbout.trustees, ...(saved.trustees ?? {}) },
-    legacy: { ...defaultAbout.legacy, ...(saved.legacy ?? {}) },
-    anagha: { ...defaultAbout.anagha, ...(saved.anagha ?? {}) },
+    legacy: {
+      ...defaultAbout.legacy,
+      ...(saved.legacy ?? {}),
+      portrait: saved.legacy?.portrait || defaultAbout.legacy.portrait,
+    },
+    anagha: {
+      ...defaultAbout.anagha,
+      ...(saved.anagha ?? {}),
+      portrait: saved.anagha?.portrait || defaultAbout.anagha.portrait,
+    },
     awards: { ...defaultAbout.awards, ...(saved.awards ?? {}) },
     scholarship: { ...defaultAbout.scholarship, ...(saved.scholarship ?? {}) },
   };

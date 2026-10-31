@@ -1,5 +1,5 @@
-import { Text, View } from "react-native";
-import { str, type Row } from "../src/api";
+import { Image, Text, View } from "react-native";
+import { mediaUrl, str, type Row } from "../src/api";
 import { useFeed } from "../src/feed";
 import { Body, Card, Empty, Loading, Muted, Screen, Title } from "../src/ui";
 
@@ -40,6 +40,18 @@ function Heading({ children }: { children: string }) {
   );
 }
 
+function SquarePhoto({ uri, label }: { uri?: string; label: string }) {
+  if (!uri) return null;
+  return (
+    <Image
+      source={{ uri }}
+      accessibilityLabel={label}
+      style={{ width: 112, height: 112, borderRadius: 16, marginBottom: 12, backgroundColor: "#f4efe6" }}
+      resizeMode="cover"
+    />
+  );
+}
+
 export default function AboutScreen() {
   const { feed, loading, refresh } = useFeed();
   const about = asRow(feed?.about);
@@ -53,6 +65,8 @@ export default function AboutScreen() {
   const awards = asRow(about.awards);
   const scholarship = asRow(about.scholarship);
   const intro = str(about.intro);
+  const rbPhoto = mediaUrl(str(legacy.portrait) || str(about.heroImage) || "/about/rb-gogate.jpg");
+  const anaghaPhoto = mediaUrl(str(anagha.portrait) || "/about/anagha-gogate.jpg");
   const hasBody =
     Boolean(intro) ||
     sections.length > 0 ||
@@ -98,6 +112,7 @@ export default function AboutScreen() {
       {str(legacy.title) || str(legacy.biography) || str(legacy.biographyMr) ? (
         <View>
           <Heading>{str(legacy.title, "The Legacy of Vaidya R. B. Gogate")}</Heading>
+          <SquarePhoto uri={rbPhoto} label="Vaidya R. B. Gogate" />
           {str(legacy.intro) ? (
             <Card>
               <Paragraphs text={str(legacy.intro)} />
@@ -127,6 +142,7 @@ export default function AboutScreen() {
       {str(anagha.title) || str(anagha.biography) || str(anagha.intro) ? (
         <View>
           <Heading>{str(anagha.title, "Dr. Anagha Gogate")}</Heading>
+          <SquarePhoto uri={anaghaPhoto} label={str(anagha.title, "Dr. Anagha Gogate")} />
           {str(anagha.intro) ? (
             <Card>
               <Paragraphs text={str(anagha.intro)} />
