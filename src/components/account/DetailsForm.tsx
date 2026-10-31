@@ -109,12 +109,12 @@ export default function DetailsForm({
 
       <div className="mt-5">
         <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="phone">
-          Phone Number
+          Phone Number (international)
         </label>
         <input
           id="phone"
           type="tel"
-          placeholder="+91 98765 43210"
+          placeholder="+91 98765 43210 or +44 20 7946 0958"
           value={form.phone}
           onChange={(event) => {
             onChange("phone", event.target.value);
@@ -133,7 +133,7 @@ export default function DetailsForm({
         <input
           id="alternate-phone"
           type="tel"
-          placeholder="+91 98765 43210"
+          placeholder="+91 98765 43210 or +1 202 555 0142"
           value={form.alternatePhone}
           onChange={(event) => {
             setSameAsPhone(false);

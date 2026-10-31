@@ -66,7 +66,7 @@ export function AccountsSection({
           <Field label="First name"><TextInput value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></Field>
           <Field label="Last name"><TextInput value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></Field>
           <Field label="Email"><TextInput value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
-          <Field label="Phone"><TextInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+          <Field label="Phone (international)"><TextInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+91 98765 43210 or +1 202 555 0142" /></Field>
           {!fixedRole && (
             <Field label="Role">
               <SelectInput value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as typeof form.role })}>

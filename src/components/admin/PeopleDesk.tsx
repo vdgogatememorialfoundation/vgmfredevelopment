@@ -132,7 +132,7 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
           <input className={field} placeholder="First name" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
           <input className={field} placeholder="Last name" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
           <input className={field} placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-          <input className={field} placeholder="Phone" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+          <input className={field} placeholder="Phone with country code" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
           {role === "staff" && !form.asCoadmin && (
             <select className={field} value={form.staffRoleId} onChange={(event) => setForm({ ...form, staffRoleId: event.target.value })}>
               {roles.map((item) => (

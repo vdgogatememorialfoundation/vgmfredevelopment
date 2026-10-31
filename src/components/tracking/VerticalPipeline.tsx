@@ -49,7 +49,6 @@ function iconPath(id: string) {
 
 function pipeState(stage: PipelineStageShape, isCurrent: boolean): "done" | "active" | "upcoming" {
   if (stage.partial || (isCurrent && !stage.reached)) return "active";
-  if (stage.reached && isCurrent) return "active";
   if (stage.reached) return "done";
   return "upcoming";
 }
@@ -141,7 +140,6 @@ export default function VerticalPipeline({
                 } as CSSProperties
               }
             >
-              {state === "active" && !failedStep ? <span className="vgmf-headway" aria-hidden="true" /> : null}
               <span className="dot" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="16" height="16">
                   <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d={iconPath(stage.id)} />
