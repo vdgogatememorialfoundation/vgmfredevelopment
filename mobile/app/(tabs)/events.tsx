@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
-import { formatDate, getApiBase, isPastDate, mediaUrl, money, str } from "../../src/api";
+import { formatDate, getApiBase, isPastDate, isRegistrationClosed, mediaUrl, money, str } from "../../src/api";
 import { TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
 import { SITE } from "../../src/site-content";
@@ -26,11 +26,12 @@ export default function EventsScreen() {
       </View>
       {shown.map((item) => {
         const register = str(item.registrationUrl);
+        const closed = isRegistrationClosed(item);
         return (
           <Card key={str(item.id)} onPress={() => router.push(`/event/${str(item.id)}`)}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <DateBadge label={formatDate(item.startDate)} />
-              <StatusChip label={str(item.mode, str(item.registrationStatus))} />
+              <StatusChip label={closed ? "Registration closed" : str(item.mode, str(item.registrationStatus))} />
             </View>
             <Cover uri={mediaUrl(item.bannerUrl) || undefined} height={148} />
             <Muted>{str(item.eventType, "Official assembly")}</Muted>
@@ -43,7 +44,11 @@ export default function EventsScreen() {
                 <Button kind="ghost" label="View details" onPress={() => router.push(`/event/${str(item.id)}`)} />
               </View>
               <View style={{ flex: 1 }}>
-                <Button label="Register now" onPress={() => (register ? void Linking.openURL(register) : void Linking.openURL(`${getApiBase()}${SITE.eventsUrl}`))} />
+                {closed ? (
+                  <Button kind="ghost" label="Registration closed" disabled onPress={() => undefined} />
+                ) : (
+                  <Button label="Register now" onPress={() => (register ? void Linking.openURL(register) : void Linking.openURL(`${getApiBase()}${SITE.eventsUrl}`))} />
+                )}
               </View>
             </View>
           </Card>
@@ -52,7 +57,7 @@ export default function EventsScreen() {
       {!shown.length ? (
         <Empty
           icon="calendar-outline"
-          label="No published events are in the app feed yet. Sister-portal programmes appear after Admin publishes."
+          label="No events are listed yet. Pull to refresh after the website is updated."
           actionLabel="Open website events"
           onAction={() => void Linking.openURL(`${getApiBase()}${SITE.eventsUrl}`)}
         />

@@ -1,12 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { siteConfig } from "@/lib/constants";
+import { isPublicFellowshipEvent, withResolvedRegistration } from "@/lib/event-status";
 import { writePublishedFeed } from "@/lib/server/db";
 import { dataFile } from "@/lib/server/paths";
 import { defaultAppearance, sanitizeAppearance } from "@/lib/mobile-appearance";
 import { defaultMobileAppConfig } from "@/lib/mobile-config";
 import { type MobileFeed } from "@/lib/mobile-types";
 import { listNotices } from "@/lib/server/notices";
+import type { Event } from "@/types";
 
 export type { MobileFeed } from "@/lib/mobile-types";
 
@@ -24,6 +26,35 @@ function readFile(path: string): MobileFeed | null {
     /* missing */
   }
   return null;
+}
+
+let partnerCache: { at: number; events: Event[]; announcements: MobileFeed["announcements"] } | null = null;
+
+function readPartnerPublicRows() {
+  if (partnerCache && Date.now() - partnerCache.at < 30_000) return partnerCache;
+  try {
+    const parsed = JSON.parse(readFileSync(dataFile("partner-snapshot.json"), "utf8")) as {
+      events?: Event[];
+      announcements?: MobileFeed["announcements"];
+    };
+    const events = (parsed.events ?? []).filter((event) => event?.id && !isPublicFellowshipEvent(event));
+    partnerCache = { at: Date.now(), events, announcements: parsed.announcements ?? [] };
+  } catch {
+    partnerCache = { at: Date.now(), events: [], announcements: [] };
+  }
+  return partnerCache;
+}
+
+function mergeLiveEvents(published: Event[]) {
+  const partner = readPartnerPublicRows().events;
+  const byId = new Map<string, Event>();
+  for (const event of partner) byId.set(event.id, event);
+  for (const event of published) {
+    if (event?.id) byId.set(event.id, event);
+  }
+  return [...byId.values()]
+    .filter((event) => !isPublicFellowshipEvent(event))
+    .map((event) => withResolvedRegistration(event));
 }
 
 export function defaultMobileFeed(): MobileFeed {
@@ -69,6 +100,7 @@ export function readMobileFeed(): MobileFeed {
   const snapshot = memory ?? readFile(DATA_FILE) ?? readFile(TMP_FILE) ?? readFile(PUBLIC_FILE);
   const base = defaultMobileFeed();
   if (!snapshot) return base;
+  const partnerRows = readPartnerPublicRows();
   return {
     ...base,
     ...snapshot,
@@ -87,13 +119,13 @@ export function readMobileFeed(): MobileFeed {
       },
       showPublicDownload: snapshot.mobile?.showPublicDownload === true,
     },
-    events: snapshot.events ?? base.events,
+    events: mergeLiveEvents(snapshot.events ?? base.events),
     articles: snapshot.articles ?? base.articles,
     books: snapshot.books ?? base.books,
     clinics: snapshot.clinics ?? base.clinics,
     videos: snapshot.videos ?? base.videos,
     notices: snapshot.notices?.length ? snapshot.notices : base.notices,
-    announcements: snapshot.announcements ?? base.announcements,
+    announcements: snapshot.announcements?.length ? snapshot.announcements : partnerRows.announcements.length ? partnerRows.announcements : base.announcements,
     flyers: snapshot.flyers ?? base.flyers,
     gallery: snapshot.gallery ?? base.gallery,
     about: snapshot.about ?? base.about,

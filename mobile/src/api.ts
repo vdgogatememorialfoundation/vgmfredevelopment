@@ -456,9 +456,15 @@ export function formatDate(value: unknown) {
 export function isPastDate(value: unknown) {
   const text = str(value);
   if (!text) return false;
-  const date = new Date(text);
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T23:59:59` : text);
   if (Number.isNaN(date.getTime())) return false;
-  return date.getTime() < Date.now() - 24 * 60 * 60 * 1000;
+  return date.getTime() < Date.now();
+}
+
+export function isRegistrationClosed(item: Row | null | undefined) {
+  if (!item) return true;
+  if (str(item.registrationStatus).toLowerCase() === "closed") return true;
+  return isPastDate(item.endDate || item.startDate || item.registrationEnd);
 }
 
 export function moduleOn(feed: Feed | null, id: string) {

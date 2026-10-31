@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { formatDate, mediaUrl, moduleOn, money, str, type Row } from "../../src/api";
+import { formatDate, isPastDate, isRegistrationClosed, mediaUrl, moduleOn, money, str, type Row } from "../../src/api";
 import { useCart } from "../../src/cart";
 import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
@@ -22,7 +22,7 @@ export default function HomeScreen() {
   const flyers = (feed?.flyers ?? []).filter((item) => str(item.image));
   const events = feed?.events ?? [];
   const books = feed?.books ?? [];
-  const featured = events[0];
+  const featured = events.find((item) => !isPastDate(item.endDate || item.startDate)) || events[0];
   const enabled = (id: string) => moduleOn(feed, id);
 
   if (loading && !feed) return <Loading />;
@@ -91,7 +91,11 @@ export default function HomeScreen() {
           <Heading>{str(featured.name)}</Heading>
           <Muted>{str(featured.shortDescription)}</Muted>
           <Muted>{[str(featured.venue), formatDate(featured.startDate)].filter(Boolean).join(" · ")}</Muted>
-          <Button label="Register now" onPress={() => openPublishedHref(str(featured.registrationUrl) || SITE.eventsUrl)} />
+          {isRegistrationClosed(featured) ? (
+            <Button kind="ghost" label="Registration closed" disabled onPress={() => undefined} />
+          ) : (
+            <Button label="Register now" onPress={() => openPublishedHref(str(featured.registrationUrl) || SITE.eventsUrl)} />
+          )}
         </Card>
       ) : null}
 

@@ -6,6 +6,7 @@ import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
 import { eventDateText, eventPlaceText, eventTimeText } from "@/lib/event-display";
+import { isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
 import { partnerPortalLabel } from "@/lib/partner-labels";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
@@ -18,6 +19,7 @@ const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral">
 
 export default function EventCard({ event }: { event: Event }) {
   const { t } = useI18n();
+  const status = resolvedRegistrationStatus(event);
   return (
     <article className="card flex flex-col overflow-hidden">
       <div className="relative">
@@ -34,8 +36,8 @@ export default function EventCard({ event }: { event: Event }) {
           ) : null}
         </div>
         <div className="absolute top-4 right-4">
-          <Badge tone={statusTone[event.registrationStatus] ?? "neutral"}>
-            {event.registrationStatus}
+          <Badge tone={statusTone[status] ?? "neutral"}>
+            {status}
           </Badge>
         </div>
       </div>
@@ -85,7 +87,11 @@ export default function EventCard({ event }: { event: Event }) {
           {t("events.view")}
         </Link>
 
-        {event.tbd?.registration || !event.registrationUrl?.trim() ? (
+        {isRegistrationClosed(event) ? (
+          <span className="btn-outline mt-3 w-full pointer-events-none cursor-not-allowed opacity-60">
+            {t("events.closed")}
+          </span>
+        ) : event.tbd?.registration || !event.registrationUrl?.trim() ? (
           <p className="mt-3 text-center text-xs text-text-muted">{t("events.tba")}</p>
         ) : (
           <a

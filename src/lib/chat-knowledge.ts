@@ -2,6 +2,7 @@ import { getAbout } from "@/lib/about";
 import { getLiveAnnouncements, getLiveClinics, getLiveEvents, getLiveNotices, getLiveVideos, getPublishedArticles, getSiteFlags } from "@/lib/cms";
 import { getLiveBooks } from "@/lib/product-data";
 import { getPolicies } from "@/lib/policies";
+import { isEventPast } from "@/lib/event-status";
 import { isPublishedNow } from "@/lib/schedule";
 import { addToCart, buildTrackingStages, formatPrice, getOrders } from "@/lib/store";
 import { siteConfig, storeConfig, seminarSiteUrl } from "@/lib/constants";
@@ -39,7 +40,7 @@ function scoreHay(hay: string, tokens: string[]) {
 }
 
 function summariseEvents() {
-  const upcoming = getLiveEvents().filter((event) => isPublishedNow(event) && event.registrationStatus !== "Closed");
+  const upcoming = getLiveEvents().filter((event) => isPublishedNow(event) && event.registrationStatus !== "Closed" && !isEventPast(event));
   if (upcoming.length === 0) {
     return "There are no upcoming seminars or events published right now. Open the Events page when a new programme is listed — registration, if any, is announced there and on seminar.vaidyagogate.org.";
   }

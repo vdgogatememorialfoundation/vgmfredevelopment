@@ -1,5 +1,6 @@
 import { getLiveAnnouncements, getLiveEvents, getLiveNotices, getPublishedArticles } from "@/lib/cms";
 import { isArticlePublished } from "@/lib/article-display";
+import { isEventPast } from "@/lib/event-status";
 import { formatCountdown, isPublishedNow } from "@/lib/schedule";
 import type { Announcement, Article, Event, Notice } from "@/types";
 
@@ -41,7 +42,7 @@ function articleItems(articles: Article[]): TickerItem[] {
 }
 
 function eventItems(events: Event[], now = Date.now()): TickerItem[] {
-  const live = events.filter((event) => isPublishedNow(event) && event.registrationStatus !== "Closed");
+  const live = events.filter((event) => isPublishedNow(event) && event.registrationStatus !== "Closed" && !isEventPast(event, now));
   const rows: TickerItem[] = live.map((event) => ({
     id: `event-${event.id}`,
     title: event.name,

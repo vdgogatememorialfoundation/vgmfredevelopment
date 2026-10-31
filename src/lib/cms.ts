@@ -5,6 +5,7 @@ import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
 import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, RegistrationStatus, SiteBanner, User, Video } from "@/types";
 import { isArticlePublished } from "@/lib/article-display";
+import { isPublicFellowshipEvent, withResolvedRegistration } from "@/lib/event-status";
 import { modulesFor, type StaffModuleId } from "@/lib/roles";
 
 const ARTICLES_KEY = "vgmf_article_edits";
@@ -189,24 +190,23 @@ export function hideAnnouncement(id: string) {
 }
 
 function isFellowshipEvent(event: Pick<Event, "id" | "source" | "slug" | "eventType">) {
-  return (
-    event.source === "fellowship" ||
-    event.eventType === "Fellowship" ||
-    String(event.id || "").startsWith("fellowship-") ||
-    String(event.slug || "").startsWith("fellowship-")
-  );
+  return isPublicFellowshipEvent(event);
 }
 
 export function getLiveEvents(): Event[] {
   const edits = readJSON<EventEdit[]>(EVENTS_KEY, []);
   const custom = readJSON<Event[]>("vgmf_custom_events", []);
-  if (!edits.length && !custom.length) return seededEvents.filter((event) => !isFellowshipEvent(event));
-  const byId = new Map(edits.map((edit) => [edit.id, edit]));
-  const fromSeed = seededEvents
-    .map((event) => ({ ...event, ...byId.get(event.id) }))
-    .filter((event) => !byId.get(event.id)?.hidden && !isFellowshipEvent(event));
-  const seedIds = new Set(seededEvents.map((event) => event.id));
-  return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden && !isFellowshipEvent(event)), ...fromSeed];
+  const events = !edits.length && !custom.length
+    ? seededEvents.filter((event) => !isFellowshipEvent(event))
+    : (() => {
+        const byId = new Map(edits.map((edit) => [edit.id, edit]));
+        const fromSeed = seededEvents
+          .map((event) => ({ ...event, ...byId.get(event.id) }))
+          .filter((event) => !byId.get(event.id)?.hidden && !isFellowshipEvent(event));
+        const seedIds = new Set(seededEvents.map((event) => event.id));
+        return [...custom.filter((event) => !seedIds.has(event.id) && !byId.get(event.id)?.hidden && !isFellowshipEvent(event)), ...fromSeed];
+      })();
+  return events.map((event) => withResolvedRegistration(event));
 }
 
 export function getLiveEvent(slug: string) {
