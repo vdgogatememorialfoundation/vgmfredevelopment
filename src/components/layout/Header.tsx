@@ -16,8 +16,7 @@ import { getSiteVisibility, visibleAccountNav, visiblePublicNav } from "@/lib/si
 import { subscribeCms } from "@/lib/cms";
 import { useSiteSettings } from "@/lib/use-cms";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
-import { ABOUT_NAV } from "@/lib/about";
-import type { MessageKey } from "@/lib/i18n/messages";
+import { navDropdown } from "@/lib/nav-menus";
 
 function CartIcon() {
   return (
@@ -94,7 +93,7 @@ function CloseIcon() {
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [aboutMenuOpen, setAboutMenuOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState("");
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
@@ -102,7 +101,7 @@ export default function Header() {
   const { t } = useI18n();
   const settings = useSiteSettings();
   const accountMenuRef = useRef<HTMLDivElement>(null);
-  const aboutMenuRef = useRef<HTMLDivElement>(null);
+  const desktopNavRef = useRef<HTMLElement>(null);
   useSyncExternalStore(
     subscribeCms,
     () => `${window.localStorage.getItem("vgmf_site_visibility") ?? ""}|${window.localStorage.getItem("vgmf_cms_pages") ?? ""}|${window.localStorage.getItem("vgmf_settings") ?? ""}`,
@@ -117,7 +116,7 @@ export default function Header() {
     const timer = setTimeout(() => {
       setMobileMenuOpen(false);
       setAccountMenuOpen(false);
-      setAboutMenuOpen(false);
+      setOpenMenu("");
     }, 0);
     return () => clearTimeout(timer);
   }, [pathname]);
@@ -141,8 +140,8 @@ export default function Header() {
       if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
         setAccountMenuOpen(false);
       }
-      if (aboutMenuRef.current && !aboutMenuRef.current.contains(event.target as Node)) {
-        setAboutMenuOpen(false);
+      if (desktopNavRef.current && !desktopNavRef.current.contains(event.target as Node)) {
+        setOpenMenu("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -184,64 +183,55 @@ export default function Header() {
 
           {/* Desktop Navigation */}
           <nav
+            ref={desktopNavRef}
             aria-label="Main navigation"
             className="hidden items-center lg:flex lg:gap-3 xl:gap-6"
           >
             {navItems.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              if (item.href === "/about") {
-                return (
-                  <div key={item.href} className="relative" ref={aboutMenuRef}>
-                    <button
-                      type="button"
-                      onClick={() => setAboutMenuOpen((open) => !open)}
-                      aria-expanded={aboutMenuOpen}
-                      aria-haspopup="true"
-                      className={classNames(
-                        "relative inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
-                        isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
-                      )}
-                    >
-                      {t("nav.about")}
-                      <span aria-hidden="true" className="text-[10px]">{aboutMenuOpen ? "▴" : "▾"}</span>
-                    </button>
-                    {aboutMenuOpen ? (
-                      <div className="absolute left-0 top-full z-50 mt-3 w-72 overflow-hidden rounded-2xl border border-border bg-white py-2 shadow-xl">
-                        {ABOUT_NAV.map((page) => {
-                          const active = pathname === page.href;
-                          return (
-                            <Link
-                              key={page.href}
-                              href={page.href}
-                              onClick={() => setAboutMenuOpen(false)}
-                              className={classNames(
-                                "block px-4 py-2.5 text-sm transition",
-                                active ? "font-semibold text-burgundy bg-warm-cream" : "text-text-primary hover:bg-warm-cream hover:text-burgundy"
-                              )}
-                            >
-                              {t(page.key as MessageKey)}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              }
+              const children = navDropdown(item.href);
+              const opened = openMenu === item.href;
               return (
-                <Link
+                <div
                   key={item.href}
-                  href={item.href}
-                  aria-current={isActive ? "page" : undefined}
-                  className={classNames(
-                    "relative whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
-                    isActive
-                      ? "text-burgundy after:absolute after:-bottom-1 after:left-0 after:h-px after:w-full after:bg-gold"
-                      : "text-text-primary hover:text-burgundy"
-                  )}
+                  className="relative"
+                  onMouseEnter={() => setOpenMenu(item.href)}
+                  onMouseLeave={() => setOpenMenu("")}
                 >
-                  {t(navMessageKey[item.href] ?? "nav.about")}
-                </Link>
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu(opened ? "" : item.href)}
+                    aria-expanded={opened}
+                    aria-haspopup="true"
+                    className={classNames(
+                      "relative inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
+                      isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
+                    )}
+                  >
+                    {t(navMessageKey[item.href] ?? "nav.about")}
+                    <span aria-hidden="true" className="text-[10px]">{opened ? "▴" : "▾"}</span>
+                  </button>
+                  {opened ? (
+                    <div className="absolute left-0 top-full z-50 mt-2 min-w-56 overflow-hidden rounded-2xl border border-border bg-white py-2 shadow-xl">
+                      {children.map((page) => {
+                        const active = pathname === page.href;
+                        return (
+                          <Link
+                            key={page.href}
+                            href={page.href}
+                            onClick={() => setOpenMenu("")}
+                            className={classNames(
+                              "block px-4 py-2.5 text-sm transition",
+                              active ? "bg-warm-cream font-semibold text-burgundy" : "text-text-primary hover:bg-warm-cream hover:text-burgundy"
+                            )}
+                          >
+                            {t(page.key)}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
             {extraPages.map((page) => {
@@ -435,21 +425,24 @@ export default function Header() {
                 <nav aria-label="Mobile navigation" className="flex-1 overflow-y-auto px-2 py-2">
                   {navItems.map((item) => {
                     const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                    if (item.href === "/about") {
-                      return (
-                        <div key={item.href} className="border-b border-border">
-                          <Link
-                            href="/about"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={classNames(
-                              "block px-3 py-3.5 text-sm font-semibold",
-                              pathname === "/about" ? "text-burgundy" : "text-text-primary"
-                            )}
-                          >
-                            {t("nav.about")}
-                          </Link>
-                          <div className="mb-2 ml-3 space-y-0.5 border-l border-border pl-3 pb-2">
-                            {ABOUT_NAV.filter((page) => page.href !== "/about").map((page) => (
+                    const children = navDropdown(item.href);
+                    const opened = openMenu === item.href || isActive;
+                    return (
+                      <div key={item.href} className="border-b border-border">
+                        <button
+                          type="button"
+                          onClick={() => setOpenMenu(openMenu === item.href ? "" : item.href)}
+                          className={classNames(
+                            "flex w-full items-center justify-between px-3 py-3.5 text-left text-sm font-semibold",
+                            isActive ? "text-burgundy" : "text-text-primary"
+                          )}
+                        >
+                          {t(navMessageKey[item.href] ?? "nav.about")}
+                          <span aria-hidden="true" className="text-[10px]">{opened ? "▴" : "▾"}</span>
+                        </button>
+                        {opened ? (
+                          <div className="mb-2 ml-3 space-y-0.5 border-l border-border pb-2 pl-3">
+                            {children.map((page) => (
                               <Link
                                 key={page.href}
                                 href={page.href}
@@ -459,26 +452,12 @@ export default function Header() {
                                   pathname === page.href ? "font-semibold text-burgundy" : "text-text-muted hover:text-burgundy"
                                 )}
                               >
-                                {t(page.key as MessageKey)}
+                                {t(page.key)}
                               </Link>
                             ))}
                           </div>
-                        </div>
-                      );
-                    }
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setMobileMenuOpen(false)}
-                        aria-current={isActive ? "page" : undefined}
-                        className={classNames(
-                          "block border-b border-border px-3 py-3.5 text-sm font-medium transition",
-                          isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
-                        )}
-                      >
-                        {t(navMessageKey[item.href] ?? "nav.about")}
-                      </Link>
+                        ) : null}
+                      </div>
                     );
                   })}
                   {extraPages.map((page) => (

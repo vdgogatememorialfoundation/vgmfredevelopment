@@ -3,7 +3,7 @@
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import { NaturalImage } from "@/components/common/NaturalImage";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { anaghaPortrait, buildTree, rbPortrait, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
@@ -35,28 +35,44 @@ function excerpt(text: string, count = 2) {
   return paragraphs(text).slice(0, count).join("\n\n");
 }
 
+const PORTRAIT = 96;
+
 function PortraitSquare({ src, alt, fallback, placeholder }: { src?: string; alt: string; fallback?: string; placeholder?: string }) {
   const start = src || fallback || "";
   const [shown, setShown] = useState(start);
+  useEffect(() => {
+    setShown(src || fallback || "");
+  }, [src, fallback]);
+  const box = {
+    width: PORTRAIT,
+    height: PORTRAIT,
+    minWidth: PORTRAIT,
+    minHeight: PORTRAIT,
+    maxWidth: PORTRAIT,
+    maxHeight: PORTRAIT,
+    overflow: "hidden" as const,
+    borderRadius: 12,
+    flexShrink: 0,
+  };
   if (!shown) {
     return (
-      <div className="mx-auto flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-slate-50 sm:mx-0 sm:h-40 sm:w-40">
-        <Initials name={placeholder || alt} size="h-16 w-16" />
+      <div className="flex items-center justify-center border border-border bg-slate-50" style={box}>
+        <Initials name={placeholder || alt} size="h-10 w-10" />
       </div>
     );
   }
   return (
-    <div className="mx-auto h-32 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:mx-0 sm:h-40 sm:w-40">
+    <div className="border border-border bg-white shadow-sm" style={box}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={shown}
         alt={alt}
-        width={160}
-        height={160}
+        width={PORTRAIT}
+        height={PORTRAIT}
         onError={() => {
           if (fallback && shown !== fallback) setShown(fallback);
         }}
-        className="h-full w-full object-cover object-top"
+        style={{ width: PORTRAIT, height: PORTRAIT, objectFit: "cover", objectPosition: "top" }}
       />
     </div>
   );
@@ -81,9 +97,9 @@ function PersonSplit({
 }) {
   const { t } = useI18n();
   return (
-    <div className="flex flex-col items-center gap-4 sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start sm:gap-8">
+    <div className="grid items-start gap-4" style={{ gridTemplateColumns: `${PORTRAIT}px minmax(0, 1fr)` }}>
       <PortraitSquare src={image} alt={imageAlt} placeholder={placeholder} fallback={fallback} />
-      <div className="w-full">
+      <div className="min-w-0">
         <h2 className="heading-3">{title}</h2>
         <div className="mt-3">
           <BioBlock text={body} />
