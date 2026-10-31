@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Article } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
+import { NaturalImage } from "@/components/common/NaturalImage";
 import { formatDate } from "@/lib/utils";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { localizedArticle } from "@/lib/article-display";
@@ -14,8 +15,7 @@ export default function ArticleCard({ article }: { article: Article }) {
   return (
     <article className="card flex flex-col overflow-hidden">
       {article.coverImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={article.coverImage} alt="" className="aspect-[16/9] w-full object-cover" />
+        <NaturalImage src={article.coverImage} alt="" fit="card" />
       ) : (
         article.featured && (
           <MediaPlaceholder variant="article" label={shown.title} aspectClassName="aspect-[16/9]" />

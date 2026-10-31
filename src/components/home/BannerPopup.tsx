@@ -16,7 +16,7 @@ function dismissedIds() {
 }
 
 function isImage(value?: string) {
-  return Boolean(value && /^(https?:|data:image)/.test(value));
+  return Boolean(value && /^(https?:|data:image|\/)/i.test(value));
 }
 
 export default function BannerPopup() {

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
-import { buildTree, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
+import { NaturalImage } from "@/components/common/NaturalImage";
+import { BioBlock, PortraitBio, paragraphs } from "@/components/about/PortraitBio";
+import { anaghaPortrait, buildTree, rbPortrait, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 function Initials({ name, size }: { name: string; size: string }) {
@@ -13,17 +15,46 @@ function Initials({ name, size }: { name: string; size: string }) {
   );
 }
 
-function paragraphs(text: string) {
-  return text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+function excerpt(text: string, count = 2) {
+  return paragraphs(text).slice(0, count).join("\n\n");
 }
 
 export function AboutLive() {
   const about = useAbout();
   const { t } = useI18n();
   const letter = paragraphs(about.intro);
+  const portrait = rbPortrait(about);
+  const people = new Set(["s-legacy", "s-anagha"]);
+  const others = about.sections.filter((section) => !people.has(section.id));
   return (
     <main>
       <PageHeader eyebrow={t("about.eyebrow")} title={about.title} />
+      <section className="section bg-background">
+        <div className="container">
+          <PortraitBio
+            image={portrait}
+            title={about.legacy.title}
+            body={excerpt(about.legacy.biography)}
+            href="/about/legacy-of-vaidya-rb-gogate"
+            imageAlt="Vaidya R. B. Gogate"
+            placeholder="R B Gogate"
+            fallback="/about/rb-square.jpg"
+          />
+        </div>
+      </section>
+      <section className="section bg-warm-cream">
+        <div className="container">
+          <PortraitBio
+            image={anaghaPortrait(about)}
+            title={about.anagha.title}
+            body={excerpt(about.anagha.biography)}
+            href="/about/dr-anagha-gogate"
+            imageAlt={about.anagha.title}
+            placeholder="A G"
+            fallback="/about/anagha-square.jpg"
+          />
+        </div>
+      </section>
       {letter.length > 0 && (
         <section className="border-b border-border bg-paper">
           <div className="container py-8 sm:py-10">
@@ -37,22 +68,13 @@ export function AboutLive() {
           </div>
         </section>
       )}
-      {about.heroImage && (
-        <section className="bg-background pt-10">
-          <div className="container">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={about.heroImage} alt="" className="aspect-[21/8] w-full rounded-2xl border border-border object-cover" />
-          </div>
-        </section>
-      )}
       <section className="section bg-background">
-        <div className="container grid gap-6 md:grid-cols-2">
-          {about.sections.map((section) => {
+        <div className="container grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {others.map((section) => {
             const body = (
               <>
                 {section.image && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={section.image} alt="" className="mb-5 aspect-[16/8] w-full rounded-xl object-cover" />
+                  <NaturalImage src={section.image} alt="" fit="card" className="mb-5 rounded-xl" />
                 )}
                 <h2 className="heading-3">{section.title}</h2>
                 <p className="mt-3 whitespace-pre-line text-text-muted">{section.body}</p>
@@ -71,11 +93,10 @@ export function AboutLive() {
         <section className="section bg-warm-cream">
           <div className="container">
             <h2 className="heading-2 mb-8 text-center">{t("about.glimpses")}</h2>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="columns-1 gap-6 sm:columns-2 lg:columns-3">
               {about.gallery.map((photo) => (
-                <figure key={photo.id} className="overflow-hidden rounded-2xl border border-border bg-white">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo.src} alt={photo.title} className="aspect-[4/3] w-full object-cover" />
+                <figure key={photo.id} className="mb-6 break-inside-avoid overflow-hidden rounded-2xl border border-border bg-white">
+                  <NaturalImage src={photo.src} alt={photo.title} fit="content" />
                   <figcaption className="p-5">
                     {photo.title && <p className="font-semibold text-text-primary">{photo.title}</p>}
                     {photo.description && <p className="mt-1 text-sm leading-6 text-text-muted">{photo.description}</p>}
@@ -105,8 +126,7 @@ function TreeNode({ branch }: { branch: TreeBranch }) {
     <li className="flex flex-col items-center">
       <div className="relative flex w-48 flex-col items-center rounded-2xl border border-border bg-white p-4 text-center shadow-sm">
         {branch.photo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={branch.photo} alt={branch.name} className="h-16 w-16 rounded-full border-2 border-gold/50 object-cover" />
+          <NaturalImage src={branch.photo} alt={branch.name} fit="thumb" className="h-16 w-16 rounded-full border-2 border-gold/50" imgClassName="h-16 w-16 rounded-full object-cover" />
         ) : (
           <Initials name={branch.name} size="h-16 w-16" />
         )}
@@ -158,8 +178,7 @@ function PersonCard({ person, featured }: { person: AboutPerson; featured?: bool
     return (
       <div className="card p-6 text-center">
         {person.photo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={person.photo} alt={person.name} className="mx-auto h-20 w-20 rounded-full border-2 border-burgundy/20 object-cover" />
+          <NaturalImage src={person.photo} alt={person.name} fit="thumb" className="mx-auto h-20 w-20 rounded-full border-2 border-burgundy/20" imgClassName="h-20 w-20 rounded-full object-cover" />
         ) : (
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-2 border-burgundy/20 bg-burgundy/5">
             <span className="text-sm font-bold text-burgundy">{initials}</span>
@@ -174,8 +193,7 @@ function PersonCard({ person, featured }: { person: AboutPerson; featured?: bool
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-border bg-white p-5">
       {person.photo ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={person.photo} alt={person.name} className="h-12 w-12 shrink-0 rounded-full border border-burgundy/20 object-cover" />
+        <NaturalImage src={person.photo} alt={person.name} fit="thumb" className="h-12 w-12 shrink-0 rounded-full border border-burgundy/20" imgClassName="h-12 w-12 rounded-full object-cover" />
       ) : (
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-burgundy/20 bg-burgundy/5">
           <span className="text-xs font-bold text-burgundy">{initials}</span>
@@ -201,10 +219,7 @@ export function FoundationLive() {
           <div>
             {foundation.sections.map((section) => (
               <div key={section.id} className="mb-10 last:mb-0">
-                {section.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={section.image} alt="" className="mb-4 aspect-[16/8] w-full rounded-xl object-cover" />
-                ) : null}
+                {section.image ? <NaturalImage src={section.image} alt="" fit="content" className="mb-4 rounded-xl" /> : null}
                 <h2 className="heading-3 mb-4">{section.title}</h2>
                 {section.body.includes("\n") && !section.body.includes("\n\n") ? (
                   <ul className="space-y-3 text-body" role="list">
@@ -309,36 +324,35 @@ export function TrusteesLive() {
 }
 
 export function LegacyLive() {
-  const { legacy } = useAbout();
-  const { t } = useI18n();
+  const about = useAbout();
+  const { legacy } = about;
+  const { t, locale } = useI18n();
+  const primary = locale === "mr" && legacy.biographyMr ? legacy.biographyMr : legacy.biography;
+  const other = locale === "mr" ? legacy.biography : legacy.biographyMr;
+  const secondary = other && other !== primary ? other : "";
+  const secondaryLabel = locale === "mr" ? "English" : "मराठी";
   return (
     <main>
-      <PageHeader eyebrow={t("about.eyebrow")} title={legacy.title} description={legacy.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={legacy.title} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
-        <div className="container grid gap-12 lg:grid-cols-2">
-          <div>
-            <h2 className="heading-3 mb-4">{t("about.biography")}</h2>
-            {legacy.biography.split(/\n\s*\n/).map((paragraph, index) => (
-              <p key={index} className="text-body mb-4">{paragraph}</p>
-            ))}
-            <h2 className="heading-3 mb-4 mt-10">{t("about.philosophy")}</h2>
-            <p className="text-body whitespace-pre-line">{legacy.philosophy}</p>
-          </div>
-          <div>
-            <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-              {legacy.portrait ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={legacy.portrait} alt="Vaidya R. B. Gogate" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center bg-slate-50 p-8 text-center">
-                  <div>
-                    <Initials name="R B" size="mx-auto mb-5 h-24 w-24" />
-                    <p className="text-lg font-bold text-text-primary">Vaidya R. B. Gogate</p>
-                    <p className="mt-2 text-sm text-text-muted">{t("legacy.portraitRole")}</p>
-                  </div>
-                </div>
-              )}
+        <div className="container">
+          <PortraitBio
+            image={rbPortrait(about)}
+            title={t("about.biography")}
+            body={primary}
+            imageAlt="Vaidya R. B. Gogate"
+            placeholder="R B Gogate"
+            fallback="/about/rb-square.jpg"
+          />
+          {secondary ? (
+            <div className="mt-12">
+              <h2 className="heading-3 mb-4">{secondaryLabel}</h2>
+              <BioBlock text={secondary} />
             </div>
+          ) : null}
+          <div className="mt-12">
+            <h2 className="heading-3 mb-4">{t("about.philosophy")}</h2>
+            <p className="text-body whitespace-pre-line">{legacy.philosophy}</p>
           </div>
         </div>
       </section>
@@ -362,6 +376,84 @@ export function LegacyLive() {
       <section className="section bg-background">
         <div className="container">
           <FamilyTree />
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function AnaghaLive() {
+  const { anagha } = useAbout();
+  const { t } = useI18n();
+  return (
+    <main>
+      <PageHeader eyebrow={t("about.eyebrow")} title={anagha.title} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container">
+          <PortraitBio
+            image={anaghaPortrait({ anagha })}
+            title={t("about.biography")}
+            body={anagha.biography}
+            imageAlt={anagha.title}
+            placeholder="A G"
+            fallback="/about/anagha-square.jpg"
+          />
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function AwardsLive() {
+  const { awards } = useAbout();
+  const { t } = useI18n();
+  return (
+    <main>
+      <PageHeader eyebrow={t("about.eyebrow")} title={awards.title} description={awards.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container grid gap-6 md:grid-cols-2">
+          {awards.items.map((item) => (
+            <article key={item.id} className="card p-8">
+              {item.image ? <NaturalImage src={item.image} alt="" fit="card" className="mb-5 rounded-xl" /> : null}
+              <h2 className="heading-3">{item.title}</h2>
+              <p className="mt-3 whitespace-pre-line text-text-muted">{item.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function ScholarshipLive() {
+  const { scholarship } = useAbout();
+  const { t } = useI18n();
+  return (
+    <main>
+      <PageHeader eyebrow={t("about.eyebrow")} title={scholarship.title} description={scholarship.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <section className="section bg-background">
+        <div className="container grid gap-10 lg:grid-cols-2">
+          <div>
+            <h2 className="heading-3 mb-6">{scholarship.booksTitle}</h2>
+            <ul className="space-y-3" role="list">
+              {scholarship.books.map((book) => (
+                <li key={book} className="rounded-2xl border border-border bg-white px-5 py-4 font-semibold text-text-primary">
+                  {book}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h2 className="heading-3 mb-6">{scholarship.researchTitle}</h2>
+            <ul className="space-y-3" role="list">
+              {scholarship.research.map((item) => (
+                <li key={item} className="flex items-start gap-3 rounded-2xl border border-border bg-white px-5 py-4">
+                  <span className="mt-1 text-burgundy">✓</span>
+                  <span className="text-text-primary">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
     </main>

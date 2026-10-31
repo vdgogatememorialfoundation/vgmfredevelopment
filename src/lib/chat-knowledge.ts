@@ -13,7 +13,7 @@ const EVENT_INTENT =
 const ARTICLE_INTENT = /\b(articles?|journal|essay|paper|latest article)\b|लेख|कட்டுரை|ಲೇಖನ|ലേഖനം/i;
 const CLINIC_INTENT = /\b(clinic|opd|consultation|hospital|treatment|doctor)\b|चिकित्सालय|क्लिनिक|மருத்துவமனை/i;
 const POLICY_INTENT = /\b(privacy|terms|refund|return policy|shipping policy|cancellation|legal)\b/i;
-const ABOUT_INTENT = /\b(who|founders?|trustees?|about|history|legacy|rb gogate|vaidya|foundation|mission|vision)\b|गोगटे|फाउंडेशन/i;
+const ABOUT_INTENT = /\b(who|founders?|trustees?|about|history|legacy|rb gogate|anagha|awards?|books?|research|vaidya|foundation|mission|vision)\b|गोगटे|अनघा|फाउंडेशन/i;
 const CONTACT_INTENT = /\b(contact|email|phone|reach|address|office|pune|where)\b|संपर्क|पत्ता|पूणे/i;
 const SHOP_INTENT = /\b(shop|store|publication|books?|buy|purchase|order a book)\b|दुकान|पुस्तक/i;
 const VIDEO_INTENT = /\b(videos?|lecture|youtube|film|recording)\b|व्हिडिओ|वीडियो/i;
@@ -68,7 +68,7 @@ function summariseAbout() {
   const about = getAbout();
   const trustees = about.trustees.trustees.slice(0, 3).map((person) => person.name).filter(Boolean).join(", ");
   const purpose = about.foundation.sections.find((section) => /purpose|mission/i.test(section.title))?.body;
-  return `${about.intro}${purpose ? ` ${purpose}` : ""}${trustees ? ` Trustees include ${trustees}.` : ""} Open About Us for the Foundation, history, trustees and the legacy of Vaidya R. B. Gogate.`;
+  return `${about.intro}${purpose ? ` ${purpose}` : ""}${trustees ? ` Trustees include ${trustees}.` : ""} Open About Us for the Foundation, the biographies of Vaidya R. B. Gogate and Dr. Anagha Gogate, awards, books and research, history and trustees.`;
 }
 
 function summariseContact() {

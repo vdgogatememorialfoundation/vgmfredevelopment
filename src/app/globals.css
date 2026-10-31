@@ -29,7 +29,6 @@
 
 html {
   scroll-behavior: smooth;
-  overflow-x: clip;
 }
 
 body {
@@ -38,6 +37,10 @@ body {
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+#main-content,
+footer {
   overflow-x: clip;
 }
 
@@ -149,6 +152,43 @@ iframe {
 
   .text-body-lg {
     @apply text-sm leading-6 text-text-muted;
+  }
+
+  /* Permanent small-square portrait: photo left, biography starts on the right. Never stacks. */
+  .vgmf-portrait-bio {
+    display: table !important;
+    width: 100% !important;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .vgmf-portrait-bio__photo {
+    display: table-cell !important;
+    width: 96px !important;
+    max-width: 96px !important;
+    vertical-align: top !important;
+    padding-right: 16px;
+  }
+
+  .vgmf-portrait-bio__frame,
+  .vgmf-portrait-bio__frame img {
+    display: block !important;
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px !important;
+    min-height: 80px !important;
+    max-width: 80px !important;
+    max-height: 80px !important;
+    object-fit: cover !important;
+    object-position: top center !important;
+    border-radius: 10px;
+  }
+
+  .vgmf-portrait-bio__text {
+    display: table-cell !important;
+    vertical-align: top !important;
+    width: auto !important;
   }
 }
 

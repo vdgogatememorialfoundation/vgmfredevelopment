@@ -17,7 +17,7 @@ function escapeHtml(value: string) {
 function imageHtml(images: unknown) {
   if (!Array.isArray(images)) return "";
   return images
-    .filter((src): src is string => typeof src === "string" && /^(https?:|data:image)/i.test(src))
+    .filter((src): src is string => typeof src === "string" && /^(https?:|data:image|\/)/i.test(src))
     .slice(0, 6)
     .map(
       (src) =>

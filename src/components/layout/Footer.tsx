@@ -8,6 +8,7 @@ import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
 import { siteConfig } from "@/lib/constants";
+import { ABOUT_NAV } from "@/lib/about";
 import { getLiveCmsPages, subscribeCmsPages } from "@/lib/cms-pages";
 import { getSiteVisibility, subscribeSiteVisibility, visiblePublicNav } from "@/lib/site-visibility";
 import { isAppDownloadPublic } from "@/lib/mobile-config";
@@ -83,15 +84,20 @@ export default function Footer() {
           </nav>
 
           <div>
-            <p className="font-serif text-xl text-ink">{t("footer.pages")}</p>
+            <p className="font-serif text-xl text-ink">{t("nav.about")}</p>
+            <ul className="mt-5 space-y-2.5">
+              {ABOUT_NAV.map((page) => (
+                <li key={page.href}>
+                  <Link href={page.href} className="text-sm text-text-muted transition hover:text-burgundy">
+                    {t(page.key as MessageKey)}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-8 font-serif text-xl text-ink">{t("footer.pages")}</p>
             <ul className="mt-5 space-y-2.5">
               {custom.length === 0 ? (
                 <>
-                  <li>
-                    <Link href="/about" className="text-sm text-text-muted transition hover:text-burgundy">
-                      {t("nav.about")}
-                    </Link>
-                  </li>
                   <li>
                     <Link href="/contact" className="text-sm text-text-muted transition hover:text-burgundy">
                       {t("nav.contact")}

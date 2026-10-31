@@ -40,8 +40,13 @@ export const organizationJsonLd = {
 export const publicSitemapPaths = [
   "/",
   "/about",
+  "/about/foundation",
   "/about/history",
   "/about/legacy-of-vaidya-rb-gogate",
+  "/about/dr-anagha-gogate",
+  "/about/awards",
+  "/about/books-and-research",
+  "/about/trustees",
   "/events",
   "/gallery",
   "/videos",

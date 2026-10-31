@@ -1,6 +1,6 @@
 /**
- * Browser storage holds roughly 5 MB per site, so uploads are downscaled and
- * re-encoded before they are saved alongside the content that uses them.
+ * Small images can still be previewed as data URLs in email drafts.
+ * Public site uploads must go through /api/media/upload and persist as /uploads/ URLs.
  */
 export async function fileToDataUrl(file: File, maxWidth = 1600, quality = 0.82): Promise<string> {
   if (file.type === "image/svg+xml" || file.type === "image/x-icon") {
@@ -39,24 +39,41 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+export async function cropImageToFile(
+  source: string,
+  crop: { sx: number; sy: number; sw: number; sh: number },
+  fileName = "crop.jpg"
+) {
+  const image = await loadImage(source);
+  const sx = Math.max(0, Math.min(image.naturalWidth - 1, Math.round(crop.sx)));
+  const sy = Math.max(0, Math.min(image.naturalHeight - 1, Math.round(crop.sy)));
+  const sw = Math.max(1, Math.min(image.naturalWidth - sx, Math.round(crop.sw)));
+  const sh = Math.max(1, Math.min(image.naturalHeight - sy, Math.round(crop.sh)));
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not crop that image.");
+  context.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => (result ? resolve(result) : reject(new Error("Could not crop that image."))), "image/jpeg", 0.9);
+  });
+  const base = fileName.replace(/\.[^.]+$/, "") || "crop";
+  return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+}
+
 export async function fileToStoredUrl(file: File, maxBytes = 25_000_000) {
   if (file.size > maxBytes) {
     throw new Error("Use a file under 25 MB.");
   }
-  try {
-    const { uploadMediaFile } = await import("@/lib/media-client");
-    return await uploadMediaFile(file);
-  } catch (remoteError) {
-    if (file.size > 2_000_000) {
-      throw remoteError instanceof Error ? remoteError : new Error("Use a file under 2 MB, or connect media storage.");
-    }
-    if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
-      return fileToDataUrl(file);
-    }
-    return readAsDataUrl(file);
-  }
+  const { uploadMediaFile } = await import("@/lib/media-client");
+  return uploadMediaFile(file);
 }
 
 export function isStorageFull(error: unknown) {
   return error instanceof DOMException && (error.name === "QuotaExceededError" || error.code === 22);
+}
+
+export function isDisplayableImage(value?: string) {
+  return Boolean(value && (/^(https?:|data:image|\/)/i.test(value) || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(value)));
 }
