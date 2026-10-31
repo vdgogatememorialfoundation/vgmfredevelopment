@@ -1,74 +1,100 @@
 import { useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Linking, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
-import { mediaUrl, money, str, type Row } from "../../src/api";
+import { getApiBase, mediaUrl, money, str, type Row } from "../../src/api";
 import { useCart } from "../../src/cart";
+import { GoldBanner, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { Chip, Cover, Empty, Heading, IconButton, Loading, Muted, PageHeader, Price, Screen, SearchBar } from "../../src/ui";
+import { SITE, STORE } from "../../src/site-content";
 import { useTheme } from "../../src/theme";
+import { Button, Card, Chip, Cover, Empty, Heading, Loading, Muted, PageHeader, Price, Screen, SearchBar, SiteFooter, StatusChip } from "../../src/ui";
 
 export default function ShopScreen() {
   const { feed, loading, refresh } = useFeed();
   const cart = useCart();
   const theme = useTheme();
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("All");
+  const [category, setCategory] = useState("All publications");
   const items = feed?.books ?? [];
-  const categories = useMemo(() => ["All", ...Array.from(new Set(items.map((item) => str(item.category)).filter(Boolean)))], [items]);
+  const categories = useMemo(() => ["All publications", ...Array.from(new Set(items.map((item) => str(item.category)).filter(Boolean)))], [items]);
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((item) => {
-      if (category !== "All" && str(item.category) !== category) return false;
+      if (category !== "All publications" && str(item.category) !== category) return false;
       if (!q) return true;
-      return [item.title, item.author, item.category, item.description].some((value) => str(value).toLowerCase().includes(q));
+      return [item.title, item.author, item.category, item.description, item.sku].some((value) => str(value).toLowerCase().includes(q));
     });
   }, [items, query, category]);
   if (loading && !feed) return <Loading />;
-  const width = theme.columns === 2 ? ("48%" as const) : ("100%" as const);
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <PageHeader
-        kicker="Catalogue"
-        title={theme.labels.shop}
-        subtitle="Books from the published Foundation shop"
-        trailing={<IconButton icon="bag-handle-outline" label={theme.labels.bag} badge={cart.count} onPress={() => router.push("/cart")} />}
-      />
-      <SearchBar value={query} onChange={setQuery} placeholder="Search publications" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+      <GoldBanner text={`Free shipping on orders over ₹${STORE.freeShippingThreshold}`} action="View bag" onAction={() => router.push("/cart")} />
+      <TopBar bag />
+      <PageHeader kicker="Official archival press" title="Foundation publications" subtitle="Authentic Ayurvedic treatises, critical commentaries and research monographs published by the Vaidya Gogate Memorial Foundation." />
+      <SearchBar value={query} onChange={setQuery} placeholder="Search by title, author or code" />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         {categories.map((item) => (
           <Chip key={item} label={item} selected={category === item} onPress={() => setCategory(item)} />
         ))}
       </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-        {filtered.map((item) => (
-          <ProductCard key={str(item.id)} item={item} width={width} />
-        ))}
-      </View>
+      {filtered.map((item) => (
+        <ProductRow key={str(item.id)} item={item} onAdd={() => cart.add({ id: str(item.id), title: str(item.title), price: Number(item.price) || 0 })} />
+      ))}
       {!filtered.length ? (
         <Empty
           icon="book-outline"
-          label={items.length ? "No publications match that search." : "No publications are currently in the published catalogue. Pull to refresh after Admin publishes."}
-          actionLabel="Refresh"
-          onAction={() => void refresh()}
+          label={items.length ? "No publications match that search." : "No titles are in the published catalogue yet. The website shop is the live catalogue — open it to browse and pay with Razorpay."}
+          actionLabel="Open website shop"
+          onAction={() => void Linking.openURL(`${getApiBase()}${SITE.shopUrl}`)}
         />
       ) : null}
+      <Card>
+        <Heading>Website checkout</Heading>
+        <Muted>Card payment stays on the website Razorpay checkout, synced with your VGMF account. The in-app bag records an unpaid request.</Muted>
+        <Button kind="ink" icon="open-outline" label="Go to web checkout" onPress={() => void Linking.openURL(`${getApiBase()}${SITE.checkoutUrl}`)} />
+      </Card>
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+        {[
+          [`${STORE.returnDays}-day return`, "Archival reprint guarantee"],
+          [`${STORE.gstRate} GST incl.`, "Official institutional copy"],
+          [STORE.courier, "Standard track"],
+        ].map(([title, body]) => (
+          <View key={title} style={{ flex: 1, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 14, padding: 10 }}>
+            <Text style={{ fontWeight: "800", fontSize: 12, color: theme.colors.text }}>{title}</Text>
+            <Text style={{ color: theme.colors.muted, fontSize: 11, marginTop: 4 }}>{body}</Text>
+          </View>
+        ))}
+      </View>
+      <SiteFooter />
     </Screen>
   );
 }
 
-function ProductCard({ item, width }: { item: Row; width: `${number}%` }) {
+function ProductRow({ item, onAdd }: { item: Row; onAdd: () => void }) {
   const theme = useTheme();
   const original = Number(item.originalPrice) || 0;
   const price = Number(item.price) || 0;
   const out = str(item.stockStatus) === "out_of_stock" || item.active === false;
+  const discount = original > price && original ? Math.round(((original - price) / original) * 100) : 0;
   return (
-    <Pressable onPress={() => router.push(`/book/${str(item.id)}`)} style={{ width }}>
-      <View style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: 1, borderRadius: theme.radius.lg, padding: 10, marginBottom: 8 }}>
-        <Cover uri={mediaUrl(item.coverImage) || undefined} ratio="square" />
-        <Heading>{str(item.title)}</Heading>
-        <Muted>{str(item.author)}</Muted>
-        <Price value={money(price)} original={original > price ? money(original) : undefined} />
-        <Muted>{out ? "Out of stock" : str(item.stockStatus) === "in_stock" ? "In stock" : ""}</Muted>
+    <Pressable onPress={() => router.push(`/book/${str(item.id)}`)}>
+      <View style={{ backgroundColor: theme.colors.paper, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 18, padding: 14, marginBottom: 12 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+          <Text style={{ color: theme.colors.muted, fontSize: 11, fontWeight: "700" }}>{str(item.sku, str(item.id))}</Text>
+          {discount ? <StatusChip label={`${discount}% off`} /> : null}
+        </View>
+        <View style={{ flexDirection: "row", gap: 12 }}>
+          <View style={{ width: 88 }}>
+            <Cover uri={mediaUrl(item.coverImage) || undefined} ratio="square" />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Heading>{str(item.title)}</Heading>
+            <Muted>{str(item.author)}</Muted>
+            <Muted>{[str(item.format), item.pages ? `${item.pages} pages` : ""].filter(Boolean).join(" · ")}</Muted>
+            <Price value={money(price)} original={original > price ? money(original) : undefined} />
+          </View>
+        </View>
+        <Button label={out ? "Out of stock" : "Add to bag"} icon="bag-handle-outline" disabled={out} onPress={onAdd} />
       </View>
     </Pressable>
   );

@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable } from "react-native";
 import { router } from "expo-router";
-import { listOrders, listTickets, mediaUrl, money, sendEmailOtp, str, verifyEmailOtp } from "../../src/api";
+import { listOrders, listTickets, money, sendEmailOtp, str, verifyEmailOtp } from "../../src/api";
 import { useAuth } from "../../src/auth";
-import { useBrand, useFeed } from "../../src/feed";
-import { Banner, BrandMark, Button, Card, Divider, Field, Heading, ListRow, Loading, Muted, PageHeader, Screen } from "../../src/ui";
+import { TopBar } from "../../src/chrome";
+import { useFeed } from "../../src/feed";
+import { SITE } from "../../src/site-content";
+import { Banner, Button, Card, Divider, Field, Heading, ListRow, Loading, Muted, PageHeader, Screen, SiteFooter } from "../../src/ui";
 
 export default function AccountScreen() {
   const { feed, loading, refresh } = useFeed();
-  const brand = useBrand();
   const { session, setSession, signOut } = useAuth();
   const [name, setName] = useState(session?.name ?? "");
   const [email, setEmail] = useState(session?.email ?? "");
@@ -52,13 +53,11 @@ export default function AccountScreen() {
 
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <View style={{ alignItems: "center", marginBottom: 8 }}>
-        <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={64} />
-      </View>
+      <TopBar />
       <PageHeader
         kicker="Account"
         title={session ? session.name || "Your account" : "Welcome"}
-        subtitle={session ? session.email : "Sign in with a 6-digit code sent to your email."}
+        subtitle={session ? session.email : "Sign in with a 6-digit code sent to your email — the same account used on the website."}
       />
       <Banner text={note} tone={tone} />
       {session ? (
@@ -88,7 +87,6 @@ export default function AccountScreen() {
             </Card>
           ))}
           {!orders.length ? <Muted>No publication requests for this email yet.</Muted> : null}
-          <View style={{ height: 12 }} />
           <Heading>Support tickets</Heading>
           {tickets.map((item) => (
             <Card key={str(item.id)}>
@@ -99,11 +97,11 @@ export default function AccountScreen() {
             </Card>
           ))}
           {!tickets.length ? <Muted>No tickets for this email yet.</Muted> : null}
-          <View style={{ height: 16 }} />
           <ListRow icon="chatbubbles-outline" title="Support" subtitle="Open or follow a ticket" onPress={() => router.push("/support")} />
           <ListRow icon="ribbon-outline" title="Certificates" subtitle="Verify a Foundation certificate" onPress={() => router.push("/certificates")} />
           <ListRow icon="help-circle-outline" title="FAQ" subtitle="Answers from the published site" onPress={() => router.push("/faq")} />
-          <ListRow icon="mail-outline" title="Contact" subtitle="Write to the Foundation" onPress={() => router.push("/contact")} />
+          <ListRow icon="mail-outline" title="Contact" subtitle={SITE.email} onPress={() => router.push("/contact")} />
+          <ListRow icon="people-outline" title="About the Foundation" subtitle="Legacy, awards, history, trustees" onPress={() => router.push("/about")} />
           <ListRow icon="shield-checkmark-outline" title="Privacy" onPress={() => router.push("/policy/privacy")} />
           <ListRow icon="document-text-outline" title="Terms" onPress={() => router.push("/policy/terms")} />
         </>
@@ -162,6 +160,7 @@ export default function AccountScreen() {
           ) : null}
         </Card>
       )}
+      <SiteFooter />
     </Screen>
   );
 }

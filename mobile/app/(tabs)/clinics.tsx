@@ -1,26 +1,25 @@
 import { useMemo, useState } from "react";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 import { router } from "expo-router";
-import { mediaUrl, str } from "../../src/api";
+import { getApiBase, mediaUrl, str } from "../../src/api";
+import { TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { Card, Cover, Empty, Heading, Loading, Muted, PageHeader, Screen, SearchBar } from "../../src/ui";
-import { useTheme } from "../../src/theme";
+import { SITE } from "../../src/site-content";
+import { Card, Cover, Empty, Heading, Loading, Muted, PageHeader, Screen, SearchBar, SiteFooter } from "../../src/ui";
 
 export default function ClinicsScreen() {
   const { feed, loading, refresh } = useFeed();
-  const theme = useTheme();
   const [query, setQuery] = useState("");
   const items = feed?.clinics ?? [];
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items.filter(
-      (item) => !q || [item.name, item.city, item.specialization, item.doctor, item.address].some((value) => str(value).toLowerCase().includes(q))
-    );
+    return items.filter((item) => !q || [item.name, item.city, item.specialization, item.doctor, item.address].some((value) => str(value).toLowerCase().includes(q)));
   }, [items, query]);
   if (loading && !feed) return <Loading />;
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <PageHeader kicker="Care" title={theme.labels.clinics} subtitle="Foundation clinics from the published feed" />
+      <TopBar />
+      <PageHeader kicker="Care" title="Foundation clinics" subtitle="Consultation hours and directions for Foundation clinics, as published on the website." />
       <SearchBar value={query} onChange={setQuery} placeholder="Search clinics" />
       {filtered.map((item) => {
         const photo = mediaUrl((item.photos as { src?: string }[] | undefined)?.[0]?.src);
@@ -45,11 +44,17 @@ export default function ClinicsScreen() {
       {!filtered.length ? (
         <Empty
           icon="medical-outline"
-          label={items.length ? "No published clinics match that search." : "No clinics are in the published app feed yet. Pull to refresh after Admin publishes."}
-          actionLabel="Refresh"
-          onAction={() => void refresh()}
+          label={items.length ? "No published clinics match that search." : "No clinics are in the published app feed yet. The website Clinics page is the live directory."}
+          actionLabel="Open website clinics"
+          onAction={() => void Linking.openURL(`${getApiBase()}/clinics`)}
         />
       ) : null}
+      <Card>
+        <Heading>{SITE.name}</Heading>
+        <Muted>{SITE.address}</Muted>
+        <Muted>{SITE.email} · {SITE.phone}</Muted>
+      </Card>
+      <SiteFooter />
     </Screen>
   );
 }

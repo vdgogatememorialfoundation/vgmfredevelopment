@@ -31,7 +31,7 @@ const ALL: Record<FlavorId, Flavor> = {
     tabs: [
       { id: "home", title: "Home", icon: "home" },
       { id: "events", title: "Events", icon: "calendar" },
-      { id: "shop", title: "Shop", icon: "book" },
+      { id: "shop", title: "Shop", icon: "bag-handle" },
       { id: "clinics", title: "Clinics", icon: "medical" },
       { id: "account", title: "Account", icon: "person" },
     ],

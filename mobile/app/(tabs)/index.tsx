@@ -1,110 +1,51 @@
 import { useRef, useState } from "react";
-import { Dimensions, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { formatDate, mediaUrl, moduleOn, money, str, type Row } from "../../src/api";
-import { useAuth } from "../../src/auth";
 import { useCart } from "../../src/cart";
-import { useBrand, useFeed } from "../../src/feed";
-import { currentFlavor } from "../../src/flavor";
-import { NoticesBoard } from "../../src/notices-list";
-import {
-  Banner,
-  BrandMark,
-  Button,
-  Card,
-  Cover,
-  DateBadge,
-  Heading,
-  IconButton,
-  IconTile,
-  Loading,
-  Muted,
-  Price,
-  Screen,
-  SearchBar,
-  SectionHeader,
-  StatusChip,
-} from "../../src/ui";
+import { TopBar } from "../../src/chrome";
+import { useFeed } from "../../src/feed";
+import { EXPLORE, PORTALS, SITE, resolvedAbout } from "../../src/site-content";
 import { useTheme } from "../../src/theme";
-import type { HomeSectionId } from "../../src/appearance";
-
-const CATEGORIES: { id: string; href: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { id: "shop", href: "/shop", label: "Publications", icon: "book-outline" },
-  { id: "events", href: "/events", label: "Events", icon: "calendar-outline" },
-  { id: "articles", href: "/articles", label: "Articles", icon: "newspaper-outline" },
-  { id: "clinics", href: "/clinics", label: "Clinics", icon: "medical-outline" },
-  { id: "certificates", href: "/certificates", label: "Certificates", icon: "ribbon-outline" },
-  { id: "videos", href: "/videos", label: "Videos", icon: "play-circle-outline" },
-  { id: "gallery", href: "/gallery", label: "Gallery", icon: "images-outline" },
-  { id: "about", href: "/about", label: "About", icon: "people-outline" },
-  { id: "support", href: "/support", label: "Support", icon: "heart-outline" },
-  { id: "contact", href: "/contact", label: "Contact", icon: "mail-outline" },
-];
-
-function greeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
+import { Banner, Button, Card, Cover, Heading, IconTile, Kicker, LinkRow, Loading, Muted, Portrait, Price, Screen, SearchBar, SectionHeader, SiteFooter, StatusChip } from "../../src/ui";
 
 export default function HomeScreen() {
   const { feed, loading, error, refresh } = useFeed();
-  const brand = useBrand();
-  const flavor = currentFlavor();
   const theme = useTheme();
   const cart = useCart();
-  const { session } = useAuth();
-  const enabled = (id: string) => moduleOn(feed, id);
-  const [hero, setHero] = useState(0);
+  const about = resolvedAbout(feed?.about);
   const [query, setQuery] = useState("");
-  const width = Dimensions.get("window").width - theme.space.md * 2;
-  const size = width;
+  const [cert, setCert] = useState("");
+  const [hero, setHero] = useState(0);
+  const width = Dimensions.get("window").width - 40;
   const scroller = useRef<ScrollView>(null);
   const flyers = (feed?.flyers ?? []).filter((item) => str(item.image));
   const events = feed?.events ?? [];
   const books = feed?.books ?? [];
-  const articles = feed?.articles ?? [];
-  const videos = feed?.videos ?? [];
-  const gallery = feed?.gallery ?? [];
+  const featured = events[0];
+  const enabled = (id: string) => moduleOn(feed, id);
 
-  const go = (next: number) => {
-    if (!flyers.length) return;
-    const index = (next + flyers.length) % flyers.length;
-    setHero(index);
-    scroller.current?.scrollTo({ x: index * width, animated: true });
-  };
+  if (loading && !feed) return <Loading />;
 
-  if (loading && !feed) {
-    return (
-      <Screen>
-        <View style={{ gap: 12 }}>
-          <View style={{ height: 56, borderRadius: 28, backgroundColor: theme.colors.border }} />
-          <View style={{ aspectRatio: 1, borderRadius: 18, backgroundColor: theme.colors.border }} />
-          <View style={{ height: 88, borderRadius: 16, backgroundColor: theme.colors.border }} />
-        </View>
-      </Screen>
-    );
-  }
+  return (
+    <Screen refreshing={loading} onRefresh={refresh}>
+      <TopBar bag={enabled("shop")} />
+      <Kicker>Preserving Ayurveda</Kicker>
+      <Text style={{ fontSize: 30, lineHeight: 36, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily, letterSpacing: -0.5, marginBottom: 8 }}>
+        {str(feed?.site.tagline, SITE.tagline)}
+      </Text>
+      <Muted>{SITE.purpose}</Muted>
+      <View style={{ height: 16 }} />
+      <SearchBar
+        value={query}
+        onChange={setQuery}
+        placeholder="Search articles, publications, events, clinics…"
+        onSubmit={() => router.push({ pathname: "/search", params: { q: query } })}
+      />
+      <Banner text={error} tone="error" />
 
-  const sectionOn = (id: HomeSectionId) => {
-    const config = theme.section(id);
-    if (config && config.visible === false) return false;
-    if (id === "support") return Boolean(feed?.flags.supportUs);
-    if (id === "notices") return enabled("notices");
-    if (id === "carousel") return flyers.length > 0;
-    if (id === "categories") return true;
-    if (id === "about") return enabled("about");
-    return enabled(id);
-  };
-
-  const renderSection = (id: HomeSectionId) => {
-    if (!sectionOn(id)) return null;
-    const config = theme.section(id);
-    if (id === "carousel") {
-      return (
-        <View key="carousel" style={{ marginBottom: 16, height: size }}>
+      {flyers.length ? (
+        <View style={{ marginBottom: 18, height: Math.round(width * 0.52) }}>
           <ScrollView
             ref={scroller}
             horizontal
@@ -113,242 +54,143 @@ export default function HomeScreen() {
             onMomentumScrollEnd={(event) => setHero(Math.round(event.nativeEvent.contentOffset.x / Math.max(width, 1)))}
           >
             {flyers.map((item) => (
-              <Pressable key={str(item.id)} onPress={() => openPublishedHref(str(item.href))} style={{ width, height: size, alignItems: "center" }}>
+              <Pressable key={str(item.id)} onPress={() => openPublishedHref(str(item.href))} style={{ width, height: Math.round(width * 0.52) }}>
                 <Image
-                  accessibilityLabel={str(item.title, "Published flyer")}
+                  accessibilityLabel={str(item.title, "Foundation flyer")}
                   source={{ uri: mediaUrl(item.image) }}
-                  resizeMode="contain"
-                  style={{ width: size, height: size, borderRadius: theme.radius.lg, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border }}
+                  resizeMode="cover"
+                  style={{ width, height: Math.round(width * 0.52), borderRadius: 16, backgroundColor: theme.colors.paper }}
                 />
               </Pressable>
             ))}
           </ScrollView>
           {flyers.length > 1 ? (
-            <>
-              <Pressable onPress={() => go(hero - 1)} accessibilityLabel="Previous slide" style={arrowStyle("left", size, theme.colors.paper)}>
-                <Text style={{ color: theme.colors.text, fontSize: 28, lineHeight: 30, fontWeight: "700" }}>‹</Text>
-              </Pressable>
-              <Pressable onPress={() => go(hero + 1)} accessibilityLabel="Next slide" style={arrowStyle("right", size, theme.colors.paper)}>
-                <Text style={{ color: theme.colors.text, fontSize: 28, lineHeight: 30, fontWeight: "700" }}>›</Text>
-              </Pressable>
-            </>
-          ) : null}
-          {flyers.length > 1 ? (
             <View style={{ position: "absolute", bottom: 10, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 }}>
               {flyers.map((item, index) => (
-                <View
-                  key={str(item.id)}
-                  style={{
-                    width: index === hero ? 18 : 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: index === hero ? theme.colors.primary : theme.colors.border,
-                  }}
-                />
+                <View key={str(item.id)} style={{ width: index === hero ? 16 : 6, height: 6, borderRadius: 3, backgroundColor: index === hero ? theme.colors.primary : theme.colors.border }} />
               ))}
             </View>
           ) : null}
         </View>
-      );
-    }
-    if (id === "categories") {
-      const items = CATEGORIES.filter((item) => item.id === "contact" || enabled(item.id));
-      if (!items.length) return null;
-      return (
-        <View key="categories" style={{ marginBottom: 8 }}>
-          <SectionHeader title={config?.title || "Explore the Foundation"} subtitle={config?.subtitle} />
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {items.map((item) => (
-              <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
-            ))}
-          </View>
-        </View>
-      );
-    }
-    if (id === "events") {
-      if (!events.length) return null;
-      return (
-        <View key="events">
-          <SectionHeader title={config?.title || theme.labels.events} subtitle={config?.subtitle} actionLabel="See all" onAction={() => router.push("/events")} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
-            {events.slice(0, 8).map((item) => (
-              <Pressable key={str(item.id)} onPress={() => router.push(`/event/${str(item.id)}`)} style={{ width: 232 }}>
-                <Card>
-                  <Cover uri={mediaUrl(item.bannerUrl) || undefined} height={118} />
-                  <DateBadge label={formatDate(item.startDate)} />
-                  <View style={{ marginTop: 8 }}>
-                    <Heading>{str(item.name)}</Heading>
-                  </View>
-                  <Muted>{[str(item.city), str(item.venue)].filter(Boolean).join(" · ")}</Muted>
-                  <StatusChip label={str(item.registrationStatus)} />
-                </Card>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      );
-    }
-    if (id === "shop") {
-      if (!books.length) return null;
-      return (
-        <View key="shop">
-          <SectionHeader title={config?.title || theme.labels.shop} subtitle={config?.subtitle} actionLabel="See all" onAction={() => router.push("/shop")} />
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-            {books.slice(0, theme.columns === 2 ? 4 : 3).map((item) => (
-              <ProductTile key={str(item.id)} item={item} columns={theme.columns} />
-            ))}
-          </View>
-        </View>
-      );
-    }
-    if (id === "articles") {
-      if (!articles.length) return null;
-      return (
-        <View key="articles">
-          <SectionHeader title={config?.title || "Articles"} subtitle={config?.subtitle} actionLabel="See all" onAction={() => router.push("/articles")} />
-          {articles.slice(0, 3).map((item) => (
-            <Card key={str(item.id)} onPress={() => router.push(`/article/${str(item.id)}`)}>
-              <Heading>{str(item.title)}</Heading>
-              <Muted>{[str(item.author), formatDate(item.date)].filter(Boolean).join(" · ")}</Muted>
-            </Card>
-          ))}
-        </View>
-      );
-    }
-    if (id === "videos") {
-      if (!videos.length) return null;
-      return (
-        <View key="videos">
-          <SectionHeader title={config?.title || "Videos"} subtitle={config?.subtitle} actionLabel="See all" onAction={() => router.push("/videos")} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-            {videos.slice(0, 6).map((item) => (
-              <View key={str(item.id)} style={{ width: 232 }}>
-                <Card onPress={() => str(item.youtubeUrl, str(item.src)) && void Linking.openURL(str(item.youtubeUrl, str(item.src)))}>
-                  <Cover uri={mediaUrl(item.poster) || undefined} height={118} />
-                  <Heading>{str(item.title)}</Heading>
-                </Card>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      );
-    }
-    if (id === "gallery") {
-      if (!gallery.length) return null;
-      return (
-        <View key="gallery">
-          <SectionHeader title={config?.title || "Gallery"} subtitle={config?.subtitle} actionLabel="See all" onAction={() => router.push("/gallery")} />
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {gallery.slice(0, 4).map((item) => (
-              <Image
-                key={str(item.id)}
-                source={{ uri: mediaUrl(item.src) }}
-                accessibilityLabel={str(item.title, "Gallery photo")}
-                style={{ width: "48%", aspectRatio: 1, borderRadius: theme.radius.md, backgroundColor: theme.colors.paper }}
-                resizeMode="cover"
-              />
-            ))}
-          </View>
-        </View>
-      );
-    }
-    if (id === "notices") {
-      return (
-        <View key="notices">
-          <NoticesBoard title={config?.title || theme.labels.notices} />
-        </View>
-      );
-    }
-    if (id === "about") {
-      const intro = str(feed?.about?.intro);
-      if (!intro) return null;
-      return (
-        <View key="about">
-          <SectionHeader title={config?.title || "The Foundation"} subtitle={config?.subtitle} actionLabel="Read more" onAction={() => router.push("/about")} />
-          <Card onPress={() => router.push("/about")}>
-            <Muted>{intro.split(/\n\s*\n/)[0]}</Muted>
-          </Card>
-        </View>
-      );
-    }
-    if (id === "support" && feed?.flags.supportUs) {
-      return (
-        <Card key="support" featured>
-          <Heading>{str(feed.flags.supportUsTitle, config?.title || "Support the Foundation")}</Heading>
-          <Muted>{str(feed.flags.supportUsText)}</Muted>
-          {str(feed.flags.supportUsHref) ? <Button kind="ghost" icon="mail-outline" label="Contact" onPress={() => router.push("/contact")} /> : null}
-        </Card>
-      );
-    }
-    return null;
-  };
-
-  return (
-    <Screen refreshing={loading} onRefresh={refresh} pad>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={52} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: "800", letterSpacing: 1.1 }}>
-            {flavor.id === "customer" ? "VAIDYA GOGATE" : flavor.displayName}
-          </Text>
-          <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: "800", letterSpacing: -0.3 }} numberOfLines={1}>
-            {session?.name ? `${greeting()}, ${session.name.split(" ")[0]}` : greeting()}
-          </Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 12 }} numberOfLines={1}>
-            {brand.tagline || brand.name}
-          </Text>
-        </View>
-        <IconButton icon={session ? "person-circle" : "person-circle-outline"} label="Account" onPress={() => router.push("/account")} />
-        {enabled("shop") ? (
-          <IconButton icon="bag-handle-outline" label={theme.labels.bag} badge={cart.count} onPress={() => router.push("/cart")} />
-        ) : null}
-      </View>
-      <SearchBar
-        value={query}
-        onChange={setQuery}
-        placeholder={theme.labels.searchPlaceholder}
-        onSubmit={() => router.push({ pathname: "/search", params: { q: query } })}
-      />
-      <Banner text={error} tone="error" />
-      {error ? <Button label="Retry" icon="refresh-outline" onPress={() => void refresh()} /> : null}
-      {flavor.id === "admin" ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-          {[
-            ["Events", events.length],
-            ["Shop", books.length],
-            ["Clinics", feed?.clinics.length ?? 0],
-            ["Notices", feed?.notices.length ?? 0],
-          ].map(([label, count]) => (
-            <View
-              key={String(label)}
-              style={{ width: "48%", backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: 1, borderRadius: theme.radius.lg, padding: 14 }}
-            >
-              <Text style={{ fontSize: 22, fontWeight: "800", color: theme.colors.text }}>{count}</Text>
-              <Muted>{String(label)} in the published snapshot</Muted>
-            </View>
-          ))}
-          <Muted>Read-only published snapshot. Editing the CMS stays on the website.</Muted>
-        </View>
       ) : null}
-      {theme.appearance.homeSections.map((section) => renderSection(section.id))}
+
+      <SectionHeader title="Explore gateway" subtitle="Services of the Foundation" />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 8 }}>
+        {EXPLORE.filter((item) => item.id === "certificates" || enabled(item.id)).map((item) => (
+          <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
+        ))}
+      </View>
+
+      {featured ? (
+        <Card onPress={() => router.push(`/event/${str(featured.id)}`)}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+            <Kicker>{str(featured.eventType, "Foundation event")}</Kicker>
+            <StatusChip label={[str(featured.city), str(featured.mode)].filter(Boolean).join(" · ") || str(featured.venue)} />
+          </View>
+          <Heading>{str(featured.name)}</Heading>
+          <Muted>{str(featured.shortDescription)}</Muted>
+          <Muted>{[str(featured.venue), formatDate(featured.startDate)].filter(Boolean).join(" · ")}</Muted>
+          <Button label="Register now" onPress={() => openPublishedHref(str(featured.registrationUrl) || SITE.eventsUrl)} />
+        </Card>
+      ) : null}
+
+      <SectionHeader title="Foundation pillars & legacy" actionLabel="About" onAction={() => router.push("/about")} />
+      <PortraitCard
+        uri={about.rb.portrait}
+        title={about.rb.title}
+        role={about.rb.role}
+        body={about.rb.excerpt}
+        onPress={() => router.push("/about")}
+      />
+      <PortraitCard
+        uri={about.anagha.portrait}
+        title={about.anagha.title}
+        role={about.anagha.role}
+        body={about.anagha.excerpt}
+        onPress={() => router.push("/about")}
+      />
+
+      <SectionHeader title="Foundation publications" subtitle="Hardcover · illustrated" actionLabel="Shop all" onAction={() => router.push("/shop")} />
+      {books.length ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+          {books.slice(0, 4).map((item) => (
+            <HomeBook key={str(item.id)} item={item} onAdd={() => cart.add({ id: str(item.id), title: str(item.title), price: Number(item.price) || 0 })} />
+          ))}
+        </View>
+      ) : (
+        <Card>
+          <Muted>The Foundation catalogue is published from Admin. Until titles are published, browse and pay on the website shop.</Muted>
+          <Button kind="ghost" label="Open website shop" onPress={() => openPublishedHref(SITE.shopUrl)} />
+        </Card>
+      )}
+
+      <Card>
+        <Kicker>Certificate & credential verification</Kicker>
+        <Heading>Verify a Foundation certificate</Heading>
+        <Muted>Look up workshop, fellowship or seminar credentials issued by VGMF.</Muted>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" }}>
+          <TextInput
+            value={cert}
+            onChangeText={setCert}
+            placeholder="e.g. VGMF-2025-PN-034"
+            placeholderTextColor={theme.colors.muted}
+            accessibilityLabel="Certificate number"
+            style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, paddingHorizontal: 12, minHeight: 48, backgroundColor: theme.colors.background, color: theme.colors.text }}
+          />
+          <Pressable
+            onPress={() => router.push({ pathname: "/certificates", params: { q: cert } })}
+            style={{ backgroundColor: theme.colors.primary, borderRadius: 12, paddingHorizontal: 16, minHeight: 48, justifyContent: "center" }}
+          >
+            <Text style={{ color: theme.colors.onPrimary, fontWeight: "800", fontSize: 12 }}>Verify</Text>
+          </Pressable>
+        </View>
+      </Card>
+
+      <SectionHeader title="Specialized portals" subtitle="Affiliated bodies" />
+      {PORTALS.map((portal) => (
+        <Card key={portal.id} onPress={() => void Linking.openURL(portal.href)}>
+          <Heading>{portal.title}</Heading>
+          <Muted>{portal.body}</Muted>
+          <LinkRow label="Open portal" onPress={() => void Linking.openURL(portal.href)} />
+        </Card>
+      ))}
+
+      <SiteFooter />
     </Screen>
   );
 }
 
-function ProductTile({ item, columns }: { item: Row; columns: 1 | 2 }) {
+function PortraitCard({ uri, title, role, body, onPress }: { uri?: string; title: string; role: string; body: string; onPress: () => void }) {
   const theme = useTheme();
-  const width = columns === 2 ? ("48%" as const) : ("100%" as const);
-  const original = Number(item.originalPrice) || 0;
-  const price = Number(item.price) || 0;
   return (
-    <Pressable onPress={() => router.push(`/book/${str(item.id)}`)} style={{ width }}>
-      <View style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border, borderWidth: 1, borderRadius: theme.radius.lg, padding: 10, marginBottom: 8 }}>
+    <Card onPress={onPress}>
+      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
+        <Portrait uri={uri} label={title} size={80} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Heading>{title}</Heading>
+          <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 3 }}>{role}</Text>
+          <Muted>{body}</Muted>
+          <LinkRow label="Read legacy" onPress={onPress} />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+function HomeBook({ item, onAdd }: { item: Row; onAdd: () => void }) {
+  const theme = useTheme();
+  const price = Number(item.price) || 0;
+  const original = Number(item.originalPrice) || 0;
+  return (
+    <View style={{ width: "48%", backgroundColor: theme.colors.paper, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 16, padding: 10, marginBottom: 8 }}>
+      <Pressable onPress={() => router.push(`/book/${str(item.id)}`)}>
         <Cover uri={mediaUrl(item.coverImage) || undefined} ratio="square" />
         <Heading>{str(item.title)}</Heading>
         <Muted>{str(item.author)}</Muted>
         <Price value={money(price)} original={original > price ? money(original) : undefined} />
-      </View>
-    </Pressable>
+      </Pressable>
+      <Button label="Add to bag" kind="ghost" icon="bag-handle-outline" onPress={onAdd} />
+    </View>
   );
 }
 
@@ -374,20 +216,8 @@ export function openPublishedHref(href: string) {
     return;
   }
   if (href.startsWith("/") && !href.startsWith("//")) {
-    router.push(href as never);
+    const origin = str((globalThis as { location?: { origin?: string } }).location?.origin);
+    void Linking.openURL(`https://staging.vaidyagogate.org${href}`);
+    void origin;
   }
-}
-
-function arrowStyle(side: "left" | "right", size: number, backgroundColor: string) {
-  return {
-    position: "absolute" as const,
-    top: size / 2 - 18,
-    [side]: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  };
 }
