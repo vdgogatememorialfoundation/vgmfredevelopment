@@ -17,7 +17,10 @@ const MENUS: Record<string, NavLink[]> = {
     { href: "/videos", key: "nav.videos" },
     { href: "/gallery", key: "nav.gallery" },
   ],
-  "/articles": [{ href: "/articles", key: "nav.articles" }],
+  "/articles": [
+    { href: "/articles", key: "nav.articles" },
+    { href: "/books", key: "nav.shopBooks" },
+  ],
   "/shop": [
     { href: "/shop", key: "nav.shop" },
     { href: "/books", key: "nav.shopBooks" },

@@ -52,9 +52,21 @@ function SquarePhoto({ uri, label }: { uri?: string; label: string }) {
     <Image
       source={{ uri }}
       accessibilityLabel={label}
-      style={{ width: 112, height: 112, borderRadius: 16, alignSelf: "center", marginBottom: 12, backgroundColor: "#f4efe6" }}
+      style={{ width: 72, height: 72, borderRadius: 10, backgroundColor: "#f4efe6" }}
       resizeMode="cover"
     />
+  );
+}
+
+function PersonRow({ uri, label, title, body }: { uri?: string; label: string; title: string; body?: string }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+      <SquarePhoto uri={uri} label={label} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontWeight: "700", fontSize: 16 }}>{title}</Text>
+        {body ? <Paragraphs text={body} /> : null}
+      </View>
+    </View>
   );
 }
 
@@ -71,8 +83,8 @@ export default function AboutScreen() {
   const awards = asRow(about.awards);
   const scholarship = asRow(about.scholarship);
   const intro = str(about.intro);
-  const rbPhoto = mediaUrl(usableUri(str(legacy.portrait)) || usableUri(str(about.heroImage)) || "/about/rb-gogate.jpg");
-  const anaghaPhoto = mediaUrl(usableUri(str(anagha.portrait)) || "/about/anagha-gogate.jpg");
+  const rbPhoto = mediaUrl(usableUri(str(legacy.portrait)) || usableUri(str(about.heroImage)) || "/about/rb-square.jpg");
+  const anaghaPhoto = mediaUrl(usableUri(str(anagha.portrait)) || "/about/anagha-square.jpg");
   const hasBody =
     Boolean(intro) ||
     sections.length > 0 ||
@@ -86,14 +98,20 @@ export default function AboutScreen() {
     <Screen refreshing={loading} onRefresh={refresh}>
       <Title>{str(about.title, "About Vaidya Gogate Memorial Foundation")}</Title>
       <Card>
-        <SquarePhoto uri={rbPhoto} label="Vaidya R. B. Gogate" />
-        <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(legacy.title, "The Legacy of Vaidya R. B. Gogate")}</Text>
-        {str(legacy.biography) ? <Paragraphs text={str(legacy.biography).split(/\n\s*\n/)[0]} /> : null}
+        <PersonRow
+          uri={rbPhoto}
+          label="Vaidya R. B. Gogate"
+          title={str(legacy.title, "The Legacy of Vaidya R. B. Gogate")}
+          body={str(legacy.biography).split(/\n\s*\n/)[0]}
+        />
       </Card>
       <Card>
-        <SquarePhoto uri={anaghaPhoto} label={str(anagha.title, "Dr. Anagha Gogate")} />
-        <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(anagha.title, "Dr. Anagha Gogate")}</Text>
-        {str(anagha.biography) ? <Paragraphs text={str(anagha.biography).split(/\n\s*\n/)[0]} /> : null}
+        <PersonRow
+          uri={anaghaPhoto}
+          label={str(anagha.title, "Dr. Anagha Gogate")}
+          title={str(anagha.title, "Dr. Anagha Gogate")}
+          body={str(anagha.biography).split(/\n\s*\n/)[0]}
+        />
       </Card>
       {intro ? (
         <Card>

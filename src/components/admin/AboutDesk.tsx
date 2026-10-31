@@ -114,7 +114,7 @@ export default function AboutDesk() {
             <input className={field} placeholder="Page title" value={draft.title} onChange={(event) => set({ title: event.target.value })} />
             <textarea className={field} rows={12} placeholder="Introduction from the family" value={draft.intro} onChange={(event) => set({ intro: event.target.value })} />
             <ImageField
-              label="R. B. Gogate portrait (shown left of his biography, at the photo’s own size)"
+              label="R. B. Gogate portrait (always a small square on the left of his biography)"
               value={draft.heroImage || draft.legacy.portrait}
               onChange={(portrait) =>
                 setDraft((current) => ({
@@ -283,7 +283,7 @@ export default function AboutDesk() {
                 <textarea className={field} rows={3} placeholder="Introduction" value={draft.anagha.intro} onChange={(event) => setAnagha({ intro: event.target.value })} />
                 <textarea className={field} rows={10} placeholder="Biography" value={draft.anagha.biography} onChange={(event) => setAnagha({ biography: event.target.value })} />
               </div>
-              <ImageField label="Portrait" value={draft.anagha.portrait} onChange={(portrait) => setAnagha({ portrait })} />
+              <ImageField label="Small square portrait (always left of the biography)" value={draft.anagha.portrait} onChange={(portrait) => setAnagha({ portrait })} />
             </div>
           )}
           {inner === "Awards" && (
@@ -386,7 +386,7 @@ export default function AboutDesk() {
               <textarea className={field} rows={7} placeholder="मराठी चरित्र" value={draft.legacy.biographyMr} onChange={(event) => setLegacy({ biographyMr: event.target.value })} />
               <textarea className={field} rows={4} placeholder="Philosophy" value={draft.legacy.philosophy} onChange={(event) => setLegacy({ philosophy: event.target.value })} />
             </div>
-            <ImageField label="Portrait" value={draft.legacy.portrait} onChange={(portrait) => setLegacy({ portrait })} />
+            <ImageField label="Small square portrait (always left of the biography)" value={draft.legacy.portrait} onChange={(portrait) => setLegacy({ portrait })} />
           </div>
           <div className={card}>
             <div className="flex items-center justify-between">

@@ -198,37 +198,50 @@ export default function Header() {
                   onMouseEnter={() => setOpenMenu(item.href)}
                   onMouseLeave={() => setOpenMenu("")}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setOpenMenu(opened ? "" : item.href)}
-                    aria-expanded={opened}
-                    aria-haspopup="true"
-                    className={classNames(
-                      "relative inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
-                      isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
-                    )}
-                  >
-                    {t(navMessageKey[item.href] ?? "nav.about")}
-                    <span aria-hidden="true" className="text-[10px]">{opened ? "▴" : "▾"}</span>
-                  </button>
+                  <div className="inline-flex items-center gap-1">
+                    <Link
+                      href={item.href}
+                      className={classNames(
+                        "relative whitespace-nowrap text-[12px] font-medium tracking-wide transition xl:text-[13px]",
+                        isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
+                      )}
+                    >
+                      {t(navMessageKey[item.href] ?? "nav.about")}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenu(opened ? "" : item.href)}
+                      aria-expanded={opened}
+                      aria-haspopup="true"
+                      aria-label={`${t(navMessageKey[item.href] ?? "nav.about")} menu`}
+                      className={classNames(
+                        "inline-flex h-5 w-4 items-center justify-center text-[10px] transition",
+                        isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
+                      )}
+                    >
+                      {opened ? "▴" : "▾"}
+                    </button>
+                  </div>
                   {opened ? (
-                    <div className="absolute left-0 top-full z-50 mt-2 min-w-56 overflow-hidden rounded-2xl border border-border bg-white py-2 shadow-xl">
-                      {children.map((page) => {
-                        const active = pathname === page.href;
-                        return (
-                          <Link
-                            key={page.href}
-                            href={page.href}
-                            onClick={() => setOpenMenu("")}
-                            className={classNames(
-                              "block px-4 py-2.5 text-sm transition",
-                              active ? "bg-warm-cream font-semibold text-burgundy" : "text-text-primary hover:bg-warm-cream hover:text-burgundy"
-                            )}
-                          >
-                            {t(page.key)}
-                          </Link>
-                        );
-                      })}
+                    <div className="absolute left-0 top-full z-50 pt-2">
+                      <div className="min-w-56 overflow-hidden rounded-2xl border border-border bg-white py-2 shadow-xl">
+                        {children.map((page) => {
+                          const active = pathname === page.href;
+                          return (
+                            <Link
+                              key={page.href}
+                              href={page.href}
+                              onClick={() => setOpenMenu("")}
+                              className={classNames(
+                                "block px-4 py-2.5 text-sm transition",
+                                active ? "bg-warm-cream font-semibold text-burgundy" : "text-text-primary hover:bg-warm-cream hover:text-burgundy"
+                              )}
+                            >
+                              {t(page.key)}
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
                   ) : null}
                 </div>

@@ -147,18 +147,26 @@ export function firstPhoto(...values: Array<string | undefined>) {
   );
 }
 
+const RB_SQUARES = ["/about/rb-square.jpg", "/about/rb-gogate.jpg"];
+const ANAGHA_SQUARES = ["/about/anagha-square.jpg", "/about/anagha-gogate.jpg"];
+
+function preferSquare(src: string, squares: string[]) {
+  const path = src.split("?")[0];
+  return squares.includes(path) ? squares[0] : src;
+}
+
 export function rbPortrait(about: Pick<AboutContent, "heroImage" | "legacy">) {
-  return firstPhoto(about.legacy?.portrait, about.heroImage, "/about/rb-gogate.jpg");
+  return preferSquare(firstPhoto(about.legacy?.portrait, about.heroImage, "/about/rb-square.jpg"), RB_SQUARES);
 }
 
 export function anaghaPortrait(about: Pick<AboutContent, "anagha">) {
-  return firstPhoto(about.anagha?.portrait, "/about/anagha-gogate.jpg");
+  return preferSquare(firstPhoto(about.anagha?.portrait, "/about/anagha-square.jpg"), ANAGHA_SQUARES);
 }
 
 export const defaultAbout: AboutContent = {
   revision: ABOUT_REVISION,
   title: "About Vaidya Gogate Memorial Foundation",
-  heroImage: "/about/rb-gogate.jpg",
+  heroImage: "/about/rb-square.jpg",
   intro:
     "Vaidya Gogate Memorial Foundation is a website with a sole motto: Propagation of knowledge. This is a platform to share our grandfather’s, Vd. Ramchandra Ballal Gogate’s work and carry forward his vision ‘knowledge for all’. We are creating this platform as an authentic source of information. Our purpose is to ignite young minds through his writings and teachings. We plan to reach out to all vaidyas, students of Ayurved as well as disseminating the knowledge across all pathies and common people. Fortunately, our family has been blessed with renowned vaidyas for many generations.\n\nStarting from Vd. Mahadev (Bapu) Gogate who was the rajavaidya to the king of Jawhar, next generation being Vd. Vishnu Mahadev Gogate (Dravyaguna) and Vd. Trimbak Mahadev Gogate (Panchakarma), next generation being Vd. Ramchandra Ballal Gogate (Shalya tantra), and this legacy still continues. They have made huge contributions to the field of Ayurved of which many remain under appreciated. This website is in their honor and remembrance. We intend to pass on the wisdom of these great professors. Vd. R. B. Gogate will always inspire us, not only as a grandfather but also through his lifetime of study, work and research.\n\nWe, his grandchildren on behalf of the Gogate family are creating this platform to promote our grandfather’s lifetime work and for our strong passion towards the field of Ayurved. We would definitely love to have your suggestions, guidelines and support in our endeavour!\n\nRegards,\nthe grandchildren of Vd. R. B. Gogate, on behalf of the Gogate family",
   sections: [
@@ -305,7 +313,7 @@ export const defaultAbout: AboutContent = {
   },
   legacy: {
     title: "The Legacy of Vaidya R. B. Gogate",
-    portrait: "/about/rb-gogate.jpg",
+    portrait: "/about/rb-square.jpg",
     intro:
       "Vd. Ramchandra Ballal Gogate — Vaidya Ramchandra Ballal Gogate — was born on 4th February 1933 at Atkar gaon and passed away on 28th September 2015 at Pune. This page shares his English biography, the Marathi remembrance by Vidula Gogate, and the posts, research and awards that still carry his work forward.",
     biography: RB_BIOGRAPHY_EN,
@@ -377,7 +385,7 @@ export const defaultAbout: AboutContent = {
   },
   anagha: {
     title: "Dr. Anagha Gogate",
-    portrait: "/about/anagha-gogate.jpg",
+    portrait: "/about/anagha-square.jpg",
     intro:
       "Dr. Anagha Ramchandra Gogate (7th November 1936 – 12th September 2019) gave unwavering support and strength to Vd. Ramchandra B. Gogate.",
     biography: ANAGHA_BIOGRAPHY,
@@ -437,11 +445,11 @@ function mergeMedia(saved: Partial<AboutContent> | null): AboutContent {
   const priorTree = saved?.legacy?.tree ?? [];
   return {
     ...defaultAbout,
-    heroImage: saved?.heroImage || defaultAbout.heroImage,
+    heroImage: preferSquare(saved?.heroImage || defaultAbout.heroImage || "", RB_SQUARES),
     gallery: saved?.gallery?.length ? saved.gallery : defaultAbout.gallery,
     legacy: {
       ...defaultAbout.legacy,
-      portrait: saved?.legacy?.portrait || defaultAbout.legacy.portrait,
+      portrait: preferSquare(saved?.legacy?.portrait || defaultAbout.legacy.portrait || "", RB_SQUARES),
       tree: defaultAbout.legacy.tree.map((node) => {
         const prior = priorTree.find((item) => item.id === node.id);
         return prior?.photo ? { ...node, photo: prior.photo } : node;
@@ -449,7 +457,7 @@ function mergeMedia(saved: Partial<AboutContent> | null): AboutContent {
     },
     anagha: {
       ...defaultAbout.anagha,
-      portrait: saved?.anagha?.portrait || defaultAbout.anagha.portrait,
+      portrait: preferSquare(saved?.anagha?.portrait || defaultAbout.anagha.portrait || "", ANAGHA_SQUARES),
     },
   };
 }
@@ -460,7 +468,7 @@ function merge(saved: Partial<AboutContent> | null): AboutContent {
     ...defaultAbout,
     ...saved,
     revision: ABOUT_REVISION,
-    heroImage: saved.heroImage || defaultAbout.heroImage,
+    heroImage: preferSquare(saved.heroImage || defaultAbout.heroImage || "", RB_SQUARES),
     sections: saved.sections ?? defaultAbout.sections,
     gallery: saved.gallery ?? defaultAbout.gallery,
     foundation: { ...defaultAbout.foundation, ...(saved.foundation ?? {}) },
@@ -469,12 +477,12 @@ function merge(saved: Partial<AboutContent> | null): AboutContent {
     legacy: {
       ...defaultAbout.legacy,
       ...(saved.legacy ?? {}),
-      portrait: saved.legacy?.portrait || defaultAbout.legacy.portrait,
+      portrait: preferSquare(saved.legacy?.portrait || defaultAbout.legacy.portrait || "", RB_SQUARES),
     },
     anagha: {
       ...defaultAbout.anagha,
       ...(saved.anagha ?? {}),
-      portrait: saved.anagha?.portrait || defaultAbout.anagha.portrait,
+      portrait: preferSquare(saved.anagha?.portrait || defaultAbout.anagha.portrait || "", ANAGHA_SQUARES),
     },
     awards: { ...defaultAbout.awards, ...(saved.awards ?? {}) },
     scholarship: { ...defaultAbout.scholarship, ...(saved.scholarship ?? {}) },

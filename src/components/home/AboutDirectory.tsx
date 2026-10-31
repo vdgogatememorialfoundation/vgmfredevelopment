@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { PortraitBio } from "@/components/about/PortraitBio";
 import { NaturalImage } from "@/components/common/NaturalImage";
-import { rbPortrait, useAbout } from "@/lib/about";
+import { anaghaPortrait, rbPortrait, useAbout } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function AboutDirectory() {
   const about = useAbout();
   const { t } = useI18n();
-  const portrait = rbPortrait(about);
   const sections = about.sections.filter((section) => section.href);
 
   if (!sections.length) return null;
@@ -23,23 +23,26 @@ export default function AboutDirectory() {
           </h2>
           <p className="mt-2 text-sm leading-6 text-text-muted">{t("home.aboutText")}</p>
         </div>
-        {portrait ? (
-          <div className="mb-10 grid items-start gap-4" style={{ gridTemplateColumns: "96px minmax(0, 1fr)" }}>
-            <div className="overflow-hidden rounded-xl border border-border bg-white shadow-sm" style={{ width: 96, height: 96 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={portrait} alt="Vaidya R. B. Gogate" width={96} height={96} style={{ width: 96, height: 96, objectFit: "cover", objectPosition: "top" }} />
-            </div>
-            <div className="min-w-0">
-              <p className="font-serif text-xl font-semibold text-ink">{about.legacy.title}</p>
-              <p className="mt-3 whitespace-pre-line text-sm leading-6 text-text-muted">
-                {about.legacy.biography.split(/\n\s*\n/)[0]}
-              </p>
-              <Link href="/about/legacy-of-vaidya-rb-gogate" className="mt-4 inline-flex text-sm font-semibold text-burgundy hover:underline">
-                {t("about.learnMore")}
-              </Link>
-            </div>
-          </div>
-        ) : null}
+        <div className="mb-10 space-y-10">
+          <PortraitBio
+            image={rbPortrait(about)}
+            title={about.legacy.title}
+            body={about.legacy.biography.split(/\n\s*\n/)[0]}
+            href="/about/legacy-of-vaidya-rb-gogate"
+            imageAlt="Vaidya R. B. Gogate"
+            placeholder="R B Gogate"
+            fallback="/about/rb-square.jpg"
+          />
+          <PortraitBio
+            image={anaghaPortrait(about)}
+            title={about.anagha.title}
+            body={about.anagha.biography.split(/\n\s*\n/)[0]}
+            href="/about/dr-anagha-gogate"
+            imageAlt={about.anagha.title}
+            placeholder="A G"
+            fallback="/about/anagha-square.jpg"
+          />
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sections.map((section) => (
             <article
