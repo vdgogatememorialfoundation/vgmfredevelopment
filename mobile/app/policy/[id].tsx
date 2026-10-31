@@ -1,8 +1,7 @@
 import { useLocalSearchParams } from "expo-router";
-import { Text } from "react-native";
 import { str, type Row } from "../../src/api";
 import { useFeed } from "../../src/feed";
-import { Card, Empty, Loading, Muted, Screen, Title } from "../../src/ui";
+import { Card, Empty, Heading, Loading, Muted, PageHeader, Screen } from "../../src/ui";
 
 const ALIASES: Record<string, string> = {
   privacy: "privacy",
@@ -26,18 +25,17 @@ export default function PolicyScreen() {
   if (!policy) {
     return (
       <Screen>
-        <Empty label="This policy is not in the published app feed." />
+        <Empty icon="document-text-outline" label="This policy is not in the published app feed." />
       </Screen>
     );
   }
   const sections = (Array.isArray(policy.sections) ? policy.sections : []) as Row[];
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <Title>{str(policy.title, key)}</Title>
-      <Muted>{str(policy.description)}</Muted>
+      <PageHeader kicker="Policy" title={str(policy.title, key)} subtitle={str(policy.description)} />
       {sections.map((section, index) => (
         <Card key={str(section.title, String(index))}>
-          <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(section.title)}</Text>
+          <Heading>{str(section.title)}</Heading>
           <Muted>{str(section.body)}</Muted>
         </Card>
       ))}

@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { listOrders, listTickets, mediaUrl, money, sendEmailOtp, str, verifyEmailOtp } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { useBrand, useFeed } from "../../src/feed";
-import { Banner, BrandMark, Button, Card, Field, Heading, Loading, Muted, Screen, Title } from "../../src/ui";
-import { useTheme } from "../../src/theme";
+import { Banner, BrandMark, Button, Card, Divider, Field, Heading, ListRow, Loading, Muted, PageHeader, Screen } from "../../src/ui";
 
 export default function AccountScreen() {
   const { feed, loading, refresh } = useFeed();
   const brand = useBrand();
-  const theme = useTheme();
   const { session, setSession, signOut } = useAuth();
   const [name, setName] = useState(session?.name ?? "");
   const [email, setEmail] = useState(session?.email ?? "");
@@ -54,17 +52,20 @@ export default function AccountScreen() {
 
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <View style={{ alignItems: "center", marginBottom: 16 }}>
-        <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} />
-        <Title>{session ? "Your account" : "Welcome"}</Title>
-        <Muted>{session ? session.email : "Sign in with a 6-digit code sent to your email."}</Muted>
+      <View style={{ alignItems: "center", marginBottom: 8 }}>
+        <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={64} />
       </View>
+      <PageHeader
+        kicker="Account"
+        title={session ? session.name || "Your account" : "Welcome"}
+        subtitle={session ? session.email : "Sign in with a 6-digit code sent to your email."}
+      />
       <Banner text={note} tone={tone} />
       {session ? (
         <>
-          <Heading>{session.name || session.email}</Heading>
           <Button
             kind="ghost"
+            icon="log-out-outline"
             label="Sign out"
             onPress={async () => {
               await signOut();
@@ -76,41 +77,43 @@ export default function AccountScreen() {
               setNote("Signed out.");
             }}
           />
+          <Divider />
           <Heading>Orders</Heading>
           {orders.map((item) => (
             <Card key={str(item.id)}>
-              <Text style={{ fontWeight: "700", color: theme.colors.text }}>Request {str(item.id)}</Text>
+              <Heading>Request {str(item.id)}</Heading>
               <Muted>
                 {str(item.paymentStatus, "unpaid")} · {str(item.status, "Recorded")} · {money(item.total)}
               </Muted>
             </Card>
           ))}
           {!orders.length ? <Muted>No publication requests for this email yet.</Muted> : null}
+          <View style={{ height: 12 }} />
           <Heading>Support tickets</Heading>
           {tickets.map((item) => (
             <Card key={str(item.id)}>
-              <Text style={{ fontWeight: "700", color: theme.colors.text }}>{str(item.subject)}</Text>
+              <Heading>{str(item.subject)}</Heading>
               <Muted>
                 {str(item.status)} · {str(item.id)}
               </Muted>
             </Card>
           ))}
           {!tickets.length ? <Muted>No tickets for this email yet.</Muted> : null}
-          <Button kind="ghost" label="Support" onPress={() => router.push("/support")} />
-          <Button kind="ghost" label="Certificates" onPress={() => router.push("/certificates")} />
-          <Button kind="ghost" label="FAQ" onPress={() => router.push("/faq")} />
-          <Button kind="ghost" label="Contact" onPress={() => router.push("/contact")} />
-          <Button kind="ghost" label="Privacy" onPress={() => router.push("/policy/privacy")} />
-          <Button kind="ghost" label="Terms" onPress={() => router.push("/policy/terms")} />
+          <View style={{ height: 16 }} />
+          <ListRow icon="chatbubbles-outline" title="Support" subtitle="Open or follow a ticket" onPress={() => router.push("/support")} />
+          <ListRow icon="ribbon-outline" title="Certificates" subtitle="Verify a Foundation certificate" onPress={() => router.push("/certificates")} />
+          <ListRow icon="help-circle-outline" title="FAQ" subtitle="Answers from the published site" onPress={() => router.push("/faq")} />
+          <ListRow icon="mail-outline" title="Contact" subtitle="Write to the Foundation" onPress={() => router.push("/contact")} />
+          <ListRow icon="shield-checkmark-outline" title="Privacy" onPress={() => router.push("/policy/privacy")} />
+          <ListRow icon="document-text-outline" title="Terms" onPress={() => router.push("/policy/terms")} />
         </>
       ) : (
-        <>
+        <Card>
           <Field label="Name" value={name} onChange={setName} autoCapitalize="words" />
           <Field label="Email" value={email} onChange={setEmail} keyboard="email-address" />
-          {otpSent ? (
-            <Field label="6-digit code" value={otp} onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))} keyboard="numeric" />
-          ) : null}
+          {otpSent ? <Field label="6-digit code" value={otp} onChange={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))} keyboard="numeric" /> : null}
           <Button
+            icon={otpSent ? "checkmark-outline" : "mail-outline"}
             label={busy ? "Please wait…" : otpSent ? "Verify code" : "Send code"}
             disabled={busy || (otpSent && otp.length !== 6)}
             onPress={async () => {
@@ -157,7 +160,7 @@ export default function AccountScreen() {
               <Muted>{wait > 0 ? `Resend code in ${wait}s` : "Resend code"}</Muted>
             </Pressable>
           ) : null}
-        </>
+        </Card>
       )}
     </Screen>
   );

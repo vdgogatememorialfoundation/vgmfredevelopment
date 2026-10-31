@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { Text } from "react-native";
 import { createTicket, listTickets, str, type Row } from "./api";
 import { useAuth } from "./auth";
-import { Banner, Button, Card, Field, Heading, Muted, Screen, Title } from "./ui";
+import { Banner, Button, Card, Field, Heading, Muted, PageHeader, Screen } from "./ui";
 
 export function TicketForm({ heading = "Support", embedded = false }: { heading?: string; embedded?: boolean }) {
   const { session } = useAuth();
@@ -39,8 +38,7 @@ export function TicketForm({ heading = "Support", embedded = false }: { heading?
 
   const form = (
     <>
-      <Title>{heading}</Title>
-      <Muted>We reply by email. Sign in to see tickets already opened from this app.</Muted>
+      <PageHeader kicker="Support" title={heading} subtitle="We reply by email. Sign in to see tickets already opened from this app." />
       <Banner text={note} tone={tone} />
       {inbox.map((item) => (
         <Card key={str(item.id)}>
@@ -50,42 +48,45 @@ export function TicketForm({ heading = "Support", embedded = false }: { heading?
           </Muted>
         </Card>
       ))}
-      <Field label="Your name" value={requestName} onChange={setName} autoCapitalize="words" />
-      {session ? <Muted>{session.email}</Muted> : <Field label="Email" value={requestEmail} onChange={setEmail} keyboard="email-address" />}
-      <Field label="Phone (optional)" value={phone} onChange={setPhone} keyboard="phone-pad" />
-      <Field label="Subject" value={subject} onChange={setSubject} autoCapitalize="sentences" />
-      <Field label="Message" value={body} onChange={setBody} multiline autoCapitalize="sentences" />
-      <Button
-        label={busy ? "Sending…" : "Send ticket"}
-        disabled={busy}
-        onPress={async () => {
-          if (!requestName.trim() || (!session && !requestEmail.trim()) || !subject.trim() || !body.trim()) {
-            setTone("error");
-            setNote("Enter your name, email, subject and message.");
-            return;
-          }
-          setBusy(true);
-          try {
-            const ticket = await createTicket({
-              name: requestName,
-              email: requestEmail,
-              phone,
-              subject,
-              body,
-            });
-            setSubject("");
-            setBody("");
-            setTone("success");
-            setNote(`Ticket ${String(ticket.id ?? "")} opened. We will email updates.`);
-            if (session) setTickets(await listTickets());
-          } catch (err) {
-            setTone("error");
-            setNote((err as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
+      <Card>
+        <Field label="Your name" value={requestName} onChange={setName} autoCapitalize="words" />
+        {session ? <Muted>{session.email}</Muted> : <Field label="Email" value={requestEmail} onChange={setEmail} keyboard="email-address" />}
+        <Field label="Phone (optional)" value={phone} onChange={setPhone} keyboard="phone-pad" />
+        <Field label="Subject" value={subject} onChange={setSubject} autoCapitalize="sentences" />
+        <Field label="Message" value={body} onChange={setBody} multiline autoCapitalize="sentences" />
+        <Button
+          icon="send-outline"
+          label={busy ? "Sending…" : "Send ticket"}
+          disabled={busy}
+          onPress={async () => {
+            if (!requestName.trim() || (!session && !requestEmail.trim()) || !subject.trim() || !body.trim()) {
+              setTone("error");
+              setNote("Enter your name, email, subject and message.");
+              return;
+            }
+            setBusy(true);
+            try {
+              const ticket = await createTicket({
+                name: requestName,
+                email: requestEmail,
+                phone,
+                subject,
+                body,
+              });
+              setSubject("");
+              setBody("");
+              setTone("success");
+              setNote(`Ticket ${String(ticket.id ?? "")} opened. We will email updates.`);
+              if (session) setTickets(await listTickets());
+            } catch (err) {
+              setTone("error");
+              setNote((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </Card>
     </>
   );
   if (embedded) return form;

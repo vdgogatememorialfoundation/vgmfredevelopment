@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { mediaUrl, money, str, type Row } from "../../src/api";
 import { useCart } from "../../src/cart";
 import { useFeed } from "../../src/feed";
-import { Button, Cover, Empty, Heading, Loading, Muted, Screen, SearchBar, SectionHeader } from "../../src/ui";
+import { Chip, Cover, Empty, Heading, IconButton, Loading, Muted, PageHeader, Price, Screen, SearchBar } from "../../src/ui";
 import { useTheme } from "../../src/theme";
 
 export default function ShopScreen() {
@@ -27,27 +27,16 @@ export default function ShopScreen() {
   const width = theme.columns === 2 ? ("48%" as const) : ("100%" as const);
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-        <SectionHeader title={theme.labels.shop} />
-        <Button label={`${theme.labels.bag} ${cart.count}`} kind="ghost" onPress={() => router.push("/cart")} />
-      </View>
+      <PageHeader
+        kicker="Catalogue"
+        title={theme.labels.shop}
+        subtitle="Books from the published Foundation shop"
+        trailing={<IconButton icon="bag-handle-outline" label={theme.labels.bag} badge={cart.count} onPress={() => router.push("/cart")} />}
+      />
       <SearchBar value={query} onChange={setQuery} placeholder="Search publications" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
         {categories.map((item) => (
-          <Pressable
-            key={item}
-            onPress={() => setCategory(item)}
-            style={{
-              borderRadius: 999,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              backgroundColor: category === item ? theme.colors.primary : theme.colors.paper,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-            }}
-          >
-            <Text style={{ color: category === item ? theme.colors.onPrimary : theme.colors.text, fontWeight: "700", fontSize: 12 }}>{item}</Text>
-          </Pressable>
+          <Chip key={item} label={item} selected={category === item} onPress={() => setCategory(item)} />
         ))}
       </View>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
@@ -57,6 +46,7 @@ export default function ShopScreen() {
       </View>
       {!filtered.length ? (
         <Empty
+          icon="book-outline"
           label={items.length ? "No publications match that search." : "No publications are currently in the published catalogue. Pull to refresh after Admin publishes."}
           actionLabel="Refresh"
           onAction={() => void refresh()}
@@ -77,9 +67,8 @@ function ProductCard({ item, width }: { item: Row; width: `${number}%` }) {
         <Cover uri={mediaUrl(item.coverImage) || undefined} ratio="square" />
         <Heading>{str(item.title)}</Heading>
         <Muted>{str(item.author)}</Muted>
-        <Text style={{ color: theme.colors.primary, fontWeight: "800", marginTop: 6 }}>{money(price)}</Text>
-        {original > price ? <Muted>{money(original)}</Muted> : null}
-        {out ? <Muted>Out of stock</Muted> : str(item.stockStatus) === "in_stock" ? <Muted>In stock</Muted> : null}
+        <Price value={money(price)} original={original > price ? money(original) : undefined} />
+        <Muted>{out ? "Out of stock" : str(item.stockStatus) === "in_stock" ? "In stock" : ""}</Muted>
       </View>
     </Pressable>
   );

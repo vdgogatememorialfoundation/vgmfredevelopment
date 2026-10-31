@@ -1,24 +1,21 @@
 import { useLocalSearchParams } from "expo-router";
-import { Text } from "react-native";
 import { findRow, mediaUrl, money, str } from "../../src/api";
 import { useCart } from "../../src/cart";
 import { useFeed } from "../../src/feed";
-import { Button, Cover, Empty, Loading, Muted, QtyStepper, Screen, Title } from "../../src/ui";
-import { useTheme } from "../../src/theme";
+import { Button, Cover, Empty, Loading, Muted, PageHeader, Price, QtyStepper, Screen, StatusChip } from "../../src/ui";
 import { useState } from "react";
 
 export default function BookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { feed, loading, refresh } = useFeed();
   const cart = useCart();
-  const theme = useTheme();
   const [qty, setQty] = useState(1);
   const item = findRow(feed?.books, String(id ?? ""));
   if (loading && !feed) return <Loading />;
   if (!item) {
     return (
       <Screen>
-        <Empty label="This publication is not in the published app feed." />
+        <Empty icon="book-outline" label="This publication is not in the published app feed." />
       </Screen>
     );
   }
@@ -32,13 +29,10 @@ export default function BookDetail() {
       {gallery.slice(0, 4).map((row) => (
         <Cover key={str(row.src)} uri={mediaUrl(row.src) || undefined} height={160} />
       ))}
-      <Title>{str(item.title)}</Title>
-      <Muted>{str(item.author)}</Muted>
-      <Text style={{ color: theme.colors.primary, fontWeight: "800", marginTop: 8, fontSize: 20 }}>{money(price)}</Text>
-      {original > price ? <Muted>{money(original)}</Muted> : null}
-      <Muted>
-        {str(item.availability, str(item.stockStatus))} {item.pages ? `· ${item.pages} pages` : ""}
-      </Muted>
+      <PageHeader kicker={str(item.category, "Publication")} title={str(item.title)} subtitle={str(item.author)} />
+      <Price value={money(price)} original={original > price ? money(original) : undefined} />
+      <StatusChip label={str(item.availability, str(item.stockStatus))} />
+      {item.pages ? <Muted>{String(item.pages)} pages</Muted> : null}
       <Muted>{str(item.description)}</Muted>
       {out ? (
         <Muted>This publication is not available in the published catalogue right now.</Muted>
@@ -46,6 +40,7 @@ export default function BookDetail() {
         <>
           <QtyStepper value={qty} onChange={setQty} />
           <Button
+            icon="bag-handle-outline"
             label="Add to bag"
             onPress={() => {
               for (let i = 0; i < qty; i += 1) cart.add({ id: str(item.id), title: str(item.title), price });

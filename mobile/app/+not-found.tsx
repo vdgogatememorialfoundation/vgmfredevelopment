@@ -1,14 +1,12 @@
-import { Link } from "expo-router";
-import { Screen, Title, Muted } from "../src/ui";
+import { router } from "expo-router";
+import { Button, Empty, PageHeader, Screen } from "../src/ui";
 
 export default function NotFound() {
   return (
     <Screen>
-      <Title>Screen not found</Title>
-      <Muted>That page is not part of the Foundation app.</Muted>
-      <Link href="/" style={{ marginTop: 16, fontWeight: "700" }}>
-        Return home
-      </Link>
+      <PageHeader kicker="VGMF" title="Screen not found" subtitle="That page is not part of the Foundation app." />
+      <Empty icon="home-outline" label="Return to Home to continue browsing the published catalogue." />
+      <Button icon="home-outline" label="Return home" onPress={() => router.replace("/")} />
     </Screen>
   );
 }

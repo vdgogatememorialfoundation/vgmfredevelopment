@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { router } from "expo-router";
 import { findRow, money, placeOrder, str } from "../src/api";
 import { useAuth } from "../src/auth";
 import { useCart } from "../src/cart";
 import { useFeed } from "../src/feed";
-import { Banner, Button, Card, Empty, Field, Heading, Muted, QtyStepper, Screen, Title } from "../src/ui";
+import { Banner, Button, Card, Empty, Field, Heading, Muted, PageHeader, QtyStepper, Screen } from "../src/ui";
 import { useTheme } from "../src/theme";
 
 export default function CartScreen() {
@@ -39,8 +39,7 @@ export default function CartScreen() {
 
   return (
     <Screen>
-      <Title>{theme.labels.bag}</Title>
-      <Muted>Card payment stays on the website. This bag records an unpaid publication request after you sign in.</Muted>
+      <PageHeader kicker="Shop" title={theme.labels.bag} subtitle="Card payment stays on the website. This bag records an unpaid publication request after you sign in." />
       <Banner text={note} tone={tone} />
       {priced.map((item) => (
         <Card key={item.id}>
@@ -57,9 +56,9 @@ export default function CartScreen() {
           </View>
         </Card>
       ))}
-      {!priced.length ? <Empty label="Your bag is empty." actionLabel="Browse publications" onAction={() => router.push("/shop")} /> : null}
+      {!priced.length ? <Empty icon="bag-handle-outline" label="Your bag is empty." actionLabel="Browse publications" onAction={() => router.push("/shop")} /> : null}
       {priced.length ? (
-        <>
+        <Card featured>
           <Heading>Summary</Heading>
           <Muted>
             {priced.reduce((sum, item) => sum + item.quantity, 0)} items · {money(total)}
@@ -70,6 +69,7 @@ export default function CartScreen() {
               <Field label="Name" value={requestName} onChange={setName} autoCapitalize="words" />
               <Field label="Phone (optional)" value={phone} onChange={setPhone} keyboard="phone-pad" />
               <Button
+                icon="create-outline"
                 label={busy ? "Recording request…" : "Record unpaid request"}
                 disabled={busy || missing.length > 0}
                 onPress={async () => {
@@ -95,10 +95,10 @@ export default function CartScreen() {
           ) : (
             <>
               <Muted>Sign in on Account to record an unpaid publication request.</Muted>
-              <Button label="Go to Account" onPress={() => router.push("/account")} />
+              <Button icon="person-outline" label="Go to Account" onPress={() => router.push("/account")} />
             </>
           )}
-        </>
+        </Card>
       ) : null}
     </Screen>
   );
