@@ -27,7 +27,7 @@ export function NaturalImage({
   fit?: Fit;
 }) {
   const [shape, setShape] = useState<"wide" | "tall" | "square" | "unknown">("unknown");
-  const portraitLike = shape !== "wide";
+  const portraitLike = fit === "portrait" || shape !== "wide";
 
   return (
     <div

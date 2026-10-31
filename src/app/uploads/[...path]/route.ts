@@ -13,7 +13,6 @@ const TYPES: Record<string, string> = {
   jpeg: "image/jpeg",
   webp: "image/webp",
   gif: "image/gif",
-  svg: "image/svg+xml",
   ico: "image/x-icon",
   pdf: "application/pdf",
   mp4: "video/mp4",
@@ -21,10 +20,15 @@ const TYPES: Record<string, string> = {
 
 function typedResponse(name: string, body: Buffer, type?: string) {
   const ext = name.split(".").pop()?.toLowerCase() || "";
+  const svg = ext === "svg" || (type || "").includes("svg");
+  const fileName = (name.split("/").pop() || "file").replace(/[^\w.\-]+/g, "_").slice(0, 120) || "file";
   return new NextResponse(new Uint8Array(body), {
     headers: {
-      "content-type": type || TYPES[ext] || "application/octet-stream",
+      "content-type": svg ? "application/octet-stream" : type || TYPES[ext] || "application/octet-stream",
       "cache-control": "public, max-age=86400",
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+      ...(svg ? { "content-disposition": `attachment; filename="${fileName}"` } : {}),
     },
   });
 }

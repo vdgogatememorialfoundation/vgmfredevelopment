@@ -78,7 +78,7 @@ export function publicMediaStatus(config = readMediaConfig()) {
       configured: Boolean(config.googleDrive.folderId && config.googleDrive.clientEmail && config.googleDrive.privateKey),
     },
     r2: {
-      configured: Boolean(config.r2.accessKeyId && config.r2.secretAccessKey && (config.r2.bucket || config.r2.endpoint || config.r2.accountId)),
+      configured: Boolean(config.r2.accessKeyId && config.r2.secretAccessKey && (config.r2.endpoint || config.r2.accountId)),
       bucket: config.r2.bucket || "vgmf-staging-main",
     },
   };

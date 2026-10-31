@@ -57,8 +57,10 @@ export default function AboutScreen() {
     Boolean(intro) ||
     sections.length > 0 ||
     Boolean(str(foundation.intro)) ||
-    Boolean(str(legacy.biography)) ||
-    Boolean(str(anagha.biography));
+    Boolean(str(legacy.biography) || str(legacy.biographyMr)) ||
+    Boolean(str(anagha.biography) || str(anagha.intro)) ||
+    Boolean(str(awards.intro) || asRows(awards.items).length) ||
+    Boolean(str(scholarship.intro) || asStrings(scholarship.books).length);
 
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
@@ -122,7 +124,7 @@ export default function AboutScreen() {
         </View>
       ) : null}
 
-      {str(anagha.title) || str(anagha.biography) ? (
+      {str(anagha.title) || str(anagha.biography) || str(anagha.intro) ? (
         <View>
           <Heading>{str(anagha.title, "Dr. Anagha Gogate")}</Heading>
           {str(anagha.intro) ? (
@@ -138,7 +140,7 @@ export default function AboutScreen() {
         </View>
       ) : null}
 
-      {str(awards.title) || asRows(awards.items).length ? (
+      {str(awards.title) || str(awards.intro) || asRows(awards.items).length ? (
         <View>
           <Heading>{str(awards.title, "Awards & Accolades")}</Heading>
           {str(awards.intro) ? (

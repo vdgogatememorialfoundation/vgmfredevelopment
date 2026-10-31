@@ -89,6 +89,8 @@ export function GalleryField({
   captionLabel?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -101,7 +103,7 @@ export function GalleryField({
       for (const file of Array.from(files)) {
         added.push({ src: await fileToStoredUrl(file), caption: "" });
       }
-      onChange([...images, ...added]);
+      onChange([...imagesRef.current, ...added]);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Upload failed.");
     } finally {

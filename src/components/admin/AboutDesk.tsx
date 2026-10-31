@@ -71,7 +71,7 @@ export default function AboutDesk() {
       for (const file of Array.from(files)) {
         added.push({ id: `ph-${Date.now()}-${added.length}`, src: await fileToStoredUrl(file), title: file.name.replace(/\.[^.]+$/, ""), description: "" });
       }
-      set({ gallery: [...draft.gallery, ...added] });
+      setDraft((current) => ({ ...current, gallery: [...current.gallery, ...added] }));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not upload the photos.");
     } finally {
@@ -113,7 +113,17 @@ export default function AboutDesk() {
           <div className={card}>
             <input className={field} placeholder="Page title" value={draft.title} onChange={(event) => set({ title: event.target.value })} />
             <textarea className={field} rows={12} placeholder="Introduction from the family" value={draft.intro} onChange={(event) => set({ intro: event.target.value })} />
-            <ImageField label="Wide banner image (optional)" value={draft.heroImage} onChange={(heroImage) => set({ heroImage })} />
+            <ImageField
+              label="R. B. Gogate portrait (shown left of his biography, at the photo’s own size)"
+              value={draft.heroImage || draft.legacy.portrait}
+              onChange={(portrait) =>
+                setDraft((current) => ({
+                  ...current,
+                  heroImage: portrait,
+                  legacy: { ...current.legacy, portrait },
+                }))
+              }
+            />
           </div>
           <div className={card}>
             <div className="flex items-center justify-between">

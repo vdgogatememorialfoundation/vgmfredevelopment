@@ -385,7 +385,8 @@ export function LegacyLive() {
   const { legacy } = useAbout();
   const { t, locale } = useI18n();
   const primary = locale === "mr" && legacy.biographyMr ? legacy.biographyMr : legacy.biography;
-  const secondary = locale === "mr" ? legacy.biography : legacy.biographyMr;
+  const other = locale === "mr" ? legacy.biography : legacy.biographyMr;
+  const secondary = other && other !== primary ? other : "";
   const secondaryLabel = locale === "mr" ? "English" : "मराठी";
   return (
     <main>
