@@ -118,10 +118,22 @@ function asRow(value: unknown): Row {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Row) : {};
 }
 
+const RB_SQUARE = "/about/rb-square.jpg";
+const ANAGHA_SQUARE = "/about/anagha-square.jpg";
+
 function usable(value: unknown) {
   const src = str(value);
   if (!src || /^data:/i.test(src) || /^blob:/i.test(src)) return "";
   return src;
+}
+
+function permanentSquare(value: unknown, shipped: string) {
+  const src = usable(value);
+  if (!src) return shipped;
+  const path = src.split("?")[0];
+  if (/square\.(jpe?g|png|webp)$/i.test(path) || path.endsWith(shipped)) return shipped;
+  if (/(rb-gogate|anagha-gogate)\.(jpe?g|png|webp)$/i.test(path)) return shipped;
+  return shipped;
 }
 
 export function resolvedAbout(about: Row | null | undefined) {
@@ -140,7 +152,7 @@ export function resolvedAbout(about: Row | null | undefined) {
     rb: {
       title: str(legacy.title, ABOUT_DEFAULT.rb.title),
       role: ABOUT_DEFAULT.rb.role,
-      portrait: mediaUrl(usable(legacy.portrait) || ABOUT_DEFAULT.rb.portrait),
+      portrait: mediaUrl(permanentSquare(legacy.portrait, RB_SQUARE)),
       excerpt: str(legacy.biography, ABOUT_DEFAULT.rb.excerpt).split(/\n\s*\n/)[0],
       biography: str(legacy.biography, ABOUT_DEFAULT.rb.biography),
       biographyMr: str(legacy.biographyMr, ABOUT_DEFAULT.rb.biographyMr),
@@ -148,7 +160,7 @@ export function resolvedAbout(about: Row | null | undefined) {
     anagha: {
       title: str(anagha.title, ABOUT_DEFAULT.anagha.title),
       role: ABOUT_DEFAULT.anagha.role,
-      portrait: mediaUrl(usable(anagha.portrait) || ABOUT_DEFAULT.anagha.portrait),
+      portrait: mediaUrl(permanentSquare(anagha.portrait, ANAGHA_SQUARE)),
       excerpt: str(anagha.biography, ABOUT_DEFAULT.anagha.excerpt).split(/\n\s*\n/)[0],
       biography: str(anagha.biography, ABOUT_DEFAULT.anagha.biography),
     },

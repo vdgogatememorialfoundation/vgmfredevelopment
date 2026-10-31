@@ -12,6 +12,7 @@ import JsonLd from "@/components/seo/JsonLd";
 import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
 import { platformEnv, publicSiteUrl } from "@/lib/platform";
 import { siteConfig } from "@/lib/constants";
+import { readMobileFeed } from "@/lib/server/mobile-feed";
 import "./globals.css";
 
 const sans = Outfit({
@@ -65,6 +66,8 @@ export function generateMetadata(): Metadata {
   const url = publicSiteUrl();
   const hosted = platformEnv();
   const noIndex = hosted === "demo" || hosted === "staging";
+  const brand = readMobileFeed().site;
+  const icon = brand.faviconUrl || brand.logoUrl || "/icon.png";
   return {
     metadataBase: new URL(url),
     title: {
@@ -87,6 +90,14 @@ export function generateMetadata(): Metadata {
     publisher: siteConfig.name,
     category: "education",
     applicationName: siteConfig.shortName,
+    icons: {
+      icon: [
+        { url: icon, type: "image/png" },
+        { url: "/favicon.ico", sizes: "48x48" },
+      ],
+      apple: [{ url: icon }],
+      shortcut: icon,
+    },
     robots: noIndex
       ? { index: false, follow: false, googleBot: { index: false, follow: false } }
       : { index: true, follow: true, googleBot: { index: true, follow: true } },

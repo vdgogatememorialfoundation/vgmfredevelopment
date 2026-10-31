@@ -18,12 +18,12 @@ function Paragraphs({ text }: { text: string }) {
   );
 }
 
-function Person({ uri, title, role, body }: { uri?: string; title: string; role: string; body: string }) {
+function Person({ uri, title, role, body, fallback }: { uri?: string; title: string; role: string; body: string; fallback?: number }) {
   const theme = useTheme();
   return (
     <Card>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
-        <Portrait uri={uri} label={title} size={80} />
+        <Portrait uri={uri} label={title} size={80} fallback={fallback} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Heading>{title}</Heading>
           <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 3 }}>{role}</Text>
@@ -48,14 +48,14 @@ export default function AboutScreen() {
         <Stat value="1933" label="Vd. R. B. Gogate born" />
         <Stat value="2015" label="Work carried forward" />
       </View>
-      <Person uri={about.rb.portrait} title={about.rb.title} role={about.rb.role} body={about.rb.biography} />
+      <Person uri={about.rb.portrait} title={about.rb.title} role={about.rb.role} body={about.rb.biography} fallback={require("../assets/rb-square.jpg")} />
       {about.rb.biographyMr ? (
         <Card>
           <Heading>मराठी</Heading>
           <Paragraphs text={about.rb.biographyMr} />
         </Card>
       ) : null}
-      <Person uri={about.anagha.portrait} title={about.anagha.title} role={about.anagha.role} body={about.anagha.biography} />
+      <Person uri={about.anagha.portrait} title={about.anagha.title} role={about.anagha.role} body={about.anagha.biography} fallback={require("../assets/anagha-square.jpg")} />
       <Heading>Awards & accolades</Heading>
       {about.awards.map((item) => (
         <Card key={item.title}>

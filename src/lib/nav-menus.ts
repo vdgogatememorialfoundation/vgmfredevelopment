@@ -9,7 +9,6 @@ const MENUS: Record<string, NavLink[]> = {
     href: page.href,
     key: page.key as MessageKey,
   })),
-  "/contact": [{ href: "/support", key: "nav.support" }],
 };
 
 export function navDropdown(href: string): NavLink[] {

@@ -31,15 +31,21 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   }, [expired]);
 
   useEffect(() => {
-    if (!settings?.faviconUrl) return;
-    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-    if (!link) {
-      link = document.createElement("link");
-      link.rel = "icon";
-      document.head.appendChild(link);
-    }
-    link.href = settings.faviconUrl;
-  }, [settings?.faviconUrl]);
+    const href = settings?.faviconUrl || settings?.logoUrl || "/icon.png";
+    const apply = (rel: string, type?: string) => {
+      let link = document.querySelector<HTMLLinkElement>(`link[rel='${rel}']`);
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = rel;
+        if (type) link.type = type;
+        document.head.appendChild(link);
+      }
+      link.href = href;
+    };
+    apply("icon", "image/png");
+    apply("shortcut icon", "image/png");
+    apply("apple-touch-icon");
+  }, [settings?.faviconUrl, settings?.logoUrl]);
 
   if (!on || expired || user?.role === "admin" || user?.role === "staff") {
     return (

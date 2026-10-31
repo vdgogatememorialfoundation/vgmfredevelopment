@@ -299,20 +299,26 @@ export function Loading({ label = "Loading the Foundation…" }: { label?: strin
 export function Cover({ uri, height = 180, ratio, fit = "cover" }: { uri?: string; height?: number; ratio?: "square" | "wide"; fit?: "cover" | "contain" }) {
   const theme = useTheme();
   if (!uri) return null;
+  const square = ratio === "square";
   return (
-    <Image
-      source={{ uri }}
-      accessibilityLabel="Published image"
+    <View
       style={{
         width: "100%",
-        height: ratio === "square" ? undefined : height,
-        aspectRatio: ratio === "square" ? 1 : ratio === "wide" ? 16 / 10 : undefined,
+        height: square ? undefined : height,
+        aspectRatio: square ? 1 : ratio === "wide" ? 16 / 10 : undefined,
         borderRadius: 14,
         marginBottom: 12,
+        overflow: "hidden",
         backgroundColor: theme.colors.background,
       }}
-      resizeMode={fit}
-    />
+    >
+      <Image
+        source={{ uri }}
+        accessibilityLabel="Published image"
+        style={{ width: "100%", height: "100%" }}
+        resizeMode={fit}
+      />
+    </View>
   );
 }
 
@@ -523,15 +529,41 @@ export function IconButton({ icon, label, onPress, badge }: { icon: keyof typeof
   );
 }
 
-export function Portrait({ uri, label, size = 80 }: { uri?: string; label: string; size?: number }) {
+export function Portrait({
+  uri,
+  label,
+  size = 80,
+  fallback,
+}: {
+  uri?: string;
+  label: string;
+  size?: number;
+  fallback?: number;
+}) {
   const theme = useTheme();
   return (
-    <Image
-      source={uri ? { uri } : undefined}
-      accessibilityLabel={label}
-      style={{ width: size, height: size, borderRadius: 10, backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border }}
-      resizeMode="cover"
-    />
+    <View
+      style={{
+        width: size,
+        height: size,
+        minWidth: size,
+        minHeight: size,
+        maxWidth: size,
+        maxHeight: size,
+        borderRadius: 10,
+        overflow: "hidden",
+        backgroundColor: theme.colors.background,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+      }}
+    >
+      <Image
+        source={uri ? { uri } : fallback ? fallback : undefined}
+        accessibilityLabel={label}
+        style={{ width: size, height: size }}
+        resizeMode="cover"
+      />
+    </View>
   );
 }
 

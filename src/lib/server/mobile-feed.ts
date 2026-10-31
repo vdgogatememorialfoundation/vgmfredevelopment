@@ -64,9 +64,9 @@ export function defaultMobileFeed(): MobileFeed {
     site: {
       name: siteConfig.name,
       tagline: siteConfig.tagline,
-      logoUrl: "",
+      logoUrl: "/uploads/site-logo.png",
       logoText: "",
-      faviconUrl: "",
+      faviconUrl: "/icon.png",
       email: siteConfig.email,
       phone: siteConfig.phone,
       address: siteConfig.address,
@@ -104,7 +104,12 @@ export function readMobileFeed(): MobileFeed {
   return {
     ...base,
     ...snapshot,
-    site: { ...base.site, ...snapshot.site },
+    site: {
+      ...base.site,
+      ...snapshot.site,
+      logoUrl: snapshot.site?.logoUrl || base.site.logoUrl,
+      faviconUrl: snapshot.site?.faviconUrl || snapshot.site?.logoUrl || base.site.faviconUrl,
+    },
     flags: { ...base.flags, ...snapshot.flags },
     visibility: { ...base.visibility, ...snapshot.visibility },
     mobile: {

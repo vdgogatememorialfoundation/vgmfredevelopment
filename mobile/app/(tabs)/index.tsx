@@ -105,6 +105,7 @@ export default function HomeScreen() {
         title={about.rb.title}
         role={about.rb.role}
         body={about.rb.excerpt}
+        fallback={require("../../assets/rb-square.jpg")}
         onPress={() => router.push("/about")}
       />
       <PortraitCard
@@ -112,6 +113,7 @@ export default function HomeScreen() {
         title={about.anagha.title}
         role={about.anagha.role}
         body={about.anagha.excerpt}
+        fallback={require("../../assets/anagha-square.jpg")}
         onPress={() => router.push("/about")}
       />
 
@@ -167,12 +169,12 @@ export default function HomeScreen() {
   );
 }
 
-function PortraitCard({ uri, title, role, body, onPress }: { uri?: string; title: string; role: string; body: string; onPress: () => void }) {
+function PortraitCard({ uri, title, role, body, onPress, fallback }: { uri?: string; title: string; role: string; body: string; onPress: () => void; fallback?: number }) {
   const theme = useTheme();
   return (
     <Card onPress={onPress}>
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 14 }}>
-        <Portrait uri={uri} label={title} size={80} />
+        <Portrait uri={uri} label={title} size={80} fallback={fallback} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Heading>{title}</Heading>
           <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 3 }}>{role}</Text>

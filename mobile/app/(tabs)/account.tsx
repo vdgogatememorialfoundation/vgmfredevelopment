@@ -86,7 +86,7 @@ export default function AccountScreen() {
       ))}
       {!tickets.length ? <Muted>No tickets for this email yet.</Muted> : null}
       <ListRow icon="chatbubbles-outline" title="Chat" subtitle="Ask the Foundation desk" onPress={() => router.push("/chat")} />
-      <ListRow icon="help-buoy-outline" title="Support" subtitle="Open or follow a ticket" onPress={() => router.push("/support")} />
+      <ListRow icon="help-buoy-outline" title="Go to my tickets" subtitle="Raise and track Foundation support tickets" onPress={() => router.push("/support")} />
       <ListRow icon="ribbon-outline" title="Certificates" subtitle="Verify a Foundation certificate" onPress={() => router.push("/certificates")} />
       <ListRow icon="help-circle-outline" title="FAQ" subtitle="Answers from the published site" onPress={() => router.push("/faq")} />
       <ListRow icon="mail-outline" title="Contact" subtitle={SITE.email} onPress={() => router.push("/contact")} />

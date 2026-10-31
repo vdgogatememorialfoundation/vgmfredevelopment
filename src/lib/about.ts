@@ -150,9 +150,8 @@ export function firstPhoto(...values: Array<string | undefined>) {
 const RB_SQUARES = ["/about/rb-square.jpg", "/about/rb-gogate.jpg"];
 const ANAGHA_SQUARES = ["/about/anagha-square.jpg", "/about/anagha-gogate.jpg"];
 
-function preferSquare(src: string, squares: string[]) {
-  const path = src.split("?")[0];
-  return squares.includes(path) ? squares[0] : src;
+function preferSquare(_src: string, squares: string[]) {
+  return squares[0];
 }
 
 export function rbPortrait(about: Pick<AboutContent, "heroImage" | "legacy">) {

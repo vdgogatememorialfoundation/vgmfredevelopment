@@ -27,9 +27,9 @@ export function collectMobileSnapshot(): MobileFeed {
     site: {
       name: settings.siteName || siteConfig.name,
       tagline: settings.tagline || siteConfig.tagline,
-      logoUrl: settings.logoUrl || "",
+      logoUrl: settings.logoUrl || "/uploads/site-logo.png",
       logoText: settings.logoText || "",
-      faviconUrl: settings.faviconUrl || "",
+      faviconUrl: settings.faviconUrl || settings.logoUrl || "/icon.png",
       email: settings.supportEmail || siteConfig.email,
       phone: settings.supportPhone || siteConfig.phone,
       address: siteConfig.address,
@@ -60,9 +60,9 @@ export function emptyFeedFallback(mobile: MobileAppConfig = defaultMobileAppConf
     site: {
       name: siteConfig.name,
       tagline: siteConfig.tagline,
-      logoUrl: "",
+      logoUrl: "/uploads/site-logo.png",
       logoText: "",
-      faviconUrl: "",
+      faviconUrl: "/icon.png",
       email: siteConfig.email,
       phone: siteConfig.phone,
       address: siteConfig.address,

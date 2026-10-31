@@ -33,7 +33,6 @@ const MENU: { title: string; items: DrawerItem[] }[] = [
       { href: "/clinics", label: "Clinics", icon: "medical-outline" },
       { href: "/certificates", label: "Certificates", icon: "ribbon-outline" },
       { href: "/contact", label: "Contact", icon: "mail-outline" },
-      { href: "/support", label: "Support", icon: "help-buoy-outline" },
       { href: "/chat", label: "Chat", icon: "chatbubbles-outline" },
       { href: "/faq", label: "FAQ", icon: "help-circle-outline" },
     ],
@@ -43,6 +42,7 @@ const MENU: { title: string; items: DrawerItem[] }[] = [
     items: [
       { href: "/cart", label: "Bag", icon: "basket-outline" },
       { href: "/account", label: "My account", icon: "person-circle-outline" },
+      { href: "/support", label: "Go to my tickets", icon: "help-buoy-outline" },
       { href: "/checkout", label: "Checkout", icon: "card-outline" },
     ],
   },

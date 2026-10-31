@@ -57,7 +57,8 @@ function defaultSettings(): SiteSettings {
     siteName: "Vaidya Gogate Memorial Foundation",
     tagline: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
     logoText: "VGMF",
-    logoUrl: "",
+    logoUrl: "/uploads/site-logo.png",
+    faviconUrl: "/icon.png",
     supportEmail: "support@vaidyagogate.org",
     supportPhone: "+91 20 1234 5678",
     maintenanceMode: false,
@@ -128,6 +129,8 @@ export function getSettings(): SiteSettings {
   return {
     ...defaults,
     ...current,
+    logoUrl: current.logoUrl || defaults.logoUrl,
+    faviconUrl: current.faviconUrl || current.logoUrl || defaults.faviconUrl,
     apiKeys: { ...defaults.apiKeys, ...current.apiKeys },
     processing: { ...defaults.processing, ...current.processing },
     social: { ...defaults.social, ...current.social },
