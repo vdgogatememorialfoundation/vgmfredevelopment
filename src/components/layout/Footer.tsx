@@ -45,22 +45,22 @@ export default function Footer() {
   const custom = getLiveCmsPages().filter((page) => page.showInFooter);
 
   return (
-    <footer className="relative mt-8 overflow-hidden border-t border-gold/40 bg-paper text-ink">
+    <footer className="relative overflow-hidden border-t border-gold/40 bg-paper text-ink">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-ink via-gold to-burgundy" />
-      <div className="container py-14 sm:py-16">
-        <div className="grid gap-12 lg:grid-cols-[1.4fr_1fr_1fr]">
+      <div className="container py-8">
+        <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr_1fr]">
           <div>
-            <div className="flex items-center gap-4">
-              <SiteLogo size={52} />
+            <div className="flex items-center gap-3">
+              <SiteLogo size={44} />
               <div>
                 <p className="font-serif text-2xl font-medium leading-none tracking-tight text-ink">Vaidya Gogate</p>
                 <p className="mt-1 font-serif italic text-sm text-gold">Memorial Foundation</p>
               </div>
             </div>
-            <p className="mt-6 max-w-md font-serif text-lg leading-8 text-ink/80">{t("footer.tagline")}</p>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-text-muted">{siteConfig.address}</p>
-            <p className="mt-2 text-sm text-text-muted">{t("footer.hours")}</p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
+            <p className="mt-4 max-w-md font-serif text-lg leading-7 text-ink/80">{t("footer.tagline")}</p>
+            <p className="mt-3 max-w-sm text-sm leading-6 text-text-muted">{siteConfig.address}</p>
+            <p className="mt-1 text-sm text-text-muted">{t("footer.hours")}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <a href={`mailto:${siteConfig.email}`} className="rounded-full border border-gold/50 bg-gold/20 px-4 py-2 text-xs font-semibold tracking-wide text-burgundy transition hover:bg-gold/40">
                 {siteConfig.email}
               </a>
@@ -72,7 +72,7 @@ export default function Footer() {
 
           <nav aria-label="Footer explore">
             <p className="font-serif text-xl text-ink">{t("footer.explore")}</p>
-            <ul className="mt-5 space-y-2.5">
+            <ul className="mt-3 space-y-1.5">
               {explore.map((link) => (
                 <li key={link.href}>
                   <Link href={link.href} className="text-sm text-text-muted transition hover:text-burgundy">
@@ -85,7 +85,7 @@ export default function Footer() {
 
           <div>
             <p className="font-serif text-xl text-ink">{t("nav.about")}</p>
-            <ul className="mt-5 space-y-2.5">
+            <ul className="mt-3 space-y-1.5">
               {ABOUT_NAV.map((page) => (
                 <li key={page.href}>
                   <Link href={page.href} className="text-sm text-text-muted transition hover:text-burgundy">
@@ -94,8 +94,8 @@ export default function Footer() {
                 </li>
               ))}
             </ul>
-            <p className="mt-8 font-serif text-xl text-ink">{t("footer.pages")}</p>
-            <ul className="mt-5 space-y-2.5">
+            <p className="mt-5 font-serif text-xl text-ink">{t("footer.pages")}</p>
+            <ul className="mt-3 space-y-1.5">
               {custom.length === 0 ? (
                 <>
                   <li>
@@ -126,24 +126,24 @@ export default function Footer() {
                 </>
               )}
             </ul>
-            <div className="mt-8">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">{t("footer.connect")}</p>
+            <div className="mt-5">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">{t("footer.connect")}</p>
               <SocialLinks tone="dark" always />
               {isAppDownloadPublic() ? (
-                <p className="mt-4">
+                <p className="mt-3">
                   <Link href="/app" className="text-sm font-semibold text-burgundy transition hover:text-ink">
                     Get the Android app
                   </Link>
                 </p>
               ) : null}
-              <div className="mt-4">
+              <div className="mt-3">
                 <LanguageSwitcher />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col gap-4 border-t border-gold/30 pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 flex flex-col gap-3 border-t border-gold/30 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-text-muted">
             © {new Date().getFullYear()} {siteConfig.name}. {t("footer.rights")}
           </p>
@@ -155,7 +155,7 @@ export default function Footer() {
             ))}
           </nav>
         </div>
-        <p className="mt-5 inline-flex rounded-full border border-gold/50 bg-gold/25 px-4 py-2 font-serif text-sm tracking-wide text-burgundy shadow-[0_0_0_1px_rgba(196,149,74,0.15)]">
+        <p className="mt-3 inline-flex rounded-full border border-gold/50 bg-gold/25 px-4 py-1.5 font-serif text-sm tracking-wide text-burgundy shadow-[0_0_0_1px_rgba(196,149,74,0.15)]">
           Developed by <strong className="ml-1 font-bold">Capture Visual Studios</strong>
         </p>
       </div>

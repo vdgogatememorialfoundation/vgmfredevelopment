@@ -12,7 +12,6 @@ import JsonLd from "@/components/seo/JsonLd";
 import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
 import { platformEnv, publicSiteUrl } from "@/lib/platform";
 import { siteConfig } from "@/lib/constants";
-import { readMobileFeed } from "@/lib/server/mobile-feed";
 import "./globals.css";
 
 const sans = Outfit({
@@ -66,8 +65,6 @@ export function generateMetadata(): Metadata {
   const url = publicSiteUrl();
   const hosted = platformEnv();
   const noIndex = hosted === "demo" || hosted === "staging";
-  const brand = readMobileFeed().site;
-  const published = brand.faviconUrl || brand.logoUrl || "";
   const icon = "/icon.png";
   return {
     metadataBase: new URL(url),
@@ -93,12 +90,11 @@ export function generateMetadata(): Metadata {
     applicationName: siteConfig.shortName,
     icons: {
       icon: [
-        { url: `${icon}?v=134`, type: "image/png" },
-        ...(published && published !== icon ? [{ url: `${published}?v=134`, type: "image/png" }] : []),
+        { url: `${icon}?v=135`, type: "image/png" },
         { url: "/favicon.ico", sizes: "48x48" },
       ],
-      apple: [{ url: `${icon}?v=134` }],
-      shortcut: `${icon}?v=134`,
+      apple: [{ url: `${icon}?v=135` }],
+      shortcut: `${icon}?v=135`,
     },
     robots: noIndex
       ? { index: false, follow: false, googleBot: { index: false, follow: false } }

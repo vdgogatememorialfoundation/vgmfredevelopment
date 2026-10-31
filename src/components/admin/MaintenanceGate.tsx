@@ -31,8 +31,7 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   }, [expired]);
 
   useEffect(() => {
-    const raw = settings?.faviconUrl || settings?.logoUrl || "/icon.png";
-    const href = `${raw}${raw.includes("?") ? "&" : "?"}v=134`;
+    const href = "/icon.png?v=135";
     const apply = (rel: string, type?: string) => {
       let link = document.querySelector<HTMLLinkElement>(`link[rel='${rel}']`);
       if (!link) {
@@ -46,7 +45,7 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
     apply("icon", "image/png");
     apply("shortcut icon", "image/png");
     apply("apple-touch-icon");
-  }, [settings?.faviconUrl, settings?.logoUrl]);
+  }, []);
 
   if (!on || expired || user?.role === "admin" || user?.role === "staff") {
     return (
