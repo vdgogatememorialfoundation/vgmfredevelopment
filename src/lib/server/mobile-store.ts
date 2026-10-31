@@ -39,6 +39,8 @@ export type MobileAddress = {
   city: string;
   state: string;
   pincode: string;
+  country?: string;
+  countryCode?: string;
 };
 
 export type MobileOrder = {

@@ -2,6 +2,7 @@ import type { User } from "@/types";
 import {
   clearSession,
   getSession,
+  isSignedOut,
   persistUntilLogoutEnabled,
   saveAccount,
   setSession,
@@ -16,18 +17,9 @@ const ready: Record<SessionScope, boolean> = { public: false, portal: false };
 let browserBound = false;
 const listeners = new Set<Listener>();
 
-function withLoginStamp(user: User): User {
-  if (user.lastLoginAt) return user;
-  return { ...user, lastLoginAt: new Date().toISOString() };
-}
-
 function resolveSnapshot(scope: SessionScope): User | null {
-  const session = getSession(scope);
-  if (!session) return null;
-  if (session.lastLoginAt) return session;
-  const stamped = withLoginStamp(session);
-  setSession(stamped, scope);
-  return stamped;
+  if (isSignedOut(scope)) return null;
+  return getSession(scope);
 }
 
 function notify() {
@@ -43,6 +35,11 @@ function refreshFromStorage() {
 }
 
 function healScope(scope: SessionScope) {
+  if (isSignedOut(scope)) {
+    snapshots[scope] = null;
+    ready[scope] = true;
+    return;
+  }
   if (!persistUntilLogoutEnabled()) {
     snapshots[scope] = resolveSnapshot(scope);
     ready[scope] = true;
@@ -51,8 +48,6 @@ function healScope(scope: SessionScope) {
   const session = resolveSnapshot(scope);
   if (session) {
     snapshots[scope] = session;
-  } else if (snapshots[scope]) {
-    setSession(snapshots[scope] as User, scope);
   } else {
     snapshots[scope] = null;
   }
@@ -115,9 +110,17 @@ export function storeSignOut(scope: SessionScope = "public") {
   const email = snapshots[scope]?.email;
   snapshots[scope] = null;
   ready[scope] = true;
+  clearSession(scope);
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.removeItem("vgmf_partner_hydrated_at");
+      window.sessionStorage.removeItem("vgmf_partner_hydrated_email");
+    } catch {
+      /* private mode */
+    }
+  }
   if (email) {
     recordActivity({ email, kind: "logout", detail: "Signed out" });
   }
-  clearSession(scope);
   notify();
 }

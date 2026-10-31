@@ -316,6 +316,16 @@ export function isValidPhone(phone: string) {
   return digits.length >= 8 && digits.length <= 15;
 }
 
+export function withDial(phone: string, dial: string) {
+  const trimmed = phone.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith("+")) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  const dialDigits = dial.replace(/\D/g, "");
+  if (dialDigits && digits.startsWith(dialDigits)) return `+${digits}`;
+  return `${dial} ${trimmed}`.trim();
+}
+
 export function formatAddressLine(address: {
   line1?: string;
   landmark?: string;

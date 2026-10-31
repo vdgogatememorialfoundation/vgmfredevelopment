@@ -11,6 +11,9 @@ import {
 } from "../src/api";
 import { useAuth } from "../src/auth";
 import { GoldBanner } from "../src/chrome";
+import { CountryField } from "../src/country-field";
+import { useFeed } from "../src/feed";
+import { countryByCode, enabledCountries, withDial } from "../src/geo";
 import { SITE } from "../src/site-content";
 import { useTheme } from "../src/theme";
 import { Banner, BrandMark, Button, Card, Chip, Field, Kicker, Muted, Screen, SiteFooter } from "../src/ui";
@@ -25,6 +28,10 @@ type SignInStep = "identifier" | "otp" | "forgot" | "forgot-code" | "forgot-pass
 export default function LoginScreen() {
   const theme = useTheme();
   const { setSession } = useAuth();
+  const { feed } = useFeed();
+  const countries = enabledCountries(feed?.platformCountries);
+  const [countryCode, setCountryCode] = useState(countries[0]?.code || "IN");
+  const country = countries.find((item) => item.code === countryCode) ?? countryByCode(countryCode);
   const [tab, setTab] = useState<Tab>("signup");
   const [note, setNote] = useState("");
   const [tone, setTone] = useState<"note" | "error" | "success">("note");
@@ -60,6 +67,12 @@ export default function LoginScreen() {
     return () => clearInterval(timer);
   }, [wait]);
 
+  useEffect(() => {
+    if (!countries.length) return;
+    if (countries.some((item) => item.code === countryCode)) return;
+    setCountryCode(countries[0].code);
+  }, [countries, countryCode]);
+
   const flash = (next: string, nextTone: typeof tone = "note") => {
     setNote(next);
     setTone(nextTone);
@@ -71,9 +84,11 @@ export default function LoginScreen() {
     middleName: middleName.trim(),
     lastName: lastName.trim(),
     email: email.trim(),
-    phone: phone.trim(),
-    whatsapp: (whatsapp || phone).trim(),
-    alternatePhone: (samePhone ? phone : alternatePhone || phone).trim(),
+    phone: withDial(phone, country.dial),
+    whatsapp: withDial(whatsapp || phone, country.dial),
+    alternatePhone: withDial(samePhone ? phone : alternatePhone || phone, country.dial),
+    country: country.name,
+    countryCode: country.code,
   });
 
   return (
@@ -184,8 +199,13 @@ export default function LoginScreen() {
             <Field label="Middle name" value={middleName} onChange={setMiddleName} autoCapitalize="words" placeholder="Optional" />
             <Field label="Last name" value={lastName} onChange={setLastName} autoCapitalize="words" placeholder="Enter last name" />
             <Field label="Email address" value={email} onChange={setEmail} keyboard="email-address" placeholder="name@example.com" />
+            <CountryField
+              value={country.code}
+              countries={countries}
+              onChange={(next) => setCountryCode(next.code)}
+            />
             <Field
-              label="Phone number"
+              label="Phone number (international)"
               value={phone}
               onChange={(value) => {
                 setPhone(value);
@@ -193,7 +213,7 @@ export default function LoginScreen() {
                 if (samePhone) setAlternatePhone(value);
               }}
               keyboard="phone-pad"
-              placeholder="+91 98765 43210"
+              placeholder={`${country.dial} 98765 43210`}
             />
             <Field
               label="Alternate phone number"
@@ -203,13 +223,13 @@ export default function LoginScreen() {
                 setAlternatePhone(value);
               }}
               keyboard="phone-pad"
-              placeholder="+91 98765 43210"
+              placeholder={`${country.dial} 98765 43210`}
             />
             <Pressable onPress={() => setSamePhone((value) => !value)} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <View style={{ width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: samePhone ? theme.colors.primary : theme.colors.paper }} />
               <Muted>Same as the phone number above</Muted>
             </Pressable>
-            <Field label="WhatsApp number" value={whatsapp} onChange={setWhatsapp} keyboard="phone-pad" placeholder="+91 98765 43210" />
+            <Field label="WhatsApp number" value={whatsapp} onChange={setWhatsapp} keyboard="phone-pad" placeholder={`${country.dial} 98765 43210`} />
             <Pressable onPress={() => setAgreed((value) => !value)} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
               <View style={{ width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: agreed ? theme.colors.primary : theme.colors.paper, marginTop: 4 }} />
               <Muted>I agree to the Foundation’s terms and privacy policy.</Muted>

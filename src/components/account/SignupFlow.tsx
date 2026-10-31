@@ -10,6 +10,8 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { ACCOUNT_EXISTS_MESSAGE } from "@/lib/account-identity";
 import { isAccountConflict, remoteAccountToUser, remoteRegister, remoteSync, remoteVerifyRegister } from "@/lib/account-api";
 import { demoAccountId, findAccountByIdentifier, saveAccount, setSession } from "@/lib/auth";
+import { countryByCode, isValidPhone, withDial } from "@/lib/geo";
+import { defaultEnabledCountry, getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
 import { displayName, sendAccountDetails, sendOtpCode } from "@/lib/admin-store";
 import { getAuthAccess } from "@/lib/auth-access";
 import { subscribeCms } from "@/lib/cms";
@@ -41,6 +43,8 @@ export default function SignupFlow() {
     phone: "",
     whatsapp: "",
     alternatePhone: "",
+    country: defaultEnabledCountry().name,
+    countryCode: defaultEnabledCountry().code,
   });
 
   const [accountId, setAccountId] = useState("");
@@ -66,19 +70,18 @@ export default function SignupFlow() {
     setOtpHint(`A code was sent to ${form.email}.`);
   };
 
-  const alreadyExists = async () => {
-    const alternate = form.alternatePhone.trim() || form.phone;
+  const alreadyExists = async (phone = form.phone, alternatePhone = form.alternatePhone.trim() || form.phone) => {
     if (
       findAccountByIdentifier(form.email) ||
-      findAccountByIdentifier(form.phone) ||
-      (alternate && findAccountByIdentifier(alternate))
+      findAccountByIdentifier(phone) ||
+      (alternatePhone && findAccountByIdentifier(alternatePhone))
     ) {
       return true;
     }
     const remote = await lookupPartnerAccount({
       email: form.email,
-      phone: form.phone,
-      alternatePhone: alternate,
+      phone,
+      alternatePhone,
     });
     return remote.found;
   };
@@ -87,12 +90,33 @@ export default function SignupFlow() {
     setBusy(true);
     setError("");
     try {
-      if (await alreadyExists()) {
+      const countries = getPlatformCountries();
+      const country = countryByCode(form.countryCode);
+      if (!isCountryEnabled(country.code, countries)) {
+        setError("The Foundation is not available in this country yet.");
+        return;
+      }
+      const phone = withDial(form.phone, country.dial);
+      const whatsapp = withDial(form.whatsapp || form.phone, country.dial);
+      const alternate = withDial(form.alternatePhone.trim() || form.phone, country.dial);
+      if (!isValidPhone(phone)) {
+        setError("Enter a valid international phone number, including the country code.");
+        return;
+      }
+      setForm((previous) => ({ ...previous, phone, whatsapp, alternatePhone: alternate, country: country.name, countryCode: country.code }));
+      if (await alreadyExists(phone, alternate)) {
         setError(ACCOUNT_EXISTS_MESSAGE);
         return;
       }
       try {
-        const remote = await remoteRegister(form);
+        const remote = await remoteRegister({
+          ...form,
+          phone,
+          whatsapp,
+          alternatePhone: alternate,
+          country: country.name,
+          countryCode: country.code,
+        });
         setRemotePending(true);
         setOtpHint(String(remote.message || `A code was sent to ${form.email}.`));
         setStep("email");
@@ -138,6 +162,14 @@ export default function SignupFlow() {
       status: "active",
       storeCredit: 0,
       createdAt: new Date().toISOString(),
+      address: {
+        line1: "",
+        city: "",
+        state: "",
+        pincode: "",
+        country: form.country,
+        countryCode: form.countryCode,
+      },
     };
 
     saveAccount(user);

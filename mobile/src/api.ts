@@ -28,6 +28,10 @@ export type Feed = {
     apps?: Record<string, { name?: string; logoUrl?: string }>;
     showDeveloperCredit?: boolean;
   };
+  platformCountries?: {
+    allowInternational?: boolean;
+    enabledCountryCodes?: string[];
+  };
   events: Row[];
   articles: Row[];
   books: Row[];
@@ -280,6 +284,8 @@ export async function registerAccount(input: {
   phone: string;
   whatsapp?: string;
   alternatePhone?: string;
+  country?: string;
+  countryCode?: string;
 }) {
   return accountAction("register", input) as Promise<{ ok: true; message?: string; pending?: Record<string, string> }>;
 }
@@ -293,6 +299,8 @@ export async function verifyRegister(input: {
   phone: string;
   whatsapp?: string;
   alternatePhone?: string;
+  country?: string;
+  countryCode?: string;
   code: string;
 }) {
   const data = await accountAction("verify-register", input);
@@ -365,6 +373,23 @@ export async function listOrders() {
   return (data.orders ?? []) as Row[];
 }
 
+export type PostalPlace = {
+  city: string;
+  state: string;
+  country: string;
+  countryCode: string;
+  pincode: string;
+};
+
+export async function fetchPostalPlace(postal: string, countryCode?: string): Promise<PostalPlace | null> {
+  const pin = postal.trim();
+  if (pin.length < 3) return null;
+  const query = new URLSearchParams({ postal: pin });
+  if (countryCode) query.set("country", countryCode);
+  const data = await parse(await fetch(`${getApiBase()}/api/geo/postal?${query}`, { headers: { accept: "application/json" } }), "public");
+  return ((data.place as PostalPlace | undefined) ?? null);
+}
+
 export async function placeOrder(input: {
   name?: string;
   email?: string;
@@ -373,6 +398,8 @@ export async function placeOrder(input: {
   city?: string;
   state?: string;
   pincode?: string;
+  country?: string;
+  countryCode?: string;
   items: { id: string; quantity: number }[];
 }) {
   const data = await parse(
@@ -393,6 +420,8 @@ export async function createCheckout(input: {
   city: string;
   state: string;
   pincode: string;
+  country?: string;
+  countryCode?: string;
   items: { id: string; quantity: number }[];
 }) {
   const data = await parse(

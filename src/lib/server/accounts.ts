@@ -40,8 +40,17 @@ function save(rows: FoundationAccount[]) {
 }
 
 function digits(value: string) {
-  const text = String(value ?? "").replace(/\D/g, "");
-  return text.length > 10 ? text.slice(-10) : text;
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function samePhone(left: string, right: string) {
+  const a = digits(left);
+  const b = digits(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const localA = a.length > 10 ? a.slice(-10) : a;
+  const localB = b.length > 10 ? b.slice(-10) : b;
+  return localA.length >= 10 && localA === localB;
 }
 
 function hashPassword(password: string, salt: string) {
@@ -67,13 +76,14 @@ export function publicAccount(account: FoundationAccount) {
 
 export function findAccount(identifier: string) {
   const value = identifier.trim().toLowerCase();
-  const phone = digits(identifier);
   return (
     load().find(
       (account) =>
         account.email === value ||
         account.accountId === identifier.trim() ||
-        (phone && (digits(account.phone) === phone || digits(account.whatsapp || "") === phone || digits(account.alternatePhone || "") === phone))
+        samePhone(account.phone, identifier) ||
+        samePhone(account.whatsapp || "", identifier) ||
+        samePhone(account.alternatePhone || "", identifier)
     ) ?? null
   );
 }

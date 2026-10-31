@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { addOrder, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, sessionFromToken } from "@/lib/server/mobile-store";
+import { isValidPhone, isValidPostal } from "@/lib/geo";
+import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
 
 export const runtime = "nodejs";
@@ -66,18 +68,23 @@ export async function POST(request: NextRequest) {
 
   const catalog = catalogItems(body?.items);
   if ("error" in catalog) return json({ ok: false, error: catalog.error }, 400);
+  const countryCode = String(body?.countryCode ?? body?.country ?? "IN").trim().slice(0, 8);
   const address = {
     line1: String(body?.line1 ?? "").trim().slice(0, 160),
     city: String(body?.city ?? "").trim().slice(0, 80),
     state: String(body?.state ?? "").trim().slice(0, 80),
     pincode: String(body?.pincode ?? "").trim().slice(0, 12),
+    country: String(body?.country ?? "").trim().slice(0, 80),
+    countryCode,
   };
-  if (!address.line1 || !address.city || !address.state || !/^\d{6}$/.test(address.pincode)) {
-    return json({ ok: false, error: "Enter your full delivery address and a 6-digit pincode." }, 400);
+  const countryBlocked = countryRejection(countryCode, address.country);
+  if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
+  if (!address.line1 || !address.city || !address.state || !isValidPostal(countryCode, address.pincode)) {
+    return json({ ok: false, error: "Enter your full delivery address and a valid postal code." }, 400);
   }
-  const phone = String(body?.phone ?? "").replace(/\s/g, "");
-  if (!/^\+?[0-9]{10,15}$/.test(phone)) {
-    return json({ ok: false, error: "Enter a valid mobile number." }, 400);
+  const phone = String(body?.phone ?? "").trim();
+  if (!isValidPhone(phone)) {
+    return json({ ok: false, error: "Enter a valid international phone number, including the country code." }, 400);
   }
 
   const draft = addOrder({

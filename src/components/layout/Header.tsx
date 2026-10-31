@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import SiteLogo from "@/components/common/SiteLogo";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
+import { leaveAfterSignOut } from "@/lib/auth";
 import { useCart } from "@/lib/use-cart";
 import { classNames } from "@/lib/utils";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
@@ -101,7 +102,6 @@ export default function Header() {
   const [mobileOpen, setMobileOpen] = useState("");
   const closeTimer = useRef<number>(0);
   const pathname = usePathname();
-  const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
   const { count } = useCart();
   const { t } = useI18n();
@@ -167,8 +167,8 @@ export default function Header() {
   const handleSignOut = () => {
     signOut();
     setAccountMenuOpen(false);
-    router.push("/");
-    router.refresh();
+    setMobileMenuOpen(false);
+    leaveAfterSignOut("/login");
   };
 
   const initials = user
@@ -533,9 +533,18 @@ export default function Header() {
                 </nav>
                 <div className="flex flex-col gap-3 border-t border-border p-4">
                   {isAuthenticated ? (
-                    <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-burgundy">
-                      {t("header.myAccount")}
-                    </Link>
+                    <>
+                      <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-burgundy">
+                        {t("header.myAccount")}
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={handleSignOut}
+                        className="text-left text-sm font-semibold text-red-700"
+                      >
+                        Logout
+                      </button>
+                    </>
                   ) : (
                     <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-burgundy">
                       {t("common.signIn")}

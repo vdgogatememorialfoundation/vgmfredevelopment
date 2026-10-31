@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isValidPhone } from "@/lib/geo";
+import { countryRejection } from "@/lib/server/platform-countries";
 import { corsHeaders } from "@/lib/server/mobile-feed";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 import {
@@ -104,8 +106,10 @@ export async function POST(request: NextRequest) {
     const lastName = String(body?.lastName ?? "").trim();
     const email = String(body?.email ?? "").trim().toLowerCase();
     const phone = String(body?.phone ?? "").trim();
-    if (!firstName || !lastName || !/^\S+@\S+\.\S+$/.test(email) || !/^\+?[0-9]{10,15}$/.test(phone.replace(/\s/g, ""))) {
-      return json({ ok: false, error: "Enter your first name, last name, email and a valid mobile number." }, 400);
+    const countryBlocked = countryRejection(String(body?.countryCode ?? ""), String(body?.country ?? ""));
+    if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
+    if (!firstName || !lastName || !/^\S+@\S+\.\S+$/.test(email) || !isValidPhone(phone)) {
+      return json({ ok: false, error: "Enter your first name, last name, email and a valid international phone number, including the country code." }, 400);
     }
     if (accountExists(email, phone) || (await resolveAccount(email)) || (await resolveAccount(phone))) {
       return json({ ok: false, error: "An account with this email or phone is already created. Please login." }, 409);
@@ -216,8 +220,10 @@ export async function POST(request: NextRequest) {
     const email = String(body?.email ?? "").trim().toLowerCase();
     const phone = String(body?.phone ?? "").trim();
     const password = String(body?.password ?? "");
-    if (!firstName || !lastName || !/^\S+@\S+\.\S+$/.test(email) || !phone) {
-      return json({ ok: false, error: "Enter your name, email and mobile to sync this account." }, 400);
+    const countryBlocked = countryRejection(String(body?.countryCode ?? ""), String(body?.country ?? ""));
+    if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
+    if (!firstName || !lastName || !/^\S+@\S+\.\S+$/.test(email) || !isValidPhone(phone)) {
+      return json({ ok: false, error: "Enter your name, email and a valid international phone number to sync this account." }, 400);
     }
     let account =
       (await resolveAccount(email)) ||

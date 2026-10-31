@@ -7,6 +7,7 @@ import { dataFile } from "@/lib/server/paths";
 import { defaultAppearance, sanitizeAppearance } from "@/lib/mobile-appearance";
 import { defaultMobileAppConfig } from "@/lib/mobile-config";
 import { type MobileFeed } from "@/lib/mobile-types";
+import { defaultPlatformCountries, readPlatformCountries, writePlatformCountries } from "@/lib/server/platform-countries";
 import { listNotices } from "@/lib/server/notices";
 import type { Event } from "@/types";
 
@@ -93,6 +94,7 @@ export function defaultMobileFeed(): MobileFeed {
     policies: {},
     faqs: [],
     appearance: defaultAppearance,
+    platformCountries: readPlatformCountries(),
   };
 }
 
@@ -147,6 +149,7 @@ export function readMobileFeed(): MobileFeed {
     faqs: snapshot.faqs ?? base.faqs,
     publishedAt: snapshot.publishedAt || base.publishedAt,
     appearance: sanitizeAppearance(snapshot.appearance ?? base.appearance ?? defaultAppearance),
+    platformCountries: snapshot.platformCountries ?? base.platformCountries ?? defaultPlatformCountries,
   };
 }
 
@@ -194,6 +197,7 @@ function persistFeedAssets(feed: MobileFeed): MobileFeed {
 
 export function saveMobileFeed(feed: MobileFeed) {
   memory = persistFeedAssets(feed);
+  if (memory.platformCountries) writePlatformCountries(memory.platformCountries);
   for (const file of [DATA_FILE, TMP_FILE, PUBLIC_FILE]) {
     try {
       mkdirSync(join(file, ".."), { recursive: true });

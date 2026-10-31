@@ -1,4 +1,4 @@
-import { getAllAccounts, getSession, setSession } from "@/lib/auth";
+import { getAllAccounts, getSession, isSignedOut, setSession } from "@/lib/auth";
 import { noticeKeys } from "@/lib/cms";
 import type { Announcement, Event, Notice, PartnerPaymentSummary, PartnerTicketSummary, User } from "@/types";
 
@@ -107,6 +107,7 @@ function applyAccounts(incoming: User[]) {
 }
 
 function applySession() {
+  if (isSignedOut()) return;
   const session = getSession();
   if (!session?.email) return;
   const live = getAllAccounts().find((account) => account.email.toLowerCase() === session.email.toLowerCase());
@@ -162,7 +163,8 @@ export function applyPartnerFeed(feed: PartnerFeed) {
 
 export async function hydratePartnerFeed(opts?: { full?: boolean; force?: boolean }) {
   if (typeof window === "undefined") return;
-  const session = getSession();
+  const signedOut = isSignedOut();
+  const session = signedOut ? null : getSession();
   const email = session?.email?.trim().toLowerCase() || "";
   const last = Number(window.sessionStorage.getItem("vgmf_partner_hydrated_at") || 0);
   const lastEmail = window.sessionStorage.getItem("vgmf_partner_hydrated_email") || "";
@@ -178,6 +180,7 @@ export async function hydratePartnerFeed(opts?: { full?: boolean; force?: boolea
   } catch {
     /* public site still works without partner data */
   }
+  if (signedOut) return;
   if (email) {
     await lookupPartnerAccount({ email, phone: session?.phone, identifier: email });
     return;

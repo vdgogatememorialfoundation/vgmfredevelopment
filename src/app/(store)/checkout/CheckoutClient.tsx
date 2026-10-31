@@ -32,6 +32,7 @@ import { useOrderSettings } from "@/lib/use-cms";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
+import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
 
 type CourierOption = CourierRate & { key: string; deliverBy: string };
 
@@ -202,6 +203,8 @@ export default function CheckoutClient() {
       return quote.note || "Delivery is not available for this pincode.";
     if (!isValidPhone(address.phone))
       return "Please enter a valid international phone number, including country code.";
+    if (!isCountryEnabled(address.countryCode, getPlatformCountries()))
+      return "The Foundation is not delivering to this country yet.";
     return "";
   };
 
