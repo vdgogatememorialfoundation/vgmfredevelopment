@@ -1,6 +1,7 @@
 import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { applyFoundationBrand, wrapFoundationEmail } from "@/lib/email-layout";
+import { readKv } from "@/lib/server/db";
 import { sendTransactionalEmail } from "@/lib/server/providers";
 
 const FILE = join("/tmp", "vgmf-mobile-email.json");
@@ -39,8 +40,14 @@ export function readMobileEmailCreds(): MobileEmailCreds {
   }
 }
 
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
 export async function sendMobileEmail(to: string, subject: string, body: string) {
-  const creds = readMobileEmailCreds();
+  const stored = asRecord(await readKv<Record<string, unknown>>("admin", "email-creds"));
+  const notify = asRecord(await readKv<Record<string, unknown>>("admin", "notify-creds"));
+  const creds = { ...readMobileEmailCreds(), ...asRecord(notify.email), ...stored };
   const html = wrapFoundationEmail(
     applyFoundationBrand(body)
       .replace(/&/g, "&amp;")

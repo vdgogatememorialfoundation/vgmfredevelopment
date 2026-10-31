@@ -7,6 +7,7 @@ export type SessionScope = "public" | "portal";
 
 const ACCOUNTS_KEY = "vgmf_accounts";
 const SECURITY_SETTINGS_KEY = "vgmf_settings_security";
+const SIGNED_OUT_PREFIX = "vgmf_signed_out_";
 /** Chrome caps Max-Age at 400 days; keep the cookie for that full window. */
 const SESSION_COOKIE_MAX_AGE = 34560000;
 const COOKIE_MAX_BYTES = 3500;
@@ -79,6 +80,68 @@ function cookieFlags(maxAge: number) {
   return `Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
+function signedOutKey(scope: SessionScope) {
+  return `${SIGNED_OUT_PREFIX}${scope}`;
+}
+
+function expireCookie(name: string) {
+  if (typeof globalThis.document === "undefined") return;
+  const expired = "Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; SameSite=Lax";
+  const extras = [""];
+  extras.push("; Secure");
+  if (browser()) {
+    const host = globalThis.window.location.hostname;
+    if (host) {
+      extras.push(`; Domain=${host}`, `; Domain=${host}; Secure`);
+      const root = host.replace(/^www\./, "");
+      if (root.includes(".")) extras.push(`; Domain=.${root}`, `; Domain=.${root}; Secure`);
+    }
+  }
+  for (const extra of extras) {
+    globalThis.document.cookie = `${name}=; ${expired}${extra}`;
+  }
+}
+
+export function isSignedOut(scope: SessionScope = "public") {
+  if (!browser()) return false;
+  if (readCookie(signedOutKey(scope)) === "1") return true;
+  try {
+    if (globalThis.window.sessionStorage.getItem(signedOutKey(scope)) === "1") return true;
+  } catch {
+    /* private mode */
+  }
+  try {
+    return globalThis.window.localStorage.getItem(signedOutKey(scope)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markSignedOut(scope: SessionScope, value: boolean) {
+  if (!browser()) return;
+  const key = signedOutKey(scope);
+  try {
+    if (value) globalThis.window.sessionStorage.setItem(key, "1");
+    else globalThis.window.sessionStorage.removeItem(key);
+  } catch {
+    /* private mode */
+  }
+  try {
+    if (value) globalThis.window.localStorage.setItem(key, "1");
+    else globalThis.window.localStorage.removeItem(key);
+  } catch {
+    /* private mode */
+  }
+  if (typeof globalThis.document === "undefined") return;
+  if (value) globalThis.document.cookie = `${key}=1; ${cookieFlags(SESSION_COOKIE_MAX_AGE)}`;
+  else expireCookie(key);
+}
+
+export function leaveAfterSignOut(href = "/login") {
+  if (!browser()) return;
+  globalThis.window.location.assign(href);
+}
+
 function writeSessionCookie(scope: SessionScope, user: User) {
   if (typeof globalThis.document === "undefined") return;
   const value = encodeURIComponent(JSON.stringify(stripPassword(user)));
@@ -87,8 +150,7 @@ function writeSessionCookie(scope: SessionScope, user: User) {
 }
 
 function clearSessionCookie(scope: SessionScope) {
-  if (typeof globalThis.document === "undefined") return;
-  globalThis.document.cookie = `${storageKey(scope)}=; ${cookieFlags(0)}`;
+  expireCookie(storageKey(scope));
 }
 
 let notifyingSession = false;
@@ -131,6 +193,10 @@ function migrateLegacyAdminSession() {
 }
 
 function restoreFromCookie(scope: SessionScope): User | null {
+  if (isSignedOut(scope)) {
+    clearSessionCookie(scope);
+    return null;
+  }
   const fromCookie = parseUser(readCookie(storageKey(scope)));
   if (!fromCookie) return null;
   if (scope === "public" && isPortalRole(fromCookie.role)) return null;
@@ -148,6 +214,10 @@ export function getSession(scope?: SessionScope): User | null {
   if (!browser()) return null;
   migrateLegacyAdminSession();
   const resolved = scope ?? scopeFromPath();
+  if (isSignedOut(resolved)) {
+    clearSessionCookie(resolved);
+    return null;
+  }
   const fromStorage = parseUser(globalThis.window.localStorage.getItem(storageKey(resolved)));
   if (fromStorage) {
     if (resolved === "public" && isPortalRole(fromStorage.role)) {
@@ -167,6 +237,7 @@ export function setSession(user: User, scope?: SessionScope) {
   if (isPortalRole(user.role)) resolved = "portal";
   else if (resolved === "portal") resolved = "public";
   const stored = stripPassword(user);
+  markSignedOut(resolved, false);
   globalThis.window.localStorage.setItem(storageKey(resolved), JSON.stringify(stored));
   writeSessionCookie(resolved, stored);
   notifySessionChanged();
@@ -176,6 +247,7 @@ export function clearSession(scope?: SessionScope) {
   if (!browser()) return;
   const resolved = scope ?? scopeFromPath();
   globalThis.window.localStorage.removeItem(storageKey(resolved));
+  markSignedOut(resolved, true);
   clearSessionCookie(resolved);
   notifySessionChanged();
 }

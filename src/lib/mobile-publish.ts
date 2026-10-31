@@ -17,6 +17,7 @@ import { defaultMobileAppConfig, getMobileAppConfig, type MobileAppConfig } from
 import { getPolicies } from "@/lib/policies";
 import { getLiveBooks } from "@/lib/product-data";
 import { getSiteVisibility } from "@/lib/site-visibility";
+import { getPlatformCountries } from "@/lib/platform-countries";
 import type { MobileFeed } from "@/lib/mobile-types";
 
 /** Assemble the public app feed from the admin CMS in this browser. */
@@ -27,9 +28,9 @@ export function collectMobileSnapshot(): MobileFeed {
     site: {
       name: settings.siteName || siteConfig.name,
       tagline: settings.tagline || siteConfig.tagline,
-      logoUrl: settings.logoUrl || "",
+      logoUrl: settings.logoUrl || "/uploads/site-logo.png",
       logoText: settings.logoText || "",
-      faviconUrl: settings.faviconUrl || "",
+      faviconUrl: settings.faviconUrl || settings.logoUrl || "/icon.png",
       email: settings.supportEmail || siteConfig.email,
       phone: settings.supportPhone || siteConfig.phone,
       address: siteConfig.address,
@@ -51,6 +52,7 @@ export function collectMobileSnapshot(): MobileFeed {
     policies: getPolicies(),
     faqs: getFaqs().filter((item) => item.active !== false),
     appearance: getPublishedAppearance(),
+    platformCountries: getPlatformCountries(),
   };
 }
 
@@ -60,9 +62,9 @@ export function emptyFeedFallback(mobile: MobileAppConfig = defaultMobileAppConf
     site: {
       name: siteConfig.name,
       tagline: siteConfig.tagline,
-      logoUrl: "",
+      logoUrl: "/uploads/site-logo.png",
       logoText: "",
-      faviconUrl: "",
+      faviconUrl: "/icon.png",
       email: siteConfig.email,
       phone: siteConfig.phone,
       address: siteConfig.address,
@@ -84,6 +86,7 @@ export function emptyFeedFallback(mobile: MobileAppConfig = defaultMobileAppConf
     policies: {},
     faqs: [],
     appearance: defaultAppearance,
+    platformCountries: { allowInternational: true, enabledCountryCodes: [] },
   };
 }
 

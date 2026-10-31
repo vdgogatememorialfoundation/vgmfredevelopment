@@ -3,7 +3,7 @@ import appJson from "./app.json";
 type FlavorId = "customer" | "admin" | "staff" | "support";
 
 const FLAVORS: Record<FlavorId, { name: string; androidPackage: string; iosBundle: string }> = {
-  customer: { name: "VGMF", androidPackage: "org.vaidyagogate.customer", iosBundle: "org.vaidyagogate.customer" },
+  customer: { name: "Vaidya Gogate Memorial Foundation", androidPackage: "org.vaidyagogate.customer", iosBundle: "org.vaidyagogate.customer" },
   admin: { name: "VGMF Admin", androidPackage: "org.vaidyagogate.admin", iosBundle: "org.vaidyagogate.admin" },
   staff: { name: "VGMF Staff", androidPackage: "org.vaidyagogate.staff", iosBundle: "org.vaidyagogate.staff" },
   support: { name: "VGMF Support", androidPackage: "org.vaidyagogate.support", iosBundle: "org.vaidyagogate.support" },

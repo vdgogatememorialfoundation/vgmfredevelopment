@@ -32,6 +32,7 @@ import { useOrderSettings } from "@/lib/use-cms";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
+import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
 
 type CourierOption = CourierRate & { key: string; deliverBy: string };
 
@@ -202,6 +203,8 @@ export default function CheckoutClient() {
       return quote.note || "Delivery is not available for this pincode.";
     if (!isValidPhone(address.phone))
       return "Please enter a valid international phone number, including country code.";
+    if (!isCountryEnabled(address.countryCode, getPlatformCountries()))
+      return "The Foundation is not delivering to this country yet.";
     return "";
   };
 
@@ -225,7 +228,7 @@ export default function CheckoutClient() {
         payment = {
           paymentId: outcome.paymentId,
           razorpayOrderId: outcome.kind === "paid" ? outcome.razorpayOrderId : undefined,
-          method: outcome.live ? "Razorpay" : "Razorpay (demo)",
+          method: outcome.live ? "Online" : "Online (demo)",
           paid: true,
         };
       } catch (problem) {
@@ -694,11 +697,9 @@ export default function CheckoutClient() {
         {/* 3. Payment */}
         {step === "payment" && (
           <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
-            <h2 className="heading-3 mb-4">Secure Payment</h2>
+            <h2 className="heading-3 mb-4">Payment</h2>
             <p className="text-sm text-text-muted">
-              Payments are processed securely by{" "}
-              <span className="font-semibold text-text-primary">Razorpay</span>.
-              Your card and bank details are never stored on our servers.
+              Pay online with UPI, cards, net banking or wallets. Your card and bank details are never stored on our servers.
             </p>
 
             <div className="mt-5 flex items-center justify-between rounded-xl border border-border bg-warm-cream p-5">
@@ -728,7 +729,7 @@ export default function CheckoutClient() {
                 <input type="radio" name="payment-method" checked={!codSelected} onChange={() => setPayMethod("online")} className="mt-1 accent-burgundy" />
                 <span>
                   <span className="block font-semibold text-text-primary">Pay online</span>
-                  <span className="block text-xs text-text-muted">UPI, cards, net banking and wallets through Razorpay</span>
+                  <span className="block text-xs text-text-muted">UPI, cards, net banking and wallets</span>
                 </span>
               </label>
               {orderSettings.codEnabled && deliveryMode === "delivery" && (
@@ -755,8 +756,8 @@ export default function CheckoutClient() {
               className="btn-primary mt-6 w-full disabled:cursor-not-allowed disabled:opacity-60"
             >
               {processing
-                ? codSelected ? "Placing order…" : "Waiting for Razorpay…"
-                : codSelected ? `Place order · pay ${formatPrice(totals.total)} on delivery` : `Pay ${formatPrice(totals.total)} via Razorpay`}
+                ? codSelected ? "Placing order…" : "Processing payment…"
+                : codSelected ? `Place order · pay ${formatPrice(totals.total)} on delivery` : `Pay ${formatPrice(totals.total)}`}
             </button>
 
             {paymentNotice() && !codSelected && (
@@ -834,12 +835,6 @@ export default function CheckoutClient() {
                 <dt className="text-text-muted">Subtotal</dt>
                 <dd className="font-medium text-text-primary">
                   {formatPrice(totals.subtotal)}
-                </dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-text-muted">GST</dt>
-                <dd className="font-medium text-text-primary">
-                  {formatPrice(totals.gst)}
                 </dd>
               </div>
               <div className="flex justify-between">

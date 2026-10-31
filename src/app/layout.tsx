@@ -65,6 +65,7 @@ export function generateMetadata(): Metadata {
   const url = publicSiteUrl();
   const hosted = platformEnv();
   const noIndex = hosted === "demo" || hosted === "staging";
+  const icon = "/icon.png";
   return {
     metadataBase: new URL(url),
     title: {
@@ -87,6 +88,14 @@ export function generateMetadata(): Metadata {
     publisher: siteConfig.name,
     category: "education",
     applicationName: siteConfig.shortName,
+    icons: {
+      icon: [
+        { url: `${icon}?v=135`, type: "image/png" },
+        { url: "/favicon.ico", sizes: "48x48" },
+      ],
+      apple: [{ url: `${icon}?v=135` }],
+      shortcut: `${icon}?v=135`,
+    },
     robots: noIndex
       ? { index: false, follow: false, googleBot: { index: false, follow: false } }
       : { index: true, follow: true, googleBot: { index: true, follow: true } },

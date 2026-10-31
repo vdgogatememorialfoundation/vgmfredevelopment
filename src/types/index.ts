@@ -473,6 +473,7 @@ export interface Order {
     | "Accepted"
     | "Packed"
     | "Ready to Ship"
+    | "To Ship"
     | "Shipped"
     | "Out for Delivery"
     | "Delivered"

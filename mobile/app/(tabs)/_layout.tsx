@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { moduleOn } from "../../src/api";
 import { useFeed } from "../../src/feed";
@@ -18,7 +19,15 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.muted,
-          tabBarStyle: { backgroundColor: theme.colors.paper, borderTopColor: theme.colors.border },
+          tabBarLabelStyle: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6, marginBottom: Platform.OS === "android" ? 4 : 0 },
+          tabBarStyle: {
+            backgroundColor: theme.colors.paper,
+            borderTopColor: theme.colors.border,
+            borderTopWidth: 1,
+            height: Platform.OS === "android" ? 62 : 84,
+            paddingTop: 6,
+            paddingBottom: Platform.OS === "android" ? 8 : 20,
+          },
           sceneStyle: { backgroundColor: theme.colors.background },
         }}
       >
@@ -28,7 +37,9 @@ export default function TabsLayout() {
             name={tabFile(tab.id)}
             options={{
               title: tab.title,
-              tabBarIcon: ({ color, size }) => <Ionicons name={tab.icon as never} color={color} size={size} />,
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons name={(focused ? tab.icon : `${tab.icon}-outline`) as never} color={color} size={size} />
+              ),
             }}
           />
         ))}

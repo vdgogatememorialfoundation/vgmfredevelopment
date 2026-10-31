@@ -1,51 +1,73 @@
 import { useMemo, useState } from "react";
+import { Linking, View } from "react-native";
 import { router } from "expo-router";
-import { formatDate, isPastDate, mediaUrl, str } from "../../src/api";
+import { formatDate, getApiBase, isPastDate, isRegistrationClosed, mediaUrl, money, str } from "../../src/api";
+import { TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { Card, Cover, Empty, Heading, Loading, Muted, Screen, SearchBar, SectionHeader, StatusChip } from "../../src/ui";
-import { useTheme } from "../../src/theme";
+import { SITE } from "../../src/site-content";
+import { Button, Card, Chip, Cover, DateBadge, Empty, Heading, Loading, Muted, PageHeader, Screen, SiteFooter, StatusChip } from "../../src/ui";
 
 export default function EventsScreen() {
-  const { feed, loading, refresh, error } = useFeed();
-  const theme = useTheme();
-  const [query, setQuery] = useState("");
+  const { feed, loading, refresh } = useFeed();
+  const [scope, setScope] = useState<"upcoming" | "past" | "all">("all");
   const items = feed?.events ?? [];
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items.filter((item) =>
-      !q || [item.name, item.city, item.venue, item.eventType, item.shortDescription].some((value) => str(value).toLowerCase().includes(q))
-    );
-  }, [items, query]);
-  const upcoming = filtered.filter((item) => !isPastDate(item.endDate || item.startDate));
-  const past = filtered.filter((item) => isPastDate(item.endDate || item.startDate));
+  const upcoming = items.filter((item) => !isPastDate(item.endDate || item.startDate));
+  const past = items.filter((item) => isPastDate(item.endDate || item.startDate));
+  const shown = useMemo(() => (scope === "upcoming" ? upcoming : scope === "past" ? past : items), [items, past, scope, upcoming]);
   if (loading && !feed) return <Loading />;
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <SectionHeader title={theme.labels.events} subtitle={error ? undefined : "Published Foundation events"} />
-      <SearchBar value={query} onChange={setQuery} placeholder="Search events" />
-      {upcoming.length ? <SectionHeader title="Upcoming" /> : null}
-      {upcoming.map((item) => (
-        <Card key={str(item.id)} onPress={() => router.push(`/event/${str(item.id)}`)}>
-          <Cover uri={mediaUrl(item.bannerUrl) || undefined} height={140} />
-          <Heading>{str(item.name)}</Heading>
-          <Muted>{[str(item.city), str(item.venue), formatDate(item.startDate)].filter(Boolean).join(" · ")}</Muted>
-          <StatusChip label={str(item.registrationStatus, str(item.mode))} />
-        </Card>
-      ))}
-      {past.length ? <SectionHeader title="Past" /> : null}
-      {past.map((item) => (
-        <Card key={str(item.id)} onPress={() => router.push(`/event/${str(item.id)}`)}>
-          <Heading>{str(item.name)}</Heading>
-          <Muted>{[str(item.city), formatDate(item.startDate)].filter(Boolean).join(" · ")}</Muted>
-        </Card>
-      ))}
-      {!filtered.length ? (
+      <TopBar />
+      <PageHeader kicker="Academic assemblies" title="Events" subtitle="Every Foundation event from the website — upcoming and past assemblies, workshops and programmes." />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        <Chip label={`Upcoming (${upcoming.length})`} selected={scope === "upcoming"} onPress={() => setScope("upcoming")} />
+        <Chip label={`Past (${past.length})`} selected={scope === "past"} onPress={() => setScope("past")} />
+        <Chip label={`All events (${items.length})`} selected={scope === "all"} onPress={() => setScope("all")} />
+      </View>
+      {shown.map((item) => {
+        const register = str(item.registrationUrl);
+        const closed = isRegistrationClosed(item);
+        return (
+          <Card key={str(item.id)} onPress={() => router.push(`/event/${str(item.id)}`)}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <DateBadge label={formatDate(item.startDate)} />
+              <StatusChip label={closed ? "Registration closed" : str(item.mode, str(item.registrationStatus))} />
+            </View>
+            <Cover uri={mediaUrl(item.bannerUrl) || undefined} height={148} />
+            <Muted>{str(item.eventType, "Official assembly")}</Muted>
+            <Heading>{str(item.name)}</Heading>
+            <Muted>{[str(item.venue), str(item.city)].filter(Boolean).join(" · ")}</Muted>
+            <Muted>{str(item.shortDescription)}</Muted>
+            {Number(item.fee) ? <Muted>Delegation fee · {money(item.fee)}</Muted> : null}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Button kind="ghost" label="View details" onPress={() => router.push(`/event/${str(item.id)}`)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                {closed ? (
+                  <Button kind="ghost" label="Registration closed" disabled onPress={() => undefined} />
+                ) : (
+                  <Button label="Register now" onPress={() => (register ? void Linking.openURL(register) : void Linking.openURL(`${getApiBase()}${SITE.eventsUrl}`))} />
+                )}
+              </View>
+            </View>
+          </Card>
+        );
+      })}
+      {!shown.length ? (
         <Empty
-          label={items.length ? "No published events match that search." : "No published events are in the app feed yet. Pull to refresh after Admin publishes."}
-          actionLabel="Refresh"
-          onAction={() => void refresh()}
+          icon="calendar-outline"
+          label="No events are listed yet. Pull to refresh after the website is updated."
+          actionLabel="Open website events"
+          onAction={() => void Linking.openURL(`${getApiBase()}${SITE.eventsUrl}`)}
         />
       ) : null}
+      <Card>
+        <Heading>Certificate verification</Heading>
+        <Muted>Attended a VGMF event? Verify your participation certificate with your registration ID.</Muted>
+        <Button kind="ink" icon="ribbon-outline" label="Verify & authenticate" onPress={() => router.push("/certificates")} />
+      </Card>
+      <SiteFooter />
     </Screen>
   );
 }

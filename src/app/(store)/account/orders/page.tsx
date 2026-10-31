@@ -179,12 +179,6 @@ export default function OrdersPage() {
                             </dd>
                           </div>
                           <div className="flex justify-between">
-                            <dt className="text-text-muted">GST</dt>
-                            <dd className="font-medium text-text-primary">
-                              {formatPrice(order.gst)}
-                            </dd>
-                          </div>
-                          <div className="flex justify-between">
                             <dt className="text-text-muted">Shipping</dt>
                             <dd className="font-medium text-text-primary">
                               {order.shipping === 0

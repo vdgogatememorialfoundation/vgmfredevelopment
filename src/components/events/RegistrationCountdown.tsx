@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { Event } from "@/types";
 import { formatCountdown } from "@/lib/schedule";
+import { isRegistrationClosed } from "@/lib/event-status";
 
 type TimerRow = { id: string; at: number; label: string };
 
@@ -21,7 +22,7 @@ function timersFor(event: Event, now: number): TimerRow[] {
       rows.push({ id: "start", at: starts, label: "Event starts in" });
     }
   }
-  if (event.registrationStatus !== "Closed" && !event.tbd?.registration) {
+  if (!isRegistrationClosed(event, now) && !event.tbd?.registration) {
     const opens = parseStamp(event.registrationStart);
     const closes = parseStamp(event.registrationEnd);
     if (Number.isFinite(opens) && opens > now) {

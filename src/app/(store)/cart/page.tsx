@@ -192,12 +192,6 @@ export default function CartPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-text-muted">GST</dt>
-                  <dd className="font-medium text-text-primary">
-                    {formatPrice(totals.gst)}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
                   <dt className="text-text-muted">Shipping</dt>
                   <dd className="font-medium text-text-primary">
                     {totals.shipping === 0 ? "FREE" : formatPrice(totals.shipping)}

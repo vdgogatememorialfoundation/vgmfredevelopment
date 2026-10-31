@@ -12,6 +12,7 @@ import { loginBlockReason } from "@/lib/auth"
 import { LoginStamp } from "@/components/layout/LoginStamp"
 import { isStaffModuleEnabled } from "@/lib/site-visibility"
 import { hydratePartnerFeed } from "@/lib/partner-hydrate"
+import { LivePublishBridge } from "@/components/admin/LivePublishBridge"
 
 export default function AdminLayout({
   children,
@@ -133,6 +134,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
+      <LivePublishBridge />
       <div className="flex min-h-screen">
         <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:block">
           <div className="sticky top-0 flex h-screen flex-col">

@@ -6,7 +6,7 @@ type CartContextValue = {
   items: CartItem[];
   count: number;
   total: number;
-  add: (item: Omit<CartItem, "quantity">) => void;
+  add: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   setQuantity: (id: string, quantity: number) => void;
   remove: (id: string) => void;
   clear: () => void;
@@ -23,11 +23,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       items,
       count,
       total,
-      add: (item) =>
+      add: (item, quantity = 1) =>
         setItems((current) => {
+          const extra = Math.max(1, Math.min(20, Math.floor(quantity)));
           const found = current.find((row) => row.id === item.id);
-          if (found) return current.map((row) => (row.id === item.id ? { ...row, quantity: row.quantity + 1 } : row));
-          return [...current, { ...item, quantity: 1 }];
+          if (found) return current.map((row) => (row.id === item.id ? { ...row, quantity: Math.min(20, row.quantity + extra) } : row));
+          return [...current, { ...item, quantity: extra }];
         }),
       setQuantity: (id, quantity) =>
         setItems((current) => {

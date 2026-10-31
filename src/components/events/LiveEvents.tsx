@@ -14,6 +14,7 @@ const scheduleKeys = eventRecordKeys("schedule");
 const useSpeakerRecords = collectionHook<EventRecord>(speakerKeys.edits, speakerKeys.custom, [], () => getEventRecords("speakers"));
 const useScheduleRecords = collectionHook<EventRecord>(scheduleKeys.edits, scheduleKeys.custom, [], () => getEventRecords("schedule"));
 import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, eventTimeText } from "@/lib/event-display";
+import { isEventPast, isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
 import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
@@ -24,10 +25,10 @@ export function EventsIndex() {
   const now = useScheduleTick();
   const events = useLiveEvents().filter((event) => isPublishedNow(event, now));
   const upcoming = events
-    .filter((event) => event.registrationStatus !== "Closed")
+    .filter((event) => !isEventPast(event, now))
     .sort(compareEventDates);
   const past = events
-    .filter((event) => event.registrationStatus === "Closed")
+    .filter((event) => isEventPast(event, now))
     .sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
@@ -108,7 +109,7 @@ export function LiveEventPage({ slug }: { slug: string }) {
           <Link href="/events" className="text-sm text-text-muted hover:text-burgundy">Events</Link>
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge tone="burgundy">{event.eventType}</Badge>
-            <Badge tone="neutral">{event.registrationStatus}</Badge>
+            <Badge tone="neutral">{resolvedRegistrationStatus(event, now)}</Badge>
           </div>
           <h1 className="heading-1 mt-4">{event.name}</h1>
           {event.bannerUrl && /^(https?:|data:image|\/)/i.test(event.bannerUrl) && (
@@ -176,13 +177,17 @@ export function LiveEventPage({ slug }: { slug: string }) {
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
             </dl>
-            {event.tbd?.registration || !event.registrationUrl?.trim() ? (
+            {isRegistrationClosed(event, now) ? (
+              <p className="btn-outline mt-5 w-full pointer-events-none cursor-not-allowed opacity-60">
+                {t("events.closed")}
+              </p>
+            ) : event.tbd?.registration || !event.registrationUrl?.trim() ? (
               <p className="mt-5 rounded-xl border border-dashed border-border bg-warm-cream px-4 py-3 text-sm text-text-muted">
                 Registration link {TBA.toLowerCase()}.
               </p>
             ) : (
               <a href={event.registrationUrl} target="_blank" rel="noopener noreferrer" className="btn-primary mt-5 w-full">
-                Register
+                {t("events.register")}
               </a>
             )}
             {!event.tbd?.venue && mapsEmbedUrl(event) && (

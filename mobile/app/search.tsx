@@ -2,7 +2,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useMemo, useState } from "react";
 import { formatDate, mediaUrl, money, str } from "../src/api";
 import { useFeed } from "../src/feed";
-import { Card, Cover, Empty, Heading, Loading, Muted, Screen, SearchBar, SectionHeader } from "../src/ui";
+import { Card, Cover, Empty, Heading, Loading, Muted, PageHeader, Screen, SearchBar, SectionHeader } from "../src/ui";
 
 export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string }>();
@@ -23,9 +23,10 @@ export default function SearchScreen() {
   if (loading && !feed) return <Loading />;
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
+      <PageHeader kicker="Find" title="Search" subtitle="Publications, events, clinics and articles from the live app feed." />
       <SearchBar value={query} onChange={setQuery} placeholder="Search the published catalogue" />
-      {!q ? <Muted>Search publications, events, clinics and articles from the live app feed.</Muted> : null}
-      {q && !total ? <Empty label="Nothing in the published feed matches that search." /> : null}
+      {!q ? <Muted>Type a name, city, author or topic.</Muted> : null}
+      {q && !total ? <Empty icon="search-outline" label="Nothing in the published feed matches that search." /> : null}
       {results.books.length ? <SectionHeader title="Publications" /> : null}
       {results.books.map((item) => (
         <Card key={str(item.id)} onPress={() => router.push(`/book/${str(item.id)}`)}>

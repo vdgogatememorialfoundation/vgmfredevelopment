@@ -159,6 +159,15 @@ export function MobileAppDesk() {
           />
           Show Android app download on the public site
         </label>
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-burgundy"
+            checked={config.showDeveloperCredit !== false}
+            onChange={(event) => patch({ showDeveloperCredit: event.target.checked })}
+          />
+          Show “Developed by Capture Visual Studios” in the Android app
+        </label>
         <div className="mt-4 border-t border-slate-100 pt-4">
           <button type="button" className={primary} onClick={save}>
             Save

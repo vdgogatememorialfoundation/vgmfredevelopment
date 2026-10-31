@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   cancelOrder,
   createAdminOrder,
@@ -48,6 +48,7 @@ import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, Stat
 import { AccountSearch } from "@/components/admin/AccountSearch";
 import { accountToDelivery } from "@/lib/account-search";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesFor } from "@/lib/geo";
+import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
 
@@ -58,6 +59,7 @@ const ALL_STATUSES: Order["status"][] = [
   "Accepted",
   "Packed",
   "Ready to Ship",
+  "To Ship",
   "Shipped",
   "Out for Delivery",
   "Delivered",
@@ -108,6 +110,9 @@ export function OrdersDashboard() {
   const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
   const toPack = orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length;
   const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery").length;
+  const toShip = orders.filter((order) => order.status === "To Ship" || order.status === "Ready to Ship" || order.status === "Packed").length;
+  const outForDelivery = orders.filter((order) => order.status === "Out for Delivery").length;
+  const delivered = orders.filter((order) => order.status === "Delivered").length;
   const inTransit = orders.filter((order) => order.status === "Shipped" || order.status === "Out for Delivery").length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
 
@@ -142,9 +147,12 @@ export function OrdersDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {[
           ["To pack", toPack, "Accepted"],
+          ["To Ship", toShip, "To Ship"],
+          ["Out for Delivery", outForDelivery, "Out for Delivery"],
+          ["Delivered", delivered, "Delivered"],
           ["Awaiting payment", awaitingPayment, "Pending"],
           ["In transit", inTransit, "Shipped"],
           ["Open returns", returns, "All"],
@@ -171,11 +179,13 @@ export function OrdersDashboard() {
             const order = getOrderByAdmin(id);
             if (order?.deliveryMode === "delivery" && getIntegrations().shipping.autoBookOnPack) await bookShipment(id);
           })}>Pack</Button>
-          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ready to ship", async (id) => {
-            setOrderStatus(id, "Ready to Ship");
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("To Ship", async (id) => {
+            setOrderStatus(id, "To Ship");
             const order = getOrderByAdmin(id);
             if (order?.deliveryMode === "delivery") await bookShipment(id);
-          })}>Ready to ship</Button>
+          })}>To Ship</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Out for Delivery", (id) => setOrderStatus(id, "Out for Delivery"))}>Out for Delivery</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Delivered", (id) => setOrderStatus(id, "Delivered"))}>Delivered</Button>
           <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]))}>Excel</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(filtered.filter((order) => picked[order.id]))}>PDF</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Labels", async (id) => {
@@ -305,6 +315,46 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const [shippingOverride, setShippingOverride] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [postalNote, setPostalNote] = useState("");
+  const lastPostal = useRef("");
+  const customerRef = useRef(customer);
+  customerRef.current = customer;
+
+  useEffect(() => {
+    const pin = customer.pincode.trim();
+    if (!postalLooksComplete(pin, customer.countryCode)) {
+      setPostalNote("");
+      return;
+    }
+    const key = `${customer.countryCode}:${pin}`;
+    if (lastPostal.current === key) return;
+    const timer = window.setTimeout(() => {
+      lastPostal.current = key;
+      void fetchPostalPlace(pin, customer.countryCode)
+        .then((place) => {
+          if (!place) {
+            setPostalNote("Postal code not found. Enter city, state and country.");
+            return;
+          }
+          const current = customerRef.current;
+          const nextStates = statesFor(place.countryCode);
+          lastPostal.current = `${place.countryCode}:${place.pincode || pin}`;
+          setCustomer({
+            ...current,
+            city: place.city || current.city,
+            state: nextStates.includes(place.state) ? place.state : place.state || current.state,
+            country: place.country,
+            countryCode: place.countryCode,
+            pincode: place.pincode || pin,
+          });
+          setPostalNote(`${place.city}${place.state ? `, ${place.state}` : ""}, ${place.country}`);
+          setQuote(null);
+          setPicked(undefined);
+        })
+        .catch(() => setPostalNote("Could not look up this postal code."));
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [customer.countryCode, customer.pincode]);
 
   const setRow = (index: number, patch: Partial<{ bookId: string; quantity: number }>) =>
     setItems((list) => list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -396,15 +446,32 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name"><TextInput value={customer.fullName} onChange={(event) => setCustomer({ ...customer, fullName: event.target.value })} /></Field>
-            <Field label="Phone"><TextInput value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} placeholder="+91" /></Field>
+            <Field label="Phone (international)"><TextInput value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} placeholder={`${countryByCode(customer.countryCode).dial} 98765 43210`} /></Field>
             <Field label="Email"><TextInput value={customer.email ?? ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} /></Field>
-            <Field label={isIndia(customer.countryCode) ? "Pincode" : "Postal code"}><TextInput value={customer.pincode} onChange={(event) => { setCustomer({ ...customer, pincode: event.target.value }); setQuote(null); setPicked(undefined); }} /></Field>
+            <Field label={isIndia(customer.countryCode) ? "Pincode" : "Postal code"}>
+              <TextInput
+                value={customer.pincode}
+                onChange={(event) => {
+                  lastPostal.current = "";
+                  setCustomer({
+                    ...customer,
+                    pincode: isIndia(customer.countryCode)
+                      ? event.target.value.replace(/\D/g, "").slice(0, 6)
+                      : event.target.value.slice(0, 12),
+                  });
+                  setQuote(null);
+                  setPicked(undefined);
+                }}
+                placeholder={isIndia(customer.countryCode) ? "6-digit PIN fills city, state, country" : "Postal code fills city, state, country"}
+              />
+            </Field>
             <Field label="Country">
               <SelectInput
                 value={customer.countryCode || "IN"}
                 onChange={(event) => {
                   const next = countryByCode(event.target.value);
                   const nextStates = statesFor(next.code);
+                  lastPostal.current = "";
                   setCustomer({
                     ...customer,
                     countryCode: next.code,
@@ -435,6 +502,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
                   <TextInput value={customer.state} onChange={(event) => setCustomer({ ...customer, state: event.target.value })} />
                 )}
               </Field>
+              {postalNote ? <p className="sm:col-span-2 text-xs text-text-muted">{postalNote}</p> : null}
             </div>
           )}
           <div>

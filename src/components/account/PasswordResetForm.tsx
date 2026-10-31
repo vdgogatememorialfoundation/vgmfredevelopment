@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { remoteAccountToUser, remoteForgot, remoteReset } from "@/lib/account-api";
 import { accountForReset, applyPasswordReset, changeAccountPassword, sendPasswordResetCode, type ResetRole } from "@/lib/password-reset";
 import { getAccounts } from "@/lib/admin-store";
 import { lookupPartnerAccount } from "@/lib/partner-hydrate";
@@ -25,6 +26,7 @@ export function ForgotPasswordForm({
   const [hint, setHint] = useState("");
   const [error, setError] = useState("");
   const [account, setAccount] = useState<User | null>(null);
+  const [remoteEmail, setRemoteEmail] = useState("");
 
   const sendCode = (target: User) => {
     sendPasswordResetCode(target, role);
@@ -37,6 +39,16 @@ export function ForgotPasswordForm({
   const submitIdentify = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
+    try {
+      const remote = await remoteForgot(identifier);
+      setRemoteEmail(String(remote.email || ""));
+      setHint(String(remote.message || `A reset code was sent to ${remote.email}.`));
+      setError("");
+      setStep("code");
+      return;
+    } catch {
+      /* fall back to the browser store when the shared account API is offline */
+    }
     await lookupPartnerAccount({ identifier });
     const found = accountForReset(identifier, role);
     if ("error" in found && found.error) {
@@ -48,7 +60,7 @@ export function ForgotPasswordForm({
 
   const submitCode = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!account) return;
+    if (!account && !remoteEmail) return;
     if (code.trim().length !== 6) {
       setError("Enter the 6-digit code.");
       return;
@@ -59,21 +71,42 @@ export function ForgotPasswordForm({
 
   const submitPassword = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!account) return;
     if (password !== confirm) {
       setError("The new passwords do not match.");
       return;
     }
-    const invalid = applyPasswordReset(account.email, role, code, password);
-    if (invalid) {
-      setError(invalid);
-      if (invalid.toLowerCase().includes("code")) setStep("code");
-      return;
-    }
-    const next = getAccounts().find((item) => item.email.toLowerCase() === account.email.toLowerCase()) ?? { ...account, password };
-    setError("");
-    setStep("done");
-    onComplete?.(next);
+    void (async () => {
+      if (remoteEmail) {
+        try {
+          const result = await remoteReset(remoteEmail, code, password);
+          const next = result.account
+            ? remoteAccountToUser(result.account, { password, foundationPasswordSet: true })
+            : account
+              ? { ...account, password, foundationPasswordSet: true }
+              : null;
+          setError("");
+          setStep("done");
+          if (next) onComplete?.(next);
+          return;
+        } catch (err) {
+          const message = (err as Error).message;
+          setError(message);
+          if (message.toLowerCase().includes("code")) setStep("code");
+          return;
+        }
+      }
+      if (!account) return;
+      const invalid = applyPasswordReset(account.email, role, code, password);
+      if (invalid) {
+        setError(invalid);
+        if (invalid.toLowerCase().includes("code")) setStep("code");
+        return;
+      }
+      const next = getAccounts().find((item) => item.email.toLowerCase() === account.email.toLowerCase()) ?? { ...account, password };
+      setError("");
+      setStep("done");
+      onComplete?.(next);
+    })();
   };
 
   return (
@@ -119,7 +152,19 @@ export function ForgotPasswordForm({
           {hint ? <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{hint}</p> : null}
           {error ? <ErrorText text={error} /> : null}
           <button type="submit" className="btn-primary w-full">Continue</button>
-          <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => account && sendCode(account)}>
+          <button
+            type="button"
+            className="w-full text-sm font-semibold text-burgundy"
+            onClick={() => {
+              if (remoteEmail) {
+                void remoteForgot(remoteEmail || identifier)
+                  .then((remote) => setHint(String(remote.message || `A reset code was sent to ${remote.email}.`)))
+                  .catch((err) => setError((err as Error).message));
+                return;
+              }
+              if (account) sendCode(account);
+            }}
+          >
             Resend code
           </button>
         </form>

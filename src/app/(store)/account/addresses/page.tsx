@@ -10,8 +10,8 @@ export default function AddressesPage() {
       />
       <EmptyState
         title="No saved addresses"
-        description="Add a shipping address for faster checkouts and to track your orders."
-        cta={{ label: "Go to Checkout", href: "/checkout" }}
+        description="Add a shipping address from the cart when you place a shop order."
+        cta={{ label: "Browse the Shop", href: "/shop" }}
       />
     </div>
   );

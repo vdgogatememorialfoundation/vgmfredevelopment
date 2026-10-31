@@ -10,8 +10,8 @@ export default function CardsPage() {
       />
       <EmptyState
         title="No saved cards"
-        description="Cards are saved securely through our payment gateway after a successful checkout. You can manage them here."
-        cta={{ label: "Go to Checkout", href: "/checkout" }}
+        description="Cards can be saved after a successful shop order. You can manage them here."
+        cta={{ label: "Browse the Shop", href: "/shop" }}
       />
     </div>
   );

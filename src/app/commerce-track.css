@@ -65,22 +65,6 @@
   color: var(--tl-text);
   transition: --grow var(--draw, 0s) linear;
 }
-.vgmf-ship-pipe > li .vgmf-headway {
-  position: absolute;
-  left: 10px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--tl-green);
-  box-shadow: 0 0 0 4px rgba(6, 125, 98, 0.16);
-  top: calc(34px + (100% - 34px) * var(--grow, 0));
-  z-index: 2;
-  pointer-events: none;
-}
-.vgmf-ship-pipe > li.is-failed .vgmf-headway {
-  background: #c2410c;
-  box-shadow: 0 0 0 4px rgba(194, 65, 12, 0.16);
-}
 .vgmf-ship-pipe > li > .dot {
   position: absolute;
   left: 0;

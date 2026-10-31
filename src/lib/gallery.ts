@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 
 const KEY = "vgmf_gallery";
 
-export const GALLERY_CATEGORIES = ["Foundation", "Seminars", "Clinics", "Events", "Archives", "Community"] as const;
+export const GALLERY_CATEGORIES = ["Foundation", "Seminars", "Clinics", "Events", "Community"] as const;
 
 export type GalleryCategory = (typeof GALLERY_CATEGORIES)[number] | string;
 

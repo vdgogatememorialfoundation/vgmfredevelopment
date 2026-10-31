@@ -25,12 +25,15 @@ export default function SupportPage() {
           Sign in, then use Support Tickets to send a message to the Foundation team.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/login?next=/account/tickets" className="btn-primary">
-            Sign in to raise a ticket
-          </Link>
-          <Link href="/account/tickets" className="btn-outline">
-            Go to my tickets
-          </Link>
+          {isAuthenticated && user ? (
+            <Link href="/account/tickets" className="btn-primary">
+              Go to my tickets
+            </Link>
+          ) : (
+            <Link href="/login?next=/account/tickets" className="btn-primary">
+              Sign in to raise a ticket
+            </Link>
+          )}
         </div>
       </div>
     </main>

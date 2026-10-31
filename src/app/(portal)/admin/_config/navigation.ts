@@ -128,6 +128,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Processing Timelines", href: "/admin/settings/timelines" },
       { label: "Notifications", href: "/admin/settings/notifications" },
       { label: "Registration", href: "/admin/settings/registration" },
+      { label: "Countries", href: "/admin/settings/countries" },
       { label: "Events", href: "/admin/settings/events" },
       { label: "Certificate verification", href: "/admin/settings/api-keys" },
       { label: "Sister portals", href: "/admin/settings/portals" },

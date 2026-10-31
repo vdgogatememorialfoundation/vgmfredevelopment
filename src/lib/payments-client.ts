@@ -47,7 +47,7 @@ export function paymentNotice() {
   if (typeof window === "undefined" || !window.localStorage.getItem("vgmf_integrations")) return "";
   const mode = paymentMode();
   if (mode === "demo") return "Demo mode: the payment is simulated and no money is charged.";
-  if (mode === "test") return "Razorpay test mode: use Razorpay test cards or UPI test IDs.";
+  if (mode === "test") return "Test mode: use test cards or UPI test IDs.";
   return "";
 }
 

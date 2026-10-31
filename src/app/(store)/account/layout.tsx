@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import RequireAuth from "@/components/auth/RequireAuth";
 import { useAuth } from "@/components/auth/AuthContext";
+import { leaveAfterSignOut } from "@/lib/auth";
 import { classNames } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 import { LoginStamp } from "@/components/layout/LoginStamp";
 import { visibleAccountNav } from "@/lib/site-visibility";
 import { InboxBell } from "@/components/notifications/InboxBell";
@@ -25,7 +25,6 @@ export default function AccountLayout({
 
 function AccountShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { user, signOut } = useAuth();
   const items = visibleAccountNav();
 
@@ -65,7 +64,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                 <LoginStamp
                   onLogout={() => {
                     signOut();
-                    router.push("/login");
+                    leaveAfterSignOut("/login");
                   }}
                 />
                 <InboxBell href="/account/notifications" />

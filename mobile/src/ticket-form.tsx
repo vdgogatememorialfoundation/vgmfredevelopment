@@ -1,23 +1,17 @@
 import { useEffect, useState } from "react";
-import { Text } from "react-native";
+import { router } from "expo-router";
 import { createTicket, listTickets, str, type Row } from "./api";
 import { useAuth } from "./auth";
-import { Banner, Button, Card, Field, Heading, Muted, Screen, Title } from "./ui";
+import { Banner, Button, Card, Field, Heading, Muted, PageHeader, Screen } from "./ui";
 
-export function TicketForm({ heading = "Support", embedded = false }: { heading?: string; embedded?: boolean }) {
+export function TicketForm({ heading = "Support tickets" }: { heading?: string }) {
   const { session } = useAuth();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [note, setNote] = useState("");
   const [tone, setTone] = useState<"note" | "error" | "success">("note");
   const [busy, setBusy] = useState(false);
   const [tickets, setTickets] = useState<Row[]>([]);
-  const requestName = name || session?.name || "";
-  const requestEmail = session?.email || email;
-  const inbox = session ? tickets : [];
 
   useEffect(() => {
     if (!session) return;
@@ -37,12 +31,27 @@ export function TicketForm({ heading = "Support", embedded = false }: { heading?
     };
   }, [session]);
 
-  const form = (
-    <>
-      <Title>{heading}</Title>
-      <Muted>We reply by email. Sign in to see tickets already opened from this app.</Muted>
+  if (!session) {
+    return (
+      <Screen>
+        <PageHeader
+          kicker="Support"
+          title="Raise a ticket from your dashboard"
+          subtitle="Support tickets stay with your Foundation account. Sign in, then open Go to my tickets."
+        />
+        <Card>
+          <Muted>Tickets are not opened from Contact. Use your signed-in account so replies stay with you.</Muted>
+          <Button icon="log-in-outline" label="Sign in to raise a ticket" onPress={() => router.push("/login")} />
+        </Card>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen>
+      <PageHeader kicker="Account" title={heading} subtitle="Raise and track Foundation support tickets from this signed-in account." />
       <Banner text={note} tone={tone} />
-      {inbox.map((item) => (
+      {tickets.map((item) => (
         <Card key={str(item.id)}>
           <Heading>{str(item.subject)}</Heading>
           <Muted>
@@ -50,44 +59,43 @@ export function TicketForm({ heading = "Support", embedded = false }: { heading?
           </Muted>
         </Card>
       ))}
-      <Field label="Your name" value={requestName} onChange={setName} autoCapitalize="words" />
-      {session ? <Muted>{session.email}</Muted> : <Field label="Email" value={requestEmail} onChange={setEmail} keyboard="email-address" />}
-      <Field label="Phone (optional)" value={phone} onChange={setPhone} keyboard="phone-pad" />
-      <Field label="Subject" value={subject} onChange={setSubject} autoCapitalize="sentences" />
-      <Field label="Message" value={body} onChange={setBody} multiline autoCapitalize="sentences" />
-      <Button
-        label={busy ? "Sending…" : "Send ticket"}
-        disabled={busy}
-        onPress={async () => {
-          if (!requestName.trim() || (!session && !requestEmail.trim()) || !subject.trim() || !body.trim()) {
-            setTone("error");
-            setNote("Enter your name, email, subject and message.");
-            return;
-          }
-          setBusy(true);
-          try {
-            const ticket = await createTicket({
-              name: requestName,
-              email: requestEmail,
-              phone,
-              subject,
-              body,
-            });
-            setSubject("");
-            setBody("");
-            setTone("success");
-            setNote(`Ticket ${String(ticket.id ?? "")} opened. We will email updates.`);
-            if (session) setTickets(await listTickets());
-          } catch (err) {
-            setTone("error");
-            setNote((err as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
-    </>
+      {!tickets.length ? <Muted>No tickets for this account yet.</Muted> : null}
+      <Card>
+        <Muted>{session.email}</Muted>
+        <Field label="Subject" value={subject} onChange={setSubject} autoCapitalize="sentences" />
+        <Field label="Message" value={body} onChange={setBody} multiline autoCapitalize="sentences" />
+        <Button
+          icon="send-outline"
+          label={busy ? "Sending…" : "Send ticket"}
+          disabled={busy}
+          onPress={async () => {
+            if (!subject.trim() || !body.trim()) {
+              setTone("error");
+              setNote("Add a subject and a message.");
+              return;
+            }
+            setBusy(true);
+            try {
+              const ticket = await createTicket({
+                name: session.name,
+                email: session.email,
+                subject,
+                body,
+              });
+              setSubject("");
+              setBody("");
+              setTone("success");
+              setNote(`Ticket ${String(ticket.id ?? "")} opened. We will email updates.`);
+              setTickets(await listTickets());
+            } catch (err) {
+              setTone("error");
+              setNote((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </Card>
+    </Screen>
   );
-  if (embedded) return form;
-  return <Screen>{form}</Screen>;
 }

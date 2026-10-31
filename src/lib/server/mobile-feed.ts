@@ -1,12 +1,15 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { siteConfig } from "@/lib/constants";
+import { isPublicFellowshipEvent, withResolvedRegistration } from "@/lib/event-status";
 import { writePublishedFeed } from "@/lib/server/db";
 import { dataFile } from "@/lib/server/paths";
 import { defaultAppearance, sanitizeAppearance } from "@/lib/mobile-appearance";
 import { defaultMobileAppConfig } from "@/lib/mobile-config";
 import { type MobileFeed } from "@/lib/mobile-types";
+import { defaultPlatformCountries, readPlatformCountries, writePlatformCountries } from "@/lib/server/platform-countries";
 import { listNotices } from "@/lib/server/notices";
+import type { Event } from "@/types";
 
 export type { MobileFeed } from "@/lib/mobile-types";
 
@@ -26,6 +29,35 @@ function readFile(path: string): MobileFeed | null {
   return null;
 }
 
+let partnerCache: { at: number; events: Event[]; announcements: MobileFeed["announcements"] } | null = null;
+
+function readPartnerPublicRows() {
+  if (partnerCache && Date.now() - partnerCache.at < 30_000) return partnerCache;
+  try {
+    const parsed = JSON.parse(readFileSync(dataFile("partner-snapshot.json"), "utf8")) as {
+      events?: Event[];
+      announcements?: MobileFeed["announcements"];
+    };
+    const events = (parsed.events ?? []).filter((event) => event?.id && !isPublicFellowshipEvent(event));
+    partnerCache = { at: Date.now(), events, announcements: parsed.announcements ?? [] };
+  } catch {
+    partnerCache = { at: Date.now(), events: [], announcements: [] };
+  }
+  return partnerCache;
+}
+
+function mergeLiveEvents(published: Event[]) {
+  const partner = readPartnerPublicRows().events;
+  const byId = new Map<string, Event>();
+  for (const event of partner) byId.set(event.id, event);
+  for (const event of published) {
+    if (event?.id) byId.set(event.id, event);
+  }
+  return [...byId.values()]
+    .filter((event) => !isPublicFellowshipEvent(event))
+    .map((event) => withResolvedRegistration(event));
+}
+
 export function defaultMobileFeed(): MobileFeed {
   const notices = listNotices();
   return {
@@ -33,9 +65,9 @@ export function defaultMobileFeed(): MobileFeed {
     site: {
       name: siteConfig.name,
       tagline: siteConfig.tagline,
-      logoUrl: "",
+      logoUrl: "/uploads/site-logo.png",
       logoText: "",
-      faviconUrl: "",
+      faviconUrl: "/icon.png",
       email: siteConfig.email,
       phone: siteConfig.phone,
       address: siteConfig.address,
@@ -62,17 +94,32 @@ export function defaultMobileFeed(): MobileFeed {
     policies: {},
     faqs: [],
     appearance: defaultAppearance,
+    platformCountries: readPlatformCountries(),
   };
+}
+
+function publicBrandName(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw || /^(vgmf|vgmf foundation|foundation live)$/i.test(raw)) return siteConfig.name;
+  return raw;
 }
 
 export function readMobileFeed(): MobileFeed {
   const snapshot = memory ?? readFile(DATA_FILE) ?? readFile(TMP_FILE) ?? readFile(PUBLIC_FILE);
   const base = defaultMobileFeed();
   if (!snapshot) return base;
+  const partnerRows = readPartnerPublicRows();
+  const customerApp = { ...base.mobile.apps.customer, ...snapshot.mobile?.apps?.customer };
   return {
     ...base,
     ...snapshot,
-    site: { ...base.site, ...snapshot.site },
+    site: {
+      ...base.site,
+      ...snapshot.site,
+      name: publicBrandName(snapshot.site?.name || base.site.name),
+      logoUrl: snapshot.site?.logoUrl || base.site.logoUrl,
+      faviconUrl: snapshot.site?.faviconUrl || snapshot.site?.logoUrl || base.site.faviconUrl,
+    },
     flags: { ...base.flags, ...snapshot.flags },
     visibility: { ...base.visibility, ...snapshot.visibility },
     mobile: {
@@ -80,20 +127,21 @@ export function readMobileFeed(): MobileFeed {
       ...snapshot.mobile,
       modules: { ...base.mobile.modules, ...snapshot.mobile?.modules },
       apps: {
-        customer: { ...base.mobile.apps.customer, ...snapshot.mobile?.apps?.customer },
+        customer: { ...customerApp, name: publicBrandName(customerApp.name) },
         admin: { ...base.mobile.apps.admin, ...snapshot.mobile?.apps?.admin },
         staff: { ...base.mobile.apps.staff, ...snapshot.mobile?.apps?.staff },
         support: { ...base.mobile.apps.support, ...snapshot.mobile?.apps?.support },
       },
       showPublicDownload: snapshot.mobile?.showPublicDownload === true,
+      showDeveloperCredit: snapshot.mobile?.showDeveloperCredit !== false,
     },
-    events: snapshot.events ?? base.events,
+    events: mergeLiveEvents(snapshot.events ?? base.events),
     articles: snapshot.articles ?? base.articles,
     books: snapshot.books ?? base.books,
     clinics: snapshot.clinics ?? base.clinics,
     videos: snapshot.videos ?? base.videos,
     notices: snapshot.notices?.length ? snapshot.notices : base.notices,
-    announcements: snapshot.announcements ?? base.announcements,
+    announcements: snapshot.announcements?.length ? snapshot.announcements : partnerRows.announcements.length ? partnerRows.announcements : base.announcements,
     flyers: snapshot.flyers ?? base.flyers,
     gallery: snapshot.gallery ?? base.gallery,
     about: snapshot.about ?? base.about,
@@ -101,6 +149,7 @@ export function readMobileFeed(): MobileFeed {
     faqs: snapshot.faqs ?? base.faqs,
     publishedAt: snapshot.publishedAt || base.publishedAt,
     appearance: sanitizeAppearance(snapshot.appearance ?? base.appearance ?? defaultAppearance),
+    platformCountries: snapshot.platformCountries ?? base.platformCountries ?? defaultPlatformCountries,
   };
 }
 
@@ -148,6 +197,7 @@ function persistFeedAssets(feed: MobileFeed): MobileFeed {
 
 export function saveMobileFeed(feed: MobileFeed) {
   memory = persistFeedAssets(feed);
+  if (memory.platformCountries) writePlatformCountries(memory.platformCountries);
   for (const file of [DATA_FILE, TMP_FILE, PUBLIC_FILE]) {
     try {
       mkdirSync(join(file, ".."), { recursive: true });

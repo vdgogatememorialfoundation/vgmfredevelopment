@@ -26,6 +26,11 @@ export type Feed = {
     apiBaseUrl?: string;
     modules: Record<string, boolean>;
     apps?: Record<string, { name?: string; logoUrl?: string }>;
+    showDeveloperCredit?: boolean;
+  };
+  platformCountries?: {
+    allowInternational?: boolean;
+    enabledCountryCodes?: string[];
   };
   events: Row[];
   articles: Row[];
@@ -42,7 +47,40 @@ export type Feed = {
   appearance?: Record<string, unknown> | null;
 };
 
-export type Session = { token: string; email: string; name: string };
+export type Session = { token: string; email: string; name: string; accountId?: string };
+
+export type FoundationAccount = {
+  id: string;
+  accountId: string;
+  salutation?: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  name: string;
+};
+
+function asSession(data: Record<string, unknown>, fallback?: Partial<Session>): Session {
+  const account = (data.account as FoundationAccount | undefined) || undefined;
+  return {
+    token: String(data.token || fallback?.token || ""),
+    email: String(data.email || account?.email || fallback?.email || ""),
+    name: String(data.name || account?.name || fallback?.name || ""),
+    accountId: String(data.accountId || account?.accountId || fallback?.accountId || "") || undefined,
+  };
+}
+
+async function accountAction(action: string, body: Record<string, unknown> = {}) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/account`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action, ...body }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not reach Foundation accounts."));
+  return data;
+}
 
 const SESSION_KEY = "vgmf-session";
 let apiBase = DEFAULT_API;
@@ -205,18 +243,22 @@ export async function logoutSession() {
 export async function checkSession() {
   await loadSession();
   if (!session?.token) return null;
-  const data = await parse(
-    await fetch(`${getApiBase()}/api/mobile/otp`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ action: "session" }),
-    }),
-    "auth"
-  );
-  if (!data.ok) {
+  try {
+    const data = await parse(
+      await fetch(`${getApiBase()}/api/mobile/account`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ action: "session" }),
+      }),
+      "auth"
+    );
+    if (!data.ok) return session;
+    const next = asSession(data, session);
+    if (next.token) await saveSession(next);
+    return next.token ? next : session;
+  } catch {
     return session;
   }
-  return session;
 }
 
 export async function verifyEmailOtp(email: string, code: string, name?: string) {
@@ -228,9 +270,83 @@ export async function verifyEmailOtp(email: string, code: string, name?: string)
     })
   );
   if (!data.ok || !data.token) throw new Error(String(data.error || "That code is not valid."));
-  const next = { token: String(data.token), email: String(data.email || email), name: String(data.name || name || "") };
+  const next = asSession(data, { email, name });
   await saveSession(next);
   return next;
+}
+
+export async function registerAccount(input: {
+  salutation: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  alternatePhone?: string;
+  country?: string;
+  countryCode?: string;
+}) {
+  return accountAction("register", input) as Promise<{ ok: true; message?: string; pending?: Record<string, string> }>;
+}
+
+export async function verifyRegister(input: {
+  salutation: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  alternatePhone?: string;
+  country?: string;
+  countryCode?: string;
+  code: string;
+}) {
+  const data = await accountAction("verify-register", input);
+  const next = asSession(data);
+  if (!next.token) throw new Error("Could not create the Foundation account.");
+  await saveSession(next);
+  return { ...next, message: String(data.message || "") };
+}
+
+export async function loginAccount(input: { identifier: string; password?: string; method?: "password" | "otp" }) {
+  const data = await accountAction("login", input);
+  if (data.token && data.otpRequired === false) {
+    const next = asSession(data);
+    await saveSession(next);
+    return { ok: true as const, otpRequired: false as const, session: next, email: next.email, name: next.name, message: String(data.message || "Signed in.") };
+  }
+  return { ok: true as const, otpRequired: true as const, email: String(data.email || input.identifier), name: String(data.name || ""), message: String(data.message || "") };
+}
+
+export async function verifyLogin(email: string, code: string) {
+  const data = await accountAction("verify-login", { email, code });
+  const next = asSession(data, { email });
+  if (!next.token) throw new Error("That code is not valid.");
+  await saveSession(next);
+  return next;
+}
+
+export async function forgotPassword(identifier: string) {
+  return accountAction("forgot", { identifier }) as Promise<{ ok: true; email?: string; message?: string }>;
+}
+
+export async function resetPassword(email: string, code: string, password: string) {
+  return accountAction("reset", { email, code, password }) as Promise<{ ok: true; message?: string }>;
+}
+
+export async function askChat(message: string) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/chat`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ message }),
+    }),
+    "public"
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not send that question."));
+  return String(data.reply || "");
 }
 
 export async function listTickets() {
@@ -257,10 +373,33 @@ export async function listOrders() {
   return (data.orders ?? []) as Row[];
 }
 
+export type PostalPlace = {
+  city: string;
+  state: string;
+  country: string;
+  countryCode: string;
+  pincode: string;
+};
+
+export async function fetchPostalPlace(postal: string, countryCode?: string): Promise<PostalPlace | null> {
+  const pin = postal.trim();
+  if (pin.length < 3) return null;
+  const query = new URLSearchParams({ postal: pin });
+  if (countryCode) query.set("country", countryCode);
+  const data = await parse(await fetch(`${getApiBase()}/api/geo/postal?${query}`, { headers: { accept: "application/json" } }), "public");
+  return ((data.place as PostalPlace | undefined) ?? null);
+}
+
 export async function placeOrder(input: {
   name?: string;
   email?: string;
   phone?: string;
+  line1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  countryCode?: string;
   items: { id: string; quantity: number }[];
 }) {
   const data = await parse(
@@ -272,6 +411,70 @@ export async function placeOrder(input: {
   );
   if (!data.ok) throw new Error(String(data.error || "Could not place the order."));
   return data.order as Row;
+}
+
+export async function createCheckout(input: {
+  name: string;
+  phone: string;
+  line1: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country?: string;
+  countryCode?: string;
+  items: { id: string; quantity: number }[];
+}) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/checkout`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(input),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not start checkout."));
+  return data as { ok: true; configured?: boolean; order?: Row; amount?: number; keyId?: string; razorpayOrderId?: string };
+}
+
+export async function verifyCheckout(input: { orderId: string; paymentId?: string; razorpayOrderId?: string; signature?: string }) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/checkout`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "verify", ...input }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not confirm payment."));
+  return data as { ok: true; order?: Row };
+}
+
+export async function listPartnerRecords() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/records`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not load account records."));
+  return data as { ok: true; tickets: Row[]; payments: Row[]; syncedAt?: string };
+}
+
+export async function listInbox() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/inbox`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not load notifications."));
+  return (data.items ?? []) as Row[];
+}
+
+export async function liveChatAction(action: string, body: Record<string, unknown> = {}) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/live-chat`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action, ...body }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not update chat."));
+  return data as { ok: true; thread?: Row; threads?: Row[] };
+}
+
+export async function listLiveChats() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/live-chat`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not load chats."));
+  return (data.threads ?? []) as Row[];
 }
 
 export async function verifyCertificate(number: string) {
@@ -317,9 +520,15 @@ export function formatDate(value: unknown) {
 export function isPastDate(value: unknown) {
   const text = str(value);
   if (!text) return false;
-  const date = new Date(text);
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T23:59:59` : text);
   if (Number.isNaN(date.getTime())) return false;
-  return date.getTime() < Date.now() - 24 * 60 * 60 * 1000;
+  return date.getTime() < Date.now();
+}
+
+export function isRegistrationClosed(item: Row | null | undefined) {
+  if (!item) return true;
+  if (str(item.registrationStatus).toLowerCase() === "closed") return true;
+  return isPastDate(item.endDate || item.startDate || item.registrationEnd);
 }
 
 export function moduleOn(feed: Feed | null, id: string) {

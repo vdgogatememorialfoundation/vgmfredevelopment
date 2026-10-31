@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   adjustStoreCredit,
   createCustomerAccount,
@@ -19,6 +19,8 @@ import type { AccountStatus, User } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import { COUNTRIES, countryByCode, isIndia, isValidPhone, statesFor } from "@/lib/geo";
+import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 
 ensureBootstrapped();
 
@@ -35,6 +37,8 @@ const emptyForm = {
   city: "",
   state: "Maharashtra",
   pincode: "",
+  country: "India",
+  countryCode: "IN",
 };
 
 export function CustomerDesk() {
@@ -60,6 +64,10 @@ export function CustomerDesk() {
   const create = () => {
     setError("");
     try {
+      if (!isValidPhone(form.phone) || (form.alternatePhone && !isValidPhone(form.alternatePhone))) {
+        setError("Enter a valid international phone number, including the country code.");
+        return;
+      }
       const created = createCustomerAccount({
         salutation: form.salutation,
         firstName: form.firstName,
@@ -74,6 +82,8 @@ export function CustomerDesk() {
           city: form.city,
           state: form.state,
           pincode: form.pincode,
+          country: form.country,
+          countryCode: form.countryCode,
         },
       });
       setNote(`Created Account ID ${created.accountId}. Login details were emailed to ${created.email}.`);
@@ -172,6 +182,47 @@ function CustomerFields({
   setForm: (next: typeof emptyForm) => void;
 }) {
   const set = (patch: Partial<typeof emptyForm>) => setForm({ ...form, ...patch });
+  const country = countryByCode(form.countryCode);
+  const states = statesFor(country.code);
+  const [lookupNote, setLookupNote] = useState("");
+  const lastLookup = useRef("");
+  const formRef = useRef(form);
+  formRef.current = form;
+
+  useEffect(() => {
+    const pin = form.pincode.trim();
+    if (!postalLooksComplete(pin, form.countryCode)) {
+      setLookupNote("");
+      return;
+    }
+    const key = `${form.countryCode}:${pin}`;
+    if (lastLookup.current === key) return;
+    const timer = window.setTimeout(() => {
+      lastLookup.current = key;
+      void fetchPostalPlace(pin, form.countryCode)
+        .then((place) => {
+          if (!place) {
+            setLookupNote("Postal code not found. Enter city, state and country.");
+            return;
+          }
+          const current = formRef.current;
+          const nextStates = statesFor(place.countryCode);
+          lastLookup.current = `${place.countryCode}:${place.pincode || pin}`;
+          setForm({
+            ...current,
+            city: place.city || current.city,
+            state: nextStates.includes(place.state) ? place.state : place.state || current.state,
+            country: place.country,
+            countryCode: place.countryCode,
+            pincode: place.pincode || pin,
+          });
+          setLookupNote(`${place.city}${place.state ? `, ${place.state}` : ""}, ${place.country}`);
+        })
+        .catch(() => setLookupNote("Could not look up this postal code."));
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [form.countryCode, form.pincode, setForm]);
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Salutation">
@@ -182,14 +233,61 @@ function CustomerFields({
       <Field label="First name"><TextInput value={form.firstName} onChange={(event) => set({ firstName: event.target.value })} /></Field>
       <Field label="Middle name (optional)"><TextInput value={form.middleName} onChange={(event) => set({ middleName: event.target.value })} /></Field>
       <Field label="Last name"><TextInput value={form.lastName} onChange={(event) => set({ lastName: event.target.value })} /></Field>
-      <Field label="Phone"><TextInput value={form.phone} onChange={(event) => set({ phone: event.target.value, alternatePhone: form.alternatePhone || event.target.value })} /></Field>
-      <Field label="Alternate phone"><TextInput value={form.alternatePhone} onChange={(event) => set({ alternatePhone: event.target.value })} /></Field>
+      <Field label="Phone (international)">
+        <TextInput value={form.phone} onChange={(event) => set({ phone: event.target.value, alternatePhone: form.alternatePhone || event.target.value })} placeholder={`${country.dial} 98765 43210`} />
+      </Field>
+      <Field label="Alternate phone">
+        <TextInput value={form.alternatePhone} onChange={(event) => set({ alternatePhone: event.target.value })} placeholder={`${country.dial} 98765 43210`} />
+      </Field>
       <Field label="Email"><TextInput value={form.email} onChange={(event) => set({ email: event.target.value })} /></Field>
+      <Field label="Country">
+        <SelectInput
+          value={country.code}
+          onChange={(event) => {
+            const next = countryByCode(event.target.value);
+            const nextStates = statesFor(next.code);
+            lastLookup.current = "";
+            set({
+              countryCode: next.code,
+              country: next.name,
+              state: nextStates.includes(form.state) ? form.state : nextStates[0] || "",
+              pincode: isIndia(next.code) ? form.pincode.replace(/\D/g, "").slice(0, 6) : form.pincode,
+            });
+          }}
+        >
+          {COUNTRIES.map((item) => (
+            <option key={item.code} value={item.code}>{item.name} ({item.dial})</option>
+          ))}
+        </SelectInput>
+      </Field>
       <Field label="Address"><TextInput value={form.line1} onChange={(event) => set({ line1: event.target.value })} /></Field>
       <Field label="Landmark"><TextInput value={form.landmark} onChange={(event) => set({ landmark: event.target.value })} /></Field>
+      <Field label={isIndia(country.code) ? "Pincode" : "Postal code"}>
+        <TextInput
+          value={form.pincode}
+          onChange={(event) => {
+            lastLookup.current = "";
+            set({
+              pincode: isIndia(country.code)
+                ? event.target.value.replace(/\D/g, "").slice(0, 6)
+                : event.target.value.slice(0, 12),
+            });
+          }}
+          placeholder={isIndia(country.code) ? "6-digit PIN fills city, state, country" : "Postal code fills city, state, country"}
+        />
+      </Field>
       <Field label="City"><TextInput value={form.city} onChange={(event) => set({ city: event.target.value })} /></Field>
-      <Field label="State"><TextInput value={form.state} onChange={(event) => set({ state: event.target.value })} /></Field>
-      <Field label="Pincode"><TextInput value={form.pincode} onChange={(event) => set({ pincode: event.target.value.replace(/\D/g, "").slice(0, 6) })} /></Field>
+      <Field label="State / region">
+        {states.length ? (
+          <SelectInput value={form.state} onChange={(event) => set({ state: event.target.value })}>
+            <option value="">Select</option>
+            {states.map((state) => <option key={state} value={state}>{state}</option>)}
+          </SelectInput>
+        ) : (
+          <TextInput value={form.state} onChange={(event) => set({ state: event.target.value })} />
+        )}
+      </Field>
+      {lookupNote ? <p className="sm:col-span-2 text-xs text-text-muted">{lookupNote}</p> : null}
     </div>
   );
 }
@@ -230,6 +328,8 @@ function CustomerDetail({ account, onNote }: { account: User; onNote: (text: str
     city: account.address?.city ?? "",
     state: account.address?.state ?? "Maharashtra",
     pincode: account.address?.pincode ?? "",
+    country: account.address?.country ?? "India",
+    countryCode: account.address?.countryCode ?? "IN",
   });
   const [credit, setCredit] = useState("");
   const [creditNote, setCreditNote] = useState("Admin adjustment");
@@ -242,6 +342,10 @@ function CustomerDetail({ account, onNote }: { account: User; onNote: (text: str
       <div className="mt-4 flex flex-wrap gap-2">
         <Button
           onClick={() => {
+            if (!isValidPhone(form.phone) || (form.alternatePhone && !isValidPhone(form.alternatePhone))) {
+              onNote("Enter a valid international phone number, including the country code.");
+              return;
+            }
             updateCustomer(account.email, {
               salutation: form.salutation,
               firstName: form.firstName,
@@ -250,7 +354,7 @@ function CustomerDetail({ account, onNote }: { account: User; onNote: (text: str
               phone: form.phone,
               alternatePhone: form.alternatePhone || form.phone,
               email: form.email,
-              address: { line1: form.line1, landmark: form.landmark, city: form.city, state: form.state, pincode: form.pincode },
+              address: { line1: form.line1, landmark: form.landmark, city: form.city, state: form.state, pincode: form.pincode, country: form.country, countryCode: form.countryCode },
             });
             onNote("Customer details saved.");
           }}

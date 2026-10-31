@@ -101,4 +101,8 @@ function applyFeed(feed: MobileFeed) {
   if (feed.mobile) {
     tryWrite(() => window.localStorage.setItem("vgmf_mobile_app", JSON.stringify(feed.mobile)));
   }
+
+  if (feed.platformCountries) {
+    tryWrite(() => window.localStorage.setItem("vgmf_platform_countries", JSON.stringify(feed.platformCountries)));
+  }
 }
