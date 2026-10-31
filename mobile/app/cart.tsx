@@ -1,25 +1,17 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { findRow, money, placeOrder, str } from "../src/api";
-import { useAuth } from "../src/auth";
+import { findRow, money, str } from "../src/api";
 import { useCart } from "../src/cart";
 import { useFeed } from "../src/feed";
-import { Banner, Button, Card, Empty, Field, Heading, Muted, PageHeader, QtyStepper, Screen } from "../src/ui";
+import { STORE } from "../src/site-content";
+import { Button, Card, Empty, Heading, Muted, PageHeader, QtyStepper, Screen } from "../src/ui";
 import { useTheme } from "../src/theme";
 
 export default function CartScreen() {
   const cart = useCart();
   const theme = useTheme();
-  const { session } = useAuth();
   const { feed } = useFeed();
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [note, setNote] = useState("");
-  const [tone, setTone] = useState<"note" | "error" | "success">("note");
-  const [busy, setBusy] = useState(false);
-  const requestName = name || session?.name || "";
-
   const priced = useMemo(
     () =>
       cart.items.map((item) => {
@@ -27,20 +19,22 @@ export default function CartScreen() {
         return {
           ...item,
           title: str(book?.title, item.title),
-          price: Number(book?.price ?? 0) || 0,
+          price: Number(book?.price ?? item.price) || 0,
           inCatalogue: Boolean(book) && book?.active !== false,
           outOfStock: str(book?.stockStatus) === "out_of_stock",
         };
       }),
     [cart.items, feed?.books]
   );
-  const missing = priced.filter((item) => !item.inCatalogue || item.outOfStock);
-  const total = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const gst = Math.round(subtotal * 0.05);
+  const shipping = subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
+  const total = subtotal + gst + shipping;
+  const blocked = priced.some((item) => !item.inCatalogue || item.outOfStock);
 
   return (
     <Screen>
-      <PageHeader kicker="Shop" title={theme.labels.bag} subtitle="Card payment stays on the website. This bag records an unpaid publication request after you sign in." />
-      <Banner text={note} tone={tone} />
+      <PageHeader kicker="Shop" title={theme.labels.bag} subtitle="Pay with Razorpay inside the Foundation app — UPI, cards and net banking." />
       {priced.map((item) => (
         <Card key={item.id}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
@@ -60,44 +54,11 @@ export default function CartScreen() {
       {priced.length ? (
         <Card featured>
           <Heading>Summary</Heading>
-          <Muted>
-            {priced.reduce((sum, item) => sum + item.quantity, 0)} items · {money(total)}
-          </Muted>
-          {session ? (
-            <>
-              <Muted>Request will be stored for {session.email} as unpaid.</Muted>
-              <Field label="Name" value={requestName} onChange={setName} autoCapitalize="words" />
-              <Field label="Phone (optional)" value={phone} onChange={setPhone} keyboard="phone-pad" />
-              <Button
-                icon="create-outline"
-                label={busy ? "Recording request…" : "Record unpaid request"}
-                disabled={busy || missing.length > 0}
-                onPress={async () => {
-                  setBusy(true);
-                  try {
-                    const order = await placeOrder({
-                      name: requestName,
-                      phone,
-                      items: priced.map((item) => ({ id: item.id, quantity: item.quantity })),
-                    });
-                    cart.clear();
-                    setTone("success");
-                    setNote(`Request ${str(order.id)} recorded as unpaid (${money(order.total)}). Pay on the website if needed.`);
-                  } catch (err) {
-                    setTone("error");
-                    setNote((err as Error).message);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              />
-            </>
-          ) : (
-            <>
-              <Muted>Sign in on Account to record an unpaid publication request.</Muted>
-              <Button icon="person-outline" label="Go to Account" onPress={() => router.push("/account")} />
-            </>
-          )}
+          <Muted>Publications {money(subtotal)}</Muted>
+          <Muted>GST {money(gst)}</Muted>
+          <Muted>Shipping {shipping ? money(shipping) : "Free over ₹499"}</Muted>
+          <Heading>Total {money(total)}</Heading>
+          <Button icon="card-outline" label="Checkout with Razorpay" disabled={blocked} onPress={() => router.push("/checkout")} />
         </Card>
       ) : null}
     </Screen>

@@ -3,6 +3,7 @@ import { checkSession, getSession, logoutSession, saveSession, type Session } fr
 
 type AuthValue = {
   session: Session | null;
+  ready: boolean;
   setSession: (next: Session | null) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -11,9 +12,12 @@ const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSessionState] = useState<Session | null>(getSession());
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    void checkSession().then((next) => setSessionState(next));
+    void checkSession()
+      .then((next) => setSessionState(next))
+      .finally(() => setReady(true));
   }, []);
 
   const setSession = useCallback(async (next: Session | null) => {
@@ -26,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionState(null);
   }, []);
 
-  return <AuthContext.Provider value={{ session, setSession, signOut }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, ready, setSession, signOut }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

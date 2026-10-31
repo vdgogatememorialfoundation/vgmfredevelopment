@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import OtpForm from "@/components/account/OtpForm";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
 import { useAuth } from "@/components/auth/AuthContext";
-import { findAccountByIdentifier, loginBlockReason } from "@/lib/auth";
+import { remoteAccountToUser, remoteLogin, remoteSync, remoteVerifyLogin } from "@/lib/account-api";
+import { findAccountByIdentifier, loginBlockReason, saveAccount } from "@/lib/auth";
 import { sendOtpCode } from "@/lib/admin-store";
 import { getAuthAccess } from "@/lib/auth-access";
 import { subscribeCms } from "@/lib/cms";
@@ -29,9 +30,22 @@ export default function SignInFlow() {
   const [otpHint, setOtpHint] = useState("");
   const [pending, setPending] = useState<User | null>(null);
   const [busy, setBusy] = useState(false);
+  const [remoteEmail, setRemoteEmail] = useState("");
 
   const enterAccount = (account: User) => {
+    saveAccount(account);
     signIn(account);
+    void remoteSync({
+      salutation: account.salutation || "Dr.",
+      firstName: account.firstName,
+      middleName: account.middleName || "",
+      lastName: account.lastName,
+      email: account.email,
+      phone: account.phone,
+      whatsapp: account.whatsapp || account.phone,
+      alternatePhone: account.alternatePhone || account.phone,
+      password: password || account.password || "",
+    }).catch(() => undefined);
     const next = new URLSearchParams(window.location.search).get("next");
     if (next?.startsWith("/") && !next.startsWith("//")) {
       router.push(next);
@@ -98,6 +112,21 @@ export default function SignInFlow() {
     setBusy(true);
     setError("");
     try {
+      if (method !== "sms") {
+        try {
+          const remote = await remoteLogin({ identifier, password, method });
+          setRemoteEmail(String(remote.email || ""));
+          setOtpHint(String(remote.message || `A code was sent to ${remote.email}.`));
+          setStep("otp");
+          return;
+        } catch (err) {
+          const message = (err as Error).message;
+          if (/Incorrect password|Enter your Foundation website password|Forgot password/i.test(message)) {
+            setError(message);
+            return;
+          }
+        }
+      }
       const resolved = await resolveAccount();
       const account = resolved.account;
       if (!account) {
@@ -148,21 +177,33 @@ export default function SignInFlow() {
   };
 
   const handleOtp = (code: string) => {
-    const account = pending ?? findAccountByIdentifier(identifier);
-    if (!account) {
-      setError("Sign in again so we can send a new code.");
-      setStep("identifier");
-      return;
-    }
-    const role = method === "sms" ? "customer-sms" : method === "otp" ? "customer-otp" : "customer";
-    const target = method === "sms" ? account.phone : account.email;
-    const invalid = verifyEmailOtp(target, role, code);
-    if (invalid) {
-      setError(invalid);
-      return;
-    }
-    setError("");
-    enterAccount(account);
+    void (async () => {
+      setError("");
+      if (remoteEmail) {
+        try {
+          const result = await remoteVerifyLogin(remoteEmail, code);
+          enterAccount(remoteAccountToUser(result.account, { password: password || undefined, foundationPasswordSet: Boolean(password) }));
+          return;
+        } catch (err) {
+          setError((err as Error).message);
+          return;
+        }
+      }
+      const account = pending ?? findAccountByIdentifier(identifier);
+      if (!account) {
+        setError("Sign in again so we can send a new code.");
+        setStep("identifier");
+        return;
+      }
+      const role = method === "sms" ? "customer-sms" : method === "otp" ? "customer-otp" : "customer";
+      const target = method === "sms" ? account.phone : account.email;
+      const invalid = verifyEmailOtp(target, role, code);
+      if (invalid) {
+        setError(invalid);
+        return;
+      }
+      enterAccount(account);
+    })();
   };
 
   if (!access.loginEnabled) {
@@ -230,6 +271,12 @@ export default function SignInFlow() {
           onSubmit={handleOtp}
           onBack={() => setStep("identifier")}
           onResend={() => {
+            if (remoteEmail) {
+              void remoteLogin({ identifier: remoteEmail || identifier, password, method })
+                .then((remote) => setOtpHint(String(remote.message || `A code was sent to ${remote.email}.`)))
+                .catch((err) => setError((err as Error).message));
+              return;
+            }
             const account = pending ?? findAccountByIdentifier(identifier);
             if (!account) return;
             if (method === "sms") sendSmsOtp(account);

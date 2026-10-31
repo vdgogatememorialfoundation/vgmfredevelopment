@@ -34,15 +34,29 @@ export type MobileTicket = {
   createdAt: string;
   responses: { at: string; from: string; text: string }[];
 };
+export type MobileAddress = {
+  line1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
 export type MobileOrder = {
   id: string;
   email: string;
   name: string;
   phone?: string;
   items: { id: string; title: string; quantity: number; price: number }[];
+  subtotal: number;
+  gst: number;
+  shipping: number;
   total: number;
-  status: "Recorded";
-  paymentStatus: "unpaid";
+  status: "Recorded" | "Paid";
+  paymentStatus: "unpaid" | "paid" | "failed";
+  method?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  address?: MobileAddress;
   createdAt: string;
 };
 
@@ -228,7 +242,15 @@ function orderKey(email: string, items: MobileOrder["items"]) {
     .digest("hex");
 }
 
-export function addOrder(input: { email: string; name: string; phone?: string; items: MobileOrder["items"] }) {
+export function addOrder(input: {
+  email: string;
+  name: string;
+  phone?: string;
+  items: MobileOrder["items"];
+  address?: MobileAddress;
+  razorpayOrderId?: string;
+  method?: string;
+}) {
   const email = input.email.trim().toLowerCase();
   const items = input.items.map((item) => ({
     id: String(item.id),
@@ -244,15 +266,24 @@ export function addOrder(input: { email: string; name: string; phone?: string; i
     const existing = load<MobileOrder[]>("orders", ORDERS_FILE, []).find((order) => order.id === replay.orderId);
     if (existing) return existing;
   }
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const gst = Math.round(subtotal * 0.05);
+  const shipping = subtotal >= 499 ? 0 : 49;
   const order: MobileOrder = {
     email,
     name: input.name.trim().slice(0, 80) || "Customer",
     phone: input.phone?.trim().slice(0, 30),
     items,
-    total: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    subtotal,
+    gst,
+    shipping,
+    total: subtotal + gst + shipping,
     id: newId(),
     status: "Recorded",
     paymentStatus: "unpaid",
+    method: input.method,
+    razorpayOrderId: input.razorpayOrderId,
+    address: input.address,
     createdAt: new Date(now).toISOString(),
   };
   const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
@@ -260,6 +291,36 @@ export function addOrder(input: { email: string; name: string; phone?: string; i
   persist("orders", ORDERS_FILE, list);
   memory.idem.push({ key, orderId: order.id, at: now });
   return order;
+}
+
+export function findOrder(id: string, email?: string) {
+  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  return list.find((order) => order.id === id && (!email || order.email === email.trim().toLowerCase()));
+}
+
+export function attachRazorpayOrder(id: string, razorpayOrderId: string) {
+  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const index = list.findIndex((order) => order.id === id);
+  if (index < 0) return null;
+  list[index] = { ...list[index], razorpayOrderId };
+  persist("orders", ORDERS_FILE, list);
+  return list[index];
+}
+
+export function markOrderPaid(id: string, input: { paymentId?: string; razorpayOrderId?: string; method?: string }) {
+  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const index = list.findIndex((order) => order.id === id);
+  if (index < 0) return null;
+  list[index] = {
+    ...list[index],
+    status: "Paid",
+    paymentStatus: "paid",
+    method: input.method || list[index].method || "Razorpay",
+    razorpayPaymentId: input.paymentId || list[index].razorpayPaymentId,
+    razorpayOrderId: input.razorpayOrderId || list[index].razorpayOrderId,
+  };
+  persist("orders", ORDERS_FILE, list);
+  return list[index];
 }
 
 export function bearerToken(header: string | null) {

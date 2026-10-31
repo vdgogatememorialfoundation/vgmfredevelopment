@@ -57,6 +57,10 @@ export const EXPLORE = [
   { id: "gallery", href: "/gallery", label: "Gallery", icon: "images-outline" as const },
   { id: "videos", href: "/videos", label: "Videos", icon: "play-circle-outline" as const },
   { id: "certificates", href: "/certificates", label: "Certificates", icon: "ribbon-outline" as const },
+  { id: "chat", href: "/chat", label: "Chat", icon: "chatbubbles-outline" as const },
+  { id: "notices", href: "/notices", label: "Notices", icon: "notifications-outline" as const },
+  { id: "contact", href: "/contact", label: "Contact", icon: "mail-outline" as const },
+  { id: "support", href: "/support", label: "Support", icon: "help-buoy-outline" as const },
 ];
 
 export const ABOUT_DEFAULT = {

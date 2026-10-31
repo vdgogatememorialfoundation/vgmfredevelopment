@@ -8,6 +8,7 @@ import OtpForm from "@/components/account/OtpForm";
 import AccountCreated from "@/components/account/AccountCreated";
 import { useAuth } from "@/components/auth/AuthContext";
 import { ACCOUNT_EXISTS_MESSAGE } from "@/lib/account-identity";
+import { isAccountConflict, remoteAccountToUser, remoteRegister, remoteSync, remoteVerifyRegister } from "@/lib/account-api";
 import { demoAccountId, findAccountByIdentifier, saveAccount, setSession } from "@/lib/auth";
 import { displayName, sendAccountDetails, sendOtpCode } from "@/lib/admin-store";
 import { getAuthAccess } from "@/lib/auth-access";
@@ -46,6 +47,7 @@ export default function SignupFlow() {
   const [error, setError] = useState("");
   const [otpHint, setOtpHint] = useState("");
   const [busy, setBusy] = useState(false);
+  const [remotePending, setRemotePending] = useState(false);
 
   const loginHref =
     nextPath?.startsWith("/") && !nextPath.startsWith("//")
@@ -89,10 +91,23 @@ export default function SignupFlow() {
         setError(ACCOUNT_EXISTS_MESSAGE);
         return;
       }
+      try {
+        const remote = await remoteRegister(form);
+        setRemotePending(true);
+        setOtpHint(String(remote.message || `A code was sent to ${form.email}.`));
+        setStep("email");
+        return;
+      } catch (err) {
+        if (isAccountConflict(err)) {
+          setError(ACCOUNT_EXISTS_MESSAGE);
+          return;
+        }
+      }
       if (!access.emailOtp) {
         completeSignup();
         return;
       }
+      setRemotePending(false);
       dispatchEmailOtp();
       setStep("email");
     } finally {
@@ -129,6 +144,16 @@ export default function SignupFlow() {
     sendAccountDetails(user.email, true);
     setSession(user);
     signIn(user);
+    void remoteSync({
+      salutation: form.salutation,
+      firstName: form.firstName,
+      middleName: form.middleName,
+      lastName: form.lastName,
+      email: form.email,
+      phone: form.phone,
+      whatsapp: form.whatsapp,
+      alternatePhone: form.alternatePhone.trim() || form.phone,
+    }).catch(() => undefined);
 
     if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
       router.push(nextPath);
@@ -138,13 +163,40 @@ export default function SignupFlow() {
   };
 
   const handleOtp = (code: string) => {
-    const invalid = verifyEmailOtp(form.email, "customer-signup", code);
-    if (invalid) {
-      setError(invalid);
-      return;
-    }
-    setError("");
-    completeSignup();
+    void (async () => {
+      setBusy(true);
+      setError("");
+      try {
+        if (remotePending) {
+          const result = await remoteVerifyRegister({ ...form, code });
+          const user = remoteAccountToUser(result.account, {
+            whatsapp: form.whatsapp,
+            alternatePhone: form.alternatePhone.trim() || form.phone,
+          });
+          saveAccount(user);
+          sendAccountDetails(user.email, true);
+          setSession(user);
+          signIn(user);
+          setAccountId(user.accountId || "");
+          if (nextPath?.startsWith("/") && !nextPath.startsWith("//")) {
+            router.push(nextPath);
+            return;
+          }
+          setStep("success");
+          return;
+        }
+        const invalid = verifyEmailOtp(form.email, "customer-signup", code);
+        if (invalid) {
+          setError(invalid);
+          return;
+        }
+        completeSignup();
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    })();
   };
 
   if (!access.signupEnabled) {
@@ -209,7 +261,15 @@ export default function SignupFlow() {
             description={`We sent a verification code to ${form.email}. You can resend after 1 minute.`}
             onSubmit={handleOtp}
             onBack={() => setStep("details")}
-            onResend={dispatchEmailOtp}
+            onResend={() => {
+              if (remotePending) {
+                void remoteRegister(form)
+                  .then((remote) => setOtpHint(String(remote.message || `A code was sent to ${form.email}.`)))
+                  .catch((err) => setError((err as Error).message));
+                return;
+              }
+              dispatchEmailOtp();
+            }}
           />
         </div>
       )}

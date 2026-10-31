@@ -3,7 +3,7 @@ import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, Vie
 import { router } from "expo-router";
 import { formatDate, mediaUrl, moduleOn, money, str, type Row } from "../../src/api";
 import { useCart } from "../../src/cart";
-import { TopBar } from "../../src/chrome";
+import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
 import { EXPLORE, PORTALS, SITE, resolvedAbout } from "../../src/site-content";
 import { useTheme } from "../../src/theme";
@@ -28,6 +28,7 @@ export default function HomeScreen() {
   if (loading && !feed) return <Loading />;
 
   return (
+    <View style={{ flex: 1 }}>
     <Screen refreshing={loading} onRefresh={refresh}>
       <TopBar bag={enabled("shop")} />
       <Kicker>Preserving Ayurveda</Kicker>
@@ -76,7 +77,7 @@ export default function HomeScreen() {
 
       <SectionHeader title="Explore gateway" subtitle="Services of the Foundation" />
       <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 8 }}>
-        {EXPLORE.filter((item) => item.id === "certificates" || enabled(item.id)).map((item) => (
+        {EXPLORE.filter((item) => ["certificates", "chat", "contact", "support", "notices"].includes(item.id) || enabled(item.id)).map((item) => (
           <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
         ))}
       </View>
@@ -119,8 +120,8 @@ export default function HomeScreen() {
         </View>
       ) : (
         <Card>
-          <Muted>The Foundation catalogue is published from Admin. Until titles are published, browse and pay on the website shop.</Muted>
-          <Button kind="ghost" label="Open website shop" onPress={() => openPublishedHref(SITE.shopUrl)} />
+          <Muted>The Foundation catalogue is published from Admin. Until titles appear, open the in-app shop — checkout stays inside VGMF with Razorpay.</Muted>
+          <Button kind="ghost" label="Open in-app shop" onPress={() => router.push("/shop")} />
         </Card>
       )}
 
@@ -157,6 +158,8 @@ export default function HomeScreen() {
 
       <SiteFooter />
     </Screen>
+    <ChatFab />
+    </View>
   );
 }
 

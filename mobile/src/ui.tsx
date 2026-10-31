@@ -316,15 +316,16 @@ export function Cover({ uri, height = 180, ratio, fit = "cover" }: { uri?: strin
   );
 }
 
+const bundledIcon = require("../assets/icon.png");
+
 export function BrandMark({ uri, name, size = 36 }: { uri?: string; name: string; size?: number }) {
   const theme = useTheme();
-  if (uri) {
-    return <Image source={{ uri }} accessibilityLabel={name} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: theme.colors.paper }} />;
-  }
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: theme.colors.primary, alignItems: "center", justifyContent: "center" }}>
-      <Text style={{ color: theme.colors.onPrimary, fontWeight: "800", fontSize: size * 0.36 }}>{(name || "V").slice(0, 1).toUpperCase()}</Text>
-    </View>
+    <Image
+      source={uri ? { uri } : bundledIcon}
+      accessibilityLabel={name}
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border }}
+    />
   );
 }
 

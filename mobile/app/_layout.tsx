@@ -1,13 +1,28 @@
 import "react-native-gesture-handler";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { AuthProvider } from "../src/auth";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AuthProvider, useAuth } from "../src/auth";
 import { CartProvider } from "../src/cart";
+import { MenuButton } from "../src/chrome";
+import { DrawerProvider } from "../src/drawer";
 import { FeedProvider } from "../src/feed";
 import { ThemeProvider, useTheme } from "../src/theme";
+import { Loading } from "../src/ui";
+import LoginScreen from "./login";
 
 function ThemedStack() {
   const theme = useTheme();
+  const { session, ready } = useAuth();
+  if (!ready) return <Loading label="Opening VGMF…" />;
+  if (!session) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={["top", "bottom"]}>
+        <StatusBar style="dark" backgroundColor={theme.colors.background} />
+        <LoginScreen />
+      </SafeAreaView>
+    );
+  }
   return (
     <>
       <StatusBar style="dark" backgroundColor={theme.colors.background} />
@@ -19,6 +34,7 @@ function ThemedStack() {
           headerBackTitle: "Back",
           headerShadowVisible: false,
           contentStyle: { backgroundColor: theme.colors.background },
+          headerRight: () => <MenuButton />,
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -37,8 +53,11 @@ function ThemedStack() {
         <Stack.Screen name="contact" options={{ title: "Contact" }} />
         <Stack.Screen name="faq" options={{ title: "FAQ" }} />
         <Stack.Screen name="cart" options={{ title: "Bag" }} />
+        <Stack.Screen name="checkout" options={{ title: "Checkout" }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="policy/[id]" options={{ title: "Policy" }} />
         <Stack.Screen name="search" options={{ title: "Search" }} />
+        <Stack.Screen name="chat" options={{ title: "Chat" }} />
       </Stack>
     </>
   );
@@ -50,7 +69,9 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <CartProvider>
-            <ThemedStack />
+            <DrawerProvider>
+              <ThemedStack />
+            </DrawerProvider>
           </CartProvider>
         </AuthProvider>
       </ThemeProvider>

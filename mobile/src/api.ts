@@ -42,7 +42,40 @@ export type Feed = {
   appearance?: Record<string, unknown> | null;
 };
 
-export type Session = { token: string; email: string; name: string };
+export type Session = { token: string; email: string; name: string; accountId?: string };
+
+export type FoundationAccount = {
+  id: string;
+  accountId: string;
+  salutation?: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  name: string;
+};
+
+function asSession(data: Record<string, unknown>, fallback?: Partial<Session>): Session {
+  const account = (data.account as FoundationAccount | undefined) || undefined;
+  return {
+    token: String(data.token || fallback?.token || ""),
+    email: String(data.email || account?.email || fallback?.email || ""),
+    name: String(data.name || account?.name || fallback?.name || ""),
+    accountId: String(data.accountId || account?.accountId || fallback?.accountId || "") || undefined,
+  };
+}
+
+async function accountAction(action: string, body: Record<string, unknown> = {}) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/account`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action, ...body }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not reach Foundation accounts."));
+  return data;
+}
 
 const SESSION_KEY = "vgmf-session";
 let apiBase = DEFAULT_API;
@@ -205,18 +238,22 @@ export async function logoutSession() {
 export async function checkSession() {
   await loadSession();
   if (!session?.token) return null;
-  const data = await parse(
-    await fetch(`${getApiBase()}/api/mobile/otp`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ action: "session" }),
-    }),
-    "auth"
-  );
-  if (!data.ok) {
+  try {
+    const data = await parse(
+      await fetch(`${getApiBase()}/api/mobile/account`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ action: "session" }),
+      }),
+      "auth"
+    );
+    if (!data.ok) return session;
+    const next = asSession(data, session);
+    if (next.token) await saveSession(next);
+    return next.token ? next : session;
+  } catch {
     return session;
   }
-  return session;
 }
 
 export async function verifyEmailOtp(email: string, code: string, name?: string) {
@@ -228,9 +265,73 @@ export async function verifyEmailOtp(email: string, code: string, name?: string)
     })
   );
   if (!data.ok || !data.token) throw new Error(String(data.error || "That code is not valid."));
-  const next = { token: String(data.token), email: String(data.email || email), name: String(data.name || name || "") };
+  const next = asSession(data, { email, name });
   await saveSession(next);
   return next;
+}
+
+export async function registerAccount(input: {
+  salutation: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  alternatePhone?: string;
+}) {
+  return accountAction("register", input) as Promise<{ ok: true; message?: string; pending?: Record<string, string> }>;
+}
+
+export async function verifyRegister(input: {
+  salutation: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  whatsapp?: string;
+  alternatePhone?: string;
+  code: string;
+}) {
+  const data = await accountAction("verify-register", input);
+  const next = asSession(data);
+  if (!next.token) throw new Error("Could not create the Foundation account.");
+  await saveSession(next);
+  return { ...next, message: String(data.message || "") };
+}
+
+export async function loginAccount(input: { identifier: string; password?: string; method?: "password" | "otp" }) {
+  return accountAction("login", input) as Promise<{ ok: true; email?: string; name?: string; message?: string }>;
+}
+
+export async function verifyLogin(email: string, code: string) {
+  const data = await accountAction("verify-login", { email, code });
+  const next = asSession(data, { email });
+  if (!next.token) throw new Error("That code is not valid.");
+  await saveSession(next);
+  return next;
+}
+
+export async function forgotPassword(identifier: string) {
+  return accountAction("forgot", { identifier }) as Promise<{ ok: true; email?: string; message?: string }>;
+}
+
+export async function resetPassword(email: string, code: string, password: string) {
+  return accountAction("reset", { email, code, password }) as Promise<{ ok: true; message?: string }>;
+}
+
+export async function askChat(message: string) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/chat`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ message }),
+    }),
+    "public"
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not send that question."));
+  return String(data.reply || "");
 }
 
 export async function listTickets() {
@@ -272,6 +373,38 @@ export async function placeOrder(input: {
   );
   if (!data.ok) throw new Error(String(data.error || "Could not place the order."));
   return data.order as Row;
+}
+
+export async function createCheckout(input: {
+  name: string;
+  phone: string;
+  line1: string;
+  city: string;
+  state: string;
+  pincode: string;
+  items: { id: string; quantity: number }[];
+}) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/checkout`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(input),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not start checkout."));
+  return data as { ok: true; configured?: boolean; order?: Row; amount?: number; keyId?: string; razorpayOrderId?: string };
+}
+
+export async function verifyCheckout(input: { orderId: string; paymentId?: string; razorpayOrderId?: string; signature?: string }) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/checkout`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "verify", ...input }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not confirm payment."));
+  return data as { ok: true; order?: Row };
 }
 
 export async function verifyCertificate(number: string) {

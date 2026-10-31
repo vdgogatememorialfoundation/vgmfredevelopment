@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { Linking, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
-import { getApiBase, mediaUrl, money, str, type Row } from "../../src/api";
+import { mediaUrl, money, str, type Row } from "../../src/api";
 import { useCart } from "../../src/cart";
 import { GoldBanner, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { SITE, STORE } from "../../src/site-content";
+import { STORE } from "../../src/site-content";
 import { useTheme } from "../../src/theme";
 import { Button, Card, Chip, Cover, Empty, Heading, Loading, Muted, PageHeader, Price, Screen, SearchBar, SiteFooter, StatusChip } from "../../src/ui";
 
@@ -43,15 +43,15 @@ export default function ShopScreen() {
       {!filtered.length ? (
         <Empty
           icon="book-outline"
-          label={items.length ? "No publications match that search." : "No titles are in the published catalogue yet. The website shop is the live catalogue — open it to browse and pay with Razorpay."}
-          actionLabel="Open website shop"
-          onAction={() => void Linking.openURL(`${getApiBase()}${SITE.shopUrl}`)}
+          label={items.length ? "No publications match that search." : "No titles are in the published catalogue yet. Pull to refresh after Admin publishes, then checkout with Razorpay in the app."}
+          actionLabel="Refresh"
+          onAction={() => void refresh()}
         />
       ) : null}
       <Card>
-        <Heading>Website checkout</Heading>
-        <Muted>Card payment stays on the website Razorpay checkout, synced with your VGMF account. The in-app bag records an unpaid request.</Muted>
-        <Button kind="ink" icon="open-outline" label="Go to web checkout" onPress={() => void Linking.openURL(`${getApiBase()}${SITE.checkoutUrl}`)} />
+        <Heading>In-app checkout</Heading>
+        <Muted>Pay with Razorpay inside VGMF — UPI, cards, net banking and wallets. Free shipping over ₹{STORE.freeShippingThreshold}.</Muted>
+        <Button icon="bag-handle-outline" label="Open bag and pay" onPress={() => router.push("/cart")} />
       </Card>
       <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
         {[

@@ -4,7 +4,7 @@
 **Document type:** Full site PRD  
 **Owner:** Gogate family / Foundation trustees  
 **Status:** Living specification of the current product  
-**Revision:** 1.1 — 31 October 2026 (Asia/Calcutta)  
+**Revision:** 1.3.1 — 31 October 2026 (Asia/Calcutta)  
 **Audience:** Trustees, editors, engineers, mobile, and operations
 
 This document describes the whole VGMF platform as built: public website, customer account, admin CMS, commerce, events, support, mobile apps, sister portals, and hosting. It is the product contract for what the site and Android app must continue to do.
@@ -185,7 +185,7 @@ About CMS key: `vgmf_about` in local storage, `ABOUT_REVISION = 3`. Empty or tal
 
 ## 7. Mobile applications
 
-Primary Android client is the **Expo 54** app in `mobile/` (`org.vaidyagogate.app`, version **1.1.0**). Flutter under `native/flutter` is secondary.
+Primary Android client is the **Expo 54** app in `mobile/` (`org.vaidyagogate.app` / `org.vaidyagogate.customer`, version **1.3.1**). Flutter under `native/flutter` is secondary. The first screen is the same **Create Account | Sign In** used on the website (name fields, email, phone, WhatsApp, email OTP, 12-digit Account ID; sign-in with email/phone/Account ID + Foundation password + OTP). Website and app share `foundation-accounts.json`. There is no guest skip. Checkout is **in-app Razorpay**. Chat, About, Gallery, Videos, Notices, Support and the rest of the site are on the app drawer and Home grid.
 
 ### 7.1 Flavors
 
@@ -198,15 +198,16 @@ Primary Android client is the **Expo 54** app in `mobile/` (`org.vaidyagogate.ap
 
 Admin flavor is **read-only** against the published snapshot. Editing stays on the website.
 
-### 7.2 Customer screens (1.1 UI)
+### 7.2 Customer screens (1.3.1 UI)
 
-Home masthead with greeting, search, icon grid, flyer carousel (1:1 as published), events, publications, articles, videos, gallery, notices, about, support.  
+**Launch:** VGMF launcher icon (burgundy + cream mark, padded adaptive foreground), cream splash, then Create Account | Sign In matching the website.  
+Hamburger **app drawer** plus top-bar chat and bag. Home icon grid includes About, Events, Shop, Clinics, Articles, Gallery, Videos, Certificates, Chat, Notices, Contact, Support.  
 Events with Upcoming / Past / All.  
-Shop with category chips and bag badge.  
+Shop with category chips, bag badge, and in-app Razorpay checkout.  
 Clinics as photo + text rows.  
-Account: email OTP, orders, tickets, policy links.  
+Account: 12-digit Account ID, Razorpay orders, tickets, Chat, policy links, sign out.  
 About: 80px left portraits.  
-Plus cart (unpaid request; card pay on website), search, FAQ, certificates, contact, policies, gallery, videos, articles, event/clinic/book detail.
+Plus cart, in-app checkout (address + Razorpay WebView), Chat, search, FAQ, certificates, contact, policies, gallery, videos, articles, event/clinic/book detail.
 
 ### 7.3 Remote appearance
 
@@ -220,7 +221,8 @@ Feed origin: staging `https://staging.vaidyagogate.org` in `app.json` extra.apiU
 - Dark-content Android status bar on paper `#F7F3EA`, navigation bar `#FFFDF8`.
 - Outline tab icons when inactive, filled when active.
 - Empty states explain “publish then pull to refresh”.
-- No card checkout inside the app.
+- Checkout is in-app Razorpay (UPI, cards, net banking, wallets). Never “open website checkout”.
+- First launch and every signed-out launch show sign up / sign in before the rest of the app.
 
 ---
 
@@ -268,14 +270,14 @@ Switched from Admin → Site & portal switches / Sister portals.
 - [x] Events and Shop are plain header links.
 - [x] Gallery and Videos do not cross-link.
 - [x] Admin upload crop stores only the cropped file.
-- [x] Android 1.1 uses the Foundation paper/burgundy system, icon explore grid, event filters, bag badge, and 80px About portraits.
+- [x] Android 1.3.1 uses the Foundation paper/burgundy system, VGMF launcher icon and splash, app drawer, chat, icon explore grid, event filters, bag badge, and 80px About portraits.
+- [x] First Android screen is Create Account | Sign In, matching the website and sharing the same accounts. Checkout is in-app Razorpay.
 - [x] Site PRD is published as `docs/VGMF-SITE-PRD.md`.
 
 ---
 
 ## 12. Out of scope
 
-- In-app Razorpay checkout (website only).
 - Flutter as the primary Android client.
 - Invented journal or magazine section.
 - Putting Announcements under Events or Books under Shop.
@@ -285,10 +287,9 @@ Switched from Admin → Site & portal switches / Sister portals.
 
 ## 13. Open product decisions
 
-1. When to ship a signed Play Store build of `1.1.0`.
-2. Whether customer bag later deep-links into website checkout.
-3. Whether sister portals share the same login as the Foundation site.
-4. Whether About CMS should move from browser local storage to server persistence (revision already exists).
+1. When to ship a signed Play Store build of `1.3.1`.
+2. Whether sister portals share the same login as the Foundation site.
+3. Whether About CMS should move from browser local storage to server persistence (revision already exists).
 
 ---
 

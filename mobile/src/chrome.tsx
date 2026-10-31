@@ -1,12 +1,46 @@
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { mediaUrl } from "./api";
 import { useAuth } from "./auth";
 import { useCart } from "./cart";
+import { useDrawer } from "./drawer";
 import { useBrand } from "./feed";
 import { SITE } from "./site-content";
 import { useTheme } from "./theme";
 import { BrandMark, IconButton } from "./ui";
+
+export function MenuButton() {
+  const { openDrawer } = useDrawer();
+  return <IconButton icon="menu-outline" label="Menu" onPress={openDrawer} />;
+}
+
+export function ChatFab() {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={() => router.push("/chat")}
+      accessibilityLabel="Open Foundation chat"
+      style={{
+        position: "absolute",
+        right: 18,
+        bottom: 18,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: theme.colors.primary,
+        alignItems: "center",
+        justifyContent: "center",
+        elevation: 4,
+        shadowColor: "#0B1F3A",
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      }}
+    >
+      <Ionicons name="chatbubbles" size={22} color={theme.colors.onPrimary} />
+    </Pressable>
+  );
+}
 
 export function TopBar({ bag = false }: { bag?: boolean }) {
   const theme = useTheme();
@@ -15,11 +49,13 @@ export function TopBar({ bag = false }: { bag?: boolean }) {
   const cart = useCart();
   return (
     <View style={{ paddingBottom: 4 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <MenuButton />
         <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={34} />
         <Text style={{ flex: 1, fontSize: 18, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }} numberOfLines={1}>
           {SITE.shortName} Foundation
         </Text>
+        <IconButton icon="chatbubbles-outline" label="Chat" onPress={() => router.push("/chat")} />
         {bag ? <IconButton icon="bag-handle-outline" label="Bag" badge={cart.count} onPress={() => router.push("/cart")} /> : null}
         <IconButton icon={session ? "person-circle" : "notifications-outline"} label="Account" onPress={() => router.push("/account")} />
       </View>
