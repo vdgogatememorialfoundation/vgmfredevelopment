@@ -30,10 +30,62 @@ function BioBlock({ text }: { text: string }) {
   );
 }
 
+function excerpt(text: string, count = 2) {
+  return paragraphs(text).slice(0, count).join("\n\n");
+}
+
+function PersonSplit({
+  image,
+  title,
+  body,
+  href,
+  imageAlt,
+  placeholder,
+}: {
+  image?: string;
+  title: string;
+  body: string;
+  href?: string;
+  imageAlt: string;
+  placeholder?: string;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className="grid items-start gap-8 lg:grid-cols-[minmax(14rem,20rem)_minmax(0,1fr)]">
+      <div className="lg:sticky lg:top-28">
+        {image ? (
+          <NaturalImage src={image} alt={imageAlt} fit="portrait" className="rounded-2xl border border-border bg-white p-2 shadow-sm" />
+        ) : (
+          <div className="flex min-h-56 items-center justify-center rounded-2xl border border-border bg-slate-50 p-8 text-center">
+            <div>
+              <Initials name={placeholder || title} size="mx-auto mb-4 h-20 w-20" />
+              <p className="font-semibold text-text-primary">{title}</p>
+            </div>
+          </div>
+        )}
+      </div>
+      <div>
+        <h2 className="heading-3">{title}</h2>
+        <div className="mt-4">
+          <BioBlock text={body} />
+        </div>
+        {href ? (
+          <Link href={href} className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-burgundy">
+            {t("about.learnMore")}
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function AboutLive() {
   const about = useAbout();
   const { t } = useI18n();
   const letter = paragraphs(about.intro);
+  const portrait = about.heroImage || about.legacy.portrait;
+  const people = new Set(["s-legacy", "s-anagha"]);
+  const others = about.sections.filter((section) => !people.has(section.id));
   return (
     <main>
       <PageHeader eyebrow={t("about.eyebrow")} title={about.title} />
@@ -50,16 +102,33 @@ export function AboutLive() {
           </div>
         </section>
       )}
-      {about.heroImage && (
-        <section className="bg-background pt-10">
-          <div className="container">
-            <NaturalImage src={about.heroImage} alt="" fit="hero" className="rounded-2xl border border-border" />
-          </div>
-        </section>
-      )}
+      <section className="section bg-background">
+        <div className="container">
+          <PersonSplit
+            image={portrait}
+            title={about.legacy.title}
+            body={excerpt(about.legacy.biography)}
+            href="/about/legacy-of-vaidya-rb-gogate"
+            imageAlt="Vaidya R. B. Gogate"
+            placeholder="R B Gogate"
+          />
+        </div>
+      </section>
+      <section className="section bg-warm-cream">
+        <div className="container">
+          <PersonSplit
+            image={about.anagha.portrait}
+            title={about.anagha.title}
+            body={excerpt(about.anagha.biography)}
+            href="/about/dr-anagha-gogate"
+            imageAlt={about.anagha.title}
+            placeholder="A G"
+          />
+        </div>
+      </section>
       <section className="section bg-background">
         <div className="container grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {about.sections.map((section) => {
+          {others.map((section) => {
             const body = (
               <>
                 {section.image && (
@@ -322,31 +391,23 @@ export function LegacyLive() {
     <main>
       <PageHeader eyebrow={t("about.eyebrow")} title={legacy.title} description={legacy.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
-        <div className="container grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
-          <div>
-            <h2 className="heading-3 mb-4">{t("about.biography")}</h2>
-            <BioBlock text={primary} />
-            {secondary ? (
-              <div className="mt-10">
-                <h2 className="heading-3 mb-4">{secondaryLabel}</h2>
-                <BioBlock text={secondary} />
-              </div>
-            ) : null}
-            <h2 className="heading-3 mb-4 mt-10">{t("about.philosophy")}</h2>
+        <div className="container">
+          <PersonSplit
+            image={legacy.portrait}
+            title={t("about.biography")}
+            body={primary}
+            imageAlt="Vaidya R. B. Gogate"
+            placeholder="R B Gogate"
+          />
+          {secondary ? (
+            <div className="mt-12">
+              <h2 className="heading-3 mb-4">{secondaryLabel}</h2>
+              <BioBlock text={secondary} />
+            </div>
+          ) : null}
+          <div className="mt-12">
+            <h2 className="heading-3 mb-4">{t("about.philosophy")}</h2>
             <p className="text-body whitespace-pre-line">{legacy.philosophy}</p>
-          </div>
-          <div>
-            {legacy.portrait ? (
-              <NaturalImage src={legacy.portrait} alt="Vaidya R. B. Gogate" fit="content" className="rounded-2xl border border-border bg-white shadow-sm" />
-            ) : (
-              <div className="flex min-h-64 items-center justify-center rounded-2xl border border-border bg-slate-50 p-8 text-center">
-                <div>
-                  <Initials name="R B" size="mx-auto mb-5 h-24 w-24" />
-                  <p className="text-lg font-bold text-text-primary">Vaidya R. B. Gogate</p>
-                  <p className="mt-2 text-sm text-text-muted">{t("legacy.portraitRole")}</p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </section>
@@ -383,24 +444,14 @@ export function AnaghaLive() {
     <main>
       <PageHeader eyebrow={t("about.eyebrow")} title={anagha.title} description={anagha.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
-        <div className="container grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)]">
-          <div>
-            <h2 className="heading-3 mb-4">{t("about.biography")}</h2>
-            <BioBlock text={anagha.biography} />
-          </div>
-          <div>
-            {anagha.portrait ? (
-              <NaturalImage src={anagha.portrait} alt={anagha.title} fit="content" className="rounded-2xl border border-border bg-white shadow-sm" />
-            ) : (
-              <div className="flex min-h-64 items-center justify-center rounded-2xl border border-border bg-slate-50 p-8 text-center">
-                <div>
-                  <Initials name="A G" size="mx-auto mb-5 h-24 w-24" />
-                  <p className="text-lg font-bold text-text-primary">{anagha.title}</p>
-                  <p className="mt-2 text-sm text-text-muted">1936 – 2019</p>
-                </div>
-              </div>
-            )}
-          </div>
+        <div className="container">
+          <PersonSplit
+            image={anagha.portrait}
+            title={t("about.biography")}
+            body={anagha.biography}
+            imageAlt={anagha.title}
+            placeholder="A G"
+          />
         </div>
       </section>
     </main>

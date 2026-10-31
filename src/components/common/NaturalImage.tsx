@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { classNames } from "@/lib/utils";
 
-type Fit = "content" | "hero" | "card" | "thumb";
+type Fit = "content" | "hero" | "card" | "thumb" | "portrait";
 
 const MAX: Record<Fit, string> = {
   hero: "max-h-[28rem]",
   content: "max-h-[36rem]",
-  card: "max-h-64",
+  portrait: "max-h-[32rem]",
+  card: "max-h-56",
   thumb: "max-h-40",
 };
 
@@ -26,13 +27,13 @@ export function NaturalImage({
   fit?: Fit;
 }) {
   const [shape, setShape] = useState<"wide" | "tall" | "square" | "unknown">("unknown");
+  const portraitLike = shape !== "wide";
 
   return (
     <div
       className={classNames(
-        "flex items-center justify-center overflow-hidden bg-paper",
-        shape === "tall" && "mx-auto max-w-sm",
-        shape === "square" && "mx-auto max-w-lg",
+        "flex items-center justify-center bg-transparent",
+        portraitLike && "mx-auto w-fit max-w-full",
         className
       )}
     >
@@ -49,7 +50,7 @@ export function NaturalImage({
         className={classNames(
           "h-auto max-w-full object-contain",
           MAX[fit],
-          shape === "tall" ? "w-auto" : "w-full",
+          portraitLike ? "w-auto" : "w-full",
           imgClassName
         )}
       />

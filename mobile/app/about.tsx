@@ -93,7 +93,7 @@ export default function AboutScreen() {
         </View>
       ) : null}
 
-      {str(legacy.title) || str(legacy.biography) ? (
+      {str(legacy.title) || str(legacy.biography) || str(legacy.biographyMr) ? (
         <View>
           <Heading>{str(legacy.title, "The Legacy of Vaidya R. B. Gogate")}</Heading>
           {str(legacy.intro) ? (
@@ -155,7 +155,7 @@ export default function AboutScreen() {
         </View>
       ) : null}
 
-      {str(scholarship.title) ? (
+      {str(scholarship.title) || str(scholarship.intro) || asStrings(scholarship.books).length || asStrings(scholarship.research).length ? (
         <View>
           <Heading>{str(scholarship.title, "Books & Research")}</Heading>
           {str(scholarship.intro) ? (

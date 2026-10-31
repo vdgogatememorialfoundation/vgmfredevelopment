@@ -22,6 +22,25 @@ export default function AboutDirectory() {
           </h2>
           <p className="mt-2 text-sm leading-6 text-text-muted">{t("home.aboutText")}</p>
         </div>
+        {(about.heroImage || about.legacy.portrait) && (
+          <div className="mb-10 grid items-start gap-8 lg:grid-cols-[minmax(12rem,18rem)_minmax(0,1fr)]">
+            <NaturalImage
+              src={(about.heroImage || about.legacy.portrait)!}
+              alt="Vaidya R. B. Gogate"
+              fit="portrait"
+              className="rounded-2xl border border-border bg-white p-2 shadow-sm"
+            />
+            <div>
+              <p className="font-serif text-xl font-semibold text-ink">{about.legacy.title}</p>
+              <p className="mt-3 whitespace-pre-line text-sm leading-6 text-text-muted">
+                {about.legacy.biography.split(/\n\s*\n/)[0]}
+              </p>
+              <Link href="/about/legacy-of-vaidya-rb-gogate" className="mt-4 inline-flex text-sm font-semibold text-burgundy hover:underline">
+                {t("about.learnMore")}
+              </Link>
+            </div>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sections.map((section) => (
             <article
