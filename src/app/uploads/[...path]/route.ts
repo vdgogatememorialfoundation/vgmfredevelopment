@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { dataFile } from "@/lib/server/paths";
+import { getR2Object } from "@/lib/server/r2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,18 @@ const TYPES: Record<string, string> = {
   svg: "image/svg+xml",
   ico: "image/x-icon",
   pdf: "application/pdf",
+  mp4: "video/mp4",
 };
+
+function typedResponse(name: string, body: Buffer, type?: string) {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  return new NextResponse(new Uint8Array(body), {
+    headers: {
+      "content-type": type || TYPES[ext] || "application/octet-stream",
+      "cache-control": "public, max-age=86400",
+    },
+  });
+}
 
 export async function GET(_request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const parts = (await context.params).path ?? [];
@@ -27,16 +39,21 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ pa
   for (const file of candidates) {
     try {
       const body = readFileSync(/* turbopackIgnore: true */ file);
-      const ext = name.split(".").pop()?.toLowerCase() || "";
-      return new NextResponse(body, {
-        headers: {
-          "content-type": TYPES[ext] || "application/octet-stream",
-          "cache-control": "public, max-age=86400",
-        },
-      });
+      return typedResponse(name, body);
     } catch {
       /* try the next path */
     }
+  }
+  const remote = await getR2Object(`uploads/${name}`).catch(() => null);
+  if (remote) {
+    try {
+      const dest = dataFile("uploads", name);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, remote.body);
+    } catch {
+      /* serve without caching locally */
+    }
+    return typedResponse(name, remote.body, remote.type);
   }
   return new NextResponse("Not found", { status: 404 });
 }

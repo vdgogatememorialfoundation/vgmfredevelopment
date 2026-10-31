@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { NaturalImage } from "@/components/common/NaturalImage";
 import { useAbout } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
@@ -21,15 +22,14 @@ export default function AboutDirectory() {
           </h2>
           <p className="mt-2 text-sm leading-6 text-text-muted">{t("home.aboutText")}</p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {sections.map((section) => (
             <article
               key={section.id}
               className="flex h-full flex-col rounded-xl border border-border bg-white px-4 py-5 shadow-sm"
             >
               {section.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={section.image} alt="" className="mb-4 aspect-[16/9] w-full rounded-lg object-cover" />
+                <NaturalImage src={section.image} alt="" fit="card" className="mb-4 rounded-lg" />
               ) : null}
               <p className="font-serif text-base font-semibold text-ink">{section.title}</p>
               <p className="mt-2 flex-1 text-sm leading-6 text-text-muted">{section.body}</p>

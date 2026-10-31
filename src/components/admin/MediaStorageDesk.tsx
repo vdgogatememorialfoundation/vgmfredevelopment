@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type Status = {
   cloudflare: { configured: boolean };
   googleDrive: { configured: boolean };
+  r2: { configured: boolean; bucket?: string };
 };
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -14,6 +15,7 @@ export function MediaStorageDesk() {
   const [status, setStatus] = useState<Status | null>(null);
   const [cloudflare, setCloudflare] = useState({ accountId: "", apiToken: "", accountHash: "" });
   const [googleDrive, setGoogleDrive] = useState({ folderId: "", clientEmail: "", privateKey: "" });
+  const [r2, setR2] = useState({ accountId: "", accessKeyId: "", secretAccessKey: "", bucket: "", endpoint: "", region: "auto" });
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -34,14 +36,15 @@ export function MediaStorageDesk() {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cloudflare, googleDrive }),
+        body: JSON.stringify({ cloudflare, googleDrive, r2 }),
       });
       const data = (await response.json()) as Status & { ok?: boolean; error?: string };
       if (!response.ok || !data.ok) throw new Error(data.error || "Could not save.");
       setStatus(data);
       setCloudflare({ accountId: "", apiToken: "", accountHash: "" });
       setGoogleDrive({ folderId: "", clientEmail: "", privateKey: "" });
-      setNote("Saved. Uploads now use this storage.");
+      setR2({ accountId: "", accessKeyId: "", secretAccessKey: "", bucket: "", endpoint: "", region: "auto" });
+      setNote("Saved. Uploads now persist as /uploads/ URLs and copy to R2 when those keys are present.");
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Could not save.");
     } finally {
@@ -54,16 +57,29 @@ export function MediaStorageDesk() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Media storage</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Photographs, logos and posters go to Cloudflare Images. Videos, PDFs and other files go to Google Drive. Keys stay on the server.
+          Every upload is saved on this server as <code>/uploads/…</code> so the site never stores a raw data URL. Cloudflare R2 keeps a private copy. Cloudflare Images and Google Drive stay optional.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+          Cloudflare R2: {status?.r2.configured ? `connected (${status.r2.bucket || "vgmf-staging-main"})` : "not connected"}
+        </p>
         <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
           Cloudflare Images: {status?.cloudflare.configured ? "connected" : "not connected"}
         </p>
         <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
           Google Drive: {status?.googleDrive.configured ? "connected" : "not connected"}
         </p>
+      </div>
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+        <p className="font-semibold text-slate-900">Cloudflare R2</p>
+        <p className="text-xs text-slate-500">S3-compatible bucket. The public site still serves files from /uploads; R2 is the durable store because this bucket has no custom domain.</p>
+        <input className={field} placeholder="Account ID" value={r2.accountId} onChange={(event) => setR2({ ...r2, accountId: event.target.value })} autoComplete="off" />
+        <input className={field} placeholder="Bucket name, e.g. vgmf-staging-main" value={r2.bucket} onChange={(event) => setR2({ ...r2, bucket: event.target.value })} autoComplete="off" />
+        <input className={field} placeholder="S3 endpoint" value={r2.endpoint} onChange={(event) => setR2({ ...r2, endpoint: event.target.value })} autoComplete="off" />
+        <input className={field} placeholder="Access Key ID" value={r2.accessKeyId} onChange={(event) => setR2({ ...r2, accessKeyId: event.target.value })} autoComplete="off" />
+        <input className={field} type="password" placeholder="Secret Access Key" value={r2.secretAccessKey} onChange={(event) => setR2({ ...r2, secretAccessKey: event.target.value })} autoComplete="new-password" />
+        <input className={field} placeholder="Region (auto)" value={r2.region} onChange={(event) => setR2({ ...r2, region: event.target.value })} autoComplete="off" />
       </div>
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <p className="font-semibold text-slate-900">Cloudflare Images</p>

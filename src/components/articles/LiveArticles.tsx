@@ -4,6 +4,7 @@ import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import ArticleCard from "@/components/articles/ArticleCard";
 import Badge from "@/components/common/Badge";
+import { NaturalImage } from "@/components/common/NaturalImage";
 import { useLiveArticles } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 import type { Article, CaptionedImage } from "@/types";
@@ -14,8 +15,7 @@ import { ShareBar } from "@/components/common/ShareBar";
 function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
   return (
     <figure className="mb-8">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={image.src} alt={image.caption || alt} className="w-full rounded-xl border border-border object-cover" />
+      <NaturalImage src={image.src} alt={image.caption || alt} fit="content" className="rounded-xl border border-border" />
       {image.caption && <figcaption className="mt-2 text-center text-sm text-text-muted">{image.caption}</figcaption>}
     </figure>
   );
@@ -151,8 +151,7 @@ export function ArticleView({ slug }: { slug: string }) {
         <div className="container grid gap-12 lg:grid-cols-3">
           <article className="min-w-0 lg:col-span-2">
             {article.coverImage && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={article.coverImage} alt={article.title} className="mb-8 aspect-[16/9] w-full rounded-2xl border border-border object-cover" />
+              <NaturalImage src={article.coverImage} alt={article.title} fit="hero" className="mb-8 rounded-2xl border border-border" />
             )}
             <ArticleBody article={article} />
           </article>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import EventCard from "@/components/events/EventCard";
 import Badge from "@/components/common/Badge";
+import { NaturalImage } from "@/components/common/NaturalImage";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { eventRecordKeys, getEventRecords, type EventRecord } from "@/lib/cms";
 import { mapsEmbedUrl } from "@/lib/maps-place";
@@ -110,9 +111,8 @@ export function LiveEventPage({ slug }: { slug: string }) {
             <Badge tone="neutral">{event.registrationStatus}</Badge>
           </div>
           <h1 className="heading-1 mt-4">{event.name}</h1>
-          {event.bannerUrl && /^(https?:|data:image)/.test(event.bannerUrl) && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={event.bannerUrl} alt="" className="mt-6 aspect-[21/9] w-full max-w-5xl rounded-2xl border border-border object-cover" />
+          {event.bannerUrl && /^(https?:|data:image|\/)/.test(event.bannerUrl) && (
+            <NaturalImage src={event.bannerUrl} alt="" fit="hero" className="mt-6 max-w-5xl rounded-2xl border border-border" />
           )}
           <p className="mt-4 max-w-3xl text-body">{event.shortDescription}</p>
           <p className="mt-4 text-sm font-semibold text-burgundy">

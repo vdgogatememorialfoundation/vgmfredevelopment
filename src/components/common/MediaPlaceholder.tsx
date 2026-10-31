@@ -31,11 +31,11 @@ export default function MediaPlaceholder({
 }: MediaPlaceholderProps) {
   const glyph = labelGlyphs[variant];
 
-  if (src && /^(https?:|data:image)/.test(src)) {
+  if (src && /^(https?:|data:image|\/)/.test(src)) {
     return (
       <div className={classNames("relative overflow-hidden bg-warm-cream", aspectClassName, className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={label ?? ""} className="absolute inset-0 h-full w-full object-cover" />
+        <img src={src} alt={label ?? ""} className="absolute inset-0 h-full w-full object-contain" />
       </div>
     );
   }

@@ -11,6 +11,10 @@ function asRows(value: unknown): Row[] {
   return Array.isArray(value) ? (value as Row[]) : [];
 }
 
+function asStrings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
 function splitParagraphs(text: string) {
   return text
     .split(/\n\s*\n/)
@@ -45,12 +49,16 @@ export default function AboutScreen() {
   const history = asRow(about.history);
   const trustees = asRow(about.trustees);
   const legacy = asRow(about.legacy);
+  const anagha = asRow(about.anagha);
+  const awards = asRow(about.awards);
+  const scholarship = asRow(about.scholarship);
   const intro = str(about.intro);
   const hasBody =
     Boolean(intro) ||
     sections.length > 0 ||
     Boolean(str(foundation.intro)) ||
-    Boolean(str(legacy.biography));
+    Boolean(str(legacy.biography)) ||
+    Boolean(str(anagha.biography));
 
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
@@ -105,6 +113,68 @@ export default function AboutScreen() {
               <Paragraphs text={str(legacy.philosophy)} />
             </Card>
           ) : null}
+          {str(legacy.biographyMr) ? (
+            <Card>
+              <Text style={{ fontWeight: "700", fontSize: 16 }}>मराठी</Text>
+              <Paragraphs text={str(legacy.biographyMr)} />
+            </Card>
+          ) : null}
+        </View>
+      ) : null}
+
+      {str(anagha.title) || str(anagha.biography) ? (
+        <View>
+          <Heading>{str(anagha.title, "Dr. Anagha Gogate")}</Heading>
+          {str(anagha.intro) ? (
+            <Card>
+              <Paragraphs text={str(anagha.intro)} />
+            </Card>
+          ) : null}
+          {str(anagha.biography) ? (
+            <Card>
+              <Paragraphs text={str(anagha.biography)} />
+            </Card>
+          ) : null}
+        </View>
+      ) : null}
+
+      {str(awards.title) || asRows(awards.items).length ? (
+        <View>
+          <Heading>{str(awards.title, "Awards & Accolades")}</Heading>
+          {str(awards.intro) ? (
+            <Card>
+              <Paragraphs text={str(awards.intro)} />
+            </Card>
+          ) : null}
+          {asRows(awards.items).map((item, index) => (
+            <Card key={str(item.id, `aw-${index}`)}>
+              <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(item.title)}</Text>
+              <Muted>{str(item.body)}</Muted>
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      {str(scholarship.title) ? (
+        <View>
+          <Heading>{str(scholarship.title, "Books & Research")}</Heading>
+          {str(scholarship.intro) ? (
+            <Card>
+              <Paragraphs text={str(scholarship.intro)} />
+            </Card>
+          ) : null}
+          <Card>
+            <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(scholarship.booksTitle, "Books")}</Text>
+            {asStrings(scholarship.books).map((book) => (
+              <Muted key={book}>{book}</Muted>
+            ))}
+          </Card>
+          <Card>
+            <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(scholarship.researchTitle, "Research")}</Text>
+            {asStrings(scholarship.research).map((item) => (
+              <Muted key={item}>{item}</Muted>
+            ))}
+          </Card>
         </View>
       ) : null}
 

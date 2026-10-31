@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { fileToDataUrl, fileToStoredUrl } from "@/lib/images";
+import { fileToStoredUrl } from "@/lib/images";
 import type { CaptionedImage } from "@/types";
 
 const input = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -28,7 +28,7 @@ export function ImageField({
     setBusy(true);
     setError("");
     try {
-      onChange(await fileToStoredUrl(file).catch(() => fileToDataUrl(file, Math.max(maxWidth, 1200), 0.82)));
+      onChange(await fileToStoredUrl(file));
     } catch (problem) {
       const quota = problem instanceof DOMException && (problem.name === "QuotaExceededError" || problem.code === 22);
       setError(quota ? "Storage is full. Use a smaller image or paste an image URL." : problem instanceof Error ? problem.message : "Upload failed.");
@@ -99,7 +99,7 @@ export function GalleryField({
     try {
       const added: CaptionedImage[] = [];
       for (const file of Array.from(files)) {
-        added.push({ src: await fileToStoredUrl(file).catch(() => fileToDataUrl(file, 640, 0.6)), caption: "" });
+        added.push({ src: await fileToStoredUrl(file), caption: "" });
       }
       onChange([...images, ...added]);
     } catch (problem) {

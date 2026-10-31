@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ImageField } from "@/components/admin/ImageField";
-import { fileToDataUrl } from "@/lib/images";
+import { fileToStoredUrl } from "@/lib/images";
 import { getAbout, resetAbout, saveAbout, type AboutContent, type AboutPerson, type AboutPhoto, type AboutSection, type FamilyNode, type TimelineEntry } from "@/lib/about";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -12,7 +12,7 @@ const ghost = "rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibol
 const card = "space-y-4 rounded-xl border border-slate-200 bg-white p-5";
 
 const tabs = ["Page & sections", "Inner pages", "Photo gallery", "Legacy & timeline", "Legacy tree"] as const;
-const innerTabs = ["Foundation", "History", "Trustees & team"] as const;
+const innerTabs = ["Foundation", "History", "Trustees & team", "Anagha", "Awards", "Books & research"] as const;
 
 function descendantsOf(nodes: FamilyNode[], id: string): Set<string> {
   const found = new Set<string>([id]);
@@ -41,6 +41,9 @@ export default function AboutDesk() {
   const setFoundation = (patch: Partial<AboutContent["foundation"]>) => setDraft((current) => ({ ...current, foundation: { ...current.foundation, ...patch } }));
   const setHistory = (patch: Partial<AboutContent["history"]>) => setDraft((current) => ({ ...current, history: { ...current.history, ...patch } }));
   const setTrustees = (patch: Partial<AboutContent["trustees"]>) => setDraft((current) => ({ ...current, trustees: { ...current.trustees, ...patch } }));
+  const setAnagha = (patch: Partial<AboutContent["anagha"]>) => setDraft((current) => ({ ...current, anagha: { ...current.anagha, ...patch } }));
+  const setAwards = (patch: Partial<AboutContent["awards"]>) => setDraft((current) => ({ ...current, awards: { ...current.awards, ...patch } }));
+  const setScholarship = (patch: Partial<AboutContent["scholarship"]>) => setDraft((current) => ({ ...current, scholarship: { ...current.scholarship, ...patch } }));
   const editList = <T extends { id: string }>(list: T[], id: string, patch: Partial<T>) => list.map((item) => (item.id === id ? { ...item, ...patch } : item));
   const move = <T,>(list: T[], index: number, delta: number) => {
     const next = [...list];
@@ -62,12 +65,18 @@ export default function AboutDesk() {
   const uploadGallery = async (files: FileList | null) => {
     if (!files?.length) return;
     setUploading(true);
-    const added: AboutPhoto[] = [];
-    for (const file of Array.from(files)) {
-      added.push({ id: `ph-${Date.now()}-${added.length}`, src: await fileToDataUrl(file, 1200, 0.8), title: file.name.replace(/\.[^.]+$/, ""), description: "" });
+    setMessage("");
+    try {
+      const added: AboutPhoto[] = [];
+      for (const file of Array.from(files)) {
+        added.push({ id: `ph-${Date.now()}-${added.length}`, src: await fileToStoredUrl(file), title: file.name.replace(/\.[^.]+$/, ""), description: "" });
+      }
+      set({ gallery: [...draft.gallery, ...added] });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not upload the photos.");
+    } finally {
+      setUploading(false);
     }
-    set({ gallery: [...draft.gallery, ...added] });
-    setUploading(false);
   };
 
   const tree = draft.legacy.tree;
@@ -85,6 +94,9 @@ export default function AboutDesk() {
           <Link href="/about/history" className={ghost}>History</Link>
           <Link href="/about/trustees" className={ghost}>Trustees</Link>
           <Link href="/about/legacy-of-vaidya-rb-gogate" className={ghost}>Legacy</Link>
+          <Link href="/about/dr-anagha-gogate" className={ghost}>Anagha</Link>
+          <Link href="/about/awards" className={ghost}>Awards</Link>
+          <Link href="/about/books-and-research" className={ghost}>Books</Link>
         </div>
       </div>
 
@@ -254,6 +266,60 @@ export default function AboutDesk() {
               </div>
             </>
           )}
+          {inner === "Anagha" && (
+            <div className={`${card} grid gap-4 lg:grid-cols-[1fr_280px]`}>
+              <div className="space-y-3">
+                <input className={field} placeholder="Page title" value={draft.anagha.title} onChange={(event) => setAnagha({ title: event.target.value })} />
+                <textarea className={field} rows={3} placeholder="Introduction" value={draft.anagha.intro} onChange={(event) => setAnagha({ intro: event.target.value })} />
+                <textarea className={field} rows={10} placeholder="Biography" value={draft.anagha.biography} onChange={(event) => setAnagha({ biography: event.target.value })} />
+              </div>
+              <ImageField label="Portrait" value={draft.anagha.portrait} onChange={(portrait) => setAnagha({ portrait })} />
+            </div>
+          )}
+          {inner === "Awards" && (
+            <>
+              <div className={card}>
+                <input className={field} placeholder="Page title" value={draft.awards.title} onChange={(event) => setAwards({ title: event.target.value })} />
+                <textarea className={field} rows={3} placeholder="Introduction" value={draft.awards.intro} onChange={(event) => setAwards({ intro: event.target.value })} />
+              </div>
+              <div className={card}>
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-900">Awards</p>
+                  <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => setAwards({ items: [...draft.awards.items, { id: `aw-${Date.now()}`, title: "", body: "" }] })}>+ Add award</button>
+                </div>
+                {draft.awards.items.map((item: AboutSection, index) => (
+                  <div key={item.id} className="grid gap-3 rounded-lg border border-slate-100 p-4 lg:grid-cols-[1fr_220px]">
+                    <div className="space-y-2">
+                      <input className={field} placeholder="Award name" value={item.title} onChange={(event) => setAwards({ items: editList(draft.awards.items, item.id, { title: event.target.value }) })} />
+                      <textarea className={field} rows={3} placeholder="Citation" value={item.body} onChange={(event) => setAwards({ items: editList(draft.awards.items, item.id, { body: event.target.value }) })} />
+                      <div className="flex gap-3 text-xs font-semibold">
+                        <button type="button" className="text-slate-500" onClick={() => setAwards({ items: move(draft.awards.items, index, -1) })}>Up</button>
+                        <button type="button" className="text-slate-500" onClick={() => setAwards({ items: move(draft.awards.items, index, 1) })}>Down</button>
+                        <button type="button" className="text-red-600" onClick={() => setAwards({ items: draft.awards.items.filter((entry) => entry.id !== item.id) })}>Remove</button>
+                      </div>
+                    </div>
+                    <ImageField label="Image" value={item.image} onChange={(image) => setAwards({ items: editList(draft.awards.items, item.id, { image }) })} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {inner === "Books & research" && (
+            <>
+              <div className={card}>
+                <input className={field} placeholder="Page title" value={draft.scholarship.title} onChange={(event) => setScholarship({ title: event.target.value })} />
+                <textarea className={field} rows={3} placeholder="Introduction" value={draft.scholarship.intro} onChange={(event) => setScholarship({ intro: event.target.value })} />
+              </div>
+              <div className={card}>
+                <input className={field} placeholder="Books heading" value={draft.scholarship.booksTitle} onChange={(event) => setScholarship({ booksTitle: event.target.value })} />
+                <textarea className={field} rows={6} placeholder="One book title per line" value={draft.scholarship.books.join("\n")} onChange={(event) => setScholarship({ books: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })} />
+              </div>
+              <div className={card}>
+                <input className={field} placeholder="Research heading" value={draft.scholarship.researchTitle} onChange={(event) => setScholarship({ researchTitle: event.target.value })} />
+                <textarea className={field} rows={6} placeholder="One research subject per line" value={draft.scholarship.research.join("\n")} onChange={(event) => setScholarship({ research: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })} />
+              </div>
+            </>
+          )}
         </>
       )}
 
@@ -306,7 +372,8 @@ export default function AboutDesk() {
             <div className="space-y-3">
               <input className={field} placeholder="Legacy page title" value={draft.legacy.title} onChange={(event) => setLegacy({ title: event.target.value })} />
               <textarea className={field} rows={3} placeholder="Introduction" value={draft.legacy.intro} onChange={(event) => setLegacy({ intro: event.target.value })} />
-              <textarea className={field} rows={7} placeholder="Biography (blank line between paragraphs)" value={draft.legacy.biography} onChange={(event) => setLegacy({ biography: event.target.value })} />
+              <textarea className={field} rows={7} placeholder="Biography in English (blank line between paragraphs)" value={draft.legacy.biography} onChange={(event) => setLegacy({ biography: event.target.value })} />
+              <textarea className={field} rows={7} placeholder="मराठी चरित्र" value={draft.legacy.biographyMr} onChange={(event) => setLegacy({ biographyMr: event.target.value })} />
               <textarea className={field} rows={4} placeholder="Philosophy" value={draft.legacy.philosophy} onChange={(event) => setLegacy({ philosophy: event.target.value })} />
             </div>
             <ImageField label="Portrait" value={draft.legacy.portrait} onChange={(portrait) => setLegacy({ portrait })} />
