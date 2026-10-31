@@ -138,7 +138,13 @@ export const ABOUT_NAV = [
 ] as const;
 
 export function firstPhoto(...values: Array<string | undefined>) {
-  return values.find((value) => typeof value === "string" && value.trim()) || "";
+  return (
+    values.find((value) => {
+      const src = typeof value === "string" ? value.trim() : "";
+      if (!src || /^data:/i.test(src) || /^blob:/i.test(src)) return false;
+      return src.startsWith("/") || /^https?:\/\//i.test(src);
+    }) || ""
+  );
 }
 
 export function rbPortrait(about: Pick<AboutContent, "heroImage" | "legacy">) {

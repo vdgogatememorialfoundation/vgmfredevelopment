@@ -3,6 +3,7 @@
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import { NaturalImage } from "@/components/common/NaturalImage";
+import { useState } from "react";
 import { anaghaPortrait, buildTree, rbPortrait, useAbout, type AboutPerson, type TreeBranch } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
@@ -34,18 +35,29 @@ function excerpt(text: string, count = 2) {
   return paragraphs(text).slice(0, count).join("\n\n");
 }
 
-function PortraitSquare({ src, alt, placeholder }: { src?: string; alt: string; placeholder?: string }) {
-  if (!src) {
+function PortraitSquare({ src, alt, fallback, placeholder }: { src?: string; alt: string; fallback?: string; placeholder?: string }) {
+  const start = src || fallback || "";
+  const [shown, setShown] = useState(start);
+  if (!shown) {
     return (
-      <div className="flex h-36 w-36 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-slate-50 sm:h-40 sm:w-40">
+      <div className="mx-auto flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-slate-50 sm:mx-0 sm:h-40 sm:w-40">
         <Initials name={placeholder || alt} size="h-16 w-16" />
       </div>
     );
   }
   return (
-    <div className="h-36 w-36 shrink-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:h-40 sm:w-40">
+    <div className="mx-auto h-32 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:mx-0 sm:h-40 sm:w-40">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={alt} className="h-full w-full object-cover object-top" />
+      <img
+        src={shown}
+        alt={alt}
+        width={160}
+        height={160}
+        onError={() => {
+          if (fallback && shown !== fallback) setShown(fallback);
+        }}
+        className="h-full w-full object-cover object-top"
+      />
     </div>
   );
 }
@@ -57,6 +69,7 @@ function PersonSplit({
   href,
   imageAlt,
   placeholder,
+  fallback,
 }: {
   image?: string;
   title: string;
@@ -64,12 +77,13 @@ function PersonSplit({
   href?: string;
   imageAlt: string;
   placeholder?: string;
+  fallback?: string;
 }) {
   const { t } = useI18n();
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-5 sm:gap-8">
-      <PortraitSquare src={image} alt={imageAlt} placeholder={placeholder} />
-      <div>
+    <div className="flex flex-col items-center gap-4 sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start sm:gap-8">
+      <PortraitSquare src={image} alt={imageAlt} placeholder={placeholder} fallback={fallback} />
+      <div className="w-full">
         <h2 className="heading-3">{title}</h2>
         <div className="mt-3">
           <BioBlock text={body} />
@@ -94,6 +108,32 @@ export function AboutLive() {
   return (
     <main>
       <PageHeader eyebrow={t("about.eyebrow")} title={about.title} />
+      <section className="section bg-background">
+        <div className="container">
+          <PersonSplit
+            image={portrait}
+            title={about.legacy.title}
+            body={excerpt(about.legacy.biography)}
+            href="/about/legacy-of-vaidya-rb-gogate"
+            imageAlt="Vaidya R. B. Gogate"
+            placeholder="R B Gogate"
+            fallback="/about/rb-gogate.jpg"
+          />
+        </div>
+      </section>
+      <section className="section bg-warm-cream">
+        <div className="container">
+          <PersonSplit
+            image={anaghaPortrait(about)}
+            title={about.anagha.title}
+            body={excerpt(about.anagha.biography)}
+            href="/about/dr-anagha-gogate"
+            imageAlt={about.anagha.title}
+            placeholder="A G"
+            fallback="/about/anagha-gogate.jpg"
+          />
+        </div>
+      </section>
       {letter.length > 0 && (
         <section className="border-b border-border bg-paper">
           <div className="container py-8 sm:py-10">
@@ -107,30 +147,6 @@ export function AboutLive() {
           </div>
         </section>
       )}
-      <section className="section bg-background">
-        <div className="container">
-          <PersonSplit
-            image={portrait}
-            title={about.legacy.title}
-            body={excerpt(about.legacy.biography)}
-            href="/about/legacy-of-vaidya-rb-gogate"
-            imageAlt="Vaidya R. B. Gogate"
-            placeholder="R B Gogate"
-          />
-        </div>
-      </section>
-      <section className="section bg-warm-cream">
-        <div className="container">
-          <PersonSplit
-            image={anaghaPortrait(about)}
-            title={about.anagha.title}
-            body={excerpt(about.anagha.biography)}
-            href="/about/dr-anagha-gogate"
-            imageAlt={about.anagha.title}
-            placeholder="A G"
-          />
-        </div>
-      </section>
       <section className="section bg-background">
         <div className="container grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {others.map((section) => {
@@ -396,7 +412,7 @@ export function LegacyLive() {
   const secondaryLabel = locale === "mr" ? "English" : "मराठी";
   return (
     <main>
-      <PageHeader eyebrow={t("about.eyebrow")} title={legacy.title} description={legacy.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={legacy.title} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
         <div className="container">
           <PersonSplit
@@ -405,6 +421,7 @@ export function LegacyLive() {
             body={primary}
             imageAlt="Vaidya R. B. Gogate"
             placeholder="R B Gogate"
+            fallback="/about/rb-gogate.jpg"
           />
           {secondary ? (
             <div className="mt-12">
@@ -449,7 +466,7 @@ export function AnaghaLive() {
   const { t } = useI18n();
   return (
     <main>
-      <PageHeader eyebrow={t("about.eyebrow")} title={anagha.title} description={anagha.intro} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
+      <PageHeader eyebrow={t("about.eyebrow")} title={anagha.title} breadcrumb={[{ name: t("nav.about"), href: "/about" }]} />
       <section className="section bg-background">
         <div className="container">
           <PersonSplit
@@ -458,6 +475,7 @@ export function AnaghaLive() {
             body={anagha.biography}
             imageAlt={anagha.title}
             placeholder="A G"
+            fallback="/about/anagha-gogate.jpg"
           />
         </div>
       </section>

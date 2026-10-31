@@ -40,13 +40,19 @@ function Heading({ children }: { children: string }) {
   );
 }
 
+function usableUri(value: string) {
+  const src = value.trim();
+  if (!src || /^data:/i.test(src) || /^blob:/i.test(src)) return "";
+  return src;
+}
+
 function SquarePhoto({ uri, label }: { uri?: string; label: string }) {
   if (!uri) return null;
   return (
     <Image
       source={{ uri }}
       accessibilityLabel={label}
-      style={{ width: 112, height: 112, borderRadius: 16, marginBottom: 12, backgroundColor: "#f4efe6" }}
+      style={{ width: 112, height: 112, borderRadius: 16, alignSelf: "center", marginBottom: 12, backgroundColor: "#f4efe6" }}
       resizeMode="cover"
     />
   );
@@ -65,8 +71,8 @@ export default function AboutScreen() {
   const awards = asRow(about.awards);
   const scholarship = asRow(about.scholarship);
   const intro = str(about.intro);
-  const rbPhoto = mediaUrl(str(legacy.portrait) || str(about.heroImage) || "/about/rb-gogate.jpg");
-  const anaghaPhoto = mediaUrl(str(anagha.portrait) || "/about/anagha-gogate.jpg");
+  const rbPhoto = mediaUrl(usableUri(str(legacy.portrait)) || usableUri(str(about.heroImage)) || "/about/rb-gogate.jpg");
+  const anaghaPhoto = mediaUrl(usableUri(str(anagha.portrait)) || "/about/anagha-gogate.jpg");
   const hasBody =
     Boolean(intro) ||
     sections.length > 0 ||
@@ -79,6 +85,16 @@ export default function AboutScreen() {
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
       <Title>{str(about.title, "About Vaidya Gogate Memorial Foundation")}</Title>
+      <Card>
+        <SquarePhoto uri={rbPhoto} label="Vaidya R. B. Gogate" />
+        <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(legacy.title, "The Legacy of Vaidya R. B. Gogate")}</Text>
+        {str(legacy.biography) ? <Paragraphs text={str(legacy.biography).split(/\n\s*\n/)[0]} /> : null}
+      </Card>
+      <Card>
+        <SquarePhoto uri={anaghaPhoto} label={str(anagha.title, "Dr. Anagha Gogate")} />
+        <Text style={{ fontWeight: "700", fontSize: 16 }}>{str(anagha.title, "Dr. Anagha Gogate")}</Text>
+        {str(anagha.biography) ? <Paragraphs text={str(anagha.biography).split(/\n\s*\n/)[0]} /> : null}
+      </Card>
       {intro ? (
         <Card>
           <Paragraphs text={intro} />
@@ -112,7 +128,6 @@ export default function AboutScreen() {
       {str(legacy.title) || str(legacy.biography) || str(legacy.biographyMr) ? (
         <View>
           <Heading>{str(legacy.title, "The Legacy of Vaidya R. B. Gogate")}</Heading>
-          <SquarePhoto uri={rbPhoto} label="Vaidya R. B. Gogate" />
           {str(legacy.intro) ? (
             <Card>
               <Paragraphs text={str(legacy.intro)} />
@@ -142,7 +157,6 @@ export default function AboutScreen() {
       {str(anagha.title) || str(anagha.biography) || str(anagha.intro) ? (
         <View>
           <Heading>{str(anagha.title, "Dr. Anagha Gogate")}</Heading>
-          <SquarePhoto uri={anaghaPhoto} label={str(anagha.title, "Dr. Anagha Gogate")} />
           {str(anagha.intro) ? (
             <Card>
               <Paragraphs text={str(anagha.intro)} />

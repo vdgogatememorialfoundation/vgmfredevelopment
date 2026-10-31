@@ -24,12 +24,12 @@ export default function AboutDirectory() {
           <p className="mt-2 text-sm leading-6 text-text-muted">{t("home.aboutText")}</p>
         </div>
         {portrait ? (
-          <div className="mb-10 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-5">
+          <div className="mb-10 flex flex-col items-center gap-4 sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start sm:gap-5">
             <div className="h-32 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:h-36 sm:w-36">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={portrait} alt="Vaidya R. B. Gogate" className="h-full w-full object-cover object-top" />
+              <img src={portrait} alt="Vaidya R. B. Gogate" width={144} height={144} className="h-full w-full object-cover object-top" />
             </div>
-            <div>
+            <div className="w-full">
               <p className="font-serif text-xl font-semibold text-ink">{about.legacy.title}</p>
               <p className="mt-3 whitespace-pre-line text-sm leading-6 text-text-muted">
                 {about.legacy.biography.split(/\n\s*\n/)[0]}
