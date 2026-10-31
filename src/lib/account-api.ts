@@ -80,3 +80,27 @@ export async function remoteSync(input: Record<string, string>) {
 export function isAccountConflict(error: unknown) {
   return /already created|already exists|Please login/i.test(error instanceof Error ? error.message : String(error || ""));
 }
+
+export function syncLocalAccounts() {
+  if (typeof window === "undefined") return;
+  try {
+    const rows = JSON.parse(window.localStorage.getItem("vgmf_accounts") || "[]") as Array<Record<string, string>>;
+    for (const row of rows) {
+      if (!row?.email || !row.firstName || !row.lastName || !row.phone) continue;
+      if (row.role && row.role !== "customer" && row.role !== "doctor") continue;
+      void remoteSync({
+        salutation: row.salutation || "Dr.",
+        firstName: row.firstName,
+        middleName: row.middleName || "",
+        lastName: row.lastName,
+        email: row.email,
+        phone: row.phone,
+        whatsapp: row.whatsapp || row.phone,
+        alternatePhone: row.alternatePhone || row.phone,
+        password: row.password || "",
+      }).catch(() => undefined);
+    }
+  } catch {
+    /* ignore broken local cache */
+  }
+}

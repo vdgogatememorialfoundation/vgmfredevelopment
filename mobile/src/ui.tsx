@@ -324,7 +324,8 @@ export function BrandMark({ uri, name, size = 36 }: { uri?: string; name: string
     <Image
       source={uri ? { uri } : bundledIcon}
       accessibilityLabel={name}
-      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border }}
+      style={{ width: size, height: size, borderRadius: Math.max(8, size / 6), backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border }}
+      resizeMode="contain"
     />
   );
 }

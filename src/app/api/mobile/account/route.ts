@@ -8,7 +8,9 @@ import {
   passwordOk,
   publicAccount,
   setAccountPassword,
+  upsertAccount,
 } from "@/lib/server/accounts";
+import { lookupPartnerIdentity } from "@/lib/server/partner-portals";
 import {
   bearerToken,
   clearMobileOtp,
@@ -32,15 +34,57 @@ function json(body: unknown, status = 200) {
 
 function sessionPayload(email: string, name: string, accountId?: string) {
   const session = createMobileSession(email, name);
+  const account = findAccount(email);
   return {
     ok: true,
     token: session.token,
     email: session.email,
     name: session.name,
-    accountId,
+    accountId: accountId || account?.accountId,
     expiresAt: session.expiresAt,
-    account: publicAccount(findAccount(email)!),
+    otpRequired: false,
+    account: account ? publicAccount(account) : undefined,
   };
+}
+
+async function resolveAccount(identifier: string) {
+  const local = findAccount(identifier);
+  if (local) return local;
+  const partner = await lookupPartnerIdentity({ identifier });
+  const found = partner.account;
+  if (!found?.email || !found.phone) return null;
+  return upsertAccount({
+    id: found.id,
+    accountId: found.accountId,
+    salutation: found.salutation,
+    firstName: found.firstName,
+    lastName: found.lastName,
+    middleName: found.middleName,
+    email: found.email,
+    phone: found.phone,
+    whatsapp: found.whatsapp,
+    alternatePhone: found.alternatePhone,
+  });
+}
+
+async function sendCode(email: string, name: string, subject: string) {
+  const issued = issueMobileOtp(email);
+  if (issued.error) return { error: issued.error, status: 429 as const };
+  try {
+    const sent = await sendMobileEmail(
+      email,
+      subject,
+      `Hi ${name},\n\nYour VGMF verification code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
+    );
+    if (!sent) {
+      clearMobileOtp(email);
+      return { error: "offline" as const, status: 502 as const };
+    }
+  } catch (error) {
+    clearMobileOtp(email);
+    return { error: (error as Error).message || "Could not send the email code.", status: 502 as const };
+  }
+  return { ok: true as const };
 }
 
 export async function POST(request: NextRequest) {
@@ -63,24 +107,12 @@ export async function POST(request: NextRequest) {
     if (!firstName || !lastName || !/^\S+@\S+\.\S+$/.test(email) || !/^\+?[0-9]{10,15}$/.test(phone.replace(/\s/g, ""))) {
       return json({ ok: false, error: "Enter your first name, last name, email and a valid mobile number." }, 400);
     }
-    if (accountExists(email, phone)) {
+    if (accountExists(email, phone) || (await resolveAccount(email)) || (await resolveAccount(phone))) {
       return json({ ok: false, error: "An account with this email or phone is already created. Please login." }, 409);
     }
-    const issued = issueMobileOtp(email);
-    if (issued.error) return json({ ok: false, error: issued.error }, 429);
-    try {
-      const sent = await sendMobileEmail(
-        email,
-        "VGMF account verification",
-        `Hi ${firstName},\n\nYour VGMF verification code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
-      );
-      if (!sent) {
-        clearMobileOtp(email);
-        return json({ ok: false, error: "Email is not configured. Ask Admin to connect ZeptoMail, then try again." }, 502);
-      }
-    } catch (error) {
-      clearMobileOtp(email);
-      return json({ ok: false, error: (error as Error).message || "Could not send the email code." }, 502);
+    const mailed = await sendCode(email, firstName, "VGMF account verification");
+    if ("error" in mailed) {
+      return json({ ok: false, error: mailed.error === "offline" ? "Email is not configured. Ask Admin to connect ZeptoMail, then try again." : mailed.error }, mailed.status);
     }
     return json({
       ok: true,
@@ -125,26 +157,28 @@ export async function POST(request: NextRequest) {
     const identifier = String(body?.identifier ?? body?.email ?? "").trim();
     const password = String(body?.password ?? "");
     const method = String(body?.method ?? "password");
-    const account = findAccount(identifier);
+    const account = await resolveAccount(identifier);
     if (!account) return json({ ok: false, error: "No account found with these details. Please create an account first." }, 404);
     if (method === "password") {
+      if (!account.passwordHash) {
+        return json({
+          ok: false,
+          error: "Seminar, Autism and Fellowship passwords are not used here. Use Email OTP, or Forgot password to set a Foundation password.",
+        }, 401);
+      }
       if (!password) return json({ ok: false, error: "Enter your Foundation website password, then we will send a one-time code." }, 400);
       if (!passwordOk(account, password)) {
         return json({ ok: false, error: "Incorrect password. Use Forgot password if you need a reset." }, 401);
       }
     }
-    const issued = issueMobileOtp(account.email);
-    if (issued.error) return json({ ok: false, error: issued.error }, 429);
-    try {
-      await sendMobileEmail(
-        account.email,
-        "VGMF sign-in code",
-        `Hi ${account.firstName},\n\nYour VGMF sign-in code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
-      );
-    } catch (error) {
-      return json({ ok: false, error: (error as Error).message || "Could not send the email code." }, 502);
+    const mailed = await sendCode(account.email, account.firstName, "VGMF sign-in code");
+    if ("error" in mailed) {
+      if (mailed.error === "offline") {
+        return json({ ...sessionPayload(account.email, publicAccount(account).name, account.accountId), message: "Signed in." });
+      }
+      return json({ ok: false, error: mailed.error }, mailed.status);
     }
-    return json({ ok: true, email: account.email, name: publicAccount(account).name, message: `A code was sent to ${account.email}.` });
+    return json({ ok: true, otpRequired: true, email: account.email, name: publicAccount(account).name, message: `A code was sent to ${account.email}.` });
   }
 
   if (action === "verify-login") {
@@ -158,15 +192,10 @@ export async function POST(request: NextRequest) {
 
   if (action === "forgot") {
     const identifier = String(body?.identifier ?? "").trim();
-    const account = findAccount(identifier);
+    const account = await resolveAccount(identifier);
     if (!account) return json({ ok: false, error: "No account found with these details." }, 404);
-    const issued = issueMobileOtp(account.email);
-    if (issued.error) return json({ ok: false, error: issued.error }, 429);
-    await sendMobileEmail(
-      account.email,
-      "VGMF password reset",
-      `Hi ${account.firstName},\n\nYour VGMF reset code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
-    );
+    const mailed = await sendCode(account.email, account.firstName, "VGMF password reset");
+    if ("error" in mailed) return json({ ok: false, error: mailed.error === "offline" ? "Email is not configured. Ask Admin to connect ZeptoMail, then try again." : mailed.error }, mailed.status);
     return json({ ok: true, email: account.email, message: `A reset code was sent to ${account.email}.` });
   }
 
@@ -190,24 +219,20 @@ export async function POST(request: NextRequest) {
     if (!firstName || !lastName || !/^\S+@\S+\.\S+$/.test(email) || !phone) {
       return json({ ok: false, error: "Enter your name, email and mobile to sync this account." }, 400);
     }
-    let account = findAccount(email) || findAccount(phone);
-    if (!account) {
-      try {
-        account = createAccount({
-          salutation: String(body?.salutation ?? "Dr."),
-          firstName,
-          middleName: String(body?.middleName ?? ""),
-          lastName,
-          email,
-          phone,
-          whatsapp: String(body?.whatsapp ?? phone),
-          alternatePhone: String(body?.alternatePhone ?? phone),
-          password: password || undefined,
-        });
-      } catch {
-        account = findAccount(email) || findAccount(phone);
-      }
-    }
+    let account =
+      (await resolveAccount(email)) ||
+      (await resolveAccount(phone)) ||
+      upsertAccount({
+        salutation: String(body?.salutation ?? "Dr."),
+        firstName,
+        middleName: String(body?.middleName ?? ""),
+        lastName,
+        email,
+        phone,
+        whatsapp: String(body?.whatsapp ?? phone),
+        alternatePhone: String(body?.alternatePhone ?? phone),
+        password: password || undefined,
+      });
     if (!account) return json({ ok: false, error: "Could not sync this account." }, 400);
     if (password && !account.passwordHash) {
       account = setAccountPassword(account.email, password) ?? account;

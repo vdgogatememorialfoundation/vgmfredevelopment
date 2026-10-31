@@ -83,6 +83,8 @@ export function accountExists(email: string, phone: string) {
 }
 
 export function createAccount(input: {
+  id?: string;
+  accountId?: string;
   salutation?: string;
   firstName: string;
   middleName?: string;
@@ -97,12 +99,14 @@ export function createAccount(input: {
   const phone = input.phone.trim();
   if (accountExists(email, phone)) throw new Error("An account with this email or phone is already created. Please login.");
   const used = new Set(load().map((item) => item.accountId));
-  let accountId = "";
-  do accountId = String(Math.floor(100000000000 + Math.random() * 900000000000));
-  while (used.has(accountId));
+  let accountId = String(input.accountId || "").replace(/\D/g, "");
+  if (accountId.length !== 12 || used.has(accountId)) {
+    do accountId = String(Math.floor(100000000000 + Math.random() * 900000000000));
+    while (used.has(accountId));
+  }
   const salt = input.password ? randomBytes(8).toString("hex") : "";
   const account: FoundationAccount = {
-    id: `usr-${Date.now()}`,
+    id: input.id || `usr-${Date.now()}`,
     accountId,
     salutation: (input.salutation || "Dr.").slice(0, 16),
     firstName: input.firstName.trim().slice(0, 40),
@@ -135,4 +139,44 @@ export function setAccountPassword(email: string, password: string) {
 export function passwordOk(account: FoundationAccount, password: string) {
   if (!account.passwordHash || !account.passwordSalt || !password) return false;
   return account.passwordHash === hashPassword(password, account.passwordSalt);
+}
+
+export function upsertAccount(input: {
+  id?: string;
+  accountId?: string;
+  salutation?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+  alternatePhone?: string;
+  password?: string;
+}) {
+  const email = String(input.email || "").trim();
+  const phone = String(input.phone || "").trim();
+  const existing =
+    (email && findAccount(email)) ||
+    (phone && findAccount(phone)) ||
+    (input.accountId && findAccount(String(input.accountId))) ||
+    null;
+  if (existing) {
+    if (input.password && !existing.passwordHash) return setAccountPassword(existing.email, input.password) ?? existing;
+    return existing;
+  }
+  if (!email || !phone || !String(input.firstName || "").trim() || !String(input.lastName || "").trim()) return null;
+  return createAccount({
+    id: input.id,
+    accountId: input.accountId,
+    salutation: input.salutation,
+    firstName: String(input.firstName),
+    middleName: input.middleName,
+    lastName: String(input.lastName),
+    email,
+    phone,
+    whatsapp: input.whatsapp,
+    alternatePhone: input.alternatePhone,
+    password: input.password,
+  });
 }

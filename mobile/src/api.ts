@@ -302,7 +302,13 @@ export async function verifyRegister(input: {
 }
 
 export async function loginAccount(input: { identifier: string; password?: string; method?: "password" | "otp" }) {
-  return accountAction("login", input) as Promise<{ ok: true; email?: string; name?: string; message?: string }>;
+  const data = await accountAction("login", input);
+  if (data.token && data.otpRequired === false) {
+    const next = asSession(data);
+    await saveSession(next);
+    return { ok: true as const, otpRequired: false as const, session: next, email: next.email, name: next.name, message: String(data.message || "Signed in.") };
+  }
+  return { ok: true as const, otpRequired: true as const, email: String(data.email || input.identifier), name: String(data.name || ""), message: String(data.message || "") };
 }
 
 export async function verifyLogin(email: string, code: string) {

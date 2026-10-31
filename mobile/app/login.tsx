@@ -45,7 +45,7 @@ export default function LoginScreen() {
   const [accountId, setAccountId] = useState("");
   const [created, setCreated] = useState<Session | null>(null);
 
-  const [method, setMethod] = useState<SignInMethod>("password");
+  const [method, setMethod] = useState<SignInMethod>("otp");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [signInStep, setSignInStep] = useState<SignInStep>("identifier");
@@ -352,8 +352,8 @@ export default function LoginScreen() {
           <Text style={{ fontSize: 20, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily, marginBottom: 6 }}>Welcome back</Text>
           <Muted>
             {method === "otp"
-              ? "Sign in with a one-time code emailed to your registered address."
-              : "Sign in with your Foundation website password. We then email a one-time code — both are required. Seminar, Autism and Fellowship passwords are not used here."}
+              ? "Use the same email, phone or 12-digit Account ID as the website. We email a one-time code."
+              : "Foundation website password only. Seminar, Autism and Fellowship passwords are not used here — choose Email OTP or Forgot password."}
           </Muted>
           <View style={{ flexDirection: "row", gap: 8, marginVertical: 12 }}>
             <Chip label="Email / password" selected={method === "password"} onPress={() => setMethod("password")} />
@@ -369,6 +369,10 @@ export default function LoginScreen() {
               setBusy(true);
               try {
                 const sent = await loginAccount({ identifier, password, method });
+                if ("session" in sent && sent.session) {
+                  await setSession(sent.session);
+                  return;
+                }
                 setPendingEmail(String(sent.email || identifier));
                 setOtp("");
                 setSignInStep("otp");

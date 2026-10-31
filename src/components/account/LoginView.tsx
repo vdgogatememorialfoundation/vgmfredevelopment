@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
 import Link from "next/link";
 import SignupFlow from "@/components/account/SignupFlow";
@@ -8,6 +8,7 @@ import SignInFlow from "@/components/account/SignInFlow";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { siteConfig } from "@/lib/constants";
 import { authClosedMessage, getAuthAccess } from "@/lib/auth-access";
+import { syncLocalAccounts } from "@/lib/account-api";
 
 export default function LoginView({
   signInMode,
@@ -17,6 +18,9 @@ export default function LoginView({
   next?: string;
 }) {
   const { t } = useI18n();
+  useEffect(() => {
+    syncLocalAccounts();
+  }, []);
   const nextQuery = next ? `&next=${encodeURIComponent(next)}` : "";
   const access = getAuthAccess();
   const closed = !access.loginEnabled && !access.signupEnabled;
