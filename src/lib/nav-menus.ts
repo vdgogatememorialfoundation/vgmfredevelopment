@@ -9,8 +9,6 @@ const MENUS: Record<string, NavLink[]> = {
     href: page.href,
     key: page.key as MessageKey,
   })),
-  "/events": [{ href: "/announcements", key: "nav.announcements" }],
-  "/shop": [{ href: "/books", key: "nav.shopBooks" }],
   "/contact": [{ href: "/support", key: "nav.support" }],
 };
 
