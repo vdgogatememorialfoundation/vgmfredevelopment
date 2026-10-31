@@ -39,6 +39,29 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+export async function cropImageToFile(
+  source: string,
+  crop: { sx: number; sy: number; sw: number; sh: number },
+  fileName = "crop.jpg"
+) {
+  const image = await loadImage(source);
+  const sx = Math.max(0, Math.min(image.naturalWidth - 1, Math.round(crop.sx)));
+  const sy = Math.max(0, Math.min(image.naturalHeight - 1, Math.round(crop.sy)));
+  const sw = Math.max(1, Math.min(image.naturalWidth - sx, Math.round(crop.sw)));
+  const sh = Math.max(1, Math.min(image.naturalHeight - sy, Math.round(crop.sh)));
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not crop that image.");
+  context.drawImage(image, sx, sy, sw, sh, 0, 0, sw, sh);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => (result ? resolve(result) : reject(new Error("Could not crop that image."))), "image/jpeg", 0.9);
+  });
+  const base = fileName.replace(/\.[^.]+$/, "") || "crop";
+  return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+}
+
 export async function fileToStoredUrl(file: File, maxBytes = 25_000_000) {
   if (file.size > maxBytes) {
     throw new Error("Use a file under 25 MB.");

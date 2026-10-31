@@ -16,7 +16,11 @@ import { getSiteVisibility, visibleAccountNav, visiblePublicNav } from "@/lib/si
 import { subscribeCms } from "@/lib/cms";
 import { useSiteSettings } from "@/lib/use-cms";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
-import { navDropdown } from "@/lib/nav-menus";
+import { navDropdown, navHasMenu } from "@/lib/nav-menus";
+
+function canHover() {
+  return typeof window !== "undefined" && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+}
 
 function CartIcon() {
   return (
@@ -93,7 +97,9 @@ function CloseIcon() {
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [openMenu, setOpenMenu] = useState("");
+  const [desktopMenu, setDesktopMenu] = useState("");
+  const [mobileOpen, setMobileOpen] = useState("");
+  const closeTimer = useRef<number>(0);
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, signOut } = useAuth();
@@ -116,10 +122,20 @@ export default function Header() {
     const timer = setTimeout(() => {
       setMobileMenuOpen(false);
       setAccountMenuOpen(false);
-      setOpenMenu("");
+      setDesktopMenu("");
     }, 0);
     return () => clearTimeout(timer);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      setMobileOpen("");
+      return;
+    }
+    const current = window.location.pathname;
+    const match = visiblePublicNav(getSiteVisibility()).find((item) => current === item.href || current.startsWith(`${item.href}/`));
+    setMobileOpen(match && navHasMenu(match.href) ? match.href : "");
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -141,7 +157,7 @@ export default function Header() {
         setAccountMenuOpen(false);
       }
       if (desktopNavRef.current && !desktopNavRef.current.contains(event.target as Node)) {
-        setOpenMenu("");
+        setDesktopMenu("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -160,7 +176,7 @@ export default function Header() {
     : "";
 
   return (
-    <header className="sticky top-0 z-50 border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
+    <header className="sticky top-0 z-50 overflow-visible border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
       <div className="container">
         <div className="flex h-[78px] items-center justify-between gap-4">
           {/* Logo */}
@@ -190,15 +206,27 @@ export default function Header() {
             {navItems.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const children = navDropdown(item.href);
-              const opened = openMenu === item.href;
+              const opened = desktopMenu === item.href;
+              const openThis = () => {
+                window.clearTimeout(closeTimer.current);
+                setDesktopMenu(item.href);
+              };
+              const closeSoon = () => {
+                window.clearTimeout(closeTimer.current);
+                closeTimer.current = window.setTimeout(() => setDesktopMenu(""), 180);
+              };
               return (
                 <div
                   key={item.href}
                   className="relative"
-                  onMouseEnter={() => setOpenMenu(item.href)}
-                  onMouseLeave={() => setOpenMenu("")}
+                  onMouseEnter={() => {
+                    if (canHover() && children.length) openThis();
+                  }}
+                  onMouseLeave={() => {
+                    if (canHover()) closeSoon();
+                  }}
                 >
-                  <div className="inline-flex items-center gap-1">
+                  <div className="inline-flex items-center gap-0.5">
                     <Link
                       href={item.href}
                       className={classNames(
@@ -208,22 +236,29 @@ export default function Header() {
                     >
                       {t(navMessageKey[item.href] ?? "nav.about")}
                     </Link>
-                    <button
-                      type="button"
-                      onClick={() => setOpenMenu(opened ? "" : item.href)}
-                      aria-expanded={opened}
-                      aria-haspopup="true"
-                      aria-label={`${t(navMessageKey[item.href] ?? "nav.about")} menu`}
-                      className={classNames(
-                        "inline-flex h-5 w-4 items-center justify-center text-[10px] transition",
-                        isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
-                      )}
-                    >
-                      {opened ? "▴" : "▾"}
-                    </button>
+                    {children.length ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          window.clearTimeout(closeTimer.current);
+                          setDesktopMenu(opened ? "" : item.href);
+                        }}
+                        aria-expanded={opened}
+                        aria-haspopup="true"
+                        aria-label={`${t(navMessageKey[item.href] ?? "nav.about")} menu`}
+                        className={classNames(
+                          "inline-flex h-7 w-6 items-center justify-center text-[10px] transition",
+                          isActive ? "text-burgundy" : "text-text-primary hover:text-burgundy"
+                        )}
+                      >
+                        {opened ? "▴" : "▾"}
+                      </button>
+                    ) : null}
                   </div>
-                  {opened ? (
-                    <div className="absolute left-0 top-full z-50 pt-2">
+                  {opened && children.length ? (
+                    <div className="absolute left-0 top-full z-[80] pt-2">
                       <div className="min-w-56 overflow-hidden rounded-2xl border border-border bg-white py-2 shadow-xl">
                         {children.map((page) => {
                           const active = pathname === page.href;
@@ -231,7 +266,7 @@ export default function Header() {
                             <Link
                               key={page.href}
                               href={page.href}
-                              onClick={() => setOpenMenu("")}
+                              onClick={() => setDesktopMenu("")}
                               className={classNames(
                                 "block px-4 py-2.5 text-sm transition",
                                 active ? "bg-warm-cream font-semibold text-burgundy" : "text-text-primary hover:bg-warm-cream hover:text-burgundy"
@@ -439,21 +474,33 @@ export default function Header() {
                   {navItems.map((item) => {
                     const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
                     const children = navDropdown(item.href);
-                    const opened = openMenu === item.href || isActive;
+                    const opened = mobileOpen === item.href;
                     return (
                       <div key={item.href} className="border-b border-border">
-                        <button
-                          type="button"
-                          onClick={() => setOpenMenu(openMenu === item.href ? "" : item.href)}
-                          className={classNames(
-                            "flex w-full items-center justify-between px-3 py-3.5 text-left text-sm font-semibold",
-                            isActive ? "text-burgundy" : "text-text-primary"
-                          )}
-                        >
-                          {t(navMessageKey[item.href] ?? "nav.about")}
-                          <span aria-hidden="true" className="text-[10px]">{opened ? "▴" : "▾"}</span>
-                        </button>
-                        {opened ? (
+                        <div className="flex items-center">
+                          <Link
+                            href={item.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={classNames(
+                              "flex-1 px-3 py-3.5 text-left text-sm font-semibold",
+                              isActive ? "text-burgundy" : "text-text-primary"
+                            )}
+                          >
+                            {t(navMessageKey[item.href] ?? "nav.about")}
+                          </Link>
+                          {children.length ? (
+                            <button
+                              type="button"
+                              onClick={() => setMobileOpen(opened ? "" : item.href)}
+                              aria-expanded={opened}
+                              aria-label={`${t(navMessageKey[item.href] ?? "nav.about")} menu`}
+                              className="flex h-11 w-11 items-center justify-center text-sm text-text-muted"
+                            >
+                              {opened ? "▴" : "▾"}
+                            </button>
+                          ) : null}
+                        </div>
+                        {opened && children.length ? (
                           <div className="mb-2 ml-3 space-y-0.5 border-l border-border pb-2 pl-3">
                             {children.map((page) => (
                               <Link

@@ -1,10 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ImageCropper } from "@/components/admin/ImageCropper";
 import { fileToStoredUrl } from "@/lib/images";
 import type { CaptionedImage } from "@/types";
 
 const input = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
+
+function isSvg(value: string) {
+  return /\.svg(\?|$)/i.test(value) || value.startsWith("data:image/svg");
+}
 
 export function ImageField({
   label,
@@ -22,9 +27,10 @@ export function ImageField({
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [cropSrc, setCropSrc] = useState("");
+  const [cropName, setCropName] = useState("crop.jpg");
 
-  const upload = async (file?: File) => {
-    if (!file) return;
+  const save = async (file: File) => {
     setBusy(true);
     setError("");
     try {
@@ -38,14 +44,30 @@ export function ImageField({
     }
   };
 
+  const pick = async (file?: File) => {
+    if (!file) return;
+    if (file.type === "image/svg+xml" || file.type === "image/x-icon") {
+      await save(file);
+      return;
+    }
+    setCropName(file.name || "crop.jpg");
+    setCropSrc(URL.createObjectURL(file));
+  };
+
+  const finishCrop = async (file: File) => {
+    if (cropSrc.startsWith("blob:")) URL.revokeObjectURL(cropSrc);
+    setCropSrc("");
+    await save(file);
+  };
+
   return (
     <div className="space-y-2">
       <p className="text-sm font-semibold text-slate-800">{label}</p>
       <div className="flex flex-wrap items-start gap-3">
-        <div className="flex h-20 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50">
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt="" className="h-full w-full object-contain" />
+            <img src={value} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="text-[11px] text-slate-400">No image</span>
           )}
@@ -62,17 +84,50 @@ export function ImageField({
             <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700" onClick={() => fileRef.current?.click()}>
               {busy ? "Uploading…" : "Upload image"}
             </button>
+            {value && !isSvg(value) ? (
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700"
+                onClick={() => {
+                  setCropName("crop.jpg");
+                  setCropSrc(value);
+                }}
+              >
+                Crop
+              </button>
+            ) : null}
             {value && (
               <button type="button" className="rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600" onClick={() => onChange("")}>
                 Remove
               </button>
             )}
           </div>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(event) => upload(event.target.files?.[0])} />
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(event) => pick(event.target.files?.[0])} />
           {hint && <p className="text-xs text-slate-500">{hint}</p>}
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
       </div>
+      {cropSrc ? (
+        <ImageCropper
+          source={cropSrc}
+          fileName={cropName}
+          onCancel={() => {
+            if (cropSrc.startsWith("blob:")) URL.revokeObjectURL(cropSrc);
+            setCropSrc("");
+            if (fileRef.current) fileRef.current.value = "";
+          }}
+          onApply={finishCrop}
+          onUseOriginal={async () => {
+            const original = cropSrc;
+            setCropSrc("");
+            if (original.startsWith("blob:")) {
+              const blob = await fetch(original).then((response) => response.blob());
+              URL.revokeObjectURL(original);
+              await save(new File([blob], cropName, { type: blob.type || "image/jpeg" }));
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -93,22 +148,54 @@ export function GalleryField({
   imagesRef.current = images;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [queue, setQueue] = useState<File[]>([]);
+  const [cropSrc, setCropSrc] = useState("");
+  const [cropName, setCropName] = useState("crop.jpg");
+  const [cropIndex, setCropIndex] = useState<number | null>(null);
 
-  const add = async (files: FileList | null) => {
+  const addUrl = async (file: File) => {
+    const src = await fileToStoredUrl(file);
+    onChange([...imagesRef.current, { src, caption: "" }]);
+  };
+
+  const nextInQueue = (rest: File[]) => {
+    const [first, ...more] = rest;
+    if (!first) {
+      setCropSrc("");
+      setQueue([]);
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+    setQueue(more);
+    setCropName(first.name || "crop.jpg");
+    setCropSrc(URL.createObjectURL(first));
+  };
+
+  const add = (files: FileList | null) => {
     if (!files?.length) return;
     setBusy(true);
     setError("");
+    nextInQueue(Array.from(files));
+  };
+
+  const finishQueued = async (file: File) => {
+    if (cropSrc.startsWith("blob:")) URL.revokeObjectURL(cropSrc);
     try {
-      const added: CaptionedImage[] = [];
-      for (const file of Array.from(files)) {
-        added.push({ src: await fileToStoredUrl(file), caption: "" });
+      if (cropIndex !== null) {
+        const src = await fileToStoredUrl(file);
+        onChange(imagesRef.current.map((image, i) => (i === cropIndex ? { ...image, src } : image)));
+        setCropIndex(null);
+        setCropSrc("");
+        setBusy(false);
+      } else {
+        await addUrl(file);
+        nextInQueue(queue);
       }
-      onChange([...imagesRef.current, ...added]);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Upload failed.");
-    } finally {
       setBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
+      setCropSrc("");
     }
   };
 
@@ -142,10 +229,10 @@ export function GalleryField({
       <ul className="grid gap-3 sm:grid-cols-2">
         {images.map((image, index) => (
           <li key={index} className="flex gap-3 rounded-lg border border-slate-200 p-2">
-            <div className="h-20 w-24 shrink-0 overflow-hidden rounded-md bg-slate-50">
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-slate-50">
               {image.src && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={image.src} alt="" className="h-full w-full object-contain" />
+                <img src={image.src} alt="" className="h-full w-full object-cover" />
               )}
             </div>
             <div className="min-w-0 flex-1 space-y-1.5">
@@ -154,14 +241,59 @@ export function GalleryField({
               )}
               <textarea className={input} rows={2} placeholder={captionLabel} value={image.caption ?? ""} onChange={(event) => update(index, { caption: event.target.value })} />
               <div className="flex gap-3 text-xs font-semibold">
-                <button type="button" className="text-slate-500" onClick={() => move(index, -1)}>Up</button>
-                <button type="button" className="text-slate-500" onClick={() => move(index, 1)}>Down</button>
-                <button type="button" className="text-red-600" onClick={() => onChange(images.filter((_, i) => i !== index))}>Remove</button>
+                {image.src && !isSvg(image.src) ? (
+                  <button
+                    type="button"
+                    className="text-slate-500"
+                    onClick={() => {
+                      setCropIndex(index);
+                      setCropName("crop.jpg");
+                      setCropSrc(image.src);
+                    }}
+                  >
+                    Crop
+                  </button>
+                ) : null}
+                <button type="button" className="text-slate-500" onClick={() => move(index, -1)}>
+                  Up
+                </button>
+                <button type="button" className="text-slate-500" onClick={() => move(index, 1)}>
+                  Down
+                </button>
+                <button type="button" className="text-red-600" onClick={() => onChange(images.filter((_, i) => i !== index))}>
+                  Remove
+                </button>
               </div>
             </div>
           </li>
         ))}
       </ul>
+      {cropSrc ? (
+        <ImageCropper
+          source={cropSrc}
+          fileName={cropName}
+          onCancel={() => {
+            if (cropSrc.startsWith("blob:")) URL.revokeObjectURL(cropSrc);
+            setCropSrc("");
+            setCropIndex(null);
+            setQueue([]);
+            setBusy(false);
+            if (fileRef.current) fileRef.current.value = "";
+          }}
+          onApply={finishQueued}
+          onUseOriginal={async () => {
+            const original = cropSrc;
+            if (original.startsWith("blob:")) {
+              const blob = await fetch(original).then((response) => response.blob());
+              URL.revokeObjectURL(original);
+              await finishQueued(new File([blob], cropName, { type: blob.type || "image/jpeg" }));
+            } else {
+              setCropSrc("");
+              setCropIndex(null);
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }
