@@ -368,6 +368,10 @@ export async function placeOrder(input: {
   name?: string;
   email?: string;
   phone?: string;
+  line1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
   items: { id: string; quantity: number }[];
 }) {
   const data = await parse(

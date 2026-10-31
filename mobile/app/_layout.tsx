@@ -9,6 +9,7 @@ import { DrawerProvider } from "../src/drawer";
 import { FeedProvider } from "../src/feed";
 import { ThemeProvider, useTheme } from "../src/theme";
 import { Loading } from "../src/ui";
+import { WishlistProvider } from "../src/wishlist";
 import LoginScreen from "./login";
 
 function ThemedStack() {
@@ -52,8 +53,9 @@ function ThemedStack() {
         <Stack.Screen name="certificates" options={{ title: "Certificates" }} />
         <Stack.Screen name="contact" options={{ title: "Contact" }} />
         <Stack.Screen name="faq" options={{ title: "FAQ" }} />
-        <Stack.Screen name="cart" options={{ title: "Bag" }} />
+        <Stack.Screen name="cart" options={{ title: "Cart" }} />
         <Stack.Screen name="checkout" options={{ title: "Checkout" }} />
+        <Stack.Screen name="account/[section]" options={{ title: "My Account" }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="policy/[id]" options={{ title: "Policy" }} />
         <Stack.Screen name="search" options={{ title: "Search" }} />
@@ -69,9 +71,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <CartProvider>
-            <DrawerProvider>
-              <ThemedStack />
-            </DrawerProvider>
+            <WishlistProvider>
+              <DrawerProvider>
+                <ThemedStack />
+              </DrawerProvider>
+            </WishlistProvider>
           </CartProvider>
         </AuthProvider>
       </ThemeProvider>

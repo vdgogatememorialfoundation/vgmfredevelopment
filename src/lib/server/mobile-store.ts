@@ -267,7 +267,7 @@ export function addOrder(input: {
     if (existing) return existing;
   }
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const gst = Math.round(subtotal * 0.05);
+  const gst = 0;
   const shipping = subtotal >= 499 ? 0 : 49;
   const order: MobileOrder = {
     email,

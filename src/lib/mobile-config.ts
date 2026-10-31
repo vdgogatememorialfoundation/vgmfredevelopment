@@ -45,14 +45,14 @@ export const appFlavors: {
   startPath: string;
   download: string;
 }[] = [
-  { id: "customer", label: "Customer app", defaultName: "VGMF", androidPackage: "org.vaidyagogate.customer", iosBundle: "org.vaidyagogate.customer", startPath: "/", download: "/apps/vgmf-customer.apk" },
+  { id: "customer", label: "Customer app", defaultName: "Vaidya Gogate Memorial Foundation", androidPackage: "org.vaidyagogate.customer", iosBundle: "org.vaidyagogate.customer", startPath: "/", download: "/apps/vgmf-customer.apk" },
   { id: "admin", label: "Admin app", defaultName: "VGMF Admin", androidPackage: "org.vaidyagogate.admin", iosBundle: "org.vaidyagogate.admin", startPath: "/admin", download: "/apps/vgmf-admin.apk" },
   { id: "staff", label: "Staff app", defaultName: "VGMF Staff", androidPackage: "org.vaidyagogate.staff", iosBundle: "org.vaidyagogate.staff", startPath: "/staff", download: "/apps/vgmf-staff.apk" },
   { id: "support", label: "Support app", defaultName: "Foundation Support", androidPackage: "org.vaidyagogate.support", iosBundle: "org.vaidyagogate.support", startPath: "/account/tickets", download: "/apps/vgmf-support.apk" },
 ];
 
 export const defaultAppBrands: Record<AppFlavorId, MobileAppBrand> = {
-  customer: { name: "VGMF", logoUrl: "" },
+  customer: { name: "Vaidya Gogate Memorial Foundation", logoUrl: "" },
   admin: { name: "VGMF Admin", logoUrl: "" },
   staff: { name: "VGMF Staff", logoUrl: "" },
   support: { name: "Foundation Support", logoUrl: "" },

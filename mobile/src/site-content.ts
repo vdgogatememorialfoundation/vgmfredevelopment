@@ -5,12 +5,11 @@ export const SITE = {
   shortName: "VGMF",
   tagline: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
   purpose:
-    "A sanctuary for clinical authenticity, archival texts and philanthropic healing. This platform shares Vd. Ramchandra Ballal Gogate’s work and carries forward his vision — knowledge for all.",
+    "This platform shares Vd. Ramchandra Ballal Gogate’s work and carries forward his vision — knowledge for all.",
   email: "info@vaidyagogate.org",
   phone: "+91 20 1234 5678",
   address: "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
   nativeName: "वैद्य गोगटे स्मृती प्रतिष्ठान",
-  liveLabel: "Foundation live",
   greeting: "नमस्ते",
   shopUrl: "/shop",
   checkoutUrl: "/checkout",
@@ -21,38 +20,13 @@ export const STORE = {
   currency: "INR",
   shippingFee: 49,
   freeShippingThreshold: 499,
-  gstRate: "5%",
   returnDays: 7,
-  courier: "Shiprocket",
+  courier: "Standard post",
   publisher: "Vaidya Gogate Memorial Foundation Publications",
 };
 
-export const PORTALS = [
-  {
-    id: "seminar",
-    title: "VGMF Seminar Portal",
-    body: "Accredited seminars and workshops for physicians and students.",
-    href: "https://seminar.vaidyagogate.org",
-  },
-  {
-    id: "autism",
-    title: "Ayurvedic Autism & Neuro Center",
-    body: "Clinical protocols, family support and research programmes.",
-    href: "https://autism.vaidyagogate.org",
-  },
-  {
-    id: "fellowship",
-    title: "Postgraduate Clinical Fellowship",
-    body: "Postgraduate clinical fellowship of the Foundation.",
-    href: "https://fellowship.vaidyagogate.org",
-  },
-];
-
 export const EXPLORE = [
   { id: "about", href: "/about", label: "About", icon: "people-outline" as const },
-  { id: "events", href: "/events", label: "Events", icon: "calendar-outline" as const },
-  { id: "shop", href: "/shop", label: "Shop", icon: "bag-handle-outline" as const },
-  { id: "clinics", href: "/clinics", label: "Clinics", icon: "medical-outline" as const },
   { id: "articles", href: "/articles", label: "Articles", icon: "newspaper-outline" as const },
   { id: "gallery", href: "/gallery", label: "Gallery", icon: "images-outline" as const },
   { id: "videos", href: "/videos", label: "Videos", icon: "play-circle-outline" as const },
@@ -60,7 +34,6 @@ export const EXPLORE = [
   { id: "chat", href: "/chat", label: "Chat", icon: "chatbubbles-outline" as const },
   { id: "notices", href: "/notices", label: "Notices", icon: "notifications-outline" as const },
   { id: "contact", href: "/contact", label: "Contact", icon: "mail-outline" as const },
-  { id: "support", href: "/support", label: "Support", icon: "help-buoy-outline" as const },
 ];
 
 export const ABOUT_DEFAULT = {

@@ -96,17 +96,25 @@ export function defaultMobileFeed(): MobileFeed {
   };
 }
 
+function publicBrandName(value?: string) {
+  const raw = String(value || "").trim();
+  if (!raw || /^(vgmf|vgmf foundation|foundation live)$/i.test(raw)) return siteConfig.name;
+  return raw;
+}
+
 export function readMobileFeed(): MobileFeed {
   const snapshot = memory ?? readFile(DATA_FILE) ?? readFile(TMP_FILE) ?? readFile(PUBLIC_FILE);
   const base = defaultMobileFeed();
   if (!snapshot) return base;
   const partnerRows = readPartnerPublicRows();
+  const customerApp = { ...base.mobile.apps.customer, ...snapshot.mobile?.apps?.customer };
   return {
     ...base,
     ...snapshot,
     site: {
       ...base.site,
       ...snapshot.site,
+      name: publicBrandName(snapshot.site?.name || base.site.name),
       logoUrl: snapshot.site?.logoUrl || base.site.logoUrl,
       faviconUrl: snapshot.site?.faviconUrl || snapshot.site?.logoUrl || base.site.faviconUrl,
     },
@@ -117,7 +125,7 @@ export function readMobileFeed(): MobileFeed {
       ...snapshot.mobile,
       modules: { ...base.mobile.modules, ...snapshot.mobile?.modules },
       apps: {
-        customer: { ...base.mobile.apps.customer, ...snapshot.mobile?.apps?.customer },
+        customer: { ...customerApp, name: publicBrandName(customerApp.name) },
         admin: { ...base.mobile.apps.admin, ...snapshot.mobile?.apps?.admin },
         staff: { ...base.mobile.apps.staff, ...snapshot.mobile?.apps?.staff },
         support: { ...base.mobile.apps.support, ...snapshot.mobile?.apps?.support },

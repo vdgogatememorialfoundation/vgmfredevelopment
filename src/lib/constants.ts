@@ -31,7 +31,7 @@ export const storeConfig = {
   currency: "INR",
   shippingFee: 49,
   freeShippingThreshold: 499,
-  gstRate: 0.05,
+  gstRate: 0,
   returnDays: 7,
   returnPickupCharges: 50,
   pickupHoldingDays: 3,

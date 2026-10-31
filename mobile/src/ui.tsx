@@ -583,7 +583,7 @@ export function SiteFooter() {
     <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
       <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily, fontSize: 16, textAlign: "center" }}>वैद्य गोगटे स्मृती प्रतिष्ठान</Text>
       <Text style={{ color: theme.colors.muted, fontSize: 11, textAlign: "center", marginTop: 6, lineHeight: 16 }}>
-        Vaidya Gogate Memorial Foundation · Pune, India{"\n"}Registered charitable trust · Affiliated with Central Council of Indian Medicine archives
+        Vaidya Gogate Memorial Foundation · Pune, India
       </Text>
     </View>
   );

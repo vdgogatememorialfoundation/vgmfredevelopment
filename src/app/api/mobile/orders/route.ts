@@ -51,17 +51,30 @@ export async function POST(request: NextRequest) {
   const name = (String(body?.name ?? "").trim() || session.name || "Customer").slice(0, 80);
   const catalog = catalogItems(body?.items);
   if ("error" in catalog) return json({ ok: false, error: catalog.error }, 400);
+  const address = {
+    line1: String(body?.line1 ?? "").trim().slice(0, 160),
+    city: String(body?.city ?? "").trim().slice(0, 80),
+    state: String(body?.state ?? "").trim().slice(0, 80),
+    pincode: String(body?.pincode ?? "").trim().slice(0, 12),
+  };
+  if (!address.line1 || !address.city || !address.state || !/^\d{6}$/.test(address.pincode)) {
+    return json({ ok: false, error: "Enter your full delivery address and a 6-digit pincode." }, 400);
+  }
+  const phone = String(body?.phone ?? "").replace(/\s/g, "");
+  if (!/^\+?[0-9]{10,15}$/.test(phone)) {
+    return json({ ok: false, error: "Enter a valid mobile number." }, 400);
+  }
   const order = addOrder({
     email,
     name,
-    phone: body?.phone ? String(body.phone) : undefined,
+    phone,
     items: catalog.items,
+    address,
   });
   return json({
     ok: true,
     store: "mobile-api",
     order,
-    paymentStatus: "unpaid",
-    note: "This records an unpaid publication request on the mobile API. It is not a website checkout order and is not marked paid. Card payment stays on the website.",
+    paymentStatus: order.paymentStatus,
   });
 }

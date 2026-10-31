@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { AppState } from "react-native";
 import { fetchFeed, fetchLiveNotices, loadSession, type Feed, type Row } from "./api";
 import { currentFlavor } from "./flavor";
+import { SITE } from "./site-content";
 
 type FeedContextValue = {
   feed: Feed | null;
@@ -65,8 +66,11 @@ export function useBrand() {
   const { feed } = useFeed();
   const flavor = currentFlavor();
   const brand = feed?.mobile?.apps?.[flavor.id];
+  const raw = String(brand?.name || feed?.site.name || flavor.displayName).trim();
+  const name =
+    flavor.id === "customer" || /^(vgmf|vgmf foundation|foundation live)$/i.test(raw) ? SITE.name : raw || SITE.name;
   return {
-    name: brand?.name || feed?.site.name || flavor.displayName,
+    name,
     logoUrl: brand?.logoUrl || feed?.site.logoUrl || "",
     tagline: feed?.site.tagline || "",
   };

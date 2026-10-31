@@ -19,7 +19,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const { isAuthenticated, user } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
-  const [wishlisted, setWishlisted] = useState(false);
+  const [wishlisted, setWishlisted] = useState(() => isInWishlist(book.id));
   const [pincode, setPincode] = useState("");
   const [estimate, setEstimate] = useState<DeliveryQuote | null>(null);
   const [checked, setChecked] = useState(false);
@@ -52,7 +52,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const handleBuyNow = () => {
     requireAccount(() => {
       addToCart(book.id, quantity);
-      router.push(`/checkout?buyNow=${book.id}&qty=${quantity}`);
+      router.push("/cart");
     });
   };
 
@@ -84,7 +84,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         <p className="mt-1.5 text-xs text-emerald-700">
           You save ₹
           {((book.originalPrice - book.price) * quantity).toLocaleString("en-IN")}
-          {" "}on the selling price · taxes computed at checkout
+          {" "}on the selling price
         </p>
       )}
 

@@ -24,8 +24,8 @@ function answer(question: string) {
     return `The next listed programme is “${next.name}”${next.startDate ? ` on ${String(next.startDate).slice(0, 10)}` : ""}${next.venue ? ` at ${next.venue}` : ""}. Open Events in the app for the full calendar.`;
   }
   if (/shop|book|publication|order|buy|checkout|razorpay/.test(q)) {
-    if (!books.length) return "The Foundation shop sells publications. Titles appear after Admin publishes the catalogue. Add them to the bag and pay with Razorpay inside the app — UPI, cards, net banking and wallets.";
-    return `Publications in the catalogue include ${books.slice(0, 3).map((item) => `“${String((item as { title?: string }).title)}”`).join(", ")}. Add them to the bag and check out with Razorpay in the app.`;
+    if (!books.length) return "The Foundation shop lists publications after Admin publishes the catalogue. Open Shop, choose a title, then add it to the cart or buy now.";
+    return `Publications in the catalogue include ${books.slice(0, 3).map((item) => `“${String((item as { title?: string }).title)}”`).join(", ")}. Open the title, add it to the cart or buy now, then checkout from the cart.`;
   }
   if (/clinic|opd|doctor|hospital/.test(q)) {
     if (!clinics.length) return "No clinics are in the published feed yet. Open Clinics once the Foundation publishes hours.";
@@ -42,7 +42,7 @@ function answer(question: string) {
   if (/contact|email|phone|address|pune/.test(q)) {
     return `${feed.site?.address || "Vaidya Gogate Memorial Foundation, Pune"}. ${feed.site?.email || "info@vaidyagogate.org"} · ${feed.site?.phone || ""}`.trim();
   }
-  return "I can help with events, shop and Razorpay checkout, tickets, sign-in, certificates, clinics and Foundation info. Ask another question, or open Support to talk to a person.";
+  return "I can help with events, publications, tickets, sign-in, certificates, clinics and Foundation info. Ask another question, or open Support to talk to a person.";
 }
 
 export async function POST(request: NextRequest) {

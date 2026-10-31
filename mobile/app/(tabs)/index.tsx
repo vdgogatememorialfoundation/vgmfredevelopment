@@ -2,17 +2,15 @@ import { useRef, useState } from "react";
 import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { formatDate, isPastDate, isRegistrationClosed, mediaUrl, moduleOn, money, str, type Row } from "../../src/api";
-import { useCart } from "../../src/cart";
 import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { EXPLORE, PORTALS, SITE, resolvedAbout } from "../../src/site-content";
+import { EXPLORE, SITE, resolvedAbout } from "../../src/site-content";
 import { useTheme } from "../../src/theme";
 import { Banner, Button, Card, Cover, Heading, IconTile, Kicker, LinkRow, Loading, Muted, Portrait, Price, Screen, SearchBar, SectionHeader, SiteFooter, StatusChip } from "../../src/ui";
 
 export default function HomeScreen() {
   const { feed, loading, error, refresh } = useFeed();
   const theme = useTheme();
-  const cart = useCart();
   const about = resolvedAbout(feed?.about);
   const [query, setQuery] = useState("");
   const [cert, setCert] = useState("");
@@ -75,9 +73,9 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      <SectionHeader title="Explore gateway" subtitle="Services of the Foundation" />
+      <SectionHeader title="Explore" subtitle="Pages of the Foundation" />
       <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 8 }}>
-        {EXPLORE.filter((item) => ["certificates", "chat", "contact", "support", "notices"].includes(item.id) || enabled(item.id)).map((item) => (
+        {EXPLORE.filter((item) => enabled(item.id) || ["certificates", "chat", "contact", "notices"].includes(item.id)).map((item) => (
           <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
         ))}
       </View>
@@ -117,24 +115,24 @@ export default function HomeScreen() {
         onPress={() => router.push("/about")}
       />
 
-      <SectionHeader title="Foundation publications" subtitle="Hardcover · illustrated" actionLabel="Shop all" onAction={() => router.push("/shop")} />
+      <SectionHeader title="Publications" subtitle="From the Foundation shop" actionLabel="Shop" onAction={() => router.push("/shop")} />
       {books.length ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
           {books.slice(0, 4).map((item) => (
-            <HomeBook key={str(item.id)} item={item} onAdd={() => cart.add({ id: str(item.id), title: str(item.title), price: Number(item.price) || 0 })} />
+            <HomeBook key={str(item.id)} item={item} />
           ))}
         </View>
       ) : (
         <Card>
-          <Muted>The Foundation catalogue is published from Admin. Until titles appear, open the in-app shop — checkout stays inside VGMF with Razorpay.</Muted>
-          <Button kind="ghost" label="Open in-app shop" onPress={() => router.push("/shop")} />
+          <Muted>No titles are in the shop yet. Open Shop after Admin publishes the catalogue.</Muted>
+          <Button kind="ghost" label="Open shop" onPress={() => router.push("/shop")} />
         </Card>
       )}
 
       <Card>
-        <Kicker>Certificate & credential verification</Kicker>
+        <Kicker>Certificate verification</Kicker>
         <Heading>Verify a Foundation certificate</Heading>
-        <Muted>Look up workshop, fellowship or seminar credentials issued by VGMF.</Muted>
+        <Muted>Look up workshop, fellowship or seminar credentials issued by the Foundation.</Muted>
         <View style={{ flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" }}>
           <TextInput
             value={cert}
@@ -152,15 +150,6 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       </Card>
-
-      <SectionHeader title="Specialized portals" subtitle="Affiliated bodies" />
-      {PORTALS.map((portal) => (
-        <Card key={portal.id} onPress={() => void Linking.openURL(portal.href)}>
-          <Heading>{portal.title}</Heading>
-          <Muted>{portal.body}</Muted>
-          <LinkRow label="Open portal" onPress={() => void Linking.openURL(portal.href)} />
-        </Card>
-      ))}
 
       <SiteFooter />
     </Screen>
@@ -186,20 +175,20 @@ function PortraitCard({ uri, title, role, body, onPress, fallback }: { uri?: str
   );
 }
 
-function HomeBook({ item, onAdd }: { item: Row; onAdd: () => void }) {
+function HomeBook({ item }: { item: Row }) {
   const theme = useTheme();
   const price = Number(item.price) || 0;
   const original = Number(item.originalPrice) || 0;
   return (
-    <View style={{ width: "48%", backgroundColor: theme.colors.paper, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 16, padding: 10, marginBottom: 8 }}>
-      <Pressable onPress={() => router.push(`/book/${str(item.id)}`)}>
-        <Cover uri={mediaUrl(item.coverImage) || undefined} ratio="square" />
-        <Heading>{str(item.title)}</Heading>
-        <Muted>{str(item.author)}</Muted>
-        <Price value={money(price)} original={original > price ? money(original) : undefined} />
-      </Pressable>
-      <Button label="Add to bag" kind="ghost" icon="bag-handle-outline" onPress={onAdd} />
-    </View>
+    <Pressable
+      onPress={() => router.push(`/book/${str(item.id)}`)}
+      style={{ width: "48%", backgroundColor: theme.colors.paper, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 16, padding: 10, marginBottom: 8 }}
+    >
+      <Cover uri={mediaUrl(item.coverImage) || undefined} ratio="square" />
+      <Heading>{str(item.title)}</Heading>
+      <Muted>{str(item.author)}</Muted>
+      <Price value={money(price)} original={original > price ? money(original) : undefined} />
+    </Pressable>
   );
 }
 

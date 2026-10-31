@@ -86,7 +86,7 @@ export default function ShopProduct({ slug }: { slug: string }) {
               )}
               <ProductBuyBox book={book} />
               <p className="mt-4 text-xs text-text-muted">
-                Prices include taxes. Sign in or register to place an order. Payments are processed through Razorpay.
+                Sign in or register to place an order. Add a title to the cart or buy now, then continue to checkout.
               </p>
             </div>
           </div>

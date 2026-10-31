@@ -17,7 +17,7 @@ export default function ChatScreen() {
     {
       id: "welcome",
       from: "vgmf",
-      text: `Namaste${session?.name ? `, ${session.name}` : ""}. Ask about events, publications, Razorpay checkout, certificates, clinics, sign-in or the Foundation.`,
+      text: `Namaste${session?.name ? `, ${session.name}` : ""}. Ask about events, publications, certificates, clinics, sign-in or the Foundation.`,
     },
   ]);
 
@@ -65,7 +65,7 @@ export default function ChatScreen() {
         }}
       />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-        {["Next event", "Shop and checkout", "Verify a certificate", "Sign in help"].map((prompt) => (
+        {["Next event", "Shop publications", "Verify a certificate", "Sign in help"].map((prompt) => (
           <Pressable
             key={prompt}
             onPress={() => setMessage(prompt)}

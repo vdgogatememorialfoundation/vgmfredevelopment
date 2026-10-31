@@ -974,7 +974,6 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
   <table style="border-collapse:collapse;margin-top:-1px;"><tr><th></th><th></th><th></th><th></th></tr>
   <tr><td></td><td></td><td>Subtotal</td><td>₹${order.subtotal.toLocaleString("en-IN")}</td></tr>
   <tr><td></td><td></td><td>Discount</td><td>−₹${order.discount.toLocaleString("en-IN")}</td></tr>
-  <tr><td></td><td></td><td>GST</td><td>₹${order.gst.toLocaleString("en-IN")}</td></tr>
   <tr><td></td><td></td><td>Shipping</td><td>₹${order.shipping.toLocaleString("en-IN")}</td></tr>
   <tr><td></td><td></td><td><b>Total</b></td><td><b>₹${order.total.toLocaleString("en-IN")}</b></td></tr></table>`;
   printHtml("Invoice " + order.id, html);
@@ -990,7 +989,7 @@ export function printPosReceipt(order: Order) {
     <p class="muted">In-store receipt · ${formatDate(order.date)}</p>
     <p><b>Order ${order.id}</b><br/>${order.deliveryAddress?.fullName ?? "Walk-in"} · ${order.deliveryAddress?.phone ?? ""}</p>
     <table><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>${itemsHtml}</table>
-    <p>Subtotal ₹${order.subtotal.toLocaleString("en-IN")} · GST ₹${order.gst.toLocaleString("en-IN")}${order.storeCreditUsed ? ` · Credit −₹${order.storeCreditUsed.toLocaleString("en-IN")}` : ""}</p>
+    <p>Subtotal ₹${order.subtotal.toLocaleString("en-IN")}${order.storeCreditUsed ? ` · Credit −₹${order.storeCreditUsed.toLocaleString("en-IN")}` : ""}</p>
     <p class="big">Paid ₹${order.total.toLocaleString("en-IN")}</p>
     <p class="muted">${order.paymentMethod ?? "Cash"} ${order.paymentRef ? `· ${order.paymentRef}` : ""} · Thank you.</p>`
   );

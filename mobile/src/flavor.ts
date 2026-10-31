@@ -26,7 +26,7 @@ export type Flavor = {
 const ALL: Record<FlavorId, Flavor> = {
   customer: {
     id: "customer",
-    displayName: "VGMF",
+    displayName: "Vaidya Gogate Memorial Foundation",
     accent: colors.secondary,
     tabs: [
       { id: "home", title: "Home", icon: "home" },

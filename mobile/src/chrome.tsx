@@ -52,20 +52,17 @@ export function TopBar({ bag = false }: { bag?: boolean }) {
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <MenuButton />
         <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={34} />
-        <Text style={{ flex: 1, fontSize: 18, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }} numberOfLines={1}>
-          {SITE.shortName} Foundation
+        <Text style={{ flex: 1, fontSize: 15, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }} numberOfLines={2}>
+          {SITE.name}
         </Text>
         <IconButton icon="chatbubbles-outline" label="Chat" onPress={() => router.push("/chat")} />
-        {bag ? <IconButton icon="bag-handle-outline" label="Bag" badge={cart.count} onPress={() => router.push("/cart")} /> : null}
+        {bag ? <IconButton icon="bag-handle-outline" label="Cart" badge={cart.count} onPress={() => router.push("/cart")} /> : null}
         <IconButton icon={session ? "person-circle" : "notifications-outline"} label="Account" onPress={() => router.push("/account")} />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
           English  ·  {SITE.greeting}
         </Text>
-        <View style={{ backgroundColor: theme.colors.primary, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
-          <Text style={{ color: theme.colors.onPrimary, fontSize: 9, fontWeight: "800", letterSpacing: 0.8 }}>{SITE.liveLabel.toUpperCase()}</Text>
-        </View>
       </View>
     </View>
   );

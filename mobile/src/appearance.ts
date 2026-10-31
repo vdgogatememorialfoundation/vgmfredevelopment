@@ -94,7 +94,7 @@ export const defaultAppearance: MobileAppearance = {
   ],
   labels: {
     searchPlaceholder: "Search publications, events and clinics",
-    bag: "Bag",
+    bag: "Cart",
     shop: "Publications",
     events: "Events",
     clinics: "Clinics",

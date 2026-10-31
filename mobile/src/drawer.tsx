@@ -5,7 +5,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { mediaUrl } from "./api";
 import { useAuth } from "./auth";
-import { useCart } from "./cart";
 import { useBrand } from "./feed";
 import { SITE } from "./site-content";
 import { useTheme } from "./theme";
@@ -35,15 +34,6 @@ const MENU: { title: string; items: DrawerItem[] }[] = [
       { href: "/contact", label: "Contact", icon: "mail-outline" },
       { href: "/chat", label: "Chat", icon: "chatbubbles-outline" },
       { href: "/faq", label: "FAQ", icon: "help-circle-outline" },
-    ],
-  },
-  {
-    title: "Account",
-    items: [
-      { href: "/cart", label: "Bag", icon: "basket-outline" },
-      { href: "/account", label: "My account", icon: "person-circle-outline" },
-      { href: "/support", label: "Go to my tickets", icon: "help-buoy-outline" },
-      { href: "/checkout", label: "Checkout", icon: "card-outline" },
     ],
   },
 ];
@@ -86,7 +76,6 @@ export function AppDrawer() {
   const theme = useTheme();
   const brand = useBrand();
   const { session, signOut } = useAuth();
-  const cart = useCart();
   const { open, closeDrawer } = useDrawer();
 
   const go = (href: string) => {
@@ -101,7 +90,7 @@ export function AppDrawer() {
           <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border, flexDirection: "row", alignItems: "center", gap: 12 }}>
             <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={44} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.primary, fontWeight: "800", fontFamily: theme.fontFamily, fontSize: 16 }}>{SITE.shortName} Foundation</Text>
+              <Text style={{ color: theme.colors.primary, fontWeight: "800", fontFamily: theme.fontFamily, fontSize: 15 }} numberOfLines={2}>{SITE.name}</Text>
               <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
                 {session?.name || SITE.nativeName}
               </Text>
@@ -131,13 +120,7 @@ export function AppDrawer() {
                   >
                     <Ionicons name={item.icon} size={18} color={theme.colors.primary} />
                     <Text style={{ flex: 1, color: theme.colors.text, fontWeight: "600", fontSize: 15 }}>{item.label}</Text>
-                    {item.href === "/cart" && cart.count ? (
-                      <View style={{ minWidth: 20, height: 20, borderRadius: 10, backgroundColor: theme.colors.primary, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 }}>
-                        <Text style={{ color: theme.colors.onPrimary, fontSize: 10, fontWeight: "800" }}>{cart.count}</Text>
-                      </View>
-                    ) : (
-                      <Ionicons name="chevron-forward" size={14} color={theme.colors.muted} />
-                    )}
+                    <Ionicons name="chevron-forward" size={14} color={theme.colors.muted} />
                   </Pressable>
                 ))}
               </View>

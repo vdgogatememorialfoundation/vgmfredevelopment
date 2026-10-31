@@ -414,7 +414,7 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
     heading: "Payment settings",
     fields: [
       { key: "currency", label: "Currency", fallback: "INR" },
-      { key: "gstPercent", label: "GST (%)", fallback: "5" },
+      { key: "gstPercent", label: "GST (%)", fallback: "0" },
       { key: "cod", label: "Allow cash on delivery", kind: "toggle", fallback: "true" },
     ],
   },

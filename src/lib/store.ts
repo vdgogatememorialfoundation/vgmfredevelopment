@@ -437,6 +437,7 @@ export function toggleWishlist(bookId: string) {
     wishlist.splice(index, 1);
   }
   window.localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist));
+  window.dispatchEvent(new Event("vgmf-wishlist"));
 }
 
 export const TRACKING_STEPS = [

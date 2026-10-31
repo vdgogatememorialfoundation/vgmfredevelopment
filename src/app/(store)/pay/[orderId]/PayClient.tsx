@@ -81,7 +81,7 @@ export default function PayClient({ orderId }: { orderId: string }) {
       });
       if (getOrder(summary.id)) {
         recordPayment(summary.id, {
-          method: outcome.live ? "Razorpay payment link" : "Razorpay (demo)",
+          method: outcome.live ? "Online" : "Online (demo)",
           reference: outcome.paymentId,
           razorpayPaymentId: outcome.paymentId,
         });
@@ -112,10 +112,10 @@ export default function PayClient({ orderId }: { orderId: string }) {
         </div>
         {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <button type="button" onClick={pay} disabled={busy} className="btn-primary mt-6 w-full disabled:opacity-60">
-          {busy ? "Opening Razorpay…" : `Pay ${formatPrice(summary.amount)}`}
+          {busy ? "Processing payment…" : `Pay ${formatPrice(summary.amount)}`}
         </button>
         <p className="mt-3 text-center text-xs text-text-muted">
-          {paymentNotice() || "Secured by Razorpay. UPI, cards and net banking accepted."}
+          {paymentNotice() || "UPI, cards and net banking accepted."}
         </p>
       </div>
     </main>

@@ -6,11 +6,9 @@ import { useCart } from "../src/cart";
 import { useFeed } from "../src/feed";
 import { STORE } from "../src/site-content";
 import { Button, Card, Empty, Heading, Muted, PageHeader, QtyStepper, Screen } from "../src/ui";
-import { useTheme } from "../src/theme";
 
 export default function CartScreen() {
   const cart = useCart();
-  const theme = useTheme();
   const { feed } = useFeed();
   const priced = useMemo(
     () =>
@@ -27,14 +25,13 @@ export default function CartScreen() {
     [cart.items, feed?.books]
   );
   const subtotal = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const gst = Math.round(subtotal * 0.05);
   const shipping = subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
-  const total = subtotal + gst + shipping;
+  const total = subtotal + shipping;
   const blocked = priced.some((item) => !item.inCatalogue || item.outOfStock);
 
   return (
     <Screen>
-      <PageHeader kicker="Shop" title={theme.labels.bag} subtitle="Pay with Razorpay inside the Foundation app — UPI, cards and net banking." />
+      <PageHeader kicker="Shop" title="Cart" subtitle="Review your titles, then continue to checkout." />
       {priced.map((item) => (
         <Card key={item.id}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
@@ -42,7 +39,7 @@ export default function CartScreen() {
               <Heading>{item.title}</Heading>
               <Muted>
                 {money(item.price)}
-                {item.inCatalogue ? "" : " · not in the published catalogue"}
+                {item.inCatalogue ? "" : " · no longer in the shop"}
                 {item.outOfStock ? " · out of stock" : ""}
               </Muted>
             </View>
@@ -50,15 +47,19 @@ export default function CartScreen() {
           </View>
         </Card>
       ))}
-      {!priced.length ? <Empty icon="bag-handle-outline" label="Your bag is empty." actionLabel="Browse publications" onAction={() => router.push("/shop")} /> : null}
+      {!priced.length ? <Empty icon="bag-handle-outline" label="Your cart is empty." actionLabel="Browse the shop" onAction={() => router.push("/shop")} /> : null}
       {priced.length ? (
         <Card featured>
           <Heading>Summary</Heading>
           <Muted>Publications {money(subtotal)}</Muted>
-          <Muted>GST {money(gst)}</Muted>
-          <Muted>Shipping {shipping ? money(shipping) : "Free over ₹499"}</Muted>
+          <Muted>Shipping {shipping ? money(shipping) : "Free"}</Muted>
           <Heading>Total {money(total)}</Heading>
-          <Button icon="card-outline" label="Checkout with Razorpay" disabled={blocked} onPress={() => router.push("/checkout")} />
+          <Button
+            icon="card-outline"
+            label="Checkout"
+            disabled={blocked}
+            onPress={() => router.push("/checkout")}
+          />
         </Card>
       ) : null}
     </Screen>
