@@ -790,7 +790,7 @@ export function RefundsDesk() {
                     refresh();
                   }}
                 >
-                  {["Pending", "Ordered", "Processing", "Packed", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].map((status) => (
+                  {["Pending", "Ordered", "Processing", "Packed", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].map((status) => (
                     <option key={status}>{status}</option>
                   ))}
                 </select>

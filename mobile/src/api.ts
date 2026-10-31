@@ -26,6 +26,7 @@ export type Feed = {
     apiBaseUrl?: string;
     modules: Record<string, boolean>;
     apps?: Record<string, { name?: string; logoUrl?: string }>;
+    showDeveloperCredit?: boolean;
   };
   events: Row[];
   articles: Row[];
@@ -415,6 +416,36 @@ export async function verifyCheckout(input: { orderId: string; paymentId?: strin
   );
   if (!data.ok) throw new Error(String(data.error || "Could not confirm payment."));
   return data as { ok: true; order?: Row };
+}
+
+export async function listPartnerRecords() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/records`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not load account records."));
+  return data as { ok: true; tickets: Row[]; payments: Row[]; syncedAt?: string };
+}
+
+export async function listInbox() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/inbox`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not load notifications."));
+  return (data.items ?? []) as Row[];
+}
+
+export async function liveChatAction(action: string, body: Record<string, unknown> = {}) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/live-chat`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action, ...body }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not update chat."));
+  return data as { ok: true; thread?: Row; threads?: Row[] };
+}
+
+export async function listLiveChats() {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/live-chat`, { headers: headers(false) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not load chats."));
+  return (data.threads ?? []) as Row[];
 }
 
 export async function verifyCertificate(number: string) {

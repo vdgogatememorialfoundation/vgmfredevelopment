@@ -13,7 +13,7 @@ import { useAuth } from "../src/auth";
 import { GoldBanner } from "../src/chrome";
 import { SITE } from "../src/site-content";
 import { useTheme } from "../src/theme";
-import { Banner, BrandMark, Button, Card, Chip, Field, Kicker, Muted, Screen } from "../src/ui";
+import { Banner, BrandMark, Button, Card, Chip, Field, Kicker, Muted, Screen, SiteFooter } from "../src/ui";
 
 const SALUTATIONS = ["Mr.", "Mrs.", "Ms.", "Dr.", "Vaidya", "Prof.", "Shri", "Smt."];
 
@@ -81,8 +81,7 @@ export default function LoginScreen() {
       <GoldBanner text="Official Vaidya Gogate Memorial Foundation app" />
       <View style={{ alignItems: "center", marginTop: 4, marginBottom: 18 }}>
         <BrandMark name={SITE.shortName} size={72} />
-        <Text style={{ marginTop: 14, color: theme.colors.primary, fontFamily: theme.fontFamily, fontSize: 20 }}>{SITE.nativeName}</Text>
-        <Kicker>{SITE.shortName} Foundation</Kicker>
+        <Kicker>{SITE.name}</Kicker>
         <Text style={{ textAlign: "center", fontSize: 24, lineHeight: 30, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily, marginTop: 6 }}>
           One Foundation account
         </Text>
@@ -392,6 +391,7 @@ export default function LoginScreen() {
           ) : null}
         </Card>
       )}
+      <SiteFooter />
     </Screen>
   );
 }

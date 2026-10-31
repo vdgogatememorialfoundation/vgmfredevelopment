@@ -131,6 +131,7 @@ export function readMobileFeed(): MobileFeed {
         support: { ...base.mobile.apps.support, ...snapshot.mobile?.apps?.support },
       },
       showPublicDownload: snapshot.mobile?.showPublicDownload === true,
+      showDeveloperCredit: snapshot.mobile?.showDeveloperCredit !== false,
     },
     events: mergeLiveEvents(snapshot.events ?? base.events),
     articles: snapshot.articles ?? base.articles,

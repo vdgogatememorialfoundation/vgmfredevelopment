@@ -23,6 +23,8 @@ const MENU: { title: string; items: DrawerItem[] }[] = [
       { href: "/videos", label: "Videos", icon: "play-circle-outline" },
       { href: "/articles", label: "Articles", icon: "newspaper-outline" },
       { href: "/notices", label: "Notices", icon: "notifications-outline" },
+      { href: "/account/notifications", label: "Notifications", icon: "notifications" },
+      { href: "/account/registrations", label: "My registrations", icon: "calendar-outline" },
     ],
   },
   {
@@ -92,7 +94,7 @@ export function AppDrawer() {
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.primary, fontWeight: "800", fontFamily: theme.fontFamily, fontSize: 15 }} numberOfLines={2}>{SITE.name}</Text>
               <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
-                {session?.name || SITE.nativeName}
+                {session?.name || SITE.name}
               </Text>
               {session?.accountId ? <Text style={{ color: theme.colors.primary, fontSize: 11, fontWeight: "700", marginTop: 2 }}>ID {session.accountId}</Text> : null}
             </View>

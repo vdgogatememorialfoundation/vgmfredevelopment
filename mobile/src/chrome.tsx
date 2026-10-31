@@ -55,9 +55,10 @@ export function TopBar({ bag = false }: { bag?: boolean }) {
         <Text style={{ flex: 1, fontSize: 15, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }} numberOfLines={2}>
           {SITE.name}
         </Text>
+        <IconButton icon="notifications-outline" label="Notifications" onPress={() => router.push("/account/notifications")} />
         <IconButton icon="chatbubbles-outline" label="Chat" onPress={() => router.push("/chat")} />
         {bag ? <IconButton icon="bag-handle-outline" label="Cart" badge={cart.count} onPress={() => router.push("/cart")} /> : null}
-        <IconButton icon={session ? "person-circle" : "notifications-outline"} label="Account" onPress={() => router.push("/account")} />
+        <IconButton icon={session ? "person-circle" : "person-outline"} label="Account" onPress={() => router.push("/account")} />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <Text style={{ color: theme.colors.muted, fontSize: 12 }}>

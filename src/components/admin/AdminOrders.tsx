@@ -58,6 +58,7 @@ const ALL_STATUSES: Order["status"][] = [
   "Accepted",
   "Packed",
   "Ready to Ship",
+  "To Ship",
   "Shipped",
   "Out for Delivery",
   "Delivered",
@@ -108,6 +109,9 @@ export function OrdersDashboard() {
   const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
   const toPack = orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length;
   const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery").length;
+  const toShip = orders.filter((order) => order.status === "To Ship" || order.status === "Ready to Ship" || order.status === "Packed").length;
+  const outForDelivery = orders.filter((order) => order.status === "Out for Delivery").length;
+  const delivered = orders.filter((order) => order.status === "Delivered").length;
   const inTransit = orders.filter((order) => order.status === "Shipped" || order.status === "Out for Delivery").length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
 
@@ -142,9 +146,12 @@ export function OrdersDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {[
           ["To pack", toPack, "Accepted"],
+          ["To Ship", toShip, "To Ship"],
+          ["Out for Delivery", outForDelivery, "Out for Delivery"],
+          ["Delivered", delivered, "Delivered"],
           ["Awaiting payment", awaitingPayment, "Pending"],
           ["In transit", inTransit, "Shipped"],
           ["Open returns", returns, "All"],
@@ -171,11 +178,13 @@ export function OrdersDashboard() {
             const order = getOrderByAdmin(id);
             if (order?.deliveryMode === "delivery" && getIntegrations().shipping.autoBookOnPack) await bookShipment(id);
           })}>Pack</Button>
-          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ready to ship", async (id) => {
-            setOrderStatus(id, "Ready to Ship");
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("To Ship", async (id) => {
+            setOrderStatus(id, "To Ship");
             const order = getOrderByAdmin(id);
             if (order?.deliveryMode === "delivery") await bookShipment(id);
-          })}>Ready to ship</Button>
+          })}>To Ship</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Out for Delivery", (id) => setOrderStatus(id, "Out for Delivery"))}>Out for Delivery</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Delivered", (id) => setOrderStatus(id, "Delivered"))}>Delivered</Button>
           <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]))}>Excel</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(filtered.filter((order) => picked[order.id]))}>PDF</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Labels", async (id) => {

@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFeed } from "./feed";
 import { useTheme } from "./theme";
 
 export function Screen({
@@ -579,12 +580,18 @@ export function LinkRow({ label, onPress }: { label: string; onPress: () => void
 
 export function SiteFooter() {
   const theme = useTheme();
+  const { feed } = useFeed();
+  const showCredit = feed?.mobile?.showDeveloperCredit !== false;
   return (
     <View style={{ marginTop: 20, paddingTop: 16, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
-      <Text style={{ color: theme.colors.primary, fontFamily: theme.fontFamily, fontSize: 16, textAlign: "center" }}>वैद्य गोगटे स्मृती प्रतिष्ठान</Text>
-      <Text style={{ color: theme.colors.muted, fontSize: 11, textAlign: "center", marginTop: 6, lineHeight: 16 }}>
+      <Text style={{ color: theme.colors.muted, fontSize: 11, textAlign: "center", lineHeight: 16 }}>
         Vaidya Gogate Memorial Foundation · Pune, India
       </Text>
+      {showCredit ? (
+        <Text style={{ color: theme.colors.primary, fontSize: 12, textAlign: "center", marginTop: 8, fontFamily: theme.fontFamily }}>
+          Developed by Capture Visual Studios
+        </Text>
+      ) : null}
     </View>
   );
 }

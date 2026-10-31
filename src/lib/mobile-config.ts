@@ -73,6 +73,8 @@ export type MobileAppConfig = {
   apps: Record<AppFlavorId, MobileAppBrand>;
   /** When false, the public site hides Android download links. Admin can still download from this desk. */
   showPublicDownload: boolean;
+  /** When false, the Android app hides “Developed by Capture Visual Studios”. */
+  showDeveloperCredit: boolean;
 };
 
 export const defaultMobileAppConfig: MobileAppConfig = {
@@ -87,6 +89,7 @@ export const defaultMobileAppConfig: MobileAppConfig = {
   modules: Object.fromEntries(mobileModules.map((item) => [item.id, true])) as Record<MobileModuleId, boolean>,
   apps: defaultAppBrands,
   showPublicDownload: false,
+  showDeveloperCredit: true,
 };
 
 export function getMobileAppConfig(): MobileAppConfig {
@@ -106,6 +109,7 @@ export function getMobileAppConfig(): MobileAppConfig {
         support: { ...defaultAppBrands.support, ...saved.apps?.support },
       },
       showPublicDownload: saved.showPublicDownload === true,
+      showDeveloperCredit: saved.showDeveloperCredit !== false,
     };
   } catch {
     return defaultMobileAppConfig;

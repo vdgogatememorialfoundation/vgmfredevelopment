@@ -18,7 +18,7 @@ export default function EventsScreen() {
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
       <TopBar />
-      <PageHeader kicker="Academic assemblies" title="Events" subtitle="Conversations, scholarly symposia and accredited clinical workshops upholding authentic classical lineage." />
+      <PageHeader kicker="Academic assemblies" title="Events" subtitle="Every Foundation event from the website — upcoming and past assemblies, workshops and programmes." />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         <Chip label={`Upcoming (${upcoming.length})`} selected={scope === "upcoming"} onPress={() => setScope("upcoming")} />
         <Chip label={`Past (${past.length})`} selected={scope === "past"} onPress={() => setScope("past")} />

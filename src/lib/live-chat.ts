@@ -16,6 +16,8 @@ export type LiveChatMessage = {
   at: string;
   page?: string;
   form?: boolean;
+  kind?: "text" | "image" | "video" | "voice";
+  mediaUrl?: string;
 };
 
 export type LiveChatThread = {
@@ -32,6 +34,9 @@ export type LiveChatThread = {
   waitingSince?: string;
   formRequested?: boolean;
   ticketId?: string;
+  status?: "open" | "closed";
+  department?: string;
+  closedAt?: string;
 };
 
 const SETTINGS_KEY = "vgmf_live_chat_settings";
@@ -94,6 +99,16 @@ function saveThreads(threads: LiveChatThread[]) {
   write(THREADS_KEY, threads);
 }
 
+function syncServer(action: string, payload: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/mobile/live-chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action, ...payload }),
+  }).catch(() => undefined);
+}
+
 export function postChatMessage(input: {
   threadId?: string;
   from: "visitor" | "staff";
@@ -103,9 +118,11 @@ export function postChatMessage(input: {
   phone?: string;
   page?: string;
   form?: boolean;
+  kind?: "text" | "image" | "video" | "voice";
+  mediaUrl?: string;
 }) {
   const text = input.text.trim();
-  if (!text) return;
+  if (!text && !input.mediaUrl) return;
   const threads = getChatThreads();
   const threadId = input.threadId || visitorThreadId();
   const now = new Date().toISOString();
@@ -118,6 +135,8 @@ export function postChatMessage(input: {
     at: now,
     page: input.page,
     form: input.form,
+    kind: input.kind || "text",
+    mediaUrl: input.mediaUrl,
   };
   const existing = threads.find((thread) => thread.id === threadId);
   if (existing) {
@@ -146,16 +165,28 @@ export function postChatMessage(input: {
     });
   }
   saveThreads(threads);
+  syncServer("post", {
+    threadId,
+    from: input.from,
+    name: input.name,
+    text: input.text,
+    email: input.email,
+    phone: input.phone,
+    page: input.page,
+    kind: input.kind || "text",
+    mediaUrl: input.mediaUrl,
+  });
   return threadId;
 }
 
-export function transferChat(threadId: string, assignedTo: string, assignedName: string, byName: string) {
+export function transferChat(threadId: string, assignedTo: string, assignedName: string, byName: string, department?: string) {
   const threads = getChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (!thread) return;
   const now = new Date().toISOString();
   thread.assignedTo = assignedTo;
   thread.assignedName = assignedName;
+  if (department) thread.department = department;
   thread.updatedAt = now;
   thread.waitingSince = undefined;
   thread.messages.push({
@@ -167,7 +198,105 @@ export function transferChat(threadId: string, assignedTo: string, assignedName:
     at: now,
   });
   saveThreads(threads);
+  syncServer("transfer", { threadId, assignedTo, assignedName, department });
   return thread;
+}
+
+export async function pullServerChats() {
+  if (typeof window === "undefined") return;
+  try {
+    const response = await fetch("/api/mobile/live-chat", { credentials: "same-origin" });
+    const data = (await response.json()) as { ok?: boolean; threads?: LiveChatThread[] };
+    if (!data?.ok || !Array.isArray(data.threads)) return;
+    const local = getChatThreads();
+    const byId = new Map(local.map((thread) => [thread.id, thread]));
+    for (const remote of data.threads) {
+      if (!remote?.id) continue;
+      const existing = byId.get(remote.id);
+      const remoteCount = remote.messages?.length ?? 0;
+      const localCount = existing?.messages?.length ?? 0;
+      if (!existing || String(remote.updatedAt || "") >= String(existing.updatedAt || "") || remoteCount >= localCount) {
+        byId.set(remote.id, { ...existing, ...remote, messages: remote.messages?.length ? remote.messages : existing?.messages ?? [] });
+      }
+    }
+    saveThreads([...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+  } catch {
+    /* desk stays on the last local snapshot */
+  }
+}
+
+export function takeChat(threadId: string, agentEmail: string, agentName: string) {
+  const threads = getChatThreads();
+  const thread = threads.find((item) => item.id === threadId);
+  if (!thread) return;
+  const now = new Date().toISOString();
+  thread.assignedTo = agentEmail;
+  thread.assignedName = agentName;
+  thread.status = "open";
+  thread.updatedAt = now;
+  thread.messages.push({
+    id: `m${Date.now().toString(36)}`,
+    threadId,
+    from: "staff",
+    name: agentName,
+    text: `Namaste, I am ${agentName} from Foundation Support. How can I help you today?`,
+    at: now,
+    kind: "text",
+  });
+  saveThreads(threads);
+  syncServer("take", { threadId, agentEmail, agentName });
+  return thread;
+}
+
+export function closeChat(threadId: string, agentName: string) {
+  const threads = getChatThreads();
+  const thread = threads.find((item) => item.id === threadId);
+  if (!thread) return;
+  const now = new Date().toISOString();
+  thread.status = "closed";
+  thread.closedAt = now;
+  thread.updatedAt = now;
+  thread.messages.push({
+    id: `m${Date.now().toString(36)}`,
+    threadId,
+    from: "staff",
+    name: agentName,
+    text: `${agentName} closed this chat. You can write again if you need more help.`,
+    at: now,
+    kind: "text",
+  });
+  saveThreads(threads);
+  syncServer("close", { threadId, agentName });
+  return thread;
+}
+
+export function raiseTicketOnBehalf(threadId: string, agentName: string) {
+  const threads = getChatThreads();
+  const thread = threads.find((item) => item.id === threadId);
+  if (!thread || !thread.email) return null;
+  const ticket = addTicket({
+    name: thread.name,
+    email: thread.email,
+    phone: thread.phone,
+    subject: `Chat with ${thread.name}`,
+    body: visitorTranscript(thread),
+    portal: "public",
+    chatThreadId: thread.id,
+  });
+  thread.ticketId = ticket.id;
+  thread.updatedAt = new Date().toISOString();
+  thread.messages.push({
+    id: `m${Date.now().toString(36)}`,
+    threadId,
+    from: "staff",
+    name: agentName,
+    text: `Ticket ${ticket.id} was opened on ${thread.name}'s behalf. Updates will go to ${thread.email}.`,
+    at: new Date().toISOString(),
+    kind: "text",
+  });
+  saveThreads(threads);
+  syncServer("ticket", { threadId, agentName, customerName: thread.name, customerEmail: thread.email, customerPhone: thread.phone });
+  return ticket;
 }
 
 function visitorTranscript(thread: LiveChatThread) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { findRow, listOrders, listTickets, money, str } from "../../src/api";
+import { findRow, formatDate, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
 import { ACCOUNT_SECTIONS, accountSection } from "../../src/account-nav";
 import { useAuth } from "../../src/auth";
 import { useFeed } from "../../src/feed";
@@ -26,6 +27,9 @@ function SectionBody({ id, title, subtitle }: { id: string; title: string; subti
   if (id === "wishlist") return <WishlistSection title={title} subtitle={subtitle} />;
   if (id === "profile") return <ProfileSection title={title} subtitle={subtitle} />;
   if (id === "loyalty") return <LoyaltySection title={title} subtitle={subtitle} />;
+  if (id === "registrations" || id === "applications") return <PartnerSection title={title} subtitle={subtitle} kind="tickets" empty={emptyCopy(id)} />;
+  if (id === "payments" || id === "receipts") return <PartnerSection title={title} subtitle={subtitle} kind="payments" empty={emptyCopy(id)} />;
+  if (id === "notifications") return <InboxSection title={title} subtitle={subtitle} />;
   const empty = ACCOUNT_SECTIONS.find((item) => item.id === id);
   return (
     <Screen>
@@ -207,6 +211,130 @@ function LoyaltySection({ title, subtitle }: { title: string; subtitle: string }
         <Heading>0</Heading>
         <Muted>Points appear here after a qualifying shop order or registration.</Muted>
       </Card>
+    </Screen>
+  );
+}
+
+function portalLabel(value: unknown) {
+  const id = str(value).toLowerCase();
+  if (id === "seminar") return "Seminar Portal";
+  if (id === "autism") return "Autism Portal";
+  if (id === "fellowship") return "Fellowship Portal";
+  return str(value, "Foundation programme");
+}
+
+function PartnerSection({
+  title,
+  subtitle,
+  kind,
+  empty,
+}: {
+  title: string;
+  subtitle: string;
+  kind: "tickets" | "payments";
+  empty: string;
+}) {
+  const { session } = useAuth();
+  const [rows, setRows] = useState<Row[]>([]);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    void listPartnerRecords()
+      .then((next) => {
+        if (!cancelled) setRows(kind === "payments" ? next.payments ?? [] : next.tickets ?? []);
+      })
+      .catch((error) => {
+        if (!cancelled) setNote((error as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, session]);
+
+  if (loading) return <Loading />;
+
+  return (
+    <Screen>
+      <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
+      <Banner text={note} tone="error" />
+      {rows.map((item) => {
+        const href = str(item.portalUrl);
+        return (
+          <Card key={str(item.id)}>
+            <Heading>{str(item.eventName, str(item.subject, "Foundation record"))}</Heading>
+            <Muted>
+              {[
+                portalLabel(item.portal),
+                str(item.kind),
+                str(item.applicationNo),
+                str(item.status),
+                item.amount != null && item.amount !== "" ? money(item.amount) : "",
+                formatDate(item.issuedAt || item.at),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Muted>
+            {href ? <Button kind="ghost" label="Open on portal" onPress={() => void Linking.openURL(href)} /> : null}
+          </Card>
+        );
+      })}
+      {!rows.length ? (
+        <Empty icon="calendar-outline" label={empty} actionLabel="Browse events" onAction={() => router.push("/events")} />
+      ) : null}
+    </Screen>
+  );
+}
+
+function InboxSection({ title, subtitle }: { title: string; subtitle: string }) {
+  const { session } = useAuth();
+  const [items, setItems] = useState<Row[]>([]);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    void listInbox()
+      .then((next) => {
+        if (!cancelled) setItems(next);
+      })
+      .catch((error) => {
+        if (!cancelled) setNote((error as Error).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  if (loading) return <Loading />;
+
+  return (
+    <Screen>
+      <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
+      <Banner text={note} tone="error" />
+      {items.map((item) => (
+        <Card
+          key={str(item.id)}
+          onPress={() => {
+            const href = str(item.href);
+            if (href.startsWith("/")) router.push(href as never);
+          }}
+        >
+          <Muted>{[str(item.kind), formatDate(item.at)].filter(Boolean).join(" · ")}</Muted>
+          <Heading>{str(item.title)}</Heading>
+          <Muted>{str(item.body)}</Muted>
+        </Card>
+      ))}
+      {!items.length ? <Empty icon="notifications-outline" label="You have no Foundation notifications right now." /> : null}
     </Screen>
   );
 }

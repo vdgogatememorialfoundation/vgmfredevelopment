@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   addTicket,
@@ -20,11 +20,15 @@ import {
 } from "@/lib/admin-store";
 import { useAuth } from "@/components/auth/AuthContext";
 import {
+  closeChat,
   getChatThreads,
   getLiveChatSettings,
   postChatMessage,
+  pullServerChats,
+  raiseTicketOnBehalf,
   saveLiveChatSettings,
   subscribeLiveChat,
+  takeChat,
   transferChat,
 } from "@/lib/live-chat";
 import type { FAQItem, SupportTicket } from "@/types";
@@ -233,15 +237,40 @@ function chatSnapshot() {
 
 export function LiveChatDesk() {
   useSyncExternalStore(subscribeLiveChat, chatSnapshot, () => "");
+  const { user } = useAuth();
   const settings = getLiveChatSettings();
   const threads = getChatThreads();
   const [activeId, setActiveId] = useState(threads[0]?.id ?? "");
   const [reply, setReply] = useState("");
   const active = threads.find((thread) => thread.id === activeId) ?? threads[0];
+  const agentName = user ? `${user.firstName} ${user.lastName}`.trim() || user.email : "Foundation Support";
+  const agentEmail = user?.email || "";
+  const agents = listSupportAgents();
+
+  useEffect(() => {
+    void pullServerChats();
+    const timer = window.setInterval(() => void pullServerChats(), 4000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const attachFile = (file: File, kind: "image" | "video" | "voice") => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      postChatMessage({
+        threadId: active?.id,
+        from: "staff",
+        name: agentName,
+        text: kind === "voice" ? "Voice message" : file.name,
+        kind,
+        mediaUrl: String(reader.result || ""),
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="space-y-4">
-      <Panel title="Live chat" description="Enable the widget on the public site. Switch online when staff can reply.">
+      <Panel title="Live chat" description="Enable the widget on the public site. Switch online when staff can reply. Every chat is recorded.">
         <div className="flex flex-wrap gap-3">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -260,9 +289,6 @@ export function LiveChatDesk() {
             Staff are online
           </label>
         </div>
-        <p className="mt-2 text-xs text-text-muted">
-          When chat is enabled but offline, visitors are asked to raise a ticket from the customer dashboard.
-        </p>
       </Panel>
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
         <ul className="space-y-2">
@@ -277,7 +303,9 @@ export function LiveChatDesk() {
                   className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${active?.id === thread.id ? "border-burgundy bg-burgundy/5" : "border-border bg-white"}`}
                 >
                   <span className="font-semibold text-text-primary">{thread.name}</span>
-                  <span className="mt-0.5 block text-xs text-text-muted">{thread.page || "site"} · {thread.messages.length} messages</span>
+                  <span className="mt-0.5 block text-xs text-text-muted">
+                    {thread.status === "closed" ? "Closed" : thread.assignedName || "Waiting"} · {thread.messages.length} messages
+                  </span>
                 </button>
               </li>
             ))
@@ -286,44 +314,103 @@ export function LiveChatDesk() {
         {active ? (
           <div className="rounded-xl border border-border bg-white p-4">
             <p className="font-semibold text-text-primary">{active.name}</p>
-            <p className="text-xs text-text-muted">{active.email || "no email"} · {active.page}{active.assignedName ? ` · assigned to ${active.assignedName}` : ""}{active.ticketId ? ` · ticket ${active.ticketId}` : ""}</p>
+            <p className="text-xs text-text-muted">
+              {active.email || "no email"} · {active.page}
+              {active.assignedName ? ` · ${active.assignedName}` : ""}
+              {active.department ? ` · ${active.department}` : ""}
+              {active.ticketId ? ` · ticket ${active.ticketId}` : ""}
+              {active.status === "closed" ? " · closed" : ""}
+            </p>
             <div className="mt-2 flex flex-wrap gap-2">
+              <Button onClick={() => takeChat(active.id, agentEmail, agentName)}>Take chat</Button>
+              <Button variant="outline" onClick={() => closeChat(active.id, agentName)}>Close chat</Button>
+              <Button variant="outline" onClick={() => raiseTicketOnBehalf(active.id, agentName)}>Raise ticket on behalf</Button>
               <SelectInput
                 className="w-56"
                 value={active.assignedTo ?? ""}
                 onChange={(event) => {
-                  const agent = listSupportAgents().find((item) => item.email === event.target.value);
+                  if (event.target.value === "__next") {
+                    const others = agents.filter((item) => item.email !== agentEmail);
+                    const next = others[0] || agents[0];
+                    if (!next) return;
+                    transferChat(active.id, next.email, `${next.firstName} ${next.lastName}`.trim(), agentName);
+                    return;
+                  }
+                  const agent = agents.find((item) => item.email === event.target.value);
                   if (!agent) return;
-                  transferChat(active.id, agent.email, `${agent.firstName} ${agent.lastName}`.trim(), "Foundation Support");
+                  transferChat(active.id, agent.email, `${agent.firstName} ${agent.lastName}`.trim(), agentName);
                 }}
               >
-                <option value="">Transfer chat…</option>
-                {listSupportAgents().map((agent) => (
+                <option value="">Transfer to agent…</option>
+                <option value="__next">Next available agent</option>
+                {agents.map((agent) => (
                   <option key={agent.email} value={agent.email}>
                     {agent.firstName} {agent.lastName} ({agent.role})
                   </option>
                 ))}
               </SelectInput>
+              <SelectInput
+                className="w-44"
+                value={active.department ?? ""}
+                onChange={(event) => {
+                  if (!event.target.value) return;
+                  transferChat(active.id, "", `${event.target.value} desk`, agentName, event.target.value);
+                }}
+              >
+                <option value="">Transfer to dept…</option>
+                {["Support", "Shop", "Events", "Accounts"].map((dept) => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </SelectInput>
             </div>
             <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
               {active.messages.map((message) => (
-                <p key={message.id} className={`rounded-lg p-2 text-sm ${message.from === "staff" ? "bg-emerald-50" : "bg-warm-cream"}`}>
+                <div key={message.id} className={`rounded-lg p-2 text-sm ${message.from === "staff" ? "bg-emerald-50" : "bg-warm-cream"}`}>
                   <span className="text-xs font-semibold">{message.name}</span>
-                  <br />
-                  {message.text}
-                </p>
+                  {message.text ? <p>{message.text}</p> : null}
+                  {message.kind === "image" && message.mediaUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={message.mediaUrl} alt="" className="mt-2 max-h-40 rounded-lg" />
+                  ) : null}
+                  {message.kind === "video" && message.mediaUrl ? <video src={message.mediaUrl} controls className="mt-2 max-h-40 rounded-lg" /> : null}
+                  {message.kind === "voice" && message.mediaUrl ? <audio src={message.mediaUrl} controls className="mt-2 w-full" /> : null}
+                </div>
               ))}
             </div>
-            <div className="mt-3 flex gap-2">
-              <TextInput value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Reply as Foundation Support" className="flex-1" />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <TextInput value={reply} onChange={(event) => setReply(event.target.value)} placeholder={`Reply as ${agentName}`} className="flex-1" />
               <Button
                 onClick={() => {
-                  postChatMessage({ threadId: active.id, from: "staff", name: "Foundation Support", text: reply });
+                  postChatMessage({ threadId: active.id, from: "staff", name: agentName, text: reply });
                   setReply("");
                 }}
               >
                 Send
               </Button>
+              <label className="btn-outline cursor-pointer px-3 py-2 text-xs">
+                Photo
+                <input type="file" accept="image/*" className="hidden" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) attachFile(file, "image");
+                  event.target.value = "";
+                }} />
+              </label>
+              <label className="btn-outline cursor-pointer px-3 py-2 text-xs">
+                Video
+                <input type="file" accept="video/*" className="hidden" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) attachFile(file, "video");
+                  event.target.value = "";
+                }} />
+              </label>
+              <label className="btn-outline cursor-pointer px-3 py-2 text-xs">
+                Voice
+                <input type="file" accept="audio/*" className="hidden" onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) attachFile(file, "voice");
+                  event.target.value = "";
+                }} />
+              </label>
             </div>
           </div>
         ) : null}
