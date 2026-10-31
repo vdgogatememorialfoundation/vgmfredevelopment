@@ -111,7 +111,7 @@ export function LiveEventPage({ slug }: { slug: string }) {
             <Badge tone="neutral">{event.registrationStatus}</Badge>
           </div>
           <h1 className="heading-1 mt-4">{event.name}</h1>
-          {event.bannerUrl && /^(https?:|data:image|\/)/.test(event.bannerUrl) && (
+          {event.bannerUrl && /^(https?:|data:image|\/)/i.test(event.bannerUrl) && (
             <NaturalImage src={event.bannerUrl} alt="" fit="hero" className="mt-6 max-w-5xl rounded-2xl border border-border" />
           )}
           <p className="mt-4 max-w-3xl text-body">{event.shortDescription}</p>

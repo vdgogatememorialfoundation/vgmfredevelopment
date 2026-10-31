@@ -31,7 +31,7 @@ export default function MediaPlaceholder({
 }: MediaPlaceholderProps) {
   const glyph = labelGlyphs[variant];
 
-  if (src && /^(https?:|data:image|\/)/.test(src)) {
+  if (src && /^(https?:|data:image|\/)/i.test(src)) {
     return (
       <div className={classNames("relative overflow-hidden bg-warm-cream", aspectClassName, className)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
