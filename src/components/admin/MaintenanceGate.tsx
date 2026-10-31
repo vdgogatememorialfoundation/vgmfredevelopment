@@ -31,7 +31,8 @@ export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   }, [expired]);
 
   useEffect(() => {
-    const href = settings?.faviconUrl || settings?.logoUrl || "/icon.png";
+    const raw = settings?.faviconUrl || settings?.logoUrl || "/icon.png";
+    const href = `${raw}${raw.includes("?") ? "&" : "?"}v=134`;
     const apply = (rel: string, type?: string) => {
       let link = document.querySelector<HTMLLinkElement>(`link[rel='${rel}']`);
       if (!link) {

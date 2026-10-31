@@ -67,7 +67,8 @@ export function generateMetadata(): Metadata {
   const hosted = platformEnv();
   const noIndex = hosted === "demo" || hosted === "staging";
   const brand = readMobileFeed().site;
-  const icon = brand.faviconUrl || brand.logoUrl || "/icon.png";
+  const published = brand.faviconUrl || brand.logoUrl || "";
+  const icon = "/icon.png";
   return {
     metadataBase: new URL(url),
     title: {
@@ -92,11 +93,12 @@ export function generateMetadata(): Metadata {
     applicationName: siteConfig.shortName,
     icons: {
       icon: [
-        { url: icon, type: "image/png" },
+        { url: `${icon}?v=134`, type: "image/png" },
+        ...(published && published !== icon ? [{ url: `${published}?v=134`, type: "image/png" }] : []),
         { url: "/favicon.ico", sizes: "48x48" },
       ],
-      apple: [{ url: icon }],
-      shortcut: icon,
+      apple: [{ url: `${icon}?v=134` }],
+      shortcut: `${icon}?v=134`,
     },
     robots: noIndex
       ? { index: false, follow: false, googleBot: { index: false, follow: false } }
