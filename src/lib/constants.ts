@@ -4,9 +4,10 @@ export const siteConfig = {
   tagline: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
   url: process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://vaidyagogate.org",
   email: "info@vaidyagogate.org",
-  phone: "+91 20 1234 5678",
-  whatsapp: "+91 98765 43210",
-  address: "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
+  phone: "093737 92952",
+  whatsapp: "093737 92952",
+  address:
+    "102, Ramprasad Chambers, 368/1, Jawaharlal Nehru Rd, near Kirad Hospital, above Shraddha Medicals, New Nana Peth, Pune, Maharashtra 411002",
   social: {
     facebook: "",
     instagram: "",

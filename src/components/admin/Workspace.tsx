@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
+import { publishLiveSite } from "@/lib/mobile-publish";
 import { getOrders } from "@/lib/store";
 import { getNotifications } from "@/lib/notify";
 import { getLiveEvents } from "@/lib/cms";
@@ -13,6 +15,8 @@ import { canOpen } from "@/lib/roles";
 
 export function WorkspaceHome() {
   const { user } = useAuth();
+  const [publishNote, setPublishNote] = useState("");
+  const [publishing, setPublishing] = useState(false);
   if (!user) return null;
   const orders = getOrders();
   const notifications = getNotifications();
@@ -53,6 +57,47 @@ export function WorkspaceHome() {
             {settings.maintenanceMode ? "Maintenance on" : "Site live"}
           </span>
           <span className="rounded-full bg-[#F3F4F6] px-3 py-1 text-gray-700">Razorpay: {integrations.razorpay.mode}</span>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">Updates on every device</h2>
+        <p className="mt-2 max-w-3xl text-sm text-gray-700">
+          Saving on this dashboard, or pressing Publish, updates this website for every phone and browser that opens it.
+          A change here stays on the site you are signed into.
+        </p>
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-gray-700">
+          <li>
+            To update the public site, sign in at{" "}
+            <a className="font-semibold text-burgundy" href="https://vaidyagogate.org/admin">
+              vaidyagogate.org/admin
+            </a>{" "}
+            and press Publish.
+          </li>
+          <li>staging.vaidyagogate.org and demo.vaidyagogate.org are separate copies. Publish on each one you want to change.</li>
+          <li>A new website build is installed on the server. That step is not a button in this dashboard.</li>
+        </ol>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={publishing}
+            onClick={() => {
+              setPublishing(true);
+              setPublishNote("");
+              void publishLiveSite().then((result) => {
+                setPublishing(false);
+                setPublishNote(
+                  result && "ok" in result && result.ok
+                    ? "Published. Every phone and browser on this website will show the latest content."
+                    : "Could not publish. Stay signed in and try again."
+                );
+              });
+            }}
+            className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {publishing ? "Publishing…" : "Publish to every device now"}
+          </button>
+          {publishNote ? <p className="text-sm text-gray-700">{publishNote}</p> : null}
         </div>
       </div>
 

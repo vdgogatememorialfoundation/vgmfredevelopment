@@ -1,5 +1,5 @@
 import type { Order, ShipmentEvent, ShipmentRecord } from "@/types";
-import { storeConfig } from "@/lib/constants";
+import { siteConfig, storeConfig } from "@/lib/constants";
 
 /** Deterministic 6-digit pickup OTP derived from the order id. */
 export function pickupOtp(orderId: string): string {
@@ -53,18 +53,30 @@ export function isSampleOrder(order: Pick<Order, "id" | "paymentLink" | "payment
 export type CourierStage = "ordered" | "packed" | "shipped" | "out" | "delivered" | "failed" | "cancelled";
 
 export function classifyCourierScan(text: string): CourierStage | null {
-  const value = text.toLowerCase();
-  if (!value.trim()) return null;
-  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed)\b/.test(value)) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!value) return null;
+  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|failed|declined|incomplete)\b/.test(value)) {
     return "failed";
   }
   if (/\bcancel/.test(value)) return "cancelled";
-  if (/\b(out for delivery|ofd|out-for-delivery|agent out)\b/.test(value)) return "out";
-  if (/\bdeliver/.test(value) && !/\b(attempt|failed|undeliver)\b/.test(value)) return "delivered";
-  if (/\b(in transit|shipped|dispatch|left (the )?hub|arrived at|reached (destination|hub)|picked up|pickup done|manifested)\b/.test(value)) {
+  if (/\b(successful|success|completed|complete|already delivered|task successful)\b/.test(value) && !/\b(attempt|fail|undeliver)\b/.test(value)) {
+    return "delivered";
+  }
+  if (
+    /\b(in transit|shipped|dispatch|left (the )?hub|arrived at (hub|facility|warehouse|origin)|reached (destination|hub|pickup)|picked up|pickup done|pickup complete|manifested|arrived at pickup)\b/.test(
+      value
+    )
+  ) {
     return "shipped";
   }
-  if (/\b(pack|booked|label generated|awb generated|ready to ship|handover)\b/.test(value)) return "packed";
+  if (/\bnot started\b/.test(value)) return "packed";
+  if (/\b(out for delivery|ofd|agent out|started|in progress|on the way|en route|ready to deliver|reached drop|reached customer|arrived)\b/.test(value)) {
+    return "out";
+  }
+  if (/\bdeliver/.test(value) && !/\b(attempt|failed|undeliver)\b/.test(value)) return "delivered";
+  if (/\b(pack|booked|label generated|awb generated|ready to ship|handover|assigned|accepted|acknowledged|unassigned|not assigned|task created)\b/.test(value)) {
+    return "packed";
+  }
   if (/\b(order placed|created|placed|confirmed)\b/.test(value)) return "ordered";
   return null;
 }
@@ -283,7 +295,7 @@ export function buildTrackingStages(
                 id: "ready",
                 title: "Your item is ready for store pickup",
                 at: packedAt || order.date,
-                location: "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
+                location: siteConfig.address,
                 detail: `Pickup OTP: ${pickupOtp(order.id)} — share it with the front desk. Held for ${storeConfig.pickupHoldingDays} days. Carry a valid ID.`,
                 reached: true,
               },

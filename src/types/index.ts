@@ -501,6 +501,8 @@ export interface Order {
   refunds?: RefundRecord[];
   returnShipment?: ReturnShipment;
   deliveryMode: "delivery" | "store_pickup";
+  /** Set at the clinic counter when the customer is at the desk. */
+  pickupArrivedAt?: string;
   deliveryAddress?: DeliveryAddress;
   eta?: string;
   trackingId?: string;

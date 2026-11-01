@@ -12,6 +12,17 @@ import { clinicDirectionsUrl, clinicMapEmbed } from "@/lib/maps";
 import { NoticesGazette } from "@/components/site/NoticesGazette";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
+function clockLabel(value?: string) {
+  if (!value) return "";
+  const [hourText, minuteText] = value.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (!Number.isFinite(hour)) return value;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const twelve = hour % 12 || 12;
+  return `${twelve}:${String(Number.isFinite(minute) ? minute : 0).padStart(2, "0")} ${suffix}`;
+}
+
 export function AnnouncementsIndex() {
   const { t } = useI18n();
   const items = [...useLiveAnnouncements()].sort((a, b) => b.date.localeCompare(a.date));
@@ -198,7 +209,7 @@ export function ClinicDetail({ slug }: { slug: string }) {
                 {clinic.weeklyHours.map((row) => (
                   <li key={row.day} className="flex justify-between gap-3">
                     <span>{row.day}</span>
-                    <span>{row.closed ? t("clinic.closed") : `${row.from} – ${row.to}`}</span>
+                    <span>{row.closed ? t("clinic.closed") : `${clockLabel(row.from)} – ${clockLabel(row.to)}`}</span>
                   </li>
                 ))}
               </ul>

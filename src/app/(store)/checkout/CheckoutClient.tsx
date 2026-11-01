@@ -16,6 +16,7 @@ import {
   formatPrice,
   getEstimatedDeliveryDate,
   generateOrderId,
+  pickupOtp,
   saveOrder,
   clearCart,
 } from "@/lib/store";
@@ -291,15 +292,19 @@ export default function CheckoutClient() {
     };
     if (commitStockForOrder(order)) order.stockCommitted = true;
     saveOrder(order);
-    if (deliveryAddress.email) {
+    if (deliveryAddress.email || deliveryAddress.phone) {
+      const pickupNote =
+        deliveryMode === "delivery"
+          ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.`
+          : `Pickup from ${pickupLocation.name}.\n${pickupLocation.address}\nPhone: ${pickupLocation.phone}\nPickup OTP: ${pickupOtp(id)}\nShow this code at the clinic counter. The desk can resend it. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`;
       sendEmail({
-        to: deliveryAddress.email,
+        to: deliveryAddress.email || "",
         phone: deliveryAddress.phone,
         name: deliveryAddress.fullName,
         params: [deliveryAddress.fullName, id, `₹${totals.total}`],
         subject: `Order ${id} placed`,
         template: "order-placed",
-        body: `Dear Guest,\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nWe received your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${deliveryMode === "delivery" ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.` : `Pickup from ${pickupLocation.name}.`}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+        body: `Dear Guest,\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nWe received your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${pickupNote}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
       });
     }
     setOrderId(id);

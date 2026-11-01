@@ -1106,15 +1106,24 @@ export async function tookanTrack(input: Json, jobId: string) {
   const job = ((data.data as Json[]) ?? [])[0] ?? {};
   const history = (job.task_history as Json[]) ?? [];
   const code = Number(job.job_status ?? job.status);
+  const currentLabel = tookanStatusLabel[code] ?? String(job.job_status ?? job.status ?? "");
   const lat = Number(job.fleet_latitude ?? job.job_latitude ?? job.latitude);
   const lng = Number(job.fleet_longitude ?? job.job_longitude ?? job.longitude);
   return {
-    status: tookanStatusLabel[code] ?? String(job.job_status ?? job.status ?? ""),
-    events: history.map((entry) => ({
-      at: String(entry.creation_datetime ?? entry.timestamp ?? ""),
-      status: String(entry.description ?? entry.status ?? ""),
-      location: String(entry.latitude && entry.longitude ? `${entry.latitude},${entry.longitude}` : ""),
-    })),
+    status: currentLabel,
+    events: [
+      ...history.map((entry) => {
+        const entryCode = Number(entry.job_status ?? entry.type);
+        const label = tookanStatusLabel[entryCode] ?? "";
+        const text = String(entry.description ?? entry.label ?? entry.status ?? "");
+        return {
+          at: String(entry.creation_datetime ?? entry.timestamp ?? ""),
+          status: [label, text].filter(Boolean).join(" · "),
+          location: String(entry.latitude && entry.longitude ? `${entry.latitude},${entry.longitude}` : ""),
+        };
+      }),
+      ...(currentLabel ? [{ at: new Date().toISOString(), status: currentLabel, location: "" }] : []),
+    ],
     lat: Number.isFinite(lat) ? lat : undefined,
     lng: Number.isFinite(lng) ? lng : undefined,
     trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? ""),

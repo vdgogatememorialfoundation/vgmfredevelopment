@@ -31,7 +31,7 @@ export default function AnnouncementTicker() {
   return (
     <div
       aria-label="Scrolling announcements"
-      className="overflow-hidden border-b border-ink-soft bg-ink text-white"
+      className="relative z-0 overflow-hidden border-b border-ink-soft bg-ink text-white"
     >
       <div className="animate-ticker flex w-max items-center gap-10 py-2.5">
         {row.map((item, index) => (

@@ -15,14 +15,15 @@ const ghost = "rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibol
 function blankClinic(): Clinic {
   return {
     id: `cli-${Date.now()}`,
-    name: "",
+    name: "Vaidya Gogate Memorial Foundation Clinic",
     slug: "",
     doctor: "",
-    specialization: "",
+    specialization: "Ayurveda consultation",
     city: "Pune",
-    address: "",
-    phone: "",
-    timings: "",
+    address:
+      "102, Ramprasad Chambers, 368/1, Jawaharlal Nehru Rd, near Kirad Hospital, above Shraddha Medicals, New Nana Peth, Pune, Maharashtra 411002",
+    phone: "093737 92952",
+    timings: "Monday to Thursday, 6:00 PM – 10:00 PM",
     consultationFee: "",
     about: "",
     services: [],
@@ -40,12 +41,10 @@ function blankDoctor(): ClinicDoctor {
 const WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function defaultHours(): ClinicHours[] {
-  return WEEK_DAYS.map((day) => ({
-    day,
-    closed: day === "Sunday",
-    from: "10:00",
-    to: "18:00",
-  }));
+  return WEEK_DAYS.map((day) => {
+    const open = day === "Monday" || day === "Tuesday" || day === "Wednesday" || day === "Thursday";
+    return { day, closed: !open, from: open ? "18:00" : "", to: open ? "22:00" : "" };
+  });
 }
 
 export default function ClinicDesk() {

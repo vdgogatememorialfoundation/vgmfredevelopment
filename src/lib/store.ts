@@ -187,12 +187,23 @@ export function getOrders(): Order[] {
   }
 }
 
+/** Keep a copy on this website so the clinic desk can find the order from another device. */
+export function publishShopOrder(order: Order) {
+  if (typeof window === "undefined" || !order?.id) return;
+  void fetch("/api/shop/orders", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ order }),
+  }).catch(() => undefined);
+}
+
 export function saveOrder(order: Order) {
   if (typeof window === "undefined") return;
   const orders = getOrders();
   orders.unshift(order);
   window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
   window.dispatchEvent(new Event("vgmf-cms"));
+  publishShopOrder(order);
 }
 
 export function getOrdersByEmail(email?: string) {
