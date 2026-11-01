@@ -31,11 +31,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const version = useSyncExternalStore(subscribeSiteText, siteTextVersion, () => "");
 
   const value = useMemo<I18nValue>(
-    () => ({
-      locale: DEFAULT_LOCALE,
-      setLocale: () => undefined,
-      t: siteT,
-    }),
+    () => {
+      void version;
+      return {
+        locale: DEFAULT_LOCALE,
+        setLocale: () => undefined,
+        t: siteT,
+      };
+    },
     [version],
   );
 
