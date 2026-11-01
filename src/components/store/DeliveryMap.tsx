@@ -150,7 +150,7 @@ function Schematic({
           <circle cx="54" cy="158" r="16" fill="#fff" stroke={STORE} strokeWidth="3" />
           <circle cx="54" cy="158" r="6" fill={STORE} />
           <text x="54" y="188" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
-            Store
+            {storeLabel.length > 18 ? `${storeLabel.slice(0, 16)}…` : storeLabel}
           </text>
         </g>
         <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("drop")}>
@@ -256,7 +256,8 @@ export default function DeliveryMap({
         maps?: {
           Map: new (el: HTMLElement, opts: object) => LiveMap;
           Marker: new (opts: object) => { setMap: (map: object | null) => void; addListener: (name: string, fn: () => void) => void };
-          InfoWindow: new () => { setContent: (html: string) => void; open: (map: object, marker: object) => void };
+          InfoWindow: new () => { setContent: (html: string) => void; open: (map: object, marker?: object) => void };
+          marker?: { AdvancedMarkerElement: new (opts: object) => { addListener: (name: string, fn: () => void) => void } };
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
           Point: new (x: number, y: number) => unknown;
@@ -289,25 +290,52 @@ export default function DeliveryMap({
           map = new maps.Map(hostRef.current, { ...options, mapId: undefined });
         }
         const info = new maps.InfoWindow();
+        const bounds = new maps.LatLngBounds();
         const place = (point: LatLng | undefined, kind: "store" | "drop", color: string) => {
           if (!point) return;
-          const marker = new maps.Marker({
+          bounds.extend(point);
+          const pinPoint = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
+          const label = pinPoint.label || (kind === "store" ? "Store" : "Home");
+          const content = document.createElement("button");
+          content.type = "button";
+          content.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:0;padding:0;cursor:pointer";
+          const img = document.createElement("img");
+          img.src = pin(color);
+          img.alt = label;
+          img.width = 36;
+          img.height = 46;
+          const name = document.createElement("span");
+          name.textContent = label;
+          name.style.cssText = "max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#fff;color:#1c1917;border-radius:999px;padding:3px 8px;font:700 11px/1.3 sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.18)";
+          content.append(img, name);
+          const openInfo = () => {
+            const current = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
+            const title = escapeHtml(current.label || label);
+            const address = current.address ? `<div style="margin-top:4px">${escapeHtml(current.address)}</div>` : "";
+            info.setContent(`<div style="font-family:sans-serif;max-width:220px;color:#1c1917"><b>${title}</b>${address}</div>`);
+            info.open(map);
+          };
+          content.addEventListener("click", openInfo);
+          const Advanced = maps.marker?.AdvancedMarkerElement;
+          if (Advanced) {
+            try {
+              new Advanced({ map, position: point, content, zIndex: 4, title: label });
+              return;
+            } catch {
+              /* classic pin below */
+            }
+          }
+          new maps.Marker({
             map,
             position: point,
-            title: kind === "store" ? pinsRef.current.store.label : pinsRef.current.drop.label,
+            title: label,
             icon: { url: pin(color), scaledSize: new maps.Size(36, 46), anchor: new maps.Point(18, 44) },
-            zIndex: 3,
-          });
-          marker.addListener("click", () => {
-            const pinPoint = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
-            const title = escapeHtml(pinPoint.label || (kind === "store" ? "Store" : "Home"));
-            const address = pinPoint.address ? `<div style="margin-top:4px">${escapeHtml(pinPoint.address)}</div>` : "";
-            info.setContent(`<div style="font-family:sans-serif;max-width:220px;color:#1c1917"><b>${title}</b>${address}</div>`);
-            info.open(map, marker);
-          });
+            zIndex: 4,
+          }).addListener("click", openInfo);
         };
         place(resolved.store, "store", STORE);
         place(resolved.drop, "drop", DROP);
+        if (resolved.store && resolved.drop) map.fitBounds(bounds, 80);
         sessionRef.current = { map, path: [], progress: 0 };
         maps.event?.addListenerOnce(map, "idle", () => {
           map.setTilt(67.5);

@@ -350,12 +350,14 @@ export function buildTrackingStages(
   const shipmentLeft = Boolean(
     shipment && ["Picked Up", "In Transit", "Out for Delivery", "Delivered"].includes(shipment.status ?? "")
   );
-  const shippedReached =
+  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
+  let shippedReached =
     collected ||
     shipmentLeft ||
     ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ||
     STAGE_RANK[progress] >= STAGE_RANK.shipped;
-  const outReached = STAGE_RANK[progress] >= STAGE_RANK.out;
+  let outReached = STAGE_RANK[progress] >= STAGE_RANK.out || (hyperlocal && shippedReached);
+  if (hyperlocal) shippedReached = false;
   const deliveredReached = progress === "delivered" && !failedReached;
 
   const packedEvents: ShipmentEvent[] = [];
@@ -381,15 +383,25 @@ export function buildTrackingStages(
       title: "Courier has the parcel",
       at: fromScans.at || packedAt || order.date,
       location: origin,
-      detail: trackingId ? `Courier: ${courier} · Tracking id: ${trackingId}` : `Courier: ${courier}`,
+      detail: shippedReached && trackingId ? `Courier: ${courier} · Tracking id: ${trackingId}` : `Courier: ${courier}`,
       reached: true,
     });
   }
 
   const outEvents = liveScans
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
-    .filter((item) => item.mapped === "out")
+    .filter((item) => item.mapped === "out" || (hyperlocal && item.mapped === "shipped"))
     .map((item) => scanEvent(item.scan, item.index, outReached));
+
+  if (hyperlocal && outReached && outEvents.length === 0) {
+    outEvents.push({
+      id: "out",
+      title: "Rider picked up from the store",
+      at: fromScans.at || packedAt || order.date,
+      location: origin,
+      reached: true,
+    });
+  }
 
   const deliveredEvents = liveScans
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
@@ -421,15 +433,13 @@ export function buildTrackingStages(
       true
     ),
     makeStage("packed", "Packed", "Packed at our facility", packedEvents, packedReached),
-    makeStage(
-      "shipped",
-      "Shipped",
-      trackingId ? `${courier} · ${trackingId}` : "Handed to courier",
-      shippedEvents,
-      shippedReached
-    ),
-    makeStage("out", "Out for Delivery", "Courier on the way", outEvents, outReached),
   ];
+  if (!hyperlocal) {
+    stages.push(
+      makeStage("shipped", "Shipped", "Handed to the courier", shippedEvents, shippedReached)
+    );
+  }
+  stages.push(makeStage("out", "Out for Delivery", "Courier on the way", outEvents, outReached));
 
   if (failedReached) {
     stages.push(makeStage("failed", "Failed", "Delivery failed", failedEvents, true));

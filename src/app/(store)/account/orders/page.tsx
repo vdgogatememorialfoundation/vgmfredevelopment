@@ -11,6 +11,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
+import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import type { Order } from "@/types";
 
 function latestStatusText(order: Order) {
@@ -131,9 +132,13 @@ export default function OrdersPage() {
                             Live scans synced from the courier
                           </span>
                         </h3>
-                        <span className="max-w-[46%] text-right text-xs font-semibold break-all text-burgundy">
-                          {order.trackingId ?? "Tracking id pending"}
-                        </span>
+                        {!isHyperlocalProvider(order.courierChoice?.provider, order.courierChoice?.lastMile) &&
+                        order.trackingId &&
+                        ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ? (
+                          <span className="max-w-[46%] text-right text-xs font-semibold break-all text-burgundy">
+                            {order.trackingId}
+                          </span>
+                        ) : null}
                       </div>
 
                       <OrderTrackingTimeline order={order} />

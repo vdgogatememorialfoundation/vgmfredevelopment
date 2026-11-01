@@ -189,7 +189,9 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
             ? "The line moves down through the delivery window, and it stops before Delivered."
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
-              : "The line runs from the top to the latest green step. Shipped turns green when the courier picks the parcel up from the store.";
+              : hyperlocal
+                ? "Gogate Products orders go from Packed to Out for delivery. There is no Shipped step, and the tracking number stays hidden."
+                : "The line runs from the top to the latest green step. The tracking number appears when Shipped turns green.";
 
   const pipe = (
     <VerticalPipeline
@@ -217,7 +219,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         }
       />
       <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} />
-      <Tile label="Tracking no." value={trackingId || "Awaiting tracking id"} />
+      {!hyperlocal && shippedStage?.reached ? <Tile label="Tracking no." value={trackingId || "Awaiting tracking id"} /> : null}
       <Tile label="Last update" value={latest?.at ? formatDateTime(latest.at) : statusLine || "Waiting for the first scan"} />
       {hyperlocal ? (
         <Tile
