@@ -235,7 +235,7 @@ export const defaultIntegrations: IntegrationSettings = {
     tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
     shipday: { apiKey: "", enabled: true },
     scooterImage: "",
-    hyperlocalPingSeconds: 20,
+    hyperlocalPingSeconds: 8,
     minWalletRupees: 50,
     connection: {},
     pickup: {

@@ -27,6 +27,8 @@ type TrackHit = {
   pickupLng?: number;
   dropLat?: number;
   dropLng?: number;
+  accepted?: boolean;
+  agentLeg?: "pickup" | "delivery";
 };
 
 function dedupe(events: { at: string; status: string; location?: string }[]) {
@@ -39,13 +41,21 @@ function dedupe(events: { at: string; status: string; location?: string }[]) {
   return out;
 }
 
-async function track(provider: string, awb: string, providerOrderId: string | undefined, creds: Record<string, Record<string, unknown>>) {
+async function track(
+  provider: string,
+  awb: string,
+  providerOrderId: string | undefined,
+  extraId: string | undefined,
+  creds: Record<string, Record<string, unknown>>
+) {
   const own = creds[provider] ?? creds[provider.replace("-parcel", "")] ?? {};
   if (provider === "shiprocket") return shiprocketTrack(own, awb);
   if (provider === "nimbuspost") return nimbusTrack(own, awb);
   if (provider === "ithink") return ithinkTrack(creds.ithink ?? own, awb);
   if (provider === "shipyaari") return shipyaariTrack(creds.shipyaari ?? own, awb);
-  if (provider === "tookan" || provider === "tookan-parcel") return tookanTrack(creds.tookan ?? own, String(providerOrderId ?? awb));
+  if (provider === "tookan" || provider === "tookan-parcel") {
+    return tookanTrack(creds.tookan ?? own, String(providerOrderId || awb), String(extraId || awb));
+  }
   if (provider === "shipday") return shipdayTrack(own, String(providerOrderId ?? awb));
   return null;
 }
@@ -60,7 +70,7 @@ export async function refreshStoredShipment(orderId: string) {
   const creds = readShippingCreds() as Record<string, Record<string, unknown>>;
   let hit: TrackHit | null = null;
   try {
-    hit = (await track(provider, shipment.awb, shipment.providerOrderId, creds)) as TrackHit | null;
+    hit = (await track(provider, shipment.awb, shipment.providerOrderId, shipment.providerShipmentId, creds)) as TrackHit | null;
   } catch {
     return { ok: true as const, live: false as const, shipment };
   }
@@ -75,10 +85,11 @@ export async function refreshStoredShipment(orderId: string) {
     awb,
     tracking: events.length ? events : shipment.tracking,
     trackingUrl: hit.trackingUrl || shipment.trackingUrl,
-    agentName: hit.agentName || shipment.agentName,
-    agentPhone: hit.agentPhone || shipment.agentPhone,
-    agentLat: hit.lat ?? shipment.agentLat,
-    agentLng: hit.lng ?? shipment.agentLng,
+    agentName: hit.accepted === false ? "" : hit.agentName || shipment.agentName,
+    agentPhone: hit.accepted === false ? "" : hit.agentPhone || shipment.agentPhone,
+    agentLat: hit.accepted === false ? undefined : hit.lat ?? shipment.agentLat,
+    agentLng: hit.accepted === false ? undefined : hit.lng ?? shipment.agentLng,
+    agentLeg: hit.agentLeg ?? shipment.agentLeg,
     pickupLat: hit.pickupLat ?? shipment.pickupLat,
     pickupLng: hit.pickupLng ?? shipment.pickupLng,
     dropLat: hit.dropLat ?? shipment.dropLat,

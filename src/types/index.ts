@@ -736,6 +736,8 @@ export interface ShipmentRecord {
   agentPhone?: string;
   agentLat?: number;
   agentLng?: number;
+  /** pickup = rider is going to the store. delivery = rider is going to the customer. */
+  agentLeg?: "pickup" | "delivery";
   pickupLat?: number;
   pickupLng?: number;
   dropLat?: number;

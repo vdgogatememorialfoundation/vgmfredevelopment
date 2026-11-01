@@ -585,6 +585,8 @@ type TrackHit = {
   pickupLng?: number;
   dropLat?: number;
   dropLng?: number;
+  accepted?: boolean;
+  agentLeg?: "pickup" | "delivery";
 };
 
 function dedupeScans(events: { at: string; status: string; location?: string }[]) {
@@ -618,6 +620,13 @@ function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
   if (result.pickupLng != null) update.pickupLng = result.pickupLng;
   if (result.dropLat != null) update.dropLat = result.dropLat;
   if (result.dropLng != null) update.dropLng = result.dropLng;
+  if (result.agentLeg) update.agentLeg = result.agentLeg;
+  if (result.accepted === false) {
+    update.agentName = "";
+    update.agentPhone = "";
+    update.agentLat = undefined;
+    update.agentLng = undefined;
+  }
   const saved = patchShipment(shipment.id, update) ?? { ...shipment, ...update };
   const order = getOrder(shipment.orderId);
   if (order && (order.courierName !== courier || (awb && order.trackingId !== awb))) {
@@ -637,6 +646,7 @@ export async function trackShipment(shipmentId: string) {
       creds: credsFrom(getIntegrations()),
       awb: shipment.awb,
       providerOrderId: shipment.providerOrderId,
+      providerShipmentId: shipment.providerShipmentId,
     });
     if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
     applyTrackHit(shipment, result);
@@ -663,6 +673,7 @@ export async function pingLiveAgent(shipmentId: string) {
     creds: credsFrom(getIntegrations()),
     awb: shipment.awb,
     providerOrderId: shipment.providerOrderId,
+    providerShipmentId: shipment.providerShipmentId,
   });
   if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
   const saved = applyTrackHit(shipment, result);
@@ -712,6 +723,7 @@ export async function cancelShipment(shipmentId: string) {
       provider: shipment.provider,
       creds: credsFrom(getIntegrations()),
       providerOrderId: shipment.providerOrderId,
+      providerShipmentId: shipment.providerShipmentId,
       awb: shipment.awb,
     });
     if (!result.ok) throw new Error(result.error ?? "The courier did not cancel the shipment.");

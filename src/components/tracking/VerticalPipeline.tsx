@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { formatDateTime } from "@/lib/utils";
 import type { ShipmentEvent } from "@/types";
 
@@ -83,17 +83,84 @@ export default function VerticalPipeline({
   const partialIdx = stages.findIndex((stage) => stage.partial);
   const nodeCurrentIdx = currentIndex ?? (partialIdx !== -1 ? partialIdx : lastReachedIdx);
   const [openIdx, setOpenIdx] = useState(Math.max(0, nodeCurrentIdx));
+  const frameRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const grown = useRef(false);
+  const [line, setLine] = useState({ left: 14.5, top: 34, height: 0 });
 
   useEffect(() => {
     setOpenIdx(Math.max(0, nodeCurrentIdx));
   }, [nodeCurrentIdx]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    const frame = frameRef.current;
+    if (!list || !frame || nodeCurrentIdx < 0) return;
+    let cancelled = false;
+    let growTimer = 0;
+    const read = () => {
+      const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
+      const current = items[nodeCurrentIdx];
+      const firstDot = items[0]?.querySelector(".dot");
+      const currentDot = current?.querySelector(".dot");
+      if (!firstDot || !currentDot) return null;
+      const frameBox = frame.getBoundingClientRect();
+      const start = firstDot.getBoundingClientRect();
+      const end = currentDot.getBoundingClientRect();
+      const top = start.top + start.height / 2 - frameBox.top;
+      const bottom = end.top + end.height / 2 - frameBox.top;
+      return {
+        left: start.left + start.width / 2 - frameBox.left - 1.5,
+        top,
+        height: Math.max(0, bottom - top),
+      };
+    };
+    const apply = () => {
+      const next = read();
+      if (!next || cancelled) return;
+      if (!grown.current) {
+        setLine({ left: next.left, top: next.top, height: 0 });
+        window.clearTimeout(growTimer);
+        growTimer = window.setTimeout(() => {
+          if (cancelled) return;
+          const latest = read();
+          if (!latest) return;
+          grown.current = true;
+          setLine(latest);
+        }, 70);
+        return;
+      }
+      setLine(next);
+    };
+    const timer = window.setTimeout(apply, 40);
+    const observer = new ResizeObserver(() => {
+      const next = read();
+      if (!next || cancelled || !grown.current) return;
+      setLine(next);
+    });
+    observer.observe(list);
+    window.addEventListener("resize", apply);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(growTimer);
+      observer.disconnect();
+      window.removeEventListener("resize", apply);
+    };
+  }, [nodeCurrentIdx, openIdx, stages.length]);
 
   const firstUpcoming = stages.findIndex((stage, index) => pipeState(stage, index === nodeCurrentIdx) === "upcoming");
 
   return (
     <div className="vgmf-trk">
       {note ? <p className="vgmf-trk-note">{note}</p> : null}
-      <ol className="vgmf-ship-pipe" role="list">
+      <div className="vgmf-ship-frame" ref={frameRef}>
+        <span
+          className={`vgmf-ship-fill${failed ? " is-failed" : ""}`}
+          style={{ left: line.left, top: line.top, height: line.height }}
+          aria-hidden="true"
+        />
+        <ol ref={listRef} className="vgmf-ship-pipe" role="list">
         {stages.map((stage, index) => {
           const state = pipeState(stage, index === nodeCurrentIdx);
           const open = openIdx === index;
@@ -164,7 +231,8 @@ export default function VerticalPipeline({
             </li>
           );
         })}
-      </ol>
+        </ol>
+      </div>
     </div>
   );
 }

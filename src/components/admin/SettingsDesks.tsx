@@ -1086,14 +1086,14 @@ export function ShippingApisDesk() {
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
-          <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.max(8, Number(seconds) || 20) })} hint="Tookan and Shipday agent location refresh." />
+          <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.min(15, Math.max(8, Number(seconds) || 8)) })} hint="How often the live map asks Tookan or Shipday for the rider. 8 to 15 seconds." />
         </div>
         <div className="mt-4">
           <ImageField
-            label="Scooter marker for Tookan / Shipday maps"
+            label="Rider bike icon"
             value={value.scooterImage}
             onChange={(scooterImage) => set({ scooterImage })}
-            hint="Shown only on hyperlocal Google Maps tracking. Other couriers embed their own tracking page."
+            hint="Upload the bike picture. The live map uses it for the rider and turns it to follow the road."
           />
         </div>
         <div className="mt-4">

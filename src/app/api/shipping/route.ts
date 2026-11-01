@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
               : provider === "ithink"
                 ? await ithinkTrack(creds.ithink ?? own, awb)
                 : provider === "tookan" || provider === "tookan-parcel"
-                  ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId ?? awb))
+                  ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId || awb), String(body.providerShipmentId || awb))
                   : provider === "shipday"
                     ? await shipdayTrack(own, String(body.providerOrderId ?? awb))
                     : provider === "shipyaari"
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
               : provider === "ithink"
                 ? await ithinkCancel(creds.ithink ?? own, String(body.awb ?? ""))
                 : provider === "tookan" || provider === "tookan-parcel"
-                  ? await tookanCancel(creds.tookan ?? own, String(body.providerOrderId ?? body.awb ?? ""))
+                  ? await tookanCancel(creds.tookan ?? own, String(body.providerOrderId ?? body.awb ?? ""), String(body.providerShipmentId ?? body.awb ?? ""))
                   : provider === "shipday"
                     ? await shipdayCancel(own, String(body.providerOrderId ?? body.awb ?? ""))
                     : provider === "shipyaari"

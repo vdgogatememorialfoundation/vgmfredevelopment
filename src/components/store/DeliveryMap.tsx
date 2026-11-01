@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadGooglePlaces } from "@/lib/maps-place";
+import { loadTrackingMaps } from "@/lib/maps-place";
 
 type LatLng = { lat: number; lng: number };
+type LiveMap = {
+  fitBounds: (bounds: object, pad?: number) => void;
+  setTilt: (tilt: number) => void;
+  setHeading: (heading: number) => void;
+  panTo: (point: LatLng) => void;
+};
+type Bike = { position?: LatLng; map?: object | null; setPosition?: (point: LatLng) => void };
 type Point = { lat?: number; lng?: number; label: string; address?: string };
+type Leg = "pickup" | "delivery";
 
 const STORE = "#8F2D2D";
 const DROP = "#0F7A4A";
-
-const MAP_STYLE = [
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#f3efe6" }] },
-  { featureType: "water", stylers: [{ color: "#d5e6ea" }] },
-  { featureType: "landscape", stylers: [{ color: "#f7f4ee" }] },
-];
+const ROAD = "#8F2D2D";
 
 function pin(color: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="46" height="58" viewBox="0 0 46 58"><path fill="${color}" d="M23 2a18 18 0 0 0-18 18c0 13 18 36 18 36s18-23 18-36A18 18 0 0 0 23 2z"/><circle cx="23" cy="20" r="7" fill="#fff"/></svg>`;
@@ -27,54 +27,92 @@ function hasCoords(point?: Point | null): point is Point & LatLng {
   return Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lng));
 }
 
-function curved(a: LatLng, b: LatLng, steps = 48): LatLng[] {
-  const mid = { lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 };
-  const dx = b.lng - a.lng;
-  const dy = b.lat - a.lat;
-  const len = Math.hypot(dx, dy) || 1;
-  const offset = len * 0.22;
-  const ctrl = { lat: mid.lat - (dx / len) * offset, lng: mid.lng + (dy / len) * offset };
-  const pts: LatLng[] = [];
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps;
-    const u = 1 - t;
-    pts.push({
-      lat: u * u * a.lat + 2 * u * t * ctrl.lat + t * t * b.lat,
-      lng: u * u * a.lng + 2 * u * t * ctrl.lng + t * t * b.lng,
-    });
+function mins(seconds: number) {
+  return `${Math.max(1, Math.round(seconds / 60))} min`;
+}
+
+function clock(seconds: number) {
+  return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(
+    new Date(Date.now() + seconds * 1000)
+  );
+}
+
+function arrivalText(leg: Leg, legs: { duration?: { value?: number } }[]) {
+  const times = legs.map((item) => item.duration?.value ?? 0).filter((value) => value > 0);
+  if (!times.length) return "";
+  if (leg === "delivery" || times.length === 1) {
+    return `Arrives in ${mins(times[0])} · by ${clock(times[0])}`;
   }
-  return pts;
+  const total = times.reduce((sum, value) => sum + value, 0);
+  return `At the store in ${mins(times[0])} · at your address by ${clock(total)}`;
+}
+
+function project(point: LatLng, path: LatLng[]) {
+  let best = Number.POSITIVE_INFINITY;
+  let at = path[0] ?? point;
+  let index = 0;
+  let heading = 0;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const a = path[i];
+    const b = path[i + 1];
+    const dx = b.lng - a.lng;
+    const dy = b.lat - a.lat;
+    const len2 = dx * dx + dy * dy || 1e-12;
+    const t = Math.max(0, Math.min(1, ((point.lng - a.lng) * dx + (point.lat - a.lat) * dy) / len2));
+    const lat = a.lat + dy * t;
+    const lng = a.lng + dx * t;
+    const score = (lat - point.lat) ** 2 + (lng - point.lng) ** 2;
+    if (score < best) {
+      best = score;
+      at = { lat, lng };
+      index = i + t;
+      heading = (Math.atan2(dx, dy) * 180) / Math.PI;
+    }
+  }
+  return { at, index, heading };
+}
+
+function along(path: LatLng[], index: number) {
+  if (!path.length) return { lat: 0, lng: 0 };
+  const i = Math.max(0, Math.min(path.length - 1, Math.floor(index)));
+  const next = Math.min(path.length - 1, i + 1);
+  const t = index - i;
+  return {
+    lat: path[i].lat + (path[next].lat - path[i].lat) * t,
+    lng: path[i].lng + (path[next].lng - path[i].lng) * t,
+  };
 }
 
 function AgentCard({
   partner,
   status,
-  hyperlocal,
+  accepted,
+  leg,
   agentName,
   agentPhone,
+  arrival,
 }: {
   partner: string;
   status: string;
-  hyperlocal: boolean;
+  accepted: boolean;
+  leg: Leg;
   agentName?: string;
   agentPhone?: string;
+  arrival: string;
 }) {
   const phone = agentPhone?.replace(/\s/g, "") ?? "";
+  const where = leg === "pickup" ? "Heading to the store, then to you" : "Heading to your address";
   return (
     <div className="vgmf-map-agent">
       <div className="min-w-0">
         <b>{partner}</b>
         <span>
-          {hyperlocal
-            ? agentName || agentPhone
-              ? [agentName, agentPhone].filter(Boolean).join(" · ")
-              : status || "Waiting for a rider"
-            : status || "Parcel is with the courier"}
+          {accepted
+            ? [agentName, agentPhone, where, arrival].filter(Boolean).join(" · ")
+            : status || "Finding a rider"}
         </span>
       </div>
-      {hyperlocal && phone ? (
-        <a href={`tel:${phone}`}>Call</a>
-      ) : null}
+      {accepted && phone ? <a href={`tel:${phone}`}>Call</a> : null}
     </div>
   );
 }
@@ -82,44 +120,32 @@ function AgentCard({
 function Schematic({
   partner,
   status,
-  hyperlocal,
+  accepted,
+  leg,
   agentName,
   agentPhone,
   storeLabel,
   dropLabel,
-  hasRider,
 }: {
   partner: string;
   status: string;
-  hyperlocal: boolean;
+  accepted: boolean;
+  leg: Leg;
   agentName?: string;
   agentPhone?: string;
   storeLabel: string;
   dropLabel: string;
-  hasRider: boolean;
 }) {
-  const lower = status.toLowerCase();
-  const t = hasRider
-    ? 0.58
-    : /deliver/.test(lower) && !/out|finding/.test(lower)
-      ? 0.92
-      : /way|started|progress|out/.test(lower)
-        ? 0.66
-        : /assign|accept|rider/.test(lower)
-          ? 0.32
-          : 0.14;
-  const x = 54 + (286 - 54) * t;
-  const y = 150 - Math.sin(Math.PI * t) * 70;
   return (
     <div className="vgmf-map-card">
       <svg viewBox="0 0 360 220" className="h-full min-h-[280px] w-full" role="img" aria-label="Path from the store to the customer">
         <rect width="360" height="220" fill="#f4f0e8" />
-        <path d="M54 158 C 140 40, 220 40, 300 92" fill="none" stroke={STORE} strokeWidth="3" strokeDasharray="2 8" strokeLinecap="round" />
+        <path d="M54 158 C 140 40, 220 40, 300 92" fill="none" stroke={ROAD} strokeWidth="3" strokeDasharray="2 8" strokeLinecap="round" />
         <circle cx="54" cy="158" r="16" fill="#fff" stroke={STORE} strokeWidth="3" />
         <circle cx="54" cy="158" r="6" fill={STORE} />
         <circle cx="300" cy="92" r="16" fill="#fff" stroke={DROP} strokeWidth="3" />
         <circle cx="300" cy="92" r="6" fill={DROP} />
-        {hyperlocal ? <circle cx={x} cy={y} r="8" fill="#0B1F3A" stroke="#fff" strokeWidth="2" /> : null}
+        {accepted ? <circle cx={leg === "delivery" ? 230 : 130} cy={leg === "delivery" ? 70 : 90} r="8" fill="#0B1F3A" stroke="#fff" strokeWidth="2" /> : null}
         <text x="54" y="188" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
           Store
         </text>
@@ -130,7 +156,7 @@ function Schematic({
       <p className="px-3 pb-14 text-xs text-text-muted">
         {storeLabel} → {dropLabel}
       </p>
-      <AgentCard partner={partner} status={status} hyperlocal={hyperlocal} agentName={agentName} agentPhone={agentPhone} />
+      <AgentCard partner={partner} status={status} accepted={accepted} leg={leg} agentName={agentName} agentPhone={agentPhone} arrival="" />
     </div>
   );
 }
@@ -139,27 +165,45 @@ export default function DeliveryMap({
   mapsKey,
   partner,
   status,
-  hyperlocal,
+  accepted,
+  leg,
   scooter,
   store,
   drop,
   agent,
   agentName,
   agentPhone,
+  onArrival,
 }: {
   mapsKey: string;
   partner: string;
   status: string;
-  hyperlocal: boolean;
+  accepted: boolean;
+  leg: Leg;
   scooter: string;
   store: Point;
   drop: Point;
   agent?: LatLng;
   agentName?: string;
   agentPhone?: string;
+  onArrival?: (text: string) => void;
 }) {
-  const mapRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const sessionRef = useRef<{
+    map: LiveMap;
+    line?: { setMap: (map: object | null) => void };
+    bike?: Bike;
+    img?: HTMLImageElement;
+    path: LatLng[];
+    progress: number;
+  } | null>(null);
   const [resolved, setResolved] = useState<{ store?: LatLng; drop?: LatLng }>({});
+  const [mapReady, setMapReady] = useState(false);
+  const [arrival, setArrival] = useState("");
+
+  useEffect(() => {
+    onArrival?.(arrival);
+  }, [arrival, onArrival]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,7 +213,7 @@ export default function DeliveryMap({
       if (hasCoords(drop)) next.drop = { lat: drop.lat, lng: drop.lng };
       if (mapsKey && (!next.store || !next.drop)) {
         try {
-          await loadGooglePlaces(mapsKey);
+          await loadTrackingMaps(mapsKey);
           const geocoder = new (window as unknown as { google: { maps: { Geocoder: new () => { geocode: (req: { address: string }, cb: (results: { geometry?: { location?: { lat: () => number; lng: () => number } } }[] | null, status: string) => void) => void } } } }).google.maps.Geocoder();
           const lookup = (address?: string) =>
             new Promise<LatLng | undefined>((resolve) => {
@@ -194,139 +238,230 @@ export default function DeliveryMap({
   }, [mapsKey, store.lat, store.lng, store.address, drop.lat, drop.lng, drop.address]);
 
   useEffect(() => {
-    if (!mapsKey || !mapRef.current || (!resolved.store && !resolved.drop && !agent)) return;
+    if (!mapsKey || !hostRef.current || (!resolved.store && !resolved.drop)) return;
     let cancelled = false;
     const googleWin = window as unknown as {
       google?: {
         maps?: {
-          Map: new (el: HTMLElement, opts: object) => { fitBounds: (b: object, pad?: number) => void; setCenter: (p: LatLng) => void; setZoom: (z: number) => void };
+          Map: new (el: HTMLElement, opts: object) => LiveMap;
           Marker: new (opts: object) => { setMap: (map: object | null) => void };
-          Polyline: new (opts: object) => { setMap: (map: object | null) => void };
-          LatLngBounds: new () => { extend: (p: LatLng) => void };
+          LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
           Point: new (x: number, y: number) => unknown;
-          SymbolPath: { CIRCLE: number };
-          DirectionsService?: new () => { route: (req: object, cb: (result: { routes?: { overview_path?: unknown }[] } | null, status: string) => void) => void };
+          event?: { addListenerOnce: (target: object, name: string, fn: () => void) => void };
         };
       };
     };
-    loadGooglePlaces(mapsKey)
+    loadTrackingMaps(mapsKey)
       .then(() => {
         const maps = googleWin.google?.maps;
-        if (cancelled || !maps || !mapRef.current) return;
-        mapRef.current.innerHTML = "";
-        const center = agent ?? resolved.store ?? resolved.drop ?? { lat: 18.52, lng: 73.86 };
-        const map = new maps.Map(mapRef.current, {
+        if (cancelled || !maps || !hostRef.current || sessionRef.current) return;
+        hostRef.current.innerHTML = "";
+        const center = resolved.store ?? resolved.drop ?? { lat: 18.5196, lng: 73.8553 };
+        const options = {
           center,
-          zoom: 13,
+          zoom: 17,
+          tilt: 67.5,
+          heading: 24,
+          mapId: "DEMO_MAP_ID",
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
           clickableIcons: false,
-          styles: MAP_STYLE,
-        });
-        const bounds = new maps.LatLngBounds();
-        const markers: { setMap: (map: object | null) => void }[] = [];
+          gestureHandling: "greedy",
+        };
+        let map: LiveMap;
+        try {
+          map = new maps.Map(hostRef.current, options);
+        } catch {
+          map = new maps.Map(hostRef.current, { ...options, mapId: undefined });
+        }
         const place = (point: LatLng | undefined, title: string, color: string) => {
           if (!point) return;
-          bounds.extend(point);
-          markers.push(
-            new maps.Marker({
-              map,
-              position: point,
-              title,
-              icon: { url: pin(color), scaledSize: new maps.Size(36, 46), anchor: new maps.Point(18, 44) },
-              zIndex: 3,
-            })
-          );
-          markers.push(
-            new maps.Marker({
-              map,
-              position: point,
-              icon: {
-                path: maps.SymbolPath.CIRCLE,
-                scale: 18,
-                fillColor: color,
-                fillOpacity: 0.18,
-                strokeColor: color,
-                strokeWeight: 2,
-              },
-              zIndex: 1,
-              clickable: false,
-            })
-          );
+          new maps.Marker({
+            map,
+            position: point,
+            title,
+            icon: { url: pin(color), scaledSize: new maps.Size(36, 46), anchor: new maps.Point(18, 44) },
+            zIndex: 3,
+          });
         };
         place(resolved.store, store.label || "Store", STORE);
-        place(resolved.drop, drop.label || "Customer", DROP);
-        if (agent) {
-          bounds.extend(agent);
-          markers.push(
-            new maps.Marker({
-              map,
-              position: agent,
-              title: agentName || "Delivery partner",
-              icon: { url: scooter, scaledSize: new maps.Size(48, 48), anchor: new maps.Point(24, 24) },
-              zIndex: 4,
-            })
-          );
-        }
-        if (resolved.store && resolved.drop) {
-          new maps.Polyline({
-            map,
-            path: curved(resolved.store, resolved.drop),
-            strokeOpacity: 0,
-            icons: [
-              {
-                icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeColor: STORE, scale: 3 },
-                offset: "0",
-                repeat: "14px",
-              },
-            ],
-          });
-          if (maps.DirectionsService) {
-            new maps.DirectionsService().route(
-              { origin: resolved.store, destination: resolved.drop, travelMode: "DRIVING" },
-              (result, code) => {
-                const path = code === "OK" ? result?.routes?.[0]?.overview_path : undefined;
-                if (!path) return;
-                new maps.Polyline({ map, path, strokeColor: DROP, strokeOpacity: 0.85, strokeWeight: 4, zIndex: 1 });
-              }
-            );
-          }
-        }
-        const only = [resolved.store, resolved.drop, agent].filter(Boolean);
-        if (only.length > 1) map.fitBounds(bounds, 72);
-        else map.setZoom(15);
+        place(resolved.drop, drop.label || "You", DROP);
+        sessionRef.current = { map, path: [], progress: 0 };
+        maps.event?.addListenerOnce(map, "idle", () => {
+          map.setTilt(67.5);
+          map.setHeading(24);
+        });
+        if (!cancelled) setMapReady(true);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [mapsKey, resolved.store, resolved.drop, agent?.lat, agent?.lng, scooter, store.label, drop.label, agentName]);
+  }, [mapsKey, resolved.store, resolved.drop, store.label, drop.label]);
 
-  if (!mapsKey || (!resolved.store && !resolved.drop && !agent)) {
+  useEffect(() => {
+    const view = sessionRef.current;
+    const googleWin = window as unknown as {
+      google?: {
+        maps?: {
+          Polyline: new (opts: object) => { setMap: (map: object | null) => void };
+          Marker: new (opts: object) => { setMap: (map: object | null) => void; setPosition: (point: LatLng) => void };
+          LatLngBounds: new () => { extend: (point: LatLng) => void };
+          Size: new (w: number, h: number) => unknown;
+          Point: new (x: number, y: number) => unknown;
+          DirectionsService?: new () => {
+            route: (
+              req: object,
+              cb: (result: { routes?: { overview_path?: { lat: () => number; lng: () => number }[]; legs?: { duration?: { value?: number } }[] }[] } | null, code: string) => void
+            ) => void;
+          };
+          geometry?: { spherical?: { computeHeading: (a: LatLng, b: LatLng) => number } };
+          marker?: { AdvancedMarkerElement: new (opts: object) => { position?: LatLng; map?: object | null } };
+        };
+      };
+    };
+    const maps = googleWin.google?.maps;
+    if (!mapReady || !view || !maps) return;
+    const live = view;
+    let stopped = false;
+    const origin = accepted && agent ? agent : resolved.store;
+    const destination = resolved.drop;
+    if (!origin || !destination) return;
+    const waypoints =
+      accepted && agent && leg === "pickup" && resolved.store
+        ? [{ location: resolved.store, stopover: true }]
+        : [];
+    let frame = 0;
+    const draw = (path: LatLng[], text: string) => {
+      live.line?.setMap(null);
+      live.line = new maps.Polyline({
+        map: live.map,
+        path,
+        strokeOpacity: 0,
+        zIndex: 2,
+        icons: [
+          {
+            icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeColor: ROAD, scale: 3 },
+            offset: "0",
+            repeat: "12px",
+          },
+        ],
+      });
+      live.path = path;
+      setArrival(text);
+      const bounds = new maps.LatLngBounds();
+      path.forEach((point) => bounds.extend(point));
+      if (agent) bounds.extend(agent);
+      live.map.fitBounds(bounds, 64);
+      window.setTimeout(() => {
+        live.map.setTilt(67.5);
+        live.map.setHeading(24);
+      }, 400);
+    };
+    const service = maps.DirectionsService ? new maps.DirectionsService() : null;
+    if (!service) return;
+    service.route(
+      { origin, destination, waypoints, travelMode: "DRIVING" },
+      (result, code) => {
+        if (stopped) return;
+        const route = code === "OK" ? result?.routes?.[0] : undefined;
+        const path = route?.overview_path?.map((point) => ({ lat: point.lat(), lng: point.lng() }));
+        if (!path?.length) return;
+        draw(path, accepted ? arrivalText(leg, route?.legs ?? []) : "");
+        if (!accepted || !agent) {
+          live.bike && (live.bike.map = null);
+          return;
+        }
+        moveBike(path);
+      }
+    );
+
+    function moveBike(path: LatLng[]) {
+      if (!agent) return;
+      const snapped = project(agent, path);
+      const headingOf = (from: LatLng, to: LatLng) =>
+        maps?.geometry?.spherical?.computeHeading(from, to) ?? (Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180) / Math.PI;
+      const nextHeading = headingOf(snapped.at, along(path, snapped.index + 0.4));
+      if (!live.img) {
+        const img = document.createElement("img");
+        img.src = scooter;
+        img.alt = agentName || "Rider";
+        img.width = 48;
+        img.height = 48;
+        img.style.width = "48px";
+        img.style.height = "48px";
+        img.style.transformOrigin = "center";
+        live.img = img;
+        const Advanced = maps?.marker?.AdvancedMarkerElement;
+        if (Advanced) {
+          live.bike = new Advanced({ map: live.map, position: snapped.at, content: img, zIndex: 5 });
+        } else if (maps) {
+          live.bike = new maps.Marker({
+            map: live.map,
+            position: snapped.at,
+            title: agentName || "Rider",
+            icon: { url: scooter, scaledSize: new maps.Size(48, 48), anchor: new maps.Point(24, 24) },
+            zIndex: 5,
+          });
+        }
+      }
+      const from = live.progress;
+      const to = snapped.index;
+      const started = performance.now();
+      const step = (now: number) => {
+        const t = Math.min(1, (now - started) / 1400);
+        const index = from + (to - from) * t;
+        const point = along(path, index);
+        const heading = headingOf(point, along(path, index + 0.35));
+        if (live.img) live.img.style.transform = `rotate(${heading}deg)`;
+        if (live.bike?.setPosition) live.bike.setPosition(point);
+        else if (live.bike) live.bike.position = point;
+        live.progress = index;
+        if (t < 1) frame = window.requestAnimationFrame(step);
+      };
+      frame = window.requestAnimationFrame(step);
+    }
+
+    return () => {
+      stopped = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [mapReady, resolved.store, resolved.drop, agent?.lat, agent?.lng, accepted, leg, scooter, agentName]);
+
+  if (!mapsKey || (!resolved.store && !resolved.drop && !mapReady)) {
     return (
       <Schematic
         partner={partner}
         status={status}
-        hyperlocal={hyperlocal}
+        accepted={accepted}
+        leg={leg}
         agentName={agentName}
         agentPhone={agentPhone}
         storeLabel={store.label || "Store"}
-        dropLabel={drop.label || "Customer"}
-        hasRider={Boolean(agent)}
+        dropLabel={drop.label || "You"}
       />
     );
   }
 
   return (
     <div className="vgmf-map-card">
-      <div ref={mapRef} className="h-full min-h-[320px] w-full" />
+      <div ref={hostRef} className="h-full min-h-[380px] w-full" />
       <div className="vgmf-map-legend">
         <span><i style={{ background: STORE }} /> Store</span>
         <span><i style={{ background: DROP }} /> You</span>
+        {accepted ? <span><i style={{ background: "#0B1F3A" }} /> Rider</span> : null}
       </div>
-      <AgentCard partner={partner} status={status} hyperlocal={hyperlocal} agentName={agentName} agentPhone={agentPhone} />
+      <AgentCard
+        partner={partner}
+        status={status}
+        accepted={accepted}
+        leg={leg}
+        agentName={agentName}
+        agentPhone={agentPhone}
+        arrival={arrival}
+      />
     </div>
   );
 }

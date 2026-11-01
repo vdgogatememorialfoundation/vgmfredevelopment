@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSettings } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
-import { customerCourierLabel, customerStatusLabel } from "@/lib/courier-label";
+import { customerCourierLabel, customerStatusLabel, riderAccepted } from "@/lib/courier-label";
 import { getPickupLocation } from "@/lib/fulfillment";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import DeliveryMap from "@/components/store/DeliveryMap";
@@ -18,9 +18,11 @@ const DEFAULT_SCOOTER =
 export default function LiveTracking({
   order,
   shipment,
+  onArrival,
 }: {
   order: Order;
   shipment?: ShipmentRecord | null;
+  onArrival?: (text: string) => void;
 }) {
   const [mapsKey, setMapsKey] = useState("");
 
@@ -46,21 +48,27 @@ export default function LiveTracking({
   const address = order.deliveryAddress;
   const dropAddress = [address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ");
   const scooter = getIntegrations().shipping.scooterImage || DEFAULT_SCOOTER;
+  const accepted = hyperlocal && riderAccepted(status, shipment?.agentName);
+  const leg = shipment?.agentLeg ?? (/picked up|out for|in transit/i.test(`${status} ${shipment?.status ?? ""}`) ? "delivery" : "pickup");
   const agent =
-    shipment?.agentLat != null && shipment.agentLng != null ? { lat: shipment.agentLat, lng: shipment.agentLng } : undefined;
+    accepted && shipment?.agentLat != null && shipment?.agentLng != null
+      ? { lat: shipment.agentLat, lng: shipment.agentLng }
+      : undefined;
 
   return (
     <DeliveryMap
       mapsKey={mapsKey}
       partner={partner}
       status={status}
-      hyperlocal={hyperlocal}
+      accepted={accepted}
+      leg={leg}
       scooter={scooter}
       store={{ lat: shipment?.pickupLat, lng: shipment?.pickupLng, label: pickup.name, address: pickup.address }}
       drop={{ lat: shipment?.dropLat, lng: shipment?.dropLng, label: address?.fullName || "Delivery address", address: dropAddress }}
       agent={agent}
-      agentName={shipment?.agentName}
-      agentPhone={shipment?.agentPhone}
+      agentName={accepted ? shipment?.agentName : undefined}
+      agentPhone={accepted ? shipment?.agentPhone : undefined}
+      onArrival={onArrival}
     />
   );
 }

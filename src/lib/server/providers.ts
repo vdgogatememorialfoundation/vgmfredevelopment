@@ -1095,7 +1095,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
       customer_phone: order.customer.phone,
       customer_address: dropAddress,
       job_delivery_datetime: deliverAt,
-      has_pickup: 0,
+      has_pickup: 1,
       has_delivery: 1,
       layout_type: 0,
       tracking_link: 1,
@@ -1104,48 +1104,72 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
   });
   if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the hyperlocal task."));
   const task = (data.data as Json) ?? {};
+  const pickupId = String(task.pickup_job_id ?? task.job_id ?? "");
+  const deliveryId = String(task.delivery_job_id ?? task.job_id ?? "");
   return {
     provider: "tookan",
-    awb: String(task.job_id ?? task.delivery_job_id ?? ""),
+    awb: deliveryId || pickupId,
     courierName: "Gogate Products",
-    providerOrderId: String(task.job_id ?? ""),
-    trackingUrl: String(task.tracking_link ?? task.delivery_tracing_link ?? ""),
+    providerOrderId: pickupId || deliveryId,
+    providerShipmentId: deliveryId,
+    trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
     pickupScheduledFor: pickupAt,
   };
 }
 
-export async function tookanTrack(input: Json, jobId: string) {
+export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
   if (!apiKey) return null;
-  const data = await call("https://api.tookanapp.com/v2/get_job_details", {
-    method: "POST",
-    json: { api_key: apiKey, job_ids: [Number(jobId) || jobId], include_task_history: 1 },
-  });
-  const job = ((data.data as Json[]) ?? [])[0] ?? {};
-  const history = (job.task_history as Json[]) ?? [];
-  const code = Number(job.job_status ?? job.status);
-  const currentLabel = tookanStatusLabel[code] ?? String(job.job_status ?? job.status ?? "");
-  const fleet = (job.fleet as Json) ?? {};
-  const lat = Number(job.fleet_latitude ?? fleet.latitude);
-  const lng = Number(job.fleet_longitude ?? fleet.longitude);
-  const pickupLat = Number(job.job_pickup_latitude ?? job.pickup_latitude);
-  const pickupLng = Number(job.job_pickup_longitude ?? job.pickup_longitude);
-  const dropLat = Number(job.job_latitude ?? job.customer_latitude ?? job.delivery_latitude);
-  const dropLng = Number(job.job_longitude ?? job.customer_longitude ?? job.delivery_longitude);
+  const ids = [...new Set([jobId, extraId].map((id) => id.trim()).filter(Boolean))];
+  const jobs: Json[] = [];
+  for (const id of ids) {
+    const data = await call("https://api.tookanapp.com/v2/get_job_details", {
+      method: "POST",
+      json: { api_key: apiKey, job_ids: [Number(id) || id], include_task_history: 1 },
+    });
+    const job = ((data.data as Json[]) ?? [])[0];
+    if (job) jobs.push(job);
+  }
   const coord = (value: number) => (Number.isFinite(value) && Math.abs(value) > 0.001 ? value : undefined);
+  const details = jobs.map((job) => {
+    const code = Number(job.job_status ?? job.status);
+    const fleet = (job.fleet as Json) ?? {};
+    const pickupTask = Number(job.job_type) === 0;
+    return { job, code, fleet, pickupTask };
+  });
+  const pickup = details.find((item) => item.pickupTask) ?? null;
+  const delivery = details.find((item) => !item.pickupTask) ?? details[0] ?? null;
+  const pickupOpen = Boolean(pickup && pickup.code !== 2 && pickup.code !== 9);
+  const active = pickupOpen && pickup ? pickup : delivery;
+  const code = active?.code ?? NaN;
+  const currentLabel = tookanStatusLabel[code] ?? String(active?.job.job_status ?? active?.job.status ?? "");
+  const fleet = active?.fleet ?? {};
+  const job = active?.job ?? {};
+  const accepted = Boolean(active) && ![6, 8, 9].includes(code) && (Boolean(String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "").trim()) || [0, 1, 4, 7].includes(code));
+  const history = details.flatMap((item) => (item.job.task_history as Json[]) ?? []);
+  const storeJob = pickup?.job ?? job;
+  const dropSource = delivery?.job ?? job;
+  const pickupLat = coord(Number(storeJob.job_pickup_latitude ?? storeJob.pickup_latitude ?? (pickup ? storeJob.job_latitude : NaN)));
+  const pickupLng = coord(Number(storeJob.job_pickup_longitude ?? storeJob.pickup_longitude ?? (pickup ? storeJob.job_longitude : NaN)));
+  const dropLat = coord(Number(dropSource.job_latitude ?? dropSource.customer_latitude ?? dropSource.delivery_latitude));
+  const dropLng = coord(Number(dropSource.job_longitude ?? dropSource.customer_longitude ?? dropSource.delivery_longitude));
+  const lat = coord(Number(job.fleet_latitude ?? fleet.latitude));
+  const lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
   return {
     status: currentLabel,
     courierName: "Gogate Products",
-    awb: jobId,
-    agentName: String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? ""),
-    agentPhone: String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? ""),
-    otp: String(job.job_otp ?? job.order_otp ?? ""),
-    lat: coord(lat),
-    lng: coord(lng),
-    pickupLat: coord(pickupLat),
-    pickupLng: coord(pickupLng),
-    dropLat: coord(dropLat),
-    dropLng: coord(dropLng),
+    awb: String(delivery?.job.job_id ?? jobId),
+    accepted,
+    agentLeg: pickupOpen ? "pickup" : "delivery",
+    agentName: accepted ? String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "") : "",
+    agentPhone: accepted ? String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? "") : "",
+    otp: String(job.job_otp ?? job.order_otp ?? delivery?.job.job_otp ?? ""),
+    lat: accepted ? lat : undefined,
+    lng: accepted ? lng : undefined,
+    pickupLat,
+    pickupLng,
+    dropLat,
+    dropLng,
     events: [
       ...history.map((entry) => {
         const entryCode = Number(entry.job_status ?? entry.type);
@@ -1159,18 +1183,21 @@ export async function tookanTrack(input: Json, jobId: string) {
       }),
       ...(currentLabel ? [{ at: new Date().toISOString(), status: currentLabel, location: "" }] : []),
     ],
-    trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? ""),
+    trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? delivery?.job.tracking_link ?? ""),
   };
 }
 
-export async function tookanCancel(input: Json, jobId: string) {
+export async function tookanCancel(input: Json, jobId: string, extraId = "") {
   const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
   if (!apiKey) return null;
-  const data = await call("https://api.tookanapp.com/v2/cancel_task", {
-    method: "POST",
-    json: { api_key: apiKey, job_id: Number(jobId) || jobId, job_status: 9 },
-  });
-  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan could not cancel the task."));
+  const ids = [...new Set([jobId, extraId].map((id) => id.trim()).filter(Boolean))];
+  for (const id of ids) {
+    const data = await call("https://api.tookanapp.com/v2/cancel_task", {
+      method: "POST",
+      json: { api_key: apiKey, job_id: Number(id) || id, job_status: 9 },
+    });
+    if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan could not cancel the task."));
+  }
   return { cancelled: true };
 }
 
@@ -1183,7 +1210,7 @@ export async function tookanTest(input: Json) {
   });
   if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan rejected the API key."));
   const fleets = Array.isArray(data.data) ? data.data : [];
-  return { message: `Connected from this site. Tookan returned ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}. Hyperlocal will book create_task; standard will book create_multiple_tasks.` };
+  return { message: `Connected from this site. Tookan returned ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}. Each booking creates a pickup task and a delivery task.` };
 }
 
 /* ---------------- iThink Logistics ---------------- */

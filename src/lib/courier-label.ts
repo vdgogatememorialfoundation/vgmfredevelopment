@@ -30,6 +30,14 @@ export function customerCourierLabel(input: { provider?: string; courier?: strin
   return aggregatorName(provider) || raw || "Courier";
 }
 
+/** A rider is on this order only after they accept. Unassigned stays hidden. */
+export function riderAccepted(status: string, agentName?: string) {
+  const text = status.trim().toLowerCase();
+  if (/unassigned|finding a rider|declined|cancelled|waiting for the courier|not found/.test(text)) return false;
+  if (agentName?.trim()) return true;
+  return /accept|assigned|started|in progress|picked|out for|on the way|going to/.test(text);
+}
+
 export function customerStatusLabel(status: string, provider?: string) {
   const clean = status.trim();
   if (!clean) return "";

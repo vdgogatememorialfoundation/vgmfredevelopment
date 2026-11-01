@@ -6,21 +6,38 @@
 .vgmf-trk a {
   color: var(--tl-link);
 }
-.vgmf-ship-pipe {
-  list-style: none;
-  margin: 0;
-  padding: 18px 16px 6px;
+.vgmf-ship-frame {
+  position: relative;
+  isolation: isolate;
   background: #fff;
   border: 1px solid #e6eeea;
   border-radius: 16px;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
 }
+.vgmf-ship-pipe {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 18px 16px 6px;
+  background: transparent;
+}
+.vgmf-ship-fill {
+  position: absolute;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--tl-green);
+  transform-origin: top center;
+  transition: height 2.8s linear;
+  z-index: 1;
+  pointer-events: none;
+}
+.vgmf-ship-fill.is-failed {
+  background: var(--tl-failed);
+}
 .vgmf-ship-pipe > li {
   position: relative;
   padding: 0 0 26px 52px;
   color: var(--tl-muted);
-  animation: vgmfTrkIn 0.45s ease both;
-  animation-delay: calc(var(--i) * 0.08s);
 }
 .vgmf-ship-pipe > li::before {
   content: "";
@@ -40,29 +57,9 @@
   display: none;
 }
 .vgmf-ship-pipe > li.done::after,
-.vgmf-ship-pipe > li.active::after {
-  content: "";
-  position: absolute;
-  left: 15px;
-  top: 34px;
-  bottom: 0;
-  width: 3px;
-  background: var(--tl-green);
-  border-radius: 2px;
-  clip-path: inset(0 0 100% 0);
-  z-index: 0;
-  pointer-events: none;
-}
-.vgmf-ship-pipe > li.done::after {
-  animation: vgmf-line-full 2.8s linear forwards;
-  animation-delay: calc(var(--i) * 2.8s);
-}
-.vgmf-ship-pipe > li.active::after {
-  animation: vgmf-line-partial 9s linear forwards;
-  animation-delay: calc(var(--i) * 2.8s);
-}
+.vgmf-ship-pipe > li.active::after,
 .vgmf-ship-pipe > li.is-failed::after {
-  background: var(--tl-failed);
+  content: none;
 }
 .vgmf-ship-pipe > li.done,
 .vgmf-ship-pipe > li.active {
@@ -82,7 +79,7 @@
   align-items: center;
   justify-content: center;
   color: var(--tl-muted);
-  z-index: 1;
+  z-index: 2;
 }
 .vgmf-ship-pipe > li.done > .dot,
 .vgmf-ship-pipe > li.active > .dot {
@@ -375,27 +372,6 @@
   font-size: 0.8rem;
   font-weight: 700;
 }
-@property --grow {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
-}
-@keyframes vgmf-line-full {
-  from { clip-path: inset(0 0 100% 0); }
-  to { clip-path: inset(0 0 0 0); }
-}
-@keyframes vgmf-line-partial {
-  from { clip-path: inset(0 0 100% 0); }
-  to { clip-path: inset(0 0 45% 0); }
-}
-@keyframes vgmfTrkIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
 @keyframes vgmfTrkPulse {
   0% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--tl-green) 35%, transparent);
@@ -405,12 +381,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .vgmf-ship-pipe > li,
-  .vgmf-ship-pipe > li.active > .dot,
-  .vgmf-ship-pipe > li.done::after,
-  .vgmf-ship-pipe > li.active::after {
+  .vgmf-ship-pipe > li.active > .dot {
     animation: none;
   }
-  .vgmf-ship-pipe > li.done::after { clip-path: inset(0 0 0 0); }
-  .vgmf-ship-pipe > li.active::after { clip-path: inset(0 0 45% 0); }
+  .vgmf-ship-fill { transition: none; }
 }

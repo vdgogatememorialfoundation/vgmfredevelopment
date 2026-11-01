@@ -6,7 +6,8 @@ import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
 import { pickupOtp } from "@/lib/store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
-import { aggregatorName, customerCourierLabel, customerStatusLabel } from "@/lib/courier-label";
+import { aggregatorName, customerCourierLabel, customerStatusLabel, riderAccepted } from "@/lib/courier-label";
+import { getIntegrations } from "@/lib/integrations";
 import { buildTrackingStages, isHyperlocalProvider, shipmentScans, type CourierScan } from "@/lib/order-pipeline";
 import { pingLiveAgent } from "@/lib/shipping-client";
 import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
@@ -35,6 +36,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const provider = shipment?.provider ?? order.courierChoice?.provider;
   const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
+  const [arrival, setArrival] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +79,8 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     };
     void run();
     const terminal = order.status === "Delivered" || order.status === "Cancelled" || order.status === "Failed";
-    const ms = terminal ? 120_000 : hyperlocal ? 20_000 : 45_000;
+    const ping = Math.min(10, Math.max(8, getIntegrations().shipping.hyperlocalPingSeconds || 8));
+    const ms = terminal ? 120_000 : hyperlocal ? ping * 1000 : 45_000;
     const timer = window.setInterval(run, ms);
     return () => {
       cancelled = true;
@@ -184,7 +187,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
             ? "The line moves down through the delivery window, and it stops before Delivered."
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
-              : "The line moves down from the top and pauses on the latest courier scan.";
+              : "The line moves down from the top, one step at a time, and stops on the latest scan.";
 
   const pipe = (
     <VerticalPipeline
@@ -207,9 +210,14 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       {hyperlocal ? (
         <Tile
           label="Delivery partner"
-          value={shipment?.agentName || shipment?.agentPhone ? [shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ") : "Assigned when a rider accepts"}
+          value={
+            riderAccepted(statusLine, shipment?.agentName) && (shipment?.agentName || shipment?.agentPhone)
+              ? [shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")
+              : "Assigned when a rider accepts"
+          }
         />
       ) : null}
+      {hyperlocal && arrival ? <Tile label="Rider arrives" value={arrival} /> : null}
       {shipment?.deliveryOtp ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
       {order.deliveryMode === "store_pickup" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
     </div>
@@ -235,7 +243,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         <div className="vgmf-hl">
           <div className="vgmf-hl-sheet">{pipe}</div>
           <div className="vgmf-hl-map">
-            <LiveTracking order={order} shipment={shipment} />
+            <LiveTracking order={order} shipment={shipment} onArrival={setArrival} />
           </div>
         </div>
       ) : (
