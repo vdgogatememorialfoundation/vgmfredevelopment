@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getSettings, getShipments } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
-import { pingLiveAgent } from "@/lib/shipping-client";
+import { lastMileLabel, pingLiveAgent } from "@/lib/shipping-client";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import { loadGooglePlaces, type GoogleMapsWindow } from "@/lib/maps-place";
 import type { Order } from "@/types";
@@ -32,7 +32,9 @@ export default function LiveTracking({ order, embedded = false }: { order: Order
   const mapsKey = typeof window === "undefined" ? "" : getSettings().apiKeys.googleMaps;
   const scooter = settings?.shipping.scooterImage || DEFAULT_SCOOTER;
   const provider = shipment?.provider ?? order.courierChoice?.provider;
-  const hyperlocal = isHyperlocalProvider(provider);
+  const lastMile = order.courierChoice?.lastMile;
+  const hyperlocal = isHyperlocalProvider(provider, lastMile);
+  const partnerLabel = lastMileLabel(provider, lastMile);
 
   useEffect(() => {
     if (!hyperlocal || !shipment || order.status === "Cancelled" || order.status === "Delivered" || order.status === "Failed") {
@@ -117,7 +119,7 @@ export default function LiveTracking({ order, embedded = false }: { order: Order
       <div className="flex h-full min-h-[280px] flex-col">
         <div className="bg-white px-3 py-2">
           <p className="vgmf-hl-live">
-            {provider === "tookan" ? "Tookan" : "Shipday"}
+            {partnerLabel}
             {ping?.status ? ` · ${ping.status}` : " · Live partner location"}
           </p>
         </div>
@@ -134,7 +136,7 @@ export default function LiveTracking({ order, embedded = false }: { order: Order
           <div>
             <p className="font-semibold text-text-primary">Live hyperlocal map</p>
             <p className="text-xs text-text-muted">
-              {provider === "tookan" ? "Tookan" : "Shipday"} agent location, refreshed from courier GPS.
+              {partnerLabel} agent location, refreshed from courier GPS.
               {ping?.status ? ` Status: ${ping.status}.` : ""}
             </p>
           </div>

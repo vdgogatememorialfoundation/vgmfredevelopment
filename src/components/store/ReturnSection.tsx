@@ -3,107 +3,70 @@
 import { useState } from "react";
 import Link from "next/link";
 import { classNames } from "@/lib/utils";
-import { initiateReturn, getReturnRequest } from "@/lib/store";
-import { cancelOrder } from "@/lib/admin-store";
-import { canCustomerCancel } from "@/lib/integrations";
+import { getReturnRequest, requestDamagedReplacement } from "@/lib/store";
+import { canCustomerRequestReplacement, customerOrderPolicyCopy } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
-import type { Order, ReturnKind, ReturnRequest } from "@/types";
+import { fileToDataUrl } from "@/lib/images";
+import type { Order, ReturnRequest } from "@/types";
 
 export default function ReturnSection({ order }: { order: Order }) {
   const settings = useOrderSettings();
-  const RETURN_REASONS = settings.returns.reasons.length ? settings.returns.reasons : ["Other"];
   const windowDays = order.returnableDays || settings.returns.windowDays;
-  const [now] = useState(() => Date.now());
-  const [, setReturnTick] = useState(0);
+  const policy = customerOrderPolicyCopy();
+  const [, setTick] = useState(0);
   const [showForm, setShowForm] = useState(false);
-  const [kind, setKind] = useState<ReturnKind>(settings.refunds.enabled ? "return" : "replacement");
-  const [reason, setReason] = useState(RETURN_REASONS[0]);
+  const [note, setNote] = useState("");
+  const [images, setImages] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const request = getReturnRequest(order.id) ?? order.returnRequest;
+  const canRequest = canCustomerRequestReplacement({ ...order, returnRequest: request }, settings);
 
-  const handleSubmit = () => {
-    if (!reason.trim()) {
-      setError("Please pick a reason.");
-      return;
+  const addPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setError("");
+    const next = [...images];
+    for (const file of Array.from(files).slice(0, 6 - next.length)) {
+      if (!file.type.startsWith("image/")) continue;
+      next.push(await fileToDataUrl(file, 1400, 0.78));
     }
-    initiateReturn(order, { kind, reason });
-    setReturnTick((value) => value + 1);
-    setShowForm(false);
+    setImages(next.slice(0, 6));
   };
 
-  const policyBullets = (
-    <ul className="mt-2 list-inside list-disc space-y-1.5">
-      <li>
-        {settings.cancellation.enabled
-          ? `Cancellable until the order is ${settings.cancellation.allowedUntil.toLowerCase()}${settings.cancellation.windowHours > 0 ? `, within ${settings.cancellation.windowHours} hours of ordering` : ""}.`
-          : "Orders cannot be cancelled once placed."}
-      </li>
-      <li>
-        {settings.returns.enabled
-          ? `Returnable within ${windowDays} days of delivery for a refund${settings.returns.replacementAllowed ? " or replacement" : ""}.`
-          : "Returns are not accepted."}
-      </li>
-      {settings.returns.enabled && settings.refunds.enabled && (
-        <li>
-          Return pickup charges of ₹{settings.returns.pickupCharge} are
-          deducted from your refund{settings.returns.replacementAllowed ? " — replacements are free" : ""}.
-        </li>
-      )}
-      <li>
-        {settings.refunds.enabled
-          ? `Refunds are processed ${settings.refunds.method === "original" ? "to the original payment method" : "by the store"} within ${settings.refunds.processingDays} business days of pickup.`
-          : "Customer refunds are turned off. The Foundation office can still refund or replace an order from the admin desk."}
-      </li>
-    </ul>
-  );
-
-  const deliveredAt = order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
-  const withinWindow = (now - Date.parse(deliveredAt)) / 864e5 <= windowDays;
-  const cancellable = canCustomerCancel(order, settings, now);
-  const canInitiate =
-    order.status === "Delivered" &&
-    settings.returns.enabled &&
-    withinWindow &&
-    (settings.refunds.enabled || settings.returns.replacementAllowed);
+  const handleSubmit = () => {
+    if (images.length === 0) {
+      setError("Share at least one photo of the damage.");
+      return;
+    }
+    setBusy(true);
+    try {
+      requestDamagedReplacement(order, {
+        reason: "Damaged or defective item",
+        images,
+        note,
+      });
+      setShowForm(false);
+      setTick((value) => value + 1);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not send the request.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
-      <p className="font-semibold text-text-primary">
-        Return, replacement & refund
-      </p>
+      <p className="font-semibold text-text-primary">Replacement for damaged items</p>
 
-      {cancellable && order.status !== "Cancelled" && (
-        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-red-100 bg-red-50/50 p-3">
-          <p className="flex-1">
-            Changed your mind? You can cancel this order now
-            {settings.cancellation.fee ? ` (cancellation fee ₹${settings.cancellation.fee})` : ""}.
-            {order.paymentStatus === "Paid" ? " The refund goes back to your payment method." : ""}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              if (!window.confirm(`Cancel order ${order.id}?`)) return;
-              cancelOrder(order.id, "Cancelled by customer");
-              setReturnTick((value) => value + 1);
-              window.location.reload();
-            }}
-            className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700"
-          >
-            Cancel order
-          </button>
-        </div>
-      )}
       {request ? (
-        <ReturnRequestStatus request={request} />
-      ) : canInitiate ? (
+        <ReplacementStatus request={request} />
+      ) : canRequest ? (
         <>
           {!showForm ? (
             <div className="mt-3 space-y-3">
               <p>
-                Not satisfied with your purchase? Request a return (money
-                refund) or a replacement (a new order is created for the same
-                item at no extra cost).
+                If this item arrived damaged, request a replacement. Photos are required. The Foundation desk reviews the request and, if accepted, places a new free order.
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -111,7 +74,7 @@ export default function ReturnSection({ order }: { order: Order }) {
                   onClick={() => setShowForm(true)}
                   className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white transition hover:bg-burgundy-dark"
                 >
-                  Request return or replacement
+                  Request replacement
                 </button>
                 <Link
                   href="/contact"
@@ -129,85 +92,56 @@ export default function ReturnSection({ order }: { order: Order }) {
               }}
               className="mt-4 space-y-4"
             >
-              <div>
-                <p className="mb-2 font-semibold text-text-primary">
-                  Choose an option
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {(
-                    [
-                      {
-                        value: "return",
-                        title: "Return · Refund",
-                        desc: `Pickup the item, refund minus ₹${settings.returns.pickupCharge} pickup charge`,
-                      },
-                      {
-                        value: "replacement",
-                        title: "Replacement",
-                        desc: "New order created for the same item — no extra charge",
-                      },
-                    ] as const
-                  ).filter((option) => (option.value === "return" ? settings.refunds.enabled : settings.returns.replacementAllowed)).map((option) => (
+              <p className="text-text-primary">
+                Damaged item only. Upload clear photos of the package and the damaged product. Returns and cancellations are not available from your account.
+              </p>
+              <label className="block">
+                <span className="mb-1.5 block font-semibold text-text-primary">Photos of the damage</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  onChange={(event) => void addPhotos(event.target.files)}
+                  className="block w-full text-xs"
+                />
+              </label>
+              {images.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {images.map((src, index) => (
                     <button
-                      key={option.value}
+                      key={src.slice(0, 24) + index}
                       type="button"
-                      onClick={() => setKind(option.value)}
-                      className={classNames(
-                        "rounded-xl border p-3 text-left transition",
-                        kind === option.value
-                          ? "border-burgundy bg-warm-cream"
-                          : "border-border bg-white hover:border-burgundy/40"
-                      )}
+                      onClick={() => setImages(images.filter((_, i) => i !== index))}
+                      className="relative h-16 w-16 overflow-hidden rounded-lg border border-border"
                     >
-                      <p className="text-sm font-bold text-text-primary">
-                        {option.title}
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-snug">
-                        {option.desc}
-                      </p>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt={`Damage ${index + 1}`} className="h-full w-full object-cover" />
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="return-reason"
-                  className="mb-1.5 block font-semibold text-text-primary"
-                >
-                  Reason
-                </label>
-                <select
-                  id="return-reason"
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
+              )}
+              <label className="block">
+                <span className="mb-1.5 block font-semibold text-text-primary">What is damaged? (optional)</span>
+                <textarea
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  rows={3}
                   className="input-field"
-                >
-                  {RETURN_REASONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+                  placeholder="Describe the damage so the desk can review it faster."
+                />
+              </label>
               {error && <p className="text-xs text-red-500">{error}</p>}
-
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white transition hover:bg-burgundy-dark"
-                >
-                  {kind === "return"
-                    ? "Initiate return"
-                    : "Create replacement order"}
+                <button type="submit" disabled={busy} className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white transition hover:bg-burgundy-dark disabled:opacity-60">
+                  {busy ? "Sending…" : "Submit replacement request"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowForm(false)}
                   className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-burgundy transition hover:bg-warm-cream"
                 >
-                  Cancel
+                  Close
                 </button>
               </div>
             </form>
@@ -215,81 +149,71 @@ export default function ReturnSection({ order }: { order: Order }) {
         </>
       ) : (
         <p className="mt-2">
-          {settings.returns.enabled
-            ? order.status === "Delivered"
-              ? "The return window for this order has closed."
-              : `You can request a return after delivery, within ${windowDays} days.`
-            : "This store does not accept returns."}
+          {order.status === "Delivered"
+            ? `The ${windowDays}-day replacement window for damaged items has closed.`
+            : "If an item arrives damaged, you can request a replacement with photos after delivery."}
         </p>
       )}
 
       <div className="mt-4 rounded-xl bg-warm-cream/60 p-3">
-        {policyBullets}
+        <p className="font-semibold text-text-primary">{policy.title}</p>
+        <p className="mt-1">{policy.body}</p>
       </div>
     </div>
   );
 }
 
-function ReturnRequestStatus({ request }: { request: ReturnRequest }) {
-  const isReplacement = request.kind === "replacement";
+function ReplacementStatus({ request }: { request: ReturnRequest }) {
+  const tone =
+    request.status === "Rejected"
+      ? "bg-red-50 text-red-700"
+      : request.status === "Replacement Created" || request.status === "Accepted"
+        ? "bg-emerald-50 text-emerald-700"
+        : "bg-burgundy/10 text-burgundy";
 
   return (
     <div className="mt-3 space-y-3">
       <div className="rounded-xl bg-warm-cream/60 p-3">
         <p className="font-semibold text-text-primary">
-          {isReplacement ? "Replacement request" : "Return request"}{" "}
-          <span className="font-mono text-burgundy">{request.id}</span>
+          Replacement request <span className="font-mono text-burgundy">{request.id}</span>
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span
-            className={classNames(
-              "rounded-full px-2.5 py-0.5 text-[11px] font-bold",
-              request.status === "Refunded" ||
-                request.status === "Picked Up"
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-burgundy/10 text-burgundy"
-            )}
-          >
-            {request.status}
-          </span>
-          <span className="text-xs text-text-muted">
-            Requested {new Date(request.requestedAt).toLocaleDateString("en-IN")}
-          </span>
+          <span className={classNames("rounded-full px-2.5 py-0.5 text-[11px] font-bold", tone)}>{request.status}</span>
+          <span>Requested {new Date(request.requestedAt).toLocaleDateString("en-IN")}</span>
         </div>
         {request.reason && (
-          <p className="mt-2 text-xs text-text-muted">
+          <p className="mt-2">
             Reason: <span className="font-medium text-text-primary">{request.reason}</span>
           </p>
         )}
+        {request.note && <p className="mt-1">{request.note}</p>}
+        {request.images?.length ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {request.images.map((src, index) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={`${request.id}-${index}`} src={src} alt={`Damage photo ${index + 1}`} className="h-16 w-16 rounded-lg object-cover" />
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      <div className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
-        {isReplacement ? (
-          <p className="font-semibold">
-            Replacement order {request.replacementOrderId ?? "—"} created — you
-            will be charged nothing extra.{" "}
-            <Link href="/account/orders" className="text-burgundy underline">
-              View orders
-            </Link>
-            .
-          </p>
-        ) : (
-          <p className="font-semibold">
-            Refund of{" "}
-            {request.refundAmount !== undefined
-              ? `₹${request.refundAmount.toLocaleString("en-IN")}`
-              : "the order value minus pickup charges"}
-            {" "}
-            (₹{request.returnCharges} pickup charges deducted) after the item
-            is picked up and verified.
-          </p>
-        )}
-      </div>
-
-      <p className="text-xs text-text-muted">
-        Follow the pipeline in the Tracking card above for live updates on your
-        request.
-      </p>
+      {request.status === "Pending Review" && (
+        <p className="rounded-xl bg-gold/10 p-3 text-ink">The Foundation desk is reviewing your photos. You will see the decision on this order.</p>
+      )}
+      {request.status === "Rejected" && (
+        <p className="rounded-xl bg-red-50 p-3 text-red-800">
+          This request was rejected{request.decisionNote ? `: ${request.decisionNote}` : "."}
+        </p>
+      )}
+      {(request.status === "Replacement Created" || request.status === "Accepted") && (
+        <p className="rounded-xl bg-emerald-50 p-3 font-semibold text-emerald-900">
+          Free replacement order {request.replacementOrderId ?? "—"} has been placed.{" "}
+          <Link href="/account/orders" className="text-burgundy underline">
+            View orders
+          </Link>
+          .
+        </p>
+      )}
     </div>
   );
 }

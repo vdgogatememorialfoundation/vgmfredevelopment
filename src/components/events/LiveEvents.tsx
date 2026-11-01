@@ -58,9 +58,9 @@ export function EventsIndex() {
         <section className="section bg-warm-cream">
           <div className="container">
             <h2 className="heading-3 mb-8">{t("events.past")}</h2>
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {past.map((event) => (
-                <EventCard key={event.id} event={event} />
+                <EventCard key={event.id} event={event} variant="compact" />
               ))}
             </div>
           </div>

@@ -9,7 +9,6 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { leaveAfterSignOut } from "@/lib/auth";
 import { useCart } from "@/lib/use-cart";
 import { classNames } from "@/lib/utils";
-import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey } from "@/lib/i18n/messages";
 import { getLiveCmsPages } from "@/lib/cms-pages";
@@ -176,7 +175,7 @@ export default function Header() {
     : "";
 
   return (
-    <header className="sticky top-0 z-50 overflow-visible border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
+    <header className="overflow-visible border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
       <div className="container">
         <div className="flex h-[78px] items-center justify-between gap-4">
           {/* Logo */}
@@ -305,7 +304,6 @@ export default function Header() {
 
           {/* Actions */}
           <div className="hidden items-center gap-3 lg:flex">
-            <LanguageSwitcher />
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
@@ -553,7 +551,6 @@ export default function Header() {
                   <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="btn-outline">
                     {t("header.exploreEvents")}
                   </Link>
-                  <LanguageSwitcher />
                 </div>
               </div>
             </div>,

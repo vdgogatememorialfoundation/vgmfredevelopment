@@ -373,6 +373,18 @@ export async function listOrders() {
   return (data.orders ?? []) as Row[];
 }
 
+export async function requestReplacement(input: { orderId: string; note?: string; images: string[] }) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/orders`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "replacement", ...input }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not send the replacement request."));
+  return data.order as Row;
+}
+
 export type PostalPlace = {
   city: string;
   state: string;

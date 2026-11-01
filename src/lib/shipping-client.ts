@@ -21,6 +21,65 @@ function credsFrom(settings: IntegrationSettings): ShippingCreds {
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
+export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink"] as const;
+const LAST_MILE = [
+  { id: "porter" as const, name: "Porter", rate: 49, etaDays: 0 },
+  { id: "shadowfax" as const, name: "Shadowfax Flash", rate: 59, etaDays: 0 },
+  { id: "flash" as const, name: "Flash", rate: 55, etaDays: 0 },
+];
+
+export function isCheckoutProvider(provider?: string) {
+  return provider === "shiprocket" || provider === "nimbuspost" || provider === "ithink";
+}
+
+export function lastMileLabel(provider?: string, lastMile?: string) {
+  const partner = provider === "nimbuspost" ? "Nimbuspost" : provider === "ithink" ? "iThink Logistics" : "Shiprocket";
+  if (lastMile === "porter") return `${partner} · Porter`;
+  if (lastMile === "shadowfax") return `${partner} · Shadowfax Flash`;
+  if (lastMile === "flash") return `${partner} · Flash`;
+  return partner;
+}
+
+function lastMileRates(bases: CourierRate[], sameCity: boolean): CourierRate[] {
+  if (!sameCity) return [];
+  const seen = new Set<string>();
+  const seeds = bases.filter((rate) => isCheckoutProvider(rate.provider));
+  const partners: CourierRate[] = seeds.length
+    ? seeds
+    : CHECKOUT_PROVIDERS.map((provider) => ({
+        provider,
+        courierId: provider,
+        courierName: lastMileLabel(provider),
+        rate: 49,
+        etaDays: 1,
+        live: false,
+      }));
+  const extra: CourierRate[] = [];
+  for (const base of partners) {
+    if (seen.has(base.provider)) continue;
+    seen.add(base.provider);
+    for (const mile of LAST_MILE) {
+      extra.push({
+        provider: base.provider,
+        courierId: `${base.provider}-${mile.id}`,
+        courierName: lastMileLabel(base.provider, mile.id),
+        rate: mile.rate,
+        etaDays: mile.etaDays,
+        live: base.live,
+        lastMile: mile.id,
+      });
+    }
+  }
+  return extra;
+}
+
+export function checkoutCourierRates(rates: CourierRate[]) {
+  return rates.filter((rate) => {
+    if (isCheckoutProvider(rate.provider)) return true;
+    if (rate.provider === "local") return !/tookan|shipday/i.test(rate.courierName);
+    return false;
+  });
+}
 
 export function publicTrackingUrl(shipment: Pick<ShipmentRecord, "awb" | "provider" | "trackingUrl">) {
   if (shipment.trackingUrl) return shipment.trackingUrl;
@@ -85,7 +144,7 @@ export async function fetchCourierRates(input: {
   const settings = getIntegrations();
   const { shipping } = settings;
   const notes: string[] = [];
-  const wanted = (["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const).filter(
+  const wanted = CHECKOUT_PROVIDERS.filter(
     (id) => shipping[id].enabled && hasShippingCredentials(id, settings)
   );
   let live: CourierRate[] = [];
@@ -115,34 +174,29 @@ export async function fetchCourierRates(input: {
       notes.push("Courier rate service could not be reached.");
     }
   }
-  const extra: CourierRate[] = [];
   const pin = input.deliveryPincode;
   const originPrefix = (shipping.pickup.pincode || "411005").slice(0, 3);
-  const sameCity = pin.startsWith(originPrefix);
-  if (shipping.tookan.apiKey && /^\d{6}$/.test(pin)) {
-    if (shipping.tookan.hyperlocal && sameCity) {
-      extra.push({ provider: "tookan", courierId: "tookan", courierName: "Tookan hyperlocal (task)", rate: 39, etaDays: 0, live: true });
-    }
-    if (shipping.tookan.parcel) {
-      extra.push({ provider: "tookan-parcel", courierId: "tookan-parcel", courierName: "Tookan parcel", rate: sameCity ? 45 : 69, etaDays: sameCity ? 1 : 3, live: true });
-    }
+  const sameCity = /^\d{6}$/.test(pin) && pin.startsWith(originPrefix);
+  const checkoutLive = checkoutCourierRates(live);
+  const extra = lastMileRates(checkoutLive, sameCity);
+  if (checkoutLive.length || extra.length) {
+    return { rates: [...checkoutLive, ...extra].sort((a, b) => a.etaDays - b.etaDays || a.rate - b.rate), live: checkoutLive.some((rate) => rate.live), notes };
   }
-  if (shipping.shipday.enabled && shipping.shipday.apiKey && sameCity) {
-    extra.push({ provider: "shipday", courierId: "shipday", courierName: "Shipday", rate: 45, etaDays: 0, live: true });
-  }
-  if (live.length || extra.length) return { rates: [...live, ...extra].sort((a, b) => a.rate - b.rate), live: true, notes };
 
   const quote = checkPincode(input.deliveryPincode, input.bookIds?.[0]);
-  const rates: CourierRate[] = quote.offers.map((offer) => ({
-    provider: "local",
-    courierId: offer.id,
-    courierName: offer.name,
-    rate: offer.charge,
-    etaDays: offer.transitDays,
-    live: false,
-  }));
+  const rates: CourierRate[] = checkoutCourierRates(
+    quote.offers.map((offer) => ({
+      provider: offer.id === "ithink" ? "ithink" : offer.id === "nimbuspost" ? "nimbuspost" : offer.id === "shiprocket" ? "shiprocket" : "local",
+      courierId: offer.id,
+      courierName: offer.name,
+      rate: offer.charge,
+      etaDays: offer.transitDays,
+      live: false,
+    }))
+  );
+  const localMiles = lastMileRates(rates.length ? rates : [], sameCity);
   if (!quote.serviceable && quote.note) notes.push(quote.note);
-  return { rates, live: false, notes };
+  return { rates: [...rates, ...localMiles].sort((a, b) => a.etaDays - b.etaDays || a.rate - b.rate), live: false, notes };
 }
 
 function label(provider: string) {

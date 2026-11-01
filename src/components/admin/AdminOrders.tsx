@@ -21,7 +21,7 @@ import {
   resaveOrder,
   setOrderStatus,
 } from "@/lib/admin-store";
-import { getOrders, getReturnRequest, initiateReturn, updateReturnRequest } from "@/lib/store";
+import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, updateReturnRequest } from "@/lib/store";
 import { getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
@@ -842,9 +842,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             <p className="mt-2 text-xs text-text-muted">{integrations.shipping.autoBookOnPack ? "Setting Packed books the courier automatically." : "Auto-booking on Packed is off. Book the courier below."}</p>
           )}
           {status === "Ready to Ship" && order.deliveryMode === "delivery" && (
-            <p className="mt-2 text-xs text-text-muted">Ready to Ship books the courier and requests pickup on Shiprocket / iThink / Tookan / Shipday.</p>
+            <p className="mt-2 text-xs text-text-muted">Ready to Ship books the courier and requests pickup on Shiprocket, Nimbuspost or iThink Logistics, including Porter / Shadowfax / Flash last-mile.</p>
           )}
-          {order.cancelReason && <p className="mt-2 text-xs text-red-600">Cancelled: {order.cancelReason}</p>}
+              {order.cancelReason && <p className="mt-2 text-xs text-red-600">Cancelled: {order.cancelReason}</p>}
+          {order.status === "Cancelled" && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold text-text-primary">Cancellation tracking</p>
+              <OrderTrackingTimeline order={order} />
+            </div>
+          )}
         </Section>
 
         <Section title="Payment">
@@ -923,7 +929,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
-                  Booking checks Shiprocket, Nimbuspost, iThink Logistics and Shipyaari wallets first. If credits are low the AWB is not created. Tookan and Shipday hyperlocal orders ping the agent on Google Maps.
+                  Booking checks Shiprocket, Nimbuspost and iThink Logistics wallets first. Same-city last-mile uses their Porter, Shadowfax Flash or Flash integrations.
                 </p>
               </div>
             ) : (
@@ -1010,7 +1016,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         <div className="mt-4">
           <Section title="Returns, refunds & replacements">
             {getOrderSettings().adminActions.processAfterDelivery ? (
-              <p className="mb-2 text-xs text-text-muted">Admin can process a cancellation, refund or replacement on this order even after delivery.</p>
+              <p className="mb-2 text-xs text-text-muted">Customers cannot cancel or return. The desk can cancel, modify, refund, open a return, or place a free replacement. Damaged-item requests from the customer wait here for accept or reject.</p>
             ) : null}
             {order.returnShipment && (
               <p className="mb-2 text-xs text-text-muted">
@@ -1019,10 +1025,35 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             )}
             {returnRequest ? (
               <div className="space-y-2 text-sm">
-                <p><b>Return</b> · {returnRequest.status}</p>
+                <p><b>{returnRequest.kind === "replacement" ? "Replacement" : "Return"}</b> · {returnRequest.status}{returnRequest.source ? ` · ${returnRequest.source}` : ""}</p>
                 <p className="text-xs text-text-muted">Reason: {returnRequest.reason} · requested {formatDateTime(returnRequest.requestedAt)}</p>
+                {returnRequest.note && <p className="text-xs text-text-muted">{returnRequest.note}</p>}
+                {returnRequest.images?.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {returnRequest.images.map((src, index) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={`${returnRequest.id}-${index}`} src={src} alt={`Damage ${index + 1}`} className="h-16 w-16 rounded-lg object-cover" />
+                    ))}
+                  </div>
+                ) : null}
                 {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)} after ₹{returnRequest.returnCharges} pickup charge.</p>}
                 <div className="flex flex-wrap gap-2">
+                  {returnRequest.status === "Pending Review" && returnRequest.kind === "replacement" && (
+                    <>
+                      <Button variant="success" onClick={() => run("rt", () => {
+                        const next = reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
+                        return `Accepted. Free replacement order ${next.replacementOrderId} placed.`;
+                      })}>Accept & place free order</Button>
+                      <Button variant="danger" onClick={() => {
+                        const reason = window.prompt("Reason for rejecting this replacement request?");
+                        if (reason === null) return;
+                        run("rt", () => {
+                          reviewReplacementRequest(order.id, { accept: false, note: reason || "Rejected after reviewing photos." });
+                          return "Replacement request rejected.";
+                        });
+                      }}>Reject</Button>
+                    </>
+                  )}
                   {returnRequest.status === "Return Requested" && (
                     <Button variant="outline" onClick={() => run("rt", () => { updateReturnRequest(order.id, { status: "Return Approved" }); return "Return approved."; })}>Approve</Button>
                   )}

@@ -158,6 +158,9 @@ export default function CheckoutScreen() {
             keyboard={isIndia(country.code) ? "numeric" : "default"}
             placeholder={isIndia(country.code) ? "6-digit PIN" : "Postal code"}
           />
+          <Muted>
+            Delivery partners are Shiprocket, Nimbuspost and iThink Logistics. Same-city orders can use their Porter, Shadowfax Flash or Flash last-mile. Orders cannot be cancelled or returned from the app. Damaged items can be replaced after delivery if you share photos.
+          </Muted>
           <Button label={busy ? "Placing order…" : `Place order · ${money(total)}`} disabled={busy} onPress={() => void submit()} />
           <Button kind="ghost" label="Back to cart" onPress={() => router.replace("/cart")} />
         </>

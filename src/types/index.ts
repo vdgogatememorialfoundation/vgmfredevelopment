@@ -539,6 +539,7 @@ export interface CourierRate {
   etaDays: number;
   live: boolean;
   cod?: boolean;
+  lastMile?: "porter" | "shadowfax" | "flash";
 }
 
 export type ReturnKind = "return" | "replacement";
@@ -549,7 +550,11 @@ export interface ReturnRequest {
   kind: ReturnKind;
   reason: string;
   requestedAt: string;
+  source?: "customer" | "admin";
   status:
+    | "Pending Review"
+    | "Accepted"
+    | "Rejected"
     | "Return Requested"
     | "Return Approved"
     | "Pickup Scheduled"
@@ -559,6 +564,11 @@ export interface ReturnRequest {
   returnCharges: number;
   refundAmount?: number;
   replacementOrderId?: string;
+  images?: string[];
+  note?: string;
+  decidedAt?: string;
+  decidedBy?: string;
+  decisionNote?: string;
   stages: ShipmentEvent[];
 }
 

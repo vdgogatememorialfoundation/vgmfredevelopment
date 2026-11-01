@@ -5,6 +5,12 @@ import { useEffect, useState } from "react";
 import { subscribeCms } from "@/lib/cms";
 import { buildTickerItems, type TickerItem } from "@/lib/ticker";
 
+function loopItems(items: TickerItem[]) {
+  const block = [...items];
+  while (block.length < 8) block.push(...items);
+  return [...block, ...block];
+}
+
 export default function AnnouncementTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
 
@@ -20,33 +26,33 @@ export default function AnnouncementTicker() {
   }, []);
 
   if (items.length === 0) return null;
-  const row = items.length === 1 ? [...items, ...items] : [...items, ...items];
+  const row = loopItems(items);
 
   return (
     <div
       aria-label="Scrolling announcements"
-      className="overflow-hidden border-b border-burgundy/15 bg-[#f7f1e8] text-ink"
+      className="overflow-hidden border-b border-ink-soft bg-ink text-white"
     >
-      <div className="flex w-max items-center gap-10 py-2 pl-10 animate-marquee">
+      <div className="animate-ticker flex w-max items-center gap-10 py-2.5">
         {row.map((item, index) => (
-          <Link
-            key={`${item.id}-${index}`}
-            href={item.href}
-            className="flex shrink-0 items-center gap-2.5 text-xs font-medium text-ink/80 transition hover:text-burgundy"
-          >
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-burgundy/10 text-[10px] text-burgundy">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-              </svg>
-            </span>
-            <span className="rounded bg-burgundy/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-burgundy">
-              {item.category}
-            </span>
-            <span className="max-w-[28rem] truncate">{item.title}</span>
-          </Link>
+          <TickerLink key={`${item.id}-${index}`} item={item} />
         ))}
       </div>
     </div>
+  );
+}
+
+function TickerLink({ item }: { item: TickerItem }) {
+  return (
+    <Link
+      href={item.href}
+      className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[14px] font-semibold leading-none text-white transition hover:text-white"
+    >
+      <span className="rounded-sm bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink">
+        {item.category}
+      </span>
+      <span>{item.title}</span>
+      <span aria-hidden="true" className="text-white">•</span>
+    </Link>
   );
 }

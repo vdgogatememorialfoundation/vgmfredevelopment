@@ -9,6 +9,7 @@ import {
   getStoreCredit,
   patchOrder,
   printPosReceipt,
+  updateCustomer,
 } from "@/lib/admin-store";
 import { storeConfig } from "@/lib/constants";
 import { getPickupLocation } from "@/lib/fulfillment";
@@ -18,7 +19,11 @@ import { useLiveBooks } from "@/lib/use-cms";
 import type { Book, DeliveryAddress, Order } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
-import { canOrder, isPurchasable } from "@/lib/product-data";
+import { canOrder, getProductByCode, isPurchasable } from "@/lib/product-data";
+import { accountToDelivery } from "@/lib/account-search";
+import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
+import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
+import { matchesBarcode } from "@/lib/barcode";
 
 const METHODS = [
   { id: "cash", label: "Cash" },
@@ -47,6 +52,8 @@ export function PosDesk() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
+  const [address, setAddress] = useState<DeliveryAddress>(emptyDeliveryAddress());
+  const [scanOpen, setScanOpen] = useState(false);
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -72,6 +79,17 @@ export function PosDesk() {
   const gst = Math.round(subtotal * storeConfig.gstRate);
   const creditApplied = useCredit ? Math.min(credit, subtotal + gst) : 0;
   const total = Math.max(0, subtotal + gst - creditApplied);
+
+  const addByCode = (code: string) => {
+    const book = getProductByCode(code) || books.find((item) => matchesBarcode(item, code));
+    if (!book) {
+      setError(`No product matched barcode ${code}.`);
+      return;
+    }
+    add(book);
+    setQuery(book.barcode || book.sku || book.title);
+    setMessage(`Added ${book.title}.`);
+  };
 
   const add = (book: Book) => {
     if (!canOrder(book)) return;
@@ -158,7 +176,28 @@ export function PosDesk() {
       }
 
       const pickup = getPickupLocation();
-      const deliverTo: DeliveryAddress = {
+      const registered = address.line1.trim()
+        ? {
+            ...address,
+            fullName: name,
+            phone,
+            email: account?.email || walkIn.email || address.email,
+          }
+        : null;
+      if (account && registered) {
+        updateCustomer(account.email, {
+          address: {
+            line1: registered.line1,
+            landmark: registered.landmark,
+            city: registered.city,
+            state: registered.state,
+            pincode: registered.pincode,
+            country: registered.country,
+            countryCode: registered.countryCode,
+          },
+        });
+      }
+      const deliverTo: DeliveryAddress = registered ?? {
         fullName: name,
         phone,
         email: account?.email || walkIn.email,
@@ -213,6 +252,16 @@ export function PosDesk() {
 
   return (
     <div className="space-y-5">
+      {scanOpen && (
+        <BarcodeCamera
+          label="Scan a product barcode to add it to the cart"
+          onClose={() => setScanOpen(false)}
+          onScan={(code) => {
+            setScanOpen(false);
+            addByCode(code);
+          }}
+        />
+      )}
       <div>
         <h1 className="text-2xl font-bold text-text-primary">In-store POS</h1>
         <p className="text-sm text-text-muted">Sell from the counter. Stock is deducted immediately and a receipt is printed.</p>
@@ -224,7 +273,21 @@ export function PosDesk() {
       <div className="grid gap-5 xl:grid-cols-5">
         <div className="xl:col-span-3">
           <Panel title="Products" description="Search by title, SKU, barcode or product code">
-            <TextInput placeholder="Scan or search…" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <div className="flex flex-wrap gap-2">
+              <div className="min-w-48 flex-1">
+                <TextInput
+                  placeholder="Scan or search…"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    addByCode(query);
+                  }}
+                />
+              </div>
+              <Button variant="outline" onClick={() => setScanOpen(true)}>Camera</Button>
+            </div>
             {catalog.length === 0 ? (
               <EmptyState text="No matching products." />
             ) : (
@@ -265,6 +328,9 @@ export function PosDesk() {
                       phone: item.phone,
                       email: item.email,
                     });
+                    setAddress(accountToDelivery(item));
+                  } else {
+                    setAddress(emptyDeliveryAddress());
                   }
                 }}
                 placeholder="Search by name, phone or email"
@@ -284,6 +350,13 @@ export function PosDesk() {
                 {credit > 0 ? ` · store credit ${rupees(credit)}` : ""}
               </p>
             )}
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-text-primary">Registered address</p>
+              <p className="mb-3 text-xs text-text-muted">
+                The customer&apos;s saved address is shown when you pick an account. The counter can add or correct it.
+              </p>
+              <AddressFields value={address} onChange={setAddress} idPrefix="pos" showEmail={false} />
+            </div>
           </Panel>
 
           <Panel title="Cart" description={`${rows.length} line${rows.length === 1 ? "" : "s"}`}>

@@ -20,7 +20,7 @@ function addDays(date: Date, days: number) {
 export default function OrderTrackingTimeline({ order }: { order: Order }) {
   const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
-  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider);
+  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
 
   useEffect(() => {
     if (!shipment || order.status === "Cancelled") return;
@@ -108,8 +108,12 @@ export default function OrderTrackingTimeline({ order }: { order: Order }) {
         return stage.reached ? `OTP ${pickupOtp(order.id)}` : "";
       case "picked":
         return stage.reached && deliveredAt ? formatDate(deliveredAt) : "";
+      case "cancel-review":
+        return "Reviewed by admin";
       case "cancelled":
-        return formatDate(order.date);
+        return formatDate(order.history?.find((item) => /cancel/i.test(item.status))?.at || order.date);
+      case "refunded":
+        return order.refundAmount ? `₹${order.refundAmount.toLocaleString("en-IN")}` : "";
       case "failed":
         return "Delivery failed";
       default:
@@ -119,7 +123,7 @@ export default function OrderTrackingTimeline({ order }: { order: Order }) {
 
   const lineNote =
     order.status === "Cancelled"
-      ? "This order was cancelled — refund will be initiated to your original payment method within 3–5 business days."
+      ? "This order was cancelled by the Foundation desk. Follow the cancellation steps below — customers cannot cancel from their account."
       : failed
         ? "The line stays on Failed until a reattempt is booked."
         : order.status === "Delivered"

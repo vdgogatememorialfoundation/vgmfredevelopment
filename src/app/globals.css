@@ -29,6 +29,31 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #0b1f3a #f7f3ea;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #f7f3ea;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #0b1f3a;
+  border: 2px solid #f7f3ea;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #16325c;
+}
+
+*::-webkit-scrollbar-corner {
+  background: #f7f3ea;
 }
 
 body {
@@ -69,6 +94,11 @@ iframe {
     animation-play-state: paused;
   }
 
+  .animate-ticker {
+    animation: ticker 36s linear infinite;
+    will-change: transform;
+  }
+
   .hero-progress {
     animation: hero-progress 7s linear forwards;
   }
@@ -77,6 +107,15 @@ iframe {
 @keyframes marquee {
   to {
     transform: translateX(-50%);
+  }
+}
+
+@keyframes ticker {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
   }
 }
 

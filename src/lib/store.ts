@@ -216,7 +216,7 @@ export function purgeSampleOrders() {
 
 // ---------- Tracking ----------
 
-const COURIERS = ["Shiprocket Surface", "Shiprocket Express", "iThink Logistics"];
+const COURIERS = ["Shiprocket Surface", "Nimbuspost", "iThink Logistics"];
 
 export function pickCourier(orderId: string) {
   let hash = 0;
@@ -276,6 +276,13 @@ function persistReturnRequest(orderId: string, request: ReturnRequest) {
   const map = getReturnRequests();
   map[orderId] = request;
   window.localStorage.setItem(RETURNS_KEY, JSON.stringify(map));
+  const orders = getOrders();
+  const index = orders.findIndex((order) => order.id === orderId);
+  if (index !== -1) {
+    orders[index] = { ...orders[index], returnRequest: request };
+    window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+  }
+  window.dispatchEvent(new Event("vgmf-cms"));
 }
 
 function returnRequestId() {
@@ -300,9 +307,83 @@ function generateReplacementOrder(source: Order): Order {
   };
 }
 
+export function requestDamagedReplacement(
+  order: Order,
+  input: { reason?: string; images: string[]; note?: string }
+): ReturnRequest {
+  if (getReturnRequest(order.id)) throw new Error("A replacement request is already open on this order.");
+  if (!input.images.length) throw new Error("Share at least one photo of the damaged item.");
+  const requestedAt = new Date().toISOString();
+  const request: ReturnRequest = {
+    id: returnRequestId(),
+    orderId: order.id,
+    kind: "replacement",
+    reason: input.reason?.trim() || "Damaged or defective item",
+    requestedAt,
+    source: "customer",
+    status: "Pending Review",
+    returnCharges: 0,
+    images: input.images,
+    note: input.note?.trim() || undefined,
+    stages: [
+      { id: "requested", title: "Replacement requested", at: requestedAt, reached: true, detail: "Photos received. The Foundation desk will review this request." },
+      { id: "review", title: "Under review", at: requestedAt, reached: true, detail: "Admin will accept or reject after checking the images." },
+      { id: "decision", title: "Decision", at: "", reached: false, detail: "Accepted requests receive a free replacement order." },
+      { id: "replacement", title: "Replacement order", at: "", reached: false, detail: "A new free order is placed when the request is accepted." },
+    ],
+  };
+  persistReturnRequest(order.id, request);
+  return request;
+}
+
+export function reviewReplacementRequest(
+  orderId: string,
+  input: { accept: boolean; note?: string; by?: string }
+): ReturnRequest {
+  const current = getReturnRequest(orderId);
+  if (!current || current.kind !== "replacement") throw new Error("No replacement request is waiting on this order.");
+  if (current.status !== "Pending Review") throw new Error("This replacement request has already been reviewed.");
+  const now = new Date().toISOString();
+  if (!input.accept) {
+    const request: ReturnRequest = {
+      ...current,
+      status: "Rejected",
+      decidedAt: now,
+      decidedBy: input.by,
+      decisionNote: input.note?.trim() || "Rejected after reviewing the photos.",
+      stages: current.stages.map((stage) =>
+        stage.id === "decision"
+          ? { ...stage, at: now, reached: true, detail: input.note?.trim() || "The replacement request was rejected." }
+          : stage
+      ),
+    };
+    persistReturnRequest(orderId, request);
+    return request;
+  }
+  const source = getOrders().find((order) => order.id === orderId);
+  if (!source) throw new Error("The original order could not be found.");
+  const replacement = generateReplacementOrder(source);
+  saveOrder(replacement);
+  const request: ReturnRequest = {
+    ...current,
+    status: "Replacement Created",
+    decidedAt: now,
+    decidedBy: input.by,
+    decisionNote: input.note?.trim() || "Accepted. A free replacement order was placed.",
+    replacementOrderId: replacement.id,
+    stages: current.stages.map((stage) => {
+      if (stage.id === "decision") return { ...stage, at: now, reached: true, detail: "Accepted after reviewing the photos." };
+      if (stage.id === "replacement") return { ...stage, at: now, reached: true, detail: `Free replacement order ${replacement.id} placed.` };
+      return stage;
+    }),
+  };
+  persistReturnRequest(orderId, request);
+  return request;
+}
+
 export function initiateReturn(
   order: Order,
-  input: { kind: ReturnKind; reason: string }
+  input: { kind: ReturnKind; reason: string; source?: "customer" | "admin"; images?: string[] }
 ): ReturnRequest {
   const requestedAt = new Date().toISOString();
   const id = returnRequestId();
@@ -312,39 +393,26 @@ export function initiateReturn(
     new Date(new Date(requestedAt).getTime() + hours * 3600000).toISOString();
 
   if (input.kind === "replacement") {
+    if (input.source === "customer") {
+      return requestDamagedReplacement(order, { reason: input.reason, images: input.images ?? [], note: input.reason });
+    }
     const replacement = generateReplacementOrder(order);
     saveOrder(replacement);
 
     const stages: ShipmentEvent[] = [
       {
         id: "requested",
-        title: "Return Requested",
+        title: "Replacement opened by admin",
         at: requestedAt,
         reached: true,
       },
       {
         id: "approved",
-        title: "Return Approved",
-        at: at(1),
+        title: "Free replacement order created",
+        at: requestedAt,
         location: "Pune, Maharashtra, India",
         reached: true,
         detail: `Replacement order ${replacement.id} created — no extra charge.`,
-      },
-      {
-        id: "pickup",
-        title: "Pickup of the original item",
-        at: at(24),
-        location: inputPicker(order),
-        reached: false,
-        detail: "The courier will collect the item you received; keep it packed.",
-      },
-      {
-        id: "replacement-shipped",
-        title: "Replacement planned",
-        at: at(72),
-        reached: false,
-        detail:
-          "Your replacement will be shipped once the pickup is verified at the facility.",
       },
     ];
 
@@ -354,9 +422,11 @@ export function initiateReturn(
       kind: "replacement",
       reason: input.reason,
       requestedAt,
+      source: "admin",
       status: "Replacement Created",
       returnCharges: 0,
       replacementOrderId: replacement.id,
+      images: input.images,
       stages,
     };
     persistReturnRequest(order.id, request);
@@ -396,6 +466,7 @@ export function initiateReturn(
     kind: "return",
     reason: input.reason,
     requestedAt,
+    source: input.source ?? "admin",
     status: "Return Requested",
     returnCharges: charges,
     refundAmount,

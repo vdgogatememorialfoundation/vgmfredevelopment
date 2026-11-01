@@ -17,8 +17,37 @@ const statusTone: Record<string, "burgundy" | "success" | "warning" | "neutral">
   Waitlist: "warning",
 };
 
-export default function EventCard({ event }: { event: Event }) {
+export default function EventCard({ event, variant = "full" }: { event: Event; variant?: "full" | "compact" }) {
   const { t } = useI18n();
+  if (variant === "compact") {
+    return (
+      <article className="card overflow-hidden">
+        <div className="relative">
+          <MediaPlaceholder
+            variant="event"
+            label={event.name}
+            src={event.bannerUrl}
+            aspectClassName="aspect-[16/10]"
+          />
+          <div className="absolute top-2 left-2">
+            <Badge tone="neutral">Past</Badge>
+          </div>
+        </div>
+        <div className="p-3">
+          <time dateTime={event.startDate} className="text-xs font-semibold text-burgundy">
+            {eventDateText(event)}
+          </time>
+          <h3 className="mt-1 text-sm font-semibold leading-snug text-text-primary">
+            <Link href={`/events/${event.slug}`} className="transition hover:text-burgundy">
+              {event.name}
+            </Link>
+          </h3>
+          <p className="mt-1 line-clamp-1 text-xs text-text-primary">{eventPlaceText(event)}</p>
+        </div>
+      </article>
+    );
+  }
+
   const status = resolvedRegistrationStatus(event);
   return (
     <article className="card flex flex-col overflow-hidden">

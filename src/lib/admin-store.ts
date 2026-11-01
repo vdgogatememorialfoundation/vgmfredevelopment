@@ -22,6 +22,7 @@ import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
 import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { barcodeSvg } from "@/lib/barcode";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
 import { emptySocial } from "@/lib/social";
@@ -875,7 +876,7 @@ export function createShipment(input: {
       sku: item.bookId,
       title: item.title,
       quantity: item.quantity,
-      barcode: getLiveBooks().find((b) => b.id === item.bookId)?.sku,
+      barcode: getLiveBooks().find((b) => b.id === item.bookId)?.barcode || getLiveBooks().find((b) => b.id === item.bookId)?.sku,
     })),
     status: "Booked",
     generatedAt: new Date().toISOString(),
@@ -943,10 +944,6 @@ function printHtml(title: string, html: string) {
   </style></head><body>${html}</body></html>`);
   win.document.close();
   win.print();
-}
-
-function barcodeSvg(code: string) {
-  return `<div style="font-family:monospace;letter-spacing:1px;font-size:14px;border:1px solid #999;display:inline-block;padding:6px 10px;">${code}</div>`;
 }
 
 export function printShippingLabel(shipment: ShipmentRecord) {

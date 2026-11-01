@@ -35,6 +35,8 @@ const ICONS: Record<string, string> = {
   ready: "M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8",
   picked: "M5 12l5 5L20 7",
   cancelled: "M6 6l12 12M18 6L6 18",
+  "cancel-review": "M4 6h16M4 12h10M4 18h14",
+  refunded: "M5 12l5 5L20 7",
   failed: "M6 6l12 12M18 6L6 18",
   Submitted: "M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4",
   "Under Review": "M4 6h16M4 12h10M4 18h14",

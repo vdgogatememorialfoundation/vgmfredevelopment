@@ -1,6 +1,7 @@
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import AnnouncementTicker from "@/components/common/AnnouncementTicker";
+import BackToTop from "@/components/common/BackToTop";
 import BannerPopup from "@/components/home/BannerPopup";
 import { SiteChat } from "@/components/chatbot/LiveChatWidget";
 import { VisitorBeacon } from "@/components/analytics/VisitorBeacon";
@@ -29,12 +30,15 @@ export default function StoreLayout({
         <MaintenanceGate>
           <HydratePublishedSite initial={initial}>
             <PartnerDrawerProvider>
+            <div className="sticky top-0 z-50">
             <Header />
             <AnnouncementTicker />
+            </div>
             <main id="main-content" className="flex-1">
               <SiteVisibilityGate>{children}</SiteVisibilityGate>
             </main>
             <Footer />
+            <BackToTop />
             <BannerPopup />
             <VisitorBeacon />
             <GoogleAnalytics />

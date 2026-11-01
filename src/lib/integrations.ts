@@ -268,14 +268,14 @@ export const defaultOrderSettings: OrderSettings = {
   freeAbove: 499,
   showCourierChoice: true,
   returns: {
-    enabled: true,
+    enabled: false,
     windowDays: 7,
-    pickupCharge: 50,
+    pickupCharge: 0,
     replacementAllowed: true,
-    reasons: ["Damaged or defective item", "Wrong item delivered", "Edition or size mismatch", "No longer needed"],
+    reasons: ["Damaged or defective item"],
   },
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
-  cancellation: { enabled: true, allowedUntil: "Packed", windowHours: 24, fee: 0 },
+  cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0 },
   adminActions: { processAfterDelivery: true },
 };
 
@@ -413,7 +413,11 @@ export function saveIntegrations(settings: IntegrationSettings) {
 }
 
 export function getOrderSettings(): OrderSettings {
-  return merge(defaultOrderSettings, readJSON<Partial<OrderSettings> | null>(ORDER_SETTINGS_KEY, null));
+  const settings = merge(defaultOrderSettings, readJSON<Partial<OrderSettings> | null>(ORDER_SETTINGS_KEY, null));
+  settings.cancellation.enabled = false;
+  settings.returns.enabled = false;
+  settings.returns.replacementAllowed = true;
+  return settings;
 }
 
 export function saveOrderSettings(settings: OrderSettings) {
@@ -473,21 +477,25 @@ export function shippingFeeSummary(settings = getOrderSettings()) {
   }
 }
 
-const cancellableOrder: Order["status"][] = ["Pending", "Paid", "Processing", "Ordered", "Packed", "Shipped"];
-
-export function canCustomerCancel(order: Order, settings = getOrderSettings(), now = Date.now()) {
-  if (!settings.cancellation.enabled) return false;
-  const limit = cancellableOrder.indexOf(settings.cancellation.allowedUntil);
-  const at = cancellableOrder.indexOf(order.status);
-  if (at === -1 || at > limit) return false;
-  const hours = (now - Date.parse(order.date)) / 36e5;
-  return settings.cancellation.windowHours <= 0 || hours <= settings.cancellation.windowHours;
+export function canCustomerCancel(_order?: Order, _settings = getOrderSettings(), _now = Date.now()) {
+  return false;
 }
 
-export function canCustomerReturn(order: Order, settings = getOrderSettings()) {
-  if (!settings.returns.enabled || order.status !== "Delivered" || order.returnRequest) return false;
+export function canCustomerReturn(_order?: Order, _settings = getOrderSettings()) {
+  return false;
+}
+
+export function canCustomerRequestReplacement(order: Order, settings = getOrderSettings()) {
+  if (!settings.returns.replacementAllowed || order.status !== "Delivered" || order.returnRequest) return false;
   const deliveredAt = order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
-  return (Date.now() - Date.parse(deliveredAt)) / 864e5 <= settings.returns.windowDays;
+  return (Date.now() - Date.parse(deliveredAt)) / 864e5 <= (order.returnableDays || settings.returns.windowDays);
+}
+
+export function customerOrderPolicyCopy() {
+  return {
+    title: "Replacements",
+    body: "Orders cannot be cancelled or returned from your account. If an item arrives damaged, share photos and request a replacement. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.",
+  };
 }
 
 export function mask(value: string) {
