@@ -82,37 +82,37 @@ export default function SeminarReviews() {
   const step = (delta: number) => setIndex((current + delta + items.length) % items.length);
 
   return (
-    <section className={`${look.section} py-10 sm:py-12`} aria-labelledby="seminar-reviews-heading">
+    <section className={`${look.section} py-6 sm:py-7`} aria-labelledby="seminar-reviews-heading">
       <div className="container">
-        <div className="mx-auto mb-6 max-w-2xl text-center">
-          <p className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${look.eyebrow}`}>{t("home.reviewsEyebrow")}</p>
-          <h2 id="seminar-reviews-heading" className={`mt-2 font-serif text-2xl font-semibold sm:text-3xl ${look.title}`}>
+        <div className="mx-auto mb-3 max-w-xl text-center">
+          <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${look.eyebrow}`}>{t("home.reviewsEyebrow")}</p>
+          <h2 id="seminar-reviews-heading" className={`mt-1 font-serif text-lg font-semibold sm:text-xl ${look.title}`}>
             {t("home.reviewsTitle")}
           </h2>
-          <p className={`mt-2 text-sm leading-6 ${look.desc}`}>{t("home.reviewsDesc")}</p>
+          <p className={`mt-1 text-[11px] leading-5 ${look.desc}`}>{t("home.reviewsDesc")}</p>
         </div>
 
-        <div className="relative mx-auto flex max-w-3xl items-center gap-3">
+        <div className="relative mx-auto flex max-w-2xl items-center gap-3">
           {controls.showArrows && items.length > 1 ? (
             <button type="button" aria-label="Previous review" onClick={() => step(-1)} className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-full border text-lg sm:flex ${look.arrow}`}>
               ‹
             </button>
           ) : null}
-          <div className={`min-w-0 flex-1 overflow-hidden rounded-xl border px-5 py-6 sm:px-8 ${look.card}`}>
+          <div className={`min-w-0 flex-1 overflow-hidden rounded-xl border px-4 py-4 sm:px-6 ${look.card}`}>
             <div key={active.id} className="text-center">
               {controls.showPhoto && active.photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={active.photo} alt={active.name} className="mx-auto mb-3 h-14 w-14 rounded-full border border-border object-cover" />
               ) : null}
               {controls.showStars ? <Stars rating={active.rating} /> : null}
-              <p className={`mt-3 font-serif text-base leading-7 sm:text-lg ${look.quote}`}>“{active.text}”</p>
-              <p className={`mt-4 text-sm font-semibold ${look.name}`}>{active.name}</p>
+              <p className={`mt-2 font-serif text-base leading-6 sm:text-lg ${look.quote}`}>“{active.text}”</p>
+              <p className={`mt-3 text-xs font-semibold ${look.name}`}>{active.name}</p>
               {controls.showEvent && active.event ? (
-                <p className={`mt-0.5 text-[11px] uppercase tracking-[0.14em] ${look.event}`}>{active.event}</p>
+                <p className={`mt-0.5 text-[10px] uppercase tracking-[0.14em] ${look.event}`}>{active.event}</p>
               ) : null}
             </div>
             {controls.showDots && items.length > 1 ? (
-              <div className="mt-4 flex items-center justify-center gap-1.5">
+              <div className="mt-3 flex items-center justify-center gap-1.5">
                 {items.map((item, slide) => (
                   <button
                     key={item.id}
