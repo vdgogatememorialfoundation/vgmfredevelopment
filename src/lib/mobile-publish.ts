@@ -19,6 +19,7 @@ import { getLiveBooks } from "@/lib/product-data";
 import { getSiteVisibility } from "@/lib/site-visibility";
 import { getPlatformCountries } from "@/lib/platform-countries";
 import { getProductReviews, getSeminarReviews } from "@/lib/reviews";
+import { getSiteText } from "@/lib/site-text";
 import type { MobileFeed } from "@/lib/mobile-types";
 
 /** Assemble the public app feed from the admin CMS in this browser. */
@@ -56,6 +57,7 @@ export function collectMobileSnapshot(): MobileFeed {
     platformCountries: getPlatformCountries(),
     seminarReviews: getSeminarReviews(),
     productReviews: getProductReviews(),
+    siteText: getSiteText(),
   };
 }
 

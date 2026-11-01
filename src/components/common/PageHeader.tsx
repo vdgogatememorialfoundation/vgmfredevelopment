@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSiteText } from "@/lib/use-site-text";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 interface PageHeaderProps {
@@ -11,12 +13,18 @@ interface PageHeaderProps {
 }
 
 export default function PageHeader({
-  eyebrow,
-  title,
-  description,
+  eyebrow: baseEyebrow,
+  title: baseTitle,
+  description: baseDescription,
   breadcrumb,
 }: PageHeaderProps) {
   const { t } = useI18n();
+  const pathname = usePathname() || "/";
+  const pages = useSiteText().pages;
+  const copy = pages[pathname.replace(/\/+$/, "") || "/"] ?? {};
+  const eyebrow = copy.eyebrow?.trim() || baseEyebrow;
+  const title = copy.title?.trim() || baseTitle;
+  const description = copy.description?.trim() || baseDescription;
   return (
     <section className="border-b border-border bg-paper">
       <div className="container py-7 sm:py-8">

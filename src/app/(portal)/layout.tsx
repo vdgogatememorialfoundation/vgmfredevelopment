@@ -11,7 +11,7 @@ export default function PortalLayout({
   children: React.ReactNode;
 }) {
   const feed = readMobileFeed();
-  const initial = { site: feed.site, flyers: feed.flyers ?? [], publishedAt: feed.publishedAt };
+  const initial = { site: feed.site, flyers: feed.flyers ?? [], publishedAt: feed.publishedAt, siteText: feed.siteText };
   return (
     <AuthProvider scope="portal">
       <LanguageProvider>

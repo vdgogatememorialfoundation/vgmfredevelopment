@@ -108,6 +108,10 @@ function applyFeed(feed: MobileFeed) {
     tryWrite(() => window.localStorage.setItem("vgmf_platform_countries", JSON.stringify(feed.platformCountries)));
   }
 
+  if (feed.siteText) {
+    tryWrite(() => window.localStorage.setItem("vgmf_site_text", JSON.stringify(feed.siteText)));
+  }
+
   if (feed.seminarReviews?.length) {
     tryWrite(() => replaceSeminarReviews(feed.seminarReviews ?? []));
   }

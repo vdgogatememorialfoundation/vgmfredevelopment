@@ -1,6 +1,7 @@
 import type { MobileAppearance } from "@/lib/mobile-appearance";
 import type { MobileAppConfig } from "@/lib/mobile-config";
 import type { PlatformCountries } from "@/lib/platform-countries";
+import type { SiteText } from "@/lib/site-text";
 import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, Review, SeminarReview, SocialLinks, Video } from "@/types";
 
 export type MobileFeed = {
@@ -44,4 +45,5 @@ export type MobileFeed = {
   platformCountries?: PlatformCountries;
   seminarReviews?: SeminarReview[];
   productReviews?: Review[];
+  siteText?: SiteText;
 };

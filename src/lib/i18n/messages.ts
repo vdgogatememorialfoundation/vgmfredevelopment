@@ -284,6 +284,8 @@ const en = {
 
 export type MessageKey = keyof typeof en;
 
+export const englishMessages: Readonly<Record<MessageKey, string>> = en;
+
 const hi: Partial<Record<MessageKey, string>> = {
   "nav.about": "हमारे बारे में",
   "nav.aboutFoundation": "फाउंडेशन",

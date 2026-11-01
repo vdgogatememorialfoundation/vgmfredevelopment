@@ -7,7 +7,7 @@ import { setMailReady } from "@/lib/auth-access";
 import { hydratePublishedSite, setPublishedFeed } from "@/lib/hydrate-public";
 import { hydratePartnerFeed } from "@/lib/partner-hydrate";
 
-export type PublishedBrand = Pick<MobileFeed, "site" | "flyers" | "publishedAt">;
+export type PublishedBrand = Pick<MobileFeed, "site" | "flyers" | "publishedAt" | "siteText">;
 
 export function HydratePublishedSite({
   initial,
@@ -24,6 +24,7 @@ export function HydratePublishedSite({
       site: initial.site,
       flyers: initial.flyers ?? [],
       publishedAt: initial.publishedAt,
+      siteText: initial.siteText,
     });
     return true;
   });

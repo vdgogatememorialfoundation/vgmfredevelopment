@@ -9,21 +9,24 @@ import FeaturedBooks from "@/components/home/FeaturedBooks";
 import ClinicsSection from "@/components/home/ClinicsSection";
 import SeminarReviews from "@/components/home/SeminarReviews";
 import SupportUs from "@/components/home/SupportUs";
+import HomeSections from "@/components/home/HomeSections";
 
 export default function HomePage() {
   return (
-    <>
-      <HeroSection />
-      <FoundationDirectory />
-      <AboutDirectory />
-      <SeminarReviews />
-      <SupportUs />
-      <UpcomingEvents />
-      <LegacySection />
-      <FeaturedBooks />
-      <FeaturedArticles />
-      <NoticeBoard />
-      <ClinicsSection />
-    </>
+    <HomeSections
+      sections={{
+        hero: <HeroSection />,
+        directory: <FoundationDirectory />,
+        about: <AboutDirectory />,
+        reviews: <SeminarReviews />,
+        support: <SupportUs />,
+        events: <UpcomingEvents />,
+        legacy: <LegacySection />,
+        books: <FeaturedBooks />,
+        articles: <FeaturedArticles />,
+        notices: <NoticeBoard />,
+        clinics: <ClinicsSection />,
+      }}
+    />
   );
 }
