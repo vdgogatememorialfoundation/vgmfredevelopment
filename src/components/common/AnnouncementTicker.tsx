@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getSettings } from "@/lib/admin-store";
 import { subscribeCms } from "@/lib/cms";
 import { buildTickerItems, type TickerItem } from "@/lib/ticker";
 
@@ -13,9 +14,14 @@ function loopItems(items: TickerItem[]) {
 
 export default function AnnouncementTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
+  const [seconds, setSeconds] = useState(36);
 
   useEffect(() => {
-    const refresh = () => setItems(buildTickerItems());
+    const refresh = () => {
+      setItems(buildTickerItems());
+      const saved = getSettings().tickerSeconds;
+      setSeconds(Math.min(90, Math.max(12, saved || 36)));
+    };
     refresh();
     const unsubscribe = subscribeCms(refresh);
     const timer = window.setInterval(refresh, 30_000);
@@ -33,7 +39,7 @@ export default function AnnouncementTicker() {
       aria-label="Scrolling announcements"
       className="relative z-0 overflow-hidden border-b border-ink-soft bg-ink text-white"
     >
-      <div className="animate-ticker flex w-max items-center gap-10 py-2.5">
+      <div className="animate-ticker flex w-max items-center gap-10 py-2.5" style={{ animationDuration: `${seconds}s` }}>
         {row.map((item, index) => (
           <TickerLink key={`${item.id}-${index}`} item={item} />
         ))}

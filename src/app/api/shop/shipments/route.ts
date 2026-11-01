@@ -3,7 +3,7 @@ import { orderBelongsTo, phonesMatch } from "@/lib/commerce-stamp";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { findShopOrder, orderPhoneMatches } from "@/lib/server/shop-orders";
-import { findShopShipment, listShopShipments, upsertShopShipment } from "@/lib/server/shop-shipments";
+import { deleteShopShipments, findShopShipment, listShopShipments, upsertShopShipment } from "@/lib/server/shop-shipments";
 import type { Order, ShipmentRecord } from "@/types";
 
 export const runtime = "nodejs";
@@ -54,6 +54,14 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as
     | { shipment?: ShipmentRecord; action?: string; orderId?: string; phone?: string }
     | null;
+  if (body?.action === "delete") {
+    const viewer = commerceViewer(request);
+    if (!viewer.portal) return NextResponse.json({ ok: false, error: "Sign in to the desk." }, { status: 403 });
+    const orderId = body.orderId ?? "";
+    if (!orderId) return NextResponse.json({ ok: false, error: "Send the order id." }, { status: 400 });
+    deleteShopShipments(orderId);
+    return NextResponse.json({ ok: true });
+  }
   if (body?.action === "refresh") {
     const orderId = body.orderId ?? "";
     if (!orderId) return NextResponse.json({ ok: false, error: "Send the order id." }, { status: 400 });

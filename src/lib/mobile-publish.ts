@@ -37,6 +37,7 @@ export function collectMobileSnapshot(): MobileFeed {
       phone: settings.supportPhone || siteConfig.phone,
       address: siteConfig.address,
       social: settings.social ?? siteConfig.social,
+      tickerSeconds: settings.tickerSeconds || 36,
     },
     flags: getSiteFlags(),
     visibility: getSiteVisibility().public,

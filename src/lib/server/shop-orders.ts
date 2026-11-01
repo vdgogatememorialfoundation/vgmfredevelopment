@@ -60,6 +60,12 @@ export function upsertShopOrder(order: Order) {
   return orders[0];
 }
 
+export function deleteShopOrder(id: string) {
+  const clean = id.trim();
+  if (!clean) return;
+  writeAll(readAll().filter((order) => order.id !== clean));
+}
+
 export function patchShopOrder(id: string, update: Partial<Order>) {
   const all = readAll();
   const index = all.findIndex((order) => order.id === id);

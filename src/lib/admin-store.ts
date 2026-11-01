@@ -75,6 +75,7 @@ function defaultSettings(): SiteSettings {
     },
     liveChatEnabled: false,
     liveChatOnline: false,
+    tickerSeconds: 36,
     processing: {
       daysToPack: 1,
       daysToPickup: 1,
@@ -137,6 +138,7 @@ export function getSettings(): SiteSettings {
     social: { ...defaults.social, ...current.social },
     liveChatEnabled: current.liveChatEnabled ?? defaults.liveChatEnabled,
     liveChatOnline: current.liveChatOnline ?? defaults.liveChatOnline,
+    tickerSeconds: current.tickerSeconds || defaults.tickerSeconds,
     pickupTimeslots: current.pickupTimeslots?.length ? current.pickupTimeslots : defaults.pickupTimeslots,
   };
 }
@@ -622,6 +624,8 @@ export function deleteOrder(orderId: string) {
   const order = getOrder(orderId);
   if (order?.stockCommitted) releaseStockForOrder(order);
   writeJSON("vgmf_orders", getOrders().filter((item) => item.id !== orderId));
+  removeOrderShipments(orderId);
+  forgetShopOrder(orderId);
 }
 
 export function resaveOrder(
@@ -752,6 +756,7 @@ export function cancelOrder(orderId: string, reason?: string) {
     reason
   );
   updateOrderInStore(next);
+  removeOrderShipments(orderId);
   sendOrderStatusEmail(next, "Cancelled");
 }
 
@@ -917,6 +922,37 @@ export function patchShipment(shipmentId: string, update: Partial<ShipmentRecord
 
 export function removeShipment(shipmentId: string) {
   writeJSON(SHIPMENTS_KEY, getShipments().filter((item) => item.id !== shipmentId));
+}
+
+/** Drop every shipment for an order from the desk and from the website copy. */
+export function removeOrderShipments(orderId: string) {
+  const next = getShipments().filter((item) => item.orderId !== orderId);
+  if (next.length === getShipments().length) {
+    forgetShopShipments(orderId);
+    return;
+  }
+  writeJSON(SHIPMENTS_KEY, next);
+  forgetShopShipments(orderId);
+}
+
+function forgetShopShipments(orderId: string) {
+  if (typeof window === "undefined" || !orderId) return;
+  void fetch("/api/shop/shipments", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "delete", orderId }),
+  }).catch(() => undefined);
+}
+
+function forgetShopOrder(orderId: string) {
+  if (typeof window === "undefined" || !orderId) return;
+  void fetch("/api/shop/orders", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "delete", orderId }),
+  }).catch(() => undefined);
 }
 
 export function updateShipmentStatus(shipmentId: string, status: ShipmentRecord["status"]) {

@@ -1,5 +1,6 @@
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions) {
   return new Date(date).toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -8,14 +9,15 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
 }
 
 export function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-IN", {
+  return `${new Date(iso).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
     weekday: "short",
     day: "numeric",
     month: "short",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  });
+  })} IST`;
 }
 
 export function formatDateRange(startDate: string, endDate: string) {

@@ -126,7 +126,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
     if (stage.id === "delivered" && !stage.reached) {
-      next.expected = shipment?.expectedBy ? `Courier delivery ${shipment.expectedBy}` : "Waiting for the courier";
+      next.expected = shipment?.expectedBy ? `Expected by ${shipment.expectedBy}` : "Expected delivery time is pending from the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
@@ -152,23 +152,23 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const stageDateLine = (stage: PipelineStageShape): string => {
     switch (stage.id) {
       case "ordered":
-        return statusStamp(order.date);
+        return statusStamp(order.date, order.deliveryAddress?.country);
       case "packed":
-        return stage.reached && dispatchedAt ? statusStamp(dispatchedAt) : "";
+        return stage.reached && dispatchedAt ? statusStamp(dispatchedAt, order.deliveryAddress?.country) : "";
       case "shipped":
-        return stage.reached && shippedAt ? statusStamp(shippedAt) : "";
+        return stage.reached && shippedAt ? statusStamp(shippedAt, order.deliveryAddress?.country) : "";
       case "out":
-        return stage.reached ? statusStamp(stage.events.at(-1)?.at) || "Out for delivery" : "";
+        return stage.reached ? statusStamp(stage.events.at(-1)?.at, order.deliveryAddress?.country) || "Out for delivery" : "";
       case "delivered":
-        return stage.reached && deliveredAt ? statusStamp(deliveredAt) : "";
+        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
       case "ready":
         return stage.reached ? `OTP ${pickupOtp(order.id)}` : "";
       case "picked":
-        return stage.reached && deliveredAt ? statusStamp(deliveredAt) : "";
+        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
       case "cancel-review":
         return "Reviewed by admin";
       case "cancelled":
-        return statusStamp(order.history?.find((item) => /cancel/i.test(item.status))?.at || order.date);
+        return statusStamp(order.history?.find((item) => /cancel/i.test(item.status))?.at || order.date, order.deliveryAddress?.country);
       case "refunded":
         return order.refundAmount ? `₹${order.refundAmount.toLocaleString("en-IN")}` : "";
       case "failed":
@@ -209,6 +209,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       metaFor={stageDateLine}
       timingFor={stageTiming}
       note={lineNote}
+      country={order.deliveryAddress?.country}
       pace={failed || order.status === "Delivered" ? null : { from: paceFrom, until: paceUntil }}
     />
   );

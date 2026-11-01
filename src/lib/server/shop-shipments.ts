@@ -39,6 +39,12 @@ export function upsertShopShipment(shipment: ShipmentRecord) {
   return next[0];
 }
 
+export function deleteShopShipments(orderId: string) {
+  const id = orderId.trim();
+  if (!id) return;
+  writeAll(readAll().filter((item) => item.orderId !== id));
+}
+
 export function replaceShopShipment(shipment: ShipmentRecord) {
   if (!shipment?.id || !shipment.orderId) return;
   const next = readAll().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);

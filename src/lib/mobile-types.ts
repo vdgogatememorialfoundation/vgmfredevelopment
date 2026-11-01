@@ -16,6 +16,7 @@ export type MobileFeed = {
     phone: string;
     address: string;
     social?: SocialLinks;
+    tickerSeconds?: number;
   };
   flags: {
     supportUs: boolean;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { flyingRoute } from "@/lib/flight-arc";
+import { flyingRoute, framePoints } from "@/lib/flight-arc";
 import { loadTrackingMaps } from "@/lib/maps-place";
 
 type LatLng = { lat: number; lng: number };
@@ -29,7 +29,7 @@ function sameSpot(a?: { lat?: number; lng?: number } | null, b?: { lat?: number;
 }
 
 function pin(color: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="46" height="58" viewBox="0 0 46 58"><path fill="${color}" d="M23 2a18 18 0 0 0-18 18c0 13 18 36 18 36s18-23 18-36A18 18 0 0 0 23 2z"/><circle cx="23" cy="20" r="7" fill="#fff"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="46" height="58" viewBox="0 0 46 58"><ellipse cx="23" cy="54" rx="9" ry="2.4" fill="rgba(28,25,23,.22)"/><path fill="${color}" d="M23 2a18 18 0 0 0-18 18c0 13 18 36 18 36s18-23 18-36A18 18 0 0 0 23 2z"/><path fill="rgba(255,255,255,.38)" d="M23 3.2c-7.2 0-12.4 4.2-14.6 9.2 5.2-3.4 24-3.4 29.2 0C35.4 7.4 30.2 3.2 23 3.2z"/><circle cx="23" cy="20" r="8" fill="#fff"/><circle cx="20.5" cy="17.2" r="2.2" fill="rgba(255,255,255,.95)"/></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
@@ -156,7 +156,11 @@ function Schematic({
         </svg>
       </div>
       {openPin ? (
-        <p className="px-3 text-xs text-text-muted">{openPin === "store" ? storeLabel : dropLabel}</p>
+        <p className="px-3 text-xs text-text-muted">
+          <b className="text-text-primary">{openPin === "store" ? "Store" : "Delivery"}</b>
+          {" · "}
+          {openPin === "store" ? storeLabel : dropLabel}
+        </p>
       ) : null}
       {showCourier ? (
         <AgentCard partner={partner} status={status} accepted={accepted} leg={leg} agentName={agentName} agentPhone={agentPhone} arrival="" />
@@ -271,10 +275,18 @@ export default function DeliveryMap({
         };
       };
     };
+    const timers: number[] = [];
     loadTrackingMaps(mapsKey)
       .then(() => {
         const maps = googleWin.google?.maps;
         if (cancelled || !maps || !hostRef.current) return;
+        const fitArc = (target: LiveMap, path: LatLng[]) => {
+          const box = new maps.LatLngBounds();
+          framePoints(path).forEach((point) => box.extend(point));
+          target.fitBounds(box, 28);
+          target.setTilt(0);
+          target.setHeading(0);
+        };
         if (sessionRef.current) {
           if (resolved.store && resolved.drop) {
             const path = flyingRoute([resolved.store, resolved.drop]);
@@ -291,11 +303,10 @@ export default function DeliveryMap({
                 zIndex: 8,
               });
             }
-            const nextBounds = new maps.LatLngBounds();
-            path.forEach((point) => nextBounds.extend(point));
-            sessionRef.current.map.fitBounds(nextBounds, { top: 96, right: 72, bottom: 72, left: 72 });
-            sessionRef.current.map.setTilt(0);
-            sessionRef.current.map.setHeading(0);
+            fitArc(sessionRef.current.map, path);
+            timers.push(window.setTimeout(() => {
+              if (sessionRef.current) fitArc(sessionRef.current.map, path);
+            }, 400));
           }
           return;
         }
@@ -320,20 +331,21 @@ export default function DeliveryMap({
           bounds.extend(point);
           const pinPoint = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
           const label = pinPoint.label || (kind === "store" ? "Store" : "Home");
-          const openInfo = () => {
-            const current = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
-            const title = escapeHtml(current.label || label);
-            const address = current.address ? `<div style="margin-top:4px">${escapeHtml(current.address)}</div>` : "";
-            info.setContent(`<div style="font-family:sans-serif;max-width:220px;color:#1c1917"><b>${title}</b>${address}</div>`);
-            info.open(map);
-          };
-          new maps.Marker({
+          const marker = new maps.Marker({
             map,
             position: point,
-            title: label,
+            title: kind === "store" ? "Store" : "Delivery",
             icon: { url: pin(color), scaledSize: new maps.Size(36, 46), anchor: new maps.Point(18, 46) },
             zIndex: kind === "store" ? 6 : 5,
-          }).addListener("click", openInfo);
+          });
+          marker.addListener("click", () => {
+            const current = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
+            const heading = kind === "store" ? "Store" : "Delivery";
+            const title = escapeHtml(current.label || label);
+            const address = current.address ? `<div style="margin-top:4px">${escapeHtml(current.address)}</div>` : "";
+            info.setContent(`<div style="font-family:sans-serif;max-width:220px;color:#1c1917"><b>${heading}</b><div style="margin-top:2px">${title}</div>${address}</div>`);
+            info.open(map, marker);
+          });
         };
         place(resolved.store, "store", STORE);
         place(resolved.drop, "drop", DROP);
@@ -356,9 +368,9 @@ export default function DeliveryMap({
             zIndex: 8,
           });
           path.forEach((point) => bounds.extend(point));
-          map.fitBounds(bounds, { top: 96, right: 72, bottom: 72, left: 72 });
-          map.setTilt(0);
-          map.setHeading(0);
+          fitArc(map, path);
+          maps.event?.addListenerOnce(map, "idle", () => fitArc(map, path));
+          timers.push(window.setTimeout(() => fitArc(map, path), 400));
         }
         sessionRef.current = session;
         if (!cancelled) setMapReady(true);
@@ -366,6 +378,7 @@ export default function DeliveryMap({
       .catch(() => undefined);
     return () => {
       cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
     };
   }, [mapsKey, resolved.store, resolved.drop, store.label, drop.label]);
 
@@ -414,9 +427,8 @@ export default function DeliveryMap({
     }
     live.path = path;
     const bounds = new maps.LatLngBounds();
-    path.forEach((point) => bounds.extend(point));
-    const pad = { top: 96, right: 72, bottom: 72, left: 72 };
-    live.map.fitBounds(bounds, pad);
+    framePoints(path).forEach((point) => bounds.extend(point));
+    live.map.fitBounds(bounds, 28);
     live.map.setTilt(0);
     live.map.setHeading(0);
     if (!accepted || !agent) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
-import { findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
+import { deleteShopOrder, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
+import { deleteShopShipments } from "@/lib/server/shop-shipments";
 import type { Order } from "@/types";
 
 export const runtime = "nodejs";
@@ -29,7 +30,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { order?: Order } | null;
+  const body = (await request.json().catch(() => null)) as { order?: Order; action?: string; orderId?: string } | null;
+  if (body?.action === "delete") {
+    const viewer = commerceViewer(request);
+    if (!viewer.portal) return NextResponse.json({ ok: false, error: "Sign in to the desk." }, { status: 403 });
+    const orderId = body.orderId ?? "";
+    if (!orderId) return NextResponse.json({ ok: false, error: "Send the order id." }, { status: 400 });
+    deleteShopOrder(orderId);
+    deleteShopShipments(orderId);
+    return NextResponse.json({ ok: true });
+  }
   const order = body?.order;
   if (!order || typeof order.id !== "string" || !Array.isArray(order.items)) {
     return NextResponse.json({ ok: false, error: "Send the order." }, { status: 400 });

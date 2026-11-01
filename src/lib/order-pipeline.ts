@@ -393,7 +393,7 @@ export function buildTrackingStages(
   if (packedReached) {
     packedEvents.push({
       id: "packed",
-      title: "Your item has been packed at our facility",
+      title: "Packed and ready for handover",
       at: packedAt || order.date,
       location: origin,
       reached: true,
@@ -430,7 +430,7 @@ export function buildTrackingStages(
   if (shippedReached && shippedEvents.length === 0) {
     shippedEvents.push({
       id: "shipped",
-      title: "Courier has the parcel",
+      title: "Collected by the courier",
       at: fromScans.at || packedAt || order.date,
       location: origin,
       detail: shippedReached && trackingId ? `Courier: ${courier} · Tracking id: ${trackingId}` : `Courier: ${courier}`,
@@ -446,7 +446,7 @@ export function buildTrackingStages(
   if (hyperlocal && outReached && outEvents.length === 0) {
     outEvents.push({
       id: "out",
-      title: "Rider picked up from the store",
+      title: "Collected from the store",
       at: fromScans.at || packedAt || order.date,
       location: origin,
       reached: true,
@@ -478,24 +478,24 @@ export function buildTrackingStages(
     makeStage(
       "ordered",
       "Ordered",
-      "Order placed",
-      [{ id: "placed", title: "Your order has been placed", at: order.date, location: origin, reached: true }],
+      "Order confirmed",
+      [{ id: "placed", title: "Order confirmed", at: order.date, location: origin, reached: true }],
       true
     ),
-    makeStage("packed", "Packed", "Packed at our facility", packedEvents, packedReached),
+    makeStage("packed", "Packed", "Packed for dispatch", packedEvents, packedReached),
   ];
   if (!hyperlocal) {
     stages.push(
-      makeStage("shipped", "Shipped", "Handed to the courier", shippedEvents, shippedReached)
+      makeStage("shipped", "Shipped", "Handed over to the courier", shippedEvents, shippedReached)
     );
   }
-  stages.push(makeStage("out", "Out for Delivery", "Courier on the way", outEvents, outReached));
+  stages.push(makeStage("out", "Out for delivery", "On the way to the address", outEvents, outReached));
 
   if (failedReached) {
     stages.push(makeStage("failed", "Failed", "Delivery failed", failedEvents, true));
     return tally(stages.filter((stage) => stage.reached || stage.id === "failed"));
   }
-  stages.push(makeStage("delivered", "Delivered", "Delivered", deliveredEvents, deliveredReached));
+  stages.push(makeStage("delivered", "Delivered", "Delivered to the address", deliveredEvents, deliveredReached));
 
   return tally(holdBeforeNext(stages));
 }

@@ -8,6 +8,7 @@ import {
   getShipments,
   patchOrder,
   patchShipment,
+  removeOrderShipments,
   printShippingLabel,
   saveShipmentRecord,
   sendEmail,
@@ -777,6 +778,23 @@ function syncOrderFromShipment(orderId: string, status: ShipmentRecord["status"]
             ? "Packed"
             : "Shipped";
   if (order.status !== target) patchOrder(orderId, { status: target }, target);
+}
+
+/** Cancel the courier booking, then remove the shipment from the desk. */
+export async function dropOrderShipments(orderId: string) {
+  const rows = getShipments().filter((item) => item.orderId === orderId);
+  for (const shipment of rows) {
+    if (shipment.note === "Cancelled" || !shipment.live || !shipment.provider || shipment.provider === "local") continue;
+    await post({
+      action: "cancel",
+      provider: shipment.provider,
+      creds: credsFrom(getIntegrations()),
+      providerOrderId: shipment.providerOrderId,
+      providerShipmentId: shipment.providerShipmentId,
+      awb: shipment.awb,
+    }).catch(() => undefined);
+  }
+  removeOrderShipments(orderId);
 }
 
 export async function cancelShipment(shipmentId: string) {

@@ -95,6 +95,7 @@ function applyFeed(feed: MobileFeed) {
       supportEmail: feed.site.email || current.supportEmail,
       supportPhone: feed.site.phone || current.supportPhone,
       social: { ...current.social, ...feed.site.social },
+      tickerSeconds: feed.site.tickerSeconds || current.tickerSeconds || 36,
     });
   });
 

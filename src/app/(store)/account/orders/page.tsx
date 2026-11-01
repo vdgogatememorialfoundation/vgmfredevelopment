@@ -18,7 +18,7 @@ import type { Order } from "@/types";
 
 function latestStatusText(order: Order) {
   const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
-  return deliveryExpectation(order.status, shipment?.expectedBy || order.eta);
+  return deliveryExpectation(order.status, shipment?.expectedBy || order.eta, Date.now(), order.deliveryAddress?.country);
 }
 
 export default function OrdersPage() {

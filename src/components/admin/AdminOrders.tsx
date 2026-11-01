@@ -30,6 +30,7 @@ import {
   bookShipment,
   MANUAL_PORTALS,
   cancelShipment,
+  dropOrderShipments,
   createReturnShipment,
   downloadInvoice,
   downloadLabel,
@@ -198,10 +199,16 @@ export function OrdersDashboard() {
             const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
             if (shipment) await downloadLabel(shipment.id);
           })}>Labels</Button>
-          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", (id) => cancelOrder(id, "Bulk cancel"))}>Cancel</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", async (id) => {
+            await dropOrderShipments(id);
+            cancelOrder(id, "Bulk cancel");
+          })}>Cancel</Button>
           <Button variant="danger" disabled={Boolean(bulkBusy)} onClick={() => {
             if (!window.confirm(`Delete ${selectedIds.length} order(s)? This cannot be undone.`)) return;
-            bulk("Deleted", (id) => deleteOrder(id));
+            bulk("Deleted", async (id) => {
+              await dropOrderShipments(id);
+              deleteOrder(id);
+            });
           }}>Delete</Button>
         </div>
       )}
@@ -659,9 +666,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const applyStatus = () =>
     run("status", async () => {
       if (status === "Cancelled") {
-        if (shipment) await cancelShipment(shipment.id).catch(() => undefined);
+        await dropOrderShipments(order.id);
         cancelOrder(order.id, cancelReason || "Cancelled by admin");
-        return "Order cancelled. The customer is notified.";
+        return "Order cancelled. The shipment was removed from the desk.";
       }
       setOrderStatus(order.id, status);
       if (status === "Packed" && order.deliveryMode === "delivery" && !shipment && integrations.shipping.autoBookOnPack) {
@@ -832,10 +839,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   onClick={() => {
                     if (!window.confirm("Cancel this order? The customer is notified.")) return;
                     run("cancel", async () => {
-                      if (shipment) await cancelShipment(shipment.id).catch(() => undefined);
+                      await dropOrderShipments(order.id);
                       cancelOrder(order.id, cancelReason || "Cancelled by admin");
                       setStatus("Cancelled");
-                      return "Order cancelled.";
+                      return "Order cancelled. The shipment was removed from the desk.";
                     });
                   }}
                 >
@@ -1193,7 +1200,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         {shipment && <Button variant="ghost" onClick={() => printShippingLabel(shipment)}>Print shipping label</Button>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
-          run("delete", () => { deleteOrder(order.id); return "Order deleted."; });
+          run("delete", async () => {
+            await dropOrderShipments(order.id);
+            deleteOrder(order.id);
+            return "Order deleted. The shipment was removed from the desk.";
+          });
         }}>Delete order</Button>
       </div>
 

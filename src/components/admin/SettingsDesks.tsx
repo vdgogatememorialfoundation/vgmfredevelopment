@@ -217,6 +217,21 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
+      <Card title="Announcement ticker" text="How fast the bar under the header moves. A lower number is faster. Saving publishes it with the rest of the site.">
+        <label className="block text-sm text-slate-700">
+          Speed · {Math.min(90, Math.max(12, settings.tickerSeconds || 36))} seconds for one pass
+          <input
+            type="range"
+            min={12}
+            max={90}
+            step={2}
+            className="mt-2 w-full"
+            value={Math.min(90, Math.max(12, settings.tickerSeconds || 36))}
+            onChange={(event) => set({ tickerSeconds: Number(event.target.value) })}
+          />
+        </label>
+      </Card>
+
       <Card title="Google Maps" text="Used on clinics, events, live tracking and the analytics live map. Paste a Maps URL if you leave this blank.">
         <Secret
           label="Google Maps JavaScript API key"
@@ -280,8 +295,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds };
 }
 
 /* ---------------- Payments ---------------- */

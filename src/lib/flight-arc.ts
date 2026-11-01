@@ -25,6 +25,24 @@ export function flyingArc(from: FlightPoint, to: FlightPoint) {
   return path;
 }
 
+/** Path plus a margin so the peak of the arc stays inside the map. */
+export function framePoints(path: FlightPoint[]) {
+  if (!path.length) return path;
+  const lats = path.map((point) => point.lat);
+  const lngs = path.map((point) => point.lng);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const latPad = Math.max((maxLat - minLat) * 0.45, 0.004);
+  const lngPad = Math.max((maxLng - minLng) * 0.45, 0.004);
+  return [
+    ...path,
+    { lat: minLat - latPad, lng: minLng - lngPad },
+    { lat: maxLat + latPad, lng: maxLng + lngPad },
+  ];
+}
+
 export function flyingRoute(points: FlightPoint[]) {
   const path: FlightPoint[] = [];
   for (let i = 0; i < points.length - 1; i += 1) {

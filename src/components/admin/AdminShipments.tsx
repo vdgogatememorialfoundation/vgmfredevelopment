@@ -31,7 +31,7 @@ const SHIPMENT_TONES: Record<string, string> = {
 export function ShipmentsSection() {
   const { version } = useCommerceMirror();
   const [extra, setExtra] = useState(0);
-  const shipments = useMemo(() => getShipments(), [version, extra]);
+  const shipments = useMemo(() => getShipments().filter((item) => item.note !== "Cancelled"), [version, extra]);
   const refresh = () => setExtra((value) => value + 1);
 
   return (

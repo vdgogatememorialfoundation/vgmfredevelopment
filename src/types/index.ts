@@ -683,6 +683,8 @@ export interface SiteSettings {
   outOfStockThreshold: number;
   liveChatEnabled?: boolean;
   liveChatOnline?: boolean;
+  /** Seconds for one pass of the announcement ticker. */
+  tickerSeconds?: number;
 }
 
 export interface AdminCategory {

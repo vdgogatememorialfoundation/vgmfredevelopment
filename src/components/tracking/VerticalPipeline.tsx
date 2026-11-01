@@ -24,6 +24,8 @@ interface VerticalPipelineProps {
   metaFor?: (stage: PipelineStageShape) => string;
   timingFor?: (stage: PipelineStageShape) => { label: string; tone: PipelineTone } | null;
   note?: string;
+  /** Delivery country. India stays on IST. Any other country uses UTC. */
+  country?: string;
   /** Milliseconds. The line creeps from the current step toward the next one until `until`. */
   pace?: { from: number; until: number } | null;
 }
@@ -80,6 +82,7 @@ export default function VerticalPipeline({
   metaFor,
   timingFor,
   note,
+  country,
   pace,
 }: VerticalPipelineProps) {
   const lastReachedIdx = stages.map((stage) => stage.reached).lastIndexOf(true);
@@ -202,7 +205,8 @@ export default function VerticalPipeline({
           const failedStep = Boolean(
             failed && /fail|reject|invalid|cancel|expire/i.test(stage.id)
           );
-          const nextHint = index === firstUpcoming && stage.caption ? stage.caption : "";
+          const promise = stages.find((item) => item.id === "delivered" || item.id === "picked")?.expected || "";
+          const nextHint = index === firstUpcoming ? promise : "";
           return (
             <li
               key={stage.id}
@@ -220,7 +224,7 @@ export default function VerticalPipeline({
                   {stamp && state !== "upcoming" ? <span className="vgmf-ship-time">{stamp}</span> : null}
                 </div>
                 {stage.caption && state !== "upcoming" ? <div className="vgmf-ship-msg">{stage.caption}</div> : null}
-                {nextHint && state === "upcoming" ? <div className="vgmf-ship-next">Up next · {nextHint}</div> : null}
+                {nextHint && state === "upcoming" ? <div className="vgmf-ship-next">{nextHint}</div> : null}
                 {timing && state !== "upcoming" ? (
                   <span className={`vgmf-ship-expect${timing.tone === "red" ? " is-late" : ""}`}>{timing.label}</span>
                 ) : null}
@@ -236,7 +240,7 @@ export default function VerticalPipeline({
                     {kids.map((event) => (
                       <li key={event.id} className={/fail|undeliver|rto/i.test(event.title) ? "failed" : ""}>
                         <b>{event.title}</b>
-                        {event.at ? <div className="when">{statusStamp(event.at)}</div> : null}
+                        {event.at ? <div className="when">{statusStamp(event.at, country)}</div> : null}
                         {event.location ? <div className="where">{event.location}</div> : null}
                         {event.detail ? <div className="where">{event.detail}</div> : null}
                         {event.agent?.name || event.agent?.phone ? (

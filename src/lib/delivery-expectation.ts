@@ -38,6 +38,17 @@ export function parseExpected(text: string | undefined, around: number): number 
   return null;
 }
 
+/** India uses IST. Any other delivery country uses UTC. */
+export function clockZone(country?: string) {
+  const value = (country ?? "").trim().toLowerCase();
+  if (value && !/^(in|ind|india)$/.test(value)) return "UTC";
+  return "Asia/Kolkata";
+}
+
+export function zoneSuffix(zone: string) {
+  return zone === "UTC" ? "UTC" : "IST";
+}
+
 /** Weekday, date and clock in India. */
 export function formatIndiaClock(ms: number) {
   return new Intl.DateTimeFormat("en-IN", {
@@ -89,13 +100,14 @@ export function customerAddressLine(address?: {
   return [line1, address.landmark, city, address.state, pin].filter(Boolean).join(", ");
 }
 
-/** Weekday, date and time in India, under each tracking update. */
-export function statusStamp(at?: string) {
+/** Weekday, date and time. India addresses use IST. Other countries use UTC. */
+export function statusStamp(at?: string, country?: string) {
   if (!at) return "";
   const date = new Date(at);
   if (Number.isNaN(date.getTime())) return at;
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
+  const zone = clockZone(country);
+  const text = new Intl.DateTimeFormat("en-IN", {
+    timeZone: zone,
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -103,11 +115,12 @@ export function statusStamp(at?: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+  return `${text} ${zoneSuffix(zone)}`;
 }
 
-function istDay(ms: number) {
+function istDay(ms: number, zone = "Asia/Kolkata") {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
+    timeZone: zone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -116,16 +129,16 @@ function istDay(ms: number) {
   return `${bag.year}-${bag.month}-${bag.day}`;
 }
 
-function clockLabel(ms: number) {
+function clockLabel(ms: number, zone = "Asia/Kolkata") {
   return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
+    timeZone: zone,
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(ms));
 }
 
 /** My Orders preview: expected date, tomorrow, today, or early. */
-export function deliveryExpectation(status: string, expectedText?: string, now = Date.now()) {
+export function deliveryExpectation(status: string, expectedText?: string, now = Date.now(), country?: string) {
   if (status === "Delivered") return "Your order is delivered";
   if (status === "Cancelled") return "This order was cancelled";
   if (status === "Failed") return "Delivery failed";
@@ -136,16 +149,17 @@ export function deliveryExpectation(status: string, expectedText?: string, now =
     if (status === "Packed" || status === "Ready to Ship") return "Your order is packed";
     return "Your order is placed";
   }
-  const today = istDay(now);
-  const due = istDay(expected);
-  const tomorrow = istDay(now + 24 * 60 * 60 * 1000);
+  const zone = clockZone(country);
+  const today = istDay(now, zone);
+  const due = istDay(expected, zone);
+  const tomorrow = istDay(now + 24 * 60 * 60 * 1000, zone);
   if (status === "Out for Delivery" && due > today) return "Arriving early";
   const timed = /\d:\d{2}/.test(expectedText ?? "");
-  const by = timed ? clockLabel(expected) : "10:00 pm";
+  const by = timed ? `${clockLabel(expected, zone)} ${zoneSuffix(zone)}` : "10:00 pm";
   if (due === today) return timed ? `Arriving today by ${by}` : "Arriving today";
   if (due === tomorrow) return `Arriving tomorrow by ${by}`;
   const dateLabel = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
+    timeZone: zone,
     weekday: "short",
     day: "numeric",
     month: "short",
