@@ -19,12 +19,14 @@ export const fallbackApplicationStatuses: Record<PartnerPortalId, string[]> = {
     "Issued",
     "E-ticket",
     "Checked in",
-    "Certificate",
+    "Certificate issued",
     "Invalid",
     "Cancelled",
+    "Expired",
   ],
   autism: [
     "Pre-registration",
+    "Approved",
     "Main registration",
     "Submitted",
     "Pending",
@@ -33,17 +35,19 @@ export const fallbackApplicationStatuses: Record<PartnerPortalId, string[]> = {
     "Issued",
     "E-ticket",
     "Checked in",
-    "Certificate",
+    "Certificate issued",
     "Invalid",
     "Cancelled",
+    "Expired",
   ],
-  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Waitlisted", "Accepted", "Rejected"],
+  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Waitlisted", "Accepted", "Certificate issued", "Rejected"],
 };
 
 const PIPELINE_ORDER: Record<PartnerPortalId, string[]> = {
-  seminar: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "E-ticket", "Checked in", "Certificate"],
+  seminar: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "E-ticket", "Checked in", "Certificate issued"],
   autism: [
     "Pre-registration",
+    "Approved",
     "Main registration",
     "Submitted",
     "Pending",
@@ -52,12 +56,12 @@ const PIPELINE_ORDER: Record<PartnerPortalId, string[]> = {
     "Issued",
     "E-ticket",
     "Checked in",
-    "Certificate",
+    "Certificate issued",
   ],
-  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Waitlisted", "Accepted"],
+  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Waitlisted", "Accepted", "Certificate issued"],
 };
 
-const TERMINAL_STATUSES = ["Invalid", "Cancelled", "Rejected"];
+const TERMINAL_STATUSES = ["Invalid", "Cancelled", "Rejected", "Expired"];
 
 const STATUS_ALIASES: Record<string, string> = {
   "pre registration": "Pre-registration",
@@ -68,13 +72,19 @@ const STATUS_ALIASES: Record<string, string> = {
   "e ticket": "E-ticket",
   eticket: "E-ticket",
   ticket: "E-ticket",
+  "e ticket issued": "E-ticket",
+  eticketissued: "E-ticket",
   issued: "Issued",
   "checked in": "Checked in",
   checkedin: "Checked in",
   "check in": "Checked in",
   scanned: "Checked in",
-  certificate: "Certificate",
-  cert: "Certificate",
+  "certificate issued": "Certificate issued",
+  certificateissued: "Certificate issued",
+  "cert issued": "Certificate issued",
+  certificate: "Certificate issued",
+  cert: "Certificate issued",
+  expired: "Expired",
   underreview: "Under Review",
   "under review": "Under Review",
   shortlist: "Shortlisted",
@@ -109,7 +119,8 @@ export function canonicalizePartnerStatus(raw?: string) {
   if (STATUS_ALIASES[key]) return STATUS_ALIASES[key];
   const compact = key.replace(/\s+/g, "");
   if (STATUS_ALIASES[compact]) return STATUS_ALIASES[compact];
-  for (const [alias, label] of Object.entries(STATUS_ALIASES)) {
+  const aliases = Object.entries(STATUS_ALIASES).sort((left, right) => right[0].length - left[0].length);
+  for (const [alias, label] of aliases) {
     if (alias.length < 4) continue;
     if (key.includes(alias) || compact.includes(alias.replace(/\s+/g, ""))) return label;
   }

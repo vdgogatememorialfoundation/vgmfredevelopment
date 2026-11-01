@@ -16,8 +16,6 @@ import {
   formatPrice,
   getEstimatedDeliveryDate,
   generateOrderId,
-  generateTrackingId,
-  pickCourier,
   saveOrder,
   clearCart,
 } from "@/lib/store";
@@ -119,7 +117,7 @@ export default function CheckoutClient() {
           declaredValue: cartValue,
           bookIds: cartKey.split(",").map((part) => part.split("x")[0]),
         });
-        if (!cancelled) setLiveRates(result.live ? { pincode: address.pincode, rates: result.rates } : null);
+        if (!cancelled) setLiveRates({ pincode: address.pincode, rates: result.rates });
       } catch {
         if (!cancelled) setLiveRates(null);
       } finally {
@@ -133,22 +131,13 @@ export default function CheckoutClient() {
   }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, cartKey, cartValue, cartUnits]);
 
   const courierOptions: CourierOption[] =
-    liveRates && liveRates.pincode === address.pincode && liveRates.rates.length
+    liveRates && liveRates.pincode === address.pincode
       ? liveRates.rates.map((rate) => ({
           ...rate,
           key: `${rate.provider}:${rate.courierId}`,
           deliverBy: getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
         }))
-      : quote.offers.map((offer) => ({
-          provider: "local",
-          courierId: offer.id,
-          courierName: offer.name,
-          rate: offer.charge,
-          etaDays: offer.transitDays,
-          live: false,
-          key: `local:${offer.id}`,
-          deliverBy: offer.deliverBy,
-        }));
+      : [];
   const selectedCourier =
     courierOptions.find((option) => option.key === courierId) ?? courierOptions[0];
   const activeCourierId = selectedCourier?.key ?? "";
@@ -237,7 +226,7 @@ export default function CheckoutClient() {
         return;
       }
     }
-    const courierName = selectedCourier?.courierName ?? pickCourier(id);
+    const courierName = selectedCourier?.courierName;
     const now = new Date().toISOString();
     const deliveryAddress =
       deliveryMode === "delivery"
@@ -279,10 +268,6 @@ export default function CheckoutClient() {
         deliveryMode === "store_pickup"
           ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
           : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
-      trackingId:
-        deliveryMode === "delivery"
-          ? generateTrackingId(courierName)
-          : undefined,
       courierName: deliveryMode === "delivery" ? courierName : undefined,
               courierChoice:
         deliveryMode === "delivery" && selectedCourier
@@ -314,7 +299,7 @@ export default function CheckoutClient() {
         params: [deliveryAddress.fullName, id, `₹${totals.total}`],
         subject: `Order ${id} placed`,
         template: "order-placed",
-        body: `Dear Guest,\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nWe received your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${deliveryMode === "delivery" ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""} via ${courierName}.` : `Pickup from ${pickupLocation.name}.`}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+        body: `Dear Guest,\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nWe received your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${deliveryMode === "delivery" ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.` : `Pickup from ${pickupLocation.name}.`}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
       });
     }
     setOrderId(id);

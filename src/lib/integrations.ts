@@ -1,4 +1,5 @@
 import type { Order } from "@/types";
+import { requiresLiveCommerce } from "@/lib/platform";
 
 const INTEGRATIONS_KEY = "vgmf_integrations";
 const ORDER_SETTINGS_KEY = "vgmf_order_settings";
@@ -425,7 +426,10 @@ export function saveOrderSettings(settings: OrderSettings) {
 }
 
 export function razorpayKeys(settings = getIntegrations()) {
-  const { mode } = settings.razorpay;
+  const stored = settings.razorpay.mode;
+  const liveReady = Boolean(settings.razorpay.liveKeyId && settings.razorpay.liveKeySecret);
+  const testReady = Boolean(settings.razorpay.testKeyId && settings.razorpay.testKeySecret);
+  const mode = stored === "demo" && requiresLiveCommerce() ? (liveReady ? "live" : testReady ? "test" : stored) : stored;
   if (mode === "live") return { mode, keyId: settings.razorpay.liveKeyId, keySecret: settings.razorpay.liveKeySecret };
   if (mode === "test") return { mode, keyId: settings.razorpay.testKeyId, keySecret: settings.razorpay.testKeySecret };
   return { mode, keyId: "", keySecret: "" };

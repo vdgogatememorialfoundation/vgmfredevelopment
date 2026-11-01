@@ -1,14 +1,10 @@
 /* Seminar commerce-track look: vertical pipe, slow downward fill, maps only for hyperlocal. */
 .vgmf-trk {
-  --tl-green: #067d62;
-  --tl-line: #d5d9d9;
-  --tl-muted: #565959;
-  --tl-text: #0f1111;
   color: var(--tl-text);
   font-size: 14px;
 }
 .vgmf-trk a {
-  color: #007185;
+  color: var(--tl-link);
 }
 .vgmf-ship-pipe {
   list-style: none;
@@ -22,7 +18,7 @@
 .vgmf-ship-pipe > li {
   position: relative;
   padding: 0 0 26px 52px;
-  color: #8d9096;
+  color: var(--tl-muted);
   animation: vgmfTrkIn 0.45s ease both;
   animation-delay: calc(var(--i) * 0.08s);
 }
@@ -53,17 +49,24 @@
   width: 3px;
   background: var(--tl-green);
   border-radius: 2px;
-  clip-path: inset(0 0 calc((1 - var(--grow, 0)) * 100%) 0);
+  clip-path: inset(0 0 100% 0);
   z-index: 0;
   pointer-events: none;
 }
+.vgmf-ship-pipe > li.done::after {
+  animation: vgmf-line-full 2.8s linear forwards;
+  animation-delay: calc(var(--i) * 2.8s);
+}
+.vgmf-ship-pipe > li.active::after {
+  animation: vgmf-line-partial 9s linear forwards;
+  animation-delay: calc(var(--i) * 2.8s);
+}
 .vgmf-ship-pipe > li.is-failed::after {
-  background: #c2410c;
+  background: var(--tl-failed);
 }
 .vgmf-ship-pipe > li.done,
 .vgmf-ship-pipe > li.active {
   color: var(--tl-text);
-  transition: --grow var(--draw, 0s) linear;
 }
 .vgmf-ship-pipe > li > .dot {
   position: absolute;
@@ -72,13 +75,13 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 2px solid #c7cccc;
+  border: 2px solid var(--tl-line);
   background: #fff;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #8d9096;
+  color: var(--tl-muted);
   z-index: 1;
 }
 .vgmf-ship-pipe > li.done > .dot,
@@ -88,8 +91,8 @@
   color: #fff;
 }
 .vgmf-ship-pipe > li.is-failed > .dot {
-  background: #c2410c;
-  border-color: #c2410c;
+  background: var(--tl-failed);
+  border-color: var(--tl-failed);
   color: #fff;
 }
 .vgmf-ship-pipe > li.active > .dot {
@@ -122,7 +125,7 @@
 .vgmf-ship-msg,
 .vgmf-ship-next {
   margin-top: 2px;
-  color: #3f4448;
+  color: var(--tl-text);
   font-size: 0.88rem;
   font-weight: 500;
 }
@@ -141,7 +144,7 @@
 }
 .vgmf-ship-expect.is-late {
   background: #fff7ed;
-  color: #c2410c;
+  color: var(--tl-failed);
 }
 .vgmf-ship-courier {
   margin-top: 8px;
@@ -162,7 +165,7 @@
   margin-top: 8px;
   border: 0;
   background: transparent;
-  color: #007185;
+  color: var(--tl-link);
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
@@ -190,7 +193,7 @@
   background: var(--tl-green);
 }
 .vgmf-ship-kids > li.failed::before {
-  background: #c2410c;
+  background: var(--tl-failed);
 }
 .vgmf-ship-kids .when,
 .vgmf-ship-kids .where {
@@ -270,6 +273,14 @@
   inherits: true;
   initial-value: 0;
 }
+@keyframes vgmf-line-full {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes vgmf-line-partial {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 45% 0); }
+}
 @keyframes vgmfTrkIn {
   from {
     opacity: 0;
@@ -280,19 +291,19 @@
 }
 @keyframes vgmfTrkPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(6, 125, 98, 0.35);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tl-green) 35%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 10px rgba(6, 125, 98, 0);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--tl-green) 0%, transparent);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .vgmf-ship-pipe > li,
-  .vgmf-ship-pipe > li.active > .dot {
+  .vgmf-ship-pipe > li.active > .dot,
+  .vgmf-ship-pipe > li.done::after,
+  .vgmf-ship-pipe > li.active::after {
     animation: none;
   }
-  .vgmf-ship-pipe > li.done,
-  .vgmf-ship-pipe > li.active {
-    transition: none;
-  }
+  .vgmf-ship-pipe > li.done::after { clip-path: inset(0 0 0 0); }
+  .vgmf-ship-pipe > li.active::after { clip-path: inset(0 0 45% 0); }
 }

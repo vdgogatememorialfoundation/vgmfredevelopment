@@ -310,10 +310,13 @@ export function buildTrackingStages(
         picked
       ),
     ];
-    return tally(stages);
+    return tally(holdBeforeNext(stages));
   }
 
-  const booked = Boolean(shipment && shipment.note !== "Cancelled") || Boolean(trackingId) || ["Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered", "Failed"].includes(order.status);
+  const shipmentBooked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.status));
+  const booked =
+    shipmentBooked ||
+    ["Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered", "Failed"].includes(order.status);
   const scanStage = fromScans.stage;
   const orderStage = stageFromOrderStatus(order.status);
   let progress: CourierStage = "ordered";
@@ -409,7 +412,21 @@ export function buildTrackingStages(
   }
   stages.push(makeStage("delivered", "Delivered", "Delivered", deliveredEvents, deliveredReached));
 
-  return tally(stages);
+  return tally(holdBeforeNext(stages));
+}
+
+/** The current step stays open so the line moves toward the next one and stops before it. */
+function holdBeforeNext(stages: TrackingStage[]) {
+  const terminal = new Set(["delivered", "picked", "failed", "cancelled", "refunded"]);
+  let index = -1;
+  stages.forEach((stage, position) => {
+    if (stage.reached && !terminal.has(stage.id)) index = position;
+  });
+  const next = index >= 0 ? stages[index + 1] : undefined;
+  if (index < 0 || !next || next.reached || terminal.has(next.id)) return stages;
+  const copy = stages.slice();
+  copy[index] = { ...copy[index], partial: true };
+  return copy;
 }
 
 function tally(stages: TrackingStage[]) {

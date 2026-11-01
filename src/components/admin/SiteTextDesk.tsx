@@ -4,15 +4,22 @@ import { useMemo, useState } from "react";
 import { englishMessages, type MessageKey } from "@/lib/i18n/messages";
 import { publishLiveSite } from "@/lib/mobile-publish";
 import {
+  applySiteTheme,
   defaultReviewsControls,
+  defaultSiteTheme,
   getSiteText,
   homeSections,
+  normalizeHex,
   normalizeSiteText,
+  normalizeTheme,
   saveSiteText,
+  themeFields,
+  themePresets,
   type HomeSectionId,
   type PageCopy,
   type ReviewsTheme,
   type SiteText,
+  type SiteTheme,
 } from "@/lib/site-text";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -82,18 +89,20 @@ function groupOf(key: string) {
   return key.split(".")[0];
 }
 
-type Tab = "home" | "reviews" | "pages" | "text";
+type Tab = "theme" | "home" | "reviews" | "pages" | "text";
 
 export function SiteTextDesk() {
   const [draft, setDraft] = useState<SiteText>(() => getSiteText());
-  const [tab, setTab] = useState<Tab>("home");
+  const [tab, setTab] = useState<Tab>("theme");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const save = async (next = draft) => {
     setBusy(true);
-    saveSiteText(next);
-    setDraft(normalizeSiteText(next));
+    const saved = normalizeSiteText(next);
+    saveSiteText(saved);
+    applySiteTheme(saved.theme);
+    setDraft(saved);
     const result = await publishLiveSite();
     setBusy(false);
     setNote(result.ok ? "Saved and published to the live website." : "Saved in this browser. Publishing did not complete; it will retry on the next save.");
@@ -102,14 +111,15 @@ export function SiteTextDesk() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Site text & controls</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Colours, theme & site text</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-500">
-          Change any heading, label, button or paragraph on the public website, reorder or hide homepage sections, and set how the Seminar voices slider looks. Leave a field blank to use the default wording.
+          Change the colours of the public website and of application, order and shipment tracking. Also edit headings, labels, buttons and homepage sections. Leave a text field blank to keep the default wording. Save & publish sends the colours and text to the live site.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
         {(
           [
+            ["theme", "Colours & theme"],
             ["home", "Homepage sections"],
             ["reviews", "Seminar voices"],
             ["pages", "Page headings"],
@@ -120,13 +130,14 @@ export function SiteTextDesk() {
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${tab === id ? "bg-blue-800 text-white" : "border border-slate-200 bg-white text-slate-600"}`}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${tab === id ? "bg-burgundy text-white" : "border border-slate-200 bg-white text-slate-600"}`}
           >
             {label}
           </button>
         ))}
       </div>
 
+      {tab === "theme" && <ThemePanel draft={draft} setDraft={setDraft} />}
       {tab === "home" && <HomePanel draft={draft} setDraft={setDraft} />}
       {tab === "reviews" && <ReviewsPanel draft={draft} setDraft={setDraft} />}
       {tab === "pages" && <PagesPanel draft={draft} setDraft={setDraft} />}
@@ -140,7 +151,9 @@ export function SiteTextDesk() {
           type="button"
           className={ghost}
           onClick={() => {
-            setDraft(getSiteText());
+            const saved = getSiteText();
+            setDraft(saved);
+            applySiteTheme(saved.theme);
             setNote("Unsaved changes discarded.");
           }}
         >
@@ -153,6 +166,71 @@ export function SiteTextDesk() {
 }
 
 type PanelProps = { draft: SiteText; setDraft: (update: (current: SiteText) => SiteText) => void };
+
+function ThemePanel({ draft, setDraft }: PanelProps) {
+  const paint = (theme: SiteTheme) => {
+    const next = normalizeTheme(theme);
+    applySiteTheme(next);
+    setDraft((current) => ({ ...current, theme: next }));
+  };
+  const setColor = (key: keyof SiteTheme, value: string) => {
+    setDraft((current) => {
+      const theme = { ...current.theme, [key]: value };
+      const valid = normalizeHex(value, "");
+      if (valid) applySiteTheme({ ...current.theme, [key]: valid });
+      return { ...current, theme };
+    });
+  };
+  return (
+    <section className={card}>
+      <div>
+        <h2 className="font-semibold text-slate-900">Site colours and tracking</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          These colours apply to the public pages, the menus, and every progress line (applications through Certificate issued, orders, and shipments). The preview updates as you pick a colour. Save & publish keeps it for every visitor.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {themePresets.map((preset) => (
+          <button key={preset.id} type="button" className={ghost} onClick={() => paint(preset.theme)}>
+            {preset.label}
+          </button>
+        ))}
+        <button type="button" className={ghost} onClick={() => paint(defaultSiteTheme)}>
+          Reset to original colours
+        </button>
+      </div>
+      {themeFields.map((group) => (
+        <div key={group.title} className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800">{group.title}</h3>
+            <p className="text-xs text-slate-500">{group.hint}</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {group.fields.map((fieldDef) => (
+              <label key={fieldDef.key} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800">
+                <input
+                  type="color"
+                  aria-label={fieldDef.label}
+                  className="h-9 w-12 cursor-pointer rounded border border-slate-200 bg-white"
+                  value={normalizeHex(draft.theme[fieldDef.key], defaultSiteTheme[fieldDef.key])}
+                  onChange={(event) => setColor(fieldDef.key, event.target.value)}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{fieldDef.label}</span>
+                  <input
+                    className="mt-1 w-full rounded border border-slate-200 px-2 py-1 font-mono text-xs uppercase"
+                    value={draft.theme[fieldDef.key]}
+                    onChange={(event) => setColor(fieldDef.key, event.target.value)}
+                  />
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
 
 function HomePanel({ draft, setDraft }: PanelProps) {
   const move = (id: HomeSectionId, delta: number) =>

@@ -939,7 +939,7 @@ export function ShippingApisDesk() {
     <div className="space-y-5">
       <Header
         title="Shipping APIs"
-        text="This is the only courier integration page. Checkout offers Shiprocket, Nimbuspost and iThink Logistics. Those partners already include Porter, Shadowfax Flash and Flash for local last-mile. Tookan and Shipday are not shown at checkout."
+        text="Checkout and packing book the live account whose key is saved here. Tookan is offered for same-city tasks and for parcel deliveries. Shipday is offered for same-city deliveries. Shiprocket, Nimbuspost, iThink and Shipyaari are offered when their keys are saved. Staging and the live site do not create demo AWBs."
         action={
           <div className="flex flex-wrap gap-2">
             <button type="button" className={ghost} onClick={() => save()}>Save</button>

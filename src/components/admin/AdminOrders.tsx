@@ -25,7 +25,6 @@ import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, 
 import { getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
-  advanceDemoShipment,
   bookShipment,
   cancelShipment,
   createReturnShipment,
@@ -929,13 +928,13 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
-                  Booking checks Shiprocket, Nimbuspost and iThink Logistics wallets first. Same-city last-mile uses their Porter, Shadowfax Flash or Flash integrations.
+                  Pack & book sends the order to the courier account the customer chose. Tookan, Shipday, Shiprocket, Nimbuspost, iThink and Shipyaari are booked for real when their API key is saved.
                 </p>
               </div>
             ) : (
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-1 text-sm">
-                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider === "local" || !shipment.provider ? "demo" : shipment.provider}{shipment.live ? " · live" : ""}</span></p>
+                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
                   {shipment.pickupScheduledFor && <p className="text-xs text-text-muted">Pickup: {formatDate(shipment.pickupScheduledFor)}{shipment.pickupSlot ? `, ${shipment.pickupSlot}` : ""}{shipment.pickupReference ? ` · ref ${shipment.pickupReference}` : ""}</p>}
@@ -971,9 +970,6 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       const choice = picked !== undefined ? quote.rates[picked] : undefined;
                       return (await reallocateCourier(order.id, choice)).message;
                     })}>Reallocate courier</Button>
-                    {!shipment.live && shipment.status !== "Delivered" && (
-                      <Button variant="ghost" onClick={() => run("advance", () => { advanceDemoShipment(shipment.id); return "Moved the demo shipment to the next scan."; })}>Next scan (demo)</Button>
-                    )}
                   </div>
                   <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                     <TextInput type="date" value={pickupDate} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setPickupDate(event.target.value)} />

@@ -49,6 +49,8 @@ const ICONS: Record<string, string> = {
   "E-ticket": "M2 9a3 3 0 010 6v2a2 2 0 002 2h16a2 2 0 002-2v-2a3 3 0 000-6V7a2 2 0 00-2-2H4a2 2 0 00-2 2z",
   "Checked in": "M5 12l5 5L20 7",
   Certificate: "M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7z",
+  "Certificate issued": "M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7z",
+  Expired: "M12 7v5l3 3M12 21a9 9 0 110-18 9 9 0 010 18z",
   "Pre-registration": "M8 4h8v3H8zM7 7h10v13H7z",
   "Main registration": "M4 6h16M4 12h10M4 18h14",
   Draft: "M6 4h9l5 5v11H6zM15 4v5h5",
@@ -80,55 +82,11 @@ export default function VerticalPipeline({
   const lastReachedIdx = stages.map((stage) => stage.reached).lastIndexOf(true);
   const partialIdx = stages.findIndex((stage) => stage.partial);
   const nodeCurrentIdx = currentIndex ?? (partialIdx !== -1 ? partialIdx : lastReachedIdx);
-  const signature = `${stages.map((stage) => `${stage.id}:${stage.reached ? 1 : 0}:${stage.partial ? 1 : 0}`).join("|")}#${nodeCurrentIdx}`;
-  const [grows, setGrows] = useState<number[]>(() => stages.map(() => 0));
   const [openIdx, setOpenIdx] = useState(Math.max(0, nodeCurrentIdx));
-  const [drawMs, setDrawMs] = useState<number[]>(() => stages.map(() => 0));
 
   useEffect(() => {
     setOpenIdx(Math.max(0, nodeCurrentIdx));
   }, [nodeCurrentIdx]);
-
-  useEffect(() => {
-    const targets = stages.map((stage, index) => {
-      const state = pipeState(stage, index === nodeCurrentIdx);
-      return state === "done" ? 1 : state === "active" ? 0.55 : 0;
-    });
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      setDrawMs(targets.map(() => 0));
-      setGrows(targets);
-      return;
-    }
-    setDrawMs(targets.map(() => 0));
-    setGrows(targets.map(() => 0));
-    let index = 0;
-    let timer = 0;
-    const next = () => {
-      if (index >= targets.length) return;
-      const target = targets[index];
-      if (target <= 0) {
-        index += 1;
-        next();
-        return;
-      }
-      const ms = target >= 1 ? 2200 : 6500;
-      setDrawMs((current) => current.map((value, i) => (i === index ? ms : value)));
-      const step = index;
-      window.requestAnimationFrame(() => {
-        setGrows((current) => current.map((value, i) => (i === step ? target : value)));
-      });
-      index += 1;
-      timer = window.setTimeout(next, ms);
-    };
-    const start = window.requestAnimationFrame(next);
-    return () => {
-      window.cancelAnimationFrame(start);
-      window.clearTimeout(timer);
-    };
-    // Restart only when courier/application progress actually changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature]);
 
   const firstUpcoming = stages.findIndex((stage, index) => pipeState(stage, index === nodeCurrentIdx) === "upcoming");
 
@@ -143,20 +101,14 @@ export default function VerticalPipeline({
           const stamp = metaFor?.(stage) || "";
           const kids = stage.events;
           const failedStep = Boolean(
-            failed && /fail|reject|invalid|cancel/i.test(stage.id)
+            failed && /fail|reject|invalid|cancel|expire/i.test(stage.id)
           );
           const nextHint = index === firstUpcoming && stage.caption ? stage.caption : "";
           return (
             <li
               key={stage.id}
               className={`${state}${failedStep ? " is-failed" : ""}`}
-              style={
-                {
-                  "--i": index,
-                  "--grow": String(grows[index] ?? 0),
-                  "--draw": `${drawMs[index] ?? 0}ms`,
-                } as CSSProperties
-              }
+              style={{ "--i": index } as CSSProperties}
             >
               <span className="dot" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="16" height="16">

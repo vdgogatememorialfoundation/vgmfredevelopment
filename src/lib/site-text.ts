@@ -34,13 +34,186 @@ export type ReviewsControls = {
 
 export type PageCopy = { eyebrow?: string; title?: string; description?: string };
 
+export type SiteTheme = {
+  burgundy: string;
+  burgundyDark: string;
+  gold: string;
+  saffron: string;
+  ink: string;
+  inkSoft: string;
+  paper: string;
+  background: string;
+  textPrimary: string;
+  textMuted: string;
+  border: string;
+  trackGreen: string;
+  trackLine: string;
+  trackMuted: string;
+  trackText: string;
+  trackFailed: string;
+  trackLink: string;
+};
+
 export type SiteText = {
   text: Partial<Record<MessageKey, string>>;
   pages: Record<string, PageCopy>;
   homeOrder: HomeSectionId[];
   homeHidden: Partial<Record<HomeSectionId, boolean>>;
   reviews: ReviewsControls;
+  theme: SiteTheme;
 };
+
+export const defaultSiteTheme: SiteTheme = {
+  burgundy: "#8F2D2D",
+  burgundyDark: "#6A1F1F",
+  gold: "#B8953A",
+  saffron: "#A67C2D",
+  ink: "#0B1F3A",
+  inkSoft: "#16325C",
+  paper: "#F7F3EA",
+  background: "#FFFDF8",
+  textPrimary: "#0B1F3A",
+  textMuted: "#5C5648",
+  border: "#E4D8C4",
+  trackGreen: "#067D62",
+  trackLine: "#D5D9D9",
+  trackMuted: "#565959",
+  trackText: "#0F1111",
+  trackFailed: "#C2410C",
+  trackLink: "#007185",
+};
+
+export const themeFields: { title: string; hint: string; fields: { key: keyof SiteTheme; label: string }[] }[] = [
+  {
+    title: "Brand",
+    hint: "Buttons, links, and the active item in the menu.",
+    fields: [
+      { key: "burgundy", label: "Primary" },
+      { key: "burgundyDark", label: "Primary dark" },
+      { key: "gold", label: "Gold" },
+      { key: "saffron", label: "Saffron" },
+    ],
+  },
+  {
+    title: "Pages",
+    hint: "Backgrounds, headings and body text on every public page.",
+    fields: [
+      { key: "background", label: "Page background" },
+      { key: "paper", label: "Paper and cards" },
+      { key: "ink", label: "Headings" },
+      { key: "inkSoft", label: "Soft headings" },
+      { key: "textPrimary", label: "Body text" },
+      { key: "textMuted", label: "Muted text" },
+      { key: "border", label: "Borders" },
+    ],
+  },
+  {
+    title: "Tracking",
+    hint: "Application, order and shipment progress, including Certificate issued.",
+    fields: [
+      { key: "trackGreen", label: "Progress" },
+      { key: "trackFailed", label: "Stopped or failed" },
+      { key: "trackLine", label: "Upcoming line" },
+      { key: "trackText", label: "Step titles" },
+      { key: "trackMuted", label: "Step notes" },
+      { key: "trackLink", label: "Links" },
+    ],
+  },
+];
+
+const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+export function normalizeHex(value: unknown, fallback: string) {
+  const text = String(value ?? "").trim();
+  if (!HEX.test(text)) return fallback;
+  if (text.length === 4) {
+    const [hash, r, g, b] = text;
+    return `${hash}${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+  return text.toUpperCase();
+}
+
+export function normalizeTheme(input?: Partial<SiteTheme> | null): SiteTheme {
+  const next = { ...defaultSiteTheme };
+  if (!input || typeof input !== "object") return next;
+  for (const key of Object.keys(next) as (keyof SiteTheme)[]) {
+    next[key] = normalizeHex(input[key], next[key]);
+  }
+  return next;
+}
+
+export function themeCssVars(theme: SiteTheme): Record<string, string> {
+  return {
+    "--color-burgundy": theme.burgundy,
+    "--color-burgundy-dark": theme.burgundyDark,
+    "--color-gold": theme.gold,
+    "--color-saffron": theme.saffron,
+    "--color-ink": theme.ink,
+    "--color-ink-soft": theme.inkSoft,
+    "--color-paper": theme.paper,
+    "--color-warm-cream": theme.paper,
+    "--color-background": theme.background,
+    "--color-text-primary": theme.textPrimary,
+    "--color-text-muted": theme.textMuted,
+    "--color-border": theme.border,
+    "--tl-green": theme.trackGreen,
+    "--tl-line": theme.trackLine,
+    "--tl-muted": theme.trackMuted,
+    "--tl-text": theme.trackText,
+    "--tl-failed": theme.trackFailed,
+    "--tl-link": theme.trackLink,
+  };
+}
+
+export function applySiteTheme(theme: SiteTheme) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  for (const [key, value] of Object.entries(themeCssVars(theme))) root.style.setProperty(key, value);
+}
+
+export const themePresets: { id: string; label: string; theme: SiteTheme }[] = [
+  { id: "original", label: "Original", theme: defaultSiteTheme },
+  {
+    id: "ocean",
+    label: "Ocean",
+    theme: {
+      ...defaultSiteTheme,
+      burgundy: "#0F4C81",
+      burgundyDark: "#0A3358",
+      gold: "#1D6A8A",
+      saffron: "#0E7490",
+      trackGreen: "#0F766E",
+      trackLink: "#0F4C81",
+    },
+  },
+  {
+    id: "forest",
+    label: "Forest",
+    theme: {
+      ...defaultSiteTheme,
+      burgundy: "#1F6B4A",
+      burgundyDark: "#145236",
+      gold: "#3F7D4E",
+      saffron: "#2F6B3A",
+      trackGreen: "#1F6B4A",
+      trackLink: "#145236",
+    },
+  },
+  {
+    id: "saffron",
+    label: "Saffron",
+    theme: {
+      ...defaultSiteTheme,
+      burgundy: "#9A3412",
+      burgundyDark: "#7C2D12",
+      gold: "#C2410C",
+      saffron: "#B45309",
+      trackGreen: "#C2410C",
+      trackFailed: "#7F1D1D",
+      trackLink: "#9A3412",
+    },
+  },
+];
 
 export const defaultReviewsControls: ReviewsControls = {
   theme: "white",
@@ -59,6 +232,7 @@ export function defaultSiteText(): SiteText {
     homeOrder: homeSections.map((section) => section.id),
     homeHidden: {},
     reviews: { ...defaultReviewsControls },
+    theme: { ...defaultSiteTheme },
   };
 }
 
@@ -84,6 +258,7 @@ export function normalizeSiteText(input?: Partial<SiteText> | null): SiteText {
       ...(input.reviews ?? {}),
       autoplaySeconds: Number.isFinite(seconds) ? Math.min(60, Math.max(0, Math.round(seconds))) : base.reviews.autoplaySeconds,
     },
+    theme: normalizeTheme(input.theme),
   };
 }
 
