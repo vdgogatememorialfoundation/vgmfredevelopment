@@ -453,16 +453,16 @@ export default function Header() {
                 aria-label="Close menu"
                 onClick={() => setMobileMenuOpen(false)}
               />
-              <div className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col bg-sidebar text-ink shadow-2xl">
-                <div className="flex items-center justify-between border-b border-ink/15 px-4 py-4">
+              <div className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col border-l border-slate-200 bg-white text-blue-900 shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
                   <div className="flex min-w-0 items-center gap-3">
                     <SiteLogo size={40} />
-                    <p className="font-serif text-lg font-semibold text-ink">Menu</p>
+                    <p className="font-serif text-lg font-semibold text-blue-900">Menu</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-ink/25 text-ink"
+                    className="flex h-10 w-10 items-center justify-center rounded-lg border border-blue-200 text-blue-800"
                     aria-label="Close menu"
                   >
                     <CloseIcon />
@@ -474,14 +474,14 @@ export default function Header() {
                     const children = navDropdown(item.href);
                     const opened = mobileOpen === item.href;
                     return (
-                      <div key={item.href} className="border-b border-ink/10">
+                      <div key={item.href} className="border-b border-slate-200">
                         <div className="flex items-center">
                           <Link
                             href={item.href}
                             onClick={() => setMobileMenuOpen(false)}
                             className={classNames(
                               "flex-1 px-3 py-3.5 text-left text-sm font-semibold",
-                              isActive ? "text-ink" : "text-ink/85"
+                              isActive ? "text-blue-900" : "text-blue-800"
                             )}
                           >
                             {t(navMessageKey[item.href] ?? "nav.about")}
@@ -492,14 +492,14 @@ export default function Header() {
                               onClick={() => setMobileOpen(opened ? "" : item.href)}
                               aria-expanded={opened}
                               aria-label={`${t(navMessageKey[item.href] ?? "nav.about")} menu`}
-                              className="flex h-11 w-11 items-center justify-center text-sm text-ink/70"
+                              className="flex h-11 w-11 items-center justify-center text-sm text-blue-800/70"
                             >
                               {opened ? "▴" : "▾"}
                             </button>
                           ) : null}
                         </div>
                         {opened && children.length ? (
-                          <div className="mb-2 ml-3 space-y-0.5 border-l border-ink/20 pb-2 pl-3">
+                          <div className="mb-2 ml-3 space-y-0.5 border-l border-blue-200 pb-2 pl-3">
                             {children.map((page) => (
                               <Link
                                 key={page.href}
@@ -507,7 +507,7 @@ export default function Header() {
                                 onClick={() => setMobileMenuOpen(false)}
                                 className={classNames(
                                   "block py-2 text-sm",
-                                  pathname === page.href ? "font-semibold text-ink" : "text-ink/70 hover:text-ink"
+                                  pathname === page.href ? "font-semibold text-blue-900" : "text-blue-800/70 hover:text-blue-900"
                                 )}
                               >
                                 {t(page.key)}
@@ -523,32 +523,32 @@ export default function Header() {
                       key={page.id}
                       href={`/p/${page.slug}`}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block border-b border-ink/10 px-3 py-3.5 text-sm font-medium text-ink hover:text-ink"
+                      className="block border-b border-slate-200 px-3 py-3.5 text-sm font-medium text-blue-800 hover:text-blue-900"
                     >
                       {page.title}
                     </Link>
                   ))}
                 </nav>
-                <div className="flex flex-col gap-3 border-t border-ink/15 p-4">
+                <div className="flex flex-col gap-3 border-t border-slate-200 p-4">
                   {isAuthenticated ? (
                     <>
-                      <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-ink">
+                      <Link href="/account" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-blue-900">
                         {t("header.myAccount")}
                       </Link>
                       <button
                         type="button"
                         onClick={handleSignOut}
-                        className="text-left text-sm font-semibold text-ink/80"
+                        className="text-left text-sm font-semibold text-blue-800"
                       >
                         Logout
                       </button>
                     </>
                   ) : (
-                    <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-ink">
+                    <Link href="/login" onClick={() => setMobileMenuOpen(false)} className="text-sm font-semibold text-blue-900">
                       {t("common.signIn")}
                     </Link>
                   )}
-                  <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="inline-flex items-center justify-center rounded-md border border-ink/25 bg-ink/5 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-ink hover:text-white">
+                  <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-800 hover:text-white">
                     {t("header.exploreEvents")}
                   </Link>
                 </div>

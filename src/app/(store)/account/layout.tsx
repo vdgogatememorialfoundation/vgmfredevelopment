@@ -38,20 +38,20 @@ function AccountShell({ children }: { children: React.ReactNode }) {
         <div className="grid gap-8 lg:grid-cols-4">
           {/* Sidebar */}
           <aside className="lg:col-span-1">
-            <div className="rounded-2xl bg-sidebar p-6 text-ink">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-blue-900">
               {user && (
-                <div className="flex items-center gap-4 border-b border-ink/15 pb-5">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink text-base font-bold text-gold">
+                <div className="flex items-center gap-4 border-b border-slate-200 pb-5">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-800 text-base font-bold text-white">
                     {initials}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-ink">
+                    <p className="truncate font-semibold text-blue-900">
                       {user.firstName} {user.lastName}
                     </p>
-                    <p className="truncate text-xs text-ink/70">
+                    <p className="truncate text-xs text-blue-900/70">
                       {user.email}
                     </p>
-                    <p className="mt-0.5 font-mono text-[11px] tracking-[0.08em] text-ink/80">
+                    <p className="mt-0.5 font-mono text-[11px] tracking-[0.08em] text-blue-800">
                       {user.accountId}
                     </p>
                   </div>
@@ -81,11 +81,11 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                       className={classNames(
                         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition",
                         active
-                          ? "bg-ink font-semibold text-white"
-                          : "text-ink/85 hover:bg-ink/10 hover:text-ink"
+                          ? "bg-blue-800 font-semibold text-white"
+                          : "text-blue-800 hover:bg-blue-50 hover:text-blue-900"
                       )}
                     >
-                      <span className={active ? "text-white" : "text-ink/70"}>
+                      <span className={active ? "text-white" : "text-blue-800/70"}>
                         <AccountIcon name={item.icon} />
                       </span>
                       {item.name}
