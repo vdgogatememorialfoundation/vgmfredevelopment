@@ -150,6 +150,20 @@ export function firstPhoto(...values: Array<string | undefined>) {
 const RB_SQUARES = ["/about/rb-square.jpg", "/about/rb-gogate.jpg"];
 const ANAGHA_SQUARES = ["/about/anagha-square.jpg", "/about/anagha-gogate.jpg"];
 
+export const ABOUT_SECTION_IMAGES: Record<string, string> = {
+  "s-foundation": "/about/foundation-square.svg",
+  "s-legacy": "/about/rb-square.jpg",
+  "s-anagha": "/about/anagha-square.jpg",
+  "s-awards": "/about/awards-square.svg",
+  "s-books": "/about/books-square.svg",
+  "s-history": "/about/history-square.svg",
+  "s-trustees": "/about/trustees-square.svg",
+};
+
+export function aboutSectionImage(section: AboutSection) {
+  return section.image?.trim() || ABOUT_SECTION_IMAGES[section.id] || "";
+}
+
 function preferSquare(_src: string, squares: string[]) {
   return squares[0];
 }
@@ -174,42 +188,49 @@ export const defaultAbout: AboutContent = {
       title: "About the Foundation",
       body: "A platform with a sole motto — Propagation of knowledge — sharing Vd. Ramchandra Ballal Gogate’s work and carrying forward his vision ‘knowledge for all’.",
       href: "/about/foundation",
+      image: "/about/foundation-square.svg",
     },
     {
       id: "s-legacy",
       title: "Legacy of Vaidya R. B. Gogate",
       body: "English and Marathi biography of Vd. Ramchandra Ballal Gogate — physician, teacher, researcher, and the grandfather whose work this platform shares.",
       href: "/about/legacy-of-vaidya-rb-gogate",
+      image: "/about/rb-square.jpg",
     },
     {
       id: "s-anagha",
       title: "Dr. Anagha Gogate",
       body: "Dr. Anagha Ramchandra Gogate (1936–2019) stood beside Vd. R. B. Gogate as physician, teacher and the strongest pillar of the family.",
       href: "/about/dr-anagha-gogate",
+      image: "/about/anagha-square.jpg",
     },
     {
       id: "s-awards",
       title: "Awards & Accolades",
       body: "Sushrut Puraskar, Gayatri Pratishthan Puraskar, Legend Shalaki Karyabhushan Puraskar, Jivan Gaurav Puraskar, and the Pandit Ramnarayan Sharma Award received at the hands of the President of India.",
       href: "/about/awards",
+      image: "/about/awards-square.svg",
     },
     {
       id: "s-books",
       title: "Books & Research",
       body: "Books on AIDS, Viddha and Agnikarma, Bhagna and Asthi roga, Shalya tantra and Hasti ayurved, with research in cancer, raktamokshan and dhoopan chikitsa.",
       href: "/about/books-and-research",
+      image: "/about/books-square.svg",
     },
     {
       id: "s-history",
       title: "Our History",
       body: "Renowned vaidyas for many generations: Vd. Mahadev (Bapu) Gogate, Vd. Vishnu Mahadev Gogate, Vd. Trimbak Mahadev Gogate, and Vd. Ramchandra Ballal Gogate.",
       href: "/about/history",
+      image: "/about/history-square.svg",
     },
     {
       id: "s-trustees",
       title: "Trustees & Team",
       body: "His grandchildren, on behalf of the Gogate family, are creating this platform. Suggestions, guidelines and support are welcome.",
       href: "/about/trustees",
+      image: "/about/trustees-square.svg",
     },
   ],
   gallery: [],
@@ -468,7 +489,10 @@ function merge(saved: Partial<AboutContent> | null): AboutContent {
     ...saved,
     revision: ABOUT_REVISION,
     heroImage: preferSquare(saved.heroImage || defaultAbout.heroImage || "", RB_SQUARES),
-    sections: saved.sections ?? defaultAbout.sections,
+    sections: (saved.sections ?? defaultAbout.sections).map((section) => ({
+      ...section,
+      image: aboutSectionImage(section),
+    })),
     gallery: saved.gallery ?? defaultAbout.gallery,
     foundation: { ...defaultAbout.foundation, ...(saved.foundation ?? {}) },
     history: { ...defaultAbout.history, ...(saved.history ?? {}) },

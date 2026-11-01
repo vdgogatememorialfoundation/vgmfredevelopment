@@ -1,5 +1,6 @@
 import { getSettings, saveSettings } from "@/lib/admin-store";
 import { flyerKeys } from "@/lib/cms";
+import { hydrateReviewsFromServer, replaceProductReviews, replaceSeminarReviews, type ProductReview } from "@/lib/reviews";
 import { flyers as seededFlyers } from "@/data/content";
 import { appliedFeedAt, emptyFeedFallback, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
@@ -34,6 +35,7 @@ function tryWrite(write: () => void) {
 /** Pull the published logo, name and slideshow onto this browser (phones included). */
 export async function hydratePublishedSite() {
   if (typeof window === "undefined") return;
+  void hydrateReviewsFromServer();
   const dirty = window.localStorage.getItem(DIRTY_KEY);
   const urls = ["/api/mobile/brand", "/api/mobile/feed", "/app-feed.json"];
   for (const url of urls) {
@@ -104,5 +106,12 @@ function applyFeed(feed: MobileFeed) {
 
   if (feed.platformCountries) {
     tryWrite(() => window.localStorage.setItem("vgmf_platform_countries", JSON.stringify(feed.platformCountries)));
+  }
+
+  if (feed.seminarReviews?.length) {
+    tryWrite(() => replaceSeminarReviews(feed.seminarReviews ?? []));
+  }
+  if (feed.productReviews?.length) {
+    tryWrite(() => replaceProductReviews(feed.productReviews as ProductReview[]));
   }
 }

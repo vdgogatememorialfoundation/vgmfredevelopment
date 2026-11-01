@@ -58,10 +58,10 @@ export default function HeroSection() {
   if (!count) {
     const tagline = settings?.tagline || t("hero.taglineFallback");
     return (
-      <section className="relative isolate z-0 border-b border-border bg-[linear-gradient(135deg,#0B1F3A_0%,#16325C_62%,#2A4A73_100%)] text-white">
+      <section className="relative isolate z-0 border-b border-border bg-white text-ink">
         <div className="container flex min-h-[132px] items-center py-5 sm:min-h-[160px]">
           <div className="max-w-2xl">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-100">{t("hero.kicker")}</p>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">{t("hero.kicker")}</p>
             <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">{tagline}</h1>
           </div>
         </div>
@@ -73,7 +73,7 @@ export default function HeroSection() {
 
   return (
     <section
-      className="relative isolate z-0 overflow-hidden bg-ink"
+      className="relative isolate z-0 overflow-hidden bg-white"
       aria-roledescription="carousel"
       aria-label="Foundation slideshow"
       onMouseEnter={() => setPaused(true)}
@@ -95,7 +95,7 @@ export default function HeroSection() {
           return (
             <div
               key={item.id}
-              className={`absolute inset-0 z-0 overflow-hidden bg-ink transition-opacity duration-700 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              className={`absolute inset-0 z-0 overflow-hidden bg-white transition-opacity duration-700 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
               aria-hidden={!visible}
             >
               {item.href ? (
@@ -108,9 +108,8 @@ export default function HeroSection() {
             </div>
           );
         })}
-        <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
         {slide.title && !slide.image.startsWith("/slides/") ? (
-          <p className="pointer-events-none absolute bottom-8 left-14 right-14 z-10 font-serif text-base leading-snug text-white drop-shadow sm:bottom-8 sm:left-16 sm:text-xl lg:text-2xl">
+          <p className="pointer-events-none absolute bottom-8 left-14 right-14 z-10 font-serif text-base leading-snug text-ink sm:bottom-8 sm:left-16 sm:text-xl lg:text-2xl">
             {slide.title}
           </p>
         ) : null}
@@ -153,7 +152,7 @@ export default function HeroSection() {
                     event.stopPropagation();
                     go(slideIndex);
                   }}
-                  className={`h-2 rounded-full ${slideIndex === active ? "w-5 bg-white" : "w-2 bg-white/60"}`}
+                  className={`h-2 rounded-full ${slideIndex === active ? "w-5 bg-ink" : "w-2 bg-ink/30"}`}
                 />
               ))}
             </div>

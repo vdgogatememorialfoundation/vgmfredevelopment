@@ -9,6 +9,7 @@ import { defaultMobileAppConfig } from "@/lib/mobile-config";
 import { type MobileFeed } from "@/lib/mobile-types";
 import { defaultPlatformCountries, readPlatformCountries, writePlatformCountries } from "@/lib/server/platform-countries";
 import { listNotices } from "@/lib/server/notices";
+import { listReviews } from "@/lib/server/reviews";
 import type { Event } from "@/types";
 
 export type { MobileFeed } from "@/lib/mobile-types";
@@ -95,6 +96,8 @@ export function defaultMobileFeed(): MobileFeed {
     faqs: [],
     appearance: defaultAppearance,
     platformCountries: readPlatformCountries(),
+    seminarReviews: [],
+    productReviews: [],
   };
 }
 
@@ -150,6 +153,14 @@ export function readMobileFeed(): MobileFeed {
     publishedAt: snapshot.publishedAt || base.publishedAt,
     appearance: sanitizeAppearance(snapshot.appearance ?? base.appearance ?? defaultAppearance),
     platformCountries: snapshot.platformCountries ?? base.platformCountries ?? defaultPlatformCountries,
+    seminarReviews: (() => {
+      const live = listReviews();
+      return live.seminarReviews.length ? live.seminarReviews : snapshot.seminarReviews ?? base.seminarReviews;
+    })(),
+    productReviews: (() => {
+      const live = listReviews();
+      return live.productReviews.length ? live.productReviews : snapshot.productReviews ?? base.productReviews;
+    })(),
   };
 }
 

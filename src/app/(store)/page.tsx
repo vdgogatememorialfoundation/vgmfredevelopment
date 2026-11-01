@@ -7,6 +7,7 @@ import LegacySection from "@/components/home/LegacySection";
 import FeaturedArticles from "@/components/home/FeaturedArticles";
 import FeaturedBooks from "@/components/home/FeaturedBooks";
 import ClinicsSection from "@/components/home/ClinicsSection";
+import SeminarReviews from "@/components/home/SeminarReviews";
 import SupportUs from "@/components/home/SupportUs";
 
 export default function HomePage() {
@@ -15,6 +16,7 @@ export default function HomePage() {
       <HeroSection />
       <FoundationDirectory />
       <AboutDirectory />
+      <SeminarReviews />
       <SupportUs />
       <UpcomingEvents />
       <LegacySection />

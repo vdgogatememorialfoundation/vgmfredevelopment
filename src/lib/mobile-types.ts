@@ -1,7 +1,7 @@
 import type { MobileAppearance } from "@/lib/mobile-appearance";
 import type { MobileAppConfig } from "@/lib/mobile-config";
 import type { PlatformCountries } from "@/lib/platform-countries";
-import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, SocialLinks, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, Review, SeminarReview, SocialLinks, Video } from "@/types";
 
 export type MobileFeed = {
   publishedAt: string;
@@ -42,4 +42,6 @@ export type MobileFeed = {
   faqs: FAQItem[];
   appearance?: MobileAppearance | null;
   platformCountries?: PlatformCountries;
+  seminarReviews?: SeminarReview[];
+  productReviews?: Review[];
 };

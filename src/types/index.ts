@@ -184,6 +184,22 @@ export interface Review {
   rating: number;
   date: string;
   text: string;
+  email?: string;
+  productId?: string;
+  verified?: boolean;
+  hidden?: boolean;
+  reply?: { text: string; date: string; author?: string };
+}
+
+export interface SeminarReview {
+  id: string;
+  name: string;
+  event: string;
+  rating: number;
+  date: string;
+  text: string;
+  photo?: string;
+  published: boolean;
 }
 
 export interface ProductMedia {

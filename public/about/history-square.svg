@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" role="img" aria-label="Our History">
+  <rect width="400" height="400" fill="#0B1F3A"/>
+  <circle cx="200" cy="200" r="92" fill="none" stroke="#F7F3EA" stroke-width="10"/>
+  <path d="M200 132 v68 l48 28" fill="none" stroke="#B8953A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
