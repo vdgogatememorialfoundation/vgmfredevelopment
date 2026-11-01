@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
 import { pickupOtp } from "@/lib/store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
-import { aggregatorName, customerCourierLabel, customerStatusLabel, riderAccepted } from "@/lib/courier-label";
+import { aggregatorName, customerCourierLabel } from "@/lib/courier-label";
 import { getIntegrations } from "@/lib/integrations";
 import { buildTrackingStages, isHyperlocalProvider, shipmentScans, type CourierScan } from "@/lib/order-pipeline";
 import { pingLiveAgent } from "@/lib/shipping-client";
@@ -18,6 +18,46 @@ function addDays(date: Date, days: number) {
   const next = new Date(date.getTime());
   next.setDate(next.getDate() + days);
   return next;
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** Courier portals store the promise as an India-time phrase such as "Mon, 2 Nov, 6:02 am". */
+function parseExpected(text: string | undefined, around: number): number | null {
+  const trimmed = text?.trim() ?? "";
+  if (!trimmed) return null;
+  const clock = trimmed.match(/(\d{1,2})\s+([A-Za-z]{3,})(?:\s+(\d{4}))?[\s,]+(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if (clock) {
+    const day = Number(clock[1]);
+    const month = MONTHS.findIndex((name) => clock[2].toLowerCase().startsWith(name));
+    let year = clock[3] ? Number(clock[3]) : new Date(around).getFullYear();
+    let hour = Number(clock[4]);
+    const minute = Number(clock[5]);
+    const meridiem = (clock[6] || "").toLowerCase();
+    if (meridiem === "pm" && hour < 12) hour += 12;
+    if (meridiem === "am" && hour === 12) hour = 0;
+    if (month >= 0 && day >= 1 && day <= 31) {
+      let ms = Date.UTC(year, month, day, hour, minute) - 5.5 * 60 * 60 * 1000;
+      if (!clock[3] && ms < around - 36 * 60 * 60 * 1000) {
+        year += 1;
+        ms = Date.UTC(year, month, day, hour, minute) - 5.5 * 60 * 60 * 1000;
+      }
+      if (Number.isFinite(ms)) return ms;
+    }
+  }
+  const dayOnly = trimmed.match(/(\d{1,2})\s+([A-Za-z]{3,})(?:\s+(\d{4}))?/);
+  if (dayOnly) {
+    const day = Number(dayOnly[1]);
+    const month = MONTHS.findIndex((name) => dayOnly[2].toLowerCase().startsWith(name));
+    const year = dayOnly[3] ? Number(dayOnly[3]) : new Date(around).getFullYear();
+    if (month >= 0 && day >= 1 && day <= 31) {
+      const ms = Date.UTC(year, month, day, 12, 0) - 5.5 * 60 * 60 * 1000;
+      if (Number.isFinite(ms)) return ms;
+    }
+  }
+  const direct = Date.parse(trimmed);
+  if (Number.isFinite(direct) && direct > around - 36 * 60 * 60 * 1000) return direct;
+  return null;
 }
 
 function Tile({ label, value }: { label: string; value: string }) {
@@ -36,7 +76,6 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const provider = shipment?.provider ?? order.courierChoice?.provider;
   const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
-  const [arrival, setArrival] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -111,9 +150,9 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const partialIdx = rawStages.map((stage) => stage.partial).lastIndexOf(true);
   const lastReachedIdx = rawStages.map((stage) => stage.reached).lastIndexOf(true);
   const nodeCurrentIdx = partialIdx !== -1 ? partialIdx : lastReachedIdx;
-  const latest = [...shownScans].reverse().find((scan) => scan.status);
-  const where = latest?.location || latest?.status || order.deliveryAddress?.city || "Pune";
-  const statusLine = customerStatusLabel(latest?.status || order.status, provider);
+  const pickupDone = hyperlocal
+    ? rawStages.some((stage) => stage.id === "out" && stage.reached)
+    : Boolean(shippedStage?.reached);
 
   const stages: PipelineStageShape[] = rawStages.map((stage) => {
     const next: PipelineStageShape = { ...stage };
@@ -193,6 +232,14 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
                 ? ""
                 : "The line runs from the top to the latest green step. The tracking number appears when Shipped turns green.";
 
+  const stepStamp = Date.parse(rawStages[nodeCurrentIdx]?.events.at(-1)?.at || order.date);
+  const paceFrom = Number.isFinite(stepStamp) ? stepStamp : placed.getTime();
+  const promisedAt = parseExpected(shipment?.expectedBy, paceFrom);
+  const paceUntil = promisedAt && promisedAt > paceFrom + 60_000 ? promisedAt : paceFrom + (hyperlocal ? 8 : 72) * 60 * 60 * 1000;
+  const latestTitle = rawStages[nodeCurrentIdx]?.events.at(-1)?.title ?? "";
+  const facilityStatus = /^(Pickup scheduled|Shipment arrived at courier facility|Shipment left courier facility)/.test(latestTitle);
+  const currentStatus = facilityStatus ? latestTitle : rawStages[nodeCurrentIdx]?.label || order.status;
+
   const pipe = (
     <VerticalPipeline
       stages={stages}
@@ -201,34 +248,16 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       metaFor={stageDateLine}
       timingFor={stageTiming}
       note={lineNote}
+      pace={failed || order.status === "Delivered" ? null : { from: paceFrom, until: paceUntil }}
     />
   );
 
   const tiles = (
     <div className="vgmf-trk-tiles">
-      <Tile label="Where" value={customerStatusLabel(where, provider) || where} />
-      <Tile
-        label="Delivery"
-        value={
-          order.deliveryMode === "store_pickup"
-            ? "Clinic pickup"
-            : shipment?.expectedBy || "Waiting for the courier"
-        }
-      />
-      <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} />
-      {!hyperlocal && shippedStage?.reached ? <Tile label="Tracking no." value={trackingId || "Awaiting tracking id"} /> : null}
-      <Tile label="Last update" value={latest?.at ? formatDateTime(latest.at) : statusLine || "Waiting for the first scan"} />
-      {hyperlocal ? (
-        <Tile
-          label="Delivery partner"
-          value={
-            riderAccepted(statusLine, shipment?.agentName) && (shipment?.agentName || shipment?.agentPhone)
-              ? [shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")
-              : "Assigned when a rider accepts"
-          }
-        />
-      ) : null}
-      {hyperlocal && arrival ? <Tile label="Rider arrives" value={arrival} /> : null}
+      <Tile label="Order" value={order.id} />
+      <Tile label="Date" value={formatDate(order.date)} />
+      <Tile label="Status" value={currentStatus} />
+      {pickupDone ? <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} /> : null}
       {shipment?.deliveryOtp ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
       {order.deliveryMode === "store_pickup" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
     </div>
@@ -254,7 +283,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         <div className="vgmf-hl">
           <div className="vgmf-hl-sheet">{pipe}</div>
           <div className="vgmf-hl-map">
-            <LiveTracking order={order} shipment={shipment} onArrival={setArrival} />
+            <LiveTracking order={order} shipment={shipment} />
           </div>
         </div>
       ) : (

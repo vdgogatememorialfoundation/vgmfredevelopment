@@ -36,17 +36,41 @@ function hasCoords(point?: { lat?: number; lng?: number } | null): point is LatL
   return Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat!) > 0.01 && Math.abs(point.lng!) > 0.01);
 }
 
-/** A curve lifted off the straight line, the way a flight path is drawn. Not a road. */
-function flyingArc(from: LatLng, to: LatLng) {
+/** A flight curve that starts on the first pin and ends on the second. The bow stays low so the tilted map does not cut it off. */
+function flyingArc(
+  from: LatLng,
+  to: LatLng,
+  spherical?: {
+    computeDistanceBetween: (a: LatLng, b: LatLng) => number;
+    computeHeading: (a: LatLng, b: LatLng) => number;
+    computeOffset: (from: LatLng, distance: number, heading: number) => { lat: () => number; lng: () => number };
+  }
+) {
+  const steps = 28;
+  if (spherical) {
+    const distance = spherical.computeDistanceBetween(from, to);
+    const heading = spherical.computeHeading(from, to);
+    const bow = Math.min(1400, Math.max(160, distance * 0.08));
+    const path: LatLng[] = [];
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const along = spherical.computeOffset(from, distance * t, heading);
+      const bulge = Math.sin(Math.PI * t) * bow;
+      const side = bulge ? spherical.computeOffset({ lat: along.lat(), lng: along.lng() }, bulge, heading - 90) : along;
+      path.push({ lat: side.lat(), lng: side.lng() });
+    }
+    path[0] = from;
+    path[path.length - 1] = to;
+    return path;
+  }
   const dLat = to.lat - from.lat;
   const dLng = to.lng - from.lng;
   const dist = Math.hypot(dLat, dLng) || 1e-6;
-  const lift = Math.min(0.45, Math.max(0.03, dist * 0.38));
+  const lift = dist * 0.08;
   const ctrl = {
     lat: (from.lat + to.lat) / 2 - (dLng / dist) * lift,
     lng: (from.lng + to.lng) / 2 + (dLat / dist) * lift,
   };
-  const steps = 40;
   const path: LatLng[] = [];
   for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
@@ -56,13 +80,22 @@ function flyingArc(from: LatLng, to: LatLng) {
       lng: u * u * from.lng + 2 * u * t * ctrl.lng + t * t * to.lng,
     });
   }
+  path[0] = from;
+  path[path.length - 1] = to;
   return path;
 }
 
-function flyingRoute(points: LatLng[]) {
+function flyingRoute(
+  points: LatLng[],
+  spherical?: {
+    computeDistanceBetween: (a: LatLng, b: LatLng) => number;
+    computeHeading: (a: LatLng, b: LatLng) => number;
+    computeOffset: (from: LatLng, distance: number, heading: number) => { lat: () => number; lng: () => number };
+  }
+) {
   const path: LatLng[] = [];
   for (let i = 0; i < points.length - 1; i += 1) {
-    const segment = flyingArc(points[i], points[i + 1]);
+    const segment = flyingArc(points[i], points[i + 1], spherical);
     if (i > 0) segment.shift();
     path.push(...segment);
   }
@@ -152,6 +185,7 @@ function Schematic({
   agentPhone,
   storeLabel,
   dropLabel,
+  showCourier,
 }: {
   partner: string;
   status: string;
@@ -161,6 +195,7 @@ function Schematic({
   agentPhone?: string;
   storeLabel: string;
   dropLabel: string;
+  showCourier: boolean;
 }) {
   const [openPin, setOpenPin] = useState<"store" | "drop" | null>(null);
   const storeName = storeLabel.length > 18 ? `${storeLabel.slice(0, 16)}…` : storeLabel;
@@ -169,7 +204,7 @@ function Schematic({
       <div className="vgmf-map-stage">
         <svg viewBox="0 0 360 220" role="img" aria-label="Path from the store to the customer">
           <rect width="360" height="220" fill="#f4f0e8" />
-          <path d="M72 108 C 150 16, 230 16, 282 96" fill="none" stroke={ROAD} strokeWidth="3" strokeLinecap="round" />
+          <path d="M72 106.3 C 150 48, 214 42, 282 94.3" fill="none" stroke={ROAD} strokeWidth="3" strokeLinecap="round" />
           <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("store")}>
             <image href={pin(STORE)} x="52" y="58" width="40" height="50" />
             <text x="72" y="132" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
@@ -188,7 +223,9 @@ function Schematic({
       {openPin ? (
         <p className="px-3 text-xs text-text-muted">{openPin === "store" ? storeLabel : dropLabel}</p>
       ) : null}
-      <AgentCard partner={partner} status={status} accepted={accepted} leg={leg} agentName={agentName} agentPhone={agentPhone} arrival="" />
+      {showCourier ? (
+        <AgentCard partner={partner} status={status} accepted={accepted} leg={leg} agentName={agentName} agentPhone={agentPhone} arrival="" />
+      ) : null}
     </div>
   );
 }
@@ -205,6 +242,7 @@ export default function DeliveryMap({
   agent,
   agentName,
   agentPhone,
+  showCourier = false,
   promised = "",
   onArrival,
 }: {
@@ -219,6 +257,8 @@ export default function DeliveryMap({
   agent?: LatLng;
   agentName?: string;
   agentPhone?: string;
+  /** Courier name stays hidden until the parcel has been picked up. */
+  showCourier?: boolean;
   /** Delivery date and time returned by the courier portal. */
   promised?: string;
   onArrival?: (text: string) => void;
@@ -303,9 +343,9 @@ export default function DeliveryMap({
         const center = resolved.store ?? resolved.drop ?? { lat: 18.5196, lng: 73.8553 };
         const options = {
           center,
-          zoom: 17,
-          tilt: 67.5,
-          heading: 24,
+          zoom: 13,
+          tilt: 12,
+          heading: 8,
           mapId: "DEMO_MAP_ID",
           mapTypeControl: false,
           streetViewControl: false,
@@ -327,7 +367,9 @@ export default function DeliveryMap({
           const pinPoint = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
           const label = pinPoint.label || (kind === "store" ? "Store" : "Home");
           const content = document.createElement("div");
-          content.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;transform:translateY(2px)";
+          content.style.cssText = "width:0;height:0;overflow:visible;cursor:pointer";
+          const stack = document.createElement("div");
+          stack.style.cssText = "position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px";
           const Pin = maps.marker?.PinElement;
           const graphic = Pin
             ? new Pin({ background: color, borderColor: "#ffffff", glyphColor: "#ffffff", scale: 1.15 }).element
@@ -335,7 +377,8 @@ export default function DeliveryMap({
           const name = document.createElement("div");
           name.textContent = label;
           name.style.cssText = "max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#fff;color:#1c1917;border-radius:999px;padding:3px 8px;font:700 11px/1.3 sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.18)";
-          content.append(name, graphic);
+          stack.append(name, graphic);
+          content.append(stack);
           const openInfo = () => {
             const current = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
             const title = escapeHtml(current.label || label);
@@ -343,7 +386,7 @@ export default function DeliveryMap({
             info.setContent(`<div style="font-family:sans-serif;max-width:220px;color:#1c1917"><b>${title}</b>${address}</div>`);
             info.open(map);
           };
-          content.addEventListener("click", openInfo);
+          stack.addEventListener("click", openInfo);
           const Advanced = maps.marker?.AdvancedMarkerElement;
           if (Advanced) {
             try {
@@ -373,10 +416,6 @@ export default function DeliveryMap({
         place(resolved.drop, "drop", DROP);
         if (resolved.store && resolved.drop) map.fitBounds(bounds, { top: 72, right: 48, bottom: 48, left: 48 });
         sessionRef.current = { map, path: [], progress: 0 };
-        maps.event?.addListenerOnce(map, "idle", () => {
-          map.setTilt(67.5);
-          map.setHeading(24);
-        });
         if (!cancelled) setMapReady(true);
       })
       .catch(() => undefined);
@@ -395,7 +434,13 @@ export default function DeliveryMap({
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
           Point: new (x: number, y: number) => unknown;
-          geometry?: { spherical?: { computeHeading: (a: LatLng, b: LatLng) => number } };
+          geometry?: {
+            spherical?: {
+              computeHeading: (a: LatLng, b: LatLng) => number;
+              computeDistanceBetween: (a: LatLng, b: LatLng) => number;
+              computeOffset: (from: LatLng, distance: number, heading: number) => { lat: () => number; lng: () => number };
+            };
+          };
           marker?: { AdvancedMarkerElement: new (opts: object) => { position?: LatLng; map?: object | null } };
         };
       };
@@ -408,16 +453,24 @@ export default function DeliveryMap({
     else if (accepted && agent) stops.push(agent, resolved.drop);
     else if (resolved.store) stops.push(resolved.store, resolved.drop);
     if (stops.length < 2) return;
-    const path = flyingRoute(stops);
+    const spherical = maps.geometry?.spherical as
+      | {
+          computeDistanceBetween: (a: LatLng, b: LatLng) => number;
+          computeHeading: (a: LatLng, b: LatLng) => number;
+          computeOffset: (from: LatLng, distance: number, heading: number) => { lat: () => number; lng: () => number };
+        }
+      | undefined;
+    const path = flyingRoute(stops, spherical);
     let frame = 0;
     live.line?.setMap(null);
     live.line = new maps.Polyline({
       map: live.map,
       path,
       strokeColor: ROAD,
-      strokeOpacity: 0.95,
-      strokeWeight: 3,
-      zIndex: 2,
+      strokeOpacity: 1,
+      strokeWeight: 4,
+      geodesic: false,
+      zIndex: 8,
     });
     live.path = path;
     const bounds = new maps.LatLngBounds();
@@ -425,11 +478,13 @@ export default function DeliveryMap({
     if (resolved.store) bounds.extend(resolved.store);
     bounds.extend(resolved.drop);
     if (agent) bounds.extend(agent);
-    live.map.fitBounds(bounds, { top: 72, right: 48, bottom: 48, left: 48 });
+    const pad = { top: 80, right: 64, bottom: 64, left: 64 };
+    live.map.fitBounds(bounds, pad);
     window.setTimeout(() => {
-      live.map.setTilt(67.5);
-      live.map.setHeading(24);
-    }, 400);
+      live.map.setTilt(12);
+      live.map.setHeading(8);
+      live.map.fitBounds(bounds, pad);
+    }, 350);
     if (!accepted || !agent) {
       if (live.bike) live.bike.map = null;
     } else {
@@ -497,6 +552,7 @@ export default function DeliveryMap({
         agentPhone={agentPhone}
         storeLabel={store.label || "Store"}
         dropLabel={drop.label || "You"}
+        showCourier={showCourier}
       />
     );
   }
@@ -511,15 +567,17 @@ export default function DeliveryMap({
           {accepted ? <span><i style={{ background: "#0B1F3A" }} /> Rider</span> : null}
         </div>
       </div>
-      <AgentCard
-        partner={partner}
-        status={status}
-        accepted={accepted}
-        leg={leg}
-        agentName={agentName}
-        agentPhone={agentPhone}
-        arrival={promised}
-      />
+      {showCourier ? (
+        <AgentCard
+          partner={partner}
+          status={status}
+          accepted={accepted}
+          leg={leg}
+          agentName={agentName}
+          agentPhone={agentPhone}
+          arrival={promised}
+        />
+      ) : null}
     </div>
   );
 }

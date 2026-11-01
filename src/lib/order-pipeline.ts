@@ -63,10 +63,14 @@ export function classifyCourierScan(text: string): CourierStage | null {
   if (/\b(successful|success|completed|complete|already delivered|task successful)\b/.test(value) && !/\b(attempt|fail|undeliver)\b/.test(value)) {
     return "delivered";
   }
+  if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
+    return "packed";
+  }
   if (
-    /\b(in transit|shipped|dispatch|left (the )?hub|arrived at (hub|facility|warehouse|origin)|reached (destination|hub|pickup)|picked up|pickup done|pickup complete|manifested|arrived at pickup)\b/.test(
+    /\b(in transit|shipped|dispatch|departed|outscan|forwarded|connected to|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
       value
-    )
+    ) &&
+    !/out for delivery|customer|doorstep/.test(value)
   ) {
     return "shipped";
   }
@@ -98,10 +102,35 @@ function destLabel(order: Order) {
   return `${city}, ${state}, India`;
 }
 
-function scanEvent(scan: CourierScan, index: number, reached: boolean): ShipmentEvent {
+function cityName(value?: string) {
+  const text = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!text || /^-?\d+(\.\d+)?\s*,\s*-?\d+/.test(text)) return "";
+  const parts = text.split(/[,|]/).map((part) => part.trim()).filter(Boolean);
+  const place = parts.find((part) => /[a-z]/i.test(part) && !/^(india|hub|facility|warehouse|courier|center|centre)$/i.test(part));
+  return (place ?? "").replace(/\b(hub|facility|warehouse|center|centre)\b/gi, "").trim();
+}
+
+/** Plain names for parcel scans from Tookan parcel, Shiprocket, and the other courier portals. */
+export function courierEventTitle(status: string, location?: string) {
+  const value = status.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const city = cityName(location) || cityName(status.split(/[-–]/).slice(1).join(" "));
+  const place = city ? ` - ${city}` : "";
+  if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
+    return "Pickup scheduled";
+  }
+  if (/arrived at|reached at|received at|inward|bag received|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
+    return `Shipment arrived at courier facility${place}`;
+  }
+  if (/left (the )?(hub|facility|warehouse)|departed|\bdispatched\b|outscan|forwarded|in transit|shipment shipped|connected to/.test(value) && !/out for delivery/.test(value)) {
+    return `Shipment left courier facility${place}`;
+  }
+  return status;
+}
+
+function scanEvent(scan: CourierScan, index: number, reached: boolean, title = scan.status): ShipmentEvent {
   return {
     id: `scan-${index}-${scan.at}`,
-    title: scan.status,
+    title,
     at: scan.at,
     location: scan.location,
     agent: scan.agent,
@@ -164,7 +193,7 @@ function makeStage(
 export function buildTrackingStages(
   order: Order,
   scans: CourierScan[] = [],
-  shipment?: Pick<ShipmentRecord, "generatedAt" | "courier" | "awb" | "status" | "tracking" | "note" | "provider"> | null
+  shipment?: Pick<ShipmentRecord, "generatedAt" | "courier" | "awb" | "status" | "tracking" | "note" | "provider" | "pickupScheduledFor"> | null
 ): {
   stages: TrackingStage[];
   reachedEvents: number;
@@ -370,12 +399,33 @@ export function buildTrackingStages(
       reached: true,
     });
   }
+  if (!hyperlocal) {
+    liveScans.forEach((scan, index) => {
+      if (!/pickup scheduled|pickup awaited|pickup pending|awaiting pickup|pickup request|out for pickup|ready for pickup/i.test(scan.status)) return;
+      packedEvents.push(scanEvent(scan, index, true, "Pickup scheduled"));
+    });
+  }
+  if (!hyperlocal && shipment?.pickupScheduledFor && !packedEvents.some((event) => event.title === "Pickup scheduled")) {
+    packedEvents.push({
+      id: "pickup-scheduled",
+      title: "Pickup scheduled",
+      at: shipment.pickupScheduledFor,
+      location: origin,
+      reached: true,
+    });
+  }
 
   const shippedEvents = liveScans
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
-    .filter((item) => item.mapped === "shipped" || item.mapped === "packed")
     .filter((item) => item.mapped === "shipped")
-    .map((item) => scanEvent(item.scan, item.index, shippedReached));
+    .map((item) =>
+      scanEvent(
+        item.scan,
+        item.index,
+        shippedReached,
+        hyperlocal ? item.scan.status : courierEventTitle(item.scan.status, item.scan.location)
+      )
+    );
 
   if (shippedReached && shippedEvents.length === 0) {
     shippedEvents.push({

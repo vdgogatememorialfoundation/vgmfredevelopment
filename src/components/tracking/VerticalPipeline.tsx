@@ -24,6 +24,8 @@ interface VerticalPipelineProps {
   metaFor?: (stage: PipelineStageShape) => string;
   timingFor?: (stage: PipelineStageShape) => { label: string; tone: PipelineTone } | null;
   note?: string;
+  /** Milliseconds. The line creeps from the current step toward the next one until `until`. */
+  pace?: { from: number; until: number } | null;
 }
 
 const ICONS: Record<string, string> = {
@@ -78,6 +80,7 @@ export default function VerticalPipeline({
   metaFor,
   timingFor,
   note,
+  pace,
 }: VerticalPipelineProps) {
   const lastReachedIdx = stages.map((stage) => stage.reached).lastIndexOf(true);
   const partialIdx = stages.map((stage) => stage.partial).lastIndexOf(true);
@@ -87,6 +90,22 @@ export default function VerticalPipeline({
   const listRef = useRef<HTMLOListElement>(null);
   const phase = useRef<"start" | "at-step">("start");
   const [line, setLine] = useState({ left: 14.5, top: 34, height: 0, transition: "none" });
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 10000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const terminal = new Set(["delivered", "picked", "failed", "cancelled", "refunded"]);
+  const current = stages[nodeCurrentIdx];
+  const creep =
+    !pace ||
+    !current ||
+    terminal.has(current.id) ||
+    nodeCurrentIdx >= stages.length - 1 ||
+    stages[nodeCurrentIdx + 1]?.reached ||
+    pace.until <= pace.from
+      ? 0
+      : Math.max(0, Math.min(0.88, (now - pace.from) / (pace.until - pace.from)));
 
   useEffect(() => {
     setOpenIdx(Math.max(0, nodeCurrentIdx));
@@ -109,10 +128,17 @@ export default function VerticalPipeline({
       const end = currentDot.getBoundingClientRect();
       const top = start.top + start.height / 2 - frameBox.top;
       const bottom = end.top + end.height / 2 - frameBox.top;
+      const nextDot = items[nodeCurrentIdx + 1]?.querySelector(".dot");
+      let height = Math.max(0, bottom - top);
+      if (nextDot && creep > 0) {
+        const nextBox = nextDot.getBoundingClientRect();
+        const nextCenter = nextBox.top + nextBox.height / 2 - frameBox.top;
+        height += Math.max(0, nextCenter - bottom) * creep;
+      }
       return {
         left: start.left + start.width / 2 - frameBox.left - 1.5,
         top,
-        height: Math.max(0, bottom - top),
+        height,
       };
     };
     const motion = (duration: string) =>
@@ -131,11 +157,11 @@ export default function VerticalPipeline({
           const latest = read();
           if (!latest) return;
           phase.current = "at-step";
-          paint(latest, "height 2.6s linear");
+          paint(latest, "height 4.8s linear");
         }, 70);
         return;
       }
-      paint(next, "height 2.6s linear");
+      paint(next, "height 12s linear");
     };
     const timer = window.setTimeout(apply, 40);
     const follow = () => {
@@ -152,9 +178,9 @@ export default function VerticalPipeline({
       window.clearTimeout(timer);
       window.clearTimeout(growTimer);
       observer.disconnect();
-      window.removeEventListener("resize", apply);
+      window.removeEventListener("resize", follow);
     };
-  }, [nodeCurrentIdx, openIdx, stages.length]);
+  }, [nodeCurrentIdx, openIdx, stages.length, creep]);
 
   const firstUpcoming = stages.findIndex((stage, index) => pipeState(stage, index === nodeCurrentIdx) === "upcoming");
 

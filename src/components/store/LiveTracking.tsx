@@ -73,6 +73,7 @@ export default function LiveTracking({
       agent={agent}
       agentName={accepted ? shipment?.agentName : undefined}
       agentPhone={accepted ? shipment?.agentPhone : undefined}
+      showCourier={/picked up|out for|in transit|deliver/i.test(`${status} ${shipment?.status ?? ""}`) || leg === "delivery"}
       promised={shipment?.expectedBy || ""}
       onArrival={onArrival}
     />
