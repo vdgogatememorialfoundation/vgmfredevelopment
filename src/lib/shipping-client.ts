@@ -1,4 +1,5 @@
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
+import { customerCourierLabel, GOGATE_COURIER } from "@/lib/courier-label";
 import { checkPincode } from "@/lib/fulfillment";
 import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
@@ -23,8 +24,8 @@ function credsFrom(settings: IntegrationSettings): ShippingCreds {
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
 export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
 
-export function lastMileLabel(provider?: string, lastMile?: string) {
-  const partner = provider === "nimbuspost" ? "Nimbuspost" : provider === "ithink" ? "iThink Logistics" : "Shiprocket";
+export function lastMileLabel(provider?: string, lastMile?: string, courier?: string) {
+  const partner = customerCourierLabel({ provider, courier });
   if (lastMile === "porter") return `${partner} · Porter`;
   if (lastMile === "shadowfax") return `${partner} · Shadowfax Flash`;
   if (lastMile === "flash") return `${partner} · Flash`;
@@ -46,13 +47,13 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
   if (hasShippingCredentials("tookan", settings)) {
     const tookan = settings.shipping.tookan;
     if (tookan.hyperlocal && sameCity) {
-      rates.push({ provider: "tookan", courierId: "tookan", courierName: "Tookan", rate: 39, etaDays: 0, live: true });
+      rates.push({ provider: "tookan", courierId: "tookan", courierName: GOGATE_COURIER, rate: 39, etaDays: 0, live: true });
     }
     if (tookan.parcel && (!sameCity || !tookan.hyperlocal)) {
       rates.push({
         provider: "tookan-parcel",
         courierId: "tookan-parcel",
-        courierName: "Tookan parcel",
+        courierName: GOGATE_COURIER,
         rate: 45,
         etaDays: sameCity ? 1 : 3,
         live: true,
@@ -60,7 +61,7 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
     }
   }
   if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && sameCity) {
-    rates.push({ provider: "shipday", courierId: "shipday", courierName: "Shipday", rate: 49, etaDays: 0, live: true });
+    rates.push({ provider: "shipday", courierId: "shipday", courierName: GOGATE_COURIER, rate: 49, etaDays: 0, live: true });
   }
   return rates;
 }
@@ -309,7 +310,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   const shipment: ShipmentRecord = {
     ...base,
     awb: result.awb,
-    courier: result.courierName || choice.courierName,
+    courier: customerCourierLabel({ provider: choice.provider, courier: result.courierName || choice.courierName }),
     live: true,
     providerOrderId: result.providerOrderId,
     providerShipmentId: result.providerShipmentId,
@@ -569,15 +570,68 @@ function mapCourierStatus(text: string): ShipmentRecord["status"] | undefined {
   return undefined;
 }
 
+type TrackHit = {
+  status?: string;
+  events?: { at: string; status: string; location?: string }[];
+  trackingUrl?: string;
+  courierName?: string;
+  awb?: string;
+  lat?: number;
+  lng?: number;
+  agentName?: string;
+  agentPhone?: string;
+  otp?: string;
+  pickupLat?: number;
+  pickupLng?: number;
+  dropLat?: number;
+  dropLng?: number;
+};
+
+function dedupeScans(events: { at: string; status: string; location?: string }[]) {
+  const out: { at: string; status: string; location?: string }[] = [];
+  for (const event of events) {
+    const prev = out[out.length - 1];
+    if (prev && prev.status === event.status && (prev.location ?? "") === (event.location ?? "")) continue;
+    out.push(event);
+  }
+  return out;
+}
+
+function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
+  const events = dedupeScans(result.events?.length ? result.events : shipment.tracking ?? []);
+  const courier = customerCourierLabel({ provider: shipment.provider, courier: result.courierName || shipment.courier });
+  const awb = result.awb || shipment.awb;
+  const mapped = result.status ? mapCourierStatus(result.status) : undefined;
+  const update: Partial<ShipmentRecord> = {
+    tracking: events.length ? events : shipment.tracking,
+    status: mapped ?? shipment.status,
+    trackingUrl: result.trackingUrl || shipment.trackingUrl,
+    courier,
+    awb,
+  };
+  if (result.agentName) update.agentName = result.agentName;
+  if (result.agentPhone) update.agentPhone = result.agentPhone;
+  if (result.otp) update.deliveryOtp = result.otp;
+  if (result.lat != null) update.agentLat = result.lat;
+  if (result.lng != null) update.agentLng = result.lng;
+  if (result.pickupLat != null) update.pickupLat = result.pickupLat;
+  if (result.pickupLng != null) update.pickupLng = result.pickupLng;
+  if (result.dropLat != null) update.dropLat = result.dropLat;
+  if (result.dropLng != null) update.dropLng = result.dropLng;
+  const saved = patchShipment(shipment.id, update) ?? { ...shipment, ...update };
+  const order = getOrder(shipment.orderId);
+  if (order && (order.courierName !== courier || (awb && order.trackingId !== awb))) {
+    patchOrder(shipment.orderId, { courierName: courier, trackingId: awb || order.trackingId });
+  }
+  if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
+  return saved;
+}
+
 export async function trackShipment(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
   if (shipment.live && shipment.provider && shipment.provider !== "local") {
-    const result = await post<{
-      status: string;
-      events: { at: string; status: string; location?: string }[];
-      trackingUrl?: string;
-    }>({
+    const result = await post<TrackHit>({
       action: "track",
       provider: shipment.provider,
       creds: credsFrom(getIntegrations()),
@@ -585,13 +639,7 @@ export async function trackShipment(shipmentId: string) {
       providerOrderId: shipment.providerOrderId,
     });
     if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
-    const mapped = mapCourierStatus(result.status);
-    patchShipment(shipmentId, {
-      tracking: result.events.length ? result.events : shipment.tracking,
-      status: mapped ?? shipment.status,
-      trackingUrl: result.trackingUrl || shipment.trackingUrl,
-    });
-    if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
+    applyTrackHit(shipment, result);
     return result.status || "No scan yet.";
   }
   return shipment.status;
@@ -605,15 +653,11 @@ export async function pingLiveAgent(shipmentId: string) {
       status: shipment.status,
       events: shipment.tracking ?? [],
       trackingUrl: publicTrackingUrl(shipment),
+      lat: shipment.agentLat,
+      lng: shipment.agentLng,
     };
   }
-  const result = await post<{
-    status: string;
-    events: { at: string; status: string; location?: string }[];
-    lat?: number;
-    lng?: number;
-    trackingUrl?: string;
-  }>({
+  const result = await post<TrackHit>({
     action: "track",
     provider: shipment.provider,
     creds: credsFrom(getIntegrations()),
@@ -621,19 +665,13 @@ export async function pingLiveAgent(shipmentId: string) {
     providerOrderId: shipment.providerOrderId,
   });
   if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
-  const mapped = mapCourierStatus(result.status);
-  patchShipment(shipmentId, {
-    tracking: result.events.length ? result.events : shipment.tracking,
-    status: mapped ?? shipment.status,
-    trackingUrl: result.trackingUrl || shipment.trackingUrl,
-  });
-  if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
+  const saved = applyTrackHit(shipment, result);
   return {
-    status: result.status || shipment.status,
-    events: result.events.length ? result.events : shipment.tracking ?? [],
-    lat: result.lat,
-    lng: result.lng,
-    trackingUrl: result.trackingUrl || publicTrackingUrl(shipment),
+    status: result.status || saved.status,
+    events: result.events?.length ? result.events : saved.tracking ?? [],
+    lat: result.lat ?? saved.agentLat,
+    lng: result.lng ?? saved.agentLng,
+    trackingUrl: result.trackingUrl || publicTrackingUrl(saved),
   };
 }
 

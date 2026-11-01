@@ -41,6 +41,7 @@ import {
   tookanTrack,
   type RateOut,
 } from "@/lib/server/providers";
+import { mergeShippingCreds } from "@/lib/server/shipping-vault";
 import { listWebhooks } from "@/lib/server/webhooks";
 
 type Body = Record<string, unknown> & {
@@ -59,6 +60,7 @@ const unsupported = (provider: string) =>
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as Body;
   const creds = body.creds ?? {};
+  if (Object.keys(creds).length) mergeShippingCreds(creds);
   const provider = String(body.provider ?? "");
   const own = creds[provider] ?? creds[provider.replace("-parcel", "")] ?? {};
 

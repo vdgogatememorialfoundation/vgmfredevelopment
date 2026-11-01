@@ -1,4 +1,4 @@
-/* Seminar commerce-track look: vertical pipe, slow downward fill, maps only for hyperlocal. */
+/* Seminar commerce-track look: vertical pipe, slow downward fill, store-to-customer map. */
 .vgmf-trk {
   color: var(--tl-text);
   font-size: 14px;
@@ -104,8 +104,9 @@
 .vgmf-ship-title {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   align-items: baseline;
+  flex-wrap: wrap;
 }
 .vgmf-ship-title b {
   font-size: 1.05rem;
@@ -119,8 +120,9 @@
   font-size: 0.75rem;
   font-weight: 600;
   text-align: right;
-  flex: 0 0 auto;
-  max-width: 48%;
+  flex: 1 1 auto;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .vgmf-ship-msg,
 .vgmf-ship-next {
@@ -158,8 +160,10 @@
   font-size: 0.82rem;
 }
 .vgmf-ship-courier span {
+  display: block;
   color: var(--tl-muted);
   font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 .vgmf-ship-drawer-btn {
   margin-top: 8px;
@@ -228,10 +232,47 @@
   font-size: 0.82rem;
   margin: 4px 0 0;
 }
+.vgmf-trk,
+.vgmf-hl,
+.vgmf-hl-sheet,
+.vgmf-ship-pipe,
+.vgmf-ship-copy {
+  max-width: 100%;
+  min-width: 0;
+}
+.vgmf-trk-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.vgmf-trk-tile {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #e6eeea;
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.vgmf-trk-tile b {
+  display: block;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tl-muted);
+}
+.vgmf-trk-tile span {
+  display: block;
+  margin-top: 4px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
 .vgmf-hl {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
+}
+.vgmf-hl-map {
+  order: -1;
 }
 @media (min-width: 860px) {
   .vgmf-hl {
@@ -239,10 +280,14 @@
     align-items: start;
   }
   .vgmf-hl .vgmf-hl-map {
+    order: 0;
     position: sticky;
     top: 12px;
     min-height: 420px;
     height: min(70vh, 640px);
+  }
+  .vgmf-trk-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 .vgmf-hl-map {
@@ -267,6 +312,68 @@
   height: 8px;
   border-radius: 50%;
   background: var(--tl-green);
+}
+.vgmf-map-card {
+  position: relative;
+  height: 100%;
+  min-height: 320px;
+}
+.vgmf-map-legend {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+}
+.vgmf-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.vgmf-map-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.vgmf-map-agent {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+.vgmf-map-agent b,
+.vgmf-map-agent span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.vgmf-map-agent span {
+  color: var(--tl-muted);
+  font-size: 0.78rem;
+}
+.vgmf-map-agent a {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--tl-green, #0f7a4a);
+  color: #fff;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 @property --grow {
   syntax: "<number>";

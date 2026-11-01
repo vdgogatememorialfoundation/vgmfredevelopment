@@ -13,7 +13,7 @@ import type {
   User,
 } from "@/types";
 import { siteConfig, storeConfig } from "@/lib/constants";
-import { generateOrderId, getOrders, pickupOtp, publishShopOrder, saveOrder } from "@/lib/store";
+import { generateOrderId, getOrders, pickupOtp, publishShipment, publishShopOrder, saveOrder } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
@@ -889,6 +889,7 @@ export function createShipment(input: {
   const list = getShipments().filter((s) => s.orderId !== order.id);
   list.push(shipment);
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(shipment);
 
   const next = { ...order, shipmentId: shipment.id, status: "Shipped" as OrderStatus };
   updateOrderInStore(next);
@@ -900,6 +901,7 @@ export function saveShipmentRecord(shipment: ShipmentRecord) {
   const list = getShipments().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
   list.push(shipment);
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(shipment);
 }
 
 export function patchShipment(shipmentId: string, update: Partial<ShipmentRecord>) {
@@ -908,6 +910,7 @@ export function patchShipment(shipmentId: string, update: Partial<ShipmentRecord
   if (index === -1) return;
   list[index] = { ...list[index], ...update };
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(list[index]);
   return list[index];
 }
 
@@ -924,6 +927,7 @@ export function updateShipmentStatus(shipmentId: string, status: ShipmentRecord[
   const idx = list.findIndex((s) => s.id === shipmentId);
   list[idx] = shipment;
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(shipment);
 
   const order = getOrder(shipment.orderId);
   if (order) {

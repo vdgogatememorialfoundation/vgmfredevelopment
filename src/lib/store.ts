@@ -5,6 +5,7 @@ import type {
   ReturnKind,
   ReturnRequest,
   ShipmentEvent,
+  ShipmentRecord,
 } from "@/types";
 import { buildTrackingStages as buildCourierStages, isSampleOrder } from "@/lib/order-pipeline";
 export type { TrackingStage, TrackingStageId } from "@/lib/order-pipeline";
@@ -193,7 +194,19 @@ export function publishShopOrder(order: Order) {
   void fetch("/api/shop/orders", {
     method: "POST",
     headers: { "content-type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ order }),
+  }).catch(() => undefined);
+}
+
+/** Keep the booked courier on this website so phones see the same tracking. */
+export function publishShipment(shipment: ShipmentRecord) {
+  if (typeof window === "undefined" || !shipment?.id) return;
+  void fetch("/api/shop/shipments", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ shipment }),
   }).catch(() => undefined);
 }
 

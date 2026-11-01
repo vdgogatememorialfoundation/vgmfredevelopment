@@ -16,6 +16,7 @@ import {
   StatusBadge,
   formatINR,
 } from "@/components/admin/AdminUI";
+import { customerCourierLabel } from "@/lib/courier-label";
 import { formatDate } from "@/lib/utils";
 
 const SHIPMENT_TONES: Record<string, string> = {
@@ -51,7 +52,7 @@ export function ShipmentsSection() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="font-semibold text-text-primary">
-                        #{shipment.orderId} — {shipment.courier}
+                        #{shipment.orderId} — {customerCourierLabel({ provider: shipment.provider, courier: shipment.courier })}
                       </p>
                       <p className="font-mono text-xs text-burgundy">AWB {shipment.awb}</p>
                     </div>

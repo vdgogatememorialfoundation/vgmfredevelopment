@@ -74,7 +74,7 @@ export default function OrdersPage() {
             const extraItems = Math.max(0, order.items.length - 1);
 
             return (
-              <article key={order.id} className="card overflow-hidden">
+              <article key={order.id} className="card overflow-visible">
                 <button
                   type="button"
                   onClick={() => setExpandedId(expanded ? null : order.id)}
@@ -133,7 +133,7 @@ export default function OrdersPage() {
                             Live scans synced from the courier
                           </span>
                         </h3>
-                        <span className="text-xs font-semibold text-burgundy">
+                        <span className="max-w-[46%] text-right text-xs font-semibold break-all text-burgundy">
                           {order.trackingId ?? "Tracking id pending"}
                         </span>
                       </div>

@@ -1,4 +1,5 @@
 import type { Order, ShipmentEvent, ShipmentRecord } from "@/types";
+import { customerCourierLabel } from "@/lib/courier-label";
 import { siteConfig, storeConfig } from "@/lib/constants";
 
 /** Deterministic 6-digit pickup OTP derived from the order id. */
@@ -163,7 +164,7 @@ function makeStage(
 export function buildTrackingStages(
   order: Order,
   scans: CourierScan[] = [],
-  shipment?: Pick<ShipmentRecord, "generatedAt" | "courier" | "awb" | "status" | "tracking" | "note"> | null
+  shipment?: Pick<ShipmentRecord, "generatedAt" | "courier" | "awb" | "status" | "tracking" | "note" | "provider"> | null
 ): {
   stages: TrackingStage[];
   reachedEvents: number;
@@ -171,7 +172,10 @@ export function buildTrackingStages(
 } {
   const dest = destLabel(order);
   const origin = "Pune, Maharashtra, India";
-  const courier = order.courierName ?? shipment?.courier ?? storeConfig.courierName;
+  const courier = customerCourierLabel({
+    provider: shipment?.provider ?? order.courierChoice?.provider,
+    courier: shipment?.courier || order.courierName,
+  });
   const trackingId = order.trackingId ?? shipment?.awb ?? "";
   const liveScans = scans.length ? scans : shipment?.tracking ?? [];
   const fromScans = highestScanStage(liveScans);

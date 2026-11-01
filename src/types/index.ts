@@ -730,6 +730,15 @@ export interface ShipmentRecord {
   tracking?: { at: string; status: string; location?: string }[];
   trackingUrl?: string;
   note?: string;
+  agentName?: string;
+  agentPhone?: string;
+  agentLat?: number;
+  agentLng?: number;
+  pickupLat?: number;
+  pickupLng?: number;
+  dropLat?: number;
+  dropLng?: number;
+  deliveryOtp?: string;
 }
 
 export interface SupportMessage {

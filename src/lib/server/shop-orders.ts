@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { orderActivityAt, phonesMatch } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
 import type { Order } from "@/types";
 
@@ -15,11 +16,46 @@ function readAll(): Order[] {
   }
 }
 
+function writeAll(orders: Order[]) {
+  writeFileSync(file(), JSON.stringify(orders.slice(0, 2000)));
+}
+
+export function listShopOrders() {
+  return readAll();
+}
+
+export function findShopOrder(id: string) {
+  return readAll().find((order) => order.id === id);
+}
+
+export function ordersForEmail(email: string) {
+  const value = email.trim().toLowerCase();
+  if (!value) return [];
+  return readAll().filter((order) => (order.deliveryAddress?.email ?? "").toLowerCase() === value);
+}
+
+export function orderPhoneMatches(order: Order, phone: string) {
+  return phonesMatch(order.deliveryAddress?.phone, phone);
+}
+
 export function upsertShopOrder(order: Order) {
   if (!order?.id) return;
-  const orders = readAll().filter((item) => item.id !== order.id);
-  orders.unshift(order);
-  writeFileSync(file(), JSON.stringify(orders.slice(0, 2000)));
+  const all = readAll();
+  const prev = all.find((item) => item.id === order.id);
+  if (prev && orderActivityAt(prev) > orderActivityAt(order)) return prev;
+  const orders = all.filter((item) => item.id !== order.id);
+  orders.unshift(prev ? { ...prev, ...order } : order);
+  writeAll(orders);
+  return orders[0];
+}
+
+export function patchShopOrder(id: string, update: Partial<Order>) {
+  const all = readAll();
+  const index = all.findIndex((order) => order.id === id);
+  if (index === -1) return;
+  all[index] = { ...all[index], ...update };
+  writeAll(all);
+  return all[index];
 }
 
 export function searchShopOrders(query: string) {

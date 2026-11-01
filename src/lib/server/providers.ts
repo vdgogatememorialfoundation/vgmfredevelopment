@@ -735,8 +735,11 @@ export async function shiprocketTrack(input: Json, awb: string) {
   });
   const tracking = (data.tracking_data as Json) ?? {};
   const activities = (tracking.shipment_track_activities as Json[]) ?? [];
+  const trackRow = ((tracking.shipment_track as Json[]) ?? [])[0] ?? {};
   return {
-    status: String(((tracking.shipment_track as Json[]) ?? [])[0]?.current_status ?? tracking.shipment_status ?? ""),
+    status: String(trackRow.current_status ?? tracking.shipment_status ?? ""),
+    courierName: String(trackRow.courier_name ?? ""),
+    awb: String(trackRow.awb_code ?? awb),
     events: activities.map((activity) => ({ at: String(activity.date), status: String(activity.activity), location: String(activity.location ?? "") })),
     trackingUrl: String(tracking.track_url ?? `https://shiprocket.co/tracking/${awb}`),
   };
@@ -851,6 +854,8 @@ export async function nimbusTrack(input: Json, awb: string) {
   const history = (shipment.history as Json[]) ?? [];
   return {
     status: String(shipment.status ?? ""),
+    courierName: String(shipment.courier_name ?? shipment.courier ?? ""),
+    awb,
     events: history.map((event) => ({ at: String(event.event_time), status: String(event.message ?? event.status_code), location: String(event.location ?? "") })),
     trackingUrl: String(shipment.tracking_url ?? `https://ship.nimbuspost.com/?awb=${awb}`),
   };
@@ -906,7 +911,7 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
   return {
     provider: "shipday",
     awb: String(data.orderId ?? order.orderId),
-    courierName: "Shipday driver",
+    courierName: "Gogate Products",
     providerOrderId: String(data.orderId ?? ""),
   };
 }
@@ -941,9 +946,14 @@ export async function shipdayTrack(input: Json, orderId: string) {
     return { status: "Not found", events: [] as { at: string; status: string; location: string }[] };
   }
   const status = String(match.orderStatus ?? match.status ?? "");
-  const carrier = (match.assignedCarrier as { name?: string } | undefined)?.name ?? "";
-  const lat = Number(match.carrierLatitude ?? match.latitude ?? (match.assignedCarrier as Json | undefined)?.latitude);
-  const lng = Number(match.carrierLongitude ?? match.longitude ?? (match.assignedCarrier as Json | undefined)?.longitude);
+  const carrier = (match.assignedCarrier as Json | undefined) ?? (match.carrier as Json | undefined) ?? {};
+  const carrierName = String(carrier.name ?? "");
+  const lat = Number(match.carrierLatitude ?? match.latitude ?? carrier.latitude);
+  const lng = Number(match.carrierLongitude ?? match.longitude ?? carrier.longitude);
+  const pickupLat = Number(match.pickupLatitude ?? match.restaurantLatitude ?? (match.restaurant as Json | undefined)?.latitude);
+  const pickupLng = Number(match.pickupLongitude ?? match.restaurantLongitude ?? (match.restaurant as Json | undefined)?.longitude);
+  const dropLat = Number(match.deliveryLatitude ?? match.customerLatitude ?? (match.delivery as Json | undefined)?.latitude);
+  const dropLng = Number(match.deliveryLongitude ?? match.customerLongitude ?? (match.delivery as Json | undefined)?.longitude);
   const feed = ((match.activityLog as Json[]) ?? (match.activityFeed as Json[]) ?? []).map((entry) => ({
     at: String(entry.time ?? entry.createdAt ?? ""),
     status: String(entry.description ?? entry.status ?? ""),
@@ -951,9 +961,17 @@ export async function shipdayTrack(input: Json, orderId: string) {
   }));
   return {
     status,
-    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: String(carrier) }],
+    courierName: "Gogate Products",
+    awb: orderId,
+    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: carrierName }],
     lat: Number.isFinite(lat) ? lat : undefined,
     lng: Number.isFinite(lng) ? lng : undefined,
+    agentName: carrierName,
+    agentPhone: String(carrier.phoneNumber ?? carrier.phone ?? ""),
+    pickupLat: Number.isFinite(pickupLat) ? pickupLat : undefined,
+    pickupLng: Number.isFinite(pickupLng) ? pickupLng : undefined,
+    dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
+    dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
   };
 }
@@ -1052,7 +1070,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
     return {
       provider: "tookan-parcel",
       awb: String(task.delivery_job_id ?? task.job_id ?? ""),
-      courierName: "Tookan parcel",
+      courierName: "Gogate Products",
       providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
       providerShipmentId: String(task.delivery_job_id ?? ""),
       trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1089,7 +1107,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
   return {
     provider: "tookan",
     awb: String(task.job_id ?? task.delivery_job_id ?? ""),
-    courierName: "Tookan hyperlocal",
+    courierName: "Gogate Products",
     providerOrderId: String(task.job_id ?? ""),
     trackingUrl: String(task.tracking_link ?? task.delivery_tracing_link ?? ""),
     pickupScheduledFor: pickupAt,
@@ -1107,10 +1125,27 @@ export async function tookanTrack(input: Json, jobId: string) {
   const history = (job.task_history as Json[]) ?? [];
   const code = Number(job.job_status ?? job.status);
   const currentLabel = tookanStatusLabel[code] ?? String(job.job_status ?? job.status ?? "");
-  const lat = Number(job.fleet_latitude ?? job.job_latitude ?? job.latitude);
-  const lng = Number(job.fleet_longitude ?? job.job_longitude ?? job.longitude);
+  const fleet = (job.fleet as Json) ?? {};
+  const lat = Number(job.fleet_latitude ?? fleet.latitude);
+  const lng = Number(job.fleet_longitude ?? fleet.longitude);
+  const pickupLat = Number(job.job_pickup_latitude ?? job.pickup_latitude);
+  const pickupLng = Number(job.job_pickup_longitude ?? job.pickup_longitude);
+  const dropLat = Number(job.job_latitude ?? job.customer_latitude ?? job.delivery_latitude);
+  const dropLng = Number(job.job_longitude ?? job.customer_longitude ?? job.delivery_longitude);
+  const coord = (value: number) => (Number.isFinite(value) && Math.abs(value) > 0.001 ? value : undefined);
   return {
     status: currentLabel,
+    courierName: "Gogate Products",
+    awb: jobId,
+    agentName: String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? ""),
+    agentPhone: String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? ""),
+    otp: String(job.job_otp ?? job.order_otp ?? ""),
+    lat: coord(lat),
+    lng: coord(lng),
+    pickupLat: coord(pickupLat),
+    pickupLng: coord(pickupLng),
+    dropLat: coord(dropLat),
+    dropLng: coord(dropLng),
     events: [
       ...history.map((entry) => {
         const entryCode = Number(entry.job_status ?? entry.type);
@@ -1124,8 +1159,6 @@ export async function tookanTrack(input: Json, jobId: string) {
       }),
       ...(currentLabel ? [{ at: new Date().toISOString(), status: currentLabel, location: "" }] : []),
     ],
-    lat: Number.isFinite(lat) ? lat : undefined,
-    lng: Number.isFinite(lng) ? lng : undefined,
     trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? ""),
   };
 }
@@ -1266,6 +1299,8 @@ export async function ithinkTrack(input: Json, awb: string) {
   const scans = (tracking?.scans as Json[]) ?? (tracking?.history as Json[]) ?? [];
   return {
     status: String(tracking?.current_status ?? tracking?.status ?? ""),
+    courierName: String(tracking?.logistic_name ?? tracking?.courier_name ?? tracking?.courier ?? ""),
+    awb,
     events: scans.map((scan) => ({
       at: String(scan.date ?? scan.time ?? scan.updated_date ?? ""),
       status: String(scan.status ?? scan.activity ?? ""),
@@ -1553,6 +1588,8 @@ export async function shipyaariTrack(input: Json, awb: string) {
   const history = (nested.history as Json[]) ?? (nested.scans as Json[]) ?? [];
   return {
     status: String(nested.status ?? nested.current_status ?? ""),
+    courierName: String(nested.courier_name ?? nested.courier ?? ""),
+    awb,
     events: history.map((entry) => ({
       at: String(entry.time ?? entry.date ?? ""),
       status: String(entry.status ?? entry.activity ?? ""),
