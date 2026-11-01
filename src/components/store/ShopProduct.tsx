@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import Badge from "@/components/common/Badge";
 import BookCard from "@/components/books/BookCard";
 import ProductBuyBox from "@/components/store/ProductBuyBox";
@@ -11,12 +12,26 @@ import { averageRating, useProductReviews } from "@/lib/reviews";
 import { useLiveBooks } from "@/lib/use-cms";
 import { storeConfig } from "@/lib/constants";
 import { getDiscountPercent } from "@/lib/store";
-import { books as seeded } from "@/data/books";
+import { browserHasProductEdits } from "@/components/store/ShopCatalogue";
+import type { Book } from "@/types";
 
-export default function ShopProduct({ slug }: { slug: string }) {
+export default function ShopProduct({
+  slug,
+  initialBook = null,
+  initialBooks = [],
+}: {
+  slug: string;
+  initialBook?: Book | null;
+  initialBooks?: Book[];
+}) {
   const live = useLiveBooks();
-  const catalogue = live.length ? live : seeded;
-  const book = catalogue.find((item) => item.slug === slug);
+  const [useLocal, setUseLocal] = useState(false);
+  useEffect(() => {
+    if (browserHasProductEdits()) setUseLocal(true);
+  }, [live]);
+  const catalogue = useLocal && live.length ? live : initialBooks;
+  const book = catalogue.find((item) => item.slug === slug) ?? (useLocal ? null : initialBook);
+  const purchaseReviews = useProductReviews(book?.id ?? "");
 
   if (!book) {
     return (
@@ -32,7 +47,6 @@ export default function ShopProduct({ slug }: { slug: string }) {
 
   const related = catalogue.filter((item) => item.slug !== book.slug).slice(0, 4);
   const discount = getDiscountPercent(book);
-  const purchaseReviews = useProductReviews(book.id);
   const rating = purchaseReviews.length ? averageRating(purchaseReviews) : book.rating ?? 0;
   const reviewCount = purchaseReviews.length || book.reviewCount || 0;
   const publisher = book.publisher?.name ?? storeConfig.publisherName;

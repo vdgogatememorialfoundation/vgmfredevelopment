@@ -7,7 +7,8 @@ import { setMailReady } from "@/lib/auth-access";
 import { hydratePublishedSite, setPublishedFeed } from "@/lib/hydrate-public";
 import { hydratePartnerFeed } from "@/lib/partner-hydrate";
 
-export type PublishedBrand = Pick<MobileFeed, "site" | "flyers" | "publishedAt" | "siteText">;
+export type PublishedBrand = Pick<MobileFeed, "site" | "flyers" | "publishedAt" | "siteText"> &
+  Partial<Pick<MobileFeed, "books" | "events" | "articles" | "clinics" | "videos" | "notices" | "announcements" | "gallery">>;
 
 export function HydratePublishedSite({
   initial,

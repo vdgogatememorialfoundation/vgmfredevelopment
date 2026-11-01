@@ -22,7 +22,20 @@ export default function StoreLayout({
   children: React.ReactNode;
 }) {
   const feed = readMobileFeed();
-  const initial = { site: feed.site, flyers: feed.flyers ?? [], publishedAt: feed.publishedAt, siteText: feed.siteText };
+  const initial = {
+    site: feed.site,
+    flyers: feed.flyers ?? [],
+    publishedAt: feed.publishedAt,
+    siteText: feed.siteText,
+    books: feed.books ?? [],
+    events: feed.events ?? [],
+    articles: feed.articles ?? [],
+    clinics: feed.clinics ?? [],
+    videos: feed.videos ?? [],
+    notices: feed.notices ?? [],
+    announcements: feed.announcements ?? [],
+    gallery: feed.gallery ?? [],
+  };
 
   return (
     <AuthProvider scope="public">

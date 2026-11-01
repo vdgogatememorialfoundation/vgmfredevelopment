@@ -144,21 +144,19 @@ function splitSeed<T extends { id: string }>(seed: T[], incoming: T[]) {
   return { custom, edits };
 }
 
+function browserEdited(keys: string[], stamped: string | null) {
+  return !stamped && keys.some((key) => window.localStorage.getItem(key));
+}
+
 /** Phones and other browsers have no admin localStorage, so the published feed is the catalogue they see. */
 function installPublishedCatalogue(feed: MobileFeed) {
   if (typeof window === "undefined") return;
   const fromFeed = window.localStorage.getItem(CATALOGUE_STAMP);
-  const authoredHere = Boolean(
-    window.localStorage.getItem("vgmf_custom_books") ||
-      window.localStorage.getItem("vgmf_deleted_books") ||
-      window.localStorage.getItem("vgmf_admin_products") ||
-      window.localStorage.getItem("vgmf_custom_events") ||
-      window.localStorage.getItem("vgmf_event_edits")
-  );
-  if (authoredHere && !fromFeed) return;
+  // Sister-site events land in local storage on every device. That must not block the shop.
+  const authoredProducts = browserEdited(["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"], fromFeed);
 
   const books = feed.books ?? [];
-  if (books.length) {
+  if (books.length && !authoredProducts) {
     const present = new Set(books.map((book) => book.id));
     tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify(books)));
     tryWrite(() =>
@@ -171,7 +169,7 @@ function installPublishedCatalogue(feed: MobileFeed) {
   }
 
   const writeSplit = <T extends { id: string }>(seed: T[], incoming: T[] | undefined, editsKey: string, customKey: string) => {
-    if (!incoming?.length) return;
+    if (!incoming?.length || browserEdited([editsKey, customKey], fromFeed)) return;
     const parts = splitSeed(seed, incoming);
     tryWrite(() => window.localStorage.setItem(customKey, JSON.stringify(parts.custom)));
     tryWrite(() => window.localStorage.setItem(editsKey, JSON.stringify(parts.edits)));

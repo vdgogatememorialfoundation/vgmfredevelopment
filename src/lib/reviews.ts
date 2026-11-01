@@ -226,10 +226,13 @@ export function averageRating(reviews: Array<{ rating: number }>) {
   return reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length;
 }
 
+const emptySeminarReviews: SeminarReview[] = [];
+const emptyProductReviews: ProductReview[] = [];
+
 let seminarRaw = "\0";
-let seminarList: SeminarReview[] = [];
+let seminarList: SeminarReview[] = emptySeminarReviews;
 let productRaw = "\0";
-let productList: ProductReview[] = [];
+let productList: ProductReview[] = emptyProductReviews;
 
 export function usePublishedSeminarReviews() {
   return useSyncExternalStore(
@@ -241,7 +244,7 @@ export function usePublishedSeminarReviews() {
       seminarList = getPublishedSeminarReviews();
       return seminarList;
     },
-    () => []
+    () => emptySeminarReviews
   );
 }
 
@@ -256,14 +259,14 @@ export function useProductReviews(productId: string) {
       productList = listProductReviews(productId);
       return productList;
     },
-    () => []
+    () => emptyProductReviews
   );
 }
 
 let allProductRaw = "\0";
-let allProductList: ProductReview[] = [];
+let allProductList: ProductReview[] = emptyProductReviews;
 let allSeminarRaw = "\0";
-let allSeminarList: SeminarReview[] = [];
+let allSeminarList: SeminarReview[] = emptySeminarReviews;
 
 export function useAllSeminarReviews() {
   return useSyncExternalStore(
@@ -275,7 +278,7 @@ export function useAllSeminarReviews() {
       allSeminarList = getSeminarReviews();
       return allSeminarList;
     },
-    () => []
+    () => emptySeminarReviews
   );
 }
 
@@ -289,6 +292,6 @@ export function useAllProductReviews() {
       allProductList = getProductReviews();
       return allProductList;
     },
-    () => []
+    () => emptyProductReviews
   );
 }
