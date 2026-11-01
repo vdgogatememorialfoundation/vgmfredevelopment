@@ -156,15 +156,10 @@ export default function CartPage() {
 
             <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
               <p className="font-semibold text-text-primary">
-                Returns & cancellation
+                Replacements
               </p>
               <p className="mt-1">
-                {orderSettings.cancellation.enabled
-                  ? `You can cancel until the order is ${orderSettings.cancellation.allowedUntil.toLowerCase()}. `
-                  : "Orders cannot be cancelled once placed. "}
-                {orderSettings.returns.enabled
-                  ? `Returnable within ${orderSettings.returns.windowDays} days of delivery for a refund${orderSettings.returns.replacementAllowed ? " or replacement" : ""}.`
-                  : "Returns are not accepted."}
+                Orders cannot be cancelled or returned from your account. Damaged items can be replaced after delivery if you share photos for the Foundation desk to review.
               </p>
             </div>
           </div>

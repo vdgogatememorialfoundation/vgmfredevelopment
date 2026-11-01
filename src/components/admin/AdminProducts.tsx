@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import {
   deleteCategory,
   deleteProduct,
+  ensureProductBarcodes,
   generateBarcode,
   generateProductCode,
   generateSku,
@@ -17,6 +18,8 @@ import {
   stockLevel,
   updateStock,
 } from "@/lib/product-data";
+import { barcodeSvg, printBarcodeSheet } from "@/lib/barcode";
+import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
 import { useAllProducts } from "@/lib/use-cms";
 import { fileToStoredUrl } from "@/lib/images";
 import type { AdminCategory, Book, ProductMedia, PublisherInfo } from "@/types";
@@ -90,12 +93,13 @@ export function ProductsSection() {
   const [filter, setFilter] = useState("all");
   const [restockQty, setRestockQty] = useState<Record<string, string>>({});
   const [stockNote, setStockNote] = useState("");
+  const [scanOpen, setScanOpen] = useState(false);
 
   const shown = books.filter((book) => {
     const q = query.trim().toLowerCase();
     const match =
       !q ||
-      [book.title, book.sku, book.productCode, book.isbn, book.author, book.category]
+      [book.title, book.sku, book.productCode, book.barcode, book.isbn, book.author, book.category]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
     if (!match) return false;
@@ -117,15 +121,60 @@ export function ProductsSection() {
             Add images, videos, ISBN and licences, publisher details, generate SKU and product code, then set stock or pre-order.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setCreating(true);
-            setEditedId(null);
-          }}
-        >
-          + Create product
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const created = ensureProductBarcodes();
+              setStockNote(created ? `Created ${created} missing barcode${created === 1 ? "" : "s"}.` : "Every product already has a barcode.");
+            }}
+          >
+            Fill missing barcodes
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() =>
+              printBarcodeSheet(
+                shown
+                  .filter((book) => book.barcode)
+                  .map((book) => ({ title: book.title, sku: book.sku, barcode: book.barcode as string }))
+              )
+            }
+          >
+            Print barcodes
+          </Button>
+          <Button variant="outline" onClick={() => setScanOpen(true)}>Scan barcode</Button>
+          <Button
+            onClick={() => {
+              setCreating(true);
+              setEditedId(null);
+            }}
+          >
+            + Create product
+          </Button>
+        </div>
       </div>
+
+      {stockNote && <p className="text-sm text-emerald-700">{stockNote}</p>}
+      {scanOpen && (
+        <BarcodeCamera
+          label="Scan a product barcode to open it"
+          onClose={() => setScanOpen(false)}
+          onScan={(code) => {
+            const match = books.find((book) =>
+              [book.barcode, book.sku, book.productCode, book.isbn].some((value) => String(value || "").replace(/\D/g, "") === code.replace(/\D/g, "") || String(value || "").toLowerCase() === code.toLowerCase())
+            );
+            setScanOpen(false);
+            if (match) {
+              setCreating(false);
+              setEditedId(match.id);
+              setQuery(match.barcode || match.sku || match.title);
+            } else {
+              setStockNote(`No product matched barcode ${code}.`);
+            }
+          }}
+        />
+      )}
 
       {editing && (
         <ProductEditor
@@ -181,6 +230,7 @@ export function ProductsSection() {
                       <td className="px-3 font-mono text-xs">
                         <p>{book.sku || "—"}</p>
                         <p className="text-text-muted">{book.productCode || "—"}</p>
+                        {book.barcode && <p className="text-text-muted">{book.barcode}</p>}
                       </td>
                       <td className="px-3 font-medium">{formatINR(book.price)}</td>
                       <td className="px-3">
@@ -261,6 +311,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
   }));
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
+  const [scanOpen, setScanOpen] = useState(false);
   const set = (patch: Partial<Book>) => setForm((current) => ({ ...current, ...patch }));
 
   const gallery: CaptionedImage[] = useMemo(
@@ -407,13 +458,31 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             </div>
             <div className="mt-2">
               <Field label="Barcode (EAN-13)">
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <TextInput value={form.barcode ?? ""} onChange={(event) => set({ barcode: event.target.value })} />
                   <Button variant="outline" onClick={() => set({ barcode: generateBarcode() })}>Generate</Button>
+                  <Button variant="outline" onClick={() => setScanOpen(true)}>Scan</Button>
                 </div>
               </Field>
+              {form.barcode ? (
+                <div
+                  className="mt-3 overflow-x-auto rounded-lg bg-white p-2"
+                  dangerouslySetInnerHTML={{ __html: barcodeSvg(form.barcode) }}
+                />
+              ) : (
+                <p className="mt-2 text-xs text-text-muted">A barcode is created automatically when you save.</p>
+              )}
             </div>
           </div>
+          {scanOpen && (
+            <BarcodeCamera
+              onClose={() => setScanOpen(false)}
+              onScan={(code) => {
+                set({ barcode: code.replace(/\D/g, "").slice(0, 13) || code });
+                setScanOpen(false);
+              }}
+            />
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Selling price (₹)"><TextInput type="number" value={form.price} onChange={(event) => set({ price: Number(event.target.value) })} /></Field>

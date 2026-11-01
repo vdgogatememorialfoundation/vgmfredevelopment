@@ -17,6 +17,8 @@ export type TrackingStageId =
   | "ready"
   | "picked"
   | "cancelled"
+  | "cancel-review"
+  | "refunded"
   | "failed";
 
 export interface TrackingStage {
@@ -36,8 +38,8 @@ export type CourierScan = {
   otp?: string;
 };
 
-export function isHyperlocalProvider(provider?: string) {
-  return provider === "tookan" || provider === "shipday";
+export function isHyperlocalProvider(provider?: string, lastMile?: string) {
+  return Boolean(lastMile) || provider === "porter" || provider === "shadowfax" || provider === "flash" || provider === "tookan" || provider === "shipday";
 }
 
 export function isSampleOrder(order: Pick<Order, "id" | "paymentLink" | "paymentRef" | "courierName">) {
@@ -167,6 +169,14 @@ export function buildTrackingStages(
     "";
 
   if (order.status === "Cancelled" || fromScans.stage === "cancelled") {
+    const cancelledAt =
+      fromScans.at ||
+      order.history?.find((item) => /cancel/i.test(`${item.status} ${item.note ?? ""}`))?.at ||
+      order.date;
+    const reviewedAt =
+      order.history?.find((item) => /cancel/i.test(`${item.status} ${item.note ?? ""}`))?.at || cancelledAt;
+    const refunded = (order.refundAmount ?? 0) > 0 || order.paymentStatus === "Refunded" || order.paymentStatus === "Partially Refunded";
+    const refundAt = order.history?.find((item) => /refund/i.test(`${item.status} ${item.note ?? ""}`))?.at || (refunded ? cancelledAt : "");
     const stages = [
       makeStage(
         "ordered",
@@ -176,22 +186,60 @@ export function buildTrackingStages(
         true
       ),
       makeStage(
+        "cancel-review",
+        "Cancellation reviewed",
+        "Reviewed by the Foundation desk",
+        [
+          {
+            id: "cancel-review",
+            title: "Cancellation reviewed by admin",
+            at: reviewedAt,
+            location: origin,
+            reached: true,
+            detail: "Customers cannot cancel orders. The Foundation desk cancelled this order.",
+          },
+        ],
+        true
+      ),
+      makeStage(
         "cancelled",
         "Cancelled",
         "Order cancelled",
         [
           {
             id: "cancelled",
-            title: "Your order was cancelled",
-            at: fromScans.at || order.history?.find((item) => /cancel/i.test(item.status))?.at || order.date,
+            title: "This order was cancelled",
+            at: cancelledAt,
             location: origin,
             reached: true,
-            detail: order.cancelReason || "Refund will be initiated to your original payment method within 3–5 business days.",
+            detail: order.cancelReason || "Cancelled by the Foundation desk.",
           },
         ],
         true
       ),
     ];
+    if (order.paymentStatus === "Paid" || refunded || (order.refundAmount ?? 0) > 0) {
+      stages.push(
+        makeStage(
+          "refunded",
+          refunded ? "Refund initiated" : "Refund pending",
+          refunded ? "Refund to the original payment method" : "Refund will be issued by the desk",
+          [
+            {
+              id: "cancel-refund",
+              title: refunded
+                ? `Refund of ₹${(order.refundAmount ?? 0).toLocaleString("en-IN")} initiated`
+                : "Refund will be initiated to your original payment method within 3–5 business days.",
+              at: refundAt || cancelledAt,
+              reached: refunded,
+              detail: refunded ? "Processed from the admin desk." : "The Foundation desk will complete the refund next.",
+            },
+          ],
+          refunded,
+          !refunded
+        )
+      );
+    }
     return tally(stages);
   }
 

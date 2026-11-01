@@ -69,12 +69,25 @@ iframe {
     animation-play-state: paused;
   }
 
+  .animate-ticker {
+    animation: ticker 46s linear infinite;
+  }
+
   .hero-progress {
     animation: hero-progress 7s linear forwards;
   }
 }
 
 @keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
   to {
     transform: translateX(-50%);
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
-import { addOrder, bearerToken, listOrders, sessionFromToken } from "@/lib/server/mobile-store";
+import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +49,19 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const session = sessionOf(request, body);
   if (!session) return json({ ok: false, error: "Sign in to record a publication request." }, 401);
+  if (String(body?.action ?? "") === "replacement") {
+    const images = Array.isArray(body?.images) ? body.images.map((item) => String(item)).filter(Boolean).slice(0, 6) : [];
+    try {
+      const order = requestMobileReplacement(String(body?.orderId ?? ""), session.email, {
+        note: String(body?.note ?? ""),
+        images,
+      });
+      if (!order) return json({ ok: false, error: "Order not found." }, 404);
+      return json({ ok: true, order });
+    } catch (error) {
+      return json({ ok: false, error: error instanceof Error ? error.message : "Could not send the request." }, 400);
+    }
+  }
   const email = session.email;
   const name = (String(body?.name ?? "").trim() || session.name || "Customer").slice(0, 80);
   const catalog = catalogItems(body?.items);

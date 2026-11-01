@@ -60,6 +60,15 @@ export type MobileOrder = {
   razorpayPaymentId?: string;
   address?: MobileAddress;
   createdAt: string;
+  replacementRequest?: {
+    status: "Pending Review" | "Accepted" | "Rejected" | "Replacement Created";
+    reason: string;
+    note?: string;
+    images: string[];
+    requestedAt: string;
+    replacementOrderId?: string;
+    decisionNote?: string;
+  };
 };
 
 type IdemRecord = { key: string; orderId: string; at: number };
@@ -293,6 +302,26 @@ export function addOrder(input: {
   persist("orders", ORDERS_FILE, list);
   memory.idem.push({ key, orderId: order.id, at: now });
   return order;
+}
+
+export function requestMobileReplacement(id: string, email: string, input: { note?: string; images: string[] }) {
+  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const index = list.findIndex((order) => order.id === id && order.email === email.trim().toLowerCase());
+  if (index < 0) return null;
+  if (list[index].replacementRequest) throw new Error("A replacement request is already open on this order.");
+  if (!input.images.length) throw new Error("Share at least one photo of the damaged item.");
+  list[index] = {
+    ...list[index],
+    replacementRequest: {
+      status: "Pending Review",
+      reason: "Damaged or defective item",
+      note: input.note?.trim() || undefined,
+      images: input.images.slice(0, 6),
+      requestedAt: new Date().toISOString(),
+    },
+  };
+  persist("orders", ORDERS_FILE, list);
+  return list[index];
 }
 
 export function findOrder(id: string, email?: string) {

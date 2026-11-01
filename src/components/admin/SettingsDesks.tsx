@@ -939,7 +939,7 @@ export function ShippingApisDesk() {
     <div className="space-y-5">
       <Header
         title="Shipping APIs"
-        text="This is the only courier integration page. Save a key, then Save & test — the request goes through this site’s /api/shipping route first, so Success or Failed is a live check from our server. Hyperlocal orders book Tookan create_task; standard orders book Tookan create_multiple_tasks (parcel)."
+        text="This is the only courier integration page. Checkout offers Shiprocket, Nimbuspost and iThink Logistics. Those partners already include Porter, Shadowfax Flash and Flash for local last-mile. Tookan and Shipday are not shown at checkout."
         action={
           <div className="flex flex-wrap gap-2">
             <button type="button" className={ghost} onClick={() => save()}>Save</button>
@@ -1184,7 +1184,7 @@ export function OrderSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="Orders, returns & refunds" text="Which fulfilment options customers can pick, how shipping is charged, and the return, refund and cancellation rules." action={<button type="button" className={primary} onClick={save}>Save</button>} />
+      <Header title="Orders, returns & refunds" text="Customers cannot cancel or return. They may request a damaged-item replacement with photos. The desk cancels, modifies, refunds, opens a return, or places a free replacement." action={<button type="button" className={primary} onClick={save}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
       <Card title="Fulfilment options at checkout">
@@ -1216,8 +1216,9 @@ export function OrderSettingsDesk() {
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Returns">
           <div className="space-y-3">
-            <Check label="Accept returns" checked={value.returns.enabled} onChange={(enabled) => set({ returns: { ...value.returns, enabled } })} />
-            <Check label="Offer replacements" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
+            <p className="text-xs text-slate-500">Customer returns stay off. The desk can still open a return from an order.</p>
+            <Check label="Accept customer returns" checked={false} onChange={() => set({ returns: { ...value.returns, enabled: false } })} />
+            <Check label="Offer damaged-item replacements" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
             <Text label="Return window (days after delivery)" type="number" value={value.returns.windowDays} onChange={(days) => set({ returns: { ...value.returns, windowDays: Number(days) || 0 } })} />
             <Text label="Return pickup charge (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
             <label className="block">
@@ -1242,7 +1243,8 @@ export function OrderSettingsDesk() {
         </Card>
         <Card title="Cancellations">
           <div className="space-y-3">
-            <Check label="Customers can cancel" checked={value.cancellation.enabled} onChange={(enabled) => set({ cancellation: { ...value.cancellation, enabled } })} />
+            <p className="text-xs text-slate-500">Customers cannot cancel. The desk cancels from the order and the customer sees cancellation tracking.</p>
+            <Check label="Customers can cancel" checked={false} onChange={() => set({ cancellation: { ...value.cancellation, enabled: false } })} />
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Allowed until the order is</span>
               <select className={input} value={value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
@@ -1258,7 +1260,7 @@ export function OrderSettingsDesk() {
       </div>
       <Card title="Admin order actions">
         <p className="mb-3 text-sm text-slate-500">
-          Customer rules above apply on the public account pages. From the admin order desk you can still cancel, refund or replace — including after delivery — when this is on.
+          Customers cannot cancel or return. From the admin order desk you can cancel, modify, refund (full or partial), open a return, or place a free replacement — including after delivery.
         </p>
         <Check
           label="Admin can cancel, refund or replace even after delivery"

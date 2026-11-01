@@ -57,7 +57,7 @@ export default function OrdersPage() {
     <div>
       <SectionHeader
         title="My Orders"
-        description="Tap an order card to view its live tracking timeline, delivery details and return instructions."
+        description="Tap an order card to view live tracking, delivery details and, if an item arrived damaged, a replacement request."
       />
 
       {mounted && orders.length === 0 ? (
@@ -254,7 +254,7 @@ export default function OrdersPage() {
                     </div>
 
                     <p className="mt-5 text-center text-xs text-text-muted">
-                      Need a SAME-BOOK replacement or a refund?{" "}
+                      Need help with a damaged item?{" "}
                       <Link
                         href="/contact"
                         className="font-semibold text-burgundy hover:underline"

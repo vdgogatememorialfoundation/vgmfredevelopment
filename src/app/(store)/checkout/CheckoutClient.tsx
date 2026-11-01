@@ -284,7 +284,7 @@ export default function CheckoutClient() {
           ? generateTrackingId(courierName)
           : undefined,
       courierName: deliveryMode === "delivery" ? courierName : undefined,
-      courierChoice:
+              courierChoice:
         deliveryMode === "delivery" && selectedCourier
           ? {
               provider: selectedCourier.provider,
@@ -293,6 +293,7 @@ export default function CheckoutClient() {
               rate: selectedCourier.rate,
               etaDays: selectedCourier.etaDays,
               live: selectedCourier.live,
+              lastMile: selectedCourier.lastMile,
             }
           : undefined,
       openBoxDelivery:
@@ -423,6 +424,9 @@ export default function CheckoutClient() {
                     <legend className="mb-2 text-sm font-semibold text-text-primary">
                       Choose your delivery partner {loadingRates && <span className="text-xs font-normal text-text-muted">· checking live rates…</span>}
                     </legend>
+                    <p className="mb-3 text-xs text-text-muted">
+                      Shiprocket, Nimbuspost and iThink Logistics. Same-city orders can use their Porter, Shadowfax Flash or Flash last-mile.
+                    </p>
                     <div className="grid gap-2">
                       {courierOptions.map((offer) => (
                         <label
@@ -444,7 +448,11 @@ export default function CheckoutClient() {
                             <span>
                               <span className="font-semibold text-text-primary">{offer.courierName}</span>
                               <span className="mt-0.5 block text-xs text-text-muted">
-                                {offer.etaDays === 0 ? "Same day after dispatch" : `${offer.etaDays} business day transit`}
+                                {offer.lastMile
+                                  ? "Local last-mile after the partner books the shipment"
+                                  : offer.etaDays === 0
+                                    ? "Same day after dispatch"
+                                    : `${offer.etaDays} business day transit`}
                               </span>
                             </span>
                           </span>
@@ -660,17 +668,11 @@ export default function CheckoutClient() {
 
             <div className="rounded-2xl border border-border bg-white p-6 text-xs text-text-muted">
               <p className="font-semibold text-text-primary">
-                Returns & cancellation
+                Replacements
               </p>
               <p className="mt-1">
-                {orderSettings.cancellation.enabled
-                  ? `You can cancel until the order is ${orderSettings.cancellation.allowedUntil.toLowerCase()}${orderSettings.cancellation.windowHours > 0 ? ` (within ${orderSettings.cancellation.windowHours} hours)` : ""}${orderSettings.cancellation.fee ? `, cancellation fee ${formatPrice(orderSettings.cancellation.fee)}` : ""}. `
-                  : "Orders cannot be cancelled once placed. "}
-                {orderSettings.returns.enabled
-                  ? `Returnable within ${orderSettings.returns.windowDays} days of delivery for a refund${orderSettings.returns.replacementAllowed ? " or replacement" : ""}${orderSettings.returns.pickupCharge ? ` (return pickup ${formatPrice(orderSettings.returns.pickupCharge)})` : ""}.`
-                  : "Returns are not accepted for this store."}
-                {openBoxSupported &&
-                  " Open-box delivery confirmation is required for returns."}
+                Orders cannot be cancelled or returned from your account. If an item arrives damaged, share photos from My Orders. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.
+                {openBoxSupported ? " Open-box delivery helps you check the item at the doorstep." : ""}
               </p>
             </div>
 

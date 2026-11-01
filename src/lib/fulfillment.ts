@@ -100,6 +100,8 @@ const DEFAULT_POLICY: FulfillmentPolicy = {
 /** Last-mile names Shiprocket / iThink allocate. They are not APIs on this site. */
 const LAST_MILE_IDS = new Set([
   "shadowfax",
+  "porter",
+  "flash",
   "pidge",
   "delhivery",
   "bluedart",
@@ -110,7 +112,7 @@ const LAST_MILE_IDS = new Set([
   "india-post",
 ]);
 
-const LAST_MILE_NAME = /shadowfax|delhivery|blue\s*dart|ekart|e-?kart|dtdc|india\s*post|pidge/i;
+const LAST_MILE_NAME = /shadowfax|porter|flash|delhivery|blue\s*dart|ekart|e-?kart|dtdc|india\s*post|pidge/i;
 
 function isLastMile(carrier: { id?: string; name?: string }) {
   const id = String(carrier.id ?? "").toLowerCase();
@@ -135,7 +137,7 @@ function defaultCarriers(): CarrierAccount[] {
       id: "shipday",
       name: "Shipday",
       kind: "hyperlocal",
-      enabled: true,
+      enabled: false,
       priority: 6,
       apiKey: "",
       apiSecret: "",
@@ -180,7 +182,7 @@ function defaultCarriers(): CarrierAccount[] {
       id: "tookan",
       name: "Tookan Hyperlocal",
       kind: "hyperlocal",
-      enabled: true,
+      enabled: false,
       priority: 4,
       apiKey: "",
       apiSecret: "",
@@ -195,7 +197,7 @@ function defaultCarriers(): CarrierAccount[] {
       id: "tookan-parcel",
       name: "Tookan Parcel",
       kind: "aggregator",
-      enabled: true,
+      enabled: false,
       priority: 5,
       apiKey: "",
       apiSecret: "",

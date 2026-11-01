@@ -130,7 +130,11 @@ export function getProductByCode(code: string): Book | undefined {
 /** Saves a full product record. Sends back-in-stock emails when it becomes orderable from stock again. */
 export function saveProduct(book: Book) {
   const before = getLiveBook(book.id);
-  const record = normalize({ ...book, createdAt: book.createdAt ?? new Date().toISOString() });
+  const record = normalize({
+    ...book,
+    barcode: book.barcode?.trim() || generateBarcode(),
+    createdAt: book.createdAt ?? new Date().toISOString(),
+  });
   const list = getCustomBooks().filter((item) => item.id !== book.id);
   list.unshift(record);
   writeJSON(CUSTOM_KEY, list);
@@ -218,10 +222,25 @@ export function inventorySnapshot(): Record<string, number> {
 /* ---------------- Codes ---------------- */
 
 export function generateBarcode(prefix = "890") {
-  const body = prefix + Math.floor(Math.random() * 9000000000).toString().padStart(9, "0");
-  const digits = body.slice(0, 12);
-  const sum = digits.split("").reduce((total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1), 0);
-  return digits + String((10 - (sum % 10)) % 10);
+  const used = new Set(getAllProducts().map((book) => book.barcode).filter(Boolean));
+  let code = "";
+  do {
+    const body = prefix + Math.floor(Math.random() * 9000000000).toString().padStart(9, "0");
+    const digits = body.slice(0, 12);
+    const sum = digits.split("").reduce((total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1), 0);
+    code = digits + String((10 - (sum % 10)) % 10);
+  } while (used.has(code));
+  return code;
+}
+
+export function ensureProductBarcodes() {
+  let changed = 0;
+  for (const book of getAllProducts()) {
+    if (book.barcode?.trim()) continue;
+    saveProduct({ ...book, barcode: generateBarcode() });
+    changed += 1;
+  }
+  return changed;
 }
 
 /** SKU like VGMF-CLI-0007: category prefix and the next free running number. */

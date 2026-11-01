@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { findRow, formatDate, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
+import { findRow, formatDate, getApiBase, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
 import { ACCOUNT_SECTIONS, accountSection } from "../../src/account-nav";
 import { useAuth } from "../../src/auth";
 import { useFeed } from "../../src/feed";
@@ -102,16 +102,25 @@ function OrdersSection({ title, subtitle }: { title: string; subtitle: string })
 
   return (
     <Screen>
-      <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
+      <PageHeader kicker="My Account" title={title} subtitle="Orders cannot be cancelled or returned from the app. Damaged items can be replaced after you share photos." />
       <Banner text={note} tone="error" />
-      {orders.map((item) => (
-        <Card key={str(item.id)}>
-          <Heading>Order {str(item.id)}</Heading>
-          <Muted>
-            {[str(item.paymentStatus, "Unpaid"), str(item.status, "Recorded"), money(item.total)].filter(Boolean).join(" · ")}
-          </Muted>
-        </Card>
-      ))}
+      {orders.map((item) => {
+        const replacement = item.replacementRequest as { status?: string; replacementOrderId?: string } | undefined;
+        return (
+          <Card key={str(item.id)}>
+            <Heading>Order {str(item.id)}</Heading>
+            <Muted>
+              {[str(item.paymentStatus, "Unpaid"), str(item.status, "Recorded"), money(item.total)].filter(Boolean).join(" · ")}
+            </Muted>
+            {replacement?.status ? <Muted>Replacement {replacement.status}{replacement.replacementOrderId ? ` · ${replacement.replacementOrderId}` : ""}</Muted> : null}
+            <Button
+              kind="ghost"
+              label="Request replacement with photos"
+              onPress={() => void Linking.openURL(`${getApiBase()}/account/orders`)}
+            />
+          </Card>
+        );
+      })}
       {!orders.length ? (
         <Empty icon="receipt-outline" label="No publication orders for this account yet." actionLabel="Browse the shop" onAction={() => router.push("/shop")} />
       ) : null}
