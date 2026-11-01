@@ -190,7 +190,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
               : hyperlocal
-                ? "Gogate Products orders go from Packed to Out for delivery. There is no Shipped step, and the tracking number stays hidden."
+                ? ""
                 : "The line runs from the top to the latest green step. The tracking number appears when Shipped turns green.";
 
   const pipe = (

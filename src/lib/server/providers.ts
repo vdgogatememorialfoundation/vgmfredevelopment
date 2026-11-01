@@ -1179,8 +1179,8 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   );
   const storeJob = pickup?.job ?? job;
   const dropSource = delivery?.job ?? job;
-  const pickupLat = coord(Number(storeJob.job_pickup_latitude ?? storeJob.pickup_latitude ?? (pickup ? storeJob.job_latitude : NaN)));
-  const pickupLng = coord(Number(storeJob.job_pickup_longitude ?? storeJob.pickup_longitude ?? (pickup ? storeJob.job_longitude : NaN)));
+  const pickupLat = coord(Number(storeJob.job_pickup_latitude ?? storeJob.pickup_latitude));
+  const pickupLng = coord(Number(storeJob.job_pickup_longitude ?? storeJob.pickup_longitude));
   const dropLat = coord(Number(dropSource.job_latitude ?? dropSource.customer_latitude ?? dropSource.delivery_latitude));
   const dropLng = coord(Number(dropSource.job_longitude ?? dropSource.customer_longitude ?? dropSource.delivery_longitude));
   const lat = coord(Number(job.fleet_latitude ?? fleet.latitude));

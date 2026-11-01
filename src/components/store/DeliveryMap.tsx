@@ -5,7 +5,7 @@ import { loadTrackingMaps } from "@/lib/maps-place";
 
 type LatLng = { lat: number; lng: number };
 type LiveMap = {
-  fitBounds: (bounds: object, pad?: number) => void;
+  fitBounds: (bounds: object, pad?: number | { top: number; right: number; bottom: number; left: number }) => void;
   setTilt: (tilt: number) => void;
   setHeading: (heading: number) => void;
   panTo: (point: LatLng) => void;
@@ -17,14 +17,23 @@ type Leg = "pickup" | "delivery";
 const STORE = "#8F2D2D";
 const DROP = "#0F7A4A";
 const ROAD = "#8F2D2D";
+/** Ramprasad Chambers, New Nana Peth. Used when the courier does not send a pickup coordinate. */
+const CLINIC_PIN: LatLng = { lat: 18.514204, lng: 73.869083 };
+
+function sameSpot(a?: { lat?: number; lng?: number } | null, b?: { lat?: number; lng?: number } | null) {
+  if (!hasCoords(a) || !hasCoords(b)) return false;
+  const dLat = a.lat - b.lat;
+  const dLng = a.lng - b.lng;
+  return dLat * dLat + dLng * dLng < 0.00000025;
+}
 
 function pin(color: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="46" height="58" viewBox="0 0 46 58"><path fill="${color}" d="M23 2a18 18 0 0 0-18 18c0 13 18 36 18 36s18-23 18-36A18 18 0 0 0 23 2z"/><circle cx="23" cy="20" r="7" fill="#fff"/></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-function hasCoords(point?: Point | null): point is Point & LatLng {
-  return Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lng));
+function hasCoords(point?: { lat?: number; lng?: number } | null): point is LatLng {
+  return Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat!) > 0.01 && Math.abs(point.lng!) > 0.01);
 }
 
 function mins(seconds: number) {
@@ -141,30 +150,31 @@ function Schematic({
   dropLabel: string;
 }) {
   const [openPin, setOpenPin] = useState<"store" | "drop" | null>(null);
+  const storeName = storeLabel.length > 18 ? `${storeLabel.slice(0, 16)}…` : storeLabel;
   return (
     <div className="vgmf-map-card">
-      <svg viewBox="0 0 360 220" className="h-full min-h-[280px] w-full" role="img" aria-label="Path from the store to the customer">
-        <rect width="360" height="220" fill="#f4f0e8" />
-        <path d="M54 158 C 140 40, 220 40, 300 92" fill="none" stroke={ROAD} strokeWidth="3" strokeDasharray="2 8" strokeLinecap="round" />
-        <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("store")}>
-          <circle cx="54" cy="158" r="16" fill="#fff" stroke={STORE} strokeWidth="3" />
-          <circle cx="54" cy="158" r="6" fill={STORE} />
-          <text x="54" y="188" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
-            {storeLabel.length > 18 ? `${storeLabel.slice(0, 16)}…` : storeLabel}
-          </text>
-        </g>
-        <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("drop")}>
-          <circle cx="300" cy="92" r="16" fill="#fff" stroke={DROP} strokeWidth="3" />
-          <circle cx="300" cy="92" r="6" fill={DROP} />
-          <text x="300" y="122" textAnchor="middle" fontSize="11" fontWeight="700" fill={DROP}>
-            {dropLabel}
-          </text>
-        </g>
-        {accepted ? <circle cx={leg === "delivery" ? 230 : 130} cy={leg === "delivery" ? 70 : 90} r="8" fill="#0B1F3A" stroke="#fff" strokeWidth="2" /> : null}
-      </svg>
-      <p className="px-3 pb-14 text-xs text-text-muted">
-        {openPin === "store" ? storeLabel : openPin === "drop" ? dropLabel : `${storeLabel} · ${dropLabel}`}
-      </p>
+      <div className="vgmf-map-stage">
+        <svg viewBox="0 0 360 220" role="img" aria-label="Path from the store to the customer">
+          <rect width="360" height="220" fill="#f4f0e8" />
+          <path d="M78 108 C 140 40, 230 48, 286 96" fill="none" stroke={ROAD} strokeWidth="3" strokeDasharray="2 8" strokeLinecap="round" />
+          <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("store")}>
+            <image href={pin(STORE)} x="52" y="58" width="40" height="50" />
+            <text x="72" y="124" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
+              {storeName}
+            </text>
+          </g>
+          <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("drop")}>
+            <image href={pin(DROP)} x="262" y="46" width="40" height="50" />
+            <text x="282" y="112" textAnchor="middle" fontSize="11" fontWeight="700" fill={DROP}>
+              {dropLabel}
+            </text>
+          </g>
+          {accepted ? <circle cx={leg === "delivery" ? 220 : 150} cy={leg === "delivery" ? 62 : 70} r="8" fill="#0B1F3A" stroke="#fff" strokeWidth="2" /> : null}
+        </svg>
+      </div>
+      {openPin ? (
+        <p className="px-3 text-xs text-text-muted">{openPin === "store" ? storeLabel : dropLabel}</p>
+      ) : null}
       <AgentCard partner={partner} status={status} accepted={accepted} leg={leg} agentName={agentName} agentPhone={agentPhone} arrival="" />
     </div>
   );
@@ -220,8 +230,8 @@ export default function DeliveryMap({
     let cancelled = false;
     const run = async () => {
       const next: { store?: LatLng; drop?: LatLng } = {};
-      if (hasCoords(store)) next.store = { lat: store.lat, lng: store.lng };
       if (hasCoords(drop)) next.drop = { lat: drop.lat, lng: drop.lng };
+      if (hasCoords(store) && !sameSpot(store, next.drop)) next.store = { lat: store.lat, lng: store.lng };
       if (mapsKey && (!next.store || !next.drop)) {
         try {
           await loadTrackingMaps(mapsKey);
@@ -229,7 +239,7 @@ export default function DeliveryMap({
           const lookup = (address?: string) =>
             new Promise<LatLng | undefined>((resolve) => {
               if (!address) return resolve(undefined);
-              geocoder.geocode({ address }, (results, code) => {
+              geocoder.geocode({ address: `${address}, India` }, (results, code) => {
                 const loc = code === "OK" ? results?.[0]?.geometry?.location : undefined;
                 resolve(loc ? { lat: loc.lat(), lng: loc.lng() } : undefined);
               });
@@ -237,9 +247,10 @@ export default function DeliveryMap({
           if (!next.store) next.store = await lookup(store.address);
           if (!next.drop) next.drop = await lookup(drop.address);
         } catch {
-          /* schematic stays available */
+          /* the clinic pin below still marks the store */
         }
       }
+      if (!next.store || sameSpot(next.store, next.drop)) next.store = CLINIC_PIN;
       if (!cancelled) setResolved(next);
     };
     void run();
@@ -257,7 +268,11 @@ export default function DeliveryMap({
           Map: new (el: HTMLElement, opts: object) => LiveMap;
           Marker: new (opts: object) => { setMap: (map: object | null) => void; addListener: (name: string, fn: () => void) => void };
           InfoWindow: new () => { setContent: (html: string) => void; open: (map: object, marker?: object) => void };
-          marker?: { AdvancedMarkerElement: new (opts: object) => { addListener: (name: string, fn: () => void) => void } };
+          CollisionBehavior?: { REQUIRED?: unknown };
+          marker?: {
+            AdvancedMarkerElement: new (opts: object) => { addListener: (name: string, fn: () => void) => void };
+            PinElement?: new (opts: { background?: string; borderColor?: string; glyphColor?: string; scale?: number }) => { element: HTMLElement };
+          };
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
           Point: new (x: number, y: number) => unknown;
@@ -296,18 +311,16 @@ export default function DeliveryMap({
           bounds.extend(point);
           const pinPoint = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
           const label = pinPoint.label || (kind === "store" ? "Store" : "Home");
-          const content = document.createElement("button");
-          content.type = "button";
-          content.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:0;padding:0;cursor:pointer";
-          const img = document.createElement("img");
-          img.src = pin(color);
-          img.alt = label;
-          img.width = 36;
-          img.height = 46;
-          const name = document.createElement("span");
+          const content = document.createElement("div");
+          content.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;transform:translateY(2px)";
+          const Pin = maps.marker?.PinElement;
+          const graphic = Pin
+            ? new Pin({ background: color, borderColor: "#ffffff", glyphColor: "#ffffff", scale: 1.15 }).element
+            : Object.assign(document.createElement("img"), { src: pin(color), alt: label, width: 36, height: 46 });
+          const name = document.createElement("div");
           name.textContent = label;
           name.style.cssText = "max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#fff;color:#1c1917;border-radius:999px;padding:3px 8px;font:700 11px/1.3 sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.18)";
-          content.append(img, name);
+          content.append(name, graphic);
           const openInfo = () => {
             const current = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
             const title = escapeHtml(current.label || label);
@@ -319,7 +332,15 @@ export default function DeliveryMap({
           const Advanced = maps.marker?.AdvancedMarkerElement;
           if (Advanced) {
             try {
-              new Advanced({ map, position: point, content, zIndex: 4, title: label });
+              new Advanced({
+                map,
+                position: point,
+                content,
+                zIndex: kind === "store" ? 6 : 5,
+                title: label,
+                gmpClickable: true,
+                collisionBehavior: maps.CollisionBehavior?.REQUIRED,
+              });
               return;
             } catch {
               /* classic pin below */
@@ -335,7 +356,7 @@ export default function DeliveryMap({
         };
         place(resolved.store, "store", STORE);
         place(resolved.drop, "drop", DROP);
-        if (resolved.store && resolved.drop) map.fitBounds(bounds, 80);
+        if (resolved.store && resolved.drop) map.fitBounds(bounds, { top: 72, right: 48, bottom: 48, left: 48 });
         sessionRef.current = { map, path: [], progress: 0 };
         maps.event?.addListenerOnce(map, "idle", () => {
           map.setTilt(67.5);
@@ -401,8 +422,10 @@ export default function DeliveryMap({
       setArrival(text);
       const bounds = new maps.LatLngBounds();
       path.forEach((point) => bounds.extend(point));
+      if (resolved.store) bounds.extend(resolved.store);
+      if (resolved.drop) bounds.extend(resolved.drop);
       if (agent) bounds.extend(agent);
-      live.map.fitBounds(bounds, 64);
+      live.map.fitBounds(bounds, { top: 72, right: 48, bottom: 48, left: 48 });
       window.setTimeout(() => {
         live.map.setTilt(67.5);
         live.map.setHeading(24);
@@ -495,11 +518,13 @@ export default function DeliveryMap({
 
   return (
     <div className="vgmf-map-card">
-      <div ref={hostRef} className="h-full min-h-[380px] w-full" />
-      <div className="vgmf-map-legend">
-        <span><i style={{ background: STORE }} /> {store.label || "Store"}</span>
-        <span><i style={{ background: DROP }} /> {drop.label || "Home"}</span>
-        {accepted ? <span><i style={{ background: "#0B1F3A" }} /> Rider</span> : null}
+      <div className="vgmf-map-stage">
+        <div ref={hostRef} className="vgmf-map-canvas" />
+        <div className="vgmf-map-legend">
+          <span><i style={{ background: STORE }} /> {store.label || "Store"}</span>
+          <span><i style={{ background: DROP }} /> {drop.label || "Home"}</span>
+          {accepted ? <span><i style={{ background: "#0B1F3A" }} /> Rider</span> : null}
+        </div>
       </div>
       <AgentCard
         partner={partner}
