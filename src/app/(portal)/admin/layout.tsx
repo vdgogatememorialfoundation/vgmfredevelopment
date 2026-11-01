@@ -101,7 +101,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
     <nav className="flex-1 overflow-y-auto px-3 py-4">
       {groups.map((group) => (
         <div key={group.label} className="mb-6">
-          <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-blue-900/60">
+          <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
             {group.label}
           </div>
           <div className="space-y-1">
@@ -118,8 +118,8 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                   className={[
                     "block rounded-lg px-3 py-2 text-sm transition",
                     active
-                      ? "bg-blue-800 font-semibold text-white"
-                      : "text-blue-800 hover:bg-blue-50 hover:text-blue-900",
+                      ? "bg-burgundy/10 font-semibold text-burgundy"
+                      : "text-gray-700 hover:bg-slate-50 hover:text-burgundy",
                   ].join(" ")}
                 >
                   {item.label}
@@ -136,18 +136,18 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
     <div className="min-h-screen bg-white text-gray-900">
       <LivePublishBridge />
       <div className="flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white text-blue-900 lg:block">
+        <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:block">
           <div className="sticky top-0 flex h-screen flex-col">
             <div className="border-b border-slate-200 px-6 py-5">
-              <div className="text-xs font-semibold uppercase tracking-widest text-blue-900/60">Foundation</div>
-              <div className="mt-1 text-lg font-semibold text-blue-900">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin workspace" : "Admin Console"}</div>
-              <div className="mt-1 text-xs text-blue-900/70">
+              <div className="text-xs font-semibold uppercase tracking-widest text-burgundy">Foundation</div>
+              <div className="mt-1 text-lg font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin workspace" : "Admin Console"}</div>
+              <div className="mt-1 text-xs text-gray-500">
                 {isStaff ? `${role?.name} · ${role?.category}` : isDoctor ? "Clinic pages" : isCoadmin ? "Higher-authority access via /staff" : "Vaidya Gogate Memorial Foundation"}
               </div>
             </div>
             {nav}
             <div className="border-t border-slate-200 p-4">
-              <Link href="/" className="block rounded-lg border border-blue-200 px-3 py-2 text-center text-sm text-blue-800 hover:bg-blue-800 hover:text-white">
+              <Link href="/" className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm hover:bg-gray-50">
                 ← Back to website
               </Link>
             </div>
@@ -184,7 +184,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                 />
               </div>
             </div>
-            {menuOpen && <div className="max-h-[70vh] overflow-y-auto border-t border-slate-200 bg-white text-blue-900 lg:hidden">{nav}</div>}
+            {menuOpen && <div className="max-h-[70vh] overflow-y-auto border-t border-slate-200 bg-white lg:hidden">{nav}</div>}
           </header>
 
           <div className="p-5 lg:p-8">
