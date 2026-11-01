@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   getShipments,
   printShippingLabel,
@@ -16,6 +16,7 @@ import {
   StatusBadge,
   formatINR,
 } from "@/components/admin/AdminUI";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { customerCourierLabel } from "@/lib/courier-label";
 import { formatDate } from "@/lib/utils";
 
@@ -28,8 +29,10 @@ const SHIPMENT_TONES: Record<string, string> = {
 };
 
 export function ShipmentsSection() {
-  const [shipments, setShipments] = useState<ShipmentRecord[]>(() => getShipments());
-  const refresh = () => setShipments(getShipments());
+  const { version } = useCommerceMirror();
+  const [extra, setExtra] = useState(0);
+  const shipments = useMemo(() => getShipments(), [version, extra]);
+  const refresh = () => setExtra((value) => value + 1);
 
   return (
     <div className="space-y-5">

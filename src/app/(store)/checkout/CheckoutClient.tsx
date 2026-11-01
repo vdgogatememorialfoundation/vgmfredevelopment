@@ -285,6 +285,7 @@ export default function CheckoutClient() {
       openBoxDelivery:
         deliveryMode === "delivery" && openBoxSupported ? openBox : false,
       returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
+      accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
       createdBy: user?.email ?? "guest checkout",
       history: [
         { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },

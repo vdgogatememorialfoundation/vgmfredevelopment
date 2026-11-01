@@ -8,7 +8,8 @@ import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getOrdersByEmail, formatPrice, purgeSampleOrders } from "@/lib/store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
+import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import type { Order } from "@/types";
 
@@ -35,23 +36,18 @@ function latestStatusText(order: Order) {
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const { ready, version } = useCommerceMirror();
   const [mounted, setMounted] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     purgeSampleOrders();
     const frame = window.requestAnimationFrame(() => setMounted(true));
-    const onChange = () => setTick((value) => value + 1);
-    window.addEventListener("vgmf-cms", onChange);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("vgmf-cms", onChange);
-    };
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const orders = mounted ? getOrdersByEmail(user?.email) : [];
-  void tick;
+  const orders = mounted && ready ? getOrdersForAccount(user) : [];
+  void version;
 
   return (
     <div>
@@ -60,7 +56,9 @@ export default function OrdersPage() {
         description="Tap an order card to view live tracking, delivery details and, if an item arrived damaged, a replacement request."
       />
 
-      {mounted && orders.length === 0 ? (
+      {mounted && !ready ? (
+        <p className="text-sm text-text-muted">Loading your orders…</p>
+      ) : mounted && orders.length === 0 ? (
         <EmptyState
           title="No shop orders yet"
           description="When you place a book order on the Foundation shop, it will appear here with courier tracking. Sample orders are not shown."

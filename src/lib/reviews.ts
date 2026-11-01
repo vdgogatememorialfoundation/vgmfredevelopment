@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { subscribeCms } from "@/lib/cms";
+import { orderBelongsTo } from "@/lib/commerce-stamp";
 import { isSampleOrder } from "@/lib/order-pipeline";
 import { getOrders } from "@/lib/store";
 import type { Review, SeminarReview } from "@/types";
@@ -146,8 +147,7 @@ export function hasPurchasedProduct(email: string | undefined, userId: string | 
     if (order.status === "Cancelled" || order.status === "Failed") return false;
     if (order.paymentStatus === "Failed" || order.paymentStatus === "Refunded") return false;
     if (!order.items.some((item) => item.bookId === bookId)) return false;
-    const orderEmail = order.deliveryAddress?.email?.trim().toLowerCase() || "";
-    return Boolean((mail && (orderEmail === mail || order.userId?.toLowerCase() === mail)) || (userId && order.userId === userId));
+    return orderBelongsTo(order, { email: mail, id: userId });
   });
 }
 

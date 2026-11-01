@@ -7,6 +7,8 @@ import type {
   ShipmentEvent,
   ShipmentRecord,
 } from "@/types";
+import { getSession, isPortalRole } from "@/lib/auth";
+import { orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { buildTrackingStages as buildCourierStages, isSampleOrder } from "@/lib/order-pipeline";
 export type { TrackingStage, TrackingStageId } from "@/lib/order-pipeline";
 export { pickupOtp } from "@/lib/order-pipeline";
@@ -210,24 +212,56 @@ export function publishShipment(shipment: ShipmentRecord) {
   }).catch(() => undefined);
 }
 
-export function saveOrder(order: Order) {
-  if (typeof window === "undefined") return;
-  const orders = getOrders();
-  orders.unshift(order);
-  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-  window.dispatchEvent(new Event("vgmf-cms"));
-  publishShopOrder(order);
+/** Keep the shopper's login on the order so another signed-in device can find it. */
+export function withAccountEmail(order: Order): Order {
+  if (order.accountEmail?.includes("@")) return order;
+  const session = getSession();
+  const delivery = order.deliveryAddress?.email?.trim().toLowerCase() || "";
+  const created = (order.createdBy ?? "").trim().toLowerCase();
+  const sessionEmail = session?.email?.trim().toLowerCase() || "";
+  const portal = isPortalRole(session?.role);
+  if (portal) {
+    if (delivery && delivery !== sessionEmail) return { ...order, accountEmail: delivery };
+    if (created.includes("@") && created !== sessionEmail) return { ...order, accountEmail: created };
+    return delivery ? { ...order, accountEmail: delivery } : order;
+  }
+  const owns =
+    !sessionEmail ||
+    delivery === sessionEmail ||
+    order.userId === session?.id ||
+    order.userId?.toLowerCase() === sessionEmail ||
+    phonesMatch(order.deliveryAddress?.phone, session?.phone ?? "");
+  if (sessionEmail && owns) return { ...order, accountEmail: sessionEmail };
+  return delivery ? { ...order, accountEmail: delivery } : order;
 }
 
-export function getOrdersByEmail(email?: string) {
-  if (!email) return [];
-  const value = email.toLowerCase();
+export function saveOrder(order: Order) {
+  if (typeof window === "undefined") return;
+  const stored = withAccountEmail(order);
+  const orders = getOrders();
+  orders.unshift(stored);
+  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+  window.dispatchEvent(new Event("vgmf-cms"));
+  publishShopOrder(stored);
+}
+
+export function getOrdersForAccount(account?: (AccountRef & { alternatePhone?: string; whatsapp?: string; accountId?: string }) | null) {
+  if (!account) return [];
   return getOrders().filter(
     (order) =>
       !isSampleOrder(order) &&
-      (order.deliveryAddress?.email?.toLowerCase() === value ||
-        order.deliveryAddress?.phone?.replace(/\D/g, "") === value.replace(/\D/g, ""))
+      orderBelongsTo(order, {
+        email: account.email,
+        phone: account.phone,
+        phones: [account.alternatePhone, account.whatsapp].filter((value): value is string => Boolean(value)),
+        id: account.id,
+        ids: account.accountId ? [account.accountId] : [],
+      })
   );
+}
+
+export function getOrdersByEmail(email?: string) {
+  return getOrdersForAccount(email ? { email } : null);
 }
 
 export function purgeSampleOrders() {
@@ -532,6 +566,7 @@ export function toggleWishlist(bookId: string) {
     wishlist.splice(index, 1);
   }
   window.localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist));
+  window.localStorage.setItem("vgmf_wishlist_at", String(Date.now()));
   window.dispatchEvent(new Event("vgmf-wishlist"));
 }
 

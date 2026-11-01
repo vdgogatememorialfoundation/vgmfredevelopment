@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { verifyCertificate } from "@/lib/certificates-client";
@@ -40,6 +40,7 @@ import {
   sendEmail,
   setOrderStatus,
 } from "@/lib/admin-store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
 import { useAllArticles, useLiveAnnouncements, useLiveEvents } from "@/lib/use-cms";
 import type { Announcement, Article, ArticleAssignment, ArticleLocaleCopy, ArticleStatus, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
@@ -756,8 +757,12 @@ export function EventAdminList() {
 }
 
 export function RefundsDesk() {
+  const { version } = useCommerceMirror();
   const [orders, setOrders] = useState<Order[]>(() => getOrders());
   const refresh = () => setOrders(getOrders());
+  useEffect(() => {
+    setOrders(getOrders());
+  }, [version]);
 
   return (
     <div className="space-y-5">

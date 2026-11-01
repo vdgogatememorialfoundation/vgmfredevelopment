@@ -12,6 +12,7 @@ import {
   uniqueSessions,
 } from "@/lib/analytics";
 import { getLiveArticles } from "@/lib/cms";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
 
 function snapshot() {
@@ -92,12 +93,14 @@ function LiveMap({ visitors, apiKey }: { visitors: { city: string; country: stri
 
 export function AnalyticsDesk() {
   useSyncExternalStore(subscribeAnalytics, snapshot, () => "");
+  const { version } = useCommerceMirror();
   const hits = getHits();
   const live = getLiveVisitors();
   const day = hitsSince(24);
   const week = hitsSince(24 * 7);
   const settings = getSettings();
   const orders = getOrders();
+  void version;
   const articles = getLiveArticles();
 
   const productCounts = useMemo(() => {

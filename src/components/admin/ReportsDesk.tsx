@@ -4,6 +4,7 @@ import { displayName, getAccounts, getShipments, getTickets } from "@/lib/admin-
 import { getAllApplications } from "@/lib/applications";
 import { getEventRecords, getIssuedCertificates, getLiveArticles, getLiveClinics, getLiveEvents } from "@/lib/cms";
 import { downloadCsv, downloadExcel, printPdf } from "@/lib/export-file";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
 
 type Report = {
@@ -360,6 +361,8 @@ function ReportCard({ item }: { item: Report }) {
 }
 
 export function ReportsDesk() {
+  const { version } = useCommerceMirror();
+  void version;
   const groups = reports();
 
   return (

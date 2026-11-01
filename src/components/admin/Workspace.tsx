@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { publishLiveSite } from "@/lib/mobile-publish";
 import { getOrders } from "@/lib/store";
 import { getNotifications } from "@/lib/notify";
@@ -15,10 +16,12 @@ import { canOpen } from "@/lib/roles";
 
 export function WorkspaceHome() {
   const { user } = useAuth();
+  const { version } = useCommerceMirror();
   const [publishNote, setPublishNote] = useState("");
   const [publishing, setPublishing] = useState(false);
   if (!user) return null;
   const orders = getOrders();
+  void version;
   const notifications = getNotifications();
   const settings = getSettings();
   const integrations = getIntegrations();

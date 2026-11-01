@@ -556,6 +556,7 @@ export function createAdminOrder(input: {
   const order: Order = {
     id: input.id ?? generateOrderId(),
     userId: input.userId ?? "admin",
+    accountEmail: (input.deliverTo.email || input.userEmail || "").trim().toLowerCase() || undefined,
     date: new Date().toISOString(),
     items: orderItems,
     subtotal,

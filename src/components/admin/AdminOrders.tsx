@@ -21,6 +21,7 @@ import {
   resaveOrder,
   setOrderStatus,
 } from "@/lib/admin-store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, updateReturnRequest } from "@/lib/store";
 import { getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
@@ -82,6 +83,7 @@ function useOrdersVersion() {
 }
 
 export function OrdersDashboard() {
+  const { version: remoteVersion } = useCommerceMirror();
   const [version, refresh] = useOrdersVersion();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -93,6 +95,8 @@ export function OrdersDashboard() {
   const [bulkNote, setBulkNote] = useState("");
 
   const orders = getOrders();
+  void version;
+  void remoteVersion;
   const filtered = orders
     .filter((order) => statusFilter === "All" || order.status === statusFilter)
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)

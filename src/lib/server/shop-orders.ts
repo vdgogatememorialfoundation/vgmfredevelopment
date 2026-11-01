@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { orderActivityAt, phonesMatch } from "@/lib/commerce-stamp";
+import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
 import type { Order } from "@/types";
 
@@ -29,9 +29,12 @@ export function findShopOrder(id: string) {
 }
 
 export function ordersForEmail(email: string) {
-  const value = email.trim().toLowerCase();
-  if (!value) return [];
-  return readAll().filter((order) => (order.deliveryAddress?.email ?? "").toLowerCase() === value);
+  return ordersForAccount({ email });
+}
+
+export function ordersForAccount(account: AccountRef) {
+  if (!account.email && !account.phone && !account.id) return [];
+  return readAll().filter((order) => orderBelongsTo(order, account));
 }
 
 export function orderPhoneMatches(order: Order, phone: string) {
@@ -65,7 +68,7 @@ export function searchShopOrders(query: string) {
   return readAll()
     .filter((order) => {
       const phone = order.deliveryAddress?.phone?.replace(/\D/g, "") ?? "";
-      const hay = [order.id, order.deliveryAddress?.fullName, order.deliveryAddress?.email, order.deliveryAddress?.phone]
+      const hay = [order.id, order.accountEmail, order.deliveryAddress?.fullName, order.deliveryAddress?.email, order.deliveryAddress?.phone]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();

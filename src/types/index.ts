@@ -472,6 +472,8 @@ export interface ShipmentEvent {
 export interface Order {
   id: string;
   userId: string;
+  /** Login email this order belongs to, including when the delivery email is different. */
+  accountEmail?: string;
   date: string;
   items: OrderItem[];
   subtotal: number;

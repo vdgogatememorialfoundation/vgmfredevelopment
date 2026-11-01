@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
-import { findShopOrder, listShopOrders, orderPhoneMatches, ordersForEmail, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
+import { findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
 import type { Order } from "@/types";
 
 export const runtime = "nodejs";
@@ -18,7 +18,11 @@ export async function GET(request: NextRequest) {
   }
   if (request.nextUrl.searchParams.get("sync")) {
     const viewer = commerceViewer(request);
-    const orders = viewer.portal ? listShopOrders() : viewer.email ? ordersForEmail(viewer.email) : [];
+    const orders = viewer.portal
+      ? listShopOrders()
+      : viewer.email || viewer.phone || viewer.id
+        ? ordersForAccount(viewer)
+        : [];
     return NextResponse.json({ ok: true, orders }, { headers: { "cache-control": "no-store" } });
   }
   return NextResponse.json({ ok: true, orders: [] }, { headers: { "cache-control": "no-store" } });
