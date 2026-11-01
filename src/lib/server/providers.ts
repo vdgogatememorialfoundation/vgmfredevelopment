@@ -727,8 +727,9 @@ export async function shiprocketPickupLocations(input: Json) {
   };
 }
 
-/** Courier clocks are India time unless the value already carries a zone. */
+/** Courier clocks are India time unless the value already carries a zone. A value with a clock wins over a date alone. */
 function expectedBy(...values: unknown[]): string | undefined {
+  const formatted: { text: string; timed: boolean }[] = [];
   for (const value of values) {
     const text = String(value ?? "").trim();
     if (!text || text === "null" || text === "undefined" || text === "0") continue;
@@ -741,15 +742,39 @@ function expectedBy(...values: unknown[]): string | undefined {
       parsed = Date.parse(iso.length === 16 ? `${iso}:00+05:30` : `${iso}+05:30`);
     } else parsed = Date.parse(text);
     if (!Number.isFinite(parsed)) continue;
-    return new Intl.DateTimeFormat("en-IN", {
-      timeZone: "Asia/Kolkata",
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      ...(dateOnly ? { year: "numeric" } : { hour: "numeric", minute: "2-digit" }),
-    }).format(new Date(parsed));
+    const timed = !dateOnly && (clock || /[T ]\d{2}:\d{2}/.test(text) || /\d:\d{2}/.test(text));
+    formatted.push({
+      timed,
+      text: new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        ...(timed ? { hour: "numeric", minute: "2-digit" } : { year: "numeric" }),
+      }).format(new Date(parsed)),
+    });
   }
-  return undefined;
+  return formatted.find((item) => item.timed)?.text ?? formatted[0]?.text;
+}
+
+function clockFields(value: unknown, found: string[] = [], depth = 0): string[] {
+  if (depth > 5 || value == null) return found;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 4)) clockFields(item, found, depth + 1);
+    return found;
+  }
+  if (typeof value !== "object") return found;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/history|scans|activities|shipment_track_activities|task_history/i.test(key)) continue;
+    if (/(^edd$|^etd$|expected|promised|estimated|delivery_date|deliverydate|delivery_time|deliverytime|job_delivery_datetime)/i.test(key) && !/delivered|picked|created|updated/i.test(key)) {
+      if (typeof child === "string" || typeof child === "number") found.push(String(child));
+    } else if (child && typeof child === "object") clockFields(child, found, depth + 1);
+  }
+  return found;
+}
+
+function promisedFrom(payload: unknown, ...first: unknown[]) {
+  return expectedBy(...first, ...clockFields(payload));
 }
 
 export async function shiprocketTrack(input: Json, awb: string) {
@@ -767,7 +792,7 @@ export async function shiprocketTrack(input: Json, awb: string) {
     awb: String(trackRow.awb_code ?? awb),
     events: activities.map((activity) => ({ at: String(activity.date), status: String(activity.activity), location: String(activity.location ?? "") })),
     trackingUrl: String(tracking.track_url ?? `https://shiprocket.co/tracking/${awb}`),
-    expectedBy: expectedBy(trackRow.edd, trackRow.etd, tracking.edd, tracking.etd, trackRow.delivered_date),
+    expectedBy: promisedFrom(data, trackRow.edd, trackRow.etd, tracking.edd, tracking.etd),
   };
 }
 
@@ -884,7 +909,7 @@ export async function nimbusTrack(input: Json, awb: string) {
     awb,
     events: history.map((event) => ({ at: String(event.event_time), status: String(event.message ?? event.status_code), location: String(event.location ?? "") })),
     trackingUrl: String(shipment.tracking_url ?? `https://ship.nimbuspost.com/?awb=${awb}`),
-    expectedBy: expectedBy(shipment.edd, shipment.expected_delivery_date, shipment.expected_delivery, shipment.delivery_date),
+    expectedBy: promisedFrom(data, shipment.edd, shipment.expected_delivery_date, shipment.expected_delivery, shipment.delivery_date),
   };
 }
 
@@ -1000,7 +1025,7 @@ export async function shipdayTrack(input: Json, orderId: string) {
     dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
     dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
-    expectedBy: expectedBy(match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
+    expectedBy: promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
   };
 }
 
@@ -1220,7 +1245,8 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
       ...(currentLabel ? [{ at: new Date().toISOString(), status: currentLabel, location: "" }] : []),
     ],
     trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? delivery?.job.tracking_link ?? ""),
-    expectedBy: expectedBy(
+    expectedBy: promisedFrom(
+      dropSource,
       dropSource.job_delivery_datetime,
       job.job_delivery_datetime,
       delivery?.job.job_delivery_datetime
@@ -1375,7 +1401,7 @@ export async function ithinkTrack(input: Json, awb: string) {
       location: String(scan.location ?? scan.city ?? ""),
     })),
     trackingUrl: String(tracking?.tracking_url ?? `https://www.ithinklogistics.com/track-order?awb=${awb}`),
-    expectedBy: expectedBy(tracking?.expected_delivery_date, tracking?.edd, tracking?.expected_delivery, tracking?.delivery_date),
+    expectedBy: promisedFrom(tracking, tracking?.expected_delivery_date, tracking?.edd, tracking?.expected_delivery, tracking?.delivery_date),
   };
 }
 
@@ -1665,7 +1691,7 @@ export async function shipyaariTrack(input: Json, awb: string) {
       location: String(entry.location ?? ""),
     })),
     trackingUrl: String(nested.tracking_url ?? `https://shipyaari.com/track/${awb}`),
-    expectedBy: expectedBy(nested.expected_delivery_date, nested.edd, nested.eta, nested.expected_delivery),
+    expectedBy: promisedFrom(data, nested.expected_delivery_date, nested.edd, nested.eta, nested.expected_delivery),
   };
 }
 

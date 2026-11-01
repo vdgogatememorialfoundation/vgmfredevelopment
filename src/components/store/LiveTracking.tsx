@@ -73,6 +73,7 @@ export default function LiveTracking({
       agent={agent}
       agentName={accepted ? shipment?.agentName : undefined}
       agentPhone={accepted ? shipment?.agentPhone : undefined}
+      promised={shipment?.expectedBy || ""}
       onArrival={onArrival}
     />
   );

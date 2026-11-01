@@ -26,7 +26,9 @@ import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, 
 import { getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
+  attachManualTracking,
   bookShipment,
+  MANUAL_PORTALS,
   cancelShipment,
   createReturnShipment,
   downloadInvoice,
@@ -629,6 +631,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [picked, setPicked] = useState<number | undefined>();
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [pickupSlot, setPickupSlot] = useState(shipment?.pickupSlot || settings.pickupTimeslots[0]?.label || "10:00 – 13:00");
+  const [manualPortal, setManualPortal] = useState<(typeof MANUAL_PORTALS)[number]["id"]>("shiprocket");
+  const [manualAwb, setManualAwb] = useState("");
+  const [manualCourier, setManualCourier] = useState("");
   const [returnReason, setReturnReason] = useState(getOrderSettings().returns.reasons[0] ?? "");
   const [refundDest, setRefundDest] = useState<"original" | "store_credit">("original");
   const [editing, setEditing] = useState(false);
@@ -934,6 +939,27 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <p className="mt-2 text-xs text-text-muted">
                   Pack & book sends the order to the courier account the customer chose. Tookan, Shipday, Shiprocket, Nimbuspost, iThink and Shipyaari are booked for real when their API key is saved.
                 </p>
+                <div className="mt-4 rounded-xl border border-border p-3">
+                  <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Paste the tracking id and choose the portal that has the parcel. The site asks that portal for the scans and the delivery date and time, then keeps them updated.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value as (typeof MANUAL_PORTALS)[number]["id"])}>
+                      {MANUAL_PORTALS.map((portal) => (
+                        <option key={portal.id} value={portal.id}>{portal.label}</option>
+                      ))}
+                    </SelectInput>
+                    <TextInput placeholder="Tracking id" value={manualAwb} onChange={(event) => setManualAwb(event.target.value)} />
+                    <TextInput placeholder="Courier name, if you know it" value={manualCourier} onChange={(event) => setManualCourier(event.target.value)} />
+                    <Button
+                      disabled={busy === "manual"}
+                      onClick={() => run("manual", () => attachManualTracking(order.id, manualPortal, manualAwb, manualCourier))}
+                    >
+                      {busy === "manual" ? "Fetching…" : "Fetch tracking"}
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="grid gap-4 lg:grid-cols-2">
@@ -941,6 +967,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
+                  <p className="text-xs text-text-muted">Courier delivery: {shipment.expectedBy || "Waiting for the courier"}</p>
                   {shipment.pickupScheduledFor && <p className="text-xs text-text-muted">Pickup: {formatDate(shipment.pickupScheduledFor)}{shipment.pickupSlot ? `, ${shipment.pickupSlot}` : ""}{shipment.pickupReference ? ` · ref ${shipment.pickupReference}` : ""}</p>}
                   {shipment.note && <p className="text-xs text-text-muted">{shipment.note}</p>}
                   <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">

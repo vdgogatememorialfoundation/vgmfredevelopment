@@ -36,24 +36,37 @@ function hasCoords(point?: { lat?: number; lng?: number } | null): point is LatL
   return Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat!) > 0.01 && Math.abs(point.lng!) > 0.01);
 }
 
-function mins(seconds: number) {
-  return `${Math.max(1, Math.round(seconds / 60))} min`;
-}
-
-function clock(seconds: number) {
-  return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(
-    new Date(Date.now() + seconds * 1000)
-  );
-}
-
-function arrivalText(leg: Leg, legs: { duration?: { value?: number } }[]) {
-  const times = legs.map((item) => item.duration?.value ?? 0).filter((value) => value > 0);
-  if (!times.length) return "";
-  if (leg === "delivery" || times.length === 1) {
-    return `Arrives in ${mins(times[0])} · by ${clock(times[0])}`;
+/** A curve lifted off the straight line, the way a flight path is drawn. Not a road. */
+function flyingArc(from: LatLng, to: LatLng) {
+  const dLat = to.lat - from.lat;
+  const dLng = to.lng - from.lng;
+  const dist = Math.hypot(dLat, dLng) || 1e-6;
+  const lift = Math.min(0.45, Math.max(0.03, dist * 0.38));
+  const ctrl = {
+    lat: (from.lat + to.lat) / 2 - (dLng / dist) * lift,
+    lng: (from.lng + to.lng) / 2 + (dLat / dist) * lift,
+  };
+  const steps = 40;
+  const path: LatLng[] = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const u = 1 - t;
+    path.push({
+      lat: u * u * from.lat + 2 * u * t * ctrl.lat + t * t * to.lat,
+      lng: u * u * from.lng + 2 * u * t * ctrl.lng + t * t * to.lng,
+    });
   }
-  const total = times.reduce((sum, value) => sum + value, 0);
-  return `At the store in ${mins(times[0])} · at your address by ${clock(total)}`;
+  return path;
+}
+
+function flyingRoute(points: LatLng[]) {
+  const path: LatLng[] = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const segment = flyingArc(points[i], points[i + 1]);
+    if (i > 0) segment.shift();
+    path.push(...segment);
+  }
+  return path;
 }
 
 function project(point: LatLng, path: LatLng[]) {
@@ -156,10 +169,10 @@ function Schematic({
       <div className="vgmf-map-stage">
         <svg viewBox="0 0 360 220" role="img" aria-label="Path from the store to the customer">
           <rect width="360" height="220" fill="#f4f0e8" />
-          <path d="M78 108 C 140 40, 230 48, 286 96" fill="none" stroke={ROAD} strokeWidth="3" strokeDasharray="2 8" strokeLinecap="round" />
+          <path d="M72 108 C 150 16, 230 16, 282 96" fill="none" stroke={ROAD} strokeWidth="3" strokeLinecap="round" />
           <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("store")}>
             <image href={pin(STORE)} x="52" y="58" width="40" height="50" />
-            <text x="72" y="124" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
+            <text x="72" y="132" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
               {storeName}
             </text>
           </g>
@@ -192,6 +205,7 @@ export default function DeliveryMap({
   agent,
   agentName,
   agentPhone,
+  promised = "",
   onArrival,
 }: {
   mapsKey: string;
@@ -205,6 +219,8 @@ export default function DeliveryMap({
   agent?: LatLng;
   agentName?: string;
   agentPhone?: string;
+  /** Delivery date and time returned by the courier portal. */
+  promised?: string;
   onArrival?: (text: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -218,13 +234,12 @@ export default function DeliveryMap({
   } | null>(null);
   const [resolved, setResolved] = useState<{ store?: LatLng; drop?: LatLng }>({});
   const [mapReady, setMapReady] = useState(false);
-  const [arrival, setArrival] = useState("");
   const pinsRef = useRef({ store, drop });
   pinsRef.current = { store, drop };
 
   useEffect(() => {
-    onArrival?.(arrival);
-  }, [arrival, onArrival]);
+    onArrival?.(promised);
+  }, [promised, onArrival]);
 
   useEffect(() => {
     let cancelled = false;
@@ -380,81 +395,52 @@ export default function DeliveryMap({
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
           Point: new (x: number, y: number) => unknown;
-          DirectionsService?: new () => {
-            route: (
-              req: object,
-              cb: (result: { routes?: { overview_path?: { lat: () => number; lng: () => number }[]; legs?: { duration?: { value?: number } }[] }[] } | null, code: string) => void
-            ) => void;
-          };
           geometry?: { spherical?: { computeHeading: (a: LatLng, b: LatLng) => number } };
           marker?: { AdvancedMarkerElement: new (opts: object) => { position?: LatLng; map?: object | null } };
         };
       };
     };
     const maps = googleWin.google?.maps;
-    if (!mapReady || !view || !maps) return;
+    if (!mapReady || !view || !maps || !resolved.drop) return;
     const live = view;
-    let stopped = false;
-    const origin = accepted && agent ? agent : resolved.store;
-    const destination = resolved.drop;
-    if (!origin || !destination) return;
-    const waypoints =
-      accepted && agent && leg === "pickup" && resolved.store
-        ? [{ location: resolved.store, stopover: true }]
-        : [];
+    const stops: LatLng[] = [];
+    if (accepted && agent && leg === "pickup" && resolved.store) stops.push(agent, resolved.store, resolved.drop);
+    else if (accepted && agent) stops.push(agent, resolved.drop);
+    else if (resolved.store) stops.push(resolved.store, resolved.drop);
+    if (stops.length < 2) return;
+    const path = flyingRoute(stops);
     let frame = 0;
-    const draw = (path: LatLng[], text: string) => {
-      live.line?.setMap(null);
-      live.line = new maps.Polyline({
-        map: live.map,
-        path,
-        strokeOpacity: 0,
-        zIndex: 2,
-        icons: [
-          {
-            icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeColor: ROAD, scale: 3 },
-            offset: "0",
-            repeat: "12px",
-          },
-        ],
-      });
-      live.path = path;
-      setArrival(text);
-      const bounds = new maps.LatLngBounds();
-      path.forEach((point) => bounds.extend(point));
-      if (resolved.store) bounds.extend(resolved.store);
-      if (resolved.drop) bounds.extend(resolved.drop);
-      if (agent) bounds.extend(agent);
-      live.map.fitBounds(bounds, { top: 72, right: 48, bottom: 48, left: 48 });
-      window.setTimeout(() => {
-        live.map.setTilt(67.5);
-        live.map.setHeading(24);
-      }, 400);
-    };
-    const service = maps.DirectionsService ? new maps.DirectionsService() : null;
-    if (!service) return;
-    service.route(
-      { origin, destination, waypoints, travelMode: "DRIVING" },
-      (result, code) => {
-        if (stopped) return;
-        const route = code === "OK" ? result?.routes?.[0] : undefined;
-        const path = route?.overview_path?.map((point) => ({ lat: point.lat(), lng: point.lng() }));
-        if (!path?.length) return;
-        draw(path, accepted ? arrivalText(leg, route?.legs ?? []) : "");
-        if (!accepted || !agent) {
-          live.bike && (live.bike.map = null);
-          return;
-        }
-        moveBike(path);
-      }
-    );
+    live.line?.setMap(null);
+    live.line = new maps.Polyline({
+      map: live.map,
+      path,
+      strokeColor: ROAD,
+      strokeOpacity: 0.95,
+      strokeWeight: 3,
+      zIndex: 2,
+    });
+    live.path = path;
+    const bounds = new maps.LatLngBounds();
+    path.forEach((point) => bounds.extend(point));
+    if (resolved.store) bounds.extend(resolved.store);
+    bounds.extend(resolved.drop);
+    if (agent) bounds.extend(agent);
+    live.map.fitBounds(bounds, { top: 72, right: 48, bottom: 48, left: 48 });
+    window.setTimeout(() => {
+      live.map.setTilt(67.5);
+      live.map.setHeading(24);
+    }, 400);
+    if (!accepted || !agent) {
+      if (live.bike) live.bike.map = null;
+    } else {
+      moveBike(path);
+    }
 
     function moveBike(path: LatLng[]) {
       if (!agent) return;
       const snapped = project(agent, path);
       const headingOf = (from: LatLng, to: LatLng) =>
         maps?.geometry?.spherical?.computeHeading(from, to) ?? (Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180) / Math.PI;
-      const nextHeading = headingOf(snapped.at, along(path, snapped.index + 0.4));
       if (!live.img) {
         const img = document.createElement("img");
         img.src = scooter;
@@ -496,7 +482,6 @@ export default function DeliveryMap({
     }
 
     return () => {
-      stopped = true;
       window.cancelAnimationFrame(frame);
     };
   }, [mapReady, resolved.store, resolved.drop, agent?.lat, agent?.lng, accepted, leg, scooter, agentName]);
@@ -533,7 +518,7 @@ export default function DeliveryMap({
         leg={leg}
         agentName={agentName}
         agentPhone={agentPhone}
-        arrival={arrival}
+        arrival={promised}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import { customerCourierLabel } from "@/lib/courier-label";
+import { classifyCourierScan, isHyperlocalProvider } from "@/lib/order-pipeline";
 import {
   ithinkTrack,
   nimbusTrack,
@@ -10,7 +11,7 @@ import {
 import { findShopOrder, patchShopOrder } from "@/lib/server/shop-orders";
 import { findShopShipment, replaceShopShipment } from "@/lib/server/shop-shipments";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
-import type { ShipmentRecord } from "@/types";
+import type { Order, ShipmentRecord } from "@/types";
 
 type TrackHit = {
   status?: string;
@@ -61,6 +62,24 @@ async function track(
   return null;
 }
 
+function shipmentStatusFor(stage: string): ShipmentRecord["status"] | undefined {
+  if (stage === "failed") return "Failed";
+  if (stage === "delivered") return "Delivered";
+  if (stage === "out") return "Out for Delivery";
+  if (stage === "shipped") return "In Transit";
+  if (stage === "packed") return "Booked";
+  return undefined;
+}
+
+function orderStatusFor(stage: string, hyperlocal: boolean): Order["status"] | undefined {
+  if (stage === "failed") return "Failed";
+  if (stage === "delivered") return "Delivered";
+  if (stage === "out" || (hyperlocal && stage === "shipped")) return "Out for Delivery";
+  if (stage === "shipped") return "Shipped";
+  if (stage === "packed") return "Packed";
+  return undefined;
+}
+
 export async function refreshStoredShipment(orderId: string) {
   const shipment = findShopShipment(orderId);
   if (!shipment) return { ok: false as const, error: "Shipment not on the server yet." };
@@ -80,10 +99,15 @@ export async function refreshStoredShipment(orderId: string) {
   const events = dedupe(hit.events?.length ? hit.events : shipment.tracking ?? []);
   const courier = customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
+  const latestStatus = hit.status || [...events].reverse().find((event) => event.status)?.status || "";
+  const stage = classifyCourierScan(latestStatus);
+  const hyperlocal = isHyperlocalProvider(provider);
+  const shipmentStatus = stage ? shipmentStatusFor(stage) : undefined;
   const next: ShipmentRecord = {
     ...shipment,
     courier,
     awb,
+    status: shipmentStatus ?? shipment.status,
     tracking: events.length ? events : shipment.tracking,
     trackingUrl: hit.trackingUrl || shipment.trackingUrl,
     agentName: hit.accepted === false ? "" : hit.agentName || shipment.agentName,
@@ -100,8 +124,17 @@ export async function refreshStoredShipment(orderId: string) {
   };
   replaceShopShipment(next);
   const order = findShopOrder(orderId);
-  if (order && (order.courierName !== courier || (awb && order.trackingId !== awb))) {
-    patchShopOrder(orderId, { courierName: courier, trackingId: awb || order.trackingId });
+  if (order) {
+    const target = stage ? orderStatusFor(stage, hyperlocal) : undefined;
+    const rank: Record<string, number> = { Packed: 1, Shipped: 2, "Out for Delivery": 3, Delivered: 4, Failed: 5 };
+    const move = Boolean(target && (rank[target] ?? 0) >= (rank[order.status] ?? 0) && order.status !== target);
+    if (move || order.courierName !== courier || (awb && order.trackingId !== awb)) {
+      patchShopOrder(orderId, {
+        courierName: courier,
+        trackingId: awb || order.trackingId,
+        ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: latestStatus }] } : {}),
+      });
+    }
   }
   return {
     ok: true as const,

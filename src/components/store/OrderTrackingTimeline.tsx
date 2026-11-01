@@ -126,7 +126,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
     if (stage.id === "delivered" && !stage.reached) {
-      next.expected = `Delivery expected by ${shipment?.expectedBy || formatDate(expectedTo)}`;
+      next.expected = shipment?.expectedBy ? `Courier delivery ${shipment.expectedBy}` : "Waiting for the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
@@ -208,14 +208,11 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     <div className="vgmf-trk-tiles">
       <Tile label="Where" value={customerStatusLabel(where, provider) || where} />
       <Tile
-        label="Expected by"
+        label="Delivery"
         value={
           order.deliveryMode === "store_pickup"
             ? "Clinic pickup"
-            : shipment?.expectedBy ||
-              (order.courierChoice?.etaDays != null
-                ? formatDate(addDays(placed, Math.max(0, order.courierChoice.etaDays)))
-                : formatDate(expectedTo))
+            : shipment?.expectedBy || "Waiting for the courier"
         }
       />
       <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} />

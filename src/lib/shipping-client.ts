@@ -349,6 +349,69 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   return { shipment, live: Boolean(shipment.live), message };
 }
 
+export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "tookan-parcel">; label: string }[] = [
+  { id: "shiprocket", label: "Shiprocket" },
+  { id: "nimbuspost", label: "Nimbuspost" },
+  { id: "ithink", label: "iThink Logistics" },
+  { id: "shipyaari", label: "Shipyaari" },
+  { id: "tookan", label: "Gogate Products (Tookan)" },
+  { id: "shipday", label: "Gogate Products (Shipday)" },
+];
+
+/** Attach a parcel that was shipped outside Pack & book. The portal is asked for scans and the delivery time. */
+export async function attachManualTracking(orderId: string, portal: (typeof MANUAL_PORTALS)[number]["id"], awb: string, courierName = "") {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
+  const trackingId = awb.trim();
+  if (trackingId.length < 3) throw new Error("Paste the tracking id from the courier.");
+  const result = await post<TrackHit>({
+    action: "track",
+    provider: portal,
+    creds: credsFrom(getIntegrations()),
+    awb: trackingId,
+    providerOrderId: trackingId,
+    providerShipmentId: trackingId,
+  });
+  if (!result.ok) {
+    throw new Error(result.error || `${label(portal)} did not return this tracking id. Check the id and that the API key is saved.`);
+  }
+  const courier = customerCourierLabel({ provider: portal, courier: result.courierName || courierName || label(portal) });
+  const shipment: ShipmentRecord = {
+    id: `SHP${Date.now()}`,
+    orderId: order.id,
+    courier,
+    awb: result.awb || trackingId,
+    charges: 0,
+    toAddress: { ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "" }) },
+    items: order.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
+    status: "Booked",
+    generatedAt: new Date().toISOString(),
+    provider: portal,
+    live: true,
+    providerOrderId: trackingId,
+    providerShipmentId: trackingId,
+    trackingUrl: result.trackingUrl,
+    expectedBy: result.expectedBy,
+    note: `Tracking pasted from ${label(portal)}.`,
+    tracking: result.events?.length ? result.events : [{ at: new Date().toISOString(), status: result.status || "Tracking attached" }],
+  };
+  saveShipmentRecord(shipment);
+  const saved = applyTrackHit(shipment, result);
+  patchOrder(
+    order.id,
+    {
+      shipmentId: saved.id,
+      trackingId: saved.awb,
+      courierName: saved.courier,
+      courierChoice: { provider: portal, courierId: portal, courierName: courier, rate: 0, etaDays: 0, live: true },
+    },
+    `Tracking ${saved.awb} attached from ${label(portal)}`
+  );
+  const when = saved.expectedBy ? ` Delivery ${saved.expectedBy}.` : " The courier has not sent a delivery time yet.";
+  return `Fetched from ${label(portal)}. ${saved.courier} · ${saved.awb}. Status: ${result.status || saved.status}.${when}`;
+}
+
 export async function schedulePickup(shipmentId: string, date: string, slot: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
