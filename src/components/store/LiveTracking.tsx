@@ -64,7 +64,12 @@ export default function LiveTracking({
       leg={leg}
       scooter={scooter}
       store={{ lat: shipment?.pickupLat, lng: shipment?.pickupLng, label: pickup.name, address: pickup.address }}
-      drop={{ lat: shipment?.dropLat, lng: shipment?.dropLng, label: address?.fullName || "Delivery address", address: dropAddress }}
+      drop={{
+        lat: shipment?.dropLat,
+        lng: shipment?.dropLng,
+        label: address?.place === "office" ? "Office" : "Home",
+        address: dropAddress,
+      }}
       agent={agent}
       agentName={accepted ? shipment?.agentName : undefined}
       agentPhone={accepted ? shipment?.agentPhone : undefined}

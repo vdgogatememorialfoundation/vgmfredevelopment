@@ -727,6 +727,31 @@ export async function shiprocketPickupLocations(input: Json) {
   };
 }
 
+/** Courier clocks are India time unless the value already carries a zone. */
+function expectedBy(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text || text === "null" || text === "undefined" || text === "0") continue;
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(text);
+    const clock = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(text) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(text);
+    let parsed = Number.NaN;
+    if (dateOnly) parsed = Date.parse(`${text}T12:00:00+05:30`);
+    else if (clock) {
+      const iso = text.replace(" ", "T");
+      parsed = Date.parse(iso.length === 16 ? `${iso}:00+05:30` : `${iso}+05:30`);
+    } else parsed = Date.parse(text);
+    if (!Number.isFinite(parsed)) continue;
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      ...(dateOnly ? { year: "numeric" } : { hour: "numeric", minute: "2-digit" }),
+    }).format(new Date(parsed));
+  }
+  return undefined;
+}
+
 export async function shiprocketTrack(input: Json, awb: string) {
   const token = await shiprocketToken(input);
   if (!token) return null;
@@ -742,6 +767,7 @@ export async function shiprocketTrack(input: Json, awb: string) {
     awb: String(trackRow.awb_code ?? awb),
     events: activities.map((activity) => ({ at: String(activity.date), status: String(activity.activity), location: String(activity.location ?? "") })),
     trackingUrl: String(tracking.track_url ?? `https://shiprocket.co/tracking/${awb}`),
+    expectedBy: expectedBy(trackRow.edd, trackRow.etd, tracking.edd, tracking.etd, trackRow.delivered_date),
   };
 }
 
@@ -858,6 +884,7 @@ export async function nimbusTrack(input: Json, awb: string) {
     awb,
     events: history.map((event) => ({ at: String(event.event_time), status: String(event.message ?? event.status_code), location: String(event.location ?? "") })),
     trackingUrl: String(shipment.tracking_url ?? `https://ship.nimbuspost.com/?awb=${awb}`),
+    expectedBy: expectedBy(shipment.edd, shipment.expected_delivery_date, shipment.expected_delivery, shipment.delivery_date),
   };
 }
 
@@ -973,6 +1000,7 @@ export async function shipdayTrack(input: Json, orderId: string) {
     dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
     dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
+    expectedBy: expectedBy(match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
   };
 }
 
@@ -1146,7 +1174,9 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const fleet = active?.fleet ?? {};
   const job = active?.job ?? {};
   const accepted = Boolean(active) && ![6, 8, 9].includes(code) && (Boolean(String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "").trim()) || [0, 1, 4, 7].includes(code));
-  const history = details.flatMap((item) => (item.job.task_history as Json[]) ?? []);
+  const history = details.flatMap((item) =>
+    ((item.job.task_history as Json[]) ?? []).map((entry) => ({ entry, pickupTask: item.pickupTask }))
+  );
   const storeJob = pickup?.job ?? job;
   const dropSource = delivery?.job ?? job;
   const pickupLat = coord(Number(storeJob.job_pickup_latitude ?? storeJob.pickup_latitude ?? (pickup ? storeJob.job_latitude : NaN)));
@@ -1171,9 +1201,14 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
     dropLat,
     dropLng,
     events: [
-      ...history.map((entry) => {
+      ...history.map(({ entry, pickupTask }) => {
         const entryCode = Number(entry.job_status ?? entry.type);
-        const label = tookanStatusLabel[entryCode] ?? "";
+        const label =
+          entryCode === 2 && pickupTask
+            ? "Picked up from seller"
+            : entryCode === 2
+              ? "Delivered"
+              : tookanStatusLabel[entryCode] ?? "";
         const text = String(entry.description ?? entry.label ?? entry.status ?? "");
         return {
           at: String(entry.creation_datetime ?? entry.timestamp ?? ""),
@@ -1181,9 +1216,15 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
           location: String(entry.latitude && entry.longitude ? `${entry.latitude},${entry.longitude}` : ""),
         };
       }),
+      ...(pickup && pickup.code === 2 ? [{ at: new Date().toISOString(), status: "Picked up from seller", location: "" }] : []),
       ...(currentLabel ? [{ at: new Date().toISOString(), status: currentLabel, location: "" }] : []),
     ],
     trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? delivery?.job.tracking_link ?? ""),
+    expectedBy: expectedBy(
+      dropSource.job_delivery_datetime,
+      job.job_delivery_datetime,
+      delivery?.job.job_delivery_datetime
+    ),
   };
 }
 
@@ -1334,6 +1375,7 @@ export async function ithinkTrack(input: Json, awb: string) {
       location: String(scan.location ?? scan.city ?? ""),
     })),
     trackingUrl: String(tracking?.tracking_url ?? `https://www.ithinklogistics.com/track-order?awb=${awb}`),
+    expectedBy: expectedBy(tracking?.expected_delivery_date, tracking?.edd, tracking?.expected_delivery, tracking?.delivery_date),
   };
 }
 
@@ -1623,6 +1665,7 @@ export async function shipyaariTrack(input: Json, awb: string) {
       location: String(entry.location ?? ""),
     })),
     trackingUrl: String(nested.tracking_url ?? `https://shipyaari.com/track/${awb}`),
+    expectedBy: expectedBy(nested.expected_delivery_date, nested.edd, nested.eta, nested.expected_delivery),
   };
 }
 

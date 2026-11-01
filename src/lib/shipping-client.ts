@@ -587,6 +587,7 @@ type TrackHit = {
   dropLng?: number;
   accepted?: boolean;
   agentLeg?: "pickup" | "delivery";
+  expectedBy?: string;
 };
 
 function dedupeScans(events: { at: string; status: string; location?: string }[]) {
@@ -621,6 +622,7 @@ function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
   if (result.dropLat != null) update.dropLat = result.dropLat;
   if (result.dropLng != null) update.dropLng = result.dropLng;
   if (result.agentLeg) update.agentLeg = result.agentLeg;
+  if (result.expectedBy) update.expectedBy = result.expectedBy;
   if (result.accepted === false) {
     update.agentName = "";
     update.agentPhone = "";

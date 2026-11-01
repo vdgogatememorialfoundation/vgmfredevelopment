@@ -117,6 +117,10 @@ function AgentCard({
   );
 }
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
+}
+
 function Schematic({
   partner,
   status,
@@ -136,25 +140,30 @@ function Schematic({
   storeLabel: string;
   dropLabel: string;
 }) {
+  const [openPin, setOpenPin] = useState<"store" | "drop" | null>(null);
   return (
     <div className="vgmf-map-card">
       <svg viewBox="0 0 360 220" className="h-full min-h-[280px] w-full" role="img" aria-label="Path from the store to the customer">
         <rect width="360" height="220" fill="#f4f0e8" />
         <path d="M54 158 C 140 40, 220 40, 300 92" fill="none" stroke={ROAD} strokeWidth="3" strokeDasharray="2 8" strokeLinecap="round" />
-        <circle cx="54" cy="158" r="16" fill="#fff" stroke={STORE} strokeWidth="3" />
-        <circle cx="54" cy="158" r="6" fill={STORE} />
-        <circle cx="300" cy="92" r="16" fill="#fff" stroke={DROP} strokeWidth="3" />
-        <circle cx="300" cy="92" r="6" fill={DROP} />
+        <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("store")}>
+          <circle cx="54" cy="158" r="16" fill="#fff" stroke={STORE} strokeWidth="3" />
+          <circle cx="54" cy="158" r="6" fill={STORE} />
+          <text x="54" y="188" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
+            Store
+          </text>
+        </g>
+        <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("drop")}>
+          <circle cx="300" cy="92" r="16" fill="#fff" stroke={DROP} strokeWidth="3" />
+          <circle cx="300" cy="92" r="6" fill={DROP} />
+          <text x="300" y="122" textAnchor="middle" fontSize="11" fontWeight="700" fill={DROP}>
+            {dropLabel}
+          </text>
+        </g>
         {accepted ? <circle cx={leg === "delivery" ? 230 : 130} cy={leg === "delivery" ? 70 : 90} r="8" fill="#0B1F3A" stroke="#fff" strokeWidth="2" /> : null}
-        <text x="54" y="188" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
-          Store
-        </text>
-        <text x="300" y="122" textAnchor="middle" fontSize="11" fontWeight="700" fill={DROP}>
-          You
-        </text>
       </svg>
       <p className="px-3 pb-14 text-xs text-text-muted">
-        {storeLabel} → {dropLabel}
+        {openPin === "store" ? storeLabel : openPin === "drop" ? dropLabel : `${storeLabel} · ${dropLabel}`}
       </p>
       <AgentCard partner={partner} status={status} accepted={accepted} leg={leg} agentName={agentName} agentPhone={agentPhone} arrival="" />
     </div>
@@ -200,6 +209,8 @@ export default function DeliveryMap({
   const [resolved, setResolved] = useState<{ store?: LatLng; drop?: LatLng }>({});
   const [mapReady, setMapReady] = useState(false);
   const [arrival, setArrival] = useState("");
+  const pinsRef = useRef({ store, drop });
+  pinsRef.current = { store, drop };
 
   useEffect(() => {
     onArrival?.(arrival);
@@ -244,7 +255,8 @@ export default function DeliveryMap({
       google?: {
         maps?: {
           Map: new (el: HTMLElement, opts: object) => LiveMap;
-          Marker: new (opts: object) => { setMap: (map: object | null) => void };
+          Marker: new (opts: object) => { setMap: (map: object | null) => void; addListener: (name: string, fn: () => void) => void };
+          InfoWindow: new () => { setContent: (html: string) => void; open: (map: object, marker: object) => void };
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
           Point: new (x: number, y: number) => unknown;
@@ -276,18 +288,26 @@ export default function DeliveryMap({
         } catch {
           map = new maps.Map(hostRef.current, { ...options, mapId: undefined });
         }
-        const place = (point: LatLng | undefined, title: string, color: string) => {
+        const info = new maps.InfoWindow();
+        const place = (point: LatLng | undefined, kind: "store" | "drop", color: string) => {
           if (!point) return;
-          new maps.Marker({
+          const marker = new maps.Marker({
             map,
             position: point,
-            title,
+            title: kind === "store" ? pinsRef.current.store.label : pinsRef.current.drop.label,
             icon: { url: pin(color), scaledSize: new maps.Size(36, 46), anchor: new maps.Point(18, 44) },
             zIndex: 3,
           });
+          marker.addListener("click", () => {
+            const pinPoint = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
+            const title = escapeHtml(pinPoint.label || (kind === "store" ? "Store" : "Home"));
+            const address = pinPoint.address ? `<div style="margin-top:4px">${escapeHtml(pinPoint.address)}</div>` : "";
+            info.setContent(`<div style="font-family:sans-serif;max-width:220px;color:#1c1917"><b>${title}</b>${address}</div>`);
+            info.open(map, marker);
+          });
         };
-        place(resolved.store, store.label || "Store", STORE);
-        place(resolved.drop, drop.label || "You", DROP);
+        place(resolved.store, "store", STORE);
+        place(resolved.drop, "drop", DROP);
         sessionRef.current = { map, path: [], progress: 0 };
         maps.event?.addListenerOnce(map, "idle", () => {
           map.setTilt(67.5);
@@ -449,8 +469,8 @@ export default function DeliveryMap({
     <div className="vgmf-map-card">
       <div ref={hostRef} className="h-full min-h-[380px] w-full" />
       <div className="vgmf-map-legend">
-        <span><i style={{ background: STORE }} /> Store</span>
-        <span><i style={{ background: DROP }} /> You</span>
+        <span><i style={{ background: STORE }} /> {store.label || "Store"}</span>
+        <span><i style={{ background: DROP }} /> {drop.label || "Home"}</span>
         {accepted ? <span><i style={{ background: "#0B1F3A" }} /> Rider</span> : null}
       </div>
       <AgentCard

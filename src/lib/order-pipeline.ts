@@ -344,7 +344,17 @@ export function buildTrackingStages(
   }
   const failedReached = scanStage === "failed" || orderStage === "failed";
   const packedReached = STAGE_RANK[progress] >= STAGE_RANK.packed || failedReached;
-  const shippedReached = STAGE_RANK[progress] >= STAGE_RANK.shipped;
+  const collected = liveScans.some((scan) =>
+    /\b(picked up|pickup done|pickup complete|collected|handed to|handover|dispatched)\b/i.test(scan.status)
+  );
+  const shipmentLeft = Boolean(
+    shipment && ["Picked Up", "In Transit", "Out for Delivery", "Delivered"].includes(shipment.status ?? "")
+  );
+  const shippedReached =
+    collected ||
+    shipmentLeft ||
+    ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ||
+    STAGE_RANK[progress] >= STAGE_RANK.shipped;
   const outReached = STAGE_RANK[progress] >= STAGE_RANK.out;
   const deliveredReached = progress === "delivered" && !failedReached;
 

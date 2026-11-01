@@ -125,7 +125,9 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       };
     }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
-    if (stage.id === "delivered" && !stage.reached) next.expected = `Delivery expected by ${formatDate(expectedTo)}`;
+    if (stage.id === "delivered" && !stage.reached) {
+      next.expected = `Delivery expected by ${shipment?.expectedBy || formatDate(expectedTo)}`;
+    }
     if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
   });
@@ -187,7 +189,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
             ? "The line moves down through the delivery window, and it stops before Delivered."
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
-              : "The line moves down from the top, one step at a time, and stops on the latest scan.";
+              : "The line moves from Ordered to Packed. After the packing update it keeps moving toward Shipped. Shipped appears when the courier picks the parcel up from the store.";
 
   const pipe = (
     <VerticalPipeline
@@ -203,7 +205,17 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const tiles = (
     <div className="vgmf-trk-tiles">
       <Tile label="Where" value={customerStatusLabel(where, provider) || where} />
-      <Tile label="Delivery by" value={order.deliveryMode === "store_pickup" ? "Clinic pickup" : formatDate(expectedTo)} />
+      <Tile
+        label="Expected by"
+        value={
+          order.deliveryMode === "store_pickup"
+            ? "Clinic pickup"
+            : shipment?.expectedBy ||
+              (order.courierChoice?.etaDays != null
+                ? formatDate(addDays(placed, Math.max(0, order.courierChoice.etaDays)))
+                : formatDate(expectedTo))
+        }
+      />
       <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} />
       <Tile label="Tracking no." value={trackingId || "Awaiting tracking id"} />
       <Tile label="Last update" value={latest?.at ? formatDateTime(latest.at) : statusLine || "Waiting for the first scan"} />

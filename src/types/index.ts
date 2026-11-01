@@ -451,6 +451,8 @@ export interface DeliveryAddress {
   pincode: string;
   country?: string;
   countryCode?: string;
+  /** Name shown when the customer taps the delivery pin. */
+  place?: "home" | "office";
 }
 
 export interface CartItem {
@@ -731,6 +733,8 @@ export interface ShipmentRecord {
   customerPaid?: number;
   tracking?: { at: string; status: string; location?: string }[];
   trackingUrl?: string;
+  /** Promised arrival from the courier that booked this shipment. */
+  expectedBy?: string;
   note?: string;
   agentName?: string;
   agentPhone?: string;

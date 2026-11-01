@@ -29,6 +29,7 @@ type TrackHit = {
   dropLng?: number;
   accepted?: boolean;
   agentLeg?: "pickup" | "delivery";
+  expectedBy?: string;
 };
 
 function dedupe(events: { at: string; status: string; location?: string }[]) {
@@ -95,6 +96,7 @@ export async function refreshStoredShipment(orderId: string) {
     dropLat: hit.dropLat ?? shipment.dropLat,
     dropLng: hit.dropLng ?? shipment.dropLng,
     deliveryOtp: hit.otp || shipment.deliveryOtp,
+    expectedBy: hit.expectedBy || shipment.expectedBy,
   };
   replaceShopShipment(next);
   const order = findShopOrder(orderId);
