@@ -9,7 +9,6 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { leaveAfterSignOut } from "@/lib/auth";
 import { useCart } from "@/lib/use-cart";
 import { classNames } from "@/lib/utils";
-import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey } from "@/lib/i18n/messages";
 import { getLiveCmsPages } from "@/lib/cms-pages";
@@ -305,7 +304,6 @@ export default function Header() {
 
           {/* Actions */}
           <div className="hidden items-center gap-3 lg:flex">
-            <LanguageSwitcher />
             <Link
               href="/cart"
               aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
@@ -553,7 +551,6 @@ export default function Header() {
                   <Link href="/events" onClick={() => setMobileMenuOpen(false)} className="btn-outline">
                     {t("header.exploreEvents")}
                   </Link>
-                  <LanguageSwitcher />
                 </div>
               </div>
             </div>,

@@ -347,7 +347,7 @@ export function answerQuestion(question: string): string {
     return "Create a foundation account from the Login page. The administrator can turn signup and login on or off independently. Signup verifies email with OTP. Sign-in uses your Foundation website password — Seminar, Autism and Fellowship passwords are not used here, so imported members must use Forgot password to set a new one. Email OTP or SMS OTP can also be used when those are enabled. Your 12-digit Account ID ties together shop orders and tickets.";
   }
   if (/\b(language|hindi|marathi|tamil|kannada|gujarati)\b|भाषा|मराठी|हिन्दी/i.test(question)) {
-    return "Use the language control in the header or footer to read the site in English, Hindi, Marathi and other Indian languages. Article translations, when the writer has added them, follow the language you choose.";
+    return "The public website is published in English. Biographies and articles may still include a Marathi original where the author supplied one.";
   }
   if (/\b(share|social|facebook|whatsapp|linkedin|telegram)\b/i.test(question)) {
     return "Every published article has Share on the public page and in the admin Articles desk: Facebook, X, LinkedIn, WhatsApp, Telegram, email, copy link or copy a ready post. Staff drafts go live only after an administrator approves them.";

@@ -18,6 +18,9 @@ export default function UpcomingEvents() {
     .filter((event) => !isEventPast(event, now))
     .sort(compareEventDates)
     .slice(0, 3);
+  const past = events
+    .filter((event) => isEventPast(event, now))
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   return (
     <section className="section-paper" aria-labelledby="upcoming-events-heading">
@@ -33,17 +36,30 @@ export default function UpcomingEvents() {
           }
         />
 
-        {upcoming.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
+        {upcoming.length === 0 && past.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-primary">
             {t("home.noEvents")}
           </p>
-        ) : (
+        ) : null}
+
+        {upcoming.length > 0 ? (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {upcoming.map((event) => (
               <EventCard key={event.id} event={event} />
             ))}
           </div>
-        )}
+        ) : null}
+
+        {past.length > 0 ? (
+          <div className={upcoming.length > 0 ? "mt-10" : ""}>
+            <h3 className="mb-4 text-lg font-semibold text-text-primary">{t("home.pastEvents")}</h3>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              {past.map((event) => (
+                <EventCard key={event.id} event={event} variant="compact" />
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-8">
           <Link href="/events" className="btn-primary">

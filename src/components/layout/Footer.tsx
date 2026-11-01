@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
 import SocialLinks from "@/components/layout/SocialLinks";
-import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
 import { siteConfig } from "@/lib/constants";
@@ -136,9 +135,6 @@ export default function Footer() {
                   </Link>
                 </p>
               ) : null}
-              <div className="mt-3">
-                <LanguageSwitcher />
-              </div>
             </div>
           </div>
         </div>

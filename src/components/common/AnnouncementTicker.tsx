@@ -26,47 +26,49 @@ export default function AnnouncementTicker() {
   return (
     <div
       aria-label="Scrolling announcements"
-      className="relative isolate overflow-hidden border-b border-burgundy/25 bg-burgundy text-[#f7f1e8]"
+      className="relative isolate overflow-hidden border-b border-burgundy-dark bg-burgundy text-white"
     >
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-28 bg-gradient-to-r from-burgundy via-burgundy to-transparent sm:w-44" />
-      <div className="pointer-events-none absolute inset-y-0 right-12 z-10 w-10 bg-gradient-to-l from-burgundy to-transparent" />
-      <p className="absolute left-3 top-1/2 z-20 -translate-y-1/2 text-[10px] font-semibold uppercase tracking-[0.22em] text-gold sm:left-5">
-        Live
-      </p>
-      <div
-        className={`flex w-max items-center gap-8 py-2.5 pl-24 sm:gap-12 sm:pl-36 ${paused ? "" : "animate-ticker"}`}
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
-      >
-        {row.map((item, index) => (
-          <TickerLink key={`${item.id}-${index}`} item={item} />
-        ))}
+      <div className="flex min-h-11 items-stretch">
+        <p className="flex shrink-0 items-center bg-gold px-3 text-[12px] font-bold uppercase tracking-[0.16em] text-burgundy sm:px-4 sm:text-[13px]">
+          Live
+        </p>
+        <div className="relative min-w-0 flex-1">
+          <div
+            className={`flex w-max items-center gap-10 py-2.5 pl-5 pr-8 ${paused ? "" : "animate-ticker"}`}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+          >
+            {row.map((item, index) => (
+              <TickerLink key={`${item.id}-${index}`} item={item} />
+            ))}
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-pressed={paused}
+          aria-label={paused ? "Play announcements" : "Pause announcements"}
+          onClick={() => setPaused((value) => !value)}
+          className="flex w-11 shrink-0 items-center justify-center border-l border-white bg-burgundy-dark text-white transition hover:bg-ink"
+        >
+          {paused ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
+          )}
+        </button>
       </div>
-      <button
-        type="button"
-        aria-pressed={paused}
-        aria-label={paused ? "Play announcements" : "Pause announcements"}
-        onClick={() => setPaused((value) => !value)}
-        className="absolute right-2 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-burgundy-dark/40 text-[#f7f1e8] transition hover:bg-white/10"
-      >
-        {paused ? (
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-        ) : (
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
-        )}
-      </button>
     </div>
   );
 }
 
 function TickerLink({ item }: { item: TickerItem }) {
   return (
-    <Link href={item.href} className="flex shrink-0 items-center gap-2.5 text-[13px] font-medium text-[#f7f1e8]/90 transition hover:text-gold">
-      <span className="rounded-full border border-gold/40 bg-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gold">
+    <Link href={item.href} className="flex shrink-0 items-center gap-3 text-[15px] font-semibold leading-none text-white transition hover:text-gold">
+      <span className="rounded-sm bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-burgundy">
         {item.category}
       </span>
-      <span className="max-w-[34rem] truncate">{item.title}</span>
-      <span aria-hidden="true" className="text-gold/70">◆</span>
+      <span>{item.title}</span>
+      <span aria-hidden="true" className="text-gold">●</span>
     </Link>
   );
 }
