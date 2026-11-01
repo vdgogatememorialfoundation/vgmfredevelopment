@@ -5,9 +5,14 @@ import { useEffect, useState } from "react";
 import { subscribeCms } from "@/lib/cms";
 import { buildTickerItems, type TickerItem } from "@/lib/ticker";
 
+function loopItems(items: TickerItem[]) {
+  const block = [...items];
+  while (block.length < 8) block.push(...items);
+  return [...block, ...block];
+}
+
 export default function AnnouncementTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
-  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     const refresh = () => setItems(buildTickerItems());
@@ -21,43 +26,17 @@ export default function AnnouncementTicker() {
   }, []);
 
   if (items.length === 0) return null;
-  const row = items.length === 1 ? [...items, ...items, ...items] : [...items, ...items];
+  const row = loopItems(items);
 
   return (
     <div
       aria-label="Scrolling announcements"
-      className="border-b border-burgundy-dark bg-burgundy text-white"
+      className="overflow-hidden border-b border-ink-soft bg-ink text-white"
     >
-      <div className="grid h-11 grid-cols-[auto_12px_minmax(0,1fr)_12px_auto] items-stretch">
-        <p className="relative z-20 flex items-center bg-gold px-3.5 text-[12px] font-bold uppercase tracking-[0.16em] text-burgundy sm:px-4 sm:text-[13px]">
-          Live
-        </p>
-        <span aria-hidden="true" className="bg-burgundy" />
-        <div className="relative z-0 min-w-0 overflow-hidden">
-          <div
-            className={`flex w-max items-center gap-8 py-2 ${paused ? "" : "animate-ticker"}`}
-            onMouseEnter={() => setPaused(true)}
-            onMouseLeave={() => setPaused(false)}
-          >
-            {row.map((item, index) => (
-              <TickerLink key={`${item.id}-${index}`} item={item} />
-            ))}
-          </div>
-        </div>
-        <span aria-hidden="true" className="bg-burgundy" />
-        <button
-          type="button"
-          aria-pressed={paused}
-          aria-label={paused ? "Play announcements" : "Pause announcements"}
-          onClick={() => setPaused((value) => !value)}
-          className="relative z-20 flex w-11 items-center justify-center border-l border-white bg-burgundy-dark text-white transition hover:bg-ink"
-        >
-          {paused ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
-          )}
-        </button>
+      <div className="animate-ticker flex w-max items-center gap-10 py-2.5">
+        {row.map((item, index) => (
+          <TickerLink key={`${item.id}-${index}`} item={item} />
+        ))}
       </div>
     </div>
   );
@@ -67,13 +46,13 @@ function TickerLink({ item }: { item: TickerItem }) {
   return (
     <Link
       href={item.href}
-      className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[14px] font-semibold leading-none text-white transition hover:text-gold"
+      className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[14px] font-semibold leading-none text-white transition hover:text-white"
     >
-      <span className="rounded-sm bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-burgundy">
+      <span className="rounded-sm bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink">
         {item.category}
       </span>
       <span>{item.title}</span>
-      <span aria-hidden="true" className="text-gold">•</span>
+      <span aria-hidden="true" className="text-white">•</span>
     </Link>
   );
 }
