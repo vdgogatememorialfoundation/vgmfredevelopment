@@ -108,7 +108,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const shippedAt = shippedStage?.events[0]?.at;
   const deliveredAt = deliveredStage?.events[deliveredStage.events.length - 1]?.at;
   const failed = order.status === "Failed" || rawStages.some((stage) => stage.id === "failed" && stage.reached);
-  const partialIdx = rawStages.findIndex((stage) => stage.partial);
+  const partialIdx = rawStages.map((stage) => stage.partial).lastIndexOf(true);
   const lastReachedIdx = rawStages.map((stage) => stage.reached).lastIndexOf(true);
   const nodeCurrentIdx = partialIdx !== -1 ? partialIdx : lastReachedIdx;
   const latest = [...shownScans].reverse().find((scan) => scan.status);
@@ -189,7 +189,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
             ? "The line moves down through the delivery window, and it stops before Delivered."
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
-              : "The line moves from Ordered to Packed. After the packing update it keeps moving toward Shipped. Shipped appears when the courier picks the parcel up from the store.";
+              : "The line runs from the top to the latest green step. Shipped turns green when the courier picks the parcel up from the store.";
 
   const pipe = (
     <VerticalPipeline

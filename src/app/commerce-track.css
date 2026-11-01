@@ -129,7 +129,7 @@
   font-weight: 500;
 }
 .vgmf-ship-next {
-  color: var(--tl-green);
+  color: var(--tl-muted);
 }
 .vgmf-ship-expect {
   display: inline-flex;

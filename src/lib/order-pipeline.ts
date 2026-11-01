@@ -426,8 +426,7 @@ export function buildTrackingStages(
       "Shipped",
       trackingId ? `${courier} · ${trackingId}` : "Handed to courier",
       shippedEvents,
-      shippedReached,
-      packedReached && !shippedReached && liveScans.some((scan) => classifyCourierScan(scan.status) == null)
+      shippedReached
     ),
     makeStage("out", "Out for Delivery", "Courier on the way", outEvents, outReached),
   ];

@@ -80,12 +80,12 @@ export default function VerticalPipeline({
   note,
 }: VerticalPipelineProps) {
   const lastReachedIdx = stages.map((stage) => stage.reached).lastIndexOf(true);
-  const partialIdx = stages.findIndex((stage) => stage.partial);
+  const partialIdx = stages.map((stage) => stage.partial).lastIndexOf(true);
   const nodeCurrentIdx = currentIndex ?? (partialIdx !== -1 ? partialIdx : lastReachedIdx);
   const [openIdx, setOpenIdx] = useState(Math.max(0, nodeCurrentIdx));
   const frameRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
-  const phase = useRef<"start" | "at-step" | "creeping">("start");
+  const phase = useRef<"start" | "at-step">("start");
   const [line, setLine] = useState({ left: 14.5, top: 34, height: 0, transition: "none" });
 
   useEffect(() => {
@@ -98,7 +98,6 @@ export default function VerticalPipeline({
     if (!list || !frame || nodeCurrentIdx < 0) return;
     let cancelled = false;
     let growTimer = 0;
-    let creepTimer = 0;
     const read = () => {
       const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
       const current = items[nodeCurrentIdx];
@@ -110,21 +109,10 @@ export default function VerticalPipeline({
       const end = currentDot.getBoundingClientRect();
       const top = start.top + start.height / 2 - frameBox.top;
       const bottom = end.top + end.height / 2 - frameBox.top;
-      const height = Math.max(0, bottom - top);
-      let creep = height;
-      const stage = stages[nodeCurrentIdx];
-      const nextStage = stages[nodeCurrentIdx + 1];
-      const nextDot = items[nodeCurrentIdx + 1]?.querySelector(".dot");
-      if (stage?.id === "packed" && stage.events.length > 0 && nextStage && !nextStage.reached && nextDot) {
-        const nextBox = nextDot.getBoundingClientRect();
-        const nextCenter = nextBox.top + nextBox.height / 2 - frameBox.top;
-        creep = height + Math.max(0, nextCenter - (top + height)) * 0.72;
-      }
       return {
         left: start.left + start.width / 2 - frameBox.left - 1.5,
         top,
-        height,
-        creep,
+        height: Math.max(0, bottom - top),
       };
     };
     const motion = (duration: string) =>
@@ -144,22 +132,7 @@ export default function VerticalPipeline({
           if (!latest) return;
           phase.current = "at-step";
           paint(latest, "height 2.6s linear");
-          if (latest.creep > latest.height + 12) {
-            window.clearTimeout(creepTimer);
-            creepTimer = window.setTimeout(() => {
-              if (cancelled) return;
-              const toward = read();
-              if (!toward) return;
-              phase.current = "creeping";
-              paint({ ...toward, height: toward.creep }, "height 8s linear");
-            }, 2800);
-          }
         }, 70);
-        return;
-      }
-      if (phase.current === "creeping" || next.creep > next.height + 12) {
-        phase.current = "creeping";
-        paint({ ...next, height: next.creep }, "height 8s linear");
         return;
       }
       paint(next, "height 2.6s linear");
@@ -169,10 +142,7 @@ export default function VerticalPipeline({
       if (cancelled || phase.current === "start") return;
       const next = read();
       if (!next) return;
-      paint(
-        { ...next, height: phase.current === "creeping" ? next.creep : next.height },
-        phase.current === "creeping" ? "height 8s linear" : "height 2.6s linear"
-      );
+      paint(next, "height 2.6s linear");
     };
     const observer = new ResizeObserver(follow);
     observer.observe(list);
@@ -181,7 +151,6 @@ export default function VerticalPipeline({
       cancelled = true;
       window.clearTimeout(timer);
       window.clearTimeout(growTimer);
-      window.clearTimeout(creepTimer);
       observer.disconnect();
       window.removeEventListener("resize", apply);
     };
