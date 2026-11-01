@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
@@ -28,6 +29,12 @@ export function findShopOrder(id: string) {
   return readAll().find((order) => order.id === id);
 }
 
+export function findShopOrderByToken(token: string) {
+  const clean = token.trim();
+  if (clean.length < 12) return;
+  return readAll().find((order) => order.trackToken === clean);
+}
+
 export function ordersForEmail(email: string) {
   return ordersForAccount({ email });
 }
@@ -47,7 +54,8 @@ export function upsertShopOrder(order: Order) {
   const prev = all.find((item) => item.id === order.id);
   if (prev && orderActivityAt(prev) > orderActivityAt(order)) return prev;
   const orders = all.filter((item) => item.id !== order.id);
-  orders.unshift(prev ? { ...prev, ...order } : order);
+  const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
+  orders.unshift(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken });
   writeAll(orders);
   return orders[0];
 }

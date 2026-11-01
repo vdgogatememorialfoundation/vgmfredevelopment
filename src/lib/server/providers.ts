@@ -777,6 +777,52 @@ function promisedFrom(payload: unknown, ...first: unknown[]) {
   return expectedBy(...first, ...clockFields(payload));
 }
 
+/** Agent name, phone, OTP and GPS when the courier portal sends them (Shiprocket hyperlocal, Porter, and the others). */
+function riderFrom(payload: unknown) {
+  const found = { name: "", phone: "", otp: "", lat: undefined as number | undefined, lng: undefined as number | undefined };
+  const walk = (value: unknown, depth: number) => {
+    if (depth > 6 || value == null || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value.slice(0, 6)) walk(item, depth + 1);
+      return;
+    }
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const k = key.toLowerCase();
+      if (typeof child === "string" || typeof child === "number") {
+        const text = String(child).trim();
+        if (!text || text === "null" || text === "undefined") continue;
+        if (!found.name && /(rider|agent|driver|delivery_boy|fe)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
+        if (!found.phone && /(rider|agent|driver|delivery_boy|fe)_?(phone|mobile|contact)$/.test(k)) found.phone = text;
+        if (!found.otp && /(delivery_otp|^otp$|door_code|verification_code)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
+        if (found.lat == null && /(rider|agent|driver|fe)_?lat(itude)?$/.test(k)) {
+          const n = Number(text);
+          if (Math.abs(n) > 0.01) found.lat = n;
+        }
+        if (found.lng == null && /(rider|agent|driver|fe)_?(lng|long|longitude)$/.test(k)) {
+          const n = Number(text);
+          if (Math.abs(n) > 0.01) found.lng = n;
+        }
+      } else walk(child, depth + 1);
+    }
+  };
+  walk(payload, 0);
+  return found;
+}
+
+function riderHit(payload: unknown, status: string) {
+  const rider = riderFrom(payload);
+  const moving = /picked up|out for|in transit|on the way|started|deliver/i.test(status);
+  return {
+    agentName: rider.name,
+    agentPhone: rider.phone,
+    otp: rider.otp,
+    lat: rider.lat,
+    lng: rider.lng,
+    accepted: rider.name ? true : undefined,
+    agentLeg: (moving ? "delivery" : "pickup") as "delivery" | "pickup",
+  };
+}
+
 export async function shiprocketTrack(input: Json, awb: string) {
   const token = await shiprocketToken(input);
   if (!token) return null;
@@ -793,6 +839,7 @@ export async function shiprocketTrack(input: Json, awb: string) {
     events: activities.map((activity) => ({ at: String(activity.date), status: String(activity.activity), location: String(activity.location ?? "") })),
     trackingUrl: String(tracking.track_url ?? `https://shiprocket.co/tracking/${awb}`),
     expectedBy: promisedFrom(data, trackRow.edd, trackRow.etd, tracking.edd, tracking.etd),
+    ...riderHit(data, String(trackRow.current_status ?? tracking.shipment_status ?? "")),
   };
 }
 
@@ -910,6 +957,7 @@ export async function nimbusTrack(input: Json, awb: string) {
     events: history.map((event) => ({ at: String(event.event_time), status: String(event.message ?? event.status_code), location: String(event.location ?? "") })),
     trackingUrl: String(shipment.tracking_url ?? `https://ship.nimbuspost.com/?awb=${awb}`),
     expectedBy: promisedFrom(data, shipment.edd, shipment.expected_delivery_date, shipment.expected_delivery, shipment.delivery_date),
+    ...riderHit(data, String(shipment.status ?? "")),
   };
 }
 
@@ -1402,6 +1450,7 @@ export async function ithinkTrack(input: Json, awb: string) {
     })),
     trackingUrl: String(tracking?.tracking_url ?? `https://www.ithinklogistics.com/track-order?awb=${awb}`),
     expectedBy: promisedFrom(tracking, tracking?.expected_delivery_date, tracking?.edd, tracking?.expected_delivery, tracking?.delivery_date),
+    ...riderHit(tracking ?? data, String(tracking?.current_status ?? tracking?.status ?? "")),
   };
 }
 
@@ -1692,6 +1741,7 @@ export async function shipyaariTrack(input: Json, awb: string) {
     })),
     trackingUrl: String(nested.tracking_url ?? `https://shipyaari.com/track/${awb}`),
     expectedBy: promisedFrom(data, nested.expected_delivery_date, nested.edd, nested.eta, nested.expected_delivery),
+    ...riderHit(data, String(nested.status ?? nested.current_status ?? "")),
   };
 }
 

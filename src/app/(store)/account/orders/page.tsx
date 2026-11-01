@@ -12,27 +12,13 @@ import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
+import { deliveryExpectation } from "@/lib/delivery-expectation";
+import { getShipments } from "@/lib/admin-store";
 import type { Order } from "@/types";
 
 function latestStatusText(order: Order) {
-  switch (order.status) {
-    case "Delivered":
-      return "Your order is delivered";
-    case "Out for Delivery":
-      return "Out for delivery";
-    case "Shipped":
-      return "Your order has been shipped";
-    case "Packed":
-      return "Your order is packed";
-    case "Processing":
-      return "Your order is being processed";
-    case "Cancelled":
-      return "This order was cancelled";
-    case "Failed":
-      return "Delivery failed";
-    default:
-      return "Your order is placed";
-  }
+  const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
+  return deliveryExpectation(order.status, shipment?.expectedBy || order.eta);
 }
 
 export default function OrdersPage() {

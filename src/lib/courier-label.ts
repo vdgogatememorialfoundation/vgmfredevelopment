@@ -43,7 +43,7 @@ export function customerStatusLabel(status: string, provider?: string) {
   if (!clean) return "";
   if (!isOwnFleet(provider)) return clean;
   const table: Record<string, string> = {
-    unassigned: "Finding a rider",
+    unassigned: "",
     assigned: "Rider assigned",
     accepted: "Rider accepted",
     started: "On the way",

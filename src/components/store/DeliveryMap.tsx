@@ -102,6 +102,62 @@ function flyingRoute(
   return path;
 }
 
+/** Screen-space curve. It starts on the first pin and ends on the next, so the map cannot cut the ends off. */
+function mountFlightArc(
+  maps: {
+    OverlayView: new () => {
+      setMap: (map: object | null) => void;
+      getPanes: () => { overlayLayer: HTMLElement } | null;
+      getProjection: () => { fromLatLngToDivPixel: (ll: object) => { x: number; y: number } | null } | null;
+      onAdd?: () => void;
+      draw?: () => void;
+      onRemove?: () => void;
+    };
+    LatLng: new (lat: number, lng: number) => object;
+  },
+  map: object,
+  points: LatLng[]
+) {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const arc = new maps.OverlayView();
+  let svg: SVGSVGElement | undefined;
+  let path: SVGPathElement | undefined;
+  arc.onAdd = () => {
+    svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("style", "position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none");
+    path = document.createElementNS(svgNS, "path");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", ROAD);
+    path.setAttribute("stroke-width", "4");
+    path.setAttribute("stroke-linecap", "round");
+    svg.appendChild(path);
+    arc.getPanes()?.overlayLayer.appendChild(svg);
+  };
+  arc.draw = () => {
+    const projection = arc.getProjection();
+    if (!projection || !path) return;
+    const parts: string[] = [];
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const start = projection.fromLatLngToDivPixel(new maps.LatLng(points[i].lat, points[i].lng));
+      const end = projection.fromLatLngToDivPixel(new maps.LatLng(points[i + 1].lat, points[i + 1].lng));
+      if (!start || !end) continue;
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const bow = Math.min(110, Math.max(36, len * 0.28));
+      const cx = (start.x + end.x) / 2 + (-dy / len) * bow;
+      const cy = (start.y + end.y) / 2 + (dx / len) * bow;
+      parts.push(`M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`);
+    }
+    path.setAttribute("d", parts.join(" "));
+  };
+  arc.onRemove = () => {
+    svg?.remove();
+  };
+  arc.setMap(map);
+  return arc;
+}
+
 function project(point: LatLng, path: LatLng[]) {
   let best = Number.POSITIVE_INFINITY;
   let at = path[0] ?? point;
@@ -164,7 +220,7 @@ function AgentCard({
         <span>
           {accepted
             ? [agentName, agentPhone, where, arrival].filter(Boolean).join(" · ")
-            : status || "Finding a rider"}
+            : status}
         </span>
       </div>
       {accepted && phone ? <a href={`tel:${phone}`}>Call</a> : null}
@@ -204,7 +260,7 @@ function Schematic({
       <div className="vgmf-map-stage">
         <svg viewBox="0 0 360 220" role="img" aria-label="Path from the store to the customer">
           <rect width="360" height="220" fill="#f4f0e8" />
-          <path d="M72 106.3 C 150 48, 214 42, 282 94.3" fill="none" stroke={ROAD} strokeWidth="3" strokeLinecap="round" />
+          <path d="M72 106.3 Q 177 36 282 94.3" fill="none" stroke={ROAD} strokeWidth="4" strokeLinecap="round" />
           <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("store")}>
             <image href={pin(STORE)} x="52" y="58" width="40" height="50" />
             <text x="72" y="132" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
@@ -267,6 +323,7 @@ export default function DeliveryMap({
   const sessionRef = useRef<{
     map: LiveMap;
     line?: { setMap: (map: object | null) => void };
+    arc?: { setMap: (map: object | null) => void };
     bike?: Bike;
     img?: HTMLImageElement;
     path: LatLng[];
@@ -344,21 +401,15 @@ export default function DeliveryMap({
         const options = {
           center,
           zoom: 13,
-          tilt: 12,
-          heading: 8,
-          mapId: "DEMO_MAP_ID",
+          tilt: 0,
+          heading: 0,
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
           clickableIcons: false,
           gestureHandling: "greedy",
         };
-        let map: LiveMap;
-        try {
-          map = new maps.Map(hostRef.current, options);
-        } catch {
-          map = new maps.Map(hostRef.current, { ...options, mapId: undefined });
-        }
+        const map = new maps.Map(hostRef.current, options);
         const info = new maps.InfoWindow();
         const bounds = new maps.LatLngBounds();
         const place = (point: LatLng | undefined, kind: "store" | "drop", color: string) => {
@@ -366,19 +417,6 @@ export default function DeliveryMap({
           bounds.extend(point);
           const pinPoint = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
           const label = pinPoint.label || (kind === "store" ? "Store" : "Home");
-          const content = document.createElement("div");
-          content.style.cssText = "width:0;height:0;overflow:visible;cursor:pointer";
-          const stack = document.createElement("div");
-          stack.style.cssText = "position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px";
-          const Pin = maps.marker?.PinElement;
-          const graphic = Pin
-            ? new Pin({ background: color, borderColor: "#ffffff", glyphColor: "#ffffff", scale: 1.15 }).element
-            : Object.assign(document.createElement("img"), { src: pin(color), alt: label, width: 36, height: 46 });
-          const name = document.createElement("div");
-          name.textContent = label;
-          name.style.cssText = "max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#fff;color:#1c1917;border-radius:999px;padding:3px 8px;font:700 11px/1.3 sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.18)";
-          stack.append(name, graphic);
-          content.append(stack);
           const openInfo = () => {
             const current = kind === "store" ? pinsRef.current.store : pinsRef.current.drop;
             const title = escapeHtml(current.label || label);
@@ -386,30 +424,12 @@ export default function DeliveryMap({
             info.setContent(`<div style="font-family:sans-serif;max-width:220px;color:#1c1917"><b>${title}</b>${address}</div>`);
             info.open(map);
           };
-          stack.addEventListener("click", openInfo);
-          const Advanced = maps.marker?.AdvancedMarkerElement;
-          if (Advanced) {
-            try {
-              new Advanced({
-                map,
-                position: point,
-                content,
-                zIndex: kind === "store" ? 6 : 5,
-                title: label,
-                gmpClickable: true,
-                collisionBehavior: maps.CollisionBehavior?.REQUIRED,
-              });
-              return;
-            } catch {
-              /* classic pin below */
-            }
-          }
           new maps.Marker({
             map,
             position: point,
             title: label,
-            icon: { url: pin(color), scaledSize: new maps.Size(36, 46), anchor: new maps.Point(18, 44) },
-            zIndex: 4,
+            icon: { url: pin(color), scaledSize: new maps.Size(36, 46), anchor: new maps.Point(18, 46) },
+            zIndex: kind === "store" ? 6 : 5,
           }).addListener("click", openInfo);
         };
         place(resolved.store, "store", STORE);
@@ -430,6 +450,15 @@ export default function DeliveryMap({
       google?: {
         maps?: {
           Polyline: new (opts: object) => { setMap: (map: object | null) => void };
+          OverlayView: new () => {
+            setMap: (map: object | null) => void;
+            getPanes: () => { overlayLayer: HTMLElement } | null;
+            getProjection: () => { fromLatLngToDivPixel: (ll: object) => { x: number; y: number } | null } | null;
+            onAdd?: () => void;
+            draw?: () => void;
+            onRemove?: () => void;
+          };
+          LatLng: new (lat: number, lng: number) => object;
           Marker: new (opts: object) => { setMap: (map: object | null) => void; setPosition: (point: LatLng) => void };
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
@@ -463,28 +492,27 @@ export default function DeliveryMap({
     const path = flyingRoute(stops, spherical);
     let frame = 0;
     live.line?.setMap(null);
-    live.line = new maps.Polyline({
-      map: live.map,
-      path,
-      strokeColor: ROAD,
-      strokeOpacity: 1,
-      strokeWeight: 4,
-      geodesic: false,
-      zIndex: 8,
-    });
+    live.arc?.setMap(null);
+    if (maps.OverlayView && maps.LatLng) {
+      live.arc = mountFlightArc(maps, live.map, stops);
+    } else {
+      live.line = new maps.Polyline({
+        map: live.map,
+        path: stops,
+        strokeColor: ROAD,
+        strokeOpacity: 1,
+        strokeWeight: 4,
+        geodesic: false,
+        zIndex: 8,
+      });
+    }
     live.path = path;
     const bounds = new maps.LatLngBounds();
-    path.forEach((point) => bounds.extend(point));
-    if (resolved.store) bounds.extend(resolved.store);
-    bounds.extend(resolved.drop);
-    if (agent) bounds.extend(agent);
-    const pad = { top: 80, right: 64, bottom: 64, left: 64 };
+    stops.forEach((point) => bounds.extend(point));
+    const pad = { top: 96, right: 72, bottom: 72, left: 72 };
     live.map.fitBounds(bounds, pad);
-    window.setTimeout(() => {
-      live.map.setTilt(12);
-      live.map.setHeading(8);
-      live.map.fitBounds(bounds, pad);
-    }, 350);
+    live.map.setTilt(0);
+    live.map.setHeading(0);
     if (!accepted || !agent) {
       if (live.bike) live.bike.map = null;
     } else {

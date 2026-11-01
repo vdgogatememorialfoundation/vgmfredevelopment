@@ -39,7 +39,7 @@ export default function TrackShipmentPage() {
     <div className="container py-8">
       <h1 className="font-serif text-3xl text-ink">Track a shipment</h1>
       <p className="mt-2 max-w-xl text-sm text-text-muted">
-        Enter the order number and the mobile number on the order. Gogate Products deliveries show the rider, and courier bookings show the assigned partner such as Ekart with its tracking number.
+        Enter the order number and the mobile number on the order. The rider’s name and phone appear after the courier is allotted and delivery has started.
       </p>
       <form onSubmit={onSubmit} className="mt-5 grid max-w-xl gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <label className="block text-sm">

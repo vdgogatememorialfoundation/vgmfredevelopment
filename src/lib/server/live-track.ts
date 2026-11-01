@@ -101,7 +101,8 @@ export async function refreshStoredShipment(orderId: string) {
   const awb = hit.awb || shipment.awb;
   const latestStatus = hit.status || [...events].reverse().find((event) => event.status)?.status || "";
   const stage = classifyCourierScan(latestStatus);
-  const hyperlocal = isHyperlocalProvider(provider);
+  const orderForLeg = findShopOrder(orderId);
+  const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile);
   const shipmentStatus = stage ? shipmentStatusFor(stage) : undefined;
   const next: ShipmentRecord = {
     ...shipment,
@@ -123,7 +124,7 @@ export async function refreshStoredShipment(orderId: string) {
     expectedBy: hit.expectedBy || shipment.expectedBy,
   };
   replaceShopShipment(next);
-  const order = findShopOrder(orderId);
+  const order = orderForLeg;
   if (order) {
     const target = stage ? orderStatusFor(stage, hyperlocal) : undefined;
     const rank: Record<string, number> = { Packed: 1, Shipped: 2, "Out for Delivery": 3, Delivered: 4, Failed: 5 };

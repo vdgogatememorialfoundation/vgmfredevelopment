@@ -48,8 +48,10 @@ export default function LiveTracking({
   const address = order.deliveryAddress;
   const dropAddress = [address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ");
   const scooter = getIntegrations().shipping.scooterImage || DEFAULT_SCOOTER;
-  const accepted = hyperlocal && riderAccepted(status, shipment?.agentName);
+  const riderKnown = Boolean(shipment?.agentName?.trim()) || riderAccepted(status, shipment?.agentName);
   const leg = shipment?.agentLeg ?? (/picked up|out for|in transit/i.test(`${status} ${shipment?.status ?? ""}`) ? "delivery" : "pickup");
+  const deliveryStarted = /picked up|out for|in transit|on the way|deliver/i.test(`${status} ${shipment?.status ?? ""}`) || shipment?.status === "Out for Delivery" || shipment?.status === "Delivered";
+  const accepted = riderKnown && deliveryStarted;
   const agent =
     accepted && shipment?.agentLat != null && shipment?.agentLng != null
       ? { lat: shipment.agentLat, lng: shipment.agentLng }
@@ -73,7 +75,7 @@ export default function LiveTracking({
       agent={agent}
       agentName={accepted ? shipment?.agentName : undefined}
       agentPhone={accepted ? shipment?.agentPhone : undefined}
-      showCourier={/picked up|out for|in transit|deliver/i.test(`${status} ${shipment?.status ?? ""}`) || leg === "delivery"}
+      showCourier={accepted}
       promised={shipment?.expectedBy || ""}
       onArrival={onArrival}
     />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { formatDateTime } from "@/lib/utils";
+import { statusStamp } from "@/lib/delivery-expectation";
 import type { ShipmentEvent } from "@/types";
 
 export type PipelineTone = "emerald" | "sky" | "red";
@@ -196,7 +196,6 @@ export default function VerticalPipeline({
         <ol ref={listRef} className="vgmf-ship-pipe" role="list">
         {stages.map((stage, index) => {
           const state = pipeState(stage, index === nodeCurrentIdx);
-          const open = openIdx === index;
           const timing = timingFor?.(stage);
           const stamp = metaFor?.(stage) || "";
           const kids = stage.events;
@@ -233,21 +232,11 @@ export default function VerticalPipeline({
                   </div>
                 ) : null}
                 {kids.length ? (
-                  <button
-                    type="button"
-                    className="vgmf-ship-drawer-btn"
-                    aria-expanded={open}
-                    onClick={() => setOpenIdx(open ? -1 : index)}
-                  >
-                    {kids.length} update{kids.length > 1 ? "s" : ""} {open ? "▴" : "▾"}
-                  </button>
-                ) : null}
-                {open && kids.length ? (
                   <ul className="vgmf-ship-kids">
                     {kids.map((event) => (
                       <li key={event.id} className={/fail|undeliver|rto/i.test(event.title) ? "failed" : ""}>
                         <b>{event.title}</b>
-                        {event.at ? <div className="when">{formatDateTime(event.at)}</div> : null}
+                        {event.at ? <div className="when">{statusStamp(event.at)}</div> : null}
                         {event.location ? <div className="where">{event.location}</div> : null}
                         {event.detail ? <div className="where">{event.detail}</div> : null}
                         {event.agent?.name || event.agent?.phone ? (

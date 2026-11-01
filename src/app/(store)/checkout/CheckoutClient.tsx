@@ -439,11 +439,13 @@ export default function CheckoutClient() {
                             <span>
                               <span className="font-semibold text-text-primary">{offer.courierName}</span>
                               <span className="mt-0.5 block text-xs text-text-muted">
-                                {offer.lastMile
-                                  ? "Local last-mile after the partner books the shipment"
-                                  : offer.etaDays === 0
-                                    ? "Same day after dispatch"
-                                    : `${offer.etaDays} business day transit`}
+                                {offer.provider === "tookan" || offer.provider === "shipday" || offer.courierName === "Gogate Products"
+                                  ? "The rider's name appears after allotment, once delivery has started"
+                                  : offer.lastMile || offer.provider === "tookan-parcel"
+                                    ? "Live rider, phone and location from the courier, on our map, after delivery starts"
+                                    : offer.etaDays === 0
+                                      ? "Same day after dispatch"
+                                      : `${offer.etaDays} business day transit`}
                               </span>
                             </span>
                           </span>

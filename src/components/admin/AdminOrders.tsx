@@ -45,6 +45,7 @@ import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGatewa
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
+import { statusStamp } from "@/lib/delivery-expectation";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
@@ -1016,20 +1017,51 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     </SelectInput>
                     <Button onClick={() => run("pickup", () => schedulePickup(shipment.id, pickupDate, pickupSlot))}>Schedule pickup</Button>
                   </div>
-                  {shipment.status === "Booked" && (
+                  {shipment.status !== "Delivered" && (
                     <Button variant="danger" onClick={() => {
-                      if (!window.confirm("Cancel this courier booking?")) return;
-                      run("cancel-shipment", async () => { const text = await cancelShipment(shipment.id); patchOrder(order.id, { shipmentId: undefined, trackingId: undefined }, "Courier booking cancelled"); return text; });
-                    }}>Cancel courier booking</Button>
+                      if (!window.confirm("Cancel this shipment and assign a different courier?")) return;
+                      run("cancel-shipment", async () => {
+                        const text = await cancelShipment(shipment.id);
+                        patchOrder(order.id, { shipmentId: undefined, trackingId: undefined, courierName: undefined }, "Courier booking cancelled");
+                        return `${text} Choose another courier below.`;
+                      });
+                    }}>Cancel shipment and reassign</Button>
                   )}
                 </div>
-                {shipment.tracking && shipment.tracking.length > 0 && (
-                  <ol className="space-y-1 border-t border-border pt-3 text-xs lg:col-span-2">
-                    {shipment.tracking.slice().reverse().map((event, index) => (
-                      <li key={index} className="flex gap-3"><span className="w-36 shrink-0 text-text-muted">{formatDateTime(event.at)}</span><span>{event.status}{event.location ? ` · ${event.location}` : ""}</span></li>
-                    ))}
-                  </ol>
-                )}
+                <div className="lg:col-span-2 rounded-xl border border-border bg-warm-cream/40 p-3 text-xs">
+                  <p className="font-semibold text-text-primary">Advanced courier tracking</p>
+                  <p className="mt-1 text-text-muted">Provider {shipment.provider || "courier"} · order {shipment.providerOrderId || "—"} · shipment {shipment.providerShipmentId || "—"} · AWB {shipment.awb}</p>
+                  <p className="mt-1 text-text-muted">
+                    Agent {shipment.agentName || "not allotted"}
+                    {shipment.agentPhone ? ` · ${shipment.agentPhone}` : ""}
+                    {shipment.deliveryOtp ? ` · OTP ${shipment.deliveryOtp}` : ""}
+                    {shipment.agentLeg ? ` · ${shipment.agentLeg}` : ""}
+                  </p>
+                  <p className="mt-1 text-text-muted">
+                    Pickup {shipment.pickupLat ?? "—"}, {shipment.pickupLng ?? "—"} · drop {shipment.dropLat ?? "—"}, {shipment.dropLng ?? "—"}
+                    {shipment.agentLat != null ? ` · rider ${shipment.agentLat}, ${shipment.agentLng}` : ""}
+                  </p>
+                  <p className="mt-2 break-all font-mono text-[11px] text-burgundy">
+                    {typeof window !== "undefined" ? `${window.location.origin}/track/${order.trackToken || ""}` : `/track/${order.trackToken || ""}`}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={() => {
+                      const token = order.trackToken || crypto.randomUUID().replace(/-/g, "");
+                      if (!order.trackToken) patchOrder(order.id, { trackToken: token });
+                      const url = `${window.location.origin}/track/${token}`;
+                      void navigator.clipboard?.writeText(url);
+                      setMessage("Tracking link copied. Anyone with this link can follow the shipment.");
+                      onChanged();
+                    }}>Copy tracking link</Button>
+                  </div>
+                  {shipment.tracking && shipment.tracking.length > 0 ? (
+                    <ol className="mt-3 space-y-1 border-t border-border pt-3">
+                      {shipment.tracking.slice().reverse().map((event, index) => (
+                        <li key={index} className="flex gap-3"><span className="w-44 shrink-0 text-text-muted">{statusStamp(event.at)}</span><span>{event.status}{event.location ? ` · ${event.location}` : ""}</span></li>
+                      ))}
+                    </ol>
+                  ) : <p className="mt-2 text-text-muted">No courier scans yet.</p>}
+                </div>
                 <div className="lg:col-span-2 space-y-4">
                   <OrderTrackingTimeline order={order} />
                 </div>

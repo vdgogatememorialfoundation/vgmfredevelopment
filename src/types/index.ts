@@ -510,6 +510,8 @@ export interface Order {
   deliveryAddress?: DeliveryAddress;
   eta?: string;
   trackingId?: string;
+  /** Secret shared with the customer as /track/{trackToken}. */
+  trackToken?: string;
   courierName?: string;
   openBoxDelivery?: boolean;
   returnableDays?: number;
