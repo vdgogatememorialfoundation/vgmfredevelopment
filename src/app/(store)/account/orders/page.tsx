@@ -12,7 +12,7 @@ import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
-import { deliveryExpectation } from "@/lib/delivery-expectation";
+import { customerAddressLine, deliveryExpectation } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
 import type { Order } from "@/types";
 
@@ -57,6 +57,7 @@ export default function OrdersPage() {
             const expanded = expandedId === order.id;
             const first = order.items[0];
             const extraItems = Math.max(0, order.items.length - 1);
+            const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
 
             return (
               <article key={order.id} className="card overflow-visible">
@@ -208,33 +209,16 @@ export default function OrdersPage() {
                               <div className="flex justify-between gap-4">
                                 <dt className="text-text-muted">Address</dt>
                                 <dd className="text-right text-text-primary">
-                                  {order.deliveryAddress?.line1}
-                                  {order.deliveryAddress?.landmark
-                                    ? `, ${order.deliveryAddress.landmark}`
-                                    : ""}
-                                  , {order.deliveryAddress?.city}{" "}
-                                  {order.deliveryAddress?.state}{" "}
-                                  {order.deliveryAddress?.pincode}
+                                  {customerAddressLine(order.deliveryAddress)}
                                 </dd>
                               </div>
                               <div className="flex justify-between gap-4">
                                 <dt className="text-text-muted">Expected delivery</dt>
                                 <dd className="text-right font-medium text-emerald-700">
-                                  {order.eta ?? "Within 5 business days"}
+                                  {shipment?.expectedBy || order.eta || "Within 5 business days"}
                                 </dd>
                               </div>
                             </dl>
-                          )}
-
-                          {order.openBoxDelivery && (
-                            <div className="mt-4 rounded-xl bg-warm-cream/60 p-3 text-xs text-text-muted">
-                              <p className="font-semibold text-text-primary">
-                                Open-box delivery instruction
-                              </p>
-                              <p className="mt-1">
-                                Open the package in front of the delivery agent, verify the item condition and sign the e-POD before accepting.
-                              </p>
-                            </div>
                           )}
                         </div>
 

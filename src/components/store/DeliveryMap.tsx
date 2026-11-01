@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { flyingRoute } from "@/lib/flight-arc";
 import { loadTrackingMaps } from "@/lib/maps-place";
 
 type LatLng = { lat: number; lng: number };
@@ -34,128 +35,6 @@ function pin(color: string) {
 
 function hasCoords(point?: { lat?: number; lng?: number } | null): point is LatLng {
   return Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat!) > 0.01 && Math.abs(point.lng!) > 0.01);
-}
-
-/** A flight curve that starts on the first pin and ends on the second. The bow stays low so the tilted map does not cut it off. */
-function flyingArc(
-  from: LatLng,
-  to: LatLng,
-  spherical?: {
-    computeDistanceBetween: (a: LatLng, b: LatLng) => number;
-    computeHeading: (a: LatLng, b: LatLng) => number;
-    computeOffset: (from: LatLng, distance: number, heading: number) => { lat: () => number; lng: () => number };
-  }
-) {
-  const steps = 28;
-  if (spherical) {
-    const distance = spherical.computeDistanceBetween(from, to);
-    const heading = spherical.computeHeading(from, to);
-    const bow = Math.min(1400, Math.max(160, distance * 0.08));
-    const path: LatLng[] = [];
-    for (let i = 0; i <= steps; i += 1) {
-      const t = i / steps;
-      const along = spherical.computeOffset(from, distance * t, heading);
-      const bulge = Math.sin(Math.PI * t) * bow;
-      const side = bulge ? spherical.computeOffset({ lat: along.lat(), lng: along.lng() }, bulge, heading - 90) : along;
-      path.push({ lat: side.lat(), lng: side.lng() });
-    }
-    path[0] = from;
-    path[path.length - 1] = to;
-    return path;
-  }
-  const dLat = to.lat - from.lat;
-  const dLng = to.lng - from.lng;
-  const dist = Math.hypot(dLat, dLng) || 1e-6;
-  const lift = dist * 0.08;
-  const ctrl = {
-    lat: (from.lat + to.lat) / 2 - (dLng / dist) * lift,
-    lng: (from.lng + to.lng) / 2 + (dLat / dist) * lift,
-  };
-  const path: LatLng[] = [];
-  for (let i = 0; i <= steps; i += 1) {
-    const t = i / steps;
-    const u = 1 - t;
-    path.push({
-      lat: u * u * from.lat + 2 * u * t * ctrl.lat + t * t * to.lat,
-      lng: u * u * from.lng + 2 * u * t * ctrl.lng + t * t * to.lng,
-    });
-  }
-  path[0] = from;
-  path[path.length - 1] = to;
-  return path;
-}
-
-function flyingRoute(
-  points: LatLng[],
-  spherical?: {
-    computeDistanceBetween: (a: LatLng, b: LatLng) => number;
-    computeHeading: (a: LatLng, b: LatLng) => number;
-    computeOffset: (from: LatLng, distance: number, heading: number) => { lat: () => number; lng: () => number };
-  }
-) {
-  const path: LatLng[] = [];
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const segment = flyingArc(points[i], points[i + 1], spherical);
-    if (i > 0) segment.shift();
-    path.push(...segment);
-  }
-  return path;
-}
-
-/** Screen-space curve. It starts on the first pin and ends on the next, so the map cannot cut the ends off. */
-function mountFlightArc(
-  maps: {
-    OverlayView: new () => {
-      setMap: (map: object | null) => void;
-      getPanes: () => { overlayLayer: HTMLElement } | null;
-      getProjection: () => { fromLatLngToDivPixel: (ll: object) => { x: number; y: number } | null } | null;
-      onAdd?: () => void;
-      draw?: () => void;
-      onRemove?: () => void;
-    };
-    LatLng: new (lat: number, lng: number) => object;
-  },
-  map: object,
-  points: LatLng[]
-) {
-  const svgNS = "http://www.w3.org/2000/svg";
-  const arc = new maps.OverlayView();
-  let svg: SVGSVGElement | undefined;
-  let path: SVGPathElement | undefined;
-  arc.onAdd = () => {
-    svg = document.createElementNS(svgNS, "svg");
-    svg.setAttribute("style", "position:absolute;left:0;top:0;width:0;height:0;overflow:visible;pointer-events:none");
-    path = document.createElementNS(svgNS, "path");
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", ROAD);
-    path.setAttribute("stroke-width", "4");
-    path.setAttribute("stroke-linecap", "round");
-    svg.appendChild(path);
-    arc.getPanes()?.overlayLayer.appendChild(svg);
-  };
-  arc.draw = () => {
-    const projection = arc.getProjection();
-    if (!projection || !path) return;
-    const parts: string[] = [];
-    for (let i = 0; i < points.length - 1; i += 1) {
-      const start = projection.fromLatLngToDivPixel(new maps.LatLng(points[i].lat, points[i].lng));
-      const end = projection.fromLatLngToDivPixel(new maps.LatLng(points[i + 1].lat, points[i + 1].lng));
-      if (!start || !end) continue;
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const bow = Math.min(110, Math.max(36, len * 0.28));
-      const cx = (start.x + end.x) / 2 + (-dy / len) * bow;
-      const cy = (start.y + end.y) / 2 + (dx / len) * bow;
-      parts.push(`M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`);
-    }
-    path.setAttribute("d", parts.join(" "));
-  };
-  arc.onRemove = () => {
-    svg?.remove();
-  };
-  arc.setMap(map);
-  return arc;
 }
 
 function project(point: LatLng, path: LatLng[]) {
@@ -322,8 +201,7 @@ export default function DeliveryMap({
   const hostRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<{
     map: LiveMap;
-    line?: { setMap: (map: object | null) => void };
-    arc?: { setMap: (map: object | null) => void };
+    line?: { setMap: (map: object | null) => void; setPath?: (path: LatLng[]) => void };
     bike?: Bike;
     img?: HTMLImageElement;
     path: LatLng[];
@@ -388,6 +266,7 @@ export default function DeliveryMap({
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
           Point: new (x: number, y: number) => unknown;
+          Polyline: new (opts: object) => { setMap: (map: object | null) => void; setPath?: (path: LatLng[]) => void };
           event?: { addListenerOnce: (target: object, name: string, fn: () => void) => void };
         };
       };
@@ -395,7 +274,31 @@ export default function DeliveryMap({
     loadTrackingMaps(mapsKey)
       .then(() => {
         const maps = googleWin.google?.maps;
-        if (cancelled || !maps || !hostRef.current || sessionRef.current) return;
+        if (cancelled || !maps || !hostRef.current) return;
+        if (sessionRef.current) {
+          if (resolved.store && resolved.drop) {
+            const path = flyingRoute([resolved.store, resolved.drop]);
+            sessionRef.current.path = path;
+            if (sessionRef.current.line?.setPath) sessionRef.current.line.setPath(path);
+            else {
+              sessionRef.current.line = new maps.Polyline({
+                map: sessionRef.current.map,
+                path,
+                strokeColor: ROAD,
+                strokeOpacity: 1,
+                strokeWeight: 4,
+                geodesic: false,
+                zIndex: 8,
+              });
+            }
+            const nextBounds = new maps.LatLngBounds();
+            path.forEach((point) => nextBounds.extend(point));
+            sessionRef.current.map.fitBounds(nextBounds, { top: 96, right: 72, bottom: 72, left: 72 });
+            sessionRef.current.map.setTilt(0);
+            sessionRef.current.map.setHeading(0);
+          }
+          return;
+        }
         hostRef.current.innerHTML = "";
         const center = resolved.store ?? resolved.drop ?? { lat: 18.5196, lng: 73.8553 };
         const options = {
@@ -434,8 +337,30 @@ export default function DeliveryMap({
         };
         place(resolved.store, "store", STORE);
         place(resolved.drop, "drop", DROP);
-        if (resolved.store && resolved.drop) map.fitBounds(bounds, { top: 72, right: 48, bottom: 48, left: 48 });
-        sessionRef.current = { map, path: [], progress: 0 };
+        const session: {
+          map: LiveMap;
+          path: LatLng[];
+          progress: number;
+          line?: { setMap: (map: object | null) => void; setPath?: (path: LatLng[]) => void };
+        } = { map, path: [], progress: 0 };
+        if (resolved.store && resolved.drop) {
+          const path = flyingRoute([resolved.store, resolved.drop]);
+          session.path = path;
+          session.line = new maps.Polyline({
+            map,
+            path,
+            strokeColor: ROAD,
+            strokeOpacity: 1,
+            strokeWeight: 4,
+            geodesic: false,
+            zIndex: 8,
+          });
+          path.forEach((point) => bounds.extend(point));
+          map.fitBounds(bounds, { top: 96, right: 72, bottom: 72, left: 72 });
+          map.setTilt(0);
+          map.setHeading(0);
+        }
+        sessionRef.current = session;
         if (!cancelled) setMapReady(true);
       })
       .catch(() => undefined);
@@ -449,16 +374,7 @@ export default function DeliveryMap({
     const googleWin = window as unknown as {
       google?: {
         maps?: {
-          Polyline: new (opts: object) => { setMap: (map: object | null) => void };
-          OverlayView: new () => {
-            setMap: (map: object | null) => void;
-            getPanes: () => { overlayLayer: HTMLElement } | null;
-            getProjection: () => { fromLatLngToDivPixel: (ll: object) => { x: number; y: number } | null } | null;
-            onAdd?: () => void;
-            draw?: () => void;
-            onRemove?: () => void;
-          };
-          LatLng: new (lat: number, lng: number) => object;
+          Polyline: new (opts: object) => { setMap: (map: object | null) => void; setPath?: (path: LatLng[]) => void };
           Marker: new (opts: object) => { setMap: (map: object | null) => void; setPosition: (point: LatLng) => void };
           LatLngBounds: new () => { extend: (point: LatLng) => void };
           Size: new (w: number, h: number) => unknown;
@@ -478,27 +394,17 @@ export default function DeliveryMap({
     if (!mapReady || !view || !maps || !resolved.drop) return;
     const live = view;
     const stops: LatLng[] = [];
-    if (accepted && agent && leg === "pickup" && resolved.store) stops.push(agent, resolved.store, resolved.drop);
-    else if (accepted && agent) stops.push(agent, resolved.drop);
-    else if (resolved.store) stops.push(resolved.store, resolved.drop);
+    if (resolved.store) stops.push(resolved.store);
+    stops.push(resolved.drop);
     if (stops.length < 2) return;
-    const spherical = maps.geometry?.spherical as
-      | {
-          computeDistanceBetween: (a: LatLng, b: LatLng) => number;
-          computeHeading: (a: LatLng, b: LatLng) => number;
-          computeOffset: (from: LatLng, distance: number, heading: number) => { lat: () => number; lng: () => number };
-        }
-      | undefined;
-    const path = flyingRoute(stops, spherical);
+    const path = flyingRoute(stops);
     let frame = 0;
-    live.line?.setMap(null);
-    live.arc?.setMap(null);
-    if (maps.OverlayView && maps.LatLng) {
-      live.arc = mountFlightArc(maps, live.map, stops);
-    } else {
+    if (live.line?.setPath) live.line.setPath(path);
+    else {
+      live.line?.setMap(null);
       live.line = new maps.Polyline({
         map: live.map,
-        path: stops,
+        path,
         strokeColor: ROAD,
         strokeOpacity: 1,
         strokeWeight: 4,
@@ -508,7 +414,7 @@ export default function DeliveryMap({
     }
     live.path = path;
     const bounds = new maps.LatLngBounds();
-    stops.forEach((point) => bounds.extend(point));
+    path.forEach((point) => bounds.extend(point));
     const pad = { top: 96, right: 72, bottom: 72, left: 72 };
     live.map.fitBounds(bounds, pad);
     live.map.setTilt(0);

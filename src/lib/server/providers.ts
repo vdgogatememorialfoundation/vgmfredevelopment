@@ -1,4 +1,5 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
 
 /**
  * Provider clients used by the API routes. Each call takes credentials from
@@ -1293,13 +1294,17 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
       ...(currentLabel ? [{ at: new Date().toISOString(), status: currentLabel, location: "" }] : []),
     ],
     trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? delivery?.job.tracking_link ?? ""),
-    expectedBy: promisedFrom(
-      dropSource,
-      dropSource.job_delivery_datetime,
-      job.job_delivery_datetime,
-      delivery?.job.job_delivery_datetime
-    ),
+    expectedBy: tookanExpected(dropSource),
   };
+}
+
+/** Prefer Tookan's real UTC field. The Z on job_delivery_datetime is the India wall clock. */
+function tookanExpected(job: Json) {
+  const instant = tookanDeliveryInstant(
+    String(job.job_time_utc ?? ""),
+    String(job.job_delivery_datetime ?? job.job_time ?? "")
+  );
+  return instant == null ? undefined : formatIndiaClock(instant);
 }
 
 export async function tookanCancel(input: Json, jobId: string, extraId = "") {

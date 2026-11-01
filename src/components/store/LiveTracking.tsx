@@ -5,6 +5,7 @@ import { getSettings } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
 import { customerCourierLabel, customerStatusLabel, riderAccepted } from "@/lib/courier-label";
 import { getPickupLocation } from "@/lib/fulfillment";
+import { customerAddressLine } from "@/lib/delivery-expectation";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import DeliveryMap from "@/components/store/DeliveryMap";
 import type { Order, ShipmentRecord } from "@/types";
@@ -46,7 +47,7 @@ export default function LiveTracking({
   const status = customerStatusLabel(latest, provider);
   const pickup = getPickupLocation();
   const address = order.deliveryAddress;
-  const dropAddress = [address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ");
+  const dropAddress = customerAddressLine(address);
   const scooter = getIntegrations().shipping.scooterImage || DEFAULT_SCOOTER;
   const riderKnown = Boolean(shipment?.agentName?.trim()) || riderAccepted(status, shipment?.agentName);
   const leg = shipment?.agentLeg ?? (/picked up|out for|in transit/i.test(`${status} ${shipment?.status ?? ""}`) ? "delivery" : "pickup");

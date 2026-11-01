@@ -38,6 +38,57 @@ export function parseExpected(text: string | undefined, around: number): number 
   return null;
 }
 
+/** Weekday, date and clock in India. */
+export function formatIndiaClock(ms: number) {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
+/**
+ * Tookan `job_time_utc` is real UTC.
+ * `job_delivery_datetime` is the India wall clock with a misleading Z, so 00:32 must stay 12:32 am, not become 6:02 am.
+ */
+export function tookanDeliveryInstant(utc?: string, wall?: string): number | null {
+  const utcText = utc?.trim() ?? "";
+  if (utcText && !utcText.startsWith("0000")) {
+    const parsed = Date.parse(utcText);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const wallText = wall?.trim() ?? "";
+  if (!wallText || wallText.startsWith("0000")) return null;
+  const bare = wallText.replace(/\.\d+Z$/i, "").replace(/Z$/i, "").replace("T", " ");
+  const clock = bare.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!clock) {
+    const parsed = Date.parse(wallText);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return Date.UTC(Number(clock[1]), Number(clock[2]) - 1, Number(clock[3]), Number(clock[4]), Number(clock[5])) - 5.5 * 60 * 60 * 1000;
+}
+
+/** Address line that matches the courier task: do not insert the state when the line already contains the pincode. */
+export function customerAddressLine(address?: {
+  line1?: string;
+  landmark?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+}) {
+  if (!address) return "";
+  const line1 = address.line1?.trim() ?? "";
+  const city = address.city?.trim() ?? "";
+  const pin = address.pincode?.trim() ?? "";
+  const tail = [city, pin].filter(Boolean).join(" ");
+  if (line1 && tail && line1.toLowerCase().includes(tail.toLowerCase())) return line1;
+  if (line1 && pin && line1.includes(pin)) return `${line1}, ${tail}`;
+  return [line1, address.landmark, city, address.state, pin].filter(Boolean).join(", ");
+}
+
 /** Weekday, date and time in India, under each tracking update. */
 export function statusStamp(at?: string) {
   if (!at) return "";
