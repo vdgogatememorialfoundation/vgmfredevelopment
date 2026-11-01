@@ -1221,13 +1221,38 @@ export async function lookupPartnerIdentity(input: {
 export { partnerPortalHref, partnerTicketHref, partnerTrackHref };
 
 function prettyStatus(value: string) {
-  return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const text = value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return text.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 const FALLBACK_STATUSES: Record<PartnerPortalId, string[]> = {
-  seminar: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
-  autism: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
-  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Accepted", "Rejected", "Waitlisted"],
+  seminar: [
+    "Submitted",
+    "Pending",
+    "Confirmed",
+    "Paid",
+    "Issued",
+    "E-ticket",
+    "Checked in",
+    "Certificate",
+    "Invalid",
+    "Cancelled",
+  ],
+  autism: [
+    "Pre-registration",
+    "Main registration",
+    "Submitted",
+    "Pending",
+    "Confirmed",
+    "Paid",
+    "Issued",
+    "E-ticket",
+    "Checked in",
+    "Certificate",
+    "Invalid",
+    "Cancelled",
+  ],
+  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Waitlisted", "Accepted", "Rejected"],
 };
 
 function uniqueStatuses(values: string[], fallback: string[]) {

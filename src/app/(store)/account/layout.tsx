@@ -38,37 +38,36 @@ function AccountShell({ children }: { children: React.ReactNode }) {
         <div className="grid gap-8 lg:grid-cols-4">
           {/* Sidebar */}
           <aside className="lg:col-span-1">
-            <div className="rounded-2xl bg-ink p-6 text-white">
+            <div className="rounded-2xl bg-sidebar p-6 text-ink">
               {user && (
-                <div className="flex items-center gap-4 border-b border-white/15 pb-5">
-                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-base font-bold text-ink">
+                <div className="flex items-center gap-4 border-b border-ink/15 pb-5">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink text-base font-bold text-gold">
                     {initials}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-white">
+                    <p className="truncate font-semibold text-ink">
                       {user.firstName} {user.lastName}
                     </p>
-                    <p className="truncate text-xs text-white/70">
+                    <p className="truncate text-xs text-ink/70">
                       {user.email}
                     </p>
-                    <p className="mt-0.5 font-mono text-[11px] tracking-[0.08em] text-gold">
+                    <p className="mt-0.5 font-mono text-[11px] tracking-[0.08em] text-ink/80">
                       {user.accountId}
                     </p>
                   </div>
                 </div>
               )}
 
-              {user ? <PartnerPortalBadges user={user} className="mt-4" tone="dark" /> : null}
+              {user ? <PartnerPortalBadges user={user} className="mt-4" /> : null}
 
               <div className="mt-4 flex items-center justify-between gap-3">
                 <LoginStamp
-                  onDark
                   onLogout={() => {
                     signOut();
                     leaveAfterSignOut("/login");
                   }}
                 />
-                <InboxBell href="/account/notifications" tone="dark" />
+                <InboxBell href="/account/notifications" />
               </div>
 
               <nav aria-label="Account sidebar" className="mt-4 space-y-1">
@@ -82,11 +81,11 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                       className={classNames(
                         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition",
                         active
-                          ? "bg-white font-semibold text-ink"
-                          : "text-white/85 hover:bg-white/10 hover:text-white"
+                          ? "bg-ink font-semibold text-white"
+                          : "text-ink/85 hover:bg-ink/10 hover:text-ink"
                       )}
                     >
-                      <span className={active ? "text-ink" : "text-white/70"}>
+                      <span className={active ? "text-white" : "text-ink/70"}>
                         <AccountIcon name={item.icon} />
                       </span>
                       {item.name}

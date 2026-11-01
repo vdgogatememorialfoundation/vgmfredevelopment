@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import ApplicationPipeline from "@/components/applications/ApplicationPipeline";
 import {
+  fallbackApplicationStatuses,
+  mergeStatusCatalog,
   resolveTrackedApplication,
   trackedFromTicket,
+  type PartnerStatusCatalog,
   type TrackedApplication,
 } from "@/lib/application-pipeline";
 import { partnerPortalLabel, partnerTrackHref } from "@/lib/partner-labels";
@@ -18,12 +21,17 @@ export default function ApplicationTracker({
   initialApplicationId?: string;
 }) {
   const { user } = useAuth();
-  const { tickets, loading } = usePartnerRecords(user?.email, user?.phone);
+  const { tickets, loading, statuses: liveStatuses } = usePartnerRecords(user?.email, user?.phone);
   const [applicationId, setApplicationId] = useState(initialApplicationId ?? "");
   const [tracked, setTracked] = useState<TrackedApplication | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [catalog, setCatalog] = useState<PartnerStatusCatalog>(fallbackApplicationStatuses);
+
+  useEffect(() => {
+    setCatalog((current) => mergeStatusCatalog({ ...current, ...liveStatuses }));
+  }, [liveStatuses]);
 
   useEffect(() => {
     if (initialApplicationId) {
@@ -50,7 +58,9 @@ export default function ApplicationTracker({
       const data = (await response.json()) as {
         found?: boolean;
         ticket?: PartnerTicketSummary | null;
+        statuses?: PartnerStatusCatalog;
       };
+      if (data.statuses) setCatalog((current) => mergeStatusCatalog({ ...current, ...data.statuses }));
       if (data.found && data.ticket) {
         setTracked(trackedFromTicket(data.ticket, user?.email));
         setNotFound(false);
@@ -155,7 +165,12 @@ export default function ApplicationTracker({
               </a>
             ) : null}
           </div>
-          <ApplicationPipeline application={application} rawStatus={tracked.ticket?.status} />
+          <ApplicationPipeline
+            application={application}
+            rawStatus={tracked.ticket?.status}
+            portal={tracked.ticket?.portal}
+            catalog={catalog}
+          />
         </div>
       ) : null}
     </div>

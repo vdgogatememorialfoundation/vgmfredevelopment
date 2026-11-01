@@ -13,7 +13,7 @@ import { usePartnerRecords } from "@/lib/use-partner-records";
 
 export default function RegistrationsPage() {
   const { user } = useAuth();
-  const { tickets, loading } = usePartnerRecords(user?.email, user?.phone);
+  const { tickets, loading, statuses } = usePartnerRecords(user?.email, user?.phone);
 
   return (
     <div>
@@ -52,7 +52,12 @@ export default function RegistrationsPage() {
                   </Badge>
                 </div>
                 <div className="mt-5">
-                  <ApplicationPipeline application={application} />
+                  <ApplicationPipeline
+                    application={application}
+                    rawStatus={ticket.status}
+                    portal={ticket.portal}
+                    catalog={statuses}
+                  />
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link
