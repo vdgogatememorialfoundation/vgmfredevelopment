@@ -26,15 +26,16 @@ export default function AnnouncementTicker() {
   return (
     <div
       aria-label="Scrolling announcements"
-      className="relative isolate overflow-hidden border-b border-burgundy-dark bg-burgundy text-white"
+      className="border-b border-burgundy-dark bg-burgundy text-white"
     >
-      <div className="flex min-h-11 items-stretch">
-        <p className="flex shrink-0 items-center bg-gold px-3 text-[12px] font-bold uppercase tracking-[0.16em] text-burgundy sm:px-4 sm:text-[13px]">
+      <div className="grid h-11 grid-cols-[auto_12px_minmax(0,1fr)_12px_auto] items-stretch">
+        <p className="relative z-20 flex items-center bg-gold px-3.5 text-[12px] font-bold uppercase tracking-[0.16em] text-burgundy sm:px-4 sm:text-[13px]">
           Live
         </p>
-        <div className="relative min-w-0 flex-1">
+        <span aria-hidden="true" className="bg-burgundy" />
+        <div className="relative z-0 min-w-0 overflow-hidden">
           <div
-            className={`flex w-max items-center gap-10 py-2.5 pl-5 pr-8 ${paused ? "" : "animate-ticker"}`}
+            className={`flex w-max items-center gap-8 py-2 ${paused ? "" : "animate-ticker"}`}
             onMouseEnter={() => setPaused(true)}
             onMouseLeave={() => setPaused(false)}
           >
@@ -43,12 +44,13 @@ export default function AnnouncementTicker() {
             ))}
           </div>
         </div>
+        <span aria-hidden="true" className="bg-burgundy" />
         <button
           type="button"
           aria-pressed={paused}
           aria-label={paused ? "Play announcements" : "Pause announcements"}
           onClick={() => setPaused((value) => !value)}
-          className="flex w-11 shrink-0 items-center justify-center border-l border-white bg-burgundy-dark text-white transition hover:bg-ink"
+          className="relative z-20 flex w-11 items-center justify-center border-l border-white bg-burgundy-dark text-white transition hover:bg-ink"
         >
           {paused ? (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
@@ -63,12 +65,15 @@ export default function AnnouncementTicker() {
 
 function TickerLink({ item }: { item: TickerItem }) {
   return (
-    <Link href={item.href} className="flex shrink-0 items-center gap-3 text-[15px] font-semibold leading-none text-white transition hover:text-gold">
+    <Link
+      href={item.href}
+      className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[14px] font-semibold leading-none text-white transition hover:text-gold"
+    >
       <span className="rounded-sm bg-white px-2 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-burgundy">
         {item.category}
       </span>
       <span>{item.title}</span>
-      <span aria-hidden="true" className="text-gold">●</span>
+      <span aria-hidden="true" className="text-gold">•</span>
     </Link>
   );
 }

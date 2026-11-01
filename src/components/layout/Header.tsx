@@ -175,7 +175,7 @@ export default function Header() {
     : "";
 
   return (
-    <header className="sticky top-0 z-50 overflow-visible border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
+    <header className="overflow-visible border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
       <div className="container">
         <div className="flex h-[78px] items-center justify-between gap-4">
           {/* Logo */}

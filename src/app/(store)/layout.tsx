@@ -30,8 +30,10 @@ export default function StoreLayout({
         <MaintenanceGate>
           <HydratePublishedSite initial={initial}>
             <PartnerDrawerProvider>
+            <div className="sticky top-0 z-50">
             <Header />
             <AnnouncementTicker />
+            </div>
             <main id="main-content" className="flex-1">
               <SiteVisibilityGate>{children}</SiteVisibilityGate>
             </main>
