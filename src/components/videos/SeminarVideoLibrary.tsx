@@ -748,7 +748,7 @@ export function SeminarVideoLibrary() {
       {!user && (
         <div className="rounded-2xl border border-border bg-white p-6">
           <p className="text-sm text-text-muted">Sign in to watch seminar videos.</p>
-          <Link href="/login?next=/videos/seminars" className="btn-primary mt-4 inline-flex">Sign in</Link>
+          <Link href="/login?next=/account/seminar-videos" className="btn-primary mt-4 inline-flex">Sign in</Link>
         </div>
       )}
       {user && loading && <p className="text-sm text-text-muted">Loading seminar videos…</p>}

@@ -223,6 +223,13 @@ function AccountIcon({ name }: { name: string }) {
           <path d="M15.5 14 17 22l-5-3-5 3 1.5-8" />
         </svg>
       );
+    case "videos":
+      return (
+        <svg {...common}>
+          <rect width="18" height="14" x="3" y="5" rx="2" />
+          <path d="m10 9 5 3-5 3z" />
+        </svg>
+      );
     case "dashboard":
       return (
         <svg {...common}>

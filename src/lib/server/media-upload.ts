@@ -16,6 +16,10 @@ const TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
   ".pdf": "application/pdf",
   ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".webm": "video/webm",
+  ".ogg": "video/ogg",
+  ".ogv": "video/ogg",
 };
 
 function extensionFor(file: File) {

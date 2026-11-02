@@ -157,7 +157,7 @@ export function SeminarSubscriptions() {
         </div>
       )}
       {rows && rows.length === 0 && <p className="text-sm text-text-muted">{note || "No seminar videos yet."}</p>}
-      <Link href="/videos/seminars" className="btn-outline mt-5 inline-flex">Open seminar videos</Link>
+      <Link href="/account/seminar-videos" className="btn-outline mt-5 inline-flex">Open seminar videos</Link>
     </div>
   );
 }
