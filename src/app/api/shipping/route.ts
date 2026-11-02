@@ -198,7 +198,7 @@ export async function POST(request: NextRequest) {
                 : provider === "tookan" || provider === "tookan-parcel"
                   ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId || awb), String(body.providerShipmentId || awb))
                   : provider === "shipday"
-                    ? await shipdayTrack(own, String(body.providerOrderId ?? awb))
+                    ? await shipdayTrack(own, String(body.orderNumber ?? body.orderId ?? ""), String(body.providerOrderId ?? awb))
                     : provider === "shipyaari"
                       ? await shipyaariTrack(creds.shipyaari ?? own, awb)
                       : undefined;

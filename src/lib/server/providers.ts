@@ -1,5 +1,6 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
+import { shipdayActivity, shipdayLookupIds, shipdayOrderRow, shipdayOrderState } from "@/lib/shipday-status";
 
 /**
  * Provider clients used by the API routes. Each call takes credentials from
@@ -1146,7 +1147,7 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
   return {
     provider: "shipday",
     awb: String(data.orderId ?? order.orderId),
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Shipday",
     providerOrderId: String(data.orderId ?? ""),
   };
 }
@@ -1180,24 +1181,34 @@ function shipdayOrders(data: unknown): Json[] {
   return [];
 }
 
-export async function shipdayTrack(input: Json, orderId: string) {
+export async function shipdayTrack(input: Json, orderNumber: string, providerOrderId = "") {
   const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
   if (!apiKey) return null;
   let match: Json | null = null;
-  try {
-    const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(orderId)}`, { headers: shipdayAuth(apiKey) });
-    match = Array.isArray(one) ? (one[0] as Json) : (one as Json);
-  } catch {
-    const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
-    match =
-      shipdayOrders(data).find(
-        (order) => String(order.orderId) === orderId || String(order.orderNumber) === orderId || String(order.id) === orderId
-      ) ?? null;
+  for (const id of shipdayLookupIds(orderNumber, providerOrderId)) {
+    try {
+      const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(id)}`, { headers: shipdayAuth(apiKey) });
+      match = shipdayOrderRow(one) as Json | null;
+      if (match) break;
+    } catch {
+      /* the numeric Shipday id is not the lookup key; try the order number */
+    }
+  }
+  if (!match) {
+    try {
+      const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
+      const wanted = new Set(shipdayLookupIds(orderNumber, providerOrderId));
+      match =
+        shipdayOrders(data).find((order) => wanted.has(String(order.orderId)) || wanted.has(String(order.orderNumber)) || wanted.has(String(order.id))) ??
+        null;
+    } catch {
+      match = null;
+    }
   }
   if (!match) {
     return { status: "Not found", events: [] as { at: string; status: string; location: string }[] };
   }
-  const status = String(match.orderStatus ?? match.status ?? "");
+  const status = shipdayOrderState(match);
   const carrier = (match.assignedCarrier as Json | undefined) ?? (match.carrier as Json | undefined) ?? {};
   const carrierName = String(carrier.name ?? "");
   const lat = Number(match.carrierLatitude ?? match.latitude ?? carrier.latitude);
@@ -1206,16 +1217,16 @@ export async function shipdayTrack(input: Json, orderId: string) {
   const pickupLng = Number(match.pickupLongitude ?? match.restaurantLongitude ?? (match.restaurant as Json | undefined)?.longitude);
   const dropLat = Number(match.deliveryLatitude ?? match.customerLatitude ?? (match.delivery as Json | undefined)?.latitude);
   const dropLng = Number(match.deliveryLongitude ?? match.customerLongitude ?? (match.delivery as Json | undefined)?.longitude);
-  const feed = ((match.activityLog as Json[]) ?? (match.activityFeed as Json[]) ?? []).map((entry) => ({
-    at: String(entry.time ?? entry.createdAt ?? ""),
-    status: String(entry.description ?? entry.status ?? ""),
-    location: String(entry.location ?? ""),
-  }));
+  const feed = shipdayActivity(match).filter((entry) => entry.status);
+  if (status && !feed.some((entry) => entry.status.toLowerCase() === status.toLowerCase())) {
+    feed.push({ at: new Date().toISOString(), status, location: "" });
+  }
+  const delivered = /\b(already delivered|delivered|successful|completed)\b/.test(status.toLowerCase().replace(/[_-]+/g, " "));
   return {
     status,
-    courierName: "Gogate Products",
-    awb: orderId,
-    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: carrierName }],
+    courierName: "Gogate Products-Shipday",
+    awb: String(match.orderId ?? (providerOrderId || orderNumber)),
+    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: "" }],
     lat: Number.isFinite(lat) ? lat : undefined,
     lng: Number.isFinite(lng) ? lng : undefined,
     agentName: carrierName,
@@ -1225,7 +1236,7 @@ export async function shipdayTrack(input: Json, orderId: string) {
     dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
     dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
-    expectedBy: promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
+    expectedBy: delivered ? "" : promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.etaTime, match.deliveryTime, match.expected_delivery),
   };
 }
 
@@ -1323,7 +1334,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
     return {
       provider: "tookan-parcel",
       awb: String(task.delivery_job_id ?? task.job_id ?? ""),
-      courierName: "Gogate Products",
+      courierName: "Gogate Products-Tookan",
       providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
       providerShipmentId: String(task.delivery_job_id ?? ""),
       trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1362,7 +1373,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
   return {
     provider: "tookan",
     awb: deliveryId || pickupId,
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Tookan",
     providerOrderId: pickupId || deliveryId,
     providerShipmentId: deliveryId,
     trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1412,7 +1423,7 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
   return {
     status: currentLabel,
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Tookan",
     awb: String(delivery?.job.job_id ?? jobId),
     accepted,
     agentLeg: pickupOpen ? "pickup" : "delivery",

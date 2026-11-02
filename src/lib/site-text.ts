@@ -61,6 +61,8 @@ export type SiteText = {
   pages: Record<string, PageCopy>;
   homeOrder: HomeSectionId[];
   homeHidden: Partial<Record<HomeSectionId, boolean>>;
+  /** Keys are home:section, page:id, or account:/path. True shows an under-development notice. */
+  developing: Partial<Record<string, boolean>>;
   reviews: ReviewsControls;
   theme: SiteTheme;
 };
@@ -233,6 +235,7 @@ export function defaultSiteText(): SiteText {
     pages: {},
     homeOrder: homeSections.map((section) => section.id),
     homeHidden: {},
+    developing: {},
     reviews: { ...defaultReviewsControls },
     theme: { ...defaultSiteTheme },
   };
@@ -255,6 +258,9 @@ export function normalizeSiteText(input?: Partial<SiteText> | null): SiteText {
     pages: input.pages && typeof input.pages === "object" ? input.pages : {},
     homeOrder: order,
     homeHidden: input.homeHidden && typeof input.homeHidden === "object" ? input.homeHidden : {},
+    developing: Object.fromEntries(
+      Object.entries(input.developing ?? {}).filter(([, value]) => value === true)
+    ),
     reviews: {
       ...base.reviews,
       ...(input.reviews ?? {}),
@@ -306,6 +312,14 @@ export function saveSiteText(next: SiteText) {
 export function applyPublishedSiteText(value: Partial<SiteText> | undefined) {
   if (typeof window === "undefined" || !value) return;
   window.localStorage.setItem(KEY, JSON.stringify(normalizeSiteText(value)));
+}
+
+export function developingKey(kind: "home" | "page" | "account", id: string) {
+  return `${kind}:${id}`;
+}
+
+export function isDeveloping(kind: "home" | "page" | "account", id: string, text = getSiteText()) {
+  return text.developing?.[developingKey(kind, id)] === true;
 }
 
 export function textOverride(key: MessageKey): string | undefined {

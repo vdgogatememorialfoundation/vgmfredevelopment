@@ -637,7 +637,7 @@ function offerFor(
   const latest = addBusinessDays(earliest, transitDays === 0 ? 0 : 1);
   return {
     id: carrier.id,
-    name: carrier.id === "tookan" || carrier.id === "tookan-parcel" || carrier.id === "shipday" ? "Gogate Products" : carrier.name,
+    name: carrier.id === "tookan" || carrier.id === "tookan-parcel" || carrier.id === "shipday" ? `Gogate Products-${carrier.id === "shipday" ? "Shipday" : "Tookan"}` : carrier.name,
     kind: carrier.kind,
     charge: carrier.charge,
     transitDays,

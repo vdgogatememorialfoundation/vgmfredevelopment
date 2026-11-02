@@ -387,7 +387,8 @@ export function buildTrackingStages(
     STAGE_RANK[progress] >= STAGE_RANK.shipped;
   let outReached = STAGE_RANK[progress] >= STAGE_RANK.out || (hyperlocal && shippedReached);
   if (hyperlocal) shippedReached = false;
-  const deliveredReached = progress === "delivered" && !failedReached;
+  const courierDelivered = order.status === "Delivered" || shipment?.status === "Delivered";
+  const deliveredReached = (progress === "delivered" || courierDelivered) && !failedReached;
 
   const packedEvents: ShipmentEvent[] = [];
   if (packedReached) {
@@ -457,6 +458,17 @@ export function buildTrackingStages(
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
     .filter((item) => item.mapped === "delivered")
     .map((item) => scanEvent(item.scan, item.index, deliveredReached));
+
+  if (deliveredReached && deliveredEvents.length === 0) {
+    const markedAt = order.history?.find((item) => item.status === "Delivered")?.at || fromScans.at || order.date;
+    deliveredEvents.push({
+      id: "delivered-confirm",
+      title: "Delivered",
+      at: markedAt,
+      location: dest,
+      reached: true,
+    });
+  }
 
   const failedEvents = liveScans
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))

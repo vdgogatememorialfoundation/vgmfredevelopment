@@ -1,5 +1,5 @@
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
-import { customerCourierLabel, GOGATE_COURIER, isOwnFleet } from "@/lib/courier-label";
+import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
 import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
@@ -49,13 +49,13 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
   if (hasShippingCredentials("tookan", settings)) {
     const tookan = settings.shipping.tookan;
     if (tookan.hyperlocal && sameCity) {
-      rates.push({ provider: "tookan", courierId: "tookan", courierName: GOGATE_COURIER, rate: 39, etaDays: 0, live: true });
+      rates.push({ provider: "tookan", courierId: "tookan", courierName: fleetCourierLabel("tookan"), rate: 39, etaDays: 0, live: true });
     }
     if (tookan.parcel && (!sameCity || !tookan.hyperlocal)) {
       rates.push({
         provider: "tookan-parcel",
         courierId: "tookan-parcel",
-        courierName: GOGATE_COURIER,
+        courierName: fleetCourierLabel("tookan-parcel"),
         rate: 45,
         etaDays: sameCity ? 1 : 3,
         live: true,
@@ -63,7 +63,7 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
     }
   }
   if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && sameCity) {
-    rates.push({ provider: "shipday", courierId: "shipday", courierName: GOGATE_COURIER, rate: 49, etaDays: 0, live: true });
+    rates.push({ provider: "shipday", courierId: "shipday", courierName: fleetCourierLabel("shipday"), rate: 49, etaDays: 0, live: true });
   }
   return rates;
 }
@@ -676,14 +676,15 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
 const statusOrder: ShipmentRecord["status"][] = ["Booked", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
 
 function mapCourierStatus(text: string): ShipmentRecord["status"] | undefined {
-  const value = text.toLowerCase();
-  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed)\b/.test(value)) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ");
+  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|incomplete)\b/.test(value)) {
     return "Failed";
   }
-  if (value.includes("deliver") && !value.includes("out") && !value.includes("un") && !value.includes("fail")) return "Delivered";
-  if (value.includes("out for")) return "Out for Delivery";
+  if (/\b(already delivered|delivered|successful|completed)\b/.test(value) && !/\b(attempt|fail|undeliver)\b/.test(value)) return "Delivered";
+  if (/\b(out for delivery|ready to deliver|started|in progress|on the way)\b/.test(value)) return "Out for Delivery";
   if (value.includes("transit") || value.includes("shipped") || value.includes("dispatch")) return "In Transit";
-  if (value.includes("picked")) return "Picked Up";
+  if (/\bpicked/.test(value)) return "Picked Up";
+  if (/\b(not assigned|not accepted|not started|booked)\b/.test(value)) return "Booked";
   return undefined;
 }
 
@@ -739,7 +740,8 @@ function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
   if (result.dropLat != null) update.dropLat = result.dropLat;
   if (result.dropLng != null) update.dropLng = result.dropLng;
   if (result.agentLeg) update.agentLeg = result.agentLeg;
-  if (result.expectedBy) update.expectedBy = result.expectedBy;
+  if (mapped === "Delivered") update.expectedBy = "";
+  else if (result.expectedBy) update.expectedBy = result.expectedBy;
   if (result.accepted === false) {
     update.agentName = "";
     update.agentPhone = "";
@@ -766,6 +768,7 @@ export async function trackShipment(shipmentId: string) {
       awb: shipment.awb,
       providerOrderId: shipment.providerOrderId,
       providerShipmentId: shipment.providerShipmentId,
+      orderNumber: shipment.orderId,
     });
     if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
     applyTrackHit(shipment, result);
@@ -793,6 +796,7 @@ export async function pingLiveAgent(shipmentId: string) {
     awb: shipment.awb,
     providerOrderId: shipment.providerOrderId,
     providerShipmentId: shipment.providerShipmentId,
+    orderNumber: shipment.orderId,
   });
   if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
   const saved = applyTrackHit(shipment, result);

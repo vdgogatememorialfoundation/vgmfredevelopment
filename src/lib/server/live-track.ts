@@ -48,7 +48,8 @@ async function track(
   awb: string,
   providerOrderId: string | undefined,
   extraId: string | undefined,
-  creds: Record<string, Record<string, unknown>>
+  creds: Record<string, Record<string, unknown>>,
+  shopOrderId = ""
 ) {
   const own = creds[provider] ?? creds[provider.replace("-parcel", "")] ?? {};
   if (provider === "shiprocket") return shiprocketTrack(own, awb);
@@ -58,7 +59,7 @@ async function track(
   if (provider === "tookan" || provider === "tookan-parcel") {
     return tookanTrack(creds.tookan ?? own, String(providerOrderId || awb), String(extraId || awb));
   }
-  if (provider === "shipday") return shipdayTrack(own, String(providerOrderId ?? awb));
+  if (provider === "shipday") return shipdayTrack(own, shopOrderId, String(providerOrderId ?? awb));
   return null;
 }
 
@@ -90,7 +91,7 @@ export async function refreshStoredShipment(orderId: string) {
   const creds = readShippingCreds() as Record<string, Record<string, unknown>>;
   let hit: TrackHit | null = null;
   try {
-    hit = (await track(provider, shipment.awb, shipment.providerOrderId, shipment.providerShipmentId, creds)) as TrackHit | null;
+    hit = (await track(provider, shipment.awb, shipment.providerOrderId, shipment.providerShipmentId, creds, orderId)) as TrackHit | null;
   } catch {
     return { ok: true as const, live: false as const, shipment };
   }
@@ -121,7 +122,7 @@ export async function refreshStoredShipment(orderId: string) {
     dropLat: hit.dropLat ?? shipment.dropLat,
     dropLng: hit.dropLng ?? shipment.dropLng,
     deliveryOtp: hit.otp || shipment.deliveryOtp,
-    expectedBy: hit.expectedBy || shipment.expectedBy,
+    expectedBy: stage === "delivered" ? "" : hit.expectedBy || shipment.expectedBy,
   };
   replaceShopShipment(next);
   const order = orderForLeg;

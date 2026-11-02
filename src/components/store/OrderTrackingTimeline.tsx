@@ -125,7 +125,8 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       };
     }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
-    if (stage.id === "delivered" && !stage.reached) {
+    const alreadyDelivered = order.status === "Delivered" || shipment?.status === "Delivered" || stage.reached;
+    if (stage.id === "delivered" && !alreadyDelivered) {
       next.expected = shipment?.expectedBy ? `Expected by ${deliveryDatePhrase(shipment.expectedBy)}` : "Expected delivery date is pending from the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;

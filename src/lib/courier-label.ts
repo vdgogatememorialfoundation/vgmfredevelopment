@@ -21,11 +21,22 @@ export function aggregatorName(provider?: string) {
   return AGGREGATOR_NAMES[(provider ?? "").toLowerCase()] ?? "";
 }
 
-/** Gogate Products for our fleet. Ekart (or whoever the aggregator assigned) otherwise. */
+/** The in-house name plus the desk that is carrying the order. */
+export function fleetCourierLabel(provider?: string) {
+  const id = (provider ?? "").toLowerCase();
+  if (id === "tookan" || id === "tookan-parcel") return "Gogate Products-Tookan";
+  if (id === "shipday") return "Gogate Products-Shipday";
+  return "";
+}
+
+/** Gogate Products-Tookan or Gogate Products-Shipday for our fleet. Ekart (or whoever the aggregator assigned) otherwise. */
 export function customerCourierLabel(input: { provider?: string; courier?: string }) {
   const provider = (input.provider ?? "").toLowerCase();
   const raw = (input.courier ?? "").trim();
-  if (isOwnFleet(provider) || /tookan|shipday/i.test(raw)) return GOGATE_COURIER;
+  const fleet = fleetCourierLabel(provider);
+  if (fleet) return fleet;
+  if (/tookan/i.test(raw)) return "Gogate Products-Tookan";
+  if (/shipday/i.test(raw)) return "Gogate Products-Shipday";
   if (raw && !AGGREGATOR_ONLY.test(raw)) return raw;
   return aggregatorName(provider) || raw || "Courier";
 }
