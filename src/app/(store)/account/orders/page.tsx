@@ -30,6 +30,8 @@ export default function OrdersPage() {
   useEffect(() => {
     purgeSampleOrders();
     const frame = window.requestAnimationFrame(() => setMounted(true));
+    const id = window.location.hash.replace(/^#/, "");
+    if (id) setExpandedId(id);
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
@@ -60,7 +62,7 @@ export default function OrdersPage() {
             const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
 
             return (
-              <article key={order.id} className="card overflow-visible">
+              <article id={order.id} key={order.id} className="card overflow-visible">
                 <button
                   type="button"
                   onClick={() => setExpandedId(expanded ? null : order.id)}

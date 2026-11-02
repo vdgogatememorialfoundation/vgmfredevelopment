@@ -8,20 +8,29 @@ import {
   getBookById,
   setCartQuantity,
   removeFromCart,
+  quantityCap,
   toggleWishlist,
   computeTotals,
   formatPrice,
   getEstimatedDeliveryDate,
 } from "@/lib/store";
+import { isPurchasable } from "@/lib/product-data";
+import QtyControl from "@/components/store/QtyControl";
+import RestockAlert from "@/components/store/RestockAlert";
+import { moveSavedToCart, removeSavedLater, saveForLater, useSavedLater } from "@/lib/saved-later";
 import { storeConfig } from "@/lib/constants";
-import { useOrderSettings } from "@/lib/use-cms";
+import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
 import Glyph from "@/components/store/Glyph";
 
 export default function CartPage() {
-  const { items } = useCart();
+  const { items, count } = useCart();
+  const saved = useSavedLater();
+  const catalogue = useLiveBooks();
+
+  const bookFor = (bookId: string) => catalogue.find((book) => book.id === bookId) ?? getBookById(bookId);
 
   const rows = items.flatMap((item) => {
-    const book = getBookById(item.bookId);
+    const book = bookFor(item.bookId);
     return book ? [{ item, book }] : [];
   });
 
@@ -40,8 +49,7 @@ export default function CartPage() {
     <main>
       <PageHeader
         eyebrow="Store"
-        title="Shopping Cart"
-        description="Review the items in your cart before proceeding to checkout."
+        title={count > 0 ? `Shopping Cart (${count})` : "Shopping Cart"}
       />
 
       <section className="section bg-background">
@@ -91,6 +99,7 @@ export default function CartPage() {
                       <span className="font-bold text-text-primary">
                         {formatPrice(book.price * item.quantity)}
                       </span>
+                      <span className="text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</span>
                       {book.originalPrice && book.originalPrice > book.price && (
                         <span className="text-sm text-text-muted line-through">
                           {formatPrice(book.originalPrice * item.quantity)}
@@ -102,32 +111,17 @@ export default function CartPage() {
                       Delivery by {getEstimatedDeliveryDate(6)} · {book.expectedDelivery}
                     </p>
 
+                    {!isPurchasable(book) && <p className="mt-2 text-xs font-semibold text-burgundy">Out of stock</p>}
+                    {!isPurchasable(book) && <RestockAlert bookId={book.id} />}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <div className="flex items-center rounded-lg border border-border">
-                        <button
-                          type="button"
-                          aria-label="Decrease quantity"
-                          onClick={() =>
-                            setCartQuantity(item.bookId, item.quantity - 1)
-                          }
-                          className="flex h-9 w-9 items-center justify-center transition hover:text-burgundy"
-                        >
-                          −
-                        </button>
-                        <span className="w-8 text-center text-sm font-semibold">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label="Increase quantity"
-                          onClick={() =>
-                            setCartQuantity(item.bookId, item.quantity + 1)
-                          }
-                          className="flex h-9 w-9 items-center justify-center transition hover:text-burgundy"
-                        >
-                          +
-                        </button>
-                      </div>
+                      <QtyControl value={item.quantity} max={quantityCap(book.id)} onChange={(quantity) => setCartQuantity(item.bookId, quantity)} />
+                      <button
+                        type="button"
+                        onClick={() => saveForLater(item.bookId)}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted transition hover:text-burgundy"
+                      >
+                        Save for later
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -151,6 +145,31 @@ export default function CartPage() {
                   </div>
                 </article>
               ))
+            )}
+
+            {saved.length > 0 && (
+              <div className="rounded-2xl border border-border bg-white p-5">
+                <h2 className="font-semibold text-text-primary">Saved for later ({saved.length})</h2>
+                <ul className="mt-4 space-y-4">
+                  {saved.map((item) => {
+                    const book = bookFor(item.bookId);
+                    if (!book) return null;
+                    return (
+                      <li key={item.bookId} className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
+                        <div>
+                          <Link href={`/shop/${book.slug}`} className="font-semibold text-text-primary hover:text-burgundy">{book.title}</Link>
+                          <p className="mt-1 text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)}</p>
+                          {!isPurchasable(book) && <RestockAlert bookId={book.id} />}
+                        </div>
+                        <div className="flex gap-3 text-xs font-semibold">
+                          <button type="button" className="text-burgundy" onClick={() => moveSavedToCart(item.bookId)}>Move to cart</button>
+                          <button type="button" className="text-red-600" onClick={() => removeSavedLater(item.bookId)}>Remove</button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
 
             <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
@@ -183,10 +202,18 @@ export default function CartPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
+                  <dt className="text-text-muted">Books</dt>
+                  <dd className="font-medium text-text-primary">{count}</dd>
+                </div>
+                <div className="flex justify-between">
                   <dt className="text-text-muted">Subtotal</dt>
                   <dd className="font-medium text-text-primary">
                     {formatPrice(totals.subtotal)}
                   </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">GST</dt>
+                  <dd className="font-medium text-text-primary">{formatPrice(totals.gst)}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-text-muted">Shipping</dt>

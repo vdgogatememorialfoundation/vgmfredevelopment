@@ -11,6 +11,7 @@ import {
   getBookById,
   setCartQuantity,
   removeFromCart,
+  quantityCap,
   toggleWishlist,
   computeTotals,
   formatPrice,
@@ -27,10 +28,13 @@ import { fetchCourierRates } from "@/lib/shipping-client";
 import { payWithRazorpay, paymentNotice } from "@/lib/payments-client";
 import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, sendEmail } from "@/lib/admin-store";
 import { commitStockForOrder } from "@/lib/product-data";
-import { useOrderSettings } from "@/lib/use-cms";
+import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import Glyph from "@/components/store/Glyph";
+import QtyControl from "@/components/store/QtyControl";
+import { markCartRecovered } from "@/lib/abandoned-cart";
+import { saveForLater } from "@/lib/saved-later";
 import { SavedCardTiles } from "@/components/account/SavedCards";
 import { saveAddress, useSavedAddresses, useSavedCards, brandLabel } from "@/lib/account-wallet";
 import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
@@ -49,6 +53,7 @@ export default function CheckoutClient() {
 
   const { user } = useAuth();
   const { items } = useCart();
+  const catalogue = useLiveBooks();
 
   const orderSettings = useOrderSettings();
   const [step, setStep] = useState<Step>("address");
@@ -109,7 +114,7 @@ export default function CheckoutClient() {
     : items;
 
   const rows = inCheckout.flatMap((item) => {
-    const book = getBookById(item.bookId);
+    const book = catalogue.find((entry) => entry.id === item.bookId) ?? getBookById(item.bookId);
     return book ? [{ item, book }] : [];
   });
 
@@ -216,6 +221,11 @@ export default function CheckoutClient() {
   };
 
   const placeOrder = async () => {
+    const over = rows.find(({ item, book }) => item.quantity > quantityCap(book.id) || (book.stock <= 0 && !book.preorder?.enabled));
+    if (over) {
+      setError(`${over.book.title} does not have enough stock. Lower the quantity or save it for later.`);
+      return;
+    }
     setProcessing(true);
     setError("");
     const id = generateOrderId();
@@ -324,6 +334,7 @@ export default function CheckoutClient() {
       });
     }
     setOrderId(id);
+    markCartRecovered();
     clearCart();
     setStep("success");
     setProcessing(false);
@@ -623,32 +634,12 @@ export default function CheckoutClient() {
                         {getEstimatedDeliveryDate(6)}
                       </p>
 
+                      <p className="mt-1 text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</p>
                       <div className="mt-3 flex flex-wrap items-center gap-3">
-                        <div className="flex items-center rounded-lg border border-border">
-                          <button
-                            type="button"
-                            aria-label="Decrease quantity"
-                            onClick={() =>
-                              setCartQuantity(item.bookId, item.quantity - 1)
-                            }
-                            className="flex h-8 w-8 items-center justify-center transition hover:text-burgundy"
-                          >
-                            −
-                          </button>
-                          <span className="w-7 text-center text-sm font-semibold">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label="Increase quantity"
-                            onClick={() =>
-                              setCartQuantity(item.bookId, item.quantity + 1)
-                            }
-                            className="flex h-8 w-8 items-center justify-center transition hover:text-burgundy"
-                          >
-                            +
-                          </button>
-                        </div>
+                        <QtyControl value={item.quantity} max={quantityCap(book.id)} onChange={(quantity) => setCartQuantity(item.bookId, quantity)} />
+                        <button type="button" onClick={() => saveForLater(item.bookId)} className="text-xs font-semibold text-text-muted hover:text-burgundy">
+                          Save for later
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -873,9 +864,13 @@ export default function CheckoutClient() {
         <aside className="lg:col-span-1 lg:self-start">
           <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-text-muted">
-              Price Details {rows.length > 0 && `(${rows.length} item${rows.length === 1 ? "" : "s"})`}
+              Price Details
             </h2>
             <dl className="mt-5 space-y-3 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-text-muted">Books</dt>
+                <dd className="font-medium text-text-primary">{itemCount}</dd>
+              </div>
               <div className="flex justify-between">
                 <dt className="text-text-muted">MRP</dt>
                 <dd className="font-medium text-text-primary">
@@ -895,17 +890,23 @@ export default function CheckoutClient() {
                 </dd>
               </div>
               <div className="flex justify-between">
+                <dt className="text-text-muted">GST</dt>
+                <dd className="font-medium text-text-primary">{formatPrice(totals.gst)}</dd>
+              </div>
+              <div className="flex justify-between">
                 <dt className="text-text-muted">
                   Shipping
                 </dt>
                 <dd className="font-medium text-text-primary">
-                  {deliveryMode === "store_pickup"
-                    ? `FREE`
-                    : totals.shipping === 0
-                      ? "FREE"
-                      : formatPrice(totals.shipping)}
+                  {deliveryMode === "store_pickup" || shipping === 0 ? "FREE" : formatPrice(shipping)}
                 </dd>
               </div>
+              {codFee > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">Cash on delivery</dt>
+                  <dd className="font-medium text-text-primary">{formatPrice(codFee)}</dd>
+                </div>
+              )}
               {creditApplied > 0 && (
                 <div className="flex justify-between">
                   <dt className="text-text-muted">Store credit</dt>

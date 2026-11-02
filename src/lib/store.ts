@@ -15,7 +15,9 @@ export { pickupOtp } from "@/lib/order-pipeline";
 import { storeConfig } from "@/lib/constants";
 import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";
-import { getLiveBook } from "@/lib/product-data";
+import { getLiveBook, isPurchasable, canPreorder } from "@/lib/product-data";
+import { pushInbox } from "@/lib/inbox";
+import { queueNotification } from "@/lib/notify";
 import { checkPincode } from "@/lib/fulfillment";
 import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 
@@ -57,12 +59,22 @@ export function persistCart(cart: CartItem[]) {
 export function addToCart(bookId: string, quantity = 1) {
   const cart = getCart();
   const existing = cart.find((item) => item.bookId === bookId);
+  const cap = quantityCap(bookId);
+  const next = Math.min(cap, Math.max(1, Math.floor(quantity)));
   if (existing) {
-    existing.quantity += quantity;
+    existing.quantity = Math.min(cap, existing.quantity + next);
   } else {
-    cart.push({ bookId, quantity });
+    cart.push({ bookId, quantity: next });
   }
   persistCart(cart);
+}
+
+export function quantityCap(bookId: string) {
+  const book = getBookById(bookId);
+  if (!book) return 20;
+  if (isPurchasable(book)) return Math.max(1, book.stock);
+  if (canPreorder(book)) return 20;
+  return 1;
 }
 
 export function setCartQuantity(bookId: string, quantity: number) {
@@ -70,12 +82,13 @@ export function setCartQuantity(bookId: string, quantity: number) {
     removeFromCart(bookId);
     return;
   }
+  const next = Math.min(quantityCap(bookId), Math.floor(quantity));
   const cart = getCart();
   const item = cart.find((entry) => entry.bookId === bookId);
   if (item) {
-    item.quantity = quantity;
+    item.quantity = next;
   } else {
-    cart.push({ bookId, quantity });
+    cart.push({ bookId, quantity: next });
   }
   persistCart(cart);
 }
@@ -329,6 +342,41 @@ export function updateReturnRequest(orderId: string, update: Partial<ReturnReque
   return next;
 }
 
+/** Records each replacement-order step on the original request and tells the customer. */
+export function syncReplacementProgress(order: Order) {
+  const parentId = order.replacementOf;
+  if (!parentId || typeof window === "undefined") return;
+  const request = getReturnRequest(parentId);
+  if (!request || request.status === "Rejected") return;
+  const now = new Date().toISOString();
+  const id = `fulfill-${order.status.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const detail = `Replacement order ${order.id} is ${order.status}.${order.trackingId ? ` Tracking ${order.trackingId}.` : ""}`;
+  const stage: ShipmentEvent = { id, title: order.status, at: now, reached: true, detail };
+  const existing = request.stages ?? [];
+  const stages = existing.some((item) => item.id === id)
+    ? existing.map((item) => (item.id === id ? { ...item, ...stage } : item))
+    : [...existing, stage];
+  persistReturnRequest(parentId, { ...request, replacementOrderId: request.replacementOrderId || order.id, stages });
+  const email = order.accountEmail || order.deliveryAddress?.email || "";
+  if (email) {
+    pushInbox({
+      audience: "customer",
+      email,
+      kind: "order",
+      title: `Replacement is ${order.status}`,
+      body: detail,
+      href: `/account/orders#${parentId}`,
+    });
+  }
+  pushInbox({
+    audience: "staff",
+    kind: "order",
+    title: `Replacement ${order.id} is ${order.status}`,
+    body: `Original order ${parentId}. ${detail}`,
+    href: "/admin/commerce/orders",
+  });
+}
+
 function persistReturnRequest(orderId: string, request: ReturnRequest) {
   if (typeof window === "undefined") return;
   const map = getReturnRequests();
@@ -349,19 +397,39 @@ function returnRequestId() {
 
 function generateReplacementOrder(source: Order): Order {
   const id = generateOrderId();
+  const placedAt = new Date().toISOString();
   const courierName = source.deliveryMode === "delivery" ? pickCourier(id) : undefined;
   return {
     ...source,
     id,
-    date: new Date().toISOString(),
+    date: placedAt,
     status: "Ordered",
     paymentStatus: "Paid",
+    paymentMethod: "Replacement",
+    subtotal: 0,
+    discount: 0,
+    gst: 0,
+    shipping: 0,
+    total: 0,
+    storeCreditUsed: 0,
+    refundAmount: undefined,
+    refunds: undefined,
+    cancelReason: undefined,
+    shipmentId: undefined,
+    razorpayOrderId: undefined,
+    razorpayPaymentId: undefined,
+    paymentLink: undefined,
+    paymentRef: undefined,
+    paidAt: placedAt,
     eta: getEstimatedDeliveryDate(6),
     trackingId: courierName ? generateTrackingId(courierName) : undefined,
+    trackToken: undefined,
     courierName,
     returnableDays: storeConfig.returnDays,
     replacementOf: source.id,
     returnRequest: undefined,
+    returnShipment: undefined,
+    history: [{ at: placedAt, status: "Ordered", note: `Free replacement for ${source.id}` }],
   };
 }
 
@@ -391,7 +459,37 @@ export function requestDamagedReplacement(
     ],
   };
   persistReturnRequest(order.id, request);
+  notifyReplacement(order, `Replacement request ${request.id}`, "Photos received. The desk will accept or reject this request.", "customer");
   return request;
+}
+
+function notifyReplacement(order: Order, title: string, body: string, who: "customer" | "both") {
+  const email = order.accountEmail || order.deliveryAddress?.email || "";
+  if (email) {
+    queueNotification({
+      to: email,
+      subject: title,
+      template: "return-created",
+      body: `Dear ${order.deliveryAddress?.fullName || "Reader"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${body}\n\nOrder ${order.id}. Follow each step in My Orders.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+    });
+    pushInbox({
+      audience: "customer",
+      email,
+      kind: "order",
+      title,
+      body,
+      href: `/account/orders#${order.id}`,
+    });
+  }
+  if (who === "both" || who === "customer") {
+    pushInbox({
+      audience: "staff",
+      kind: "order",
+      title,
+      body: `Order ${order.id}. ${body}`,
+      href: "/admin/commerce/orders",
+    });
+  }
 }
 
 export function reviewReplacementRequest(
@@ -416,6 +514,8 @@ export function reviewReplacementRequest(
       ),
     };
     persistReturnRequest(orderId, request);
+    const source = getOrders().find((order) => order.id === orderId);
+    if (source) notifyReplacement(source, `Replacement request ${request.id} was rejected`, request.decisionNote || "The desk rejected this request.", "both");
     return request;
   }
   const source = getOrders().find((order) => order.id === orderId);
@@ -436,6 +536,7 @@ export function reviewReplacementRequest(
     }),
   };
   persistReturnRequest(orderId, request);
+  notifyReplacement(source, `Replacement order ${replacement.id} placed`, `Your request was accepted. Follow order ${replacement.id} until it is delivered.`, "both");
   return request;
 }
 

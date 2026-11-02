@@ -271,7 +271,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
               }
             }}
           >
-            <p className="text-sm font-semibold text-text-primary">Email me when it is back</p>
+            <p className="text-sm font-semibold text-text-primary">Notify me when restocked</p>
             <div className="mt-2 flex gap-2">
               <input
                 className="input-field py-2"
@@ -281,7 +281,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
                 value={notifyEmail || user?.email || ""}
                 onChange={(event) => setNotifyEmail(event.target.value)}
               />
-              <button type="submit" className="btn-outline shrink-0 px-3 py-2 text-xs">Notify me</button>
+              <button type="submit" className="btn-outline shrink-0 px-3 py-2 text-xs">Notify me when restocked</button>
             </div>
             {notifyNote && <p className="mt-2 text-xs text-emerald-700">{notifyNote}</p>}
           </form>

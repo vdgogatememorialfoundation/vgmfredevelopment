@@ -13,7 +13,7 @@ import type {
   User,
 } from "@/types";
 import { siteConfig, storeConfig } from "@/lib/constants";
-import { generateOrderId, getOrders, pickupOtp, publishShipment, publishShopOrder, saveOrder } from "@/lib/store";
+import { generateOrderId, getOrders, pickupOtp, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
@@ -744,6 +744,7 @@ export function setOrderStatus(orderId: string, status: OrderStatus) {
   }
   updateOrderInStore(next);
   sendOrderStatusEmail(next, status);
+  syncReplacementProgress(next);
 }
 
 export function cancelOrder(orderId: string, reason?: string) {
@@ -970,6 +971,7 @@ export function updateShipmentStatus(shipmentId: string, status: ShipmentRecord[
   if (order) {
     const next: Order = { ...order, status: status === "Delivered" ? "Delivered" : "Shipped" };
     updateOrderInStore(next);
+    syncReplacementProgress(next);
   }
 }
 
@@ -1259,18 +1261,21 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
     params: [name, order.id, status],
     subject: `Order ${order.id} — ${status}`,
     template: "order-status",
-    body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is now ${status}.${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+    body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${order.replacementOf ? `Your replacement for order ${order.replacementOf} (${order.id}) is now ${status}.` : `Your order ${order.id} is now ${status}.`}${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\nFollow each step in My Orders.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
+  const ordersHref = order.replacementOf ? `/account/orders#${order.replacementOf}` : "/account/orders";
   if (to) {
     pushInbox({
       audience: "customer",
       email: to,
       kind: "order",
-      title: `Order ${order.id} is now ${status}`,
+      title: order.replacementOf ? `Replacement is ${status}` : `Order ${order.id} is now ${status}`,
       body: order.trackingId
         ? `Tracking: ${order.courierName ?? ""} ${order.trackingId}`
-        : `Your Foundation shop order was updated to ${status}.`,
-      href: "/account/orders",
+        : order.replacementOf
+          ? `Your replacement for order ${order.replacementOf} is now ${status}.`
+          : `Your Foundation shop order was updated to ${status}.`,
+      href: ordersHref,
     });
   }
   pushInbox({

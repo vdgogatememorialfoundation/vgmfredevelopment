@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { classNames } from "@/lib/utils";
-import { getReturnRequest, requestDamagedReplacement } from "@/lib/store";
+import { getOrders, getReturnRequest, requestDamagedReplacement } from "@/lib/store";
 import { canCustomerRequestReplacement, customerOrderPolicyCopy } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
 import { fileToDataUrl } from "@/lib/images";
@@ -163,6 +163,28 @@ export default function ReturnSection({ order }: { order: Order }) {
   );
 }
 
+const FULFILLMENT = ["Pending", "Paid", "Processing", "Ordered", "Accepted", "Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered"];
+
+function statusRank(status?: string) {
+  const index = FULFILLMENT.indexOf(status || "");
+  return index < 0 ? -1 : index;
+}
+
+function whenLabel(iso?: string) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "";
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function ReplacementStatus({ request }: { request: ReturnRequest }) {
   const tone =
     request.status === "Rejected"
@@ -170,6 +192,32 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
       : request.status === "Replacement Created" || request.status === "Accepted"
         ? "bg-emerald-50 text-emerald-700"
         : "bg-burgundy/10 text-burgundy";
+  const replacement = request.replacementOrderId ? getOrders().find((order) => order.id === request.replacementOrderId) : undefined;
+  const rank = statusRank(replacement?.status);
+  const stampFor = (names: string[]) =>
+    replacement?.history?.find((entry) => names.includes(entry.status))?.at
+    || request.stages.find((stage) => stage.reached && stage.at && names.includes(stage.title))?.at
+    || "";
+  const steps = [
+    { id: "requested", title: "Request received", reached: true, at: request.requestedAt, detail: "Photos and the damage note are with the desk." },
+    { id: "review", title: "Desk review", reached: true, at: request.requestedAt, detail: "The Foundation desk checks the photos." },
+    {
+      id: "decision",
+      title: request.status === "Rejected" ? "Request rejected" : "Decision",
+      reached: request.status !== "Pending Review",
+      at: request.decidedAt,
+      detail: request.decisionNote || (request.status === "Pending Review" ? "Waiting for accept or reject." : "Accepted."),
+    },
+    ...(request.status === "Rejected"
+      ? []
+      : [
+          { id: "placed", title: "Free replacement order", reached: Boolean(replacement), at: request.decidedAt, detail: replacement ? `Order ${replacement.id}` : "Placed when the request is accepted." },
+          { id: "packed", title: "Packed", reached: rank >= statusRank("Packed"), at: stampFor(["Packed", "Ready to Ship", "To Ship"]), detail: "The replacement is packed for dispatch." },
+          { id: "shipped", title: "Shipped", reached: rank >= statusRank("Shipped"), at: stampFor(["Shipped"]), detail: replacement?.trackingId ? `Tracking ${replacement.trackingId}` : "Handed to the courier." },
+          { id: "out", title: "Out for delivery", reached: rank >= statusRank("Out for Delivery"), at: stampFor(["Out for Delivery"]), detail: "On the way to you." },
+          { id: "delivered", title: "Delivered", reached: rank >= statusRank("Delivered"), at: stampFor(["Delivered"]), detail: "The replacement has been delivered." },
+        ]),
+  ];
 
   return (
     <div className="mt-3 space-y-3">
@@ -179,7 +227,7 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className={classNames("rounded-full px-2.5 py-0.5 text-[11px] font-bold", tone)}>{request.status}</span>
-          <span>Requested {new Date(request.requestedAt).toLocaleDateString("en-IN")}</span>
+          <span>Requested {whenLabel(request.requestedAt)} IST</span>
         </div>
         {request.reason && (
           <p className="mt-2">
@@ -197,21 +245,24 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
         ) : null}
       </div>
 
-      {request.status === "Pending Review" && (
-        <p className="rounded-xl bg-gold/10 p-3 text-ink">The Foundation desk is reviewing your photos. You will see the decision on this order.</p>
-      )}
-      {request.status === "Rejected" && (
-        <p className="rounded-xl bg-red-50 p-3 text-red-800">
-          This request was rejected{request.decisionNote ? `: ${request.decisionNote}` : "."}
-        </p>
-      )}
-      {(request.status === "Replacement Created" || request.status === "Accepted") && (
-        <p className="rounded-xl bg-emerald-50 p-3 font-semibold text-emerald-900">
-          Free replacement order {request.replacementOrderId ?? "—"} has been placed.{" "}
-          <Link href="/account/orders" className="text-burgundy underline">
-            View orders
+      <ol className="space-y-3">
+        {steps.map((step) => (
+          <li key={step.id} className="flex gap-3">
+            <span className={classNames("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", step.reached ? "bg-burgundy" : "bg-border")} />
+            <span>
+              <span className={classNames("block text-sm font-semibold", step.reached ? "text-ink" : "text-text-muted")}>{step.title}</span>
+              {step.detail && <span className="mt-0.5 block">{step.detail}</span>}
+              {step.reached && step.at && <span className="mt-0.5 block">{whenLabel(step.at)} IST</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      {replacement && (
+        <p>
+          <Link href={`/account/orders#${replacement.id}`} className="font-semibold text-burgundy">
+            Open replacement order {replacement.id}
           </Link>
-          .
         </p>
       )}
     </div>
