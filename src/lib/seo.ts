@@ -50,6 +50,7 @@ export const publicSitemapPaths = [
   "/events",
   "/gallery",
   "/videos",
+  "/videos/seminars",
   "/articles",
   "/shop",
   "/clinics",

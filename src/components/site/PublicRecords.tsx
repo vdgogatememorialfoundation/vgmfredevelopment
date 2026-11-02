@@ -85,7 +85,16 @@ export function VideosIndex() {
         </section>
       )}
       <section className="section bg-background">
-        <div className="container">
+        <div className="container space-y-8">
+          <div className="rounded-2xl border border-border bg-white p-6 sm:flex sm:items-center sm:justify-between sm:gap-6">
+            <div>
+              <h2 className="font-serif text-2xl font-semibold text-ink">Seminar recordings</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
+                Seminar videos play on this site. They are free for volunteers, for people who paid and attended, and for people who paid but could not attend. Anyone who did not register for that seminar can buy the recording here.
+              </p>
+            </div>
+            <Link href="/videos/seminars" className="btn-primary mt-4 inline-flex shrink-0 sm:mt-0">Open seminar videos</Link>
+          </div>
           <VideosGrid videos={videos} />
         </div>
       </section>
