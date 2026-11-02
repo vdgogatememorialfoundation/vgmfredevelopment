@@ -99,8 +99,20 @@ export interface IntegrationSettings {
     metaPhoneNumberId: string;
     metaAccessToken: string;
     metaApiVersion: string;
+    /** Same value pasted into Meta → WhatsApp → Configuration → Verify token. */
+    metaVerifyToken: string;
+    /** Optional. When set, webhook posts must carry X-Hub-Signature-256. */
+    metaAppSecret: string;
+    /** Approved template with one variable, used after the 24-hour reply window. */
+    metaReplyTemplate: string;
     aisensyApiKey: string;
     aisensyProjectId: string;
+    /** Project API app password. Unlocks free-text replies inside 24 hours. */
+    aisensyAppPassword: string;
+    /** Live API campaign with one variable, used after the 24-hour window. */
+    aisensyReplyCampaign: string;
+    /** Optional. Appended to the AiSensy webhook URL as ?token= */
+    aisensyWebhookToken: string;
     /** Agent API key from CPaaS → Agent → SMTP/API. WhatsApp send uses this, not OAuth. */
     zohoCpaasApiKey: string;
     /** WhatsApp sender number for the Agent, including country code (e.g. +9198…). */
@@ -210,8 +222,14 @@ export const defaultIntegrations: IntegrationSettings = {
     metaPhoneNumberId: "",
     metaAccessToken: "",
     metaApiVersion: "v21.0",
+    metaVerifyToken: "",
+    metaAppSecret: "",
+    metaReplyTemplate: "",
     aisensyApiKey: "",
     aisensyProjectId: "",
+    aisensyAppPassword: "",
+    aisensyReplyCampaign: "",
+    aisensyWebhookToken: "",
     zohoCpaasApiKey: "",
     zohoCpaasFrom: "",
     zohoCpaasDomain: "zoho.in",
