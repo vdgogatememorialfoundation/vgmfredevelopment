@@ -11,10 +11,12 @@ import { videos as seededVideos } from "@/data/videos";
 import {
   clinicKeys,
   defaultFlags,
+  awardKeys,
   bannerKeys,
   flyerKeys,
   getAllArticles,
   getLiveAnnouncements,
+  getLiveAwards,
   getLiveBanners,
   getLiveClinics,
   getLiveEvents,
@@ -28,7 +30,7 @@ import {
   videoKeys,
   type SiteFlags,
 } from "@/lib/cms";
-import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, SiteBanner, SiteSettings, User, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, PrizeAward, SiteBanner, SiteSettings, User, Video } from "@/types";
 import { getSettings } from "@/lib/admin-store";
 import { books as seededBooks } from "@/data/books";
 import { getAllProducts } from "@/lib/product-data";
@@ -157,7 +159,8 @@ export function useLiveFlyers() {
     () => (getPublishedFeed()?.flyers as Flyer[] | undefined)?.length ? (getPublishedFeed()!.flyers as Flyer[]) : seededFlyers
   );
 }
-export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners);
+export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners, () => getPublishedFeed()?.banners);
+export const useLiveAwards = collectionHook<PrizeAward>(awardKeys.edits, awardKeys.custom, [], getLiveAwards, () => getPublishedFeed()?.awards);
 export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos, () => getPublishedFeed()?.videos);
 export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics, () => getPublishedFeed()?.clinics);
 

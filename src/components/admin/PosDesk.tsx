@@ -13,7 +13,7 @@ import {
 } from "@/lib/admin-store";
 import { storeConfig } from "@/lib/constants";
 import { getPickupLocation } from "@/lib/fulfillment";
-import { payOnPaytmEdc, payOnRazorpayEdc, payWithRazorpay } from "@/lib/payments-client";
+import { payOnPaytmEdc, payOnRazorpayEdc, payWithRazorpay, waitForRazorpay } from "@/lib/payments-client";
 import { generateOrderId } from "@/lib/store";
 import { useLiveBooks } from "@/lib/use-cms";
 import type { Book, DeliveryAddress, Order } from "@/types";
@@ -146,10 +146,24 @@ export function PosDesk() {
             method: "upi",
             skipDemo: true,
           });
-          paymentMethod = outcome.live ? "Razorpay UPI" : "Razorpay UPI (demo)";
-          paymentRef = outcome.paymentId;
-          razorpayPaymentId = outcome.paymentId;
-          razorpayOrderId = outcome.kind === "paid" ? outcome.razorpayOrderId : undefined;
+          if (outcome.kind === "holding") {
+            setMessage("The payment is on hold until Razorpay confirms it. This sale is not recorded until then.");
+            const confirmed = await waitForRazorpay(outcome.razorpayOrderId);
+            if (!confirmed) {
+              setMessage("The payment is still on hold. This sale is not recorded, and nothing is packed before Razorpay confirms it.");
+              setBusy(false);
+              return;
+            }
+            paymentMethod = "Razorpay UPI";
+            paymentRef = confirmed;
+            razorpayPaymentId = confirmed;
+            razorpayOrderId = outcome.razorpayOrderId;
+          } else {
+            paymentMethod = outcome.live ? "Razorpay UPI" : "Razorpay UPI (demo)";
+            paymentRef = outcome.paymentId;
+            razorpayPaymentId = outcome.paymentId;
+            razorpayOrderId = outcome.kind === "paid" ? outcome.razorpayOrderId : undefined;
+          }
         } else if (method === "razorpay-edc") {
           setMessage("Sending the amount to the Razorpay EDC. Complete the payment on the machine.");
           const outcome = await payOnRazorpayEdc({

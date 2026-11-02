@@ -5,7 +5,7 @@ import { useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { getOrder, recordPayment } from "@/lib/admin-store";
 import { subscribeCms } from "@/lib/cms";
-import { decodeSummary, payWithRazorpay, paymentNotice } from "@/lib/payments-client";
+import { decodeSummary, payWithRazorpay, paymentNotice, waitForRazorpay } from "@/lib/payments-client";
 import { formatPrice } from "@/lib/store";
 
 type Summary = { id: string; amount: number; name: string; email: string; phone: string; items: string[]; paid: boolean };
@@ -79,6 +79,20 @@ export default function PayClient({ orderId }: { orderId: string }) {
         phone: summary.phone,
         description: `VGMF order ${summary.id}`,
       });
+      if (outcome.kind === "holding") {
+        setError("The payment is on hold until Razorpay confirms it. It is not marked paid, and this order is not packed before that.");
+        const confirmed = await waitForRazorpay(outcome.razorpayOrderId);
+        if (!confirmed) {
+          setError("The payment is still on hold until Razorpay confirms it. It is not marked paid. Do not pay again.");
+          return;
+        }
+        if (getOrder(summary.id)) {
+          recordPayment(summary.id, { method: "Online", reference: confirmed, razorpayPaymentId: confirmed });
+        }
+        setResult({ paymentId: confirmed, demo: false });
+        setError("");
+        return;
+      }
       if (getOrder(summary.id)) {
         recordPayment(summary.id, {
           method: outcome.live ? "Online" : "Online (demo)",

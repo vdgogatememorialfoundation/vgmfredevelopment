@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLiveFlyers, useSiteSettings } from "@/lib/use-cms";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
@@ -26,6 +27,8 @@ export default function HeroSection() {
   const [failed, setFailed] = useState<Record<string, boolean>>({});
   const [phone, setPhone] = useState(false);
   const touchX = useRef<number | null>(null);
+  const swiped = useRef(false);
+  const [lightbox, setLightbox] = useState(false);
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
     const apply = () => setPhone(query.matches);
@@ -98,8 +101,11 @@ export default function HeroSection() {
         if (touchX.current == null) return;
         const delta = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
         touchX.current = null;
-        if (delta > 40) go(active - 1);
-        if (delta < -40) go(active + 1);
+        if (Math.abs(delta) > 40) {
+          swiped.current = true;
+          if (delta > 40) go(active - 1);
+          if (delta < -40) go(active + 1);
+        }
       }}
     >
       <div className={SLIDE_BOX}>
@@ -120,13 +126,21 @@ export default function HeroSection() {
               className={`absolute inset-0 z-0 overflow-hidden bg-white transition-opacity duration-700 ${visible ? "opacity-100" : "pointer-events-none opacity-0"}`}
               aria-hidden={!visible}
             >
-              {item.href ? (
-                <a href={item.href} className="absolute inset-0" tabIndex={visible ? 0 : -1} aria-label={item.title || "Open slide"}>
-                  {image}
-                </a>
-              ) : (
-                image
-              )}
+              <button
+                type="button"
+                className="absolute inset-0"
+                tabIndex={visible ? 0 : -1}
+                aria-label={item.title ? `Open ${item.title}` : "Open flyer"}
+                onClick={() => {
+                  if (swiped.current) {
+                    swiped.current = false;
+                    return;
+                  }
+                  if (visible) setLightbox(true);
+                }}
+              >
+                {image}
+              </button>
             </div>
           );
         })}
@@ -187,6 +201,36 @@ export default function HeroSection() {
       <p className="sr-only" aria-live="polite">
         Slide {active + 1} of {count}: {slide.title}
       </p>
+      {lightbox && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={slide.title || "Flyer"}>
+              <button type="button" className="absolute inset-0 bg-ink/80" aria-label="Close flyer" onClick={() => setLightbox(false)} />
+              <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+                <button
+                  type="button"
+                  className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-lg text-ink shadow"
+                  aria-label="Close flyer"
+                  onClick={() => setLightbox(false)}
+                >
+                  ×
+                </button>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={slide.image} alt={slide.title || "Flyer"} className="block h-auto max-h-[82dvh] w-full !max-w-none bg-paper object-contain" />
+                {(slide.title || slide.href) && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+                    <p className="text-sm font-medium text-text-primary">{slide.title}</p>
+                    {slide.href ? (
+                      <a href={slide.href} className="text-sm font-semibold text-burgundy">
+                        Open
+                      </a>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </section>
   );
 }

@@ -746,7 +746,7 @@ export function SeminarVideoLibrary() {
     }
   };
 
-  const checkPayment = async (purchaseId: number) => {
+  const checkPayment = async (purchaseId: number, quiet = false) => {
     const response = await seminarApi({
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -755,7 +755,7 @@ export function SeminarVideoLibrary() {
     const data = (await response.json().catch(() => null)) as { paid?: boolean; error?: string } | null;
     if (!response.ok) throw new Error(data?.error || "The payment could not be checked.");
     if (data?.paid) await load();
-    else setPayNote("The payment has not been seen yet. If you have paid, wait a minute and check again.");
+    else if (!quiet) setPayNote("The payment has not been seen yet. If you have paid, wait a minute and check again.");
     return Boolean(data?.paid);
   };
 
@@ -825,18 +825,28 @@ export function SeminarVideoLibrary() {
       prefill: { name: profile.name, email: profile.email, contact: profile.phone },
       theme: { color: "#8F2D2D" },
       handler: (payment: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-        void seminarApi({
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "verify", purchaseId, ...payment }),
-        })
-          .then(async (verifyResponse) => {
-            const verify = (await verifyResponse.json().catch(() => null)) as { error?: string } | null;
-            if (!verifyResponse.ok) throw new Error(verify?.error || "Payment could not be confirmed.");
-            setPayNote("Payment received. The video is unlocked.");
-            void load();
-          })
-          .catch((error: Error) => setPayNote(error.message));
+        setPayNote("Payment sent. Holding it until the seminar payment service confirms it. The video stays locked until then.");
+        void (async () => {
+          for (let attempt = 0; attempt < 15; attempt += 1) {
+            const verifyResponse = await seminarApi({
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ action: "verify", purchaseId, ...payment }),
+            }).catch(() => null);
+            if (verifyResponse?.ok) {
+              setPayNote("Payment confirmed. The video is unlocked.");
+              void load();
+              return;
+            }
+            const seen = await checkPayment(purchaseId, true).catch(() => false);
+            if (seen) {
+              setPayNote("Payment confirmed. The video is unlocked.");
+              return;
+            }
+            await new Promise((resolve) => window.setTimeout(resolve, 4000));
+          }
+          setPayNote("The payment is still on hold. It unlocks when the payment service confirms it. Use Check payment on this page.");
+        })();
       },
       modal: { ondismiss: () => setPayNote("Payment window closed. You can try again.") },
     });

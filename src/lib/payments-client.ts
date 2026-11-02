@@ -1,7 +1,7 @@
 import type { Order } from "@/types";
 import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
-import { getOrder, patchOrder, recordPayment, refundOrder, sendEmail } from "@/lib/admin-store";
+import { getOrder, maxRefundable, patchOrder, recordPayment, refundOrder, sendEmail } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 
@@ -65,7 +65,24 @@ function loadCheckoutScript() {
 
 export type CheckoutOutcome =
   | { kind: "paid"; paymentId: string; razorpayOrderId: string; live: true }
+  | { kind: "holding"; paymentId: string; razorpayOrderId: string; live: true }
   | { kind: "demo"; paymentId: string; live: false };
+
+/** Asks Razorpay whether this order is captured. Empty string means it is still unconfirmed. */
+export async function pollRazorpayOrder(orderId: string) {
+  const status = await api<{ confirmed?: boolean; paymentId?: string }>({ action: "order-status", orderId });
+  if (status.ok && status.confirmed) return status.paymentId || "paid";
+  return "";
+}
+
+export async function waitForRazorpay(orderId: string, attempts = 12) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const paymentId = await pollRazorpayOrder(orderId).catch(() => "");
+    if (paymentId) return paymentId;
+    await sleep(5000);
+  }
+  return "";
+}
 
 /** Opens Razorpay Checkout in test/live mode; demo mode returns a simulated payment id. */
 export async function payWithRazorpay(input: {
@@ -141,8 +158,22 @@ export async function payWithRazorpay(input: {
     paymentId: response.razorpay_payment_id,
     signature: response.razorpay_signature,
   });
-  if (!verified.ok || !verified.verified) throw new Error("Payment signature could not be verified. Do not ship until Razorpay shows it captured.");
-  return { kind: "paid", paymentId: response.razorpay_payment_id, razorpayOrderId: response.razorpay_order_id, live: true };
+  if (verified.ok && verified.verified) {
+    return { kind: "paid", paymentId: response.razorpay_payment_id, razorpayOrderId: response.razorpay_order_id, live: true };
+  }
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await sleep(4000);
+    const status = await api<{ confirmed?: boolean; paymentId?: string }>({ action: "order-status", orderId: response.razorpay_order_id });
+    if (status.ok && status.confirmed) {
+      return { kind: "paid", paymentId: status.paymentId || response.razorpay_payment_id, razorpayOrderId: response.razorpay_order_id, live: true };
+    }
+  }
+  return {
+    kind: "holding",
+    paymentId: response.razorpay_payment_id,
+    razorpayOrderId: response.razorpay_order_id,
+    live: true,
+  };
 }
 
 function encodeSummary(order: Order) {
@@ -228,7 +259,9 @@ export async function refreshPaymentLink(orderId: string) {
 export async function refundThroughGateway(orderId: string, amount?: number) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
-  const value = amount ?? order.total;
+  const cap = maxRefundable(order);
+  const value = Math.min(amount ?? cap, cap);
+  if (value <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
   if (order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") && paymentMode() !== "demo") {
     const result = await api<{ refundId: string; status: string }>({ action: "refund", paymentId: order.razorpayPaymentId, amount: value });
     if (!result.ok) throw new Error(result.error ?? "Razorpay refused the refund.");

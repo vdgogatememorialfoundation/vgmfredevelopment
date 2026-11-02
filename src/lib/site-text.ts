@@ -11,6 +11,8 @@ export const homeSections = [
   { id: "reviews", label: "Seminar voices" },
   { id: "support", label: "Support Us" },
   { id: "events", label: "Events & programmes" },
+  { id: "speakers", label: "Speakers" },
+  { id: "awards", label: "Awards" },
   { id: "legacy", label: "Legacy" },
   { id: "books", label: "Shop & publications" },
   { id: "articles", label: "Articles" },

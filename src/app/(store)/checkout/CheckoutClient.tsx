@@ -26,7 +26,7 @@ import { storeConfig } from "@/lib/constants";
 import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
 import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import { fetchCourierRates } from "@/lib/shipping-client";
-import { openHostedCheckout, payWithRazorpay, paymentNotice, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
+import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
 import { printGstInvoice } from "@/lib/gst-invoice";
 import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, sendEmail } from "@/lib/admin-store";
 import { commitStockForOrder } from "@/lib/product-data";
@@ -81,11 +81,14 @@ export default function CheckoutClient() {
   const [courierId, setCourierId] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [holdingNote, setHoldingNote] = useState("");
+  const [razorpayHold, setRazorpayHold] = useState("");
   const [orderId, setOrderId] = useState("");
   const [useCredit, setUseCredit] = useState(false);
   const seededRef = useRef(false);
   const addressSeeded = useRef(false);
   const paymentReturn = useRef("");
+  const paidOnce = useRef(false);
   const savedAddresses = useSavedAddresses(user?.email);
   const savedCards = useSavedCards(user?.email);
   const [addressChoice, setAddressChoice] = useState("new");
@@ -114,20 +117,11 @@ export default function CheckoutClient() {
     void readyHostedGateways().then(setHostedGateways).catch(() => setHostedGateways([]));
   }, []);
 
-  useEffect(() => {
-    const flag = searchParams.get("payment");
-    if (flag !== "paid" && flag !== "failed") return;
-    const key = searchParams.toString();
-    if (paymentReturn.current === key) return;
-    paymentReturn.current = key;
+  const finishPaidCheckout = (reference?: string) => {
+    if (paidOnce.current) return;
     const raw = window.sessionStorage.getItem(PENDING_CHECKOUT);
-    if (flag === "failed") {
-      setError("The payment was not completed. You can try again.");
-      setStep("payment");
-      return;
-    }
     if (!raw) {
-      setError("The payment returned, but this browser no longer has the checkout.");
+      setError("The payment is confirmed, but this browser no longer has the checkout.");
       return;
     }
     try {
@@ -138,19 +132,89 @@ export default function CheckoutClient() {
         paymentStatus: "Paid",
         paidAt: new Date().toISOString(),
         paymentMethod: GATEWAY_LABEL[searchParams.get("gateway") as ReadyGateway["id"]] || order.paymentMethod,
-        paymentRef: searchParams.get("ref") || order.paymentRef,
+        paymentRef: reference || searchParams.get("ref") || order.paymentRef,
       };
       if (commitStockForOrder(paid)) paid.stockCommitted = true;
+      if (paid.storeCreditUsed && paid.accountEmail) {
+        adjustStoreCredit(paid.accountEmail, -paid.storeCreditUsed, `Used on order ${paid.id}`, paid.id);
+      }
+      paidOnce.current = true;
       saveOrder(paid);
       window.sessionStorage.removeItem(PENDING_CHECKOUT);
       markCartRecovered();
       clearCart();
+      setHoldingNote("");
       setOrderId(paid.id);
       setStep("success");
     } catch {
       setError("The payment returned, but the checkout could not be restored.");
     }
+  };
+
+  useEffect(() => {
+    const flag = searchParams.get("payment");
+    if (flag !== "paid" && flag !== "failed" && flag !== "holding") return;
+    const key = searchParams.toString();
+    if (paymentReturn.current === key) return;
+    paymentReturn.current = key;
+    if (flag === "failed") {
+      setHoldingNote("");
+      setError("The payment was not completed. You can try again.");
+      setStep("payment");
+      return;
+    }
+    if (flag === "holding") {
+      setError("");
+      setHoldingNote("The payment is on hold until the payment service confirms it. This page will update when that arrives. The order is not packed before then.");
+      setStep("payment");
+      return;
+    }
+    finishPaidCheckout();
+    // finishPaidCheckout reads the current search params when the return flag changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!holdingNote) return;
+    const orderId = searchParams.get("orderId") || "";
+    if (!orderId) return;
+    let stop = false;
+    const tick = async () => {
+      const response = await fetch(`/api/payments/hosted?orderId=${encodeURIComponent(orderId)}`, { cache: "no-store" });
+      const data = (await response.json().catch(() => null)) as { status?: string; reference?: string } | null;
+      if (stop || !data) return;
+      if (data.status === "confirmed") finishPaidCheckout(data.reference);
+      if (data.status === "failed") {
+        setHoldingNote("");
+        setError("The payment service did not confirm this payment. You can try again.");
+      }
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 5000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdingNote, searchParams]);
+
+  useEffect(() => {
+    if (!razorpayHold) return;
+    let stop = false;
+    const tick = async () => {
+      const paymentId = await pollRazorpayOrder(razorpayHold).catch(() => "");
+      if (stop || !paymentId) return;
+      setRazorpayHold("");
+      finishPaidCheckout(paymentId);
+    };
+    void tick();
+    const timer = window.setInterval(() => void tick(), 5000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [razorpayHold]);
 
   useEffect(() => {
     if (cardChoice || !savedCards.length) return;
@@ -279,6 +343,7 @@ export default function CheckoutClient() {
     setError("");
     const id = generateOrderId();
     let payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean };
+    let awaitingGateway = false;
     const hosted = hostedSelected;
     if (codSelected) {
       payment = { method: "Cash on delivery", paid: false };
@@ -294,12 +359,22 @@ export default function CheckoutClient() {
           phone: address.phone,
           description: `VGMF order ${id}`,
         });
-        payment = {
-          paymentId: outcome.paymentId,
-          razorpayOrderId: outcome.kind === "paid" ? outcome.razorpayOrderId : undefined,
-          method: outcome.live ? "Online" : "Online (demo)",
-          paid: true,
-        };
+        if (outcome.kind === "holding") {
+          awaitingGateway = true;
+          payment = {
+            paymentId: outcome.paymentId,
+            razorpayOrderId: outcome.razorpayOrderId,
+            method: "Online",
+            paid: false,
+          };
+        } else {
+          payment = {
+            paymentId: outcome.paymentId,
+            razorpayOrderId: outcome.kind === "paid" ? outcome.razorpayOrderId : undefined,
+            method: outcome.live ? "Online" : "Online (demo)",
+            paid: true,
+          };
+        }
       } catch (problem) {
         setError(problem instanceof Error ? problem.message : "Payment did not complete.");
         setProcessing(false);
@@ -312,7 +387,7 @@ export default function CheckoutClient() {
       deliveryMode === "delivery"
         ? { ...address, fullName: address.fullName.trim() }
         : { ...address, fullName: address.fullName.trim() || "Store pickup" };
-    if (creditApplied > 0 && user?.email) {
+    if (creditApplied > 0 && user?.email && !hosted && !awaitingGateway) {
       adjustStoreCredit(user.email, -creditApplied, `Used on order ${id}`, id);
     }
     const account =
@@ -369,8 +444,28 @@ export default function CheckoutClient() {
         { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
       ],
     };
-    if (hosted) {
+    if (hosted || awaitingGateway) {
       window.sessionStorage.setItem(PENDING_CHECKOUT, JSON.stringify(order));
+      await fetch("/api/payments/hosted", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "hold",
+          gateway: hosted || "razorpay",
+          orderId: id,
+          amount: totals.total,
+          kind: "order",
+          reference: payment.razorpayOrderId || "",
+        }),
+      }).catch(() => undefined);
+      if (awaitingGateway && payment.razorpayOrderId) {
+        setHoldingNote("The payment is on hold until Razorpay confirms it. This page will update when that arrives. The order is not packed before then.");
+        setRazorpayHold(payment.razorpayOrderId);
+        setStep("payment");
+        setProcessing(false);
+        return;
+      }
+      if (!hosted) return;
       try {
         await openHostedCheckout({
           gateway: hosted,
@@ -871,6 +966,9 @@ export default function CheckoutClient() {
               )}
             </div>
 
+            {holdingNote && (
+              <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{holdingNote}</p>
+            )}
             {error && (
               <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
                 {error}
@@ -989,7 +1087,7 @@ export default function CheckoutClient() {
               )}
               {orderSettings.platformFee.enabled && (
                 <div className="flex justify-between">
-                  <dt className="text-text-muted">Platform fee</dt>
+                  <dt className="text-text-muted">Platform fee{orderSettings.platformFee.refundable ? "" : " (kept on refund)"}</dt>
                   <dd className="font-medium text-text-primary">{formatPrice(totals.platformFee)}</dd>
                 </div>
               )}

@@ -325,10 +325,12 @@ function eventFromSeminar(
       name: row.speaker_name || "",
       designation: "",
       topic: row.title || "",
+      bio: row.speaker_bio || undefined,
     }));
   const schedule = sessions.map((row) => ({
     id: `${portal}-sch-${row.id}`,
     time: iso(row.start_time),
+    endTime: iso(row.end_time),
     title: [row.speaker_name, row.title].filter(Boolean).join(" — ") || "Session",
     description: row.description || undefined,
   }));

@@ -162,6 +162,69 @@ export async function startHostedPayment(input: StartInput): Promise<HostedStart
   return { kind: "redirect", url };
 }
 
+export async function pollHostedPayment(gateway: HostedGatewayId, orderId: string): Promise<"confirmed" | "failed" | "holding"> {
+  const creds = gatewayCreds(gateway);
+  if (!creds || !orderId) return "holding";
+  try {
+    if (gateway === "cashfree") {
+      const response = await fetch(`${cashfreeBase(creds.mode)}/orders/${encodeURIComponent(orderId)}`, {
+        headers: { "x-api-version": "2023-08-01", "x-client-id": creds.key, "x-client-secret": creds.salt },
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await readJson(response);
+      const status = String(data.order_status || "").toUpperCase();
+      if (status === "PAID") return "confirmed";
+      if (status === "EXPIRED" || status === "TERMINATED") return "failed";
+      return "holding";
+    }
+    if (gateway === "phonepe") {
+      const path = `/pg/v1/status/${creds.merchantId}/${orderId}`;
+      const checksum = `${sha256(path + creds.salt)}###${creds.saltIndex || "1"}`;
+      const response = await fetch(`${phonepeBase(creds.mode)}${path}`, {
+        headers: { "content-type": "application/json", "X-VERIFY": checksum, "X-MERCHANT-ID": creds.merchantId },
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await readJson(response);
+      const code = String(data.code || "");
+      if (code === "PAYMENT_SUCCESS") return "confirmed";
+      if (code === "PAYMENT_ERROR" || code === "PAYMENT_DECLINED") return "failed";
+      return "holding";
+    }
+    if (gateway === "payu") {
+      const command = "verify_payment";
+      const hash = sha512(`${creds.key}|${command}|${orderId}|${creds.salt}`);
+      const response = await fetch(creds.mode === "live" ? "https://info.payu.in/merchant/postservice.php" : "https://test.payu.in/merchant/postservice.php", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ key: creds.key, command, var1: orderId, hash }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await readJson(response);
+      const details = (data.transaction_details && typeof data.transaction_details === "object" ? data.transaction_details : {}) as Record<string, unknown>;
+      const row = (details[orderId] && typeof details[orderId] === "object" ? details[orderId] : {}) as Record<string, unknown>;
+      const status = String(row.status || "").toLowerCase();
+      if (status === "success") return "confirmed";
+      if (status === "failure" || status === "failed") return "failed";
+      return "holding";
+    }
+    const hash = sha512(`${creds.key}|${orderId}|${creds.salt}`);
+    const response = await fetch(creds.mode === "live" ? "https://dashboard.easebuzz.in/transaction/v1/retrieve" : "https://testdashboard.easebuzz.in/transaction/v1/retrieve", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ key: creds.key, txnid: orderId, hash }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = await readJson(response);
+    const nested = (data.msg && typeof data.msg === "object" ? data.msg : data) as Record<string, unknown>;
+    const status = String(nested.status || data.status || "").toLowerCase();
+    if (status === "success") return "confirmed";
+    if (status === "failure" || status === "failed" || status === "usercancelled") return "failed";
+    return "holding";
+  } catch {
+    return "holding";
+  }
+}
+
 export async function verifyHostedReturn(gateway: HostedGatewayId, fields: Record<string, string>) {
   const creds = gatewayCreds(gateway);
   if (!creds) return { ok: false, orderId: fields.txnid || fields.order_id || fields.transactionId || "" };

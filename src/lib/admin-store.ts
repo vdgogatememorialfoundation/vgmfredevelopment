@@ -669,12 +669,21 @@ export function resaveOrder(
   return next;
 }
 
+/** Amount still refundable. The platform fee is kept unless the desk has allowed refunding it. */
+export function maxRefundable(order: Order) {
+  const settings = getOrderSettings();
+  const kept = settings.platformFee.enabled && !settings.platformFee.refundable ? Math.max(0, order.platformFee ?? 0) : 0;
+  return Math.max(0, order.total - kept - (order.refundAmount ?? 0));
+}
+
 export function refundToStoreCredit(orderId: string, amount?: number, note?: string) {
   const order = getOrder(orderId);
   if (!order) return;
   const email = order.deliveryAddress?.email;
   if (!email) throw new Error("This order has no customer email to credit.");
-  const refundAmount = amount ?? Math.max(0, order.total - (order.refundAmount ?? 0));
+  const cap = maxRefundable(order);
+  const refundAmount = Math.min(amount ?? cap, cap);
+  if (refundAmount <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
   const balance = adjustStoreCredit(email, refundAmount, note ?? `Refund for order ${order.id}`, order.id);
   const next: Order = withHistory(
     {
@@ -770,7 +779,9 @@ export function cancelOrder(orderId: string, reason?: string) {
 export function refundOrder(orderId: string, amount?: number, note?: string) {
   const order = getOrder(orderId);
   if (!order) return;
-  const refundAmount = amount ?? Math.max(0, order.total - (order.refundAmount ?? 0));
+  const cap = maxRefundable(order);
+  const refundAmount = Math.min(amount ?? cap, cap);
+  if (refundAmount <= 0) return;
   const next: Order = withHistory(
     {
       ...order,

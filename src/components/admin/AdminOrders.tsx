@@ -16,6 +16,7 @@ import {
   printOrdersPdf,
   printPackagingSlip,
   recordPayment,
+  maxRefundable,
   refundToStoreCredit,
   resaveOrder,
   setOrderStatus,
@@ -634,7 +635,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [status, setStatus] = useState<Order["status"]>(order.status);
   const [method, setMethod] = useState("UPI");
   const [reference, setReference] = useState("");
-  const [refundAmount, setRefundAmount] = useState(String(order.total - (order.refundAmount ?? 0)));
+  const refundCap = maxRefundable(order);
+  const [refundAmount, setRefundAmount] = useState(String(refundCap));
   const [cancelReason, setCancelReason] = useState("");
   const [quote, setQuote] = useState<RateQuote | null>(null);
   const [picked, setPicked] = useState<number | undefined>();
@@ -906,7 +908,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
           {refundable && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-              <div className="w-28"><TextInput type="number" min={1} max={order.total} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} /></div>
+              <div className="w-28"><TextInput type="number" min={1} max={refundCap} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} /></div>
               <SelectInput value={refundDest} onChange={(event) => setRefundDest(event.target.value as "original" | "store_credit")}>
                 <option value="original">Original payment method</option>
                 <option value="store_credit">Store credit</option>
@@ -919,6 +921,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               }}>
                 {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund via Razorpay" : "Record refund"}
               </Button>
+              {(order.platformFee ?? 0) > 0 && !getOrderSettings().platformFee.refundable && (
+                <p className="w-full text-xs text-slate-500">Platform fee of ₹{order.platformFee} is kept. Switch on “Allow the desk to refund the platform fee” to include it.</p>
+              )}
             </div>
           )}
         </Section>

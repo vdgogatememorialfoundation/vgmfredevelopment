@@ -1291,8 +1291,9 @@ export function OrderSettingsDesk() {
       </Card>
       <Card title="Platform fee">
         <div className="grid gap-4 md:grid-cols-2">
-          <Check label="Add a platform fee at checkout" hint="Switch this off to charge no platform fee." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
+          <Check label="Add a platform fee at checkout" hint="Switch this off to charge no platform fee. While it is on, the fee stays with the Foundation unless the next switch is on." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
           <Text label="Amount (₹)" type="number" value={value.platformFee.amount} onChange={(amount) => set({ platformFee: { ...value.platformFee, amount: Number(amount) || 0 } })} />
+          <Check label="Allow the desk to refund the platform fee" hint="Leave this off. The platform fee is then kept on every refund." checked={value.platformFee.refundable} onChange={(refundable) => set({ platformFee: { ...value.platformFee, refundable } })} />
         </div>
       </Card>
       <Card title="GST" text="Leave this off until the Foundation is GST compliant. Turning on GST adds it to checkout. Turning on invoices lets a customer print a GST invoice after payment.">

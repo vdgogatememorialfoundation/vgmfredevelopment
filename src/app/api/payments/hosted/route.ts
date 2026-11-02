@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { HostedGatewayId, HostedGatewaySettings } from "@/lib/integrations";
-import { PaymentError, startHostedPayment } from "@/lib/server/hosted-payments";
+import { PaymentError, pollHostedPayment, startHostedPayment } from "@/lib/server/hosted-payments";
+import { readHold, saveHold, type PaymentHold } from "@/lib/server/payment-holds";
 import { listReadyGateways, writePaymentVault, type PaymentVault } from "@/lib/server/payment-vault";
 
 export const runtime = "nodejs";
@@ -40,12 +41,46 @@ function cleanGateway(value: unknown): HostedGatewaySettings | null {
   };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const orderId = request.nextUrl.searchParams.get("orderId") || "";
+  if (orderId) {
+    const hold = readHold(orderId);
+    if (!hold) return NextResponse.json({ ok: true, status: "unknown" });
+    if (hold.status === "holding" && hold.gateway !== "razorpay") {
+      const next = await pollHostedPayment(hold.gateway, orderId);
+      if (next !== "holding") {
+        hold.status = next;
+        hold.updatedAt = new Date().toISOString();
+        saveHold(hold);
+      }
+    }
+    return NextResponse.json({ ok: true, status: hold.status, reference: hold.reference || "", gateway: hold.gateway });
+  }
   return NextResponse.json({ ok: true, gateways: listReadyGateways() });
 }
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  if (body.action === "hold") {
+    const gateway = String(body.gateway || "") as PaymentHold["gateway"];
+    const id = String(body.orderId || "");
+    if (!id || (gateway !== "razorpay" && !IDS.has(gateway as HostedGatewayId))) {
+      return NextResponse.json({ ok: false, error: "Choose a payment method." }, { status: 400 });
+    }
+    const now = new Date().toISOString();
+    const existing = readHold(id);
+    saveHold({
+      id,
+      kind: body.kind === "subscription" || body.kind === "other" ? body.kind : "order",
+      gateway,
+      amount: Number(body.amount) || 0,
+      status: existing?.status === "confirmed" ? "confirmed" : "holding",
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      reference: String(body.reference || existing?.reference || ""),
+    });
+    return NextResponse.json({ ok: true, status: "holding" });
+  }
   if (body.action === "save") {
     if (!adminCookie(request)) return NextResponse.json({ ok: false, error: "Sign in to the admin desk to save payment keys." }, { status: 401 });
     const incoming = (body.payments && typeof body.payments === "object" ? body.payments : {}) as Record<string, unknown>;

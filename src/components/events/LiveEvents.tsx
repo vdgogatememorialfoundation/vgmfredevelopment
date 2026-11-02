@@ -17,7 +17,6 @@ import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, ev
 import { isEventPast, isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
 import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
 import PartnerRegister from "@/components/events/PartnerRegister";
-import EventSchedules from "@/components/events/EventSchedules";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
 import { useI18n } from "@/components/i18n/LanguageProvider";
@@ -56,7 +55,12 @@ export function EventsIndex() {
           )}
         </div>
       </section>
-      <EventSchedules />
+      <section className="section bg-white">
+        <div className="container flex flex-wrap gap-3">
+          <Link href="/schedules" className="btn-primary">Event schedules</Link>
+          <Link href="/speakers" className="btn-outline">Speakers</Link>
+        </div>
+      </section>
       {past.length > 0 && (
         <section className="section bg-warm-cream">
           <div className="container">

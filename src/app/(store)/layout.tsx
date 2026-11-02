@@ -26,6 +26,8 @@ export default function StoreLayout({
   const initial = {
     site: feed.site,
     flyers: feed.flyers ?? [],
+    banners: feed.banners ?? [],
+    awards: feed.awards ?? [],
     publishedAt: feed.publishedAt,
     siteText: feed.siteText,
     books: feed.books ?? [],

@@ -132,6 +132,7 @@ export const ABOUT_NAV = [
   { href: "/about/legacy-of-vaidya-rb-gogate", key: "nav.aboutLegacy" },
   { href: "/about/dr-anagha-gogate", key: "nav.aboutAnagha" },
   { href: "/about/awards", key: "nav.aboutAwards" },
+  { href: "/awards", key: "nav.competitionAwards" },
   { href: "/about/books-and-research", key: "nav.aboutBooks" },
   { href: "/about/history", key: "nav.aboutHistory" },
   { href: "/about/trustees", key: "nav.aboutTrustees" },

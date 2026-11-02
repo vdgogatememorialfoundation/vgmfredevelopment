@@ -9,6 +9,8 @@ import FeaturedBooks from "@/components/home/FeaturedBooks";
 import ClinicsSection from "@/components/home/ClinicsSection";
 import SeminarReviews from "@/components/home/SeminarReviews";
 import SupportUs from "@/components/home/SupportUs";
+import AwardsSection from "@/components/home/AwardsSection";
+import { SpeakerBoard } from "@/components/events/EventSchedules";
 import HomeSections from "@/components/home/HomeSections";
 
 export default function HomePage() {
@@ -21,6 +23,8 @@ export default function HomePage() {
         reviews: <SeminarReviews />,
         support: <SupportUs />,
         events: <UpcomingEvents />,
+        speakers: <SpeakerBoard variant="home" />,
+        awards: <AwardsSection variant="home" />,
         legacy: <LegacySection />,
         books: <FeaturedBooks />,
         articles: <FeaturedArticles />,

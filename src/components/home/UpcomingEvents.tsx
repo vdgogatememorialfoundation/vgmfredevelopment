@@ -62,7 +62,7 @@ export default function UpcomingEvents() {
           </div>
         ) : null}
 
-        <EventSchedules compact />
+        <EventSchedules variant="home" />
 
         <div className="mt-8">
           <Link href="/events" className="btn-primary">

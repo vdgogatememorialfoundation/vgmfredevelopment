@@ -1,5 +1,5 @@
 import { getSettings, saveSettings } from "@/lib/admin-store";
-import { flyerKeys } from "@/lib/cms";
+import { awardKeys, bannerKeys, flyerKeys } from "@/lib/cms";
 import { hydrateReviewsFromServer, replaceProductReviews, replaceSeminarReviews, type ProductReview } from "@/lib/reviews";
 import { announcements as seededAnnouncements, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { articles as seededArticles } from "@/data/articles";
@@ -120,6 +120,12 @@ function applyFeed(feed: MobileFeed) {
     });
     tryWrite(() => window.localStorage.setItem(flyerKeys.custom, JSON.stringify(custom)));
     tryWrite(() => window.localStorage.setItem(flyerKeys.edits, JSON.stringify(edits as Flyer[])));
+  }
+  if (feed.banners) {
+    tryWrite(() => window.localStorage.setItem(bannerKeys.custom, JSON.stringify(feed.banners)));
+  }
+  if (feed.awards) {
+    tryWrite(() => window.localStorage.setItem(awardKeys.custom, JSON.stringify(feed.awards)));
   }
 
   if (feed.mobile) {

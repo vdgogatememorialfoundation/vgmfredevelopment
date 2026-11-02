@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLiveBanners } from "@/lib/use-cms";
 
 const DISMISS_KEY = "vgmf_banner_dismissed";
@@ -34,7 +35,7 @@ export default function BannerPopup() {
     [banners, hidden]
   );
 
-  if (!ready || !banner) return null;
+  if (!ready || !banner || typeof document === "undefined") return null;
 
   const dismiss = () => {
     const next = [...hidden, banner.id];
@@ -44,32 +45,37 @@ export default function BannerPopup() {
 
   const image = (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={banner.image} alt={banner.title || "Site banner"} className="max-h-[70vh] w-full object-contain" />
+    <img
+      src={banner.image}
+      alt={banner.title || "Site banner"}
+      className="block h-auto max-h-[78dvh] w-full !max-w-none object-contain"
+    />
   );
 
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <button type="button" className="absolute inset-0 bg-ink/60" aria-label="Close banner" onClick={dismiss} />
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={banner.title || "Site banner"}>
+      <button type="button" className="absolute inset-0 bg-ink/70" aria-label="Close banner" onClick={dismiss} />
       <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
         <button
           type="button"
           onClick={dismiss}
-          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-lg text-ink shadow"
+          className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-lg text-ink shadow"
           aria-label="Dismiss banner"
         >
           ×
         </button>
         {banner.href ? (
-          <a href={banner.href} onClick={dismiss} className="block">
+          <a href={banner.href} onClick={dismiss} className="block min-h-[180px] bg-paper">
             {image}
           </a>
         ) : (
-          image
+          <div className="min-h-[180px] bg-paper">{image}</div>
         )}
         {banner.title ? (
           <p className="border-t border-border px-4 py-3 text-center text-sm font-medium text-text-primary">{banner.title}</p>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

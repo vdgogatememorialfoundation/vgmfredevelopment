@@ -202,6 +202,8 @@ export interface OrderSettings {
   platformFee: {
     enabled: boolean;
     amount: number;
+    /** Off keeps the platform fee when an order is refunded. On lets the desk refund it too. */
+    refundable: boolean;
   };
   gst: {
     enabled: boolean;
@@ -331,7 +333,7 @@ export const defaultOrderSettings: OrderSettings = {
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
   cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0 },
   adminActions: { processAfterDelivery: true },
-  platformFee: { enabled: false, amount: 0 },
+  platformFee: { enabled: false, amount: 0, refundable: false },
   gst: { enabled: false, ratePercent: 0, invoiceEnabled: false, legalName: "", gstin: "", stateName: "Maharashtra" },
 };
 
@@ -517,6 +519,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     platformFee: {
       enabled: Boolean(merged.platformFee?.enabled),
       amount: Math.max(0, finiteNumber(merged.platformFee?.amount, 0)),
+      refundable: Boolean(merged.platformFee?.refundable),
     },
     gst: {
       enabled: Boolean(merged.gst?.enabled),

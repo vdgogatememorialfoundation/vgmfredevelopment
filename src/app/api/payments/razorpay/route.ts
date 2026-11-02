@@ -31,6 +31,15 @@ export async function POST(request: NextRequest) {
             body.deviceMode === "wired" || body.deviceMode === "wireless" ? body.deviceMode : undefined
           )),
         });
+      case "order-status": {
+        const status = await razorpayOrderPayments(creds, String(body.orderId || ""));
+        return NextResponse.json({
+          ok: true,
+          configured: true,
+          confirmed: status.status === "paid" || Boolean(status.paymentId),
+          paymentId: status.paymentId || "",
+        });
+      }
       case "verify":
         return NextResponse.json({
           ok: true,

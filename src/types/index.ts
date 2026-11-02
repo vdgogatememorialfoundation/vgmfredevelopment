@@ -112,13 +112,28 @@ export interface Speaker {
   name: string;
   designation: string;
   topic: string;
+  bio?: string;
 }
 
 export interface ScheduleItem {
   id: string;
   time: string;
+  /** ISO end time when the portal sent one. */
+  endTime?: string;
   title: string;
   description?: string;
+}
+
+export interface PrizeAward {
+  id: string;
+  personName: string;
+  awardName: string;
+  competitionType: string;
+  /** Seminar or programme this award belongs to. */
+  category: string;
+  image: string;
+  year: string;
+  note: string;
 }
 
 export interface Faq {
