@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
 import { useOrderSettings } from "@/lib/use-cms";
+import Glyph from "@/components/store/Glyph";
 
 export default function CartPage() {
   const { items } = useCart();
@@ -49,11 +50,7 @@ export default function CartPage() {
             {rows.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border bg-white px-6 py-16 text-center">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-warm-cream text-burgundy">
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="8" cy="21" r="1" />
-                    <circle cx="19" cy="21" r="1" />
-                    <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-                  </svg>
+                  <Glyph name="package" className="h-7 w-7" />
                 </div>
                 <h2 className="mt-4 font-semibold text-text-primary">
                   Your cart is empty
@@ -100,9 +97,9 @@ export default function CartPage() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-emerald-700">
-                      Delivery by {getEstimatedDeliveryDate(6)} ·{" "}
-                      {book.expectedDelivery}
+                    <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
+                      <Glyph name="truck" className="h-3.5 w-3.5" />
+                      Delivery by {getEstimatedDeliveryDate(6)} · {book.expectedDelivery}
                     </p>
 
                     <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -137,15 +134,17 @@ export default function CartPage() {
                           toggleWishlist(item.bookId);
                           removeFromCart(item.bookId);
                         }}
-                        className="text-xs font-semibold text-text-muted transition hover:text-burgundy"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted transition hover:text-burgundy"
                       >
+                        <Glyph name="heart" className="h-3.5 w-3.5" />
                         Move to Wishlist
                       </button>
                       <button
                         type="button"
                         onClick={() => removeFromCart(item.bookId)}
-                        className="text-xs font-semibold text-red-600 transition hover:text-red-700"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 transition hover:text-red-700"
                       >
+                        <Glyph name="trash" className="h-3.5 w-3.5" />
                         Remove
                       </button>
                     </div>
@@ -166,7 +165,10 @@ export default function CartPage() {
 
           <aside className="lg:sticky lg:top-28 lg:self-start">
             <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
-              <h2 className="heading-3">Price Details</h2>
+              <h2 className="heading-3 flex items-center gap-2">
+                <Glyph name="tag" className="h-5 w-5 text-burgundy" />
+                Price Details
+              </h2>
               <dl className="mt-5 space-y-3 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-text-muted">MRP</dt>
@@ -202,12 +204,21 @@ export default function CartPage() {
                 </div>
               </dl>
 
-              {!shippingFree && totals.subtotal > 0 && (
-                <p className="mt-3 rounded-lg bg-warm-cream p-3 text-xs text-text-muted">
-                  Add {formatPrice(orderSettings.freeAbove - totals.subtotal)}{" "}
-                  more to get FREE shipping.
-                </p>
+              {!shippingFree && totals.subtotal > 0 && orderSettings.freeAbove > 0 && (
+                <div className="mt-4 rounded-xl bg-warm-cream p-3">
+                  <div className="mb-2 flex items-center justify-between text-xs text-text-muted">
+                    <span className="inline-flex items-center gap-1 font-semibold text-ink"><Glyph name="truck" className="h-3.5 w-3.5 text-burgundy" /> Free shipping</span>
+                    <span>{formatPrice(orderSettings.freeAbove - totals.subtotal)} to go</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white">
+                    <span className="block h-full bg-burgundy" style={{ width: `${Math.min(100, Math.round((totals.subtotal / orderSettings.freeAbove) * 100))}%` }} />
+                  </div>
+                </div>
               )}
+              <ul className="mt-4 space-y-2 text-xs text-text-muted">
+                <li className="flex items-center gap-2"><Glyph name="lock" className="h-3.5 w-3.5 text-burgundy" /> Secure payment</li>
+                <li className="flex items-center gap-2"><Glyph name="shield" className="h-3.5 w-3.5 text-burgundy" /> Damaged items can be replaced after photos are reviewed</li>
+              </ul>
 
               <Link
                 href="/checkout"

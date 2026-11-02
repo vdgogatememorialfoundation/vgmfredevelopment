@@ -30,6 +30,9 @@ import { commitStockForOrder } from "@/lib/product-data";
 import { useOrderSettings } from "@/lib/use-cms";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
+import Glyph from "@/components/store/Glyph";
+import { SavedCardTiles } from "@/components/account/SavedCards";
+import { saveAddress, useSavedAddresses, useSavedCards, brandLabel } from "@/lib/account-wallet";
 import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
 import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
 
@@ -71,6 +74,12 @@ export default function CheckoutClient() {
   const [orderId, setOrderId] = useState("");
   const [useCredit, setUseCredit] = useState(false);
   const seededRef = useRef(false);
+  const addressSeeded = useRef(false);
+  const savedAddresses = useSavedAddresses(user?.email);
+  const savedCards = useSavedCards(user?.email);
+  const [addressChoice, setAddressChoice] = useState("new");
+  const [keepAddress, setKeepAddress] = useState(true);
+  const [cardChoice, setCardChoice] = useState("");
 
   // Seed cart for Buy Now flow (once).
   useEffect(() => {
@@ -81,6 +90,19 @@ export default function CheckoutClient() {
       }, 0);
     }
   }, [buyNow, buyQty]);
+
+  useEffect(() => {
+    if (addressSeeded.current || !savedAddresses.length) return;
+    const chosen = savedAddresses.find((item) => item.isDefault) ?? savedAddresses[0];
+    addressSeeded.current = true;
+    setAddress({ ...chosen, email: chosen.email || user?.email || "" });
+    setAddressChoice(chosen.id);
+  }, [savedAddresses, user?.email]);
+
+  useEffect(() => {
+    if (cardChoice || !savedCards.length) return;
+    setCardChoice((savedCards.find((item) => item.isDefault) ?? savedCards[0]).id);
+  }, [cardChoice, savedCards]);
 
   const inCheckout = buyNow
     ? items.filter((item) => item.bookId === buyNow)
@@ -330,12 +352,9 @@ export default function CheckoutClient() {
                 >
                   {done ? "✓" : index + 1}
                 </span>
-                <span
-                  className={
-                    current ? "text-text-primary" : "text-text-muted"
-                  }
-                >
-                  {s[0].toUpperCase() + s.slice(1)}
+                <span className={`inline-flex items-center gap-1 ${current ? "text-text-primary" : "text-text-muted"}`}>
+                  <Glyph name={s === "address" ? "pin" : s === "review" ? "package" : "card"} className="h-3.5 w-3.5" />
+                  {s === "address" ? "Address" : s === "review" ? "Review" : "Payment"}
                 </span>
                 {index < 2 && (
                   <span className="mx-1 h-px w-6 bg-border" aria-hidden="true" />
@@ -361,8 +380,9 @@ export default function CheckoutClient() {
                     : "border-border hover:border-burgundy/40"
                 }`}
               >
-                <p className="text-sm font-semibold text-text-primary">
-                  📦 Home Delivery
+                <p className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                  <Glyph name="truck" className="h-4 w-4 text-burgundy" />
+                  Home delivery
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
                   {shippingFeeSummary(orderSettings)}
@@ -380,7 +400,8 @@ export default function CheckoutClient() {
                     : "border-border hover:border-burgundy/40"
                 }`}
               >
-                <p className="text-sm font-semibold text-text-primary">
+                <p className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                  <Glyph name="store" className="h-4 w-4 text-burgundy" />
                   Pickup from store
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
@@ -395,7 +416,57 @@ export default function CheckoutClient() {
 
             {deliveryMode === "delivery" && (
               <>
-                <AddressFields value={address} onChange={setAddress} idPrefix="co" showEmail />
+                {user && savedAddresses.length > 0 && (
+                  <div className="mb-5 grid gap-2">
+                    {savedAddresses.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setAddressChoice(item.id);
+                          setAddress({ ...item, email: item.email || user.email });
+                        }}
+                        className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-left ${addressChoice === item.id ? "border-burgundy bg-burgundy/5" : "border-border bg-white"}`}
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warm-cream text-burgundy">
+                          <Glyph name={item.place === "office" ? "office" : "home"} className="h-4 w-4" />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-semibold text-ink">{item.place === "office" ? "Office" : "Home"}{item.isDefault ? " · default" : ""}</span>
+                          <span className="block text-xs text-text-muted">{item.line1}, {formatAddressLine(item)}</span>
+                        </span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddressChoice("new");
+                        setAddress(emptyDeliveryAddress({ fullName: `${user.firstName} ${user.lastName}`.trim(), email: user.email, phone: user.phone }));
+                      }}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-3 text-sm font-semibold ${addressChoice === "new" ? "border-burgundy bg-burgundy/5 text-burgundy" : "border-border text-text-primary"}`}
+                    >
+                      <Glyph name="plus" className="h-4 w-4" />
+                      Add a new address
+                    </button>
+                  </div>
+                )}
+                {addressChoice === "new" || savedAddresses.length === 0 ? (
+                  <AddressFields value={address} onChange={setAddress} idPrefix="co" showEmail />
+                ) : (
+                  <div className="rounded-xl border border-border bg-warm-cream p-4 text-sm">
+                    <p className="flex items-center gap-2 font-semibold text-ink">
+                      <Glyph name="pin" className="h-4 w-4 text-burgundy" />
+                      {address.fullName} · {address.phone}
+                    </p>
+                    <p className="mt-1 text-text-muted">{address.line1}{address.landmark ? `, ${address.landmark}` : ""}, {formatAddressLine(address)}</p>
+                  </div>
+                )}
+                {user && (
+                  <label className="mt-4 flex items-start gap-2 text-sm text-text-primary">
+                    <input type="checkbox" className="mt-1 accent-burgundy" checked={keepAddress} onChange={(event) => setKeepAddress(event.target.checked)} />
+                    <span>Save this address in my account</span>
+                  </label>
+                )}
 
                 {!domestic ? (
                   <p className="mt-5 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-ink">
@@ -488,6 +559,9 @@ export default function CheckoutClient() {
                 if (problem) {
                   setError(problem);
                   return;
+                }
+                if (user?.email && keepAddress) {
+                  saveAddress(user.email, { ...address, id: addressChoice === "new" ? undefined : addressChoice });
                 }
                 setError("");
                 setStep("review");
@@ -666,10 +740,24 @@ export default function CheckoutClient() {
         {/* 3. Payment */}
         {step === "payment" && (
           <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
-            <h2 className="heading-3 mb-4">Payment</h2>
+            <h2 className="heading-3 mb-4 flex items-center gap-2">
+              <Glyph name="lock" className="h-5 w-5 text-burgundy" />
+              Payment
+            </h2>
             <p className="text-sm text-text-muted">
-              Pay online with UPI, cards, net banking or wallets. Your card and bank details are never stored on our servers.
+              Pay online with UPI, cards, net banking or wallets. A saved card keeps only the brand and last four digits. The secure payment window still collects the payment.
             </p>
+            {savedCards.length > 0 && !codSelected && (
+              <>
+                <SavedCardTiles cards={savedCards} selectedId={cardChoice} onSelect={setCardChoice} />
+                <p className="mt-2 text-xs text-text-muted">
+                  {(() => {
+                    const chosen = savedCards.find((card) => card.id === cardChoice);
+                    return chosen ? `Use your ${brandLabel(chosen.brand)} ending ${chosen.last4} in the payment window.` : "Choose a saved card to remember which one to use.";
+                  })()}
+                </p>
+              </>
+            )}
 
             <div className="mt-5 flex items-center justify-between rounded-xl border border-border bg-warm-cream p-5">
               <div>
@@ -697,7 +785,7 @@ export default function CheckoutClient() {
               <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${payMethod === "online" || !codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
                 <input type="radio" name="payment-method" checked={!codSelected} onChange={() => setPayMethod("online")} className="mt-1 accent-burgundy" />
                 <span>
-                  <span className="block font-semibold text-text-primary">Pay online</span>
+                  <span className="flex items-center gap-2 font-semibold text-text-primary"><Glyph name="card" className="h-4 w-4 text-burgundy" /> Pay online</span>
                   <span className="block text-xs text-text-muted">UPI, cards, net banking and wallets</span>
                 </span>
               </label>
@@ -705,7 +793,7 @@ export default function CheckoutClient() {
                 <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
                   <input type="radio" name="payment-method" checked={codSelected} onChange={() => setPayMethod("cod")} className="mt-1 accent-burgundy" />
                   <span>
-                    <span className="block font-semibold text-text-primary">Cash on delivery</span>
+                    <span className="flex items-center gap-2 font-semibold text-text-primary"><Glyph name="package" className="h-4 w-4 text-burgundy" /> Cash on delivery</span>
                     <span className="block text-xs text-text-muted">{orderSettings.codFee ? `${formatPrice(orderSettings.codFee)} COD fee` : "No extra fee"}</span>
                   </span>
                 </label>
