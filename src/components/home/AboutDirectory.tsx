@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { PortraitBio } from "@/components/about/PortraitBio";
-import { NaturalImage } from "@/components/common/NaturalImage";
-import { anaghaPortrait, rbPortrait, useAbout } from "@/lib/about";
+import { SquarePhoto } from "@/components/common/SquarePhoto";
+import { aboutSectionImage, anaghaPortrait, rbPortrait, useAbout } from "@/lib/about";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function AboutDirectory() {
@@ -49,9 +49,7 @@ export default function AboutDirectory() {
               key={section.id}
               className="flex h-full flex-col rounded-xl border border-border bg-white px-4 py-5 shadow-sm"
             >
-              {section.image ? (
-                <NaturalImage src={section.image} alt="" fit="card" className="mb-4 rounded-lg" />
-              ) : null}
+              <SquarePhoto src={aboutSectionImage(section)} alt={section.title} className="mb-4 max-w-[7.5rem]" />
               <p className="font-serif text-base font-semibold text-ink">{section.title}</p>
               <p className="mt-2 flex-1 text-sm leading-6 text-text-muted">{section.body}</p>
               <Link

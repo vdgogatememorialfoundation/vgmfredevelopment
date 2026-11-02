@@ -149,6 +149,9 @@ export default function Footer() {
                 {t(link.key)}
               </Link>
             ))}
+            <Link href="/track-shipment" className="text-text-muted transition hover:text-burgundy">
+              Track a shipment
+            </Link>
           </nav>
         </div>
         <p className="mt-3 inline-flex rounded-full border border-gold/50 bg-gold/25 px-4 py-1.5 font-serif text-sm tracking-wide text-burgundy shadow-[0_0_0_1px_rgba(196,149,74,0.15)]">

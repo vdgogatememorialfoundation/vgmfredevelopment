@@ -12,8 +12,8 @@ import type {
   FAQItem,
   User,
 } from "@/types";
-import { storeConfig } from "@/lib/constants";
-import { generateOrderId, getOrders, saveOrder } from "@/lib/store";
+import { siteConfig, storeConfig } from "@/lib/constants";
+import { generateOrderId, getOrders, pickupOtp, publishShipment, publishShopOrder, saveOrder } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
@@ -75,6 +75,7 @@ function defaultSettings(): SiteSettings {
     },
     liveChatEnabled: false,
     liveChatOnline: false,
+    tickerSeconds: 36,
     processing: {
       daysToPack: 1,
       daysToPickup: 1,
@@ -137,6 +138,7 @@ export function getSettings(): SiteSettings {
     social: { ...defaults.social, ...current.social },
     liveChatEnabled: current.liveChatEnabled ?? defaults.liveChatEnabled,
     liveChatOnline: current.liveChatOnline ?? defaults.liveChatOnline,
+    tickerSeconds: current.tickerSeconds || defaults.tickerSeconds,
     pickupTimeslots: current.pickupTimeslots?.length ? current.pickupTimeslots : defaults.pickupTimeslots,
   };
 }
@@ -556,6 +558,7 @@ export function createAdminOrder(input: {
   const order: Order = {
     id: input.id ?? generateOrderId(),
     userId: input.userId ?? "admin",
+    accountEmail: (input.deliverTo.email || input.userEmail || "").trim().toLowerCase() || undefined,
     date: new Date().toISOString(),
     items: orderItems,
     subtotal,
@@ -592,7 +595,11 @@ export function createAdminOrder(input: {
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`],
     subject: `Order ${order.id} placed`,
     template: "order-placed",
-    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\nExpected delivery: ${formatDate(order.plan.deliveredBy)}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\n${
+      order.deliveryMode === "store_pickup"
+        ? `Pickup from ${siteConfig.name}.\n${siteConfig.address}\nPhone: ${siteConfig.phone}\nPickup OTP: ${pickupOtp(order.id)}\nShow this code at the clinic counter. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`
+        : `Expected delivery: ${formatDate(order.plan.deliveredBy)}`
+    }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return order;
 }
@@ -606,6 +613,7 @@ export function updateOrderInStore(order: Order) {
   }
   orders[idx] = order;
   writeJSON("vgmf_orders", orders);
+  publishShopOrder(order);
 }
 
 export function getOrder(orderId: string) {
@@ -616,6 +624,8 @@ export function deleteOrder(orderId: string) {
   const order = getOrder(orderId);
   if (order?.stockCommitted) releaseStockForOrder(order);
   writeJSON("vgmf_orders", getOrders().filter((item) => item.id !== orderId));
+  removeOrderShipments(orderId);
+  forgetShopOrder(orderId);
 }
 
 export function resaveOrder(
@@ -746,6 +756,7 @@ export function cancelOrder(orderId: string, reason?: string) {
     reason
   );
   updateOrderInStore(next);
+  removeOrderShipments(orderId);
   sendOrderStatusEmail(next, "Cancelled");
 }
 
@@ -884,6 +895,7 @@ export function createShipment(input: {
   const list = getShipments().filter((s) => s.orderId !== order.id);
   list.push(shipment);
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(shipment);
 
   const next = { ...order, shipmentId: shipment.id, status: "Shipped" as OrderStatus };
   updateOrderInStore(next);
@@ -895,6 +907,7 @@ export function saveShipmentRecord(shipment: ShipmentRecord) {
   const list = getShipments().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
   list.push(shipment);
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(shipment);
 }
 
 export function patchShipment(shipmentId: string, update: Partial<ShipmentRecord>) {
@@ -903,11 +916,43 @@ export function patchShipment(shipmentId: string, update: Partial<ShipmentRecord
   if (index === -1) return;
   list[index] = { ...list[index], ...update };
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(list[index]);
   return list[index];
 }
 
 export function removeShipment(shipmentId: string) {
   writeJSON(SHIPMENTS_KEY, getShipments().filter((item) => item.id !== shipmentId));
+}
+
+/** Drop every shipment for an order from the desk and from the website copy. */
+export function removeOrderShipments(orderId: string) {
+  const next = getShipments().filter((item) => item.orderId !== orderId);
+  if (next.length === getShipments().length) {
+    forgetShopShipments(orderId);
+    return;
+  }
+  writeJSON(SHIPMENTS_KEY, next);
+  forgetShopShipments(orderId);
+}
+
+function forgetShopShipments(orderId: string) {
+  if (typeof window === "undefined" || !orderId) return;
+  void fetch("/api/shop/shipments", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "delete", orderId }),
+  }).catch(() => undefined);
+}
+
+function forgetShopOrder(orderId: string) {
+  if (typeof window === "undefined" || !orderId) return;
+  void fetch("/api/shop/orders", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "delete", orderId }),
+  }).catch(() => undefined);
 }
 
 export function updateShipmentStatus(shipmentId: string, status: ShipmentRecord["status"]) {
@@ -919,6 +964,7 @@ export function updateShipmentStatus(shipmentId: string, status: ShipmentRecord[
   const idx = list.findIndex((s) => s.id === shipmentId);
   list[idx] = shipment;
   writeJSON(SHIPMENTS_KEY, list);
+  publishShipment(shipment);
 
   const order = getOrder(shipment.orderId);
   if (order) {
@@ -929,77 +975,214 @@ export function updateShipmentStatus(shipmentId: string, status: ShipmentRecord[
 
 /* ---------------- Printables ---------------- */
 
-function printHtml(title: string, html: string) {
+function esc(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function rupees(value: number) {
+  return `₹${Math.round(value).toLocaleString("en-IN")}`;
+}
+
+function letterhead() {
+  return `<header class="head">
+    <div>
+      <p class="brand">${esc(siteConfig.name)}</p>
+      <p class="addr">${esc(siteConfig.address)}</p>
+      <p class="addr">Phone ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}</p>
+      <p class="addr">Clinic hours: Monday to Thursday, 6:00 PM – 10:00 PM</p>
+    </div>
+    <div class="mark">VGMF</div>
+  </header>`;
+}
+
+function addressBlock(address?: { fullName?: string; phone?: string; line1?: string; landmark?: string; city?: string; state?: string; pincode?: string; email?: string }) {
+  if (!address) return "—";
+  const line = [address.line1, address.landmark, address.city, address.state, address.pincode].filter(Boolean).join(", ");
+  return `${esc(address.fullName || "Customer")}<br/>${esc(line)}<br/>${esc(address.phone || "")}${address.email ? `<br/>${esc(address.email)}` : ""}`;
+}
+
+function printHtml(title: string, html: string, page = "A4") {
   if (typeof window === "undefined") return;
   const win = window.open("", "_blank");
   if (!win) return;
-  win.document.write(`<!doctype html><html><head><title>${title}</title>
+  const margin = page === "A4" ? "12mm" : "4mm";
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
   <style>
-    body{font-family:Arial,sans-serif;color:#111;margin:32px;}
-    h1{font-size:18px;} table{width:100%;border-collapse:collapse;margin-top:12px;}
-    td,th{border:1px solid #bbb;padding:6px 8px;font-size:12px;text-align:left;}
-    .muted{color:#666;font-size:11px;} .big{font-size:20px;font-weight:bold;}
-    .row{display:flex;justify-content:space-between;gap:16px;margin-top:8px;}
-    .box{border:1px solid #444;padding:14px;margin-top:14px;border-radius:6px;}
+    @page { size: ${page}; margin: ${margin}; }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", Arial, sans-serif; color: #1c1917; margin: 0; }
+    .head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #8F2D2D; padding-bottom: 12px; }
+    .brand { font-size: 18px; font-weight: 700; color: #6A1F1F; margin: 0; }
+    .addr { margin: 2px 0; font-size: 11px; color: #44403c; line-height: 1.45; }
+    .mark { font-weight: 800; letter-spacing: 0.14em; color: #8F2D2D; font-size: 13px; }
+    h1 { font-size: 18px; margin: 16px 0 0; letter-spacing: 0.08em; text-transform: uppercase; color: #1c1917; }
+    .sub { margin: 4px 0 0; font-size: 12px; color: #57534e; }
+    .grid { display: flex; justify-content: space-between; gap: 16px; margin-top: 14px; }
+    .box { border: 1px solid #e7e5e4; border-radius: 8px; padding: 12px 14px; min-width: 42%; }
+    .label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #78716c; margin: 0 0 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th { background: #f7f3ea; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #44403c; }
+    td, th { border-bottom: 1px solid #e7e5e4; padding: 8px; text-align: left; font-size: 12px; vertical-align: top; }
+    .right { text-align: right; }
+    .totals { width: 260px; margin-left: auto; margin-top: 8px; }
+    .totals td { border: none; padding: 3px 8px; }
+    .grand td { border-top: 2px solid #8F2D2D; font-size: 14px; font-weight: 700; padding-top: 8px; }
+    .foot { margin-top: 28px; font-size: 11px; color: #57534e; border-top: 1px solid #e7e5e4; padding-top: 8px; line-height: 1.5; }
+    .label-sheet { border: 2px solid #1c1917; padding: 0; overflow: hidden; }
+    .label-band { background: #6A1F1F; color: #fff; padding: 10px 12px; display: flex; justify-content: space-between; gap: 8px; align-items: flex-end; }
+    .label-band b { font-size: 13px; letter-spacing: 0.12em; }
+    .label-band span { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.9; }
+    .label-body { padding: 12px; }
+    .awb { font-size: 22px; font-weight: 800; letter-spacing: 0.08em; margin: 0; }
+    .route { margin-top: 8px; border: 1px dashed #8F2D2D; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; }
+    .route b { font-size: 18px; letter-spacing: 0.04em; }
+    .meta { font-size: 11px; color: #44403c; margin: 6px 0 0; }
+    .check { font-size: 16px; }
   </style></head><body>${html}</body></html>`);
   win.document.close();
+  win.focus();
   win.print();
 }
 
-export function printShippingLabel(shipment: ShipmentRecord) {
-  const html = `<h1>Shipping Label</h1>
-  <div class="row"><div><span class="muted">Courier</span><br/><span class="big">${shipment.courier}</span></div>
-  <div><span class="muted">AWB / Tracking</span><br/><span class="big">${shipment.awb}</span></div></div>
-  <div class="box"><b>Deliver to</b><br/>${shipment.toAddress.fullName} · ${shipment.toAddress.phone}<br/>
-  ${shipment.toAddress.line1}${shipment.toAddress.landmark ? ", " + shipment.toAddress.landmark : ""}, ${shipment.toAddress.city} ${shipment.toAddress.state} ${shipment.toAddress.pincode}</div>
-  <table><tr><th>SKU</th><th>Title</th><th>Qty</th><th>Barcode</th></tr>
-  ${shipment.items.map((i) => `<tr><td>${i.sku}</td><td>${i.title}</td><td>${i.quantity}</td><td>${barcodeSvg(i.barcode ?? i.sku)}</td></tr>`).join("")}
-  </table>
-  <p class="muted">Generated ${formatDate(shipment.generatedAt)} · Return to sender if not delivered in 7 days.</p>`;
-  printHtml("Shipping Label", html);
+export function printShippingLabel(
+  shipment: ShipmentRecord,
+  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string }
+) {
+  const to = shipment.toAddress;
+  const awb = details?.awb || shipment.awb;
+  const courier = details?.courierName || shipment.courier || "Courier";
+  const routing = details?.routingCode || shipment.routingCode || "";
+  const hub = details?.destination || shipment.destinationHub || "";
+  const html = `<div class="label-sheet">
+    <div class="label-band">
+      <div>
+        <b>VGMF</b>
+        <div>${esc(siteConfig.name)}</div>
+      </div>
+      <span>Shipping label</span>
+    </div>
+    <div class="label-body">
+      <p class="label">${esc(courier)}</p>
+      <p class="awb">${esc(awb)}</p>
+      ${barcodeSvg(awb, { height: 56, module: 1.6 })}
+      <p class="meta">Order ${esc(shipment.orderId)} · ${esc(formatDate(shipment.generatedAt))}</p>
+      ${
+        routing || hub
+          ? `<div class="route"><div><p class="label">Routing</p><b>${esc(routing || "—")}</b></div><div><p class="label">Hub</p><b>${esc(hub || "—")}</b></div></div>`
+          : ""
+      }
+      <div class="grid">
+        <div class="box">
+          <p class="label">From</p>
+          <strong>${esc(siteConfig.name)}</strong><br/>
+          ${esc(siteConfig.address)}<br/>
+          ${esc(siteConfig.phone)}
+        </div>
+        <div class="box">
+          <p class="label">Deliver to</p>
+          <strong>${esc(to.fullName)}</strong><br/>
+          ${esc([to.line1, to.landmark, to.city, to.state, to.pincode].filter(Boolean).join(", "))}<br/>
+          ${esc(to.phone)}
+        </div>
+      </div>
+      <table><tr><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
+      ${shipment.items.map((item) => `<tr><td>${esc(item.sku)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`).join("")}
+      </table>
+      <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
+    </div>
+  </div>`;
+  printHtml(`Label ${awb}`, html, "100mm 150mm");
 }
 
 export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
   const itemsHtml = order.items
-    .map((i) => `<tr><td>${i.title}</td><td>${i.quantity}</td><td>${i.price.toLocaleString("en-IN")}</td><td>${(i.price * i.quantity).toLocaleString("en-IN")}</td></tr>`)
+    .map(
+      (item) => `<tr>
+        <td>${esc(item.title)}</td>
+        <td>${esc(item.sku || item.bookId)}</td>
+        <td class="right">${esc(item.quantity)}</td>
+        <td class="right">${rupees(item.price)}</td>
+        <td class="right">${rupees(item.price * item.quantity)}</td>
+      </tr>`
+    )
     .join("");
-  const html = `<h1>Tax Invoice</h1>
-  <p class="muted">Vaidya Gogate Memorial Foundation · Invoice for order ${order.id}</p>
-  <div class="row"><div><b>Billed to:</b><br/>${order.deliveryAddress?.fullName ?? "—"}<br/>${order.deliveryAddress?.line1 ?? ""}, ${order.deliveryAddress?.city ?? ""}</div>
-  ${shipment ? `<div><b>Shipped via ${shipment.courier}</b><br/>AWB ${shipment.awb}</div>` : ""}</div>
-  <table><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr>${itemsHtml}</table>
-  <table style="border-collapse:collapse;margin-top:-1px;"><tr><th></th><th></th><th></th><th></th></tr>
-  <tr><td></td><td></td><td>Subtotal</td><td>₹${order.subtotal.toLocaleString("en-IN")}</td></tr>
-  <tr><td></td><td></td><td>Discount</td><td>−₹${order.discount.toLocaleString("en-IN")}</td></tr>
-  <tr><td></td><td></td><td>Shipping</td><td>₹${order.shipping.toLocaleString("en-IN")}</td></tr>
-  <tr><td></td><td></td><td><b>Total</b></td><td><b>₹${order.total.toLocaleString("en-IN")}</b></td></tr></table>`;
-  printHtml("Invoice " + order.id, html);
+  const html = `${letterhead()}
+  <h1>Tax invoice</h1>
+  <p class="sub">Invoice ${esc(order.id)} · ${esc(formatDate(order.date))} · Payment ${esc(order.paymentStatus)}${order.paymentMethod ? ` · ${esc(order.paymentMethod)}` : ""}</p>
+  <div class="grid">
+    <div class="box"><p class="label">Bill to</p>${addressBlock(order.deliveryAddress)}</div>
+    <div class="box">
+      <p class="label">${order.deliveryMode === "store_pickup" ? "Store pickup" : "Shipment"}</p>
+      ${
+        order.deliveryMode === "store_pickup"
+          ? `Collect from the clinic.<br/>Pickup OTP ${esc(pickupOtp(order.id))}`
+          : shipment
+            ? `${esc(shipment.courier)}<br/>AWB ${esc(shipment.awb)}`
+            : "Packed at the clinic. AWB is printed after the courier is booked."
+      }
+    </div>
+  </div>
+  <table>
+    <tr><th>Item</th><th>SKU</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr>
+    ${itemsHtml}
+  </table>
+  <table class="totals">
+    <tr><td>Subtotal</td><td class="right">${rupees(order.subtotal)}</td></tr>
+    <tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>
+    <tr><td>GST</td><td class="right">${rupees(order.gst)}</td></tr>
+    <tr><td>Shipping</td><td class="right">${rupees(order.shipping)}</td></tr>
+    ${order.storeCreditUsed ? `<tr><td>Store credit</td><td class="right">−${rupees(order.storeCreditUsed)}</td></tr>` : ""}
+    <tr class="grand"><td>Total</td><td class="right">${rupees(order.total)}</td></tr>
+  </table>
+  <p class="foot">This invoice is issued by ${esc(siteConfig.name)}. Books are supplied as listed. For a correction, contact ${esc(siteConfig.phone)} or ${esc(siteConfig.email)} with invoice ${esc(order.id)}.</p>`;
+  printHtml(`Invoice ${order.id}`, html);
 }
 
 export function printPosReceipt(order: Order) {
   const itemsHtml = order.items
-    .map((item) => `<tr><td>${item.title}</td><td>${item.quantity}</td><td>₹${(item.price * item.quantity).toLocaleString("en-IN")}</td></tr>`)
+    .map((item) => `<tr><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td><td class="right">${rupees(item.price * item.quantity)}</td></tr>`)
     .join("");
   printHtml(
     `Receipt ${order.id}`,
-    `<h1>Vaidya Gogate Memorial Foundation</h1>
-    <p class="muted">In-store receipt · ${formatDate(order.date)}</p>
-    <p><b>Order ${order.id}</b><br/>${order.deliveryAddress?.fullName ?? "Walk-in"} · ${order.deliveryAddress?.phone ?? ""}</p>
-    <table><tr><th>Item</th><th>Qty</th><th>Amount</th></tr>${itemsHtml}</table>
-    <p>Subtotal ₹${order.subtotal.toLocaleString("en-IN")}${order.storeCreditUsed ? ` · Credit −₹${order.storeCreditUsed.toLocaleString("en-IN")}` : ""}</p>
-    <p class="big">Paid ₹${order.total.toLocaleString("en-IN")}</p>
-    <p class="muted">${order.paymentMethod ?? "Cash"} ${order.paymentRef ? `· ${order.paymentRef}` : ""} · Thank you.</p>`
+    `${letterhead()}
+    <h1>Receipt</h1>
+    <p class="sub">In-store sale · ${esc(formatDate(order.date))} · Order ${esc(order.id)}</p>
+    <div class="box" style="margin-top:14px">${esc(order.deliveryAddress?.fullName ?? "Walk-in")} · ${esc(order.deliveryAddress?.phone ?? "")}</div>
+    <table><tr><th>Item</th><th class="right">Qty</th><th class="right">Amount</th></tr>${itemsHtml}</table>
+    <table class="totals">
+      <tr><td>Subtotal</td><td class="right">${rupees(order.subtotal)}</td></tr>
+      ${order.storeCreditUsed ? `<tr><td>Store credit</td><td class="right">−${rupees(order.storeCreditUsed)}</td></tr>` : ""}
+      <tr class="grand"><td>Paid</td><td class="right">${rupees(order.total)}</td></tr>
+    </table>
+    <p class="foot">${esc(order.paymentMethod ?? "Cash")}${order.paymentRef ? ` · ${esc(order.paymentRef)}` : ""} · Thank you for visiting the clinic.</p>`
   );
 }
 
 export function printPackagingSlip(order: Order) {
-  const title = `Packaging Slip — Order ${order.id}`;
-  const html = `<h1>Packaging Slip</h1>
-  <p class="muted">Order ${order.id} · ${formatDate(order.date)}</p>
-  <div class="box"><b>Packaging recommended:</b> ${order.plan?.packagingLabel ?? "Standard cardboard box"}</div>
-  <table><tr><th>SKU</th><th>Title</th><th>Qty</th></tr>
-  ${order.items.map((i) => `<tr><td>${i.bookId}</td><td>${i.title}</td><td>${i.quantity}</td></tr>`).join("")}</table>
-  <p class="muted">Pack, seal and attach the shipping label. Then book the courier pickup.</p>`;
+  const title = `Packaging slip ${order.id}`;
+  const html = `${letterhead()}
+  <h1>Packaging slip</h1>
+  <p class="sub">Order ${esc(order.id)} · ${esc(formatDate(order.date))} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
+  <div class="grid">
+    <div class="box"><p class="label">Customer</p>${addressBlock(order.deliveryAddress)}</div>
+    <div class="box">
+      <p class="label">Pack in</p>
+      <strong>${esc(order.plan?.packagingLabel ?? "Standard cardboard box")}</strong>
+      <p class="sub">Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside.</p>
+    </div>
+  </div>
+  <table><tr><th></th><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
+  ${order.items
+    .map(
+      (item) =>
+        `<tr><td class="check">☐</td><td>${esc(item.sku || item.bookId)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`
+    )
+    .join("")}</table>
+  <p class="foot">Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________<br/>Pack, seal, and attach the shipping label. Then book the courier pickup, or hold the parcel for store pickup.</p>`;
   printHtml(title, html);
 }
 

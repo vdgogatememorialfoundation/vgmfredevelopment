@@ -8,11 +8,13 @@ export function PartnerPortalBadges({
   portals,
   className = "",
   onOpen,
+  tone = "light",
 }: {
   user?: Pick<User, "partnerPortals"> | null;
   portals?: PartnerPortal[];
   className?: string;
   onOpen?: () => void;
+  tone?: "light" | "dark";
 }) {
   const items = portals ?? user?.partnerPortals ?? [];
   const drawer = usePartnerDrawer();
@@ -34,7 +36,11 @@ export function PartnerPortalBadges({
           key={portal.id}
           type="button"
           onClick={() => open(portal.id)}
-          className="rounded-full bg-burgundy/10 px-2 py-0.5 text-[11px] font-bold text-burgundy hover:bg-burgundy/15"
+          className={
+            tone === "dark"
+              ? "rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-white/25"
+              : "rounded-full bg-burgundy/10 px-2 py-0.5 text-[11px] font-bold text-burgundy hover:bg-burgundy/15"
+          }
         >
           {portal.label}
         </button>
@@ -43,7 +49,11 @@ export function PartnerPortalBadges({
         <button
           type="button"
           onClick={() => open("all")}
-          className="rounded-full border border-burgundy/20 px-2 py-0.5 text-[11px] font-semibold text-burgundy hover:bg-burgundy/5"
+          className={
+            tone === "dark"
+              ? "rounded-full border border-white/30 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-white/10"
+              : "rounded-full border border-burgundy/20 px-2 py-0.5 text-[11px] font-semibold text-burgundy hover:bg-burgundy/5"
+          }
         >
           Open synced details
         </button>

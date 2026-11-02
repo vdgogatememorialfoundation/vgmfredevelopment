@@ -15,22 +15,25 @@ import {
   printOrderInvoice,
   printOrdersPdf,
   printPackagingSlip,
-  printShippingLabel,
   recordPayment,
   refundToStoreCredit,
   resaveOrder,
   setOrderStatus,
 } from "@/lib/admin-store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, updateReturnRequest } from "@/lib/store";
 import { getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
-  advanceDemoShipment,
+  attachManualTracking,
   bookShipment,
+  MANUAL_PORTALS,
   cancelShipment,
+  dropOrderShipments,
   createReturnShipment,
   downloadInvoice,
   downloadLabel,
+  rescheduleOwnDelivery,
   downloadManifest,
   fetchCourierRates,
   orderWeightKg,
@@ -43,6 +46,8 @@ import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGatewa
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
+import { deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
+import { isOwnFleet } from "@/lib/courier-label";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
@@ -83,6 +88,7 @@ function useOrdersVersion() {
 }
 
 export function OrdersDashboard() {
+  const { version: remoteVersion } = useCommerceMirror();
   const [version, refresh] = useOrdersVersion();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -94,6 +100,8 @@ export function OrdersDashboard() {
   const [bulkNote, setBulkNote] = useState("");
 
   const orders = getOrders();
+  void version;
+  void remoteVersion;
   const filtered = orders
     .filter((order) => statusFilter === "All" || order.status === statusFilter)
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
@@ -192,10 +200,16 @@ export function OrdersDashboard() {
             const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
             if (shipment) await downloadLabel(shipment.id);
           })}>Labels</Button>
-          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", (id) => cancelOrder(id, "Bulk cancel"))}>Cancel</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", async (id) => {
+            await dropOrderShipments(id);
+            cancelOrder(id, "Bulk cancel");
+          })}>Cancel</Button>
           <Button variant="danger" disabled={Boolean(bulkBusy)} onClick={() => {
             if (!window.confirm(`Delete ${selectedIds.length} order(s)? This cannot be undone.`)) return;
-            bulk("Deleted", (id) => deleteOrder(id));
+            bulk("Deleted", async (id) => {
+              await dropOrderShipments(id);
+              deleteOrder(id);
+            });
           }}>Delete</Button>
         </div>
       )}
@@ -626,6 +640,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [picked, setPicked] = useState<number | undefined>();
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [pickupSlot, setPickupSlot] = useState(shipment?.pickupSlot || settings.pickupTimeslots[0]?.label || "10:00 – 13:00");
+  const [manualPortal, setManualPortal] = useState<(typeof MANUAL_PORTALS)[number]["id"]>("shiprocket");
+  const [manualAwb, setManualAwb] = useState("");
+  const [manualCourier, setManualCourier] = useState("");
+  const [deliveryWhen, setDeliveryWhen] = useState("");
   const [returnReason, setReturnReason] = useState(getOrderSettings().returns.reasons[0] ?? "");
   const [refundDest, setRefundDest] = useState<"original" | "store_credit">("original");
   const [editing, setEditing] = useState(false);
@@ -650,9 +668,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const applyStatus = () =>
     run("status", async () => {
       if (status === "Cancelled") {
-        if (shipment) await cancelShipment(shipment.id).catch(() => undefined);
+        await dropOrderShipments(order.id);
         cancelOrder(order.id, cancelReason || "Cancelled by admin");
-        return "Order cancelled. The customer is notified.";
+        return "Order cancelled. The shipment was removed from the desk.";
       }
       setOrderStatus(order.id, status);
       if (status === "Packed" && order.deliveryMode === "delivery" && !shipment && integrations.shipping.autoBookOnPack) {
@@ -823,10 +841,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   onClick={() => {
                     if (!window.confirm("Cancel this order? The customer is notified.")) return;
                     run("cancel", async () => {
-                      if (shipment) await cancelShipment(shipment.id).catch(() => undefined);
+                      await dropOrderShipments(order.id);
                       cancelOrder(order.id, cancelReason || "Cancelled by admin");
                       setStatus("Cancelled");
-                      return "Order cancelled.";
+                      return "Order cancelled. The shipment was removed from the desk.";
                     });
                   }}
                 >
@@ -929,15 +947,37 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-text-muted">
-                  Booking checks Shiprocket, Nimbuspost and iThink Logistics wallets first. Same-city last-mile uses their Porter, Shadowfax Flash or Flash integrations.
+                  Pack & book sends the order to the courier account the customer chose. Tookan, Shipday, Shiprocket, Nimbuspost, iThink and Shipyaari are booked for real when their API key is saved.
                 </p>
+                <div className="mt-4 rounded-xl border border-border p-3">
+                  <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>
+                  <p className="mt-1 text-xs text-text-muted">
+                    Paste the tracking id and choose the portal that has the parcel. The site asks that portal for the scans and the delivery date and time, then keeps them updated.
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value as (typeof MANUAL_PORTALS)[number]["id"])}>
+                      {MANUAL_PORTALS.map((portal) => (
+                        <option key={portal.id} value={portal.id}>{portal.label}</option>
+                      ))}
+                    </SelectInput>
+                    <TextInput placeholder="Tracking id" value={manualAwb} onChange={(event) => setManualAwb(event.target.value)} />
+                    <TextInput placeholder="Courier name, if you know it" value={manualCourier} onChange={(event) => setManualCourier(event.target.value)} />
+                    <Button
+                      disabled={busy === "manual"}
+                      onClick={() => run("manual", () => attachManualTracking(order.id, manualPortal, manualAwb, manualCourier))}
+                    >
+                      {busy === "manual" ? "Fetching…" : "Fetch tracking"}
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-1 text-sm">
-                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider === "local" || !shipment.provider ? "demo" : shipment.provider}{shipment.live ? " · live" : ""}</span></p>
+                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
+                  <p className="text-xs text-text-muted">Delivery date: {deliveryDatePhrase(shipment.expectedBy) || "Waiting for the courier"}</p>
                   {shipment.pickupScheduledFor && <p className="text-xs text-text-muted">Pickup: {formatDate(shipment.pickupScheduledFor)}{shipment.pickupSlot ? `, ${shipment.pickupSlot}` : ""}{shipment.pickupReference ? ` · ref ${shipment.pickupReference}` : ""}</p>}
                   {shipment.note && <p className="text-xs text-text-muted">{shipment.note}</p>}
                   <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
@@ -971,9 +1011,6 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       const choice = picked !== undefined ? quote.rates[picked] : undefined;
                       return (await reallocateCourier(order.id, choice)).message;
                     })}>Reallocate courier</Button>
-                    {!shipment.live && shipment.status !== "Delivered" && (
-                      <Button variant="ghost" onClick={() => run("advance", () => { advanceDemoShipment(shipment.id); return "Moved the demo shipment to the next scan."; })}>Next scan (demo)</Button>
-                    )}
                   </div>
                   <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                     <TextInput type="date" value={pickupDate} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setPickupDate(event.target.value)} />
@@ -989,20 +1026,66 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     </SelectInput>
                     <Button onClick={() => run("pickup", () => schedulePickup(shipment.id, pickupDate, pickupSlot))}>Schedule pickup</Button>
                   </div>
-                  {shipment.status === "Booked" && (
+                  {isOwnFleet(shipment.provider) && shipment.status !== "Delivered" && (
+                    <div className="rounded-xl border border-border p-3">
+                      <p className="text-sm font-semibold text-text-primary">Reschedule Gogate Products delivery</p>
+                      <p className="mt-1 text-xs text-text-muted">Customers see the date only. The time is sent to the courier task and kept for the tracking line.</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <TextInput type="datetime-local" value={deliveryWhen} onChange={(event) => setDeliveryWhen(event.target.value)} />
+                        <Button
+                          disabled={busy === "reschedule" || !deliveryWhen}
+                          onClick={() => run("reschedule", () => rescheduleOwnDelivery(shipment.id, deliveryWhen))}
+                        >
+                          {busy === "reschedule" ? "Saving…" : "Save delivery time"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {shipment.status !== "Delivered" && (
                     <Button variant="danger" onClick={() => {
-                      if (!window.confirm("Cancel this courier booking?")) return;
-                      run("cancel-shipment", async () => { const text = await cancelShipment(shipment.id); patchOrder(order.id, { shipmentId: undefined, trackingId: undefined }, "Courier booking cancelled"); return text; });
-                    }}>Cancel courier booking</Button>
+                      if (!window.confirm("Cancel this shipment and assign a different courier?")) return;
+                      run("cancel-shipment", async () => {
+                        const text = await cancelShipment(shipment.id);
+                        patchOrder(order.id, { shipmentId: undefined, trackingId: undefined, courierName: undefined }, "Courier booking cancelled");
+                        return `${text} Choose another courier below.`;
+                      });
+                    }}>Cancel shipment and reassign</Button>
                   )}
                 </div>
-                {shipment.tracking && shipment.tracking.length > 0 && (
-                  <ol className="space-y-1 border-t border-border pt-3 text-xs lg:col-span-2">
-                    {shipment.tracking.slice().reverse().map((event, index) => (
-                      <li key={index} className="flex gap-3"><span className="w-36 shrink-0 text-text-muted">{formatDateTime(event.at)}</span><span>{event.status}{event.location ? ` · ${event.location}` : ""}</span></li>
-                    ))}
-                  </ol>
-                )}
+                <div className="lg:col-span-2 rounded-xl border border-border bg-warm-cream/40 p-3 text-xs">
+                  <p className="font-semibold text-text-primary">Advanced courier tracking</p>
+                  <p className="mt-1 text-text-muted">Provider {shipment.provider || "courier"} · order {shipment.providerOrderId || "—"} · shipment {shipment.providerShipmentId || "—"} · AWB {shipment.awb}</p>
+                  <p className="mt-1 text-text-muted">
+                    Agent {shipment.agentName || "not allotted"}
+                    {shipment.agentPhone ? ` · ${shipment.agentPhone}` : ""}
+                    {shipment.deliveryOtp ? ` · OTP ${shipment.deliveryOtp}` : ""}
+                    {shipment.agentLeg ? ` · ${shipment.agentLeg}` : ""}
+                  </p>
+                  <p className="mt-1 text-text-muted">
+                    Pickup {shipment.pickupLat ?? "—"}, {shipment.pickupLng ?? "—"} · drop {shipment.dropLat ?? "—"}, {shipment.dropLng ?? "—"}
+                    {shipment.agentLat != null ? ` · rider ${shipment.agentLat}, ${shipment.agentLng}` : ""}
+                  </p>
+                  <p className="mt-2 break-all font-mono text-[11px] text-burgundy">
+                    {typeof window !== "undefined" ? `${window.location.origin}/track/${order.trackToken || ""}` : `/track/${order.trackToken || ""}`}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={() => {
+                      const token = order.trackToken || crypto.randomUUID().replace(/-/g, "");
+                      if (!order.trackToken) patchOrder(order.id, { trackToken: token });
+                      const url = `${window.location.origin}/track/${token}`;
+                      void navigator.clipboard?.writeText(url);
+                      setMessage("Tracking link copied. Anyone with this link can follow the shipment.");
+                      onChanged();
+                    }}>Copy tracking link</Button>
+                  </div>
+                  {shipment.tracking && shipment.tracking.length > 0 ? (
+                    <ol className="mt-3 space-y-1 border-t border-border pt-3">
+                      {shipment.tracking.slice().reverse().map((event, index) => (
+                        <li key={index} className="flex gap-3"><span className="w-44 shrink-0 text-text-muted">{statusStamp(event.at)}</span><span>{event.status}{event.location ? ` · ${event.location}` : ""}</span></li>
+                      ))}
+                    </ol>
+                  ) : <p className="mt-2 text-text-muted">No courier scans yet.</p>}
+                </div>
                 <div className="lg:col-span-2 space-y-4">
                   <OrderTrackingTimeline order={order} />
                 </div>
@@ -1131,10 +1214,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => printOrderInvoice(order, shipment)}>Print invoice</Button>
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
-        {shipment && <Button variant="ghost" onClick={() => printShippingLabel(shipment)}>Print shipping label</Button>}
+        {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Print shipping label</Button>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
-          run("delete", () => { deleteOrder(order.id); return "Order deleted."; });
+          run("delete", async () => {
+            await dropOrderShipments(order.id);
+            deleteOrder(order.id);
+            return "Order deleted. The shipment was removed from the desk.";
+          });
         }}>Delete order</Button>
       </div>
 

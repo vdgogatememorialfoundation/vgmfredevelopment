@@ -1,8 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { DEFAULT_LOCALE, LOCALE_KEY, type Locale } from "@/lib/i18n/locales";
 import { translate, type MessageKey } from "@/lib/i18n/messages";
+import { siteTextVersion, subscribeSiteText, textOverride } from "@/lib/site-text";
+
+function siteT(key: MessageKey) {
+  return textOverride(key) ?? translate(DEFAULT_LOCALE, key);
+}
 
 type I18nValue = {
   locale: Locale;
@@ -23,13 +28,18 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const version = useSyncExternalStore(subscribeSiteText, siteTextVersion, () => "");
+
   const value = useMemo<I18nValue>(
-    () => ({
-      locale: DEFAULT_LOCALE,
-      setLocale: () => undefined,
-      t: (key) => translate(DEFAULT_LOCALE, key),
-    }),
-    [],
+    () => {
+      void version;
+      return {
+        locale: DEFAULT_LOCALE,
+        setLocale: () => undefined,
+        t: siteT,
+      };
+    },
+    [version],
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
@@ -41,7 +51,7 @@ export function useI18n() {
     return {
       locale: DEFAULT_LOCALE,
       setLocale: () => undefined,
-      t: (key: MessageKey) => translate(DEFAULT_LOCALE, key),
+      t: siteT,
     };
   }
   return context;

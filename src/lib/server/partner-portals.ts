@@ -457,6 +457,74 @@ async function queryRows(portal: PartnerPortalId, sql: string, params: unknown[]
   }
 }
 
+type IssuedCertificateIndex = {
+  regs: Set<string>;
+  tickets: Set<string>;
+  users: Set<string>;
+};
+
+function emptyIssuedCertificates(): IssuedCertificateIndex {
+  return { regs: new Set(), tickets: new Set(), users: new Set() };
+}
+
+/** A certificate counts as issued only when the sister site has enabled it and stored a public id. */
+async function loadIssuedCertificates(portal: PartnerPortalId): Promise<IssuedCertificateIndex> {
+  const index = emptyIssuedCertificates();
+  if (portal === "fellowship") {
+    const rows = (await queryRows(portal, "SELECT fellowship_id::text AS registration_id FROM certificates WHERE issued_at IS NOT NULL")) ?? [];
+    for (const row of rows) if (row.registration_id) index.regs.add(String(row.registration_id));
+    return index;
+  }
+  const idColumn = portal === "autism" ? "public_certificate_no" : "certificate_id_string";
+  const tables: { table: string; ticket: boolean }[] = [
+    { table: "user_certificates", ticket: true },
+    { table: "volunteer_certificates", ticket: false },
+  ];
+  if (portal === "autism") tables.push({ table: "competition_certificates", ticket: false });
+  for (const spec of tables) {
+    const rows =
+      (await queryRows(
+        portal,
+        `SELECT registration_id::text AS registration_id, user_id::text AS user_id, seminar_id::text AS seminar_id${
+          spec.ticket ? ", ticket_id::text AS ticket_id" : ""
+        }
+           FROM ${spec.table}
+          WHERE enabled = 1 AND coalesce(${idColumn}, '') <> ''`
+      )) ?? [];
+    for (const row of rows) {
+      if (row.registration_id) index.regs.add(String(row.registration_id));
+      if (spec.ticket && row.ticket_id) index.tickets.add(String(row.ticket_id));
+      if (row.user_id && row.seminar_id) index.users.add(`${row.user_id}:${row.seminar_id}`);
+    }
+  }
+  return index;
+}
+
+function stopsBeforeCertificate(status: string) {
+  return /invalid|cancel|reject|expire/i.test(status);
+}
+
+function ticketLiveStatus(row: Record<string, unknown>, certs: IssuedCertificateIndex) {
+  if (asNumber(row.is_valid) === 0) return "Invalid";
+  if (certs.tickets.has(String(row.id))) return "Certificate issued";
+  return row.is_scanned ? "Checked in" : "Issued";
+}
+
+function registrationLiveStatus(row: Record<string, unknown>, certs: IssuedCertificateIndex) {
+  const raw = str(row, ["status"], "Submitted").replace(/_/g, " ");
+  const userKey = `${str(row, ["user_id"])}:${str(row, ["seminar_id"])}`;
+  const issued = certs.regs.has(String(row.id)) || (str(row, ["user_id"]) && str(row, ["seminar_id"]) && certs.users.has(userKey));
+  if (issued && !stopsBeforeCertificate(raw)) return "Certificate issued";
+  return raw;
+}
+
+function applicationLiveStatus(row: Record<string, unknown>, certs: IssuedCertificateIndex) {
+  const raw = str(row, ["status", "application_status"], "Submitted").replace(/_/g, " ");
+  const id = String(row.application_id ?? row.id ?? "");
+  if (id && certs.regs.has(id) && !stopsBeforeCertificate(raw)) return "Certificate issued";
+  return raw;
+}
+
 function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extras: {
   hasTicket?: boolean;
   ticketCount?: number;
@@ -599,6 +667,7 @@ async function pullFellowshipDatabase() {
   const ticketsByEmail: Record<string, PartnerTicketSummary[]> = {};
   const paymentsByEmail: Record<string, PartnerPaymentSummary[]> = {};
   const seen = new Set<string>();
+  const certs = await loadIssuedCertificates(portal);
 
   for (const row of users) {
     const email = str(row, ["email"]).toLowerCase();
@@ -608,7 +677,7 @@ async function pullFellowshipDatabase() {
           id: `fellowship-app-${str(row, ["application_id"])}`,
           portal,
           eventName: str(row, ["application_number"]) || "Research Fellowship 2026",
-          status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+          status: applicationLiveStatus(row, certs),
           applicationNo: str(row, ["application_number"]) || undefined,
           issuedAt: iso(row.submitted_at) || undefined,
           portalUrl: partnerTicketHref(portal),
@@ -634,7 +703,7 @@ async function pullFellowshipDatabase() {
           id: `fellowship-app-${str(row, ["application_id"])}`,
           portal,
           eventName: str(row, ["application_number"]) ? `Fellowship ${str(row, ["application_number"])}` : "Research Fellowship 2026",
-          status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+          status: applicationLiveStatus(row, certs),
           applicationNo: str(row, ["application_number"]) || undefined,
           issuedAt: iso(row.submitted_at) || undefined,
           portalUrl: partnerTicketHref(portal),
@@ -724,6 +793,7 @@ async function pullDatabase(portal: PartnerPortalId) {
     ...attempts.map((row) => ({ ...row, id: `att-${row.id}` })),
     ...orders.map((row) => ({ ...row, id: `ord-${row.id}` })),
   ];
+  const certs = await loadIssuedCertificates(portal);
 
   const seminarById = new Map(seminars.map((row) => [String(row.id), row]));
   const sessionsBySeminar = new Map<string, ScheduleRow[]>();
@@ -814,7 +884,7 @@ async function pullDatabase(portal: PartnerPortalId) {
         eventName: eventName(item.event_id || item.seminar_id) !== `${partnerCategory(portal)} programme`
           ? eventName(item.event_id || item.seminar_id)
           : fallbackEvent,
-        status: asNumber(item.is_valid) === 0 ? "Invalid" : item.is_scanned ? "Checked in" : "Issued",
+        status: ticketLiveStatus(item, certs),
         applicationNo: str(item, ["ticket_id_string"]) || str(userRegs[0] ?? {}, ["application_no"]) || undefined,
         issuedAt: iso(item.scan_time || item.created_at) || undefined,
         portalUrl: partnerTicketHref(portal),
@@ -826,7 +896,7 @@ async function pullDatabase(portal: PartnerPortalId) {
         id: `${portal}-reg-${item.id}`,
         portal,
         eventName: eventName(item.seminar_id),
-        status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+        status: registrationLiveStatus(item, certs),
         applicationNo: str(item, ["application_no"]) || undefined,
         issuedAt: iso(item.created_at) || undefined,
         portalUrl: partnerTicketHref(portal),
@@ -838,7 +908,7 @@ async function pullDatabase(portal: PartnerPortalId) {
         id: `${portal}-app-${item.id}`,
         portal,
         eventName: eventName(item.seminar_id),
-        status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+        status: applicationLiveStatus(item, certs),
         applicationNo: str(item, ["application_no"]) || undefined,
         issuedAt: iso(item.created_at) || undefined,
         portalUrl: partnerTicketHref(portal),
@@ -863,7 +933,7 @@ async function pullDatabase(portal: PartnerPortalId) {
       id: `${portal}-reg-${row.id}`,
       portal,
       eventName: eventName(row.seminar_id),
-      status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+      status: registrationLiveStatus(row, certs),
       applicationNo: str(row, ["application_no"]) || undefined,
       issuedAt: iso(row.created_at) || undefined,
       portalUrl: partnerTicketHref(portal),
@@ -878,7 +948,7 @@ async function pullDatabase(portal: PartnerPortalId) {
       id: `${portal}-app-${row.id}`,
       portal,
       eventName: eventName(row.seminar_id),
-      status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+      status: applicationLiveStatus(row, certs),
       applicationNo: str(row, ["application_no"]) || undefined,
       issuedAt: iso(row.created_at) || undefined,
       portalUrl: partnerTicketHref(portal),
@@ -1221,13 +1291,41 @@ export async function lookupPartnerIdentity(input: {
 export { partnerPortalHref, partnerTicketHref, partnerTrackHref };
 
 function prettyStatus(value: string) {
-  return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  const text = value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return text.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 const FALLBACK_STATUSES: Record<PartnerPortalId, string[]> = {
-  seminar: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
-  autism: ["Submitted", "Pending", "Confirmed", "Paid", "Issued", "Checked in", "Invalid", "Cancelled"],
-  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Accepted", "Rejected", "Waitlisted"],
+  seminar: [
+    "Submitted",
+    "Pending",
+    "Confirmed",
+    "Paid",
+    "Issued",
+    "E-ticket",
+    "Checked in",
+    "Certificate issued",
+    "Invalid",
+    "Cancelled",
+    "Expired",
+  ],
+  autism: [
+    "Pre-registration",
+    "Approved",
+    "Main registration",
+    "Submitted",
+    "Pending",
+    "Confirmed",
+    "Paid",
+    "Issued",
+    "E-ticket",
+    "Checked in",
+    "Certificate issued",
+    "Invalid",
+    "Cancelled",
+    "Expired",
+  ],
+  fellowship: ["Draft", "Submitted", "Under Review", "Shortlisted", "Waitlisted", "Accepted", "Certificate issued", "Rejected"],
 };
 
 function uniqueStatuses(values: string[], fallback: string[]) {
@@ -1261,6 +1359,7 @@ async function liveStatusCatalog(portal: PartnerPortalId) {
 }
 
 async function liveSeminarLike(portal: Exclude<PartnerPortalId, "fellowship">, email: string) {
+  const certs = await loadIssuedCertificates(portal);
   const titles = await seminarTitles(portal);
   const eventName = (id?: unknown) => titles.get(String(id || "")) || `${partnerCategory(portal)} programme`;
   const tickets: PartnerTicketSummary[] = [];
@@ -1319,7 +1418,7 @@ async function liveSeminarLike(portal: Exclude<PartnerPortalId, "fellowship">, e
       id: `${portal}-tkt-${item.id}`,
       portal,
       eventName: eventName(item.event_id),
-      status: asNumber(item.is_valid) === 0 ? "Invalid" : item.is_scanned ? "Checked in" : "Issued",
+      status: ticketLiveStatus(item, certs),
       applicationNo: str(item, ["ticket_id_string"]) || str(registrations[0] ?? {}, ["application_no"]) || undefined,
       issuedAt: iso(item.scan_time) || undefined,
       portalUrl: partnerTrackHref(portal),
@@ -1331,7 +1430,7 @@ async function liveSeminarLike(portal: Exclude<PartnerPortalId, "fellowship">, e
       id: `${portal}-reg-${item.id}`,
       portal,
       eventName: eventName(item.seminar_id),
-      status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+      status: registrationLiveStatus(item, certs),
       applicationNo: str(item, ["application_no"]) || undefined,
       issuedAt: iso(item.created_at) || undefined,
       portalUrl: partnerTrackHref(portal),
@@ -1343,7 +1442,7 @@ async function liveSeminarLike(portal: Exclude<PartnerPortalId, "fellowship">, e
       id: `${portal}-app-${item.id}`,
       portal,
       eventName: eventName(item.seminar_id),
-      status: str(item, ["status"], "Submitted").replace(/_/g, " "),
+      status: applicationLiveStatus(item, certs),
       applicationNo: str(item, ["application_no"]) || undefined,
       issuedAt: iso(item.created_at) || undefined,
       portalUrl: partnerTrackHref(portal),
@@ -1376,6 +1475,7 @@ async function liveSeminarLike(portal: Exclude<PartnerPortalId, "fellowship">, e
 
 async function liveFellowship(email: string) {
   const portal: PartnerPortalId = "fellowship";
+  const certs = await loadIssuedCertificates(portal);
   const apps =
     (await queryRows(
       portal,
@@ -1401,7 +1501,7 @@ async function liveFellowship(email: string) {
       id: `fellowship-app-${str(row, ["application_id"])}`,
       portal,
       eventName: str(row, ["application_number"]) ? `Fellowship ${str(row, ["application_number"])}` : "Research Fellowship 2026",
-      status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+      status: applicationLiveStatus(row, certs),
       applicationNo: str(row, ["application_number"]) || undefined,
       issuedAt: iso(row.submitted_at) || undefined,
       portalUrl: partnerTrackHref(portal),
@@ -1493,6 +1593,7 @@ export async function liveApplicationById(query: string) {
   if (!needle) return null;
   const compact = needle.replace(/\s+/g, "");
   const tryPortal = async (portal: PartnerPortalId) => {
+    const certs = await loadIssuedCertificates(portal);
     if (portal === "fellowship") {
       const rows =
         (await queryRows(
@@ -1512,7 +1613,7 @@ export async function liveApplicationById(query: string) {
         id: `fellowship-app-${str(row, ["application_id"])}`,
         portal,
         eventName: str(row, ["application_number"]) ? `Fellowship ${str(row, ["application_number"])}` : "Research Fellowship 2026",
-        status: str(row, ["application_status"], "Submitted").replace(/_/g, " "),
+        status: applicationLiveStatus(row, certs),
         applicationNo: str(row, ["application_number"]) || undefined,
         issuedAt: iso(row.submitted_at) || undefined,
         portalUrl: partnerTrackHref(portal),
@@ -1525,7 +1626,7 @@ export async function liveApplicationById(query: string) {
     const registrations =
       (await queryRows(
         portal,
-        `SELECT r.id, r.seminar_id, r.application_no, r.status, r.created_at, u.email AS user_email
+        `SELECT r.id, r.user_id, r.seminar_id, r.application_no, r.status, r.created_at, u.email AS user_email
            FROM registrations r
            LEFT JOIN users u ON u.id = r.user_id
           WHERE lower(coalesce(r.application_no, '')) = $1
@@ -1542,7 +1643,7 @@ export async function liveApplicationById(query: string) {
           id: `${portal}-reg-${row.id}`,
           portal,
           eventName: eventName(row.seminar_id),
-          status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+          status: registrationLiveStatus(row, certs),
           applicationNo: str(row, ["application_no"]) || undefined,
           issuedAt: iso(row.created_at) || undefined,
           portalUrl: partnerTrackHref(portal),
@@ -1571,7 +1672,7 @@ export async function liveApplicationById(query: string) {
             id: `${portal}-app-${row.id}`,
             portal,
             eventName: eventName(row.seminar_id),
-            status: str(row, ["status"], "Submitted").replace(/_/g, " "),
+            status: applicationLiveStatus(row, certs),
             applicationNo: str(row, ["application_no"]) || undefined,
             issuedAt: iso(row.created_at) || undefined,
             portalUrl: partnerTrackHref(portal),
@@ -1599,7 +1700,7 @@ export async function liveApplicationById(query: string) {
           id: `${portal}-tkt-${row.id}`,
           portal,
           eventName: eventName(),
-          status: asNumber(row.is_valid) === 0 ? "Invalid" : row.is_scanned ? "Checked in" : "Issued",
+          status: ticketLiveStatus(row, certs),
           applicationNo: str(row, ["ticket_id_string"]) || undefined,
           issuedAt: iso(row.scan_time) || undefined,
           portalUrl: partnerTrackHref(portal),

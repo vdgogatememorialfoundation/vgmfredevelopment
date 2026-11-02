@@ -26,6 +26,7 @@ export function emptyDeliveryAddress(partial?: Partial<DeliveryAddress>): Delive
     country: country.name,
     countryCode: country.code,
     ...partial,
+    place: partial?.place ?? "home",
   };
 }
 
@@ -102,8 +103,25 @@ export function AddressFields({
     return () => window.clearTimeout(timer);
   }, [countries, countryCode, onChange, value.pincode]);
 
+  const place = value.place === "office" ? "office" : "home";
+
   return (
     <div className="space-y-5">
+      <div>
+        <span className="mb-2 block text-sm font-semibold text-text-primary">Save this address as</span>
+        <div className="flex gap-2">
+          {(["home", "office"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={`rounded-full border px-4 py-2 text-sm font-semibold ${place === option ? "border-burgundy bg-burgundy text-white" : "border-border bg-white text-text-primary"}`}
+              onClick={() => set({ place: option })}
+            >
+              {option === "home" ? "Home" : "Office"}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="grid gap-5 sm:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-name`}>

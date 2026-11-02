@@ -1,21 +1,37 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import Badge from "@/components/common/Badge";
 import BookCard from "@/components/books/BookCard";
 import ProductBuyBox from "@/components/store/ProductBuyBox";
 import MediaGallery from "@/components/store/MediaGallery";
+import ProductReviews from "@/components/store/ProductReviews";
 import Stars from "@/components/store/Stars";
+import { averageRating, useProductReviews } from "@/lib/reviews";
 import { useLiveBooks } from "@/lib/use-cms";
 import { storeConfig } from "@/lib/constants";
-import { formatDate } from "@/lib/utils";
 import { getDiscountPercent } from "@/lib/store";
-import { books as seeded } from "@/data/books";
+import { browserHasProductEdits } from "@/components/store/ShopCatalogue";
+import type { Book } from "@/types";
 
-export default function ShopProduct({ slug }: { slug: string }) {
+export default function ShopProduct({
+  slug,
+  initialBook = null,
+  initialBooks = [],
+}: {
+  slug: string;
+  initialBook?: Book | null;
+  initialBooks?: Book[];
+}) {
   const live = useLiveBooks();
-  const catalogue = live.length ? live : seeded;
-  const book = catalogue.find((item) => item.slug === slug);
+  const [useLocal, setUseLocal] = useState(false);
+  useEffect(() => {
+    if (browserHasProductEdits()) setUseLocal(true);
+  }, [live]);
+  const catalogue = useLocal && live.length ? live : initialBooks;
+  const book = catalogue.find((item) => item.slug === slug) ?? (useLocal ? null : initialBook);
+  const purchaseReviews = useProductReviews(book?.id ?? "");
 
   if (!book) {
     return (
@@ -31,8 +47,8 @@ export default function ShopProduct({ slug }: { slug: string }) {
 
   const related = catalogue.filter((item) => item.slug !== book.slug).slice(0, 4);
   const discount = getDiscountPercent(book);
-  const rating = book.rating ?? 0;
-  const reviewCount = book.reviewCount ?? book.reviews?.length ?? 0;
+  const rating = purchaseReviews.length ? averageRating(purchaseReviews) : book.rating ?? 0;
+  const reviewCount = purchaseReviews.length || book.reviewCount || 0;
   const publisher = book.publisher?.name ?? storeConfig.publisherName;
 
   return (
@@ -136,31 +152,7 @@ export default function ShopProduct({ slug }: { slug: string }) {
         </div>
       </section>
 
-      <section id="reviews" className="section border-t border-border bg-warm-cream">
-        <div className="container mx-auto max-w-3xl">
-          <h2 className="heading-3 mb-6">Ratings & reviews</h2>
-          {(book.reviews?.length ?? 0) > 0 ? (
-            <div className="space-y-4">
-              {(book.reviews ?? []).map((review) => (
-                <article key={review.id} className="rounded-2xl border border-border bg-white p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="font-semibold text-text-primary">{review.name}</p>
-                      <Stars rating={review.rating} size="sm" />
-                    </div>
-                    <time className="text-xs text-text-muted">{formatDate(review.date)}</time>
-                  </div>
-                  <p className="mt-3 text-sm leading-relaxed text-text-primary">{review.text}</p>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
-              No reviews yet for this product.
-            </p>
-          )}
-        </div>
-      </section>
+      <ProductReviews productId={book.id} productTitle={book.title} productSlug={book.slug} />
 
       {related.length > 0 && (
         <section className="section bg-background">

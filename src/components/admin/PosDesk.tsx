@@ -23,6 +23,7 @@ import { canOrder, getProductByCode, isPurchasable } from "@/lib/product-data";
 import { accountToDelivery } from "@/lib/account-search";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
+import { PickupCounter } from "@/components/admin/PickupCounter";
 import { matchesBarcode } from "@/lib/barcode";
 
 const METHODS = [
@@ -266,6 +267,8 @@ export function PosDesk() {
         <h1 className="text-2xl font-bold text-text-primary">In-store POS</h1>
         <p className="text-sm text-text-muted">Sell from the counter. Stock is deducted immediately and a receipt is printed.</p>
       </div>
+
+      <PickupCounter />
 
       {message && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

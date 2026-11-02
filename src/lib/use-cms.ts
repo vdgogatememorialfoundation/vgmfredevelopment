@@ -49,10 +49,13 @@ export function useLiveArticles() {
   return useSyncExternalStore(
     subscribeCms,
     () => {
-      const raw = `${window.localStorage.getItem("vgmf_article_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_articles") ?? ""}`;
+      const local = `${window.localStorage.getItem("vgmf_article_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_articles") ?? ""}`;
+      const raw = `${local}|${publishedStamp()}`;
       if (raw === articleRaw) return articleList;
       articleRaw = raw;
-      articleList = getPublishedArticles();
+      const hasLocal = Boolean(window.localStorage.getItem("vgmf_article_edits") || window.localStorage.getItem("vgmf_custom_articles"));
+      const published = getPublishedFeed()?.articles;
+      articleList = !hasLocal && published?.length ? published : getPublishedArticles();
       return articleList;
     },
     () => seededArticles
@@ -77,10 +80,13 @@ export function useLiveAnnouncements() {
   return useSyncExternalStore(
     subscribeCms,
     () => {
-      const raw = `${window.localStorage.getItem("vgmf_announcement_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_announcements") ?? ""}`;
+      const local = `${window.localStorage.getItem("vgmf_announcement_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_announcements") ?? ""}`;
+      const raw = `${local}|${publishedStamp()}`;
       if (raw === announcementRaw) return announcementList;
       announcementRaw = raw;
-      announcementList = raw === "|" ? seededAnnouncements : getLiveAnnouncements();
+      const hasLocal = Boolean(window.localStorage.getItem("vgmf_announcement_edits") || window.localStorage.getItem("vgmf_custom_announcements"));
+      const published = getPublishedFeed()?.announcements;
+      announcementList = !hasLocal && published?.length ? published : local === "|" ? seededAnnouncements : getLiveAnnouncements();
       return announcementList;
     },
     () => seededAnnouncements
@@ -91,27 +97,39 @@ export function useLiveEvents() {
   return useSyncExternalStore(
     subscribeCms,
     () => {
-      const raw = `${window.localStorage.getItem("vgmf_event_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_events") ?? ""}`;
+      const local = `${window.localStorage.getItem("vgmf_event_edits") ?? ""}|${window.localStorage.getItem("vgmf_custom_events") ?? ""}`;
+      const raw = `${local}|${publishedStamp()}`;
       if (raw === eventRaw) return eventList;
       eventRaw = raw;
-      eventList = raw === "|" ? seededEvents : getLiveEvents();
+      const hasLocal = Boolean(window.localStorage.getItem("vgmf_event_edits") || window.localStorage.getItem("vgmf_custom_events"));
+      const published = getPublishedFeed()?.events;
+      eventList = !hasLocal && published?.length ? published : local === "|" ? seededEvents : getLiveEvents();
       return eventList;
     },
     () => seededEvents
   );
 }
 
-export function collectionHook<T>(editsKey: string, customKey: string, seed: T[], read: () => T[]) {
+export function collectionHook<T>(
+  editsKey: string,
+  customKey: string,
+  seed: T[],
+  read: () => T[],
+  published?: () => T[] | undefined
+) {
   let rawCache = "\0";
   let valueCache = seed;
   return function useCollection() {
     return useSyncExternalStore(
       subscribeCms,
       () => {
-        const raw = `${window.localStorage.getItem(editsKey) ?? ""}|${window.localStorage.getItem(customKey) ?? ""}`;
+        const local = `${window.localStorage.getItem(editsKey) ?? ""}|${window.localStorage.getItem(customKey) ?? ""}`;
+        const raw = `${local}|${publishedStamp()}`;
         if (raw === rawCache) return valueCache;
         rawCache = raw;
-        valueCache = raw === "|" ? seed : read();
+        const hasLocal = Boolean(window.localStorage.getItem(editsKey) || window.localStorage.getItem(customKey));
+        const fromFeed = published?.() ?? [];
+        valueCache = !hasLocal && fromFeed.length ? fromFeed : local === "|" ? seed : read();
         return valueCache;
       },
       () => seed
@@ -119,7 +137,7 @@ export function collectionHook<T>(editsKey: string, customKey: string, seed: T[]
   };
 }
 
-export const useLiveNotices = collectionHook<Notice>(noticeKeys.edits, noticeKeys.custom, seededNotices, getLiveNotices);
+export const useLiveNotices = collectionHook<Notice>(noticeKeys.edits, noticeKeys.custom, seededNotices, getLiveNotices, () => getPublishedFeed()?.notices);
 
 let flyerRaw = "\0";
 let flyerList: Flyer[] = seededFlyers;
@@ -140,8 +158,8 @@ export function useLiveFlyers() {
   );
 }
 export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners);
-export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos);
-export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics);
+export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos, () => getPublishedFeed()?.videos);
+export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics, () => getPublishedFeed()?.clinics);
 
 export function useSiteFlags() {
   return useSyncExternalStore(
@@ -202,9 +220,17 @@ let productAll: Book[] = seededBooks;
 let productLive: Book[] = seededBooks;
 
 function readProducts() {
-  const raw = productKeys.map((key) => window.localStorage.getItem(key) ?? "").join("|");
+  const local = productKeys.map((key) => window.localStorage.getItem(key) ?? "").join("|");
+  const raw = `${local}|${publishedStamp()}`;
   if (raw !== productRaw) {
     productRaw = raw;
+    const hasLocal = productKeys.some((key) => window.localStorage.getItem(key));
+    const published = getPublishedFeed()?.books;
+    if (!hasLocal && published?.length) {
+      productAll = published;
+      productLive = published.filter((book) => book.active !== false);
+      return;
+    }
     productAll = getAllProducts();
     productLive = productAll.filter((book) => book.active !== false);
   }

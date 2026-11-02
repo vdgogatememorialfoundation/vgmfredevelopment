@@ -1,12 +1,15 @@
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
+import { customerCourierLabel, GOGATE_COURIER, isOwnFleet } from "@/lib/courier-label";
+import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
 import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
+import { requiresLiveCommerce } from "@/lib/platform";
 import {
-  generateAWB,
   getOrder,
   getShipments,
   patchOrder,
   patchShipment,
+  removeOrderShipments,
   printShippingLabel,
   saveShipmentRecord,
   sendEmail,
@@ -21,64 +24,48 @@ function credsFrom(settings: IntegrationSettings): ShippingCreds {
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
-export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink"] as const;
-const LAST_MILE = [
-  { id: "porter" as const, name: "Porter", rate: 49, etaDays: 0 },
-  { id: "shadowfax" as const, name: "Shadowfax Flash", rate: 59, etaDays: 0 },
-  { id: "flash" as const, name: "Flash", rate: 55, etaDays: 0 },
-];
+export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
 
-export function isCheckoutProvider(provider?: string) {
-  return provider === "shiprocket" || provider === "nimbuspost" || provider === "ithink";
-}
-
-export function lastMileLabel(provider?: string, lastMile?: string) {
-  const partner = provider === "nimbuspost" ? "Nimbuspost" : provider === "ithink" ? "iThink Logistics" : "Shiprocket";
+export function lastMileLabel(provider?: string, lastMile?: string, courier?: string) {
+  const partner = customerCourierLabel({ provider, courier });
   if (lastMile === "porter") return `${partner} · Porter`;
   if (lastMile === "shadowfax") return `${partner} · Shadowfax Flash`;
   if (lastMile === "flash") return `${partner} · Flash`;
   return partner;
 }
 
-function lastMileRates(bases: CourierRate[], sameCity: boolean): CourierRate[] {
-  if (!sameCity) return [];
-  const seen = new Set<string>();
-  const seeds = bases.filter((rate) => isCheckoutProvider(rate.provider));
-  const partners: CourierRate[] = seeds.length
-    ? seeds
-    : CHECKOUT_PROVIDERS.map((provider) => ({
-        provider,
-        courierId: provider,
-        courierName: lastMileLabel(provider),
-        rate: 49,
-        etaDays: 1,
-        live: false,
-      }));
-  const extra: CourierRate[] = [];
-  for (const base of partners) {
-    if (seen.has(base.provider)) continue;
-    seen.add(base.provider);
-    for (const mile of LAST_MILE) {
-      extra.push({
-        provider: base.provider,
-        courierId: `${base.provider}-${mile.id}`,
-        courierName: lastMileLabel(base.provider, mile.id),
-        rate: mile.rate,
-        etaDays: mile.etaDays,
-        live: base.live,
-        lastMile: mile.id,
+const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "tookan", "tookan-parcel", "shipday"]);
+
+export function checkoutCourierRates(rates: CourierRate[]) {
+  return rates.filter((rate) => REAL_CHECKOUT.has(rate.provider) && rate.live !== false);
+}
+
+function connectedCourierRates(deliveryPincode: string): CourierRate[] {
+  const settings = getIntegrations();
+  const origin = (settings.shipping.pickup.pincode || "411005").replace(/\D/g, "").slice(0, 3);
+  const pin = deliveryPincode.replace(/\D/g, "");
+  const sameCity = pin.length === 6 && origin.length === 3 && pin.startsWith(origin);
+  const rates: CourierRate[] = [];
+  if (hasShippingCredentials("tookan", settings)) {
+    const tookan = settings.shipping.tookan;
+    if (tookan.hyperlocal && sameCity) {
+      rates.push({ provider: "tookan", courierId: "tookan", courierName: GOGATE_COURIER, rate: 39, etaDays: 0, live: true });
+    }
+    if (tookan.parcel && (!sameCity || !tookan.hyperlocal)) {
+      rates.push({
+        provider: "tookan-parcel",
+        courierId: "tookan-parcel",
+        courierName: GOGATE_COURIER,
+        rate: 45,
+        etaDays: sameCity ? 1 : 3,
+        live: true,
       });
     }
   }
-  return extra;
-}
-
-export function checkoutCourierRates(rates: CourierRate[]) {
-  return rates.filter((rate) => {
-    if (isCheckoutProvider(rate.provider)) return true;
-    if (rate.provider === "local") return !/tookan|shipday/i.test(rate.courierName);
-    return false;
-  });
+  if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && sameCity) {
+    rates.push({ provider: "shipday", courierId: "shipday", courierName: GOGATE_COURIER, rate: 49, etaDays: 0, live: true });
+  }
+  return rates;
 }
 
 export function publicTrackingUrl(shipment: Pick<ShipmentRecord, "awb" | "provider" | "trackingUrl">) {
@@ -174,29 +161,22 @@ export async function fetchCourierRates(input: {
       notes.push("Courier rate service could not be reached.");
     }
   }
-  const pin = input.deliveryPincode;
-  const originPrefix = (shipping.pickup.pincode || "411005").slice(0, 3);
-  const sameCity = /^\d{6}$/.test(pin) && pin.startsWith(originPrefix);
+  const connected = connectedCourierRates(input.deliveryPincode);
   const checkoutLive = checkoutCourierRates(live);
-  const extra = lastMileRates(checkoutLive, sameCity);
-  if (checkoutLive.length || extra.length) {
-    return { rates: [...checkoutLive, ...extra].sort((a, b) => a.etaDays - b.etaDays || a.rate - b.rate), live: checkoutLive.some((rate) => rate.live), notes };
+  const seen = new Set(checkoutLive.map((rate) => `${rate.provider}:${rate.courierId}`));
+  const rates = [...checkoutLive, ...connected.filter((rate) => !seen.has(`${rate.provider}:${rate.courierId}`))];
+  if (rates.length) {
+    return {
+      rates: rates.sort((a, b) => a.etaDays - b.etaDays || a.rate - b.rate),
+      live: true,
+      notes,
+    };
   }
 
   const quote = checkPincode(input.deliveryPincode, input.bookIds?.[0]);
-  const rates: CourierRate[] = checkoutCourierRates(
-    quote.offers.map((offer) => ({
-      provider: offer.id === "ithink" ? "ithink" : offer.id === "nimbuspost" ? "nimbuspost" : offer.id === "shiprocket" ? "shiprocket" : "local",
-      courierId: offer.id,
-      courierName: offer.name,
-      rate: offer.charge,
-      etaDays: offer.transitDays,
-      live: false,
-    }))
-  );
-  const localMiles = lastMileRates(rates.length ? rates : [], sameCity);
   if (!quote.serviceable && quote.note) notes.push(quote.note);
-  return { rates: [...rates, ...localMiles].sort((a, b) => a.etaDays - b.etaDays || a.rate - b.rate), live: false, notes };
+  if (!notes.length) notes.push("No live courier is connected for this pincode. Save a Tookan, Shiprocket, Nimbuspost, iThink, Shipyaari or Shipday key in Settings → Shipping APIs.");
+  return { rates: [], live: false, notes };
 }
 
 function label(provider: string) {
@@ -296,51 +276,56 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
     tracking: [{ at: new Date().toISOString(), status: "Shipment booked" }],
   };
 
-  let shipment: ShipmentRecord = { ...base, awb: generateAWB(choice.courierName), live: false, note: "Demo booking: no aggregator credentials, so no wallet was charged." };
-  let message = `Demo booking with ${choice.courierName}. Add aggregator credentials in Settings → Shipping APIs to book for real.`;
-
-  if (choice.provider !== "local") {
-    const result = await post<{
-      awb: string;
-      courierName: string;
-      providerOrderId?: string;
-      providerShipmentId?: string;
-      labelUrl?: string;
-      invoiceUrl?: string;
-      manifestUrl?: string;
-      pickupScheduledFor?: string;
-      pickupReference?: string;
-      courierCost?: number;
-      trackingUrl?: string;
-    }>({
-      action: "book",
-      provider: choice.provider,
-      creds: credsFrom(settings),
-      order: bookingPayload(order, choice, settings),
-      schedulePickup: settings.shipping.autoSchedulePickup,
-    });
-    if (!result.ok) {
-      if (result.configured) throw new Error(`${label(choice.provider)} refused the booking: ${result.error}`);
-    } else {
-      shipment = {
-        ...base,
-        awb: result.awb,
-        courier: result.courierName || choice.courierName,
-        live: true,
-        providerOrderId: result.providerOrderId,
-        providerShipmentId: result.providerShipmentId,
-        labelUrl: result.labelUrl || undefined,
-        invoiceUrl: result.invoiceUrl || undefined,
-        manifestUrl: result.manifestUrl || undefined,
-        pickupScheduledFor: result.pickupScheduledFor || undefined,
-        pickupReference: result.pickupReference || undefined,
-        courierCost: result.courierCost ?? choice.rate,
-        trackingUrl: result.trackingUrl || undefined,
-        note: `Booked on ${label(choice.provider)}. The courier charge is debited from the ${label(choice.provider)} wallet.`,
-      };
-      message = `Booked on ${label(choice.provider)} with ${shipment.courier}. AWB ${shipment.awb}.`;
-    }
+  if (choice.provider === "local" || !REAL_CHECKOUT.has(choice.provider)) {
+    throw new Error(`${choice.courierName} is not a live courier account. Choose Tookan, Shiprocket, Nimbuspost, iThink, Shipyaari or Shipday.`);
   }
+  if (requiresLiveCommerce() && choice.live === false) {
+    throw new Error("Staging and the live site only book real couriers. This rate is not from a connected account.");
+  }
+
+  const result = await post<{
+    awb: string;
+    courierName: string;
+    providerOrderId?: string;
+    providerShipmentId?: string;
+    labelUrl?: string;
+    invoiceUrl?: string;
+    manifestUrl?: string;
+    pickupScheduledFor?: string;
+    pickupReference?: string;
+    courierCost?: number;
+    trackingUrl?: string;
+  }>({
+    action: "book",
+    provider: choice.provider,
+    creds: credsFrom(settings),
+    order: bookingPayload(order, choice, settings),
+    schedulePickup: settings.shipping.autoSchedulePickup,
+  });
+  if (!result.ok || !result.awb) {
+    throw new Error(
+      result.configured
+        ? `${label(choice.provider)} refused the booking: ${result.error || "no tracking number was returned."}`
+        : `${label(choice.provider)} credentials are missing. Save the API key in Settings → Shipping APIs.`
+    );
+  }
+  const shipment: ShipmentRecord = {
+    ...base,
+    awb: result.awb,
+    courier: customerCourierLabel({ provider: choice.provider, courier: result.courierName || choice.courierName }),
+    live: true,
+    providerOrderId: result.providerOrderId,
+    providerShipmentId: result.providerShipmentId,
+    labelUrl: result.labelUrl || undefined,
+    invoiceUrl: result.invoiceUrl || undefined,
+    manifestUrl: result.manifestUrl || undefined,
+    pickupScheduledFor: result.pickupScheduledFor || undefined,
+    pickupReference: result.pickupReference || undefined,
+    courierCost: result.courierCost ?? choice.rate,
+    trackingUrl: result.trackingUrl || undefined,
+    note: `Booked on ${label(choice.provider)}.`,
+  };
+  const message = `Booked on ${label(choice.provider)} with ${shipment.courier}. AWB ${shipment.awb}.`;
 
   saveShipmentRecord(shipment);
   patchOrder(
@@ -366,6 +351,69 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   return { shipment, live: Boolean(shipment.live), message };
 }
 
+export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "tookan-parcel">; label: string }[] = [
+  { id: "shiprocket", label: "Shiprocket" },
+  { id: "nimbuspost", label: "Nimbuspost" },
+  { id: "ithink", label: "iThink Logistics" },
+  { id: "shipyaari", label: "Shipyaari" },
+  { id: "tookan", label: "Gogate Products (Tookan)" },
+  { id: "shipday", label: "Gogate Products (Shipday)" },
+];
+
+/** Attach a parcel that was shipped outside Pack & book. The portal is asked for scans and the delivery time. */
+export async function attachManualTracking(orderId: string, portal: (typeof MANUAL_PORTALS)[number]["id"], awb: string, courierName = "") {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
+  const trackingId = awb.trim();
+  if (trackingId.length < 3) throw new Error("Paste the tracking id from the courier.");
+  const result = await post<TrackHit>({
+    action: "track",
+    provider: portal,
+    creds: credsFrom(getIntegrations()),
+    awb: trackingId,
+    providerOrderId: trackingId,
+    providerShipmentId: trackingId,
+  });
+  if (!result.ok) {
+    throw new Error(result.error || `${label(portal)} did not return this tracking id. Check the id and that the API key is saved.`);
+  }
+  const courier = customerCourierLabel({ provider: portal, courier: result.courierName || courierName || label(portal) });
+  const shipment: ShipmentRecord = {
+    id: `SHP${Date.now()}`,
+    orderId: order.id,
+    courier,
+    awb: result.awb || trackingId,
+    charges: 0,
+    toAddress: { ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "" }) },
+    items: order.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
+    status: "Booked",
+    generatedAt: new Date().toISOString(),
+    provider: portal,
+    live: true,
+    providerOrderId: trackingId,
+    providerShipmentId: trackingId,
+    trackingUrl: result.trackingUrl,
+    expectedBy: result.expectedBy,
+    note: `Tracking pasted from ${label(portal)}.`,
+    tracking: result.events?.length ? result.events : [{ at: new Date().toISOString(), status: result.status || "Tracking attached" }],
+  };
+  saveShipmentRecord(shipment);
+  const saved = applyTrackHit(shipment, result);
+  patchOrder(
+    order.id,
+    {
+      shipmentId: saved.id,
+      trackingId: saved.awb,
+      courierName: saved.courier,
+      courierChoice: { provider: portal, courierId: portal, courierName: courier, rate: 0, etaDays: 0, live: true },
+    },
+    `Tracking ${saved.awb} attached from ${label(portal)}`
+  );
+  const when = saved.expectedBy ? ` Delivery ${deliveryDatePhrase(saved.expectedBy)}.` : " The courier has not sent a delivery date yet.";
+  return `Fetched from ${label(portal)}. ${saved.courier} · ${saved.awb}. Status: ${result.status || saved.status}.${when}`;
+}
+
 export async function schedulePickup(shipmentId: string, date: string, slot: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
@@ -387,27 +435,49 @@ export async function schedulePickup(shipmentId: string, date: string, slot: str
     : `Pickup noted for ${date}, ${slot}.`;
 }
 
+type LabelFetch = {
+  labelUrl?: string;
+  routingCode?: string;
+  destination?: string;
+  courierName?: string;
+  awb?: string;
+};
+
 export async function downloadLabel(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
-  if (shipment.labelUrl) {
-    window.open(shipment.labelUrl, "_blank", "noopener");
-    return "Opened the courier label.";
-  }
-  if (shipment.live && shipment.provider === "shiprocket" && shipment.providerShipmentId) {
-    const result = await post<{ labelUrl: string }>({
+  const provider = shipment.provider;
+  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari"]);
+  let details: LabelFetch = {
+    labelUrl: shipment.labelUrl,
+    routingCode: shipment.routingCode,
+    destination: shipment.destinationHub,
+    courierName: shipment.courier,
+    awb: shipment.awb,
+  };
+  if (shipment.live && provider && fetched.has(provider) && (shipment.awb || shipment.providerShipmentId)) {
+    const result = await post<LabelFetch>({
       action: "label",
-      provider: "shiprocket",
+      provider,
       creds: credsFrom(getIntegrations()),
       shipmentId: shipment.providerShipmentId,
+      awb: shipment.awb,
     });
-    if (result.ok && result.labelUrl) {
-      patchShipment(shipmentId, { labelUrl: result.labelUrl });
-      window.open(result.labelUrl, "_blank", "noopener");
-      return "Opened the Shiprocket label.";
+    if (result.ok) {
+      details = {
+        labelUrl: result.labelUrl || details.labelUrl,
+        routingCode: result.routingCode || details.routingCode,
+        destination: result.destination || details.destination,
+        courierName: result.courierName || details.courierName,
+        awb: result.awb || details.awb,
+      };
+      patchShipment(shipmentId, {
+        labelUrl: details.labelUrl,
+        routingCode: details.routingCode,
+        destinationHub: details.destination,
+      });
     }
-  }
-  if (shipment.live && shipment.provider === "ithink" && shipment.awb) {
+  } else if (shipment.live && provider === "ithink" && shipment.awb && !shipment.labelUrl) {
     const result = await post<{ labelUrl: string }>({
       action: "label",
       provider: "ithink",
@@ -415,13 +485,43 @@ export async function downloadLabel(shipmentId: string) {
       awb: shipment.awb,
     });
     if (result.ok && result.labelUrl) {
+      details.labelUrl = result.labelUrl;
       patchShipment(shipmentId, { labelUrl: result.labelUrl });
-      window.open(result.labelUrl, "_blank", "noopener");
-      return "Opened the iThink Logistics label.";
     }
   }
-  printShippingLabel(shipment);
-  return "Printed the AWB label from the site.";
+  const latest = getShipments().find((item) => item.id === shipmentId) ?? shipment;
+  printShippingLabel(latest, details);
+  const fromPortal = fetched.has(provider ?? "") && shipment.live ? ` using the ${label(provider ?? "courier")} shipment` : "";
+  return `Printed the shipping label${fromPortal}.`;
+}
+
+/** Gogate Products only. Customers see the date. The clock is kept for the tracking line and the courier task. */
+export async function rescheduleOwnDelivery(shipmentId: string, localValue: string) {
+  const shipment = getShipments().find((item) => item.id === shipmentId);
+  if (!shipment) throw new Error("Shipment not found.");
+  if (!isOwnFleet(shipment.provider)) throw new Error("Delivery time can be changed only for Gogate Products deliveries.");
+  const match = localValue.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) throw new Error("Choose a delivery date and time.");
+  const wall = `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:00`;
+  const ms = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5])) - 5.5 * 60 * 60 * 1000;
+  const expectedBy = formatIndiaClock(ms);
+  const shown = deliveryDatePhrase(expectedBy);
+  let portal = "";
+  if (shipment.live && (shipment.provider === "tookan" || shipment.provider === "tookan-parcel" || shipment.provider === "shipday")) {
+    const result = await post<{ updated?: boolean }>({
+      action: "reschedule",
+      provider: shipment.provider,
+      creds: credsFrom(getIntegrations()),
+      jobId: shipment.providerShipmentId || shipment.awb,
+      extraId: shipment.providerOrderId || "",
+      providerOrderId: shipment.providerOrderId || shipment.awb,
+      deliveryAt: wall,
+    });
+    portal = result.ok ? " The courier task was updated." : " The date is saved here. The courier portal could not be updated.";
+  }
+  patchShipment(shipmentId, { expectedBy });
+  patchOrder(shipment.orderId, { eta: shown }, `Delivery rescheduled to ${shown}`);
+  return `Delivery date set to ${shown}.${portal} Customers see the date only.`;
 }
 
 export async function downloadInvoice(shipmentId: string) {
@@ -557,15 +657,11 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
     order: bookingPayload(order, choice, settings),
   });
   if (!result.ok) {
-    if (!result.configured) {
-      return {
-        live: false,
-        awb: generateAWB("Return"),
-        courierName: "Return pickup (demo)",
-        note: `${label(provider)} credentials are not configured, so a demo return AWB was created.`,
-      };
-    }
-    throw new Error(result.error ?? "Could not create the return shipment.");
+    throw new Error(
+      result.configured === false
+        ? `${label(provider)} credentials are not configured, so the return was not booked.`
+        : result.error ?? "Could not create the return shipment."
+    );
   }
   return {
     live: true,
@@ -591,29 +687,88 @@ function mapCourierStatus(text: string): ShipmentRecord["status"] | undefined {
   return undefined;
 }
 
+type TrackHit = {
+  status?: string;
+  events?: { at: string; status: string; location?: string }[];
+  trackingUrl?: string;
+  courierName?: string;
+  awb?: string;
+  lat?: number;
+  lng?: number;
+  agentName?: string;
+  agentPhone?: string;
+  otp?: string;
+  pickupLat?: number;
+  pickupLng?: number;
+  dropLat?: number;
+  dropLng?: number;
+  accepted?: boolean;
+  agentLeg?: "pickup" | "delivery";
+  expectedBy?: string;
+};
+
+function dedupeScans(events: { at: string; status: string; location?: string }[]) {
+  const out: { at: string; status: string; location?: string }[] = [];
+  for (const event of events) {
+    const prev = out[out.length - 1];
+    if (prev && prev.status === event.status && (prev.location ?? "") === (event.location ?? "")) continue;
+    out.push(event);
+  }
+  return out;
+}
+
+function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
+  const events = dedupeScans(result.events?.length ? result.events : shipment.tracking ?? []);
+  const courier = customerCourierLabel({ provider: shipment.provider, courier: result.courierName || shipment.courier });
+  const awb = result.awb || shipment.awb;
+  const mapped = result.status ? mapCourierStatus(result.status) : undefined;
+  const update: Partial<ShipmentRecord> = {
+    tracking: events.length ? events : shipment.tracking,
+    status: mapped ?? shipment.status,
+    trackingUrl: result.trackingUrl || shipment.trackingUrl,
+    courier,
+    awb,
+  };
+  if (result.agentName) update.agentName = result.agentName;
+  if (result.agentPhone) update.agentPhone = result.agentPhone;
+  if (result.otp) update.deliveryOtp = result.otp;
+  if (result.lat != null) update.agentLat = result.lat;
+  if (result.lng != null) update.agentLng = result.lng;
+  if (result.pickupLat != null) update.pickupLat = result.pickupLat;
+  if (result.pickupLng != null) update.pickupLng = result.pickupLng;
+  if (result.dropLat != null) update.dropLat = result.dropLat;
+  if (result.dropLng != null) update.dropLng = result.dropLng;
+  if (result.agentLeg) update.agentLeg = result.agentLeg;
+  if (result.expectedBy) update.expectedBy = result.expectedBy;
+  if (result.accepted === false) {
+    update.agentName = "";
+    update.agentPhone = "";
+    update.agentLat = undefined;
+    update.agentLng = undefined;
+  }
+  const saved = patchShipment(shipment.id, update) ?? { ...shipment, ...update };
+  const order = getOrder(shipment.orderId);
+  if (order && (order.courierName !== courier || (awb && order.trackingId !== awb))) {
+    patchOrder(shipment.orderId, { courierName: courier, trackingId: awb || order.trackingId });
+  }
+  if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
+  return saved;
+}
+
 export async function trackShipment(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
   if (shipment.live && shipment.provider && shipment.provider !== "local") {
-    const result = await post<{
-      status: string;
-      events: { at: string; status: string; location?: string }[];
-      trackingUrl?: string;
-    }>({
+    const result = await post<TrackHit>({
       action: "track",
       provider: shipment.provider,
       creds: credsFrom(getIntegrations()),
       awb: shipment.awb,
       providerOrderId: shipment.providerOrderId,
+      providerShipmentId: shipment.providerShipmentId,
     });
     if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
-    const mapped = mapCourierStatus(result.status);
-    patchShipment(shipmentId, {
-      tracking: result.events.length ? result.events : shipment.tracking,
-      status: mapped ?? shipment.status,
-      trackingUrl: result.trackingUrl || shipment.trackingUrl,
-    });
-    if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
+    applyTrackHit(shipment, result);
     return result.status || "No scan yet.";
   }
   return shipment.status;
@@ -627,35 +782,26 @@ export async function pingLiveAgent(shipmentId: string) {
       status: shipment.status,
       events: shipment.tracking ?? [],
       trackingUrl: publicTrackingUrl(shipment),
+      lat: shipment.agentLat,
+      lng: shipment.agentLng,
     };
   }
-  const result = await post<{
-    status: string;
-    events: { at: string; status: string; location?: string }[];
-    lat?: number;
-    lng?: number;
-    trackingUrl?: string;
-  }>({
+  const result = await post<TrackHit>({
     action: "track",
     provider: shipment.provider,
     creds: credsFrom(getIntegrations()),
     awb: shipment.awb,
     providerOrderId: shipment.providerOrderId,
+    providerShipmentId: shipment.providerShipmentId,
   });
   if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
-  const mapped = mapCourierStatus(result.status);
-  patchShipment(shipmentId, {
-    tracking: result.events.length ? result.events : shipment.tracking,
-    status: mapped ?? shipment.status,
-    trackingUrl: result.trackingUrl || shipment.trackingUrl,
-  });
-  if (mapped) syncOrderFromShipment(shipment.orderId, mapped);
+  const saved = applyTrackHit(shipment, result);
   return {
-    status: result.status || shipment.status,
-    events: result.events.length ? result.events : shipment.tracking ?? [],
-    lat: result.lat,
-    lng: result.lng,
-    trackingUrl: result.trackingUrl || publicTrackingUrl(shipment),
+    status: result.status || saved.status,
+    events: result.events?.length ? result.events : saved.tracking ?? [],
+    lat: result.lat ?? saved.agentLat,
+    lng: result.lng ?? saved.agentLng,
+    trackingUrl: result.trackingUrl || publicTrackingUrl(saved),
   };
 }
 
@@ -687,6 +833,23 @@ function syncOrderFromShipment(orderId: string, status: ShipmentRecord["status"]
   if (order.status !== target) patchOrder(orderId, { status: target }, target);
 }
 
+/** Cancel the courier booking, then remove the shipment from the desk. */
+export async function dropOrderShipments(orderId: string) {
+  const rows = getShipments().filter((item) => item.orderId === orderId);
+  for (const shipment of rows) {
+    if (shipment.note === "Cancelled" || !shipment.live || !shipment.provider || shipment.provider === "local") continue;
+    await post({
+      action: "cancel",
+      provider: shipment.provider,
+      creds: credsFrom(getIntegrations()),
+      providerOrderId: shipment.providerOrderId,
+      providerShipmentId: shipment.providerShipmentId,
+      awb: shipment.awb,
+    }).catch(() => undefined);
+  }
+  removeOrderShipments(orderId);
+}
+
 export async function cancelShipment(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) return "Shipment not found.";
@@ -696,6 +859,7 @@ export async function cancelShipment(shipmentId: string) {
       provider: shipment.provider,
       creds: credsFrom(getIntegrations()),
       providerOrderId: shipment.providerOrderId,
+      providerShipmentId: shipment.providerShipmentId,
       awb: shipment.awb,
     });
     if (!result.ok) throw new Error(result.error ?? "The courier did not cancel the shipment.");

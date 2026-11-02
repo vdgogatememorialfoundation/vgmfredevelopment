@@ -5,6 +5,7 @@ import { useCallback, useSyncExternalStore } from "react";
 import EmptyState from "@/components/account/EmptyState";
 import SectionHeader from "@/components/account/SectionHeader";
 import { getLiveBook } from "@/lib/product-data";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { formatPrice, getWishlist, toggleWishlist } from "@/lib/store";
 
 function subscribe(onChange: () => void) {
@@ -17,6 +18,7 @@ function subscribe(onChange: () => void) {
 }
 
 export default function WishlistPage() {
+  const { ready } = useCommerceMirror();
   const snapshot = useCallback(() => JSON.stringify(getWishlist()), []);
   const ids = JSON.parse(useSyncExternalStore(subscribe, snapshot, () => "[]")) as string[];
   const items = ids
@@ -29,7 +31,9 @@ export default function WishlistPage() {
         title="My Wishlist"
         description="Publications you have saved for later."
       />
-      {items.length ? (
+      {!ready ? (
+        <p className="text-sm text-text-muted">Loading your wishlist…</p>
+      ) : items.length ? (
         <ul className="space-y-3">
           {items.map((book) => (
             <li key={book.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-5">

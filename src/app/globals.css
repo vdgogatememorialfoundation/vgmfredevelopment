@@ -21,6 +21,12 @@
 
 :root {
   --font-sans: var(--font-sans-body), var(--font-devanagari), var(--font-kannada), var(--font-tamil), var(--font-malayalam), var(--font-gujarati), "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Kannada", "Nirmala UI", "Segoe UI", system-ui, sans-serif;
+  --tl-green: #067d62;
+  --tl-line: #d5d9d9;
+  --tl-muted: #565959;
+  --tl-text: #0f1111;
+  --tl-failed: #c2410c;
+  --tl-link: #007185;
 }
 
 * {
@@ -30,7 +36,7 @@
 html {
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: #0b1f3a #f7f3ea;
+  scrollbar-color: var(--color-ink) var(--color-paper);
 }
 
 *::-webkit-scrollbar {
@@ -39,21 +45,21 @@ html {
 }
 
 *::-webkit-scrollbar-track {
-  background: #f7f3ea;
+  background: var(--color-paper);
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #0b1f3a;
-  border: 2px solid #f7f3ea;
+  background: var(--color-ink);
+  border: 2px solid var(--color-paper);
   border-radius: 999px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #16325c;
+  background: var(--color-ink-soft);
 }
 
 *::-webkit-scrollbar-corner {
-  background: #f7f3ea;
+  background: var(--color-paper);
 }
 
 body {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import SiteLogo from "@/components/common/SiteLogo";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
 import { leaveAfterSignOut } from "@/lib/auth";
@@ -77,6 +77,47 @@ function MenuIcon() {
   );
 }
 
+function AnchoredMenu({
+  open,
+  getAnchor,
+  align = "left",
+  children,
+}: {
+  open: boolean;
+  getAnchor: () => HTMLElement | null;
+  align?: "left" | "right";
+  children: ReactNode;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const readAnchor = useRef(getAnchor);
+  readAnchor.current = getAnchor;
+
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const el = readAnchor.current();
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const width = align === "right" ? 288 : 256;
+      const left = align === "right" ? Math.max(8, rect.right - width) : Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+      setPos({ top: rect.bottom + 8, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, align]);
+
+  if (!open || !pos || typeof document === "undefined") return null;
+  return createPortal(
+    <div style={{ position: "fixed", top: pos.top, left: pos.left, zIndex: 200 }}>{children}</div>,
+    document.body
+  );
+}
+
 function CloseIcon() {
   return (
     <svg
@@ -107,6 +148,7 @@ export default function Header() {
   const settings = useSiteSettings();
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const desktopNavRef = useRef<HTMLElement>(null);
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   useSyncExternalStore(
     subscribeCms,
     () => `${window.localStorage.getItem("vgmf_site_visibility") ?? ""}|${window.localStorage.getItem("vgmf_cms_pages") ?? ""}|${window.localStorage.getItem("vgmf_settings") ?? ""}`,
@@ -152,6 +194,8 @@ export default function Header() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-account-menu]") || target?.closest("[data-nav-menu]")) return;
       if (accountMenuRef.current && !accountMenuRef.current.contains(event.target as Node)) {
         setAccountMenuOpen(false);
       }
@@ -175,7 +219,7 @@ export default function Header() {
     : "";
 
   return (
-    <header className="overflow-visible border-b border-gold/40 bg-white/95 shadow-[0_8px_24px_rgba(11,31,58,0.06)] backdrop-blur">
+    <header className="relative z-30 overflow-visible border-b border-gold/40 bg-white shadow-[0_8px_24px_rgba(11,31,58,0.06)]">
       <div className="container">
         <div className="flex h-[78px] items-center justify-between gap-4">
           {/* Logo */}
@@ -218,6 +262,9 @@ export default function Header() {
                 <div
                   key={item.href}
                   className="relative"
+                  ref={(node) => {
+                    itemRefs.current[item.href] = node;
+                  }}
                   onMouseEnter={() => {
                     if (canHover() && children.length) openThis();
                   }}
@@ -257,8 +304,8 @@ export default function Header() {
                     ) : null}
                   </div>
                   {opened && children.length ? (
-                    <div className="absolute left-0 top-full z-[80] pt-2">
-                      <div className="min-w-56 overflow-hidden rounded-2xl border border-border bg-white py-2 shadow-xl">
+                    <AnchoredMenu open getAnchor={() => itemRefs.current[item.href] ?? null} align="left">
+                      <div data-nav-menu className="min-w-56 overflow-hidden rounded-2xl border border-border bg-white py-2 shadow-xl">
                         {children.map((page) => {
                           const active = pathname === page.href;
                           return (
@@ -276,7 +323,7 @@ export default function Header() {
                           );
                         })}
                       </div>
-                    </div>
+                    </AnchoredMenu>
                   ) : null}
                 </div>
               );
@@ -334,9 +381,11 @@ export default function Header() {
                 </button>
 
                 {accountMenuOpen && (
+                  <AnchoredMenu open getAnchor={() => accountMenuRef.current} align="right">
                   <div
                     role="menu"
-                    className="absolute right-0 top-full z-50 mt-3 w-72 overflow-hidden rounded-2xl border border-border bg-white shadow-xl"
+                    data-account-menu
+                    className="w-72 overflow-hidden rounded-2xl border border-border bg-white shadow-xl"
                   >
                     <div className="border-b border-border bg-warm-cream px-5 py-4">
                       <p className="font-semibold text-text-primary">
@@ -394,6 +443,7 @@ export default function Header() {
                       </button>
                     </div>
                   </div>
+                  </AnchoredMenu>
                 )}
               </div>
             ) : (

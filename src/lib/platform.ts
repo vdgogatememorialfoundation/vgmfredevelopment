@@ -47,6 +47,21 @@ export function isDemoEnv() {
   return platformEnv() === "demo";
 }
 
+/** Staging and the public site book real couriers and take real payments. The demo host can still simulate. */
+export function requiresLiveCommerce(host?: string) {
+  const name = (host ?? (typeof window !== "undefined" ? window.location.hostname : "")).trim().toLowerCase();
+  if (!name) {
+    const env = platformEnv();
+    return env === "staging" || env === "production";
+  }
+  return (
+    name === PRODUCTION_HOST ||
+    name === `www.${PRODUCTION_HOST}` ||
+    name === STAGING_HOST ||
+    name === STAGING_ALIAS_HOST
+  );
+}
+
 export function isHostedEnv() {
   const env = platformEnv();
   return env === "demo" || env === "staging" || env === "production";

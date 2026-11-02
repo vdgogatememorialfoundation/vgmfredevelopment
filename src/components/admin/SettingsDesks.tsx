@@ -217,6 +217,21 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
+      <Card title="Announcement ticker" text="How fast the bar under the header moves. A lower number is faster. Saving publishes it with the rest of the site.">
+        <label className="block text-sm text-slate-700">
+          Speed · {Math.min(90, Math.max(12, settings.tickerSeconds || 36))} seconds for one pass
+          <input
+            type="range"
+            min={12}
+            max={90}
+            step={2}
+            className="mt-2 w-full"
+            value={Math.min(90, Math.max(12, settings.tickerSeconds || 36))}
+            onChange={(event) => set({ tickerSeconds: Number(event.target.value) })}
+          />
+        </label>
+      </Card>
+
       <Card title="Google Maps" text="Used on clinics, events, live tracking and the analytics live map. Paste a Maps URL if you leave this blank.">
         <Secret
           label="Google Maps JavaScript API key"
@@ -280,8 +295,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds };
 }
 
 /* ---------------- Payments ---------------- */
@@ -939,7 +954,7 @@ export function ShippingApisDesk() {
     <div className="space-y-5">
       <Header
         title="Shipping APIs"
-        text="This is the only courier integration page. Checkout offers Shiprocket, Nimbuspost and iThink Logistics. Those partners already include Porter, Shadowfax Flash and Flash for local last-mile. Tookan and Shipday are not shown at checkout."
+        text="Checkout and packing book the live account whose key is saved here. Tookan is offered for same-city tasks and for parcel deliveries. Shipday is offered for same-city deliveries. Shiprocket, Nimbuspost, iThink and Shipyaari are offered when their keys are saved. Staging and the live site do not create demo AWBs."
         action={
           <div className="flex flex-wrap gap-2">
             <button type="button" className={ghost} onClick={() => save()}>Save</button>
@@ -1086,14 +1101,14 @@ export function ShippingApisDesk() {
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
-          <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.max(8, Number(seconds) || 20) })} hint="Tookan and Shipday agent location refresh." />
+          <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.min(15, Math.max(8, Number(seconds) || 8)) })} hint="How often the live map asks Tookan or Shipday for the rider. 8 to 15 seconds." />
         </div>
         <div className="mt-4">
           <ImageField
-            label="Scooter marker for Tookan / Shipday maps"
+            label="Rider bike icon"
             value={value.scooterImage}
             onChange={(scooterImage) => set({ scooterImage })}
-            hint="Shown only on hyperlocal Google Maps tracking. Other couriers embed their own tracking page."
+            hint="Upload the bike picture. The live map uses it for the rider and turns it to follow the road."
           />
         </div>
         <div className="mt-4">
@@ -1171,7 +1186,14 @@ export function OrderSettingsDesk() {
   const save = () => {
     saveOrderSettings(value);
     savePolicy({ ...getPolicy(), storePickupEnabled: value.pickupEnabled });
-    setNote("Saved. Checkout, product pages and customer orders use these rules now.");
+    setNote("Saving. Phones and other browsers will pick this up in a moment.");
+    void publishLiveSite().then((result) => {
+      setNote(
+        result?.ok
+          ? "Saved. Cash on delivery, shipping and pickup now load on phones and other browsers. Refresh those devices."
+          : "Saved on this browser. Publish the site again so other devices receive cash on delivery and shipping."
+      );
+    });
   };
 
   const feeModes = [

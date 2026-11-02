@@ -415,9 +415,10 @@ export function getPickupLocation() {
   const active = settings?.fulfillmentLocations?.find((location) => location.active);
   if (!active) {
     return {
-      name: "Vaidya Gogate Memorial Foundation",
-      address: "FC Road, Shivaji Nagar, Pune, Maharashtra 411005",
-      phone: "+91 20 1234 5678",
+      name: "Vaidya Gogate Memorial Foundation Clinic",
+      address:
+        "102, Ramprasad Chambers, 368/1, Jawaharlal Nehru Rd, near Kirad Hospital, above Shraddha Medicals, New Nana Peth, Pune, Maharashtra 411002",
+      phone: "093737 92952",
     };
   }
   return {
@@ -636,7 +637,7 @@ function offerFor(
   const latest = addBusinessDays(earliest, transitDays === 0 ? 0 : 1);
   return {
     id: carrier.id,
-    name: carrier.name,
+    name: carrier.id === "tookan" || carrier.id === "tookan-parcel" || carrier.id === "shipday" ? "Gogate Products" : carrier.name,
     kind: carrier.kind,
     charge: carrier.charge,
     transitDays,

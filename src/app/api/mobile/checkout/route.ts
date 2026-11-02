@@ -52,16 +52,15 @@ export async function POST(request: NextRequest) {
     const paymentId = String(body?.paymentId ?? "");
     const razorpayOrderId = String(body?.razorpayOrderId ?? order.razorpayOrderId ?? "");
     const signature = String(body?.signature ?? "");
-    if (creds) {
-      if (!paymentId || !razorpayOrderId || !signature) return json({ ok: false, error: "Payment details are incomplete." }, 400);
-      if (!razorpayVerify(creds.keySecret, razorpayOrderId, paymentId, signature)) {
-        return json({ ok: false, error: "Razorpay could not verify this payment." }, 400);
-      }
+    if (!creds) return json({ ok: false, error: "Razorpay is not configured on this server, so the payment was not recorded." }, 503);
+    if (!paymentId || !razorpayOrderId || !signature) return json({ ok: false, error: "Payment details are incomplete." }, 400);
+    if (!razorpayVerify(creds.keySecret, razorpayOrderId, paymentId, signature)) {
+      return json({ ok: false, error: "Razorpay could not verify this payment." }, 400);
     }
     const paid = markOrderPaid(order.id, {
-      paymentId: paymentId || `pay_demo_${Date.now()}`,
+      paymentId,
       razorpayOrderId,
-      method: creds ? "Razorpay" : "Razorpay (demo)",
+      method: "Razorpay",
     });
     return json({ ok: true, order: paid, configured: Boolean(creds) });
   }
@@ -97,15 +96,7 @@ export async function POST(request: NextRequest) {
 
   const creds = razorpayCreds({});
   if (!creds) {
-    return json({
-      ok: true,
-      configured: false,
-      partner: "razorpay",
-      order: draft,
-      amount: draft.total,
-      keyId: "",
-      razorpayOrderId: "",
-    });
+    return json({ ok: false, configured: false, error: "Razorpay is not configured on this server." }, 503);
   }
 
   try {

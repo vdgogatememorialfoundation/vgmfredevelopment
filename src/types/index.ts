@@ -184,6 +184,22 @@ export interface Review {
   rating: number;
   date: string;
   text: string;
+  email?: string;
+  productId?: string;
+  verified?: boolean;
+  hidden?: boolean;
+  reply?: { text: string; date: string; author?: string };
+}
+
+export interface SeminarReview {
+  id: string;
+  name: string;
+  event: string;
+  rating: number;
+  date: string;
+  text: string;
+  photo?: string;
+  published: boolean;
 }
 
 export interface ProductMedia {
@@ -435,6 +451,8 @@ export interface DeliveryAddress {
   pincode: string;
   country?: string;
   countryCode?: string;
+  /** Name shown when the customer taps the delivery pin. */
+  place?: "home" | "office";
 }
 
 export interface CartItem {
@@ -456,6 +474,8 @@ export interface ShipmentEvent {
 export interface Order {
   id: string;
   userId: string;
+  /** Login email this order belongs to, including when the delivery email is different. */
+  accountEmail?: string;
   date: string;
   items: OrderItem[];
   subtotal: number;
@@ -485,9 +505,13 @@ export interface Order {
   refunds?: RefundRecord[];
   returnShipment?: ReturnShipment;
   deliveryMode: "delivery" | "store_pickup";
+  /** Set at the clinic counter when the customer is at the desk. */
+  pickupArrivedAt?: string;
   deliveryAddress?: DeliveryAddress;
   eta?: string;
   trackingId?: string;
+  /** Secret shared with the customer as /track/{trackToken}. */
+  trackToken?: string;
   courierName?: string;
   openBoxDelivery?: boolean;
   returnableDays?: number;
@@ -659,6 +683,8 @@ export interface SiteSettings {
   outOfStockThreshold: number;
   liveChatEnabled?: boolean;
   liveChatOnline?: boolean;
+  /** Seconds for one pass of the announcement ticker. */
+  tickerSeconds?: number;
 }
 
 export interface AdminCategory {
@@ -702,6 +728,9 @@ export interface ShipmentRecord {
   providerOrderId?: string;
   providerShipmentId?: string;
   labelUrl?: string;
+  /** Sort code returned by Shiprocket, Nimbuspost, or Shipyaari. */
+  routingCode?: string;
+  destinationHub?: string;
   invoiceUrl?: string;
   manifestUrl?: string;
   pickupScheduledFor?: string;
@@ -711,7 +740,20 @@ export interface ShipmentRecord {
   customerPaid?: number;
   tracking?: { at: string; status: string; location?: string }[];
   trackingUrl?: string;
+  /** Promised arrival from the courier that booked this shipment. */
+  expectedBy?: string;
   note?: string;
+  agentName?: string;
+  agentPhone?: string;
+  agentLat?: number;
+  agentLng?: number;
+  /** pickup = rider is going to the store. delivery = rider is going to the customer. */
+  agentLeg?: "pickup" | "delivery";
+  pickupLat?: number;
+  pickupLng?: number;
+  dropLat?: number;
+  dropLng?: number;
+  deliveryOtp?: string;
 }
 
 export interface SupportMessage {

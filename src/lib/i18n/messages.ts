@@ -38,7 +38,7 @@ const en = {
   "footer.tagline": "Ayurveda education, publications and clinical care.",
   "footer.programmes": "Programmes",
   "footer.office": "Foundation office",
-  "footer.hours": "Office hours: Monday–Saturday, 10:00–18:00 IST",
+  "footer.hours": "Clinic hours: Monday–Thursday, 6:00 PM–10:00 PM",
   "footer.pages": "From the Foundation",
   "footer.connect": "Connect",
   "header.getStarted": "Get started",
@@ -119,6 +119,9 @@ const en = {
   "home.shopDesc": "Clinical references, scholarly works and the writings of Vaidya R. B. Gogate.",
   "home.noBooks": "No publications are listed yet.",
   "home.viewShop": "View shop",
+  "home.reviewsEyebrow": "Seminar voices",
+  "home.reviewsTitle": "What participants say",
+  "home.reviewsDesc": "Views and ratings from people who attended Foundation seminars and programmes.",
   "notice.pageEyebrow": "Foundation office",
   "notice.pageTitle": "Notice board",
   "notice.pageDesc": "Deadlines, lists and circulars published by the Foundation office.",
@@ -280,6 +283,8 @@ const en = {
 } as const;
 
 export type MessageKey = keyof typeof en;
+
+export const englishMessages: Readonly<Record<MessageKey, string>> = en;
 
 const hi: Partial<Record<MessageKey, string>> = {
   "nav.about": "हमारे बारे में",

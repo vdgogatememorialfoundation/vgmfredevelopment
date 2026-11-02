@@ -16,8 +16,7 @@ import {
   formatPrice,
   getEstimatedDeliveryDate,
   generateOrderId,
-  generateTrackingId,
-  pickCourier,
+  pickupOtp,
   saveOrder,
   clearCart,
 } from "@/lib/store";
@@ -61,7 +60,6 @@ export default function CheckoutClient() {
   const [payMethod, setPayMethod] = useState<"online" | "cod">("online");
   const [liveRates, setLiveRates] = useState<{ pincode: string; rates: CourierRate[] } | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
-  const [openBox, setOpenBox] = useState(true);
   const [address, setAddress] = useState<DeliveryAddress>({
     ...EMPTY_ADDRESS,
     fullName: user ? `${user.firstName} ${user.lastName}`.trim() : "",
@@ -93,10 +91,6 @@ export default function CheckoutClient() {
     return book ? [{ item, book }] : [];
   });
 
-  const rowBooksOpenBox = rows.map(({ book }) => book.openBoxDelivery);
-  const openBoxSupported =
-    rows.length > 0 && rowBooksOpenBox.every(Boolean);
-
   const quote: DeliveryQuote = checkCart(
     rows.map(({ item }) => ({ bookId: item.bookId, quantity: item.quantity })),
     address.pincode
@@ -119,7 +113,7 @@ export default function CheckoutClient() {
           declaredValue: cartValue,
           bookIds: cartKey.split(",").map((part) => part.split("x")[0]),
         });
-        if (!cancelled) setLiveRates(result.live ? { pincode: address.pincode, rates: result.rates } : null);
+        if (!cancelled) setLiveRates({ pincode: address.pincode, rates: result.rates });
       } catch {
         if (!cancelled) setLiveRates(null);
       } finally {
@@ -133,22 +127,13 @@ export default function CheckoutClient() {
   }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, cartKey, cartValue, cartUnits]);
 
   const courierOptions: CourierOption[] =
-    liveRates && liveRates.pincode === address.pincode && liveRates.rates.length
+    liveRates && liveRates.pincode === address.pincode
       ? liveRates.rates.map((rate) => ({
           ...rate,
           key: `${rate.provider}:${rate.courierId}`,
           deliverBy: getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
         }))
-      : quote.offers.map((offer) => ({
-          provider: "local",
-          courierId: offer.id,
-          courierName: offer.name,
-          rate: offer.charge,
-          etaDays: offer.transitDays,
-          live: false,
-          key: `local:${offer.id}`,
-          deliverBy: offer.deliverBy,
-        }));
+      : [];
   const selectedCourier =
     courierOptions.find((option) => option.key === courierId) ?? courierOptions[0];
   const activeCourierId = selectedCourier?.key ?? "";
@@ -237,7 +222,7 @@ export default function CheckoutClient() {
         return;
       }
     }
-    const courierName = selectedCourier?.courierName ?? pickCourier(id);
+    const courierName = selectedCourier?.courierName;
     const now = new Date().toISOString();
     const deliveryAddress =
       deliveryMode === "delivery"
@@ -279,10 +264,6 @@ export default function CheckoutClient() {
         deliveryMode === "store_pickup"
           ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
           : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
-      trackingId:
-        deliveryMode === "delivery"
-          ? generateTrackingId(courierName)
-          : undefined,
       courierName: deliveryMode === "delivery" ? courierName : undefined,
               courierChoice:
         deliveryMode === "delivery" && selectedCourier
@@ -296,9 +277,8 @@ export default function CheckoutClient() {
               lastMile: selectedCourier.lastMile,
             }
           : undefined,
-      openBoxDelivery:
-        deliveryMode === "delivery" && openBoxSupported ? openBox : false,
       returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
+      accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
       createdBy: user?.email ?? "guest checkout",
       history: [
         { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
@@ -306,15 +286,19 @@ export default function CheckoutClient() {
     };
     if (commitStockForOrder(order)) order.stockCommitted = true;
     saveOrder(order);
-    if (deliveryAddress.email) {
+    if (deliveryAddress.email || deliveryAddress.phone) {
+      const pickupNote =
+        deliveryMode === "delivery"
+          ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.`
+          : `Pickup from ${pickupLocation.name}.\n${pickupLocation.address}\nPhone: ${pickupLocation.phone}\nPickup OTP: ${pickupOtp(id)}\nShow this code at the clinic counter. The desk can resend it. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`;
       sendEmail({
-        to: deliveryAddress.email,
+        to: deliveryAddress.email || "",
         phone: deliveryAddress.phone,
         name: deliveryAddress.fullName,
         params: [deliveryAddress.fullName, id, `₹${totals.total}`],
         subject: `Order ${id} placed`,
         template: "order-placed",
-        body: `Dear Guest,\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nWe received your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${deliveryMode === "delivery" ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""} via ${courierName}.` : `Pickup from ${pickupLocation.name}.`}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+        body: `Dear Guest,\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nWe received your order ${id}.\n\nTotal: ₹${totals.total.toLocaleString("en-IN")} (${payment.paid ? "paid" : payment.method}).\n${pickupNote}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
       });
     }
     setOrderId(id);
@@ -448,11 +432,13 @@ export default function CheckoutClient() {
                             <span>
                               <span className="font-semibold text-text-primary">{offer.courierName}</span>
                               <span className="mt-0.5 block text-xs text-text-muted">
-                                {offer.lastMile
-                                  ? "Local last-mile after the partner books the shipment"
-                                  : offer.etaDays === 0
-                                    ? "Same day after dispatch"
-                                    : `${offer.etaDays} business day transit`}
+                                {offer.provider === "tookan" || offer.provider === "shipday" || offer.courierName === "Gogate Products"
+                                  ? "The rider's name appears after allotment, once delivery has started"
+                                  : offer.lastMile || offer.provider === "tookan-parcel"
+                                    ? "Live rider, phone and location from the courier, on our map, after delivery starts"
+                                    : offer.etaDays === 0
+                                      ? "Same day after dispatch"
+                                      : `${offer.etaDays} business day transit`}
                               </span>
                             </span>
                           </span>
@@ -469,24 +455,6 @@ export default function CheckoutClient() {
                 )}
                 {domestic && quote && !quote.serviceable && pincodeValid && (
                   <p className="mt-3 text-sm text-red-700">{quote.note}</p>
-                )}
-
-                {openBoxSupported && (
-                  <label className="mt-5 flex items-start gap-3 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={openBox}
-                      onChange={(e) => setOpenBox(e.target.checked)}
-                      className="mt-0.5 h-5 w-5 accent-burgundy"
-                    />
-                    <span className="text-text-primary">
-                      <span className="font-semibold">Open-box delivery</span>{" "}
-                      <span className="text-text-muted">
-                        (optional) Inspect the item at the doorstep before
-                        accepting delivery. Offered for this item.
-                      </span>
-                    </span>
-                  </label>
                 )}
               </>
             )}
@@ -672,7 +640,6 @@ export default function CheckoutClient() {
               </p>
               <p className="mt-1">
                 Orders cannot be cancelled or returned from your account. If an item arrives damaged, share photos from My Orders. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.
-                {openBoxSupported ? " Open-box delivery helps you check the item at the doorstep." : ""}
               </p>
             </div>
 

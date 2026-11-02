@@ -142,11 +142,33 @@ export function leaveAfterSignOut(href = "/login") {
   globalThis.window.location.assign(href);
 }
 
+function sessionCookiePayload(user: User) {
+  const full = encodeURIComponent(JSON.stringify(stripPassword(user)));
+  if (full.length <= COOKIE_MAX_BYTES) return full;
+  return encodeURIComponent(
+    JSON.stringify({
+      email: user.email,
+      role: user.role,
+      id: user.id,
+      phone: user.phone,
+      accountId: user.accountId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    })
+  );
+}
+
 function writeSessionCookie(scope: SessionScope, user: User) {
   if (typeof globalThis.document === "undefined") return;
-  const value = encodeURIComponent(JSON.stringify(stripPassword(user)));
+  const value = sessionCookiePayload(user);
   if (value.length > COOKIE_MAX_BYTES) return;
   globalThis.document.cookie = `${storageKey(scope)}=${value}; ${cookieFlags(SESSION_COOKIE_MAX_AGE)}`;
+}
+
+function cookieHolds(scope: SessionScope, user: User) {
+  const parsed = parseUser(readCookie(storageKey(scope)));
+  if (!parsed?.email) return false;
+  return parsed.email.toLowerCase() === user.email.toLowerCase() && (parsed.role ?? "") === (user.role ?? "");
 }
 
 function clearSessionCookie(scope: SessionScope) {
@@ -225,7 +247,7 @@ export function getSession(scope?: SessionScope): User | null {
       return null;
     }
     if (resolved === "portal" && !isPortalRole(fromStorage.role)) return null;
-    if (persistUntilLogoutEnabled() && !readCookie(storageKey(resolved))) writeSessionCookie(resolved, fromStorage);
+    if (persistUntilLogoutEnabled() && !cookieHolds(resolved, fromStorage)) writeSessionCookie(resolved, fromStorage);
     return fromStorage;
   }
   return persistUntilLogoutEnabled() ? restoreFromCookie(resolved) : null;

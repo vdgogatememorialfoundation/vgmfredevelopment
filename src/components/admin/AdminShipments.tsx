@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   getShipments,
-  printShippingLabel,
   updateShipmentStatus,
 } from "@/lib/admin-store";
+import { downloadLabel } from "@/lib/shipping-client";
 import { getOrder } from "@/lib/admin-store";
 import type { ShipmentRecord } from "@/types";
 import {
@@ -16,6 +16,8 @@ import {
   StatusBadge,
   formatINR,
 } from "@/components/admin/AdminUI";
+import { useCommerceMirror } from "@/lib/commerce-sync";
+import { customerCourierLabel } from "@/lib/courier-label";
 import { formatDate } from "@/lib/utils";
 
 const SHIPMENT_TONES: Record<string, string> = {
@@ -27,8 +29,10 @@ const SHIPMENT_TONES: Record<string, string> = {
 };
 
 export function ShipmentsSection() {
-  const [shipments, setShipments] = useState<ShipmentRecord[]>(() => getShipments());
-  const refresh = () => setShipments(getShipments());
+  const { version } = useCommerceMirror();
+  const [extra, setExtra] = useState(0);
+  const shipments = useMemo(() => getShipments().filter((item) => item.note !== "Cancelled"), [version, extra]);
+  const refresh = () => setExtra((value) => value + 1);
 
   return (
     <div className="space-y-5">
@@ -51,7 +55,7 @@ export function ShipmentsSection() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="font-semibold text-text-primary">
-                        #{shipment.orderId} — {shipment.courier}
+                        #{shipment.orderId} — {customerCourierLabel({ provider: shipment.provider, courier: shipment.courier })}
                       </p>
                       <p className="font-mono text-xs text-burgundy">AWB {shipment.awb}</p>
                     </div>
@@ -75,7 +79,7 @@ export function ShipmentsSection() {
                         <option key={s}>{s}</option>
                       ))}
                     </SelectInput>
-                    <Button variant="ghost" onClick={() => printShippingLabel(shipment)}>
+                    <Button variant="ghost" onClick={() => void downloadLabel(shipment.id).catch(() => undefined)}>
                       Shipping label
                     </Button>
                     <span className="text-xs text-text-muted">

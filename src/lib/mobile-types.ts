@@ -1,7 +1,9 @@
+import type { OrderSettings } from "@/lib/integrations";
 import type { MobileAppearance } from "@/lib/mobile-appearance";
 import type { MobileAppConfig } from "@/lib/mobile-config";
 import type { PlatformCountries } from "@/lib/platform-countries";
-import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, SocialLinks, Video } from "@/types";
+import type { SiteText } from "@/lib/site-text";
+import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, Review, SeminarReview, SocialLinks, Video } from "@/types";
 
 export type MobileFeed = {
   publishedAt: string;
@@ -15,6 +17,7 @@ export type MobileFeed = {
     phone: string;
     address: string;
     social?: SocialLinks;
+    tickerSeconds?: number;
   };
   flags: {
     supportUs: boolean;
@@ -42,4 +45,9 @@ export type MobileFeed = {
   faqs: FAQItem[];
   appearance?: MobileAppearance | null;
   platformCountries?: PlatformCountries;
+  seminarReviews?: SeminarReview[];
+  productReviews?: Review[];
+  siteText?: SiteText;
+  /** Public checkout rules (cash on delivery, shipping fee, pickup). No secrets. */
+  orderSettings?: OrderSettings;
 };

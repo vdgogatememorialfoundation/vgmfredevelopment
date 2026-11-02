@@ -8,50 +8,33 @@ import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
-import { getOrdersByEmail, formatPrice, purgeSampleOrders } from "@/lib/store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
+import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
+import { isHyperlocalProvider } from "@/lib/order-pipeline";
+import { customerAddressLine, deliveryDatePhrase, deliveryExpectation } from "@/lib/delivery-expectation";
+import { getShipments } from "@/lib/admin-store";
 import type { Order } from "@/types";
 
 function latestStatusText(order: Order) {
-  switch (order.status) {
-    case "Delivered":
-      return "Your order is delivered";
-    case "Out for Delivery":
-      return "Out for delivery";
-    case "Shipped":
-      return "Your order has been shipped";
-    case "Packed":
-      return "Your order is packed";
-    case "Processing":
-      return "Your order is being processed";
-    case "Cancelled":
-      return "This order was cancelled";
-    case "Failed":
-      return "Delivery failed";
-    default:
-      return "Your order is placed";
-  }
+  const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
+  return deliveryExpectation(order.status, shipment?.expectedBy || order.eta, Date.now(), order.deliveryAddress?.country);
 }
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const { ready, version } = useCommerceMirror();
   const [mounted, setMounted] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     purgeSampleOrders();
     const frame = window.requestAnimationFrame(() => setMounted(true));
-    const onChange = () => setTick((value) => value + 1);
-    window.addEventListener("vgmf-cms", onChange);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("vgmf-cms", onChange);
-    };
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const orders = mounted ? getOrdersByEmail(user?.email) : [];
-  void tick;
+  const orders = mounted && ready ? getOrdersForAccount(user) : [];
+  void version;
 
   return (
     <div>
@@ -60,7 +43,9 @@ export default function OrdersPage() {
         description="Tap an order card to view live tracking, delivery details and, if an item arrived damaged, a replacement request."
       />
 
-      {mounted && orders.length === 0 ? (
+      {mounted && !ready ? (
+        <p className="text-sm text-text-muted">Loading your orders…</p>
+      ) : mounted && orders.length === 0 ? (
         <EmptyState
           title="No shop orders yet"
           description="When you place a book order on the Foundation shop, it will appear here with courier tracking. Sample orders are not shown."
@@ -72,9 +57,10 @@ export default function OrdersPage() {
             const expanded = expandedId === order.id;
             const first = order.items[0];
             const extraItems = Math.max(0, order.items.length - 1);
+            const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
 
             return (
-              <article key={order.id} className="card overflow-hidden">
+              <article key={order.id} className="card overflow-visible">
                 <button
                   type="button"
                   onClick={() => setExpandedId(expanded ? null : order.id)}
@@ -133,9 +119,13 @@ export default function OrdersPage() {
                             Live scans synced from the courier
                           </span>
                         </h3>
-                        <span className="text-xs font-semibold text-burgundy">
-                          {order.trackingId ?? "Tracking id pending"}
-                        </span>
+                        {!isHyperlocalProvider(order.courierChoice?.provider, order.courierChoice?.lastMile) &&
+                        order.trackingId &&
+                        ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ? (
+                          <span className="max-w-[46%] text-right text-xs font-semibold break-all text-burgundy">
+                            {order.trackingId}
+                          </span>
+                        ) : null}
                       </div>
 
                       <OrderTrackingTimeline order={order} />
@@ -219,33 +209,16 @@ export default function OrdersPage() {
                               <div className="flex justify-between gap-4">
                                 <dt className="text-text-muted">Address</dt>
                                 <dd className="text-right text-text-primary">
-                                  {order.deliveryAddress?.line1}
-                                  {order.deliveryAddress?.landmark
-                                    ? `, ${order.deliveryAddress.landmark}`
-                                    : ""}
-                                  , {order.deliveryAddress?.city}{" "}
-                                  {order.deliveryAddress?.state}{" "}
-                                  {order.deliveryAddress?.pincode}
+                                  {customerAddressLine(order.deliveryAddress)}
                                 </dd>
                               </div>
                               <div className="flex justify-between gap-4">
                                 <dt className="text-text-muted">Expected delivery</dt>
                                 <dd className="text-right font-medium text-emerald-700">
-                                  {order.eta ?? "Within 5 business days"}
+                                  {deliveryDatePhrase(shipment?.expectedBy) || deliveryDatePhrase(order.eta) || order.eta || "Within 5 business days"}
                                 </dd>
                               </div>
                             </dl>
-                          )}
-
-                          {order.openBoxDelivery && (
-                            <div className="mt-4 rounded-xl bg-warm-cream/60 p-3 text-xs text-text-muted">
-                              <p className="font-semibold text-text-primary">
-                                Open-box delivery instruction
-                              </p>
-                              <p className="mt-1">
-                                Open the package in front of the delivery agent, verify the item condition and sign the e-POD before accepting.
-                              </p>
-                            </div>
                           )}
                         </div>
 

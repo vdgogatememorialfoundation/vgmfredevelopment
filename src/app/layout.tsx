@@ -10,6 +10,7 @@ import {
 } from "next/font/google";
 import JsonLd from "@/components/seo/JsonLd";
 import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
+import { SiteTheme } from "@/components/theme/SiteTheme";
 import { platformEnv, publicSiteUrl } from "@/lib/platform";
 import { siteConfig } from "@/lib/constants";
 import "./globals.css";
@@ -148,6 +149,7 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
     >
       <body className="min-h-screen bg-background font-sans antialiased">
+        <SiteTheme />
         <EnvironmentBanner />
         <JsonLd />
         {children}

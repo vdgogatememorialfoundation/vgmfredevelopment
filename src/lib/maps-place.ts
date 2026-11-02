@@ -54,6 +54,18 @@ export type GoogleMapsWindow = Window & {
   };
 };
 
+export async function loadTrackingMaps(key: string) {
+  await loadGooglePlaces(key);
+  const maps = (window as GoogleMapsWindow).google?.maps as { importLibrary?: (name: string) => Promise<unknown> } | undefined;
+  if (!maps?.importLibrary) return;
+  await Promise.all([
+    maps.importLibrary("maps"),
+    maps.importLibrary("routes"),
+    maps.importLibrary("geometry"),
+    maps.importLibrary("marker"),
+  ]);
+}
+
 export function loadGooglePlaces(key: string) {
   const win = window as GoogleMapsWindow;
   if (win.google?.maps?.places) return Promise.resolve();
@@ -65,7 +77,7 @@ export function loadGooglePlaces(key: string) {
       return;
     }
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&libraries=places,geometry,marker,routes`;
     script.async = true;
     script.dataset.vgmfMaps = "1";
     script.onload = () => resolve();

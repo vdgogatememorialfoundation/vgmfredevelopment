@@ -10,11 +10,13 @@ import {
   ithinkWallet,
   nimbusBook,
   nimbusCancel,
+  nimbusLabel,
   nimbusRates,
   nimbusTrack,
   nimbusWallet,
   shipdayBook,
   shipdayCancel,
+  shipdayReschedule,
   shipdayTest,
   shipdayTrack,
   shiprocketAddPickup,
@@ -22,6 +24,7 @@ import {
   shiprocketCancel,
   shiprocketInvoice,
   shiprocketLabel,
+  shiprocketLabelSheet,
   shiprocketManifest,
   shiprocketPickup,
   shiprocketPickupLocations,
@@ -31,16 +34,19 @@ import {
   shiprocketWallet,
   shipyaariBook,
   shipyaariCancel,
+  shipyaariLabel,
   shipyaariRates,
   shipyaariTest,
   shipyaariTrack,
   shipyaariWallet,
   tookanBookMode,
   tookanCancel,
+  tookanReschedule,
   tookanTest,
   tookanTrack,
   type RateOut,
 } from "@/lib/server/providers";
+import { mergeShippingCreds } from "@/lib/server/shipping-vault";
 import { listWebhooks } from "@/lib/server/webhooks";
 
 type Body = Record<string, unknown> & {
@@ -59,6 +65,7 @@ const unsupported = (provider: string) =>
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as Body;
   const creds = body.creds ?? {};
+  if (Object.keys(creds).length) mergeShippingCreds(creds);
   const provider = String(body.provider ?? "");
   const own = creds[provider] ?? creds[provider.replace("-parcel", "")] ?? {};
 
@@ -152,9 +159,31 @@ export async function POST(request: NextRequest) {
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "iThink Logistics credentials are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
+        if (provider === "nimbuspost") {
+          const result = await nimbusLabel(own, String(body.awb ?? ""));
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "Nimbuspost credentials are not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
+        if (provider === "shipyaari") {
+          const result = await shipyaariLabel(creds.shipyaari ?? own, String(body.awb ?? ""));
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipyaari credentials are not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
         if (provider !== "shiprocket") return unsupported(provider);
-        const result = await shiprocketLabel(own, String(body.shipmentId));
+        const result = await shiprocketLabelSheet(own, String(body.shipmentId ?? ""), String(body.awb ?? ""));
         if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shiprocket credentials are not configured." });
+        return NextResponse.json({ ok: true, configured: true, ...result });
+      }
+      case "reschedule": {
+        const deliveryAt = String(body.deliveryAt ?? "");
+        const result =
+          provider === "tookan" || provider === "tookan-parcel"
+            ? await tookanReschedule(creds.tookan ?? own, String(body.jobId ?? ""), String(body.extraId ?? ""), deliveryAt)
+            : provider === "shipday"
+              ? await shipdayReschedule(own, String(body.jobId ?? body.providerOrderId ?? ""), deliveryAt)
+              : undefined;
+        if (result === undefined) return unsupported(provider);
+        if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "track": {
@@ -167,7 +196,7 @@ export async function POST(request: NextRequest) {
               : provider === "ithink"
                 ? await ithinkTrack(creds.ithink ?? own, awb)
                 : provider === "tookan" || provider === "tookan-parcel"
-                  ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId ?? awb))
+                  ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId || awb), String(body.providerShipmentId || awb))
                   : provider === "shipday"
                     ? await shipdayTrack(own, String(body.providerOrderId ?? awb))
                     : provider === "shipyaari"
@@ -186,7 +215,7 @@ export async function POST(request: NextRequest) {
               : provider === "ithink"
                 ? await ithinkCancel(creds.ithink ?? own, String(body.awb ?? ""))
                 : provider === "tookan" || provider === "tookan-parcel"
-                  ? await tookanCancel(creds.tookan ?? own, String(body.providerOrderId ?? body.awb ?? ""))
+                  ? await tookanCancel(creds.tookan ?? own, String(body.providerOrderId ?? body.awb ?? ""), String(body.providerShipmentId ?? body.awb ?? ""))
                   : provider === "shipday"
                     ? await shipdayCancel(own, String(body.providerOrderId ?? body.awb ?? ""))
                     : provider === "shipyaari"

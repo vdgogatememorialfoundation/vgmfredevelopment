@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils";
+import { deliveryDatePhrase, parseExpected, statusStamp } from "@/lib/delivery-expectation";
 import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
 import { pickupOtp } from "@/lib/store";
+import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
+import { aggregatorName, customerCourierLabel } from "@/lib/courier-label";
+import { getIntegrations } from "@/lib/integrations";
 import { buildTrackingStages, isHyperlocalProvider, shipmentScans, type CourierScan } from "@/lib/order-pipeline";
 import { pingLiveAgent } from "@/lib/shipping-client";
 import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
 import LiveTracking from "@/components/store/LiveTracking";
-import type { Order } from "@/types";
+import type { Order, ShipmentRecord } from "@/types";
 
 function addDays(date: Date, days: number) {
   const next = new Date(date.getTime());
@@ -17,36 +21,83 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-export default function OrderTrackingTimeline({ order }: { order: Order }) {
-  const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
+function Tile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="vgmf-trk-tile">
+      <b>{label}</b>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+export default function OrderTrackingTimeline({ order, phone = "" }: { order: Order; phone?: string }) {
+  const localShipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled") ?? null;
+  const [remote, setRemote] = useState<ShipmentRecord | null>(null);
+  const shipment = remote ?? localShipment;
+  const provider = shipment?.provider ?? order.courierChoice?.provider;
+  const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
-  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
 
   useEffect(() => {
-    if (!shipment || order.status === "Cancelled") return;
     let cancelled = false;
     const run = async () => {
       try {
-        const result = await pingLiveAgent(shipment.id);
+        const response = await fetch("/api/shop/shipments", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "refresh", orderId: order.id, phone }),
+        });
+        const data = (await response.json()) as {
+          ok?: boolean;
+          live?: boolean;
+          shipment?: ShipmentRecord;
+          order?: Order;
+        };
         if (cancelled) return;
-        setScans(shipmentScans(shipment, result.events ?? []));
+        if (data.shipment) {
+          setRemote(data.shipment);
+          rememberShipment(data.shipment);
+          setScans(shipmentScans(data.shipment));
+        }
+        if (data.order) rememberOrder(data.order);
+        if (data.live) return;
       } catch {
-        if (!cancelled) setScans(shipmentScans(shipment));
+        /* try the courier keys saved on this browser */
+      }
+      const local = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
+      if (!local?.id || cancelled) return;
+      try {
+        const result = await pingLiveAgent(local.id);
+        if (cancelled) return;
+        const updated = getShipments().find((item) => item.id === local.id) ?? local;
+        setRemote(updated);
+        setScans(shipmentScans(updated, result.events ?? []));
+      } catch {
+        if (!cancelled) setScans(shipmentScans(local));
       }
     };
-    run();
-    const ms = hyperlocal ? Math.max(8, 20) * 1000 : 45_000;
-    const timer = window.setInterval(run, order.status === "Delivered" || order.status === "Failed" ? ms * 4 : ms);
+    void run();
+    const terminal = order.status === "Delivered" || order.status === "Cancelled" || order.status === "Failed";
+    const ping = Math.min(10, Math.max(8, getIntegrations().shipping.hyperlocalPingSeconds || 8));
+    const ms = terminal ? 120_000 : hyperlocal ? ping * 1000 : 45_000;
+    const timer = window.setInterval(run, ms);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [shipment?.id, order.status, hyperlocal]);
+  }, [order.id, order.status, phone, hyperlocal]);
 
-  const { stages: rawStages } = useMemo(() => buildTrackingStages(order, scans, shipment), [order, scans, shipment]);
+  const shownScans = scans.map((scan, index, list) =>
+    index === list.length - 1 && (shipment?.agentName || shipment?.agentPhone)
+      ? { ...scan, agent: { name: shipment.agentName, phone: shipment.agentPhone }, otp: shipment.deliveryOtp || scan.otp }
+      : scan
+  );
+  const { stages: rawStages } = useMemo(() => buildTrackingStages(order, shownScans, shipment), [order, shownScans, shipment]);
   const returnRequest = order.returnRequest;
-  const courier = order.courierName ?? storeConfig.courierName;
-  const trackingId = order.trackingId;
+  const courier = customerCourierLabel({ provider, courier: shipment?.courier || order.courierName });
+  const via = aggregatorName(provider);
+  const trackingId = shipment?.awb || order.trackingId || "";
   const placed = new Date(order.date);
   const expectedFrom = addDays(placed, storeConfig.orderPreparationDays + 2);
   const expectedTo = addDays(placed, storeConfig.orderPreparationDays + storeConfig.defaultDeliveryDays);
@@ -57,20 +108,26 @@ export default function OrderTrackingTimeline({ order }: { order: Order }) {
   const shippedAt = shippedStage?.events[0]?.at;
   const deliveredAt = deliveredStage?.events[deliveredStage.events.length - 1]?.at;
   const failed = order.status === "Failed" || rawStages.some((stage) => stage.id === "failed" && stage.reached);
-  const partialIdx = rawStages.findIndex((stage) => stage.partial);
+  const partialIdx = rawStages.map((stage) => stage.partial).lastIndexOf(true);
   const lastReachedIdx = rawStages.map((stage) => stage.reached).lastIndexOf(true);
   const nodeCurrentIdx = partialIdx !== -1 ? partialIdx : lastReachedIdx;
+  const pickupDone = hyperlocal
+    ? rawStages.some((stage) => stage.id === "out" && stage.reached)
+    : Boolean(shippedStage?.reached);
 
   const stages: PipelineStageShape[] = rawStages.map((stage) => {
     const next: PipelineStageShape = { ...stage };
     if (stage.id === "shipped" && (trackingId || courier) && stage.reached) {
+      const viaNote = via && via !== courier ? `via ${via}` : hyperlocal ? "Hyperlocal" : "Logistics";
       next.courierNote = {
         title: courier,
-        detail: `${hyperlocal ? "Hyperlocal" : "Logistics"}${trackingId ? ` · Tracking ID ${trackingId}` : ""}`,
+        detail: [viaNote, trackingId ? `Tracking ID ${trackingId}` : ""].filter(Boolean).join(" · "),
       };
     }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
-    if (stage.id === "delivered" && !stage.reached) next.expected = `Delivery expected by ${formatDate(expectedTo)}`;
+    if (stage.id === "delivered" && !stage.reached) {
+      next.expected = shipment?.expectedBy ? `Expected by ${deliveryDatePhrase(shipment.expectedBy)}` : "Expected delivery date is pending from the courier";
+    }
     if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
   });
@@ -95,23 +152,23 @@ export default function OrderTrackingTimeline({ order }: { order: Order }) {
   const stageDateLine = (stage: PipelineStageShape): string => {
     switch (stage.id) {
       case "ordered":
-        return formatDate(order.date);
+        return statusStamp(order.date, order.deliveryAddress?.country);
       case "packed":
-        return stage.reached && dispatchedAt ? formatDate(dispatchedAt) : "";
+        return stage.reached && dispatchedAt ? statusStamp(dispatchedAt, order.deliveryAddress?.country) : "";
       case "shipped":
-        return stage.reached && shippedAt ? formatDate(shippedAt) : "";
+        return stage.reached && shippedAt ? statusStamp(shippedAt, order.deliveryAddress?.country) : "";
       case "out":
-        return stage.reached ? "Out for delivery" : "";
+        return stage.reached ? statusStamp(stage.events.at(-1)?.at, order.deliveryAddress?.country) || "Out for delivery" : "";
       case "delivered":
-        return stage.reached && deliveredAt ? formatDate(deliveredAt) : "";
+        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
       case "ready":
         return stage.reached ? `OTP ${pickupOtp(order.id)}` : "";
       case "picked":
-        return stage.reached && deliveredAt ? formatDate(deliveredAt) : "";
+        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
       case "cancel-review":
         return "Reviewed by admin";
       case "cancelled":
-        return formatDate(order.history?.find((item) => /cancel/i.test(item.status))?.at || order.date);
+        return statusStamp(order.history?.find((item) => /cancel/i.test(item.status))?.at || order.date, order.deliveryAddress?.country);
       case "refunded":
         return order.refundAmount ? `₹${order.refundAmount.toLocaleString("en-IN")}` : "";
       case "failed":
@@ -132,7 +189,17 @@ export default function OrderTrackingTimeline({ order }: { order: Order }) {
             ? "The line moves down through the delivery window, and it stops before Delivered."
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
-              : "The line moves down from the top and pauses on the latest courier scan.";
+              : hyperlocal
+                ? ""
+                : "The line runs from the top to the latest green step. The tracking number appears when Shipped turns green.";
+
+  const stepStamp = Date.parse(rawStages[nodeCurrentIdx]?.events.at(-1)?.at || order.date);
+  const paceFrom = Number.isFinite(stepStamp) ? stepStamp : placed.getTime();
+  const promisedAt = parseExpected(shipment?.expectedBy, paceFrom);
+  const paceUntil = promisedAt && promisedAt > paceFrom + 60_000 ? promisedAt : paceFrom + (hyperlocal ? 8 : 72) * 60 * 60 * 1000;
+  const latestTitle = rawStages[nodeCurrentIdx]?.events.at(-1)?.title ?? "";
+  const facilityStatus = /^(Pickup scheduled|Shipment arrived at courier facility|Shipment left courier facility)/.test(latestTitle);
+  const currentStatus = facilityStatus ? latestTitle : rawStages[nodeCurrentIdx]?.label || order.status;
 
   const pipe = (
     <VerticalPipeline
@@ -142,7 +209,21 @@ export default function OrderTrackingTimeline({ order }: { order: Order }) {
       metaFor={stageDateLine}
       timingFor={stageTiming}
       note={lineNote}
+      country={order.deliveryAddress?.country}
+      pace={failed || order.status === "Delivered" ? null : { from: paceFrom, until: paceUntil }}
     />
+  );
+
+  const tiles = (
+    <div className="vgmf-trk-tiles">
+      <Tile label="Order" value={order.id} />
+      <Tile label="Date" value={formatDate(order.date)} />
+      <Tile label="Status" value={currentStatus} />
+      {pickupDone ? <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} /> : null}
+      {pickupDone && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
+      {shipment?.deliveryOtp ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
+      {order.deliveryMode === "store_pickup" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
+    </div>
   );
 
   const returnPipeline = returnRequest
@@ -160,11 +241,12 @@ export default function OrderTrackingTimeline({ order }: { order: Order }) {
 
   return (
     <div className="vgmf-trk">
-      {order.deliveryMode === "delivery" && hyperlocal ? (
+      {tiles}
+      {order.deliveryMode === "delivery" ? (
         <div className="vgmf-hl">
           <div className="vgmf-hl-sheet">{pipe}</div>
           <div className="vgmf-hl-map">
-            <LiveTracking order={order} embedded />
+            <LiveTracking order={order} shipment={shipment} />
           </div>
         </div>
       ) : (

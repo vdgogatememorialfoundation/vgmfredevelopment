@@ -1,5 +1,6 @@
 import type { Order } from "@/types";
 import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
+import { requiresLiveCommerce } from "@/lib/platform";
 import { getOrder, patchOrder, recordPayment, refundOrder, sendEmail } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
@@ -46,7 +47,7 @@ export function paymentMode() {
 export function paymentNotice() {
   if (typeof window === "undefined" || !window.localStorage.getItem("vgmf_integrations")) return "";
   const mode = paymentMode();
-  if (mode === "demo") return "Demo mode: the payment is simulated and no money is charged.";
+  if (mode === "demo" && !requiresLiveCommerce()) return "Demo mode: the payment is simulated and no money is charged.";
   if (mode === "test") return "Test mode: use test cards or UPI test IDs.";
   return "";
 }
@@ -84,9 +85,10 @@ export async function payWithRazorpay(input: {
   };
   // A visitor's browser has no saved admin settings; the host's env keys decide whether checkout is live.
   const hasLocalSettings = Boolean(window.localStorage.getItem("vgmf_integrations"));
-  if (paymentMode() === "demo" && hasLocalSettings && !input.skipDemo) return simulate();
+  const liveHost = requiresLiveCommerce();
+  if (paymentMode() === "demo" && hasLocalSettings && !input.skipDemo && !liveHost) return simulate();
   const order = await api<{ orderId: string; keyId: string }>({ action: "order", amount: input.amount, receipt: input.receipt });
-  if (!order.ok && order.configured === false && (!hasLocalSettings || paymentMode() === "demo")) return simulate();
+  if (!order.ok && order.configured === false && !liveHost && (!hasLocalSettings || paymentMode() === "demo")) return simulate();
   if (!order.ok) {
     if (order.configured === false) {
       throw new Error("Razorpay keys are missing for this mode. Add them in Settings → Payments, or switch to demo mode.");
@@ -174,7 +176,7 @@ export async function createPaymentLink(orderId: string) {
   if (!order) throw new Error("Order not found.");
   const settings = getIntegrations();
   let link: NonNullable<Order["paymentLink"]>;
-  if (settings.razorpay.mode === "demo") {
+  if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
     link = {
       url: `${window.location.origin}/pay/${order.id}?d=${encodeSummary(order)}`,
       provider: "demo",

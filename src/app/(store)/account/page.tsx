@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import { getAllApplications } from "@/lib/applications";
-import { getOrdersByEmail } from "@/lib/store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
+import { getOrdersForAccount } from "@/lib/store";
 import { usePartnerRecords } from "@/lib/use-partner-records";
 
 interface Stat {
@@ -16,6 +17,7 @@ interface Stat {
 
 export default function AccountDashboardPage() {
   const { user } = useAuth();
+  const { version } = useCommerceMirror();
   const { tickets, payments } = usePartnerRecords(user?.email, user?.phone);
   const [orderCount, setOrderCount] = useState(0);
   const [localApps, setLocalApps] = useState(0);
@@ -31,10 +33,10 @@ export default function AccountDashboardPage() {
             .includes(`${user.firstName} ${user.lastName}`.toLowerCase())
       );
       setLocalApps(apps.length);
-      setOrderCount(getOrdersByEmail(user.email).length);
+      setOrderCount(getOrdersForAccount(user).length);
     }, 0);
     return () => clearTimeout(timer);
-  }, [user]);
+  }, [user, version]);
 
   if (!user) return null;
 

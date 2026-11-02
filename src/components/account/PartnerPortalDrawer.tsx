@@ -28,7 +28,7 @@ export function PartnerDrawerProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [portal, setPortal] = useState<DrawerPortal>("all");
   const [visible, setVisible] = useState(false);
-  const { tickets, payments, loading } = usePartnerRecords(user?.email, user?.phone);
+  const { tickets, payments, loading, statuses } = usePartnerRecords(user?.email, user?.phone);
 
   const open = useCallback((next: DrawerPortal = "all") => {
     setPortal(next);
@@ -130,7 +130,12 @@ export function PartnerDrawerProvider({ children }: { children: ReactNode }) {
                                 </Badge>
                               </div>
                               <div className="mt-4">
-                                <ApplicationPipeline application={application} />
+                                <ApplicationPipeline
+                                  application={application}
+                                  rawStatus={ticket.status}
+                                  portal={ticket.portal}
+                                  catalog={statuses}
+                                />
                               </div>
                               <div className="mt-3 flex flex-wrap gap-3">
                                 <Link

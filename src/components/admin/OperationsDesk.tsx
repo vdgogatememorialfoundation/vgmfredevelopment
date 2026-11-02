@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import RecordDesk from "@/components/admin/RecordDesk";
 import {
@@ -24,6 +24,7 @@ import {
   saveSettings,
   setPaymentStatus,
 } from "@/lib/admin-store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { certificates as seededCertificates } from "@/data/content";
@@ -50,8 +51,12 @@ const paymentTitles: Record<PaymentFilter, string> = {
 };
 
 export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
+  const { version } = useCommerceMirror();
   const [orders, setOrders] = useState<Order[]>(() => getOrders());
   const refresh = () => setOrders(getOrders());
+  useEffect(() => {
+    setOrders(getOrders());
+  }, [version]);
   const shown = filter === "all" ? orders : orders.filter((order) => order.paymentStatus === filter);
   const total = shown.reduce((sum, order) => sum + order.total, 0);
 
@@ -111,7 +116,11 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
 }
 
 export function ReconciliationDesk() {
-  const [orders] = useState<Order[]>(() => getOrders());
+  const { version } = useCommerceMirror();
+  const [orders, setOrders] = useState<Order[]>(() => getOrders());
+  useEffect(() => {
+    setOrders(getOrders());
+  }, [version]);
   const rows = (["Paid", "Pending", "Failed", "Refunded"] as const).map((status) => {
     const list = orders.filter((order) => order.paymentStatus === status);
     return { status, count: list.length, total: list.reduce((sum, order) => sum + order.total, 0) };
@@ -348,7 +357,11 @@ export function EventRecordsDesk({ kind }: { kind: EventRecordKind }) {
 }
 
 export function CourierPerformanceDesk() {
-  const [shipments] = useState(() => getShipments());
+  const { version } = useCommerceMirror();
+  const [shipments, setShipments] = useState(() => getShipments());
+  useEffect(() => {
+    setShipments(getShipments());
+  }, [version]);
   const couriers = Array.from(new Set(shipments.map((shipment) => shipment.courier)));
 
   return (
@@ -407,7 +420,6 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
       { key: "returnableDays", label: "Return window (days)", fallback: "7" },
       { key: "cancellationHours", label: "Cancellation window (hours)", fallback: "24" },
       { key: "invoicePrefix", label: "Invoice prefix", fallback: "VGMF-INV" },
-      { key: "openBox", label: "Offer open-box delivery", kind: "toggle", fallback: "false" },
     ],
   },
   payments: {

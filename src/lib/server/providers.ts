@@ -1,4 +1,5 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
 
 /**
  * Provider clients used by the API routes. Each call takes credentials from
@@ -677,14 +678,77 @@ export async function shiprocketPickup(input: Json, shipmentId: string, date?: s
 }
 
 export async function shiprocketLabel(input: Json, shipmentId: string) {
+  const sheet = await shiprocketLabelSheet(input, shipmentId);
+  return sheet ? { labelUrl: sheet.labelUrl ?? "" } : null;
+}
+
+export type LabelSheet = {
+  labelUrl?: string;
+  routingCode?: string;
+  destination?: string;
+  courierName?: string;
+  awb?: string;
+};
+
+function labelText(source: Json, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim() && value !== "null" && value !== "undefined") return value.trim();
+  }
+  return "";
+}
+
+function labelSheetFrom(source: Json | null | undefined): LabelSheet {
+  if (!source) return {};
+  const nested = source.data && typeof source.data === "object" ? (source.data as Json) : source;
+  const directUrl = typeof source.data === "string" ? source.data : "";
+  const track = (nested.tracking_data as Json) ?? nested;
+  const row = (Array.isArray(track.shipment_track) ? (track.shipment_track[0] as Json) : track) ?? nested;
+  const bag = { ...nested, ...row };
+  return {
+    labelUrl: directUrl || labelText(bag, ["label_url", "label", "pdf_url", "pdf", "shipping_label"]),
+    routingCode: labelText(bag, ["routing_code", "routingCode", "route_code", "sort_code"]),
+    destination: labelText(bag, ["destination", "destination_hub", "destination_code"]),
+    courierName: labelText(bag, ["courier_name", "courier", "courierName"]),
+    awb: labelText(bag, ["awb", "awb_code", "awb_number", "awbNumber"]),
+  };
+}
+
+/** Shiprocket label PDF plus the routing code printed on that label. */
+export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb = ""): Promise<LabelSheet | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
-  const data = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}` },
-    json: { shipment_id: [Number(shipmentId)] },
-  });
-  return { labelUrl: String(data.label_url ?? "") };
+  const headers = { authorization: `Bearer ${token}` };
+  let sheet: LabelSheet = {};
+  if (awb) {
+    try {
+      const tracked = await call(`https://apiv2.shiprocket.in/v1/external/courier/track/awb/${encodeURIComponent(awb)}`, { headers });
+      sheet = labelSheetFrom(tracked);
+    } catch {
+      /* the generate call below can still return a label */
+    }
+  }
+  if (shipmentId) {
+    try {
+      const data = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
+        method: "POST",
+        headers,
+        json: { shipment_id: [Number(shipmentId)] },
+      });
+      const generated = labelSheetFrom(data);
+      sheet = { ...sheet, ...Object.fromEntries(Object.entries(generated).filter(([, value]) => value)) };
+    } catch (error) {
+      if (!sheet.routingCode && !sheet.labelUrl) throw error;
+    }
+    try {
+      const details = await call(`https://apiv2.shiprocket.in/v1/external/shipments/${encodeURIComponent(shipmentId)}`, { headers });
+      const extra = labelSheetFrom(details);
+      sheet = { ...extra, ...Object.fromEntries(Object.entries(sheet).filter(([, value]) => value)) };
+    } catch {
+      /* routing is optional */
+    }
+  }
+  return sheet;
 }
 
 export async function shiprocketInvoice(input: Json, providerOrderId: string) {
@@ -727,6 +791,102 @@ export async function shiprocketPickupLocations(input: Json) {
   };
 }
 
+/** Courier clocks are India time unless the value already carries a zone. A value with a clock wins over a date alone. */
+function expectedBy(...values: unknown[]): string | undefined {
+  const formatted: { text: string; timed: boolean }[] = [];
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text || text === "null" || text === "undefined" || text === "0") continue;
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(text);
+    const clock = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(text) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(text);
+    let parsed = Number.NaN;
+    if (dateOnly) parsed = Date.parse(`${text}T12:00:00+05:30`);
+    else if (clock) {
+      const iso = text.replace(" ", "T");
+      parsed = Date.parse(iso.length === 16 ? `${iso}:00+05:30` : `${iso}+05:30`);
+    } else parsed = Date.parse(text);
+    if (!Number.isFinite(parsed)) continue;
+    const timed = !dateOnly && (clock || /[T ]\d{2}:\d{2}/.test(text) || /\d:\d{2}/.test(text));
+    formatted.push({
+      timed,
+      text: new Intl.DateTimeFormat("en-IN", {
+        timeZone: "Asia/Kolkata",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        ...(timed ? { hour: "numeric", minute: "2-digit" } : { year: "numeric" }),
+      }).format(new Date(parsed)),
+    });
+  }
+  return formatted.find((item) => item.timed)?.text ?? formatted[0]?.text;
+}
+
+function clockFields(value: unknown, found: string[] = [], depth = 0): string[] {
+  if (depth > 5 || value == null) return found;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 4)) clockFields(item, found, depth + 1);
+    return found;
+  }
+  if (typeof value !== "object") return found;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/history|scans|activities|shipment_track_activities|task_history/i.test(key)) continue;
+    if (/(^edd$|^etd$|expected|promised|estimated|delivery_date|deliverydate|delivery_time|deliverytime|job_delivery_datetime)/i.test(key) && !/delivered|picked|created|updated/i.test(key)) {
+      if (typeof child === "string" || typeof child === "number") found.push(String(child));
+    } else if (child && typeof child === "object") clockFields(child, found, depth + 1);
+  }
+  return found;
+}
+
+function promisedFrom(payload: unknown, ...first: unknown[]) {
+  return expectedBy(...first, ...clockFields(payload));
+}
+
+/** Agent name, phone, OTP and GPS when the courier portal sends them (Shiprocket hyperlocal, Porter, and the others). */
+function riderFrom(payload: unknown) {
+  const found = { name: "", phone: "", otp: "", lat: undefined as number | undefined, lng: undefined as number | undefined };
+  const walk = (value: unknown, depth: number) => {
+    if (depth > 6 || value == null || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value.slice(0, 6)) walk(item, depth + 1);
+      return;
+    }
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const k = key.toLowerCase();
+      if (typeof child === "string" || typeof child === "number") {
+        const text = String(child).trim();
+        if (!text || text === "null" || text === "undefined") continue;
+        if (!found.name && /(rider|agent|driver|delivery_boy|fe)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
+        if (!found.phone && /(rider|agent|driver|delivery_boy|fe)_?(phone|mobile|contact)$/.test(k)) found.phone = text;
+        if (!found.otp && /(delivery_otp|^otp$|door_code|verification_code)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
+        if (found.lat == null && /(rider|agent|driver|fe)_?lat(itude)?$/.test(k)) {
+          const n = Number(text);
+          if (Math.abs(n) > 0.01) found.lat = n;
+        }
+        if (found.lng == null && /(rider|agent|driver|fe)_?(lng|long|longitude)$/.test(k)) {
+          const n = Number(text);
+          if (Math.abs(n) > 0.01) found.lng = n;
+        }
+      } else walk(child, depth + 1);
+    }
+  };
+  walk(payload, 0);
+  return found;
+}
+
+function riderHit(payload: unknown, status: string) {
+  const rider = riderFrom(payload);
+  const moving = /picked up|out for|in transit|on the way|started|deliver/i.test(status);
+  return {
+    agentName: rider.name,
+    agentPhone: rider.phone,
+    otp: rider.otp,
+    lat: rider.lat,
+    lng: rider.lng,
+    accepted: rider.name ? true : undefined,
+    agentLeg: (moving ? "delivery" : "pickup") as "delivery" | "pickup",
+  };
+}
+
 export async function shiprocketTrack(input: Json, awb: string) {
   const token = await shiprocketToken(input);
   if (!token) return null;
@@ -735,10 +895,15 @@ export async function shiprocketTrack(input: Json, awb: string) {
   });
   const tracking = (data.tracking_data as Json) ?? {};
   const activities = (tracking.shipment_track_activities as Json[]) ?? [];
+  const trackRow = ((tracking.shipment_track as Json[]) ?? [])[0] ?? {};
   return {
-    status: String(((tracking.shipment_track as Json[]) ?? [])[0]?.current_status ?? tracking.shipment_status ?? ""),
+    status: String(trackRow.current_status ?? tracking.shipment_status ?? ""),
+    courierName: String(trackRow.courier_name ?? ""),
+    awb: String(trackRow.awb_code ?? awb),
     events: activities.map((activity) => ({ at: String(activity.date), status: String(activity.activity), location: String(activity.location ?? "") })),
     trackingUrl: String(tracking.track_url ?? `https://shiprocket.co/tracking/${awb}`),
+    expectedBy: promisedFrom(data, trackRow.edd, trackRow.etd, tracking.edd, tracking.etd),
+    ...riderHit(data, String(trackRow.current_status ?? tracking.shipment_status ?? "")),
   };
 }
 
@@ -851,8 +1016,12 @@ export async function nimbusTrack(input: Json, awb: string) {
   const history = (shipment.history as Json[]) ?? [];
   return {
     status: String(shipment.status ?? ""),
+    courierName: String(shipment.courier_name ?? shipment.courier ?? ""),
+    awb,
     events: history.map((event) => ({ at: String(event.event_time), status: String(event.message ?? event.status_code), location: String(event.location ?? "") })),
     trackingUrl: String(shipment.tracking_url ?? `https://ship.nimbuspost.com/?awb=${awb}`),
+    expectedBy: promisedFrom(data, shipment.edd, shipment.expected_delivery_date, shipment.expected_delivery, shipment.delivery_date),
+    ...riderHit(data, String(shipment.status ?? "")),
   };
 }
 
@@ -865,6 +1034,27 @@ export async function nimbusWallet(input: Json) {
   const nested = (data.data as Json) ?? data;
   const balance = Number(nested.balance ?? nested.wallet_balance ?? nested.amount ?? 0);
   return { provider: "nimbuspost", balance, currency: "INR" };
+}
+
+export async function nimbusLabel(input: Json, awb: string): Promise<LabelSheet | null> {
+  const token = await nimbusToken(input);
+  if (!token) return null;
+  const headers = { authorization: `Bearer ${token}` };
+  const data = await call("https://api.nimbuspost.com/v1/shipments/label", {
+    method: "POST",
+    headers,
+    json: { awbs: [awb] },
+  });
+  let sheet = labelSheetFrom(data);
+  try {
+    const tracked = await call(`https://api.nimbuspost.com/v1/shipments/track/${encodeURIComponent(awb)}`, { headers });
+    const extra = labelSheetFrom(tracked);
+    sheet = { ...extra, ...Object.fromEntries(Object.entries(sheet).filter(([, value]) => value)) };
+  } catch {
+    /* the label URL is the part the desk needs */
+  }
+  if (!sheet.awb) sheet.awb = awb;
+  return sheet;
 }
 
 export async function nimbusCancel(input: Json, awb: string) {
@@ -906,13 +1096,30 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
   return {
     provider: "shipday",
     awb: String(data.orderId ?? order.orderId),
-    courierName: "Shipday driver",
+    courierName: "Gogate Products",
     providerOrderId: String(data.orderId ?? ""),
   };
 }
 
 function shipdayAuth(apiKey: string) {
   return { authorization: `Basic ${apiKey}` };
+}
+
+/** Gogate Products on Shipday. deliveryAt is an India wall clock, YYYY-MM-DD HH:MM:SS. */
+export async function shipdayReschedule(input: Json, orderId: string, deliveryAt: string) {
+  const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
+  if (!apiKey) return null;
+  const [date, time] = deliveryAt.split(" ");
+  const data = await call(`https://api.shipday.com/order/edit/${encodeURIComponent(orderId)}`, {
+    method: "PUT",
+    headers: shipdayAuth(apiKey),
+    json: {
+      expectedDeliveryDate: date,
+      expectedDeliveryTime: time,
+    },
+  });
+  if (data.success === false) throw new ProviderError(String(data.response ?? "Shipday could not reschedule the delivery."));
+  return { updated: true };
 }
 
 function shipdayOrders(data: unknown): Json[] {
@@ -941,9 +1148,14 @@ export async function shipdayTrack(input: Json, orderId: string) {
     return { status: "Not found", events: [] as { at: string; status: string; location: string }[] };
   }
   const status = String(match.orderStatus ?? match.status ?? "");
-  const carrier = (match.assignedCarrier as { name?: string } | undefined)?.name ?? "";
-  const lat = Number(match.carrierLatitude ?? match.latitude ?? (match.assignedCarrier as Json | undefined)?.latitude);
-  const lng = Number(match.carrierLongitude ?? match.longitude ?? (match.assignedCarrier as Json | undefined)?.longitude);
+  const carrier = (match.assignedCarrier as Json | undefined) ?? (match.carrier as Json | undefined) ?? {};
+  const carrierName = String(carrier.name ?? "");
+  const lat = Number(match.carrierLatitude ?? match.latitude ?? carrier.latitude);
+  const lng = Number(match.carrierLongitude ?? match.longitude ?? carrier.longitude);
+  const pickupLat = Number(match.pickupLatitude ?? match.restaurantLatitude ?? (match.restaurant as Json | undefined)?.latitude);
+  const pickupLng = Number(match.pickupLongitude ?? match.restaurantLongitude ?? (match.restaurant as Json | undefined)?.longitude);
+  const dropLat = Number(match.deliveryLatitude ?? match.customerLatitude ?? (match.delivery as Json | undefined)?.latitude);
+  const dropLng = Number(match.deliveryLongitude ?? match.customerLongitude ?? (match.delivery as Json | undefined)?.longitude);
   const feed = ((match.activityLog as Json[]) ?? (match.activityFeed as Json[]) ?? []).map((entry) => ({
     at: String(entry.time ?? entry.createdAt ?? ""),
     status: String(entry.description ?? entry.status ?? ""),
@@ -951,10 +1163,19 @@ export async function shipdayTrack(input: Json, orderId: string) {
   }));
   return {
     status,
-    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: String(carrier) }],
+    courierName: "Gogate Products",
+    awb: orderId,
+    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: carrierName }],
     lat: Number.isFinite(lat) ? lat : undefined,
     lng: Number.isFinite(lng) ? lng : undefined,
+    agentName: carrierName,
+    agentPhone: String(carrier.phoneNumber ?? carrier.phone ?? ""),
+    pickupLat: Number.isFinite(pickupLat) ? pickupLat : undefined,
+    pickupLng: Number.isFinite(pickupLng) ? pickupLng : undefined,
+    dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
+    dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
+    expectedBy: promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
   };
 }
 
@@ -1052,7 +1273,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
     return {
       provider: "tookan-parcel",
       awb: String(task.delivery_job_id ?? task.job_id ?? ""),
-      courierName: "Tookan parcel",
+      courierName: "Gogate Products",
       providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
       providerShipmentId: String(task.delivery_job_id ?? ""),
       trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1077,7 +1298,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
       customer_phone: order.customer.phone,
       customer_address: dropAddress,
       job_delivery_datetime: deliverAt,
-      has_pickup: 0,
+      has_pickup: 1,
       has_delivery: 1,
       layout_type: 0,
       tracking_link: 1,
@@ -1086,49 +1307,132 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
   });
   if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the hyperlocal task."));
   const task = (data.data as Json) ?? {};
+  const pickupId = String(task.pickup_job_id ?? task.job_id ?? "");
+  const deliveryId = String(task.delivery_job_id ?? task.job_id ?? "");
   return {
     provider: "tookan",
-    awb: String(task.job_id ?? task.delivery_job_id ?? ""),
-    courierName: "Tookan hyperlocal",
-    providerOrderId: String(task.job_id ?? ""),
-    trackingUrl: String(task.tracking_link ?? task.delivery_tracing_link ?? ""),
+    awb: deliveryId || pickupId,
+    courierName: "Gogate Products",
+    providerOrderId: pickupId || deliveryId,
+    providerShipmentId: deliveryId,
+    trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
     pickupScheduledFor: pickupAt,
   };
 }
 
-export async function tookanTrack(input: Json, jobId: string) {
+export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
   if (!apiKey) return null;
-  const data = await call("https://api.tookanapp.com/v2/get_job_details", {
-    method: "POST",
-    json: { api_key: apiKey, job_ids: [Number(jobId) || jobId], include_task_history: 1 },
+  const ids = [...new Set([jobId, extraId].map((id) => id.trim()).filter(Boolean))];
+  const jobs: Json[] = [];
+  for (const id of ids) {
+    const data = await call("https://api.tookanapp.com/v2/get_job_details", {
+      method: "POST",
+      json: { api_key: apiKey, job_ids: [Number(id) || id], include_task_history: 1 },
+    });
+    const job = ((data.data as Json[]) ?? [])[0];
+    if (job) jobs.push(job);
+  }
+  const coord = (value: number) => (Number.isFinite(value) && Math.abs(value) > 0.001 ? value : undefined);
+  const details = jobs.map((job) => {
+    const code = Number(job.job_status ?? job.status);
+    const fleet = (job.fleet as Json) ?? {};
+    const pickupTask = Number(job.job_type) === 0;
+    return { job, code, fleet, pickupTask };
   });
-  const job = ((data.data as Json[]) ?? [])[0] ?? {};
-  const history = (job.task_history as Json[]) ?? [];
-  const code = Number(job.job_status ?? job.status);
-  const lat = Number(job.fleet_latitude ?? job.job_latitude ?? job.latitude);
-  const lng = Number(job.fleet_longitude ?? job.job_longitude ?? job.longitude);
+  const pickup = details.find((item) => item.pickupTask) ?? null;
+  const delivery = details.find((item) => !item.pickupTask) ?? details[0] ?? null;
+  const pickupOpen = Boolean(pickup && pickup.code !== 2 && pickup.code !== 9);
+  const active = pickupOpen && pickup ? pickup : delivery;
+  const code = active?.code ?? NaN;
+  const currentLabel = tookanStatusLabel[code] ?? String(active?.job.job_status ?? active?.job.status ?? "");
+  const fleet = active?.fleet ?? {};
+  const job = active?.job ?? {};
+  const accepted = Boolean(active) && ![6, 8, 9].includes(code) && (Boolean(String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "").trim()) || [0, 1, 4, 7].includes(code));
+  const history = details.flatMap((item) =>
+    ((item.job.task_history as Json[]) ?? []).map((entry) => ({ entry, pickupTask: item.pickupTask }))
+  );
+  const storeJob = pickup?.job ?? job;
+  const dropSource = delivery?.job ?? job;
+  const pickupLat = coord(Number(storeJob.job_pickup_latitude ?? storeJob.pickup_latitude));
+  const pickupLng = coord(Number(storeJob.job_pickup_longitude ?? storeJob.pickup_longitude));
+  const dropLat = coord(Number(dropSource.job_latitude ?? dropSource.customer_latitude ?? dropSource.delivery_latitude));
+  const dropLng = coord(Number(dropSource.job_longitude ?? dropSource.customer_longitude ?? dropSource.delivery_longitude));
+  const lat = coord(Number(job.fleet_latitude ?? fleet.latitude));
+  const lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
   return {
-    status: tookanStatusLabel[code] ?? String(job.job_status ?? job.status ?? ""),
-    events: history.map((entry) => ({
-      at: String(entry.creation_datetime ?? entry.timestamp ?? ""),
-      status: String(entry.description ?? entry.status ?? ""),
-      location: String(entry.latitude && entry.longitude ? `${entry.latitude},${entry.longitude}` : ""),
-    })),
-    lat: Number.isFinite(lat) ? lat : undefined,
-    lng: Number.isFinite(lng) ? lng : undefined,
-    trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? ""),
+    status: currentLabel,
+    courierName: "Gogate Products",
+    awb: String(delivery?.job.job_id ?? jobId),
+    accepted,
+    agentLeg: pickupOpen ? "pickup" : "delivery",
+    agentName: accepted ? String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "") : "",
+    agentPhone: accepted ? String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? "") : "",
+    otp: String(job.job_otp ?? job.order_otp ?? delivery?.job.job_otp ?? ""),
+    lat: accepted ? lat : undefined,
+    lng: accepted ? lng : undefined,
+    pickupLat,
+    pickupLng,
+    dropLat,
+    dropLng,
+    events: [
+      ...history.map(({ entry, pickupTask }) => {
+        const entryCode = Number(entry.job_status ?? entry.type);
+        const label =
+          entryCode === 2 && pickupTask
+            ? "Picked up from seller"
+            : entryCode === 2
+              ? "Delivered"
+              : tookanStatusLabel[entryCode] ?? "";
+        const text = String(entry.description ?? entry.label ?? entry.status ?? "");
+        return {
+          at: String(entry.creation_datetime ?? entry.timestamp ?? ""),
+          status: [label, text].filter(Boolean).join(" · "),
+          location: String(entry.latitude && entry.longitude ? `${entry.latitude},${entry.longitude}` : ""),
+        };
+      }),
+      ...(pickup && pickup.code === 2 ? [{ at: new Date().toISOString(), status: "Picked up from seller", location: "" }] : []),
+      ...(currentLabel ? [{ at: new Date().toISOString(), status: currentLabel, location: "" }] : []),
+    ],
+    trackingUrl: String(job.tracking_link ?? job.delivery_tracing_link ?? delivery?.job.tracking_link ?? ""),
+    expectedBy: tookanExpected(dropSource),
   };
 }
 
-export async function tookanCancel(input: Json, jobId: string) {
+/** Prefer Tookan's real UTC field. The Z on job_delivery_datetime is the India wall clock. */
+function tookanExpected(job: Json) {
+  const instant = tookanDeliveryInstant(
+    String(job.job_time_utc ?? ""),
+    String(job.job_delivery_datetime ?? job.job_time ?? "")
+  );
+  return instant == null ? undefined : formatIndiaClock(instant);
+}
+
+/** Move a Gogate Products Tookan delivery to a new India wall-clock time (YYYY-MM-DD HH:MM:SS). */
+export async function tookanReschedule(input: Json, jobId: string, extraId: string, deliveryAt: string) {
   const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
   if (!apiKey) return null;
-  const data = await call("https://api.tookanapp.com/v2/cancel_task", {
+  const deliveryId = jobId.trim() || extraId.trim();
+  if (!deliveryId) throw new ProviderError("Tookan job id is missing.");
+  const data = await call("https://api.tookanapp.com/v2/edit_task", {
     method: "POST",
-    json: { api_key: apiKey, job_id: Number(jobId) || jobId, job_status: 9 },
+    json: { api_key: apiKey, job_id: Number(deliveryId) || deliveryId, job_delivery_datetime: deliveryAt },
   });
-  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan could not cancel the task."));
+  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan could not reschedule the delivery."));
+  return { updated: true };
+}
+
+export async function tookanCancel(input: Json, jobId: string, extraId = "") {
+  const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
+  if (!apiKey) return null;
+  const ids = [...new Set([jobId, extraId].map((id) => id.trim()).filter(Boolean))];
+  for (const id of ids) {
+    const data = await call("https://api.tookanapp.com/v2/cancel_task", {
+      method: "POST",
+      json: { api_key: apiKey, job_id: Number(id) || id, job_status: 9 },
+    });
+    if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan could not cancel the task."));
+  }
   return { cancelled: true };
 }
 
@@ -1141,7 +1445,7 @@ export async function tookanTest(input: Json) {
   });
   if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan rejected the API key."));
   const fleets = Array.isArray(data.data) ? data.data : [];
-  return { message: `Connected from this site. Tookan returned ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}. Hyperlocal will book create_task; standard will book create_multiple_tasks.` };
+  return { message: `Connected from this site. Tookan returned ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}. Each booking creates a pickup task and a delivery task.` };
 }
 
 /* ---------------- iThink Logistics ---------------- */
@@ -1257,12 +1561,16 @@ export async function ithinkTrack(input: Json, awb: string) {
   const scans = (tracking?.scans as Json[]) ?? (tracking?.history as Json[]) ?? [];
   return {
     status: String(tracking?.current_status ?? tracking?.status ?? ""),
+    courierName: String(tracking?.logistic_name ?? tracking?.courier_name ?? tracking?.courier ?? ""),
+    awb,
     events: scans.map((scan) => ({
       at: String(scan.date ?? scan.time ?? scan.updated_date ?? ""),
       status: String(scan.status ?? scan.activity ?? ""),
       location: String(scan.location ?? scan.city ?? ""),
     })),
     trackingUrl: String(tracking?.tracking_url ?? `https://www.ithinklogistics.com/track-order?awb=${awb}`),
+    expectedBy: promisedFrom(tracking, tracking?.expected_delivery_date, tracking?.edd, tracking?.expected_delivery, tracking?.delivery_date),
+    ...riderHit(tracking ?? data, String(tracking?.current_status ?? tracking?.status ?? "")),
   };
 }
 
@@ -1534,6 +1842,19 @@ export async function shipyaariBook(input: Json, order: BookInput): Promise<Book
   };
 }
 
+export async function shipyaariLabel(input: Json, awb: string): Promise<LabelSheet | null> {
+  const token = await shipyaariToken(input);
+  if (!token) return null;
+  const data = await call("https://api.shipyaari.com/api/v1/order/label", {
+    method: "POST",
+    headers: shipyaariAuth(token),
+    json: { awb, awbs: [awb] },
+  });
+  const sheet = labelSheetFrom(data);
+  if (!sheet.awb) sheet.awb = awb;
+  return sheet;
+}
+
 export async function shipyaariTrack(input: Json, awb: string) {
   const token = await shipyaariToken(input);
   if (!token) return null;
@@ -1544,12 +1865,16 @@ export async function shipyaariTrack(input: Json, awb: string) {
   const history = (nested.history as Json[]) ?? (nested.scans as Json[]) ?? [];
   return {
     status: String(nested.status ?? nested.current_status ?? ""),
+    courierName: String(nested.courier_name ?? nested.courier ?? ""),
+    awb,
     events: history.map((entry) => ({
       at: String(entry.time ?? entry.date ?? ""),
       status: String(entry.status ?? entry.activity ?? ""),
       location: String(entry.location ?? ""),
     })),
     trackingUrl: String(nested.tracking_url ?? `https://shipyaari.com/track/${awb}`),
+    expectedBy: promisedFrom(data, nested.expected_delivery_date, nested.edd, nested.eta, nested.expected_delivery),
+    ...riderHit(data, String(nested.status ?? nested.current_status ?? "")),
   };
 }
 

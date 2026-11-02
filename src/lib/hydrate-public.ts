@@ -1,6 +1,13 @@
 import { getSettings, saveSettings } from "@/lib/admin-store";
 import { flyerKeys } from "@/lib/cms";
-import { flyers as seededFlyers } from "@/data/content";
+import { hydrateReviewsFromServer, replaceProductReviews, replaceSeminarReviews, type ProductReview } from "@/lib/reviews";
+import { announcements as seededAnnouncements, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
+import { articles as seededArticles } from "@/data/articles";
+import { events as seededEvents } from "@/data/events";
+import { clinics as seededClinics } from "@/data/clinics";
+import { videos as seededVideos } from "@/data/videos";
+import { books as seededBooks } from "@/data/books";
+import { getOrderSettings, publicOrderSettings, saveOrderSettings } from "@/lib/integrations";
 import { appliedFeedAt, emptyFeedFallback, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
 import type { Flyer } from "@/types";
@@ -34,6 +41,7 @@ function tryWrite(write: () => void) {
 /** Pull the published logo, name and slideshow onto this browser (phones included). */
 export async function hydratePublishedSite() {
   if (typeof window === "undefined") return;
+  void hydrateReviewsFromServer();
   const dirty = window.localStorage.getItem(DIRTY_KEY);
   const urls = ["/api/mobile/brand", "/api/mobile/feed", "/app-feed.json"];
   for (const url of urls) {
@@ -54,15 +62,21 @@ export async function hydratePublishedSite() {
         publishedAt: data.feed?.publishedAt || data.publishedAt || base.publishedAt,
       };
       setPublishedFeed(merged);
-      if (dirty) {
+      // Brand is only the logo and slideshow. Applying it would stamp the catalogue before books and events arrive.
+      if (!full) {
         if (url.includes("/brand")) continue;
         return;
       }
-      if (merged.publishedAt && appliedFeedAt() !== merged.publishedAt) {
+      if (dirty) return;
+      installPublishedOrderSettings(merged);
+      const feedAt = merged.publishedAt || "";
+      const catalogueAt = window.localStorage.getItem(CATALOGUE_STAMP) ?? "";
+      if (feedAt && appliedFeedAt() !== feedAt) {
         applyFeed(merged);
-        setAppliedFeedAt(merged.publishedAt);
+        setAppliedFeedAt(feedAt);
+      } else if (feedAt && catalogueAt !== feedAt) {
+        installPublishedCatalogue(merged);
       }
-      if (url.includes("/brand")) continue;
       return;
     } catch {
       /* try the next source */
@@ -70,7 +84,16 @@ export async function hydratePublishedSite() {
   }
 }
 
+/** Phones keep default checkout rules until this runs. Missing settings must not wipe a saved copy. */
+function installPublishedOrderSettings(feed: MobileFeed) {
+  if (!feed.orderSettings || typeof window === "undefined") return;
+  const next = publicOrderSettings(feed.orderSettings);
+  if (JSON.stringify(getOrderSettings()) === JSON.stringify(next)) return;
+  tryWrite(() => saveOrderSettings(next));
+}
+
 function applyFeed(feed: MobileFeed) {
+  installPublishedOrderSettings(feed);
   const current = getSettings();
   tryWrite(() => {
     saveSettings({
@@ -83,6 +106,7 @@ function applyFeed(feed: MobileFeed) {
       supportEmail: feed.site.email || current.supportEmail,
       supportPhone: feed.site.phone || current.supportPhone,
       social: { ...current.social, ...feed.site.social },
+      tickerSeconds: feed.site.tickerSeconds || current.tickerSeconds || 36,
     });
   });
 
@@ -105,4 +129,72 @@ function applyFeed(feed: MobileFeed) {
   if (feed.platformCountries) {
     tryWrite(() => window.localStorage.setItem("vgmf_platform_countries", JSON.stringify(feed.platformCountries)));
   }
+
+  if (feed.siteText) {
+    tryWrite(() => window.localStorage.setItem("vgmf_site_text", JSON.stringify(feed.siteText)));
+  }
+
+  if (feed.seminarReviews?.length) {
+    tryWrite(() => replaceSeminarReviews(feed.seminarReviews ?? []));
+  }
+  if (feed.productReviews?.length) {
+    tryWrite(() => replaceProductReviews(feed.productReviews as ProductReview[]));
+  }
+
+  installPublishedCatalogue(feed);
+}
+
+const CATALOGUE_STAMP = "vgmf_feed_catalogue_at";
+
+function splitSeed<T extends { id: string }>(seed: T[], incoming: T[]) {
+  const seedIds = new Set(seed.map((item) => item.id));
+  const custom = incoming.filter((item) => !seedIds.has(item.id));
+  const edits = seed.map((item) => {
+    const match = incoming.find((row) => row.id === item.id);
+    return match ? { ...match, hidden: false } : { id: item.id, hidden: true };
+  });
+  return { custom, edits };
+}
+
+function browserEdited(keys: string[], stamped: string | null) {
+  return !stamped && keys.some((key) => window.localStorage.getItem(key));
+}
+
+/** Phones and other browsers have no admin localStorage, so the published feed is the catalogue they see. */
+function installPublishedCatalogue(feed: MobileFeed) {
+  if (typeof window === "undefined") return;
+  const fromFeed = window.localStorage.getItem(CATALOGUE_STAMP);
+  // Sister-site events land in local storage on every device. That must not block the shop.
+  const authoredProducts = browserEdited(["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"], fromFeed);
+
+  const books = feed.books ?? [];
+  if (books.length && !authoredProducts) {
+    const present = new Set(books.map((book) => book.id));
+    tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify(books)));
+    tryWrite(() =>
+      window.localStorage.setItem(
+        "vgmf_deleted_books",
+        JSON.stringify(seededBooks.map((book) => book.id).filter((id) => !present.has(id)))
+      )
+    );
+    tryWrite(() => window.localStorage.setItem("vgmf_admin_products", "[]"));
+  }
+
+  const writeSplit = <T extends { id: string }>(seed: T[], incoming: T[] | undefined, editsKey: string, customKey: string) => {
+    if (!incoming?.length || browserEdited([editsKey, customKey], fromFeed)) return;
+    const parts = splitSeed(seed, incoming);
+    tryWrite(() => window.localStorage.setItem(customKey, JSON.stringify(parts.custom)));
+    tryWrite(() => window.localStorage.setItem(editsKey, JSON.stringify(parts.edits)));
+  };
+  writeSplit(seededEvents, feed.events, "vgmf_event_edits", "vgmf_custom_events");
+  writeSplit(seededArticles, feed.articles, "vgmf_article_edits", "vgmf_custom_articles");
+  writeSplit(seededAnnouncements, feed.announcements, "vgmf_announcement_edits", "vgmf_custom_announcements");
+  writeSplit(seededNotices, feed.notices, "vgmf_notice_edits", "vgmf_custom_notices");
+  writeSplit(seededClinics, feed.clinics, "vgmf_clinic_edits", "vgmf_custom_clinics");
+  writeSplit(seededVideos, feed.videos, "vgmf_video_edits", "vgmf_custom_videos");
+  if (feed.gallery?.length) tryWrite(() => window.localStorage.setItem("vgmf_gallery", JSON.stringify(feed.gallery)));
+  if (feed.about) tryWrite(() => window.localStorage.setItem("vgmf_about", JSON.stringify(feed.about)));
+  if (feed.flags) tryWrite(() => window.localStorage.setItem("vgmf_site_flags", JSON.stringify(feed.flags)));
+  if (feed.publishedAt) window.localStorage.setItem(CATALOGUE_STAMP, feed.publishedAt);
+  window.dispatchEvent(new Event("vgmf-cms"));
 }

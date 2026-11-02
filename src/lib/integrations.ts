@@ -1,4 +1,5 @@
 import type { Order } from "@/types";
+import { requiresLiveCommerce } from "@/lib/platform";
 
 const INTEGRATIONS_KEY = "vgmf_integrations";
 const ORDER_SETTINGS_KEY = "vgmf_order_settings";
@@ -234,7 +235,7 @@ export const defaultIntegrations: IntegrationSettings = {
     tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
     shipday: { apiKey: "", enabled: true },
     scooterImage: "",
-    hyperlocalPingSeconds: 20,
+    hyperlocalPingSeconds: 8,
     minWalletRupees: 50,
     connection: {},
     pickup: {
@@ -412,12 +413,57 @@ export function saveIntegrations(settings: IntegrationSettings) {
   persistMailStatus(next);
 }
 
+function finiteNumber(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+const SHIPPING_FEE_MODES = new Set<OrderSettings["shippingFeeMode"]>(["free", "flat", "per_item", "free_above", "courier_rate"]);
+
+/** Checkout rules that are safe to publish. No payment or courier secrets. */
+export function publicOrderSettings(input?: Partial<OrderSettings> | null): OrderSettings {
+  const merged = merge(defaultOrderSettings, input ?? null);
+  const mode = SHIPPING_FEE_MODES.has(merged.shippingFeeMode) ? merged.shippingFeeMode : defaultOrderSettings.shippingFeeMode;
+  const until = merged.cancellation?.allowedUntil;
+  return {
+    deliveryEnabled: Boolean(merged.deliveryEnabled),
+    pickupEnabled: Boolean(merged.pickupEnabled),
+    codEnabled: Boolean(merged.codEnabled),
+    codFee: Math.max(0, finiteNumber(merged.codFee, defaultOrderSettings.codFee)),
+    shippingFeeMode: mode,
+    flatFee: Math.max(0, finiteNumber(merged.flatFee, defaultOrderSettings.flatFee)),
+    perItemFee: Math.max(0, finiteNumber(merged.perItemFee, defaultOrderSettings.perItemFee)),
+    freeAbove: Math.max(0, finiteNumber(merged.freeAbove, defaultOrderSettings.freeAbove)),
+    showCourierChoice: Boolean(merged.showCourierChoice),
+    returns: {
+      enabled: false,
+      windowDays: Math.max(0, finiteNumber(merged.returns?.windowDays, defaultOrderSettings.returns.windowDays)),
+      pickupCharge: Math.max(0, finiteNumber(merged.returns?.pickupCharge, defaultOrderSettings.returns.pickupCharge)),
+      replacementAllowed: true,
+      reasons: Array.isArray(merged.returns?.reasons)
+        ? merged.returns.reasons.map((item) => String(item ?? "").trim()).filter(Boolean)
+        : defaultOrderSettings.returns.reasons,
+    },
+    refunds: {
+      enabled: Boolean(merged.refunds?.enabled),
+      method: merged.refunds?.method === "manual" ? "manual" : "original",
+      processingDays: Math.max(1, finiteNumber(merged.refunds?.processingDays, defaultOrderSettings.refunds.processingDays)),
+      autoRefundOnReturnPickup: Boolean(merged.refunds?.autoRefundOnReturnPickup),
+    },
+    cancellation: {
+      enabled: false,
+      allowedUntil: until === "Ordered" || until === "Shipped" || until === "Packed" ? until : "Packed",
+      windowHours: Math.max(0, finiteNumber(merged.cancellation?.windowHours, 0)),
+      fee: Math.max(0, finiteNumber(merged.cancellation?.fee, 0)),
+    },
+    adminActions: {
+      processAfterDelivery: merged.adminActions?.processAfterDelivery !== false,
+    },
+  };
+}
+
 export function getOrderSettings(): OrderSettings {
-  const settings = merge(defaultOrderSettings, readJSON<Partial<OrderSettings> | null>(ORDER_SETTINGS_KEY, null));
-  settings.cancellation.enabled = false;
-  settings.returns.enabled = false;
-  settings.returns.replacementAllowed = true;
-  return settings;
+  return publicOrderSettings(readJSON<Partial<OrderSettings> | null>(ORDER_SETTINGS_KEY, null));
 }
 
 export function saveOrderSettings(settings: OrderSettings) {
@@ -425,7 +471,10 @@ export function saveOrderSettings(settings: OrderSettings) {
 }
 
 export function razorpayKeys(settings = getIntegrations()) {
-  const { mode } = settings.razorpay;
+  const stored = settings.razorpay.mode;
+  const liveReady = Boolean(settings.razorpay.liveKeyId && settings.razorpay.liveKeySecret);
+  const testReady = Boolean(settings.razorpay.testKeyId && settings.razorpay.testKeySecret);
+  const mode = stored === "demo" && requiresLiveCommerce() ? (liveReady ? "live" : testReady ? "test" : stored) : stored;
   if (mode === "live") return { mode, keyId: settings.razorpay.liveKeyId, keySecret: settings.razorpay.liveKeySecret };
   if (mode === "test") return { mode, keyId: settings.razorpay.testKeyId, keySecret: settings.razorpay.testKeySecret };
   return { mode, keyId: "", keySecret: "" };
