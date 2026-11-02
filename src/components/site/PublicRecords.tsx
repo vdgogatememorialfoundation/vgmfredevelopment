@@ -65,7 +65,7 @@ export function VideosIndex() {
   const featured = videos.find((video) => video.featured) ?? videos[0];
   return (
     <main>
-      <PageHeader eyebrow={t("videos.eyebrow")} title={t("videos.title")} description={t("videos.desc")} />
+      <PageHeader eyebrow={t("videos.eyebrow")} title={t("videos.title")} showDescription={false} />
       {featured?.youtubeUrl && (
         <section className="border-b border-border bg-warm-cream">
           <div className="container grid items-center gap-8 py-10 lg:grid-cols-2">

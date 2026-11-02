@@ -16,7 +16,6 @@ export default function FeaturedBooks() {
         <SectionHeading
           eyebrow={t("home.shopEyebrow")}
           title={t("home.shopTitle")}
-          description={t("home.shopDesc")}
           action={
             <Link href="/shop" className="text-sm font-semibold text-burgundy hover:text-burgundy-dark">
               {t("home.viewShop")}
