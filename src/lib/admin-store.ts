@@ -1005,13 +1005,14 @@ function addressBlock(address?: { fullName?: string; phone?: string; line1?: str
   return `${esc(address.fullName || "Customer")}<br/>${esc(line)}<br/>${esc(address.phone || "")}${address.email ? `<br/>${esc(address.email)}` : ""}`;
 }
 
-function printHtml(title: string, html: string) {
+function printHtml(title: string, html: string, page = "A4") {
   if (typeof window === "undefined") return;
   const win = window.open("", "_blank");
   if (!win) return;
+  const margin = page === "A4" ? "12mm" : "4mm";
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
   <style>
-    @page { size: A4; margin: 12mm; }
+    @page { size: ${page}; margin: ${margin}; }
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", Arial, sans-serif; color: #1c1917; margin: 0; }
     .head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #8F2D2D; padding-bottom: 12px; }
@@ -1031,8 +1032,15 @@ function printHtml(title: string, html: string) {
     .totals td { border: none; padding: 3px 8px; }
     .grand td { border-top: 2px solid #8F2D2D; font-size: 14px; font-weight: 700; padding-top: 8px; }
     .foot { margin-top: 28px; font-size: 11px; color: #57534e; border-top: 1px solid #e7e5e4; padding-top: 8px; line-height: 1.5; }
-    .label-sheet { border: 2px solid #1c1917; padding: 16px; }
-    .awb { font-size: 26px; font-weight: 800; letter-spacing: 0.06em; margin: 4px 0; }
+    .label-sheet { border: 2px solid #1c1917; padding: 0; overflow: hidden; }
+    .label-band { background: #6A1F1F; color: #fff; padding: 10px 12px; display: flex; justify-content: space-between; gap: 8px; align-items: flex-end; }
+    .label-band b { font-size: 13px; letter-spacing: 0.12em; }
+    .label-band span { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.9; }
+    .label-body { padding: 12px; }
+    .awb { font-size: 22px; font-weight: 800; letter-spacing: 0.08em; margin: 0; }
+    .route { margin-top: 8px; border: 1px dashed #8F2D2D; border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; gap: 8px; }
+    .route b { font-size: 18px; letter-spacing: 0.04em; }
+    .meta { font-size: 11px; color: #44403c; margin: 6px 0 0; }
     .check { font-size: 16px; }
   </style></head><body>${html}</body></html>`);
   win.document.close();
@@ -1040,37 +1048,54 @@ function printHtml(title: string, html: string) {
   win.print();
 }
 
-export function printShippingLabel(shipment: ShipmentRecord) {
+export function printShippingLabel(
+  shipment: ShipmentRecord,
+  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string }
+) {
   const to = shipment.toAddress;
+  const awb = details?.awb || shipment.awb;
+  const courier = details?.courierName || shipment.courier || "Courier";
+  const routing = details?.routingCode || shipment.routingCode || "";
+  const hub = details?.destination || shipment.destinationHub || "";
   const html = `<div class="label-sheet">
-    ${letterhead()}
-    <h1>Shipping label</h1>
-    <p class="sub">Order ${esc(shipment.orderId)} · ${esc(formatDate(shipment.generatedAt))}</p>
-    <div class="grid">
-      <div class="box">
-        <p class="label">From</p>
-        <strong>${esc(siteConfig.name)}</strong><br/>
-        ${esc(siteConfig.address)}<br/>
-        Phone ${esc(siteConfig.phone)}
+    <div class="label-band">
+      <div>
+        <b>VGMF</b>
+        <div>${esc(siteConfig.name)}</div>
       </div>
-      <div class="box">
-        <p class="label">Deliver to</p>
-        <strong>${esc(to.fullName)}</strong><br/>
-        ${esc([to.line1, to.landmark, to.city, to.state, to.pincode].filter(Boolean).join(", "))}<br/>
-        Phone ${esc(to.phone)}
+      <span>Shipping label</span>
+    </div>
+    <div class="label-body">
+      <p class="label">${esc(courier)}</p>
+      <p class="awb">${esc(awb)}</p>
+      ${barcodeSvg(awb, { height: 56, module: 1.6 })}
+      <p class="meta">Order ${esc(shipment.orderId)} · ${esc(formatDate(shipment.generatedAt))}</p>
+      ${
+        routing || hub
+          ? `<div class="route"><div><p class="label">Routing</p><b>${esc(routing || "—")}</b></div><div><p class="label">Hub</p><b>${esc(hub || "—")}</b></div></div>`
+          : ""
+      }
+      <div class="grid">
+        <div class="box">
+          <p class="label">From</p>
+          <strong>${esc(siteConfig.name)}</strong><br/>
+          ${esc(siteConfig.address)}<br/>
+          ${esc(siteConfig.phone)}
+        </div>
+        <div class="box">
+          <p class="label">Deliver to</p>
+          <strong>${esc(to.fullName)}</strong><br/>
+          ${esc([to.line1, to.landmark, to.city, to.state, to.pincode].filter(Boolean).join(", "))}<br/>
+          ${esc(to.phone)}
+        </div>
       </div>
+      <table><tr><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
+      ${shipment.items.map((item) => `<tr><td>${esc(item.sku)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`).join("")}
+      </table>
+      <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
     </div>
-    <div class="box" style="margin-top:14px">
-      <p class="label">${esc(shipment.courier || "Courier")}</p>
-      <p class="awb">${esc(shipment.awb)}</p>
-      ${barcodeSvg(shipment.awb)}
-    </div>
-    <table><tr><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
-    ${shipment.items.map((item) => `<tr><td>${esc(item.sku)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`).join("")}
-    </table>
-    <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
   </div>`;
-  printHtml(`Label ${shipment.awb}`, html);
+  printHtml(`Label ${awb}`, html, "100mm 150mm");
 }
 
 export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {

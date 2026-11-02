@@ -129,15 +129,20 @@ function istDay(ms: number, zone = "Asia/Kolkata") {
   return `${bag.year}-${bag.month}-${bag.day}`;
 }
 
-function clockLabel(ms: number, zone = "Asia/Kolkata") {
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: zone,
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(ms));
+/** Drop the clock from a courier promise. Customers see the date, not 12:32 am. */
+export function deliveryDatePhrase(text?: string) {
+  const trimmed = text?.trim() ?? "";
+  if (!trimmed) return "";
+  return trimmed
+    .replace(/,?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?/gi, "")
+    .replace(/\s+(?:IST|UTC)\b/gi, "")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
-/** My Orders preview: expected date, tomorrow, today, or early. */
+/** My Orders preview: expected date, tomorrow, today, or early. The clock time stays hidden. */
 export function deliveryExpectation(status: string, expectedText?: string, now = Date.now(), country?: string) {
   if (status === "Delivered") return "Your order is delivered";
   if (status === "Cancelled") return "This order was cancelled";
@@ -154,10 +159,8 @@ export function deliveryExpectation(status: string, expectedText?: string, now =
   const due = istDay(expected, zone);
   const tomorrow = istDay(now + 24 * 60 * 60 * 1000, zone);
   if (status === "Out for Delivery" && due > today) return "Arriving early";
-  const timed = /\d:\d{2}/.test(expectedText ?? "");
-  const by = timed ? `${clockLabel(expected, zone)} ${zoneSuffix(zone)}` : "10:00 pm";
-  if (due === today) return timed ? `Arriving today by ${by}` : "Arriving today";
-  if (due === tomorrow) return `Arriving tomorrow by ${by}`;
+  if (due === today) return "Arriving today";
+  if (due === tomorrow) return "Arriving tomorrow";
   const dateLabel = new Intl.DateTimeFormat("en-IN", {
     timeZone: zone,
     weekday: "short",

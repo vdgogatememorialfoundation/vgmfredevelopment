@@ -678,14 +678,77 @@ export async function shiprocketPickup(input: Json, shipmentId: string, date?: s
 }
 
 export async function shiprocketLabel(input: Json, shipmentId: string) {
+  const sheet = await shiprocketLabelSheet(input, shipmentId);
+  return sheet ? { labelUrl: sheet.labelUrl ?? "" } : null;
+}
+
+export type LabelSheet = {
+  labelUrl?: string;
+  routingCode?: string;
+  destination?: string;
+  courierName?: string;
+  awb?: string;
+};
+
+function labelText(source: Json, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim() && value !== "null" && value !== "undefined") return value.trim();
+  }
+  return "";
+}
+
+function labelSheetFrom(source: Json | null | undefined): LabelSheet {
+  if (!source) return {};
+  const nested = source.data && typeof source.data === "object" ? (source.data as Json) : source;
+  const directUrl = typeof source.data === "string" ? source.data : "";
+  const track = (nested.tracking_data as Json) ?? nested;
+  const row = (Array.isArray(track.shipment_track) ? (track.shipment_track[0] as Json) : track) ?? nested;
+  const bag = { ...nested, ...row };
+  return {
+    labelUrl: directUrl || labelText(bag, ["label_url", "label", "pdf_url", "pdf", "shipping_label"]),
+    routingCode: labelText(bag, ["routing_code", "routingCode", "route_code", "sort_code"]),
+    destination: labelText(bag, ["destination", "destination_hub", "destination_code"]),
+    courierName: labelText(bag, ["courier_name", "courier", "courierName"]),
+    awb: labelText(bag, ["awb", "awb_code", "awb_number", "awbNumber"]),
+  };
+}
+
+/** Shiprocket label PDF plus the routing code printed on that label. */
+export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb = ""): Promise<LabelSheet | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
-  const data = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}` },
-    json: { shipment_id: [Number(shipmentId)] },
-  });
-  return { labelUrl: String(data.label_url ?? "") };
+  const headers = { authorization: `Bearer ${token}` };
+  let sheet: LabelSheet = {};
+  if (awb) {
+    try {
+      const tracked = await call(`https://apiv2.shiprocket.in/v1/external/courier/track/awb/${encodeURIComponent(awb)}`, { headers });
+      sheet = labelSheetFrom(tracked);
+    } catch {
+      /* the generate call below can still return a label */
+    }
+  }
+  if (shipmentId) {
+    try {
+      const data = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
+        method: "POST",
+        headers,
+        json: { shipment_id: [Number(shipmentId)] },
+      });
+      const generated = labelSheetFrom(data);
+      sheet = { ...sheet, ...Object.fromEntries(Object.entries(generated).filter(([, value]) => value)) };
+    } catch (error) {
+      if (!sheet.routingCode && !sheet.labelUrl) throw error;
+    }
+    try {
+      const details = await call(`https://apiv2.shiprocket.in/v1/external/shipments/${encodeURIComponent(shipmentId)}`, { headers });
+      const extra = labelSheetFrom(details);
+      sheet = { ...extra, ...Object.fromEntries(Object.entries(sheet).filter(([, value]) => value)) };
+    } catch {
+      /* routing is optional */
+    }
+  }
+  return sheet;
 }
 
 export async function shiprocketInvoice(input: Json, providerOrderId: string) {
@@ -973,6 +1036,27 @@ export async function nimbusWallet(input: Json) {
   return { provider: "nimbuspost", balance, currency: "INR" };
 }
 
+export async function nimbusLabel(input: Json, awb: string): Promise<LabelSheet | null> {
+  const token = await nimbusToken(input);
+  if (!token) return null;
+  const headers = { authorization: `Bearer ${token}` };
+  const data = await call("https://api.nimbuspost.com/v1/shipments/label", {
+    method: "POST",
+    headers,
+    json: { awbs: [awb] },
+  });
+  let sheet = labelSheetFrom(data);
+  try {
+    const tracked = await call(`https://api.nimbuspost.com/v1/shipments/track/${encodeURIComponent(awb)}`, { headers });
+    const extra = labelSheetFrom(tracked);
+    sheet = { ...extra, ...Object.fromEntries(Object.entries(sheet).filter(([, value]) => value)) };
+  } catch {
+    /* the label URL is the part the desk needs */
+  }
+  if (!sheet.awb) sheet.awb = awb;
+  return sheet;
+}
+
 export async function nimbusCancel(input: Json, awb: string) {
   const token = await nimbusToken(input);
   if (!token) return null;
@@ -1019,6 +1103,23 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
 
 function shipdayAuth(apiKey: string) {
   return { authorization: `Basic ${apiKey}` };
+}
+
+/** Gogate Products on Shipday. deliveryAt is an India wall clock, YYYY-MM-DD HH:MM:SS. */
+export async function shipdayReschedule(input: Json, orderId: string, deliveryAt: string) {
+  const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
+  if (!apiKey) return null;
+  const [date, time] = deliveryAt.split(" ");
+  const data = await call(`https://api.shipday.com/order/edit/${encodeURIComponent(orderId)}`, {
+    method: "PUT",
+    headers: shipdayAuth(apiKey),
+    json: {
+      expectedDeliveryDate: date,
+      expectedDeliveryTime: time,
+    },
+  });
+  if (data.success === false) throw new ProviderError(String(data.response ?? "Shipday could not reschedule the delivery."));
+  return { updated: true };
 }
 
 function shipdayOrders(data: unknown): Json[] {
@@ -1305,6 +1406,20 @@ function tookanExpected(job: Json) {
     String(job.job_delivery_datetime ?? job.job_time ?? "")
   );
   return instant == null ? undefined : formatIndiaClock(instant);
+}
+
+/** Move a Gogate Products Tookan delivery to a new India wall-clock time (YYYY-MM-DD HH:MM:SS). */
+export async function tookanReschedule(input: Json, jobId: string, extraId: string, deliveryAt: string) {
+  const apiKey = pick(input.apiKey, "TOOKAN_API_KEY");
+  if (!apiKey) return null;
+  const deliveryId = jobId.trim() || extraId.trim();
+  if (!deliveryId) throw new ProviderError("Tookan job id is missing.");
+  const data = await call("https://api.tookanapp.com/v2/edit_task", {
+    method: "POST",
+    json: { api_key: apiKey, job_id: Number(deliveryId) || deliveryId, job_delivery_datetime: deliveryAt },
+  });
+  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan could not reschedule the delivery."));
+  return { updated: true };
 }
 
 export async function tookanCancel(input: Json, jobId: string, extraId = "") {
@@ -1725,6 +1840,19 @@ export async function shipyaariBook(input: Json, order: BookInput): Promise<Book
     trackingUrl: String(nested.tracking_url ?? `https://shipyaari.com/track/${awb}`),
     courierCost: Number(nested.charges ?? nested.freight ?? 0) || undefined,
   };
+}
+
+export async function shipyaariLabel(input: Json, awb: string): Promise<LabelSheet | null> {
+  const token = await shipyaariToken(input);
+  if (!token) return null;
+  const data = await call("https://api.shipyaari.com/api/v1/order/label", {
+    method: "POST",
+    headers: shipyaariAuth(token),
+    json: { awb, awbs: [awb] },
+  });
+  const sheet = labelSheetFrom(data);
+  if (!sheet.awb) sheet.awb = awb;
+  return sheet;
 }
 
 export async function shipyaariTrack(input: Json, awb: string) {

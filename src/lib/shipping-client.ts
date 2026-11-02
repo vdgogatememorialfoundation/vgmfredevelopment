@@ -1,5 +1,6 @@
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
-import { customerCourierLabel, GOGATE_COURIER } from "@/lib/courier-label";
+import { customerCourierLabel, GOGATE_COURIER, isOwnFleet } from "@/lib/courier-label";
+import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
 import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
@@ -409,7 +410,7 @@ export async function attachManualTracking(orderId: string, portal: (typeof MANU
     },
     `Tracking ${saved.awb} attached from ${label(portal)}`
   );
-  const when = saved.expectedBy ? ` Delivery ${saved.expectedBy}.` : " The courier has not sent a delivery time yet.";
+  const when = saved.expectedBy ? ` Delivery ${deliveryDatePhrase(saved.expectedBy)}.` : " The courier has not sent a delivery date yet.";
   return `Fetched from ${label(portal)}. ${saved.courier} · ${saved.awb}. Status: ${result.status || saved.status}.${when}`;
 }
 
@@ -434,27 +435,49 @@ export async function schedulePickup(shipmentId: string, date: string, slot: str
     : `Pickup noted for ${date}, ${slot}.`;
 }
 
+type LabelFetch = {
+  labelUrl?: string;
+  routingCode?: string;
+  destination?: string;
+  courierName?: string;
+  awb?: string;
+};
+
 export async function downloadLabel(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
-  if (shipment.labelUrl) {
-    window.open(shipment.labelUrl, "_blank", "noopener");
-    return "Opened the courier label.";
-  }
-  if (shipment.live && shipment.provider === "shiprocket" && shipment.providerShipmentId) {
-    const result = await post<{ labelUrl: string }>({
+  const provider = shipment.provider;
+  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari"]);
+  let details: LabelFetch = {
+    labelUrl: shipment.labelUrl,
+    routingCode: shipment.routingCode,
+    destination: shipment.destinationHub,
+    courierName: shipment.courier,
+    awb: shipment.awb,
+  };
+  if (shipment.live && provider && fetched.has(provider) && (shipment.awb || shipment.providerShipmentId)) {
+    const result = await post<LabelFetch>({
       action: "label",
-      provider: "shiprocket",
+      provider,
       creds: credsFrom(getIntegrations()),
       shipmentId: shipment.providerShipmentId,
+      awb: shipment.awb,
     });
-    if (result.ok && result.labelUrl) {
-      patchShipment(shipmentId, { labelUrl: result.labelUrl });
-      window.open(result.labelUrl, "_blank", "noopener");
-      return "Opened the Shiprocket label.";
+    if (result.ok) {
+      details = {
+        labelUrl: result.labelUrl || details.labelUrl,
+        routingCode: result.routingCode || details.routingCode,
+        destination: result.destination || details.destination,
+        courierName: result.courierName || details.courierName,
+        awb: result.awb || details.awb,
+      };
+      patchShipment(shipmentId, {
+        labelUrl: details.labelUrl,
+        routingCode: details.routingCode,
+        destinationHub: details.destination,
+      });
     }
-  }
-  if (shipment.live && shipment.provider === "ithink" && shipment.awb) {
+  } else if (shipment.live && provider === "ithink" && shipment.awb && !shipment.labelUrl) {
     const result = await post<{ labelUrl: string }>({
       action: "label",
       provider: "ithink",
@@ -462,13 +485,43 @@ export async function downloadLabel(shipmentId: string) {
       awb: shipment.awb,
     });
     if (result.ok && result.labelUrl) {
+      details.labelUrl = result.labelUrl;
       patchShipment(shipmentId, { labelUrl: result.labelUrl });
-      window.open(result.labelUrl, "_blank", "noopener");
-      return "Opened the iThink Logistics label.";
     }
   }
-  printShippingLabel(shipment);
-  return "Printed the AWB label from the site.";
+  const latest = getShipments().find((item) => item.id === shipmentId) ?? shipment;
+  printShippingLabel(latest, details);
+  const fromPortal = fetched.has(provider ?? "") && shipment.live ? ` using the ${label(provider ?? "courier")} shipment` : "";
+  return `Printed the shipping label${fromPortal}.`;
+}
+
+/** Gogate Products only. Customers see the date. The clock is kept for the tracking line and the courier task. */
+export async function rescheduleOwnDelivery(shipmentId: string, localValue: string) {
+  const shipment = getShipments().find((item) => item.id === shipmentId);
+  if (!shipment) throw new Error("Shipment not found.");
+  if (!isOwnFleet(shipment.provider)) throw new Error("Delivery time can be changed only for Gogate Products deliveries.");
+  const match = localValue.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) throw new Error("Choose a delivery date and time.");
+  const wall = `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:00`;
+  const ms = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5])) - 5.5 * 60 * 60 * 1000;
+  const expectedBy = formatIndiaClock(ms);
+  const shown = deliveryDatePhrase(expectedBy);
+  let portal = "";
+  if (shipment.live && (shipment.provider === "tookan" || shipment.provider === "tookan-parcel" || shipment.provider === "shipday")) {
+    const result = await post<{ updated?: boolean }>({
+      action: "reschedule",
+      provider: shipment.provider,
+      creds: credsFrom(getIntegrations()),
+      jobId: shipment.providerShipmentId || shipment.awb,
+      extraId: shipment.providerOrderId || "",
+      providerOrderId: shipment.providerOrderId || shipment.awb,
+      deliveryAt: wall,
+    });
+    portal = result.ok ? " The courier task was updated." : " The date is saved here. The courier portal could not be updated.";
+  }
+  patchShipment(shipmentId, { expectedBy });
+  patchOrder(shipment.orderId, { eta: shown }, `Delivery rescheduled to ${shown}`);
+  return `Delivery date set to ${shown}.${portal} Customers see the date only.`;
 }
 
 export async function downloadInvoice(shipmentId: string) {

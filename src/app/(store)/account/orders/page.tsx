@@ -12,7 +12,7 @@ import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
-import { customerAddressLine, deliveryExpectation } from "@/lib/delivery-expectation";
+import { customerAddressLine, deliveryDatePhrase, deliveryExpectation } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
 import type { Order } from "@/types";
 
@@ -215,7 +215,7 @@ export default function OrdersPage() {
                               <div className="flex justify-between gap-4">
                                 <dt className="text-text-muted">Expected delivery</dt>
                                 <dd className="text-right font-medium text-emerald-700">
-                                  {shipment?.expectedBy || order.eta || "Within 5 business days"}
+                                  {deliveryDatePhrase(shipment?.expectedBy) || deliveryDatePhrase(order.eta) || order.eta || "Within 5 business days"}
                                 </dd>
                               </div>
                             </dl>

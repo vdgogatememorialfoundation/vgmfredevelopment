@@ -728,6 +728,9 @@ export interface ShipmentRecord {
   providerOrderId?: string;
   providerShipmentId?: string;
   labelUrl?: string;
+  /** Sort code returned by Shiprocket, Nimbuspost, or Shipyaari. */
+  routingCode?: string;
+  destinationHub?: string;
   invoiceUrl?: string;
   manifestUrl?: string;
   pickupScheduledFor?: string;

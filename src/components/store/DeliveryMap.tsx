@@ -137,9 +137,9 @@ function Schematic({
   return (
     <div className="vgmf-map-card">
       <div className="vgmf-map-stage">
-        <svg viewBox="0 0 360 220" role="img" aria-label="Path from the store to the customer">
-          <rect width="360" height="220" fill="#f4f0e8" />
-          <path d="M72 106.3 Q 177 36 282 94.3" fill="none" stroke={ROAD} strokeWidth="4" strokeLinecap="round" />
+        <svg viewBox="0 -36 360 256" role="img" aria-label="Path from the store to the customer">
+          <rect x="0" y="-36" width="360" height="256" fill="#f4f0e8" />
+          <path d="M72 106.3 Q 177 8 282 94.3" fill="none" stroke={ROAD} strokeWidth="4" strokeLinecap="round" />
           <g role="button" tabIndex={0} style={{ cursor: "pointer" }} onClick={() => setOpenPin("store")}>
             <image href={pin(STORE)} x="52" y="58" width="40" height="50" />
             <text x="72" y="132" textAnchor="middle" fontSize="11" fontWeight="700" fill={STORE}>
@@ -276,14 +276,16 @@ export default function DeliveryMap({
       };
     };
     const timers: number[] = [];
+    let observer: ResizeObserver | null = null;
     loadTrackingMaps(mapsKey)
       .then(() => {
         const maps = googleWin.google?.maps;
         if (cancelled || !maps || !hostRef.current) return;
         const fitArc = (target: LiveMap, path: LatLng[]) => {
+          if (!path.length || !hostRef.current || hostRef.current.clientHeight < 80) return;
           const box = new maps.LatLngBounds();
           framePoints(path).forEach((point) => box.extend(point));
-          target.fitBounds(box, 28);
+          target.fitBounds(box, { top: 48, right: 36, bottom: 56, left: 36 });
           target.setTilt(0);
           target.setHeading(0);
         };
@@ -371,13 +373,22 @@ export default function DeliveryMap({
           fitArc(map, path);
           maps.event?.addListenerOnce(map, "idle", () => fitArc(map, path));
           timers.push(window.setTimeout(() => fitArc(map, path), 400));
+          timers.push(window.setTimeout(() => fitArc(map, path), 1200));
         }
         sessionRef.current = session;
+        if (hostRef.current) {
+          observer = new ResizeObserver(() => {
+            const live = sessionRef.current;
+            if (live?.path.length) fitArc(live.map, live.path);
+          });
+          observer.observe(hostRef.current);
+        }
         if (!cancelled) setMapReady(true);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
+      observer?.disconnect();
       timers.forEach((id) => window.clearTimeout(id));
     };
   }, [mapsKey, resolved.store, resolved.drop, store.label, drop.label]);
@@ -428,7 +439,9 @@ export default function DeliveryMap({
     live.path = path;
     const bounds = new maps.LatLngBounds();
     framePoints(path).forEach((point) => bounds.extend(point));
-    live.map.fitBounds(bounds, 28);
+    if ((hostRef.current?.clientHeight ?? 0) >= 80) {
+      live.map.fitBounds(bounds, { top: 48, right: 36, bottom: 56, left: 36 });
+    }
     live.map.setTilt(0);
     live.map.setHeading(0);
     if (!accepted || !agent) {

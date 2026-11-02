@@ -15,7 +15,6 @@ import {
   printOrderInvoice,
   printOrdersPdf,
   printPackagingSlip,
-  printShippingLabel,
   recordPayment,
   refundToStoreCredit,
   resaveOrder,
@@ -34,6 +33,7 @@ import {
   createReturnShipment,
   downloadInvoice,
   downloadLabel,
+  rescheduleOwnDelivery,
   downloadManifest,
   fetchCourierRates,
   orderWeightKg,
@@ -46,7 +46,8 @@ import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGatewa
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
-import { statusStamp } from "@/lib/delivery-expectation";
+import { deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
+import { isOwnFleet } from "@/lib/courier-label";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
@@ -642,6 +643,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [manualPortal, setManualPortal] = useState<(typeof MANUAL_PORTALS)[number]["id"]>("shiprocket");
   const [manualAwb, setManualAwb] = useState("");
   const [manualCourier, setManualCourier] = useState("");
+  const [deliveryWhen, setDeliveryWhen] = useState("");
   const [returnReason, setReturnReason] = useState(getOrderSettings().returns.reasons[0] ?? "");
   const [refundDest, setRefundDest] = useState<"original" | "store_credit">("original");
   const [editing, setEditing] = useState(false);
@@ -975,7 +977,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
-                  <p className="text-xs text-text-muted">Courier delivery: {shipment.expectedBy || "Waiting for the courier"}</p>
+                  <p className="text-xs text-text-muted">Delivery date: {deliveryDatePhrase(shipment.expectedBy) || "Waiting for the courier"}</p>
                   {shipment.pickupScheduledFor && <p className="text-xs text-text-muted">Pickup: {formatDate(shipment.pickupScheduledFor)}{shipment.pickupSlot ? `, ${shipment.pickupSlot}` : ""}{shipment.pickupReference ? ` · ref ${shipment.pickupReference}` : ""}</p>}
                   {shipment.note && <p className="text-xs text-text-muted">{shipment.note}</p>}
                   <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
@@ -1024,6 +1026,21 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     </SelectInput>
                     <Button onClick={() => run("pickup", () => schedulePickup(shipment.id, pickupDate, pickupSlot))}>Schedule pickup</Button>
                   </div>
+                  {isOwnFleet(shipment.provider) && shipment.status !== "Delivered" && (
+                    <div className="rounded-xl border border-border p-3">
+                      <p className="text-sm font-semibold text-text-primary">Reschedule Gogate Products delivery</p>
+                      <p className="mt-1 text-xs text-text-muted">Customers see the date only. The time is sent to the courier task and kept for the tracking line.</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <TextInput type="datetime-local" value={deliveryWhen} onChange={(event) => setDeliveryWhen(event.target.value)} />
+                        <Button
+                          disabled={busy === "reschedule" || !deliveryWhen}
+                          onClick={() => run("reschedule", () => rescheduleOwnDelivery(shipment.id, deliveryWhen))}
+                        >
+                          {busy === "reschedule" ? "Saving…" : "Save delivery time"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   {shipment.status !== "Delivered" && (
                     <Button variant="danger" onClick={() => {
                       if (!window.confirm("Cancel this shipment and assign a different courier?")) return;
@@ -1197,7 +1214,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => printOrderInvoice(order, shipment)}>Print invoice</Button>
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
-        {shipment && <Button variant="ghost" onClick={() => printShippingLabel(shipment)}>Print shipping label</Button>}
+        {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Print shipping label</Button>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
           run("delete", async () => {

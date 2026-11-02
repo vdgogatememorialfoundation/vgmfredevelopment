@@ -5,7 +5,7 @@ import { getSettings } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
 import { customerCourierLabel, customerStatusLabel, riderAccepted } from "@/lib/courier-label";
 import { getPickupLocation } from "@/lib/fulfillment";
-import { customerAddressLine } from "@/lib/delivery-expectation";
+import { customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import DeliveryMap from "@/components/store/DeliveryMap";
 import type { Order, ShipmentRecord } from "@/types";
@@ -77,7 +77,7 @@ export default function LiveTracking({
       agentName={accepted ? shipment?.agentName : undefined}
       agentPhone={accepted ? shipment?.agentPhone : undefined}
       showCourier={accepted}
-      promised={shipment?.expectedBy || ""}
+      promised={deliveryDatePhrase(shipment?.expectedBy)}
       onArrival={onArrival}
     />
   );

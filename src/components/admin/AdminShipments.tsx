@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import {
   getShipments,
-  printShippingLabel,
   updateShipmentStatus,
 } from "@/lib/admin-store";
+import { downloadLabel } from "@/lib/shipping-client";
 import { getOrder } from "@/lib/admin-store";
 import type { ShipmentRecord } from "@/types";
 import {
@@ -79,7 +79,7 @@ export function ShipmentsSection() {
                         <option key={s}>{s}</option>
                       ))}
                     </SelectInput>
-                    <Button variant="ghost" onClick={() => printShippingLabel(shipment)}>
+                    <Button variant="ghost" onClick={() => void downloadLabel(shipment.id).catch(() => undefined)}>
                       Shipping label
                     </Button>
                     <span className="text-xs text-text-muted">

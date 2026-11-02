@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils";
-import { parseExpected, statusStamp } from "@/lib/delivery-expectation";
+import { deliveryDatePhrase, parseExpected, statusStamp } from "@/lib/delivery-expectation";
 import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
 import { pickupOtp } from "@/lib/store";
@@ -126,7 +126,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
     if (stage.id === "delivered" && !stage.reached) {
-      next.expected = shipment?.expectedBy ? `Expected by ${shipment.expectedBy}` : "Expected delivery time is pending from the courier";
+      next.expected = shipment?.expectedBy ? `Expected by ${deliveryDatePhrase(shipment.expectedBy)}` : "Expected delivery date is pending from the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;

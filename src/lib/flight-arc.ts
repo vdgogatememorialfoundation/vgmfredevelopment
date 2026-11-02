@@ -34,8 +34,8 @@ export function framePoints(path: FlightPoint[]) {
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
-  const latPad = Math.max((maxLat - minLat) * 0.45, 0.004);
-  const lngPad = Math.max((maxLng - minLng) * 0.45, 0.004);
+  const latPad = Math.max((maxLat - minLat) * 1.2, 0.012);
+  const lngPad = Math.max((maxLng - minLng) * 0.7, 0.008);
   return [
     ...path,
     { lat: minLat - latPad, lng: minLng - lngPad },
