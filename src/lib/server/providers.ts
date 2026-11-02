@@ -424,6 +424,27 @@ export async function sendMetaTemplate(
   return { id: String(messages[0]?.id ?? ""), provider: "meta" };
 }
 
+/** Free-form reply inside the 24-hour customer-care window. */
+export async function sendMetaText(input: Json, message: { to: string; body: string }) {
+  const token = pick(input.metaAccessToken, "META_WA_TOKEN");
+  const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
+  if (!token || !phoneId) return null;
+  const version = typeof input.metaApiVersion === "string" && input.metaApiVersion ? input.metaApiVersion : "v21.0";
+  const data = await call(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    json: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: waCloudTo(message.to),
+      type: "text",
+      text: { preview_url: false, body: message.body.slice(0, 4096) },
+    },
+  });
+  const messages = (data.messages as Json[] | undefined) ?? [];
+  return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
+}
+
 export async function listMetaTemplates(input: Json) {
   const token = pick(input.metaAccessToken, "META_WA_TOKEN");
   const wabaId = pick(input.metaWabaId, "META_WA_WABA_ID");
@@ -462,6 +483,35 @@ export async function sendAiSensy(input: Json, message: { to: string; campaign: 
     },
   });
   return { id: "", provider: "aisensy" };
+}
+
+/** Session reply through the AiSensy Project API. Needs the project id and app password. */
+export async function sendAiSensySession(input: Json, message: { to: string; body: string }) {
+  const projectId = pick(input.aisensyProjectId, "AISENSY_PROJECT_ID");
+  const password = pick(input.aisensyAppPassword, "AISENSY_APP_PASSWORD");
+  if (!projectId || !password) return null;
+  const data = await call(`https://apis.aisensy.com/project-apis/v1/project/${encodeURIComponent(projectId)}/messages`, {
+    method: "POST",
+    headers: { "X-AiSensy-Project-API-Pwd": password },
+    json: {
+      to: waCloudTo(message.to),
+      type: "text",
+      recipient_type: "individual",
+      text: { body: message.body.slice(0, 4096) },
+    },
+  });
+  const id = String(data.id ?? (data.messages as Json[] | undefined)?.[0]?.id ?? "");
+  return { id, provider: "aisensy" as const };
+}
+
+export function metaSignatureOk(raw: string, header: string | null, secret: string) {
+  if (!secret) return true;
+  if (!header?.startsWith("sha256=")) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(raw).digest("hex")}`;
+  const left = Buffer.from(header);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
 }
 
 /* ---------------- Shipping ---------------- */

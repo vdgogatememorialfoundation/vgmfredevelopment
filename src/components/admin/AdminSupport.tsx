@@ -43,6 +43,7 @@ import {
   TextInput,
 } from "@/components/admin/AdminUI";
 import { classNames, formatDateTime } from "@/lib/utils";
+import { WhatsAppInboxDesk } from "@/components/admin/WhatsAppInbox";
 
 const TICKET_TONES: Record<string, string> = {
   Open: "bg-burgundy/10 text-burgundy",
@@ -53,7 +54,7 @@ const TICKET_TONES: Record<string, string> = {
 
 export function SupportSection() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"queries" | "tickets" | "chat" | "faq">("tickets");
+  const [tab, setTab] = useState<"queries" | "tickets" | "chat" | "whatsapp" | "faq">("tickets");
   const [messages, setMessages] = useState(() => getSupportMessages());
   const [tickets, setTickets] = useState(() => ticketsVisibleTo(user));
   const [createForm, setCreateForm] = useState({ name: "", email: "", phone: "", subject: "", body: "", assignedTo: "" });
@@ -81,7 +82,7 @@ export function SupportSection() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {(["tickets", "chat", "queries", "faq"] as const).map((t) => (
+        {(["tickets", "chat", "whatsapp", "queries", "faq"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -91,7 +92,7 @@ export function SupportSection() {
               tab === t ? "bg-burgundy text-white" : "bg-white text-text-muted hover:text-burgundy border border-border"
             )}
           >
-            {t === "queries" ? "Contact queries" : t === "tickets" ? "Tickets" : t === "chat" ? "Live chat" : "FAQ"}
+            {t === "queries" ? "Contact queries" : t === "tickets" ? "Tickets" : t === "chat" ? "Live chat" : t === "whatsapp" ? "WhatsApp" : "FAQ"}
           </button>
         ))}
       </div>
@@ -177,6 +178,8 @@ export function SupportSection() {
       )}
 
       {tab === "chat" && <LiveChatDesk />}
+
+      {tab === "whatsapp" && <WhatsAppInboxDesk />}
 
       {tab === "faq" && (
         <Panel title={`FAQ (${faqs.length})`} description="SPAs answer these in the chatbot and FAQ pages.">

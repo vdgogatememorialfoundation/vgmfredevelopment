@@ -647,16 +647,16 @@ export function WhatsAppSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="WhatsApp" text="Send order and account messages through Meta Cloud API (developers.facebook.com) or Zoho CPaaS (Agent API key). Sync Meta templates and map each site event to a template name or Zoho template alias." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
+      <Header title="WhatsApp" text="Two business numbers stay live together. Chats on the Meta number are answered through Meta. Chats on the AiSensy number are answered through AiSensy. The choice below is only which line sends order and account alerts." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
       <Card title="Provider">
         <div className="grid gap-3 md:grid-cols-4">
           {([
             ["none", "Off", "Only email is sent."],
-            ["meta", "Meta Cloud API", "Direct from your WhatsApp Business Account."],
+            ["meta", "Meta Cloud API", "Order alerts from the Meta number."],
             ["zoho", "Zoho CPaaS", "Zoho CPaaS WhatsApp channel."],
-            ["aisensy", "AiSensy", "Through AiSensy API campaigns."],
+            ["aisensy", "AiSensy", "Order alerts from the AiSensy number."],
           ] as const).map(([provider, label, hint]) => (
             <button
               key={provider}
@@ -676,13 +676,16 @@ export function WhatsAppSettingsDesk() {
             <Text label="App ID" value={value.metaAppId} onChange={(metaAppId) => set({ metaAppId })} />
             <Text label="WhatsApp Business Account ID" value={value.metaWabaId} onChange={(metaWabaId) => set({ metaWabaId })} />
             <Text label="Phone number ID" value={value.metaPhoneNumberId} onChange={(metaPhoneNumberId) => set({ metaPhoneNumberId })} />
+            <Text label="Meta WhatsApp number" value={value.metaDisplayNumber} onChange={(metaDisplayNumber) => set({ metaDisplayNumber })} placeholder="+91…" hint="The first business number. Customers who message this number are answered through Meta." />
             <Secret label="Access token" value={value.metaAccessToken} onChange={(metaAccessToken) => set({ metaAccessToken })} />
+            <Secret label="App secret (optional)" value={value.metaAppSecret} onChange={(metaAppSecret) => set({ metaAppSecret })} />
             <Text label="Graph API version" value={value.metaApiVersion} onChange={(metaApiVersion) => set({ metaApiVersion })} />
+            <Text label="Verify token" value={value.metaVerifyToken} onChange={(metaVerifyToken) => set({ metaVerifyToken })} hint="Type a private word, Save, then paste the same word into Meta → WhatsApp → Configuration." />
+            <Text label="Reply template after 24 hours" value={value.metaReplyTemplate} onChange={(metaReplyTemplate) => set({ metaReplyTemplate })} placeholder="one variable, e.g. desk_reply" hint="Used when the customer has not written in the last 24 hours." />
             <button type="button" className={ghost} disabled={busy} onClick={sync}>{busy ? "Syncing…" : "Sync templates from Meta"}</button>
             <p className="text-xs text-slate-500">
               Callback URL for Meta App → WhatsApp → Configuration:{" "}
               <span className="font-mono break-all">{typeof window === "undefined" ? "/api/notify/webhook" : `${window.location.origin}/api/notify/webhook`}</span>
-              . Verify token env: <span className="font-mono">META_WA_VERIFY_TOKEN</span>.
             </p>
           </div>
         </Card>
@@ -706,10 +709,22 @@ export function WhatsAppSettingsDesk() {
             </label>
           </div>
         </Card>
-        <Card title="AiSensy" text="AiSensy → Manage → API key. Create one API campaign per message.">
+        <Card title="AiSensy" text="Manage → API Keys. The API key sends campaigns. The project id and app password let the desk reply in the 24-hour window.">
           <div className="space-y-3">
             <Secret label="API key" value={value.aisensyApiKey} onChange={(aisensyApiKey) => set({ aisensyApiKey })} />
-            <Text label="Project ID (optional)" value={value.aisensyProjectId} onChange={(aisensyProjectId) => set({ aisensyProjectId })} />
+            <Text label="Project ID" value={value.aisensyProjectId} onChange={(aisensyProjectId) => set({ aisensyProjectId })} />
+            <Text label="AiSensy WhatsApp number" value={value.aisensyDisplayNumber} onChange={(aisensyDisplayNumber) => set({ aisensyDisplayNumber })} placeholder="+91…" hint="The second business number. Customers who message this number are answered through AiSensy." />
+            <Secret label="Project app password" value={value.aisensyAppPassword} onChange={(aisensyAppPassword) => set({ aisensyAppPassword })} />
+            <Text label="Reply campaign after 24 hours" value={value.aisensyReplyCampaign} onChange={(aisensyReplyCampaign) => set({ aisensyReplyCampaign })} placeholder="Live API campaign name" hint="The campaign template needs one variable. The desk reply is that variable." />
+            <Text label="Webhook token (optional)" value={value.aisensyWebhookToken} onChange={(aisensyWebhookToken) => set({ aisensyWebhookToken })} hint="If set, AiSensy must call the URL below, which includes this token." />
+            <p className="text-xs text-slate-500">
+              Webhook URL for AiSensy → Manage → Webhooks:{" "}
+              <span className="font-mono break-all">
+                {typeof window === "undefined"
+                  ? "/api/whatsapp/aisensy"
+                  : `${window.location.origin}/api/whatsapp/aisensy${value.aisensyWebhookToken ? `?token=${encodeURIComponent(value.aisensyWebhookToken)}` : ""}`}
+              </span>
+            </p>
           </div>
         </Card>
       </div>

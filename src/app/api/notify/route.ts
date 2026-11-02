@@ -9,6 +9,7 @@ import {
   sendZohoCpaas,
 } from "@/lib/server/providers";
 import { applyFoundationBrand, wrapFoundationEmail } from "@/lib/email-layout";
+import { saveWhatsAppCredsFile } from "@/lib/server/whatsapp-inbox";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
       };
       await writeKv("admin", "notify-creds", next);
       await writeKv("admin", "email-creds", next.email);
+      saveWhatsAppCredsFile(next.whatsapp);
       return NextResponse.json({ ok: true });
     }
 
