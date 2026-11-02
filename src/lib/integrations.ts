@@ -97,6 +97,8 @@ export interface IntegrationSettings {
     metaAppId: string;
     metaWabaId: string;
     metaPhoneNumberId: string;
+    /** Customers message this WhatsApp number. Inbox replies go out on it through Meta. */
+    metaDisplayNumber: string;
     metaAccessToken: string;
     metaApiVersion: string;
     /** Same value pasted into Meta → WhatsApp → Configuration → Verify token. */
@@ -107,6 +109,8 @@ export interface IntegrationSettings {
     metaReplyTemplate: string;
     aisensyApiKey: string;
     aisensyProjectId: string;
+    /** Customers message this second WhatsApp number. Inbox replies go out on it through AiSensy. */
+    aisensyDisplayNumber: string;
     /** Project API app password. Unlocks free-text replies inside 24 hours. */
     aisensyAppPassword: string;
     /** Live API campaign with one variable, used after the 24-hour window. */
@@ -220,6 +224,7 @@ export const defaultIntegrations: IntegrationSettings = {
     metaAppId: "",
     metaWabaId: "",
     metaPhoneNumberId: "",
+    metaDisplayNumber: "",
     metaAccessToken: "",
     metaApiVersion: "v21.0",
     metaVerifyToken: "",
@@ -227,6 +232,7 @@ export const defaultIntegrations: IntegrationSettings = {
     metaReplyTemplate: "",
     aisensyApiKey: "",
     aisensyProjectId: "",
+    aisensyDisplayNumber: "",
     aisensyAppPassword: "",
     aisensyReplyCampaign: "",
     aisensyWebhookToken: "",

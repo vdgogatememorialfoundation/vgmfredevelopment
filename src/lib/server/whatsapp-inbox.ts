@@ -15,6 +15,8 @@ export type WaMessage = {
   status?: string;
   externalId?: string;
   by?: string;
+  /** Desk-only note. Never sent out on WhatsApp. */
+  system?: boolean;
 };
 
 export type WaThread = {
@@ -22,11 +24,18 @@ export type WaThread = {
   phone: string;
   name: string;
   provider: WaProvider;
+  /** The business number this chat is on. */
+  lineNumber?: string;
+  department?: string;
+  assignedTo?: string;
+  assignedName?: string;
   updatedAt: string;
   unread: number;
   lastInboundAt?: string;
   messages: WaMessage[];
 };
+
+export const WA_DEPARTMENTS = ["Support", "Shop", "Clinic", "Events", "Accounts"] as const;
 
 type Store = { threads: WaThread[] };
 
@@ -41,6 +50,7 @@ const CRED_KEYS = [
   "metaAppId",
   "metaWabaId",
   "metaPhoneNumberId",
+  "metaDisplayNumber",
   "metaAccessToken",
   "metaApiVersion",
   "metaVerifyToken",
@@ -48,6 +58,7 @@ const CRED_KEYS = [
   "metaReplyTemplate",
   "aisensyApiKey",
   "aisensyProjectId",
+  "aisensyDisplayNumber",
   "aisensyAppPassword",
   "aisensyReplyCampaign",
   "aisensyWebhookToken",
@@ -63,14 +74,71 @@ function nid() {
   return `wa${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function threadKey(provider: WaProvider, phone: string) {
+  return `${provider}:${phone}`;
+}
+
+function normalizeStore(store: Store) {
+  let dirty = false;
+  const byId = new Map<string, WaThread>();
+  const threads: WaThread[] = [];
+  for (const thread of store.threads) {
+    if (!thread || typeof thread !== "object") {
+      dirty = true;
+      continue;
+    }
+    const provider: WaProvider = thread.provider === "aisensy" ? "aisensy" : "meta";
+    const rawId = String(thread.id || "");
+    const phone = waPhone(thread.phone || (rawId.includes(":") ? rawId.slice(rawId.indexOf(":") + 1) : rawId));
+    if (!phone) {
+      dirty = true;
+      continue;
+    }
+    const id = threadKey(provider, phone);
+    if (thread.id !== id || thread.provider !== provider || thread.phone !== phone) dirty = true;
+    thread.id = id;
+    thread.provider = provider;
+    thread.phone = phone;
+    const existing = byId.get(id);
+    if (existing) {
+      existing.messages.push(...(Array.isArray(thread.messages) ? thread.messages : []));
+      existing.messages.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+      if (existing.messages.length > MAX_MESSAGES) existing.messages.splice(0, existing.messages.length - MAX_MESSAGES);
+      if (String(thread.updatedAt || "") > String(existing.updatedAt || "")) existing.updatedAt = thread.updatedAt;
+      if (!existing.lineNumber && thread.lineNumber) existing.lineNumber = thread.lineNumber;
+      if (!existing.assignedTo && thread.assignedTo) {
+        existing.assignedTo = thread.assignedTo;
+        existing.assignedName = thread.assignedName;
+      }
+      if (!existing.department && thread.department) existing.department = thread.department;
+      dirty = true;
+      continue;
+    }
+    byId.set(id, thread);
+    threads.push(thread);
+  }
+  if (threads.length !== store.threads.length) dirty = true;
+  store.threads = threads;
+  return dirty;
+}
+
 function readStore(): Store {
   try {
     const parsed = JSON.parse(readFileSync(FILE(), "utf8")) as Store;
-    if (parsed && Array.isArray(parsed.threads)) return parsed;
+    if (parsed && Array.isArray(parsed.threads)) {
+      if (normalizeStore(parsed)) writeStore(parsed);
+      return parsed;
+    }
   } catch {
     /* missing */
   }
   return { threads: [] };
+}
+
+function savedLineNumber(provider: WaProvider) {
+  const file = readCredsFile();
+  const raw = provider === "meta" ? file.metaDisplayNumber : file.aisensyDisplayNumber;
+  return waPhone(typeof raw === "string" ? raw : "");
 }
 
 function writeStore(store: Store) {
@@ -95,6 +163,17 @@ export function serviceWindowOpen(thread: { lastInboundAt?: string }, now = Date
   return Number.isFinite(at) && now - at < WINDOW_MS;
 }
 
+function rememberLine(thread: WaThread, phone: string, lineNumber?: string) {
+  const incoming = waPhone(lineNumber || "");
+  if (incoming && incoming !== phone) {
+    thread.lineNumber = incoming;
+    return;
+  }
+  if (thread.lineNumber) return;
+  const saved = savedLineNumber(thread.provider);
+  if (saved && saved !== phone) thread.lineNumber = saved;
+}
+
 function upsert(store: Store, input: {
   provider: WaProvider;
   phone: string;
@@ -105,15 +184,25 @@ function upsert(store: Store, input: {
   at?: string;
   by?: string;
   status?: string;
+  lineNumber?: string;
+  system?: boolean;
 }) {
   const phone = waPhone(input.phone);
   if (!phone || phone.length < 8) return null;
   const text = input.text.replace(/\s+/g, " ").trim().slice(0, 4000);
   if (!text) return null;
-  let thread = store.threads.find((item) => item.id === phone);
+  const id = threadKey(input.provider, phone);
+  let thread = store.threads.find((item) => item.id === id);
+  if (!thread) {
+    const legacy = store.threads.find((item) => item.id === phone && item.provider === input.provider);
+    if (legacy) {
+      legacy.id = id;
+      thread = legacy;
+    }
+  }
   if (!thread) {
     thread = {
-      id: phone,
+      id,
       phone,
       name: input.name?.trim() || `+${phone}`,
       provider: input.provider,
@@ -123,9 +212,10 @@ function upsert(store: Store, input: {
     };
     store.threads.unshift(thread);
   }
+  rememberLine(thread, phone, input.lineNumber);
   if (input.externalId && thread.messages.some((message) => message.externalId === input.externalId)) return thread;
-  if (input.direction === "out") {
-    const last = thread.messages[thread.messages.length - 1];
+  if (input.direction === "out" && !input.system) {
+    const last = [...thread.messages].reverse().find((message) => !message.system);
     const at = Date.parse(input.at || new Date().toISOString());
     if (last?.direction === "out" && last.text === text && Number.isFinite(at) && Math.abs(at - Date.parse(last.at)) < 60_000) {
       if (input.externalId && !last.externalId) last.externalId = input.externalId;
@@ -137,15 +227,15 @@ function upsert(store: Store, input: {
     id: nid(),
     at,
     direction: input.direction,
-    provider: input.provider,
+    provider: thread.provider,
     text,
     status: input.status,
     externalId: input.externalId || undefined,
     by: input.by,
+    system: input.system || undefined,
   });
   if (thread.messages.length > MAX_MESSAGES) thread.messages.splice(0, thread.messages.length - MAX_MESSAGES);
   thread.updatedAt = at;
-  thread.provider = input.provider;
   if (input.name?.trim()) thread.name = input.name.trim().slice(0, 80);
   if (input.direction === "in") {
     thread.lastInboundAt = at;
@@ -224,6 +314,7 @@ export type InboundWa = {
   externalId?: string;
   at?: string;
   direction: "in" | "out";
+  lineNumber?: string;
 };
 
 export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string }[] } {
@@ -236,6 +327,7 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
     for (const change of changes) {
       const value = asRecord(asRecord(change)?.value);
       if (!value) continue;
+      const lineNumber = waPhone(String(asRecord(value.metadata)?.display_phone_number || "")) || undefined;
       const names = new Map<string, string>();
       for (const contact of Array.isArray(value.contacts) ? value.contacts : []) {
         const row = asRecord(contact);
@@ -256,6 +348,7 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
           externalId: String(message.id || ""),
           at: Number.isFinite(stamp) && stamp > 0 ? new Date(stamp * 1000).toISOString() : undefined,
           direction: "in",
+          lineNumber,
         });
       }
       for (const raw of Array.isArray(value.statuses) ? value.statuses : []) {
@@ -297,6 +390,12 @@ export function parseAiSensyWebhook(body: unknown): InboundWa[] {
   const sender = firstString(message, ["sender", "direction"]).toUpperCase();
   const direction: "in" | "out" = sender === "AGENT" || sender === "BUSINESS" || sender === "API" || sender === "OUT" ? "out" : "in";
   const stamp = Date.parse(firstString(message, ["sent_at", "created_at"]) || firstString(root, ["created_at", "timestamp"]));
+  const lineNumber =
+    waPhone(
+      firstString(message, ["wa_number", "business_phone", "project_phone", "from_number"]) ||
+        firstString(data, ["wa_number", "business_phone", "project_phone", "from_number"]) ||
+        firstString(root, ["wa_number", "business_phone", "project_phone", "from_number"])
+    ) || undefined;
   return [
     {
       provider: "aisensy",
@@ -306,6 +405,7 @@ export function parseAiSensyWebhook(body: unknown): InboundWa[] {
       externalId: firstString(message, ["id", "submitted_message_id"]) || firstString(root, ["id"]),
       at: Number.isFinite(stamp) ? new Date(stamp).toISOString() : undefined,
       direction,
+      lineNumber,
     },
   ];
 }
@@ -374,7 +474,7 @@ export async function loadWhatsAppCreds() {
   return merged;
 }
 
-export async function replyOnWhatsApp(threadId: string, text: string, by: string) {
+export async function replyOnWhatsApp(threadId: string, text: string, by: string, options?: { keepUnread?: boolean }) {
   const body = text.replace(/\s+/g, " ").trim();
   if (!body) throw new Error("Type a reply first.");
   const existing = readStore().threads.find((item) => item.id === threadId);
@@ -427,7 +527,7 @@ export async function replyOnWhatsApp(threadId: string, text: string, by: string
   }
   const store = readStore();
   const updated = upsert(store, {
-    provider: sent.provider,
+    provider: existing.provider,
     phone: existing.phone,
     name: existing.name,
     text: body,
@@ -436,7 +536,85 @@ export async function replyOnWhatsApp(threadId: string, text: string, by: string
     by,
     status: "sent",
   });
-  if (updated) updated.unread = 0;
+  if (updated && !options?.keepUnread) updated.unread = 0;
   writeStore(store);
   return updated;
+}
+
+function connectionNotice(name: string, department: string) {
+  const who = name.trim();
+  const desk = department.trim();
+  if (who && desk) return `You have been connected to ${who} from the ${desk} desk.`;
+  if (who) return `You have been connected to ${who}.`;
+  if (desk) return `You have been connected to the ${desk} desk. An executive will reply here.`;
+  return "";
+}
+
+function knownDepartment(value: string) {
+  const clean = value.trim();
+  if (!clean) return "";
+  return WA_DEPARTMENTS.find((item) => item.toLowerCase() === clean.toLowerCase()) || "";
+}
+
+export async function transferWhatsApp(input: {
+  threadId: string;
+  department?: string;
+  assignedTo?: string;
+  assignedName?: string;
+  byName: string;
+  byEmail: string;
+}) {
+  const requestedDept = String(input.department || "").trim();
+  const department = requestedDept ? knownDepartment(requestedDept) : "";
+  if (requestedDept && !department) throw new Error("Choose a department from the list.");
+  const assignedTo = String(input.assignedTo || "").trim().slice(0, 120);
+  const assignedName = String(input.assignedName || "").trim().slice(0, 80);
+  if (!department && !assignedTo && !assignedName) throw new Error("Choose a department or a staff member.");
+  const store = readStore();
+  const thread = store.threads.find((item) => item.id === input.threadId);
+  if (!thread) throw new Error("That chat is no longer in the inbox.");
+  const clearAssignee = Boolean(department) && !assignedTo && !assignedName;
+  const nextDept = department || thread.department || "";
+  const nextTo = clearAssignee ? "" : assignedTo || thread.assignedTo || "";
+  const nextName = clearAssignee ? "" : assignedName || (assignedTo ? (assignedTo === thread.assignedTo ? thread.assignedName || assignedTo : assignedTo) : thread.assignedName || "");
+  const unchanged =
+    nextTo === (thread.assignedTo || "") &&
+    nextName === (thread.assignedName || "") &&
+    nextDept === (thread.department || "");
+  if (unchanged) return { thread, noticeSent: false, noticeError: "" };
+  thread.department = nextDept || undefined;
+  thread.assignedTo = nextTo || undefined;
+  thread.assignedName = nextName || undefined;
+  const byName = String(input.byName || "").trim().slice(0, 80) || input.byEmail || "Desk";
+  const byEmail = String(input.byEmail || "").trim();
+  const tookIt = Boolean(nextTo) && nextTo.toLowerCase() === byEmail.toLowerCase() && !requestedDept;
+  const target = nextName && nextDept ? `${nextName} (${nextDept})` : nextName || (nextDept ? `the ${nextDept} desk` : "another desk");
+  const at = new Date().toISOString();
+  thread.messages.push({
+    id: nid(),
+    at,
+    direction: "out",
+    provider: thread.provider,
+    text: tookIt ? `${byName} took this chat.` : `${byName} transferred this chat to ${target}.`,
+    by: byEmail || byName,
+    system: true,
+  });
+  if (thread.messages.length > MAX_MESSAGES) thread.messages.splice(0, thread.messages.length - MAX_MESSAGES);
+  thread.updatedAt = at;
+  const actorKeepsIt = Boolean(nextTo) && nextTo.toLowerCase() === byEmail.toLowerCase();
+  thread.unread = actorKeepsIt ? 0 : thread.unread + 1;
+  writeStore(store);
+  const notice = connectionNotice(nextName, nextDept);
+  let noticeSent = false;
+  let noticeError = "";
+  if (notice) {
+    try {
+      await replyOnWhatsApp(thread.id, notice, byEmail || byName, { keepUnread: true });
+      noticeSent = true;
+    } catch (error) {
+      noticeError = (error as Error).message;
+    }
+  }
+  const latest = readStore().threads.find((item) => item.id === thread.id) ?? thread;
+  return { thread: latest, noticeSent, noticeError };
 }
