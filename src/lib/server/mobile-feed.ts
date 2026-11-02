@@ -60,12 +60,18 @@ function mergeLiveEvents(published: Event[]) {
       byId.set(event.id, event);
       continue;
     }
+    const fromPortal = event.id.startsWith("seminar-") || event.id.startsWith("autism-");
     byId.set(event.id, {
       ...existing,
       source: existing.source || event.source,
       bannerUrl: existing.bannerUrl || event.bannerUrl,
       schedule: existing.schedule?.length ? existing.schedule : event.schedule,
       speakers: existing.speakers?.length ? existing.speakers : event.speakers,
+      preRegistration: fromPortal ? event.preRegistration : existing.preRegistration,
+      mainRegistration: fromPortal ? event.mainRegistration : existing.mainRegistration,
+      registrationStart: fromPortal && event.registrationStart ? event.registrationStart : existing.registrationStart,
+      registrationEnd: fromPortal && event.registrationEnd ? event.registrationEnd : existing.registrationEnd,
+      registrationStatus: fromPortal && (event.preRegistration || event.mainRegistration) ? event.registrationStatus : existing.registrationStatus,
     });
   }
   return [...byId.values()]

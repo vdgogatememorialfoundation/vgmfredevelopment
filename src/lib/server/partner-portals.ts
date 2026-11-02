@@ -5,6 +5,7 @@ import { upsertNotice } from "@/lib/server/notices";
 import { partnerCategory, partnerPortalHref, partnerPortalIds, partnerTicketHref, partnerTrackHref, portalBadge } from "@/lib/partner-labels";
 import { AUTISM_ORIGIN, FELLOWSHIP_ORIGIN, SEMINAR_ORIGIN, asList, asRecord, textField } from "@/lib/partner-certificates";
 import { partnerForKey, readApiKey } from "@/lib/partner-keys";
+import { collapsedRegistration } from "@/lib/registration-windows";
 import type {
   Announcement,
   Event,
@@ -15,6 +16,7 @@ import type {
   PartnerPortalId,
   PartnerTicketSummary,
   RegistrationStatus,
+  RegistrationWindow,
   User,
 } from "@/types";
 
@@ -221,6 +223,31 @@ function registrationStatus(start?: string, end?: string, enabled = true): Regis
   return "Open";
 }
 
+function flagOn(value: unknown, whenMissing: boolean) {
+  if (value == null || value === "") return whenMissing;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const text = String(value).trim().toLowerCase();
+  if (["0", "false", "no", "off"].includes(text)) return false;
+  if (["1", "true", "yes", "on"].includes(text)) return true;
+  return whenMissing;
+}
+
+function registrationWindow(row: Record<string, unknown>, kind: "pre" | "main"): RegistrationWindow | undefined {
+  const prefix = kind === "pre" ? "preregistration" : "registration";
+  const start = iso(row[`${prefix}_start`]);
+  const end = iso(row[`${prefix}_end`]);
+  const hasFlag = row[`${prefix}_enabled`] != null && row[`${prefix}_enabled`] !== "";
+  const enabled = flagOn(row[`${prefix}_enabled`], Boolean(start || end));
+  if (!enabled) return undefined;
+  if (!start && !end && !hasFlag) return undefined;
+  return {
+    label: kind === "pre" ? "Pre-registration" : "Main registration",
+    start: start || undefined,
+    end: end || undefined,
+  };
+}
+
 function mapMode(value: string): EventMode {
   const text = value.toLowerCase();
   if (text.includes("online") || text.includes("webinar")) return "Online";
@@ -314,8 +341,11 @@ function eventFromSeminar(
   const slug = str(seminar, ["event_slug"]) || slugify(`${portal}-${title}-${idNum}`);
   const start = iso(seminar.event_date) || iso(sessions[0]?.start_time);
   const end = iso(seminar.event_end_date) || iso(sessions[sessions.length - 1]?.end_time) || start;
-  const registrationStart = iso(seminar.registration_start) || iso(seminar.preregistration_start);
-  const registrationEnd = iso(seminar.registration_end) || iso(seminar.preregistration_end);
+  const preRegistration = registrationWindow(seminar, "pre");
+  const mainRegistration = registrationWindow(seminar, "main");
+  const collapsed = collapsedRegistration([preRegistration, mainRegistration].filter((window): window is RegistrationWindow => Boolean(window)));
+  const registrationStart = collapsed.start || iso(seminar.registration_start) || iso(seminar.preregistration_start);
+  const registrationEnd = collapsed.end || iso(seminar.registration_end) || iso(seminar.preregistration_end);
   const venue = str(seminar, ["location_text", "venue", "location"]) || String(sessions[0]?.location || "").trim();
   const city = venue.toLowerCase().includes("pune") ? "Pune" : "";
   const speakers = sessions
@@ -334,7 +364,11 @@ function eventFromSeminar(
     title: [row.speaker_name, row.title].filter(Boolean).join(" — ") || "Session",
     description: row.description || undefined,
   }));
-  const enabled = seminar.registration_enabled == null ? true : Boolean(asNumber(seminar.registration_enabled) || seminar.registration_enabled === true);
+  const enabled = mainRegistration || preRegistration
+    ? true
+    : seminar.registration_enabled == null
+      ? true
+      : Boolean(asNumber(seminar.registration_enabled) || seminar.registration_enabled === true);
   return {
     id: `${portal}-${idNum}`,
     name: title,
@@ -350,10 +384,14 @@ function eventFromSeminar(
     eventType: mapEventType(portal, title),
     registrationStart: registrationStart || start || dateOnly(),
     registrationEnd: registrationEnd || end || dateOnly(),
+    preRegistration,
+    mainRegistration,
     fee: asNumber(seminar.price),
     currency: "INR",
     capacity: asNumber(seminar.capacity) || undefined,
-    registrationStatus: registrationStatus(registrationStart || start, registrationEnd || end, enabled),
+    registrationStatus: preRegistration || mainRegistration
+      ? collapsed.status
+      : registrationStatus(registrationStart || start, registrationEnd || end, enabled),
     speakers,
     schedule,
     mapsUrl: str(seminar, ["location_url"]) || undefined,
@@ -470,7 +508,8 @@ async function pullPublic(portal: PartnerPortalId) {
     Array.isArray(schedules) ? schedules : asList((feed?.schedules as unknown) ?? schedules ?? {})
   ) as ScheduleRow[];
   let events = eventsFromSchedules(portal, sessionRows);
-  const seminarList = asList(seminars ?? {});
+  const feedSeminars = asList(feed?.seminars ?? {});
+  const seminarList = feedSeminars.length ? feedSeminars : asList(seminars ?? {});
   if (seminarList.length) {
     const byId = new Map(events.map((event) => [event.id, event]));
     for (const item of seminarList) {
@@ -478,14 +517,21 @@ async function pullPublic(portal: PartnerPortalId) {
       const mapped = eventFromSeminar(
         portal,
         {
+          ...row,
           id: row.id,
           title: row.title,
           event_date: row.eventDate || row.event_date,
-          location_text: row.venue,
+          location_text: row.venue || row.location_text,
         },
         sessionRows.filter((session) => String(session.seminar_id) === String(row.id))
       );
-      byId.set(mapped.id, { ...byId.get(mapped.id), ...mapped, schedule: byId.get(mapped.id)?.schedule || mapped.schedule });
+      const previous = byId.get(mapped.id);
+      byId.set(mapped.id, {
+        ...previous,
+        ...mapped,
+        schedule: previous?.schedule?.length ? previous.schedule : mapped.schedule,
+        speakers: previous?.speakers?.length ? previous.speakers : mapped.speakers,
+      });
     }
     events = [...byId.values()];
   }

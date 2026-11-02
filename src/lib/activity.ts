@@ -46,6 +46,14 @@ export function recordActivity(input: Omit<AccountActivity, "id" | "at" | "userA
   } catch {
     /* mail is best-effort */
   }
+  if (typeof window !== "undefined") {
+    void fetch("/api/analytics/live", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "activity", email: row.email, kind: row.kind, detail: row.detail || "" }),
+      keepalive: true,
+    }).catch(() => undefined);
+  }
   return row;
 }
 

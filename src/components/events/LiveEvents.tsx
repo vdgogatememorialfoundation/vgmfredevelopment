@@ -15,8 +15,9 @@ const useSpeakerRecords = collectionHook<EventRecord>(speakerKeys.edits, speaker
 const useScheduleRecords = collectionHook<EventRecord>(scheduleKeys.edits, scheduleKeys.custom, [], () => getEventRecords("schedule"));
 import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, eventTimeText } from "@/lib/event-display";
 import { isEventPast, isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
-import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
+import { EventRegistration } from "@/components/events/EventRegistration";
 import PartnerRegister from "@/components/events/PartnerRegister";
+import { configuredWindows, registrationBadge } from "@/lib/registration-windows";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
 import { useI18n } from "@/components/i18n/LanguageProvider";
@@ -116,7 +117,7 @@ export function LiveEventPage({ slug }: { slug: string }) {
           <Link href="/events" className="text-sm text-text-muted hover:text-burgundy">Events</Link>
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge tone="burgundy">{event.eventType}</Badge>
-            <Badge tone="neutral">{resolvedRegistrationStatus(event, now)}</Badge>
+            <Badge tone="neutral">{registrationBadge(event, now) || resolvedRegistrationStatus(event, now)}</Badge>
           </div>
           <h1 className="heading-1 mt-4">{event.name}</h1>
           {event.bannerUrl && /^(https?:|data:image|\/)/i.test(event.bannerUrl) && (
@@ -172,18 +173,16 @@ export function LiveEventPage({ slug }: { slug: string }) {
           <aside className="rounded-2xl border border-border bg-white p-6">
             <p className="text-sm text-text-muted">Registration fee</p>
             <p className="mt-1 text-2xl font-semibold text-text-primary">{eventFeeText(event)}</p>
-            <div className="mt-4">
-              <RegistrationCountdown event={event} />
-            </div>
+            <EventRegistration event={event} />
             <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Dates</dt><dd className="text-right font-medium">{eventDateText(event)}</dd></div>
               {eventTimeText(event) && <div className="flex justify-between gap-3"><dt className="text-text-muted">Time</dt><dd className="text-right font-medium">{eventTimeText(event)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
             </dl>
-            {event.source && event.source !== "vgmf" && Number(String(event.id).split("-").pop()) > 0 && !isRegistrationClosed(event, now) ? (
+            {configuredWindows(event).length ? null : event.source && event.source !== "vgmf" && Number(String(event.id).split("-").pop()) > 0 && !isRegistrationClosed(event, now) ? (
               <PartnerRegister portal={event.source} seminarId={Number(String(event.id).split("-").pop())} />
-            ) : isRegistrationClosed(event, now) ? (
+            ) : configuredWindows(event).length ? null : isRegistrationClosed(event, now) ? (
               <p className="btn-outline mt-5 w-full pointer-events-none cursor-not-allowed opacity-60">
                 {t("events.closed")}
               </p>

@@ -116,6 +116,8 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Downloads", href: "/admin/reports" },
       { label: "Analytics", href: "/admin/analytics" },
+      { label: "User activity", href: "/admin/analytics/users" },
+      { label: "Customer activity", href: "/admin/analytics/customers" },
     ],
   },
 

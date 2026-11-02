@@ -4,9 +4,10 @@ import Link from "next/link";
 import type { Event } from "@/types";
 import Badge from "@/components/common/Badge";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
-import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
+import { EventRegistration } from "@/components/events/EventRegistration";
 import { eventDateText, eventPlaceText, eventTimeText } from "@/lib/event-display";
 import { isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
+import { configuredWindows, registrationBadge } from "@/lib/registration-windows";
 import { partnerPortalLabel } from "@/lib/partner-labels";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
@@ -48,7 +49,7 @@ export default function EventCard({ event, variant = "full" }: { event: Event; v
     );
   }
 
-  const status = resolvedRegistrationStatus(event);
+  const status = registrationBadge(event) || resolvedRegistrationStatus(event);
   return (
     <article className="card flex flex-col overflow-hidden">
       <div className="relative">
@@ -65,7 +66,7 @@ export default function EventCard({ event, variant = "full" }: { event: Event; v
           ) : null}
         </div>
         <div className="absolute top-4 right-4">
-          <Badge tone={statusTone[status] ?? "neutral"}>
+          <Badge tone={status.toLowerCase().includes("closed") ? "neutral" : status.toLowerCase().includes("closing") || status.toLowerCase().includes("soon") ? "warning" : statusTone[status] ?? "success"}>
             {status}
           </Badge>
         </div>
@@ -102,7 +103,7 @@ export default function EventCard({ event, variant = "full" }: { event: Event; v
         </div>
 
         <div className="mt-4">
-          <RegistrationCountdown event={event} compact />
+          <EventRegistration event={event} variant="card" />
         </div>
 
         <Link
@@ -112,7 +113,7 @@ export default function EventCard({ event, variant = "full" }: { event: Event; v
           {t("events.view")}
         </Link>
 
-        {isRegistrationClosed(event) ? (
+        {configuredWindows(event).length ? null : isRegistrationClosed(event) ? (
           <span className="btn-outline mt-3 w-full pointer-events-none cursor-not-allowed opacity-60">
             {t("events.closed")}
           </span>

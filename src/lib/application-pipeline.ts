@@ -274,8 +274,8 @@ export function resolveTrackedApplication(query: string, email?: string): Tracke
   return findLocalTrackedApplication(query) ?? findStoredPartnerApplication(query, email);
 }
 
-export function kindLabel(kind?: PartnerTicketSummary["kind"]) {
-  if (kind === "application") return "Application";
+export function kindLabel(kind?: PartnerTicketSummary["kind"], portal?: PartnerPortalId) {
   if (kind === "ticket") return "E-ticket";
-  return "Registration";
+  if (kind === "application") return portal === "fellowship" ? "Application" : "Pre-registration";
+  return portal === "fellowship" ? "Registration" : "Main registration";
 }

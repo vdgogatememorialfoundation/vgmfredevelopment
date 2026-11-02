@@ -33,7 +33,7 @@ export default function RegistrationsPage() {
                   <div>
                     <p className="font-semibold text-text-primary">{ticket.eventName}</p>
                     <p className="mt-1 text-xs text-text-muted">
-                      {partnerPortalLabel(ticket.portal)} · {kindLabel(ticket.kind)}
+                      {partnerPortalLabel(ticket.portal)} · {kindLabel(ticket.kind, ticket.portal)}
                       {ticket.applicationNo ? ` · ${ticket.applicationNo}` : ""}
                       {ticket.issuedAt ? ` · ${new Date(ticket.issuedAt).toLocaleDateString("en-IN")}` : ""}
                     </p>

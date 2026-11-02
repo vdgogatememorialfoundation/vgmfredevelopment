@@ -13,6 +13,12 @@ export type RegistrationStatus =
   | "Closed"
   | "Waitlist";
 
+export interface RegistrationWindow {
+  label: "Pre-registration" | "Main registration";
+  start?: string;
+  end?: string;
+}
+
 export type EventMode = "Online" | "Offline" | "Hybrid";
 
 export type PartnerPortalId = "seminar" | "autism" | "fellowship";
@@ -32,6 +38,10 @@ export interface Event {
   eventType: EventType;
   registrationStart: string;
   registrationEnd: string;
+  /** Pre-registration window from the seminar or autism portal, when that portal has one. */
+  preRegistration?: RegistrationWindow;
+  /** Main registration window from the seminar or autism portal, when that portal has one. */
+  mainRegistration?: RegistrationWindow;
   fee: number;
   currency: string;
   capacity?: number;

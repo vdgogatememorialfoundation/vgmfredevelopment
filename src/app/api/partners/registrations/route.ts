@@ -31,8 +31,12 @@ export async function GET(request: NextRequest) {
   if (!portal || !Number.isInteger(seminarId) || seminarId < 1) {
     return NextResponse.json({ ok: false, error: "Choose a portal event." }, { status: 400 });
   }
+  const phase = request.nextUrl.searchParams.get("phase") === "pre" ? "pre" : "main";
+  const formPath = phase === "pre" && portal === "autism"
+    ? `/api/preregistration-form-config?seminarId=${seminarId}`
+    : `/api/registration-form-config?seminarId=${seminarId}`;
   try {
-    const response = await fetch(`${partnerOrigin(portal)}/api/registration-form-config?seminarId=${seminarId}`, {
+    const response = await fetch(`${partnerOrigin(portal)}${formPath}`, {
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
     });
@@ -71,6 +75,7 @@ export async function POST(request: NextRequest) {
       { status: 404 }
     );
   }
+  const phase = String(inbound.get("phase") || "main") === "pre" ? "pre" : "main";
   const outbound = new FormData();
   outbound.set("userId", String(person.id));
   outbound.set("seminarId", String(seminarId));
@@ -84,7 +89,8 @@ export async function POST(request: NextRequest) {
     outbound.set("certificate", file, file.name || "certificate");
   }
   try {
-    const response = await fetch(`${partnerOrigin(portal)}/api/applications/submit`, {
+    const submitPath = phase === "pre" && portal === "autism" ? "/api/preregistrations/submit" : "/api/applications/submit";
+    const response = await fetch(`${partnerOrigin(portal)}${submitPath}`, {
       method: "POST",
       body: outbound,
       signal: AbortSignal.timeout(20000),

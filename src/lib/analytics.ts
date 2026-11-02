@@ -128,6 +128,32 @@ export function heartbeat(path?: string, geo?: Geo) {
     lng: geo?.lng ?? existing?.lng,
   };
   write(LIVE_KEY, [next, ...current.filter((visitor) => visitor.sessionId !== id)].slice(0, 200));
+  const audience = window.localStorage.getItem("vgmf_session") ? "customer" : "visitor";
+  let label = "";
+  try {
+    const session = JSON.parse(window.localStorage.getItem("vgmf_session") || "null") as { firstName?: string; role?: string } | null;
+    if (session?.role === "admin" || session?.role === "coadmin" || session?.role === "staff") return;
+    label = session?.firstName || "";
+  } catch {
+    label = "";
+  }
+  void fetch("/api/analytics/live", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      sessionId: id,
+      path: next.path,
+      title: next.title,
+      city: next.city,
+      region: next.region,
+      country: next.country,
+      lat: next.lat,
+      lng: next.lng,
+      audience: label || audience === "customer" ? "customer" : "visitor",
+      label,
+    }),
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 export function countBy(hits: AnalyticsHit[], key: "country" | "region" | "city" | "path") {

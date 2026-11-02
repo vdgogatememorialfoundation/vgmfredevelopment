@@ -22,7 +22,7 @@ function optionList(field: Field) {
   }).filter((option) => option.value);
 }
 
-export default function PartnerRegister({ portal, seminarId }: { portal: PartnerPortalId; seminarId: number }) {
+export default function PartnerRegister({ portal, seminarId, phase = "main" }: { portal: PartnerPortalId; seminarId: number; phase?: "pre" | "main" }) {
   const { user } = useAuth();
   const [fields, setFields] = useState<Field[] | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
@@ -34,7 +34,7 @@ export default function PartnerRegister({ portal, seminarId }: { portal: Partner
 
   useEffect(() => {
     let cancelled = false;
-    void fetch(`/api/partners/registrations?portal=${portal}&seminarId=${seminarId}`, { cache: "no-store" })
+    void fetch(`/api/partners/registrations?portal=${portal}&seminarId=${seminarId}&phase=${phase}`, { cache: "no-store" })
       .then(async (response) => {
         const data = (await response.json().catch(() => null)) as { error?: string; form?: { fields?: Field[] } } | null;
         if (cancelled) return;
@@ -62,7 +62,7 @@ export default function PartnerRegister({ portal, seminarId }: { portal: Partner
     return () => {
       cancelled = true;
     };
-  }, [portal, seminarId, user?.email, user?.firstName, user?.lastName, user?.phone]);
+  }, [phase, portal, seminarId, user?.email, user?.firstName, user?.lastName, user?.phone]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -72,6 +72,7 @@ export default function PartnerRegister({ portal, seminarId }: { portal: Partner
     const body = new FormData();
     body.set("portal", portal);
     body.set("seminarId", String(seminarId));
+    body.set("phase", phase);
     body.set("formData", JSON.stringify(values));
     if (file) body.set("certificate", file);
     try {
@@ -90,7 +91,7 @@ export default function PartnerRegister({ portal, seminarId }: { portal: Partner
 
   return (
     <div className="mt-5 border-t border-border pt-5">
-      <h2 className="text-sm font-semibold text-ink">Register on {label}</h2>
+      <h2 className="text-sm font-semibold text-ink">{phase === "pre" ? "Pre-register" : "Register"} on {label}</h2>
       {!user && (
         <p className="mt-3 text-sm text-text-muted">
           <Link href={`/login?next=/events`} className="font-semibold text-burgundy">Sign in</Link> to register. The application is saved on {label}.
@@ -185,7 +186,7 @@ export default function PartnerRegister({ portal, seminarId }: { portal: Partner
           })}
           {note && <p className="text-sm text-burgundy">{note}</p>}
           <button type="submit" className="btn-primary w-full" disabled={busy || fields.length === 0}>
-            {busy ? "Saving…" : `Register on ${label}`}
+            {busy ? "Saving…" : phase === "pre" ? `Pre-register on ${label}` : `Register on ${label}`}
           </button>
         </form>
       )}
