@@ -31,6 +31,24 @@ export function seminarVideoDbConfigured() {
   return Boolean((process.env.SEMINAR_DATABASE_URL || "").trim());
 }
 
+let officeAdminId: number | null = null;
+
+/** Seminar office routes trust an admin user id. This site chooses that id; the browser never supplies it. */
+export async function seminarOfficeAdminId() {
+  if (officeAdminId) return officeAdminId;
+  const db = seminarPool();
+  if (!db) return null;
+  const result = await db.query<{ id: number }>(
+    `SELECT id FROM users
+     WHERE COALESCE(is_disabled, 0) = 0 AND lower(COALESCE(role, '')) = 'admin'
+     ORDER BY id ASC
+     LIMIT 1`
+  );
+  const id = Number(result.rows[0]?.id || 0);
+  officeAdminId = id > 0 ? id : null;
+  return officeAdminId;
+}
+
 export async function findSeminarViewer(email: string, phone: string): Promise<SeminarViewer | null> {
   const db = seminarPool();
   if (!db) return null;

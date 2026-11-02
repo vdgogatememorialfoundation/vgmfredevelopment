@@ -9,6 +9,7 @@ interface PageHeaderProps {
   eyebrow?: string;
   title: string;
   description?: string;
+  showDescription?: boolean;
   breadcrumb?: { name: string; href: string }[];
 }
 
@@ -16,6 +17,7 @@ export default function PageHeader({
   eyebrow: baseEyebrow,
   title: baseTitle,
   description: baseDescription,
+  showDescription = true,
   breadcrumb,
 }: PageHeaderProps) {
   const { t } = useI18n();
@@ -24,7 +26,7 @@ export default function PageHeader({
   const copy = pages[pathname.replace(/\/+$/, "") || "/"] ?? {};
   const eyebrow = copy.eyebrow?.trim() || baseEyebrow;
   const title = copy.title?.trim() || baseTitle;
-  const description = copy.description?.trim() || baseDescription;
+  const description = showDescription ? copy.description?.trim() || baseDescription : "";
   return (
     <section className="border-b border-border bg-paper">
       <div className="container py-7 sm:py-8">

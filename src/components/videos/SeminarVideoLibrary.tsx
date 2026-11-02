@@ -747,7 +747,7 @@ export function SeminarVideoLibrary() {
       <AdBanner slot={slot} />
       {!user && (
         <div className="rounded-2xl border border-border bg-white p-6">
-          <p className="text-sm text-text-muted">Sign in with the email or phone on your seminar account. Volunteers and people who paid for that seminar watch here without another charge. Anyone who did not register can buy the recording.</p>
+          <p className="text-sm text-text-muted">Sign in to watch seminar videos.</p>
           <Link href="/login?next=/videos/seminars" className="btn-primary mt-4 inline-flex">Sign in</Link>
         </div>
       )}
@@ -781,11 +781,7 @@ export function SeminarVideoLibrary() {
       {qr && <img src={qr} alt="UPI payment QR" className="h-52 w-52 rounded-xl border border-border bg-white p-2" />}
       {user && linked && !loading && years.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-sm text-text-muted">
-          {catalog?.blocked
-            ? "The seminar office has turned off your access to these recordings."
-            : catalog?.viewer?.volunteer
-              ? "Seminar videos are free for volunteer accounts. Recordings appear here after the seminar office publishes them."
-              : "Seminar recordings appear here once the seminar office publishes them."}
+          No recordings are published yet.
         </p>
       )}
       {years.map((year) => {
@@ -798,7 +794,6 @@ export function SeminarVideoLibrary() {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="font-serif text-2xl font-semibold text-ink">{year.title || `Seminar ${year.year}`}</h2>
-                {year.description && <p className="mt-1 text-sm text-text-muted">{year.description}</p>}
               </div>
               {year.priceTbd && !year.allAllowed ? (
                 <span className="text-xs font-semibold text-text-muted">Price will be updated later</span>
@@ -811,7 +806,6 @@ export function SeminarVideoLibrary() {
                 <article key={album.id} className="rounded-2xl border border-border bg-white p-5 lg:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-burgundy">Album</p>
                   <h3 className="mt-1 font-semibold text-ink">{album.title}</h3>
-                  {album.description && <p className="mt-2 text-sm text-text-muted">{album.description}</p>}
                   <div className="mt-3">{renderActions(album, true)}</div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {partsOf(album.id).map((part) => (
@@ -874,7 +868,6 @@ export function SeminarVideoLibrary() {
         </div>
         <h3 className="mt-2 font-semibold text-ink">{item.title}</h3>
         {item.seminarTitle && <p className="mt-1 text-xs text-burgundy">{item.seminarTitle}</p>}
-        {item.description && <p className="mt-2 text-sm text-text-muted">{item.description.length > 180 ? `${item.description.slice(0, 177)}…` : item.description}</p>}
         <div className="mt-3">{renderActions(item, insideAlbum)}</div>
       </>
     );
