@@ -9,7 +9,7 @@ import { hydratePublishedSite, setPublishedFeed } from "@/lib/hydrate-public";
 import { hydratePartnerFeed } from "@/lib/partner-hydrate";
 
 export type PublishedBrand = Pick<MobileFeed, "site" | "flyers" | "publishedAt" | "siteText"> &
-  Partial<Pick<MobileFeed, "banners" | "awards">> &
+  Partial<Pick<MobileFeed, "banners" | "awards" | "thanks">> &
   Partial<Pick<MobileFeed, "books" | "events" | "articles" | "clinics" | "videos" | "notices" | "announcements" | "gallery">>;
 
 export function HydratePublishedSite({
@@ -28,6 +28,7 @@ export function HydratePublishedSite({
       flyers: initial.flyers ?? [],
       banners: initial.banners ?? [],
       awards: initial.awards ?? [],
+      thanks: initial.thanks ?? [],
       publishedAt: initial.publishedAt,
       siteText: initial.siteText,
     });

@@ -45,6 +45,7 @@ export const publicSitemapPaths = [
   "/about/legacy-of-vaidya-rb-gogate",
   "/about/dr-anagha-gogate",
   "/about/awards",
+  "/thanks",
   "/about/books-and-research",
   "/about/trustees",
   "/events",

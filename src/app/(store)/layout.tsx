@@ -28,6 +28,7 @@ export default function StoreLayout({
     flyers: feed.flyers ?? [],
     banners: feed.banners ?? [],
     awards: feed.awards ?? [],
+    thanks: feed.thanks ?? [],
     publishedAt: feed.publishedAt,
     siteText: feed.siteText,
     books: feed.books ?? [],

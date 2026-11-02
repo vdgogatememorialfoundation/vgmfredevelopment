@@ -133,6 +133,7 @@ export const ABOUT_NAV = [
   { href: "/about/dr-anagha-gogate", key: "nav.aboutAnagha" },
   { href: "/about/awards", key: "nav.aboutAwards" },
   { href: "/awards", key: "nav.competitionAwards" },
+  { href: "/thanks", key: "nav.specialThanks" },
   { href: "/about/books-and-research", key: "nav.aboutBooks" },
   { href: "/about/history", key: "nav.aboutHistory" },
   { href: "/about/trustees", key: "nav.aboutTrustees" },

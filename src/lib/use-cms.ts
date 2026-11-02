@@ -13,11 +13,13 @@ import {
   defaultFlags,
   awardKeys,
   bannerKeys,
+  thanksKeys,
   flyerKeys,
   getAllArticles,
   getLiveAnnouncements,
   getLiveAwards,
   getLiveBanners,
+  getLiveThanks,
   getLiveClinics,
   getLiveEvents,
   getLiveFlyers,
@@ -30,7 +32,7 @@ import {
   videoKeys,
   type SiteFlags,
 } from "@/lib/cms";
-import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, PrizeAward, SiteBanner, SiteSettings, User, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, Flyer, Notice, Order, PrizeAward, SiteBanner, SiteSettings, ThanksCredit, User, Video } from "@/types";
 import { getSettings } from "@/lib/admin-store";
 import { books as seededBooks } from "@/data/books";
 import { getAllProducts } from "@/lib/product-data";
@@ -161,6 +163,7 @@ export function useLiveFlyers() {
 }
 export const useLiveBanners = collectionHook<SiteBanner>(bannerKeys.edits, bannerKeys.custom, [], getLiveBanners, () => getPublishedFeed()?.banners);
 export const useLiveAwards = collectionHook<PrizeAward>(awardKeys.edits, awardKeys.custom, [], getLiveAwards, () => getPublishedFeed()?.awards);
+export const useLiveThanks = collectionHook<ThanksCredit>(thanksKeys.edits, thanksKeys.custom, [], getLiveThanks, () => getPublishedFeed()?.thanks);
 export const useLiveVideos = collectionHook<Video>(videoKeys.edits, videoKeys.custom, seededVideos, getLiveVideos, () => getPublishedFeed()?.videos);
 export const useLiveClinics = collectionHook<Clinic>(clinicKeys.edits, clinicKeys.custom, seededClinics, getLiveClinics, () => getPublishedFeed()?.clinics);
 

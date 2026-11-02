@@ -59,6 +59,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Slideshow & posters", href: "/admin/website/flyers" },
       { label: "Banners", href: "/admin/website/banners" },
       { label: "Competition awards", href: "/admin/website/awards" },
+      { label: "Special thanks", href: "/admin/website/thanks" },
       { label: "Media Library", href: "/admin/website/media" },
       { label: "Articles", href: "/admin/articles" },
       { label: "Gallery", href: "/admin/website/gallery" },

@@ -136,6 +136,13 @@ export interface PrizeAward {
   note: string;
 }
 
+export interface ThanksCredit {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+}
+
 export interface Faq {
   question: string;
   answer: string;

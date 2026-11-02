@@ -1,5 +1,5 @@
 import { getSettings, saveSettings } from "@/lib/admin-store";
-import { awardKeys, bannerKeys, flyerKeys } from "@/lib/cms";
+import { awardKeys, bannerKeys, flyerKeys, thanksKeys } from "@/lib/cms";
 import { hydrateReviewsFromServer, replaceProductReviews, replaceSeminarReviews, type ProductReview } from "@/lib/reviews";
 import { announcements as seededAnnouncements, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { articles as seededArticles } from "@/data/articles";
@@ -126,6 +126,9 @@ function applyFeed(feed: MobileFeed) {
   }
   if (feed.awards) {
     tryWrite(() => window.localStorage.setItem(awardKeys.custom, JSON.stringify(feed.awards)));
+  }
+  if (feed.thanks) {
+    tryWrite(() => window.localStorage.setItem(thanksKeys.custom, JSON.stringify(feed.thanks)));
   }
 
   if (feed.mobile) {

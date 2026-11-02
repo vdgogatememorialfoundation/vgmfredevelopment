@@ -3,7 +3,7 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { announcements as seededAnnouncements, certificates as baseCertificates, flyers as seededFlyers, notices as seededNotices } from "@/data/content";
 import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
-import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, PrizeAward, RegistrationStatus, SiteBanner, User, Video } from "@/types";
+import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, PrizeAward, RegistrationStatus, SiteBanner, ThanksCredit, User, Video } from "@/types";
 import { isArticlePublished } from "@/lib/article-display";
 import { isPublicFellowshipEvent, withResolvedRegistration } from "@/lib/event-status";
 import { modulesFor, type StaffModuleId } from "@/lib/roles";
@@ -337,6 +337,7 @@ export const noticeKeys = { edits: "vgmf_notice_edits", custom: "vgmf_custom_not
 export const flyerKeys = { edits: "vgmf_flyer_edits", custom: "vgmf_custom_flyers" };
 export const bannerKeys = { edits: "vgmf_banner_edits", custom: "vgmf_custom_banners" };
 export const awardKeys = { edits: "vgmf_award_edits", custom: "vgmf_custom_awards" };
+export const thanksKeys = { edits: "vgmf_thanks_edits", custom: "vgmf_custom_thanks" };
 export const videoKeys = { edits: "vgmf_video_edits", custom: "vgmf_custom_videos" };
 export const clinicKeys = { edits: "vgmf_clinic_edits", custom: "vgmf_custom_clinics" };
 
@@ -354,6 +355,9 @@ export const hideBanner = (id: string) => hideRecord(bannerKeys.edits, bannerKey
 export const getLiveAwards = () => liveRecords<PrizeAward>([], awardKeys.edits, awardKeys.custom);
 export const saveAward = (record: PrizeAward) => saveRecord<PrizeAward>([], awardKeys.edits, awardKeys.custom, record);
 export const hideAward = (id: string) => hideRecord(awardKeys.edits, awardKeys.custom, id);
+export const getLiveThanks = () => liveRecords<ThanksCredit>([], thanksKeys.edits, thanksKeys.custom);
+export const saveThanks = (record: ThanksCredit) => saveRecord<ThanksCredit>([], thanksKeys.edits, thanksKeys.custom, record);
+export const hideThanks = (id: string) => hideRecord(thanksKeys.edits, thanksKeys.custom, id);
 
 export const getLiveVideos = () => liveRecords(seededVideos, videoKeys.edits, videoKeys.custom);
 export const saveVideo = (record: Video) => saveRecord(seededVideos, videoKeys.edits, videoKeys.custom, record);
