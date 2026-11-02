@@ -13,6 +13,7 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      { source: "/videos/seminars", destination: "/account/seminar-videos", permanent: false },
       { source: "/vgmf-foundation.apk", destination: "/apps/vgmf-customer.apk", permanent: false },
       { source: "/api/mobile/apk", destination: "/apps/vgmf-customer.apk", permanent: false },
     ];

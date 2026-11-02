@@ -4,8 +4,9 @@ import Link from "next/link";
 import Badge from "@/components/common/Badge";
 import PageHeader from "@/components/common/PageHeader";
 import ClinicCard from "@/components/clinics/ClinicCard";
+import VideoFrame from "@/components/videos/VideoFrame";
 import VideosGrid from "@/components/videos/VideosGrid";
-import { getYouTubeId } from "@/data/videos";
+import { embedForVideo } from "@/lib/video-embed";
 import { useLiveAnnouncements, useLiveClinics, useLiveVideos } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
 import { clinicDirectionsUrl, clinicMapEmbed } from "@/lib/maps";
@@ -63,19 +64,15 @@ export function VideosIndex() {
   const { t } = useI18n();
   const videos = useLiveVideos();
   const featured = videos.find((video) => video.featured) ?? videos[0];
+  const featuredEmbed = featured ? embedForVideo(featured) : null;
   return (
     <main>
-      <PageHeader eyebrow={t("videos.eyebrow")} title={t("videos.title")} description={t("videos.desc")} />
-      {featured?.youtubeUrl && (
+      <PageHeader eyebrow={t("videos.eyebrow")} title={t("videos.title")} showDescription={false} />
+      {featured && featuredEmbed && (
         <section className="border-b border-border bg-warm-cream">
           <div className="container grid items-center gap-8 py-10 lg:grid-cols-2">
             <div className="aspect-video w-full overflow-hidden rounded-2xl border border-border bg-black">
-              <iframe
-                title={featured.title}
-                src={`https://www.youtube-nocookie.com/embed/${getYouTubeId(featured.youtubeUrl)}`}
-                className="h-full w-full"
-                allowFullScreen
-              />
+              <VideoFrame video={featured} />
             </div>
             <div>
               <h2 className="heading-3">{featured.title}</h2>

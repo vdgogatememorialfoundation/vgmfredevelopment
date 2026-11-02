@@ -1,4 +1,4 @@
-import { getYouTubeId } from "@/data/videos";
+import VideoFrame from "@/components/videos/VideoFrame";
 import type { Video } from "@/types";
 import { formatDate } from "@/lib/utils";
 
@@ -6,28 +6,7 @@ export default function VideoCard({ video }: { video: Video }) {
   return (
     <article className="card flex flex-col overflow-hidden">
       <div className="relative aspect-video w-full bg-black">
-        {video.kind === "youtube" && video.youtubeUrl ? (
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${getYouTubeId(
-              video.youtubeUrl
-            )}`}
-            title={video.title}
-            loading="lazy"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            className="h-full w-full"
-          />
-        ) : (
-          <video
-            controls
-            preload="metadata"
-            poster={video.poster}
-            className="h-full w-full object-contain"
-          >
-            <source src={video.src} type="video/mp4" />
-            Your browser does not support playing this video.
-          </video>
-        )}
+        <VideoFrame video={video} />
         {video.duration && (
           <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
             {video.duration}

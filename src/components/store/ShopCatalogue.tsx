@@ -63,7 +63,7 @@ export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }
 
   return (
     <main>
-      <PageHeader eyebrow={t("shop.eyebrow")} title={t("shop.title")} description={t("shop.desc")} />
+      <PageHeader eyebrow={t("shop.eyebrow")} title={t("shop.title")} showDescription={false} />
       <section className="section bg-background">
         <div className="container">
           <div className="mb-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">

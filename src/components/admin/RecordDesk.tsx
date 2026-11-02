@@ -5,12 +5,24 @@ import Link from "next/link";
 import { ImageField } from "@/components/admin/ImageField";
 import { fileToStoredUrl } from "@/lib/images";
 
+type SelectOption = string | { value: string; label: string };
+
 type Field = {
   key: string;
   label: string;
   kind?: "text" | "textarea" | "select" | "image" | "file";
-  options?: string[];
+  options?: SelectOption[];
+  accept?: string;
+  visible?: (record: Record<string, unknown>) => boolean;
 };
+
+function optionValue(option: SelectOption) {
+  return typeof option === "string" ? option : option.value;
+}
+
+function optionLabel(option: SelectOption) {
+  return typeof option === "string" ? option : option.label;
+}
 
 const fieldClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 
@@ -80,6 +92,7 @@ export default function RecordDesk<T extends { id: string }>({
       <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <p className="text-sm font-semibold text-slate-800">{editing ? "Edit record" : "Add to the site"}</p>
         {fields.map((field) =>
+          field.visible && !field.visible(draft as Record<string, unknown>) ? null :
           field.kind === "select" ? (
             <label key={field.key} className="block text-xs font-semibold text-slate-500">
               {field.label}
@@ -89,7 +102,7 @@ export default function RecordDesk<T extends { id: string }>({
                 onChange={(event) => update(field.key, event.target.value)}
               >
                 {(field.options ?? []).map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                  <option key={optionValue(option)} value={optionValue(option)}>{optionLabel(option)}</option>
                 ))}
               </select>
             </label>
@@ -108,7 +121,7 @@ export default function RecordDesk<T extends { id: string }>({
               <input
                 className={`${fieldClass} mt-1`}
                 type="file"
-                accept="video/*,.pdf,image/*"
+                accept={field.accept || "video/*,.pdf,image/*"}
                 onChange={async (event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;

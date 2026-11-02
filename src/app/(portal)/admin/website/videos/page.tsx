@@ -10,15 +10,34 @@ export default function Page() {
   return (
     <RecordDesk<Video>
       heading="Videos"
-      description="Videos saved here appear on the public videos page."
+      description="Embed a video link, or upload a video file. It plays on the public videos page."
       publicHref="/videos"
       records={records}
       label={(record) => record.title}
       fields={[
         { key: "title", label: "Title" },
         { key: "category", label: "Category" },
-        { key: "youtubeUrl", label: "YouTube link" },
-        { key: "src", label: "Video file", kind: "file" },
+        {
+          key: "kind",
+          label: "Source",
+          kind: "select",
+          options: [
+            { value: "youtube", label: "Embed a link" },
+            { value: "upload", label: "Upload a video" },
+          ],
+        },
+        {
+          key: "youtubeUrl",
+          label: "Video link",
+          visible: (record) => record.kind !== "upload",
+        },
+        {
+          key: "src",
+          label: "Video file",
+          kind: "file",
+          accept: "video/*",
+          visible: (record) => record.kind === "upload",
+        },
         { key: "poster", label: "Poster", kind: "image" },
         { key: "description", label: "Description", kind: "textarea" },
         { key: "date", label: "Date" },
@@ -33,13 +52,15 @@ export default function Page() {
         youtubeUrl: "",
         src: "",
       })}
-      onSave={(record) =>
+      onSave={(record) => {
+        const embed = record.kind !== "upload";
         saveVideo({
           ...record,
-          kind: record.youtubeUrl ? "youtube" : "upload",
-          youtubeUrl: record.youtubeUrl || "",
-        })
-      }
+          kind: embed ? "youtube" : "upload",
+          youtubeUrl: embed ? (record.youtubeUrl || "").trim() : "",
+          src: embed ? "" : record.src || "",
+        });
+      }}
       onHide={hideVideo}
     />
   );

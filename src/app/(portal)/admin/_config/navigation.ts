@@ -62,6 +62,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Articles", href: "/admin/articles" },
       { label: "Gallery", href: "/admin/website/gallery" },
       { label: "Videos", href: "/admin/website/videos" },
+      { label: "Seminar videos", href: "/admin/website/seminar-videos" },
       { label: "Clinics", href: "/admin/website/clinics" },
       { label: "Policies", href: "/admin/website/policies" },
     ],
