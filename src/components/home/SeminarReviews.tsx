@@ -89,7 +89,6 @@ export default function SeminarReviews() {
           <h2 id="seminar-reviews-heading" className={`mt-1 font-serif text-lg font-semibold sm:text-xl ${look.title}`}>
             {t("home.reviewsTitle")}
           </h2>
-          <p className={`mt-1 text-[11px] leading-5 ${look.desc}`}>{t("home.reviewsDesc")}</p>
         </div>
 
         <div className="relative mx-auto flex max-w-2xl items-center gap-3">

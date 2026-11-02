@@ -83,7 +83,7 @@ export default function RegistrationsPage() {
         !loading && (
           <div className="rounded-2xl border border-burgundy/20 bg-burgundy/5 p-8 text-center">
             <p className="text-sm text-text-muted">
-              No sister-portal registrations are linked to this account yet. Register on the Seminar, Autism or Fellowship site and it will appear here.
+              No registrations are linked to this account yet. Register from an event on this site. It is saved on the Seminar, Autism or Fellowship portal and listed here.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link href={seminarSiteUrl} target="_blank" rel="noopener noreferrer" className="btn-primary">

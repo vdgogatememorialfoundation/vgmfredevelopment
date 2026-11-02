@@ -563,16 +563,24 @@ export function SeminarVideoLibrary() {
     if (!playerTitle) return;
     const onKey = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      if ((event.ctrlKey || event.metaKey) && (key === "s" || key === "u")) {
+      if ((event.ctrlKey || event.metaKey) && (key === "s" || key === "u" || key === "p" || key === "c")) {
         event.preventDefault();
         event.stopPropagation();
       }
+    };
+    const blockSave = (event: Event) => {
+      const root = videoRef.current?.parentElement;
+      if (!root || !(event.target instanceof Node) || !root.contains(event.target)) return;
+      event.preventDefault();
     };
     const onHide = () => {
       if (document.hidden) videoRef.current?.pause();
     };
     const onPageHide = () => stop(true);
     document.addEventListener("keydown", onKey, true);
+    document.addEventListener("contextmenu", blockSave, true);
+    document.addEventListener("dragstart", blockSave, true);
+    document.addEventListener("copy", blockSave, true);
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", onPageHide);
     const video = videoRef.current;
@@ -586,6 +594,9 @@ export function SeminarVideoLibrary() {
     }
     return () => {
       document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("contextmenu", blockSave, true);
+      document.removeEventListener("dragstart", blockSave, true);
+      document.removeEventListener("copy", blockSave, true);
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", onPageHide);
       video?.removeEventListener("enterpictureinpicture", leavePicture);
@@ -860,8 +871,8 @@ export function SeminarVideoLibrary() {
             </>
           )}
           <p className="mt-2 text-sm text-text-muted">
-            Purchases and access are read from the seminar office. Videos play on {devices?.limit || catalog?.maxDevices || 1} device{(devices?.limit || catalog?.maxDevices || 1) === 1 ? "" : "s"}.
-            The picture cannot be downloaded or sent to another screen, and playback pauses if you leave this page. Your license stays on the video.
+            Purchases, access and the device list are saved on the seminar portal. The office sets how many devices this login can use: {devices?.limit || catalog?.maxDevices || 1}.
+            The picture cannot be downloaded, copied or sent to another screen, and playback pauses if you leave this page. Your license stays on the video.
           </p>
           <p className="mt-3 text-sm text-ink">
             {(devices?.devices || []).length} of {devices?.limit || catalog?.maxDevices || 1} devices in use. To move your access to a new device, contact the seminar office.

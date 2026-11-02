@@ -89,10 +89,6 @@ export default function EventCard({ event, variant = "full" }: { event: Event; v
           </Link>
         </h3>
 
-        <p className="mt-2 text-sm text-text-muted line-clamp-2">
-          {event.shortDescription}
-        </p>
-
         <div className="mt-4 flex items-center gap-2 text-sm text-text-muted">
           <span className="flex h-8 w-8 items-center justify-center rounded-full border border-border">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

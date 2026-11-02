@@ -26,9 +26,6 @@ export default function LegacySection() {
             <h2 id="legacy-heading" className="heading-2 mt-1">
               {t("legacy.title")}
             </h2>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-text-primary">
-              {t("legacy.desc")}
-            </p>
             <p className="mt-2 text-sm font-semibold text-burgundy">{t("legacy.portraitRole")}</p>
             <Link href="/about/legacy-of-vaidya-rb-gogate" className="btn-primary mt-6">
               {t("legacy.readMore")}

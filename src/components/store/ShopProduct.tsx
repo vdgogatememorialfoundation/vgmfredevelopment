@@ -101,9 +101,6 @@ export default function ShopProduct({
                 </div>
               )}
               <ProductBuyBox book={book} />
-              <p className="mt-4 text-xs text-text-muted">
-                Sign in or register to place an order. Add a title to the cart or buy now, then continue to checkout.
-              </p>
             </div>
           </div>
         </div>

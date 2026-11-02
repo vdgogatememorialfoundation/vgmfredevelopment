@@ -16,6 +16,7 @@ const useScheduleRecords = collectionHook<EventRecord>(scheduleKeys.edits, sched
 import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, eventTimeText } from "@/lib/event-display";
 import { isEventPast, isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
 import { RegistrationCountdown } from "@/components/events/RegistrationCountdown";
+import PartnerRegister from "@/components/events/PartnerRegister";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
 import { useI18n } from "@/components/i18n/LanguageProvider";
@@ -36,7 +37,7 @@ export function EventsIndex() {
       <PageHeader
         eyebrow={t("events.eyebrow")}
         title={t("events.title")}
-        description={t("events.desc")}
+        showDescription={false}
       />
       <section className="section bg-background">
         <div className="container">
@@ -115,7 +116,6 @@ export function LiveEventPage({ slug }: { slug: string }) {
           {event.bannerUrl && /^(https?:|data:image|\/)/i.test(event.bannerUrl) && (
             <NaturalImage src={event.bannerUrl} alt="" fit="hero" className="mt-6 max-w-5xl rounded-2xl border border-border" />
           )}
-          <p className="mt-4 max-w-3xl text-body">{event.shortDescription}</p>
           <p className="mt-4 text-sm font-semibold text-burgundy">
             {eventDateText(event)}
             {eventTimeText(event) ? ` · ${eventTimeText(event)}` : ""}
@@ -126,7 +126,6 @@ export function LiveEventPage({ slug }: { slug: string }) {
       <section className="section bg-background">
         <div className="container grid gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            <p className="text-body whitespace-pre-line">{event.description}</p>
             {event.tbd?.schedule ? (
               <div>
                 <h2 className="heading-3">Schedule</h2>
@@ -140,7 +139,6 @@ export function LiveEventPage({ slug }: { slug: string }) {
                     <li key={item.id} className="rounded-xl border border-border bg-white p-4">
                       <p className="text-sm font-semibold text-burgundy">{item.time}</p>
                       <p className="font-semibold">{item.title}</p>
-                      {item.description && <p className="text-sm text-text-muted">{item.description}</p>}
                     </li>
                   ))}
                 </ul>
@@ -177,7 +175,9 @@ export function LiveEventPage({ slug }: { slug: string }) {
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
             </dl>
-            {isRegistrationClosed(event, now) ? (
+            {event.source && event.source !== "vgmf" && Number(String(event.id).split("-").pop()) > 0 && !isRegistrationClosed(event, now) ? (
+              <PartnerRegister portal={event.source} seminarId={Number(String(event.id).split("-").pop())} />
+            ) : isRegistrationClosed(event, now) ? (
               <p className="btn-outline mt-5 w-full pointer-events-none cursor-not-allowed opacity-60">
                 {t("events.closed")}
               </p>

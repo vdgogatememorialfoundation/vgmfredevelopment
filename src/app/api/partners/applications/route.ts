@@ -4,20 +4,32 @@ import { liveRecordsForEmail, liveStatusCatalogs } from "@/lib/server/partner-po
 
 export const runtime = "nodejs";
 
-function emailFrom(request: NextRequest) {
-  const fromQuery = request.nextUrl.searchParams.get("email")?.trim().toLowerCase() ?? "";
-  if (fromQuery) return fromQuery;
+function sessionIdentity(request: NextRequest) {
   for (const name of ["vgmf_session", "vgmf_admin_session"]) {
     const raw = request.cookies.get(name)?.value;
     if (!raw) continue;
+    const candidates = [raw];
     try {
-      const parsed = JSON.parse(decodeURIComponent(raw)) as { email?: string };
-      if (parsed?.email) return parsed.email.trim().toLowerCase();
+      candidates.push(decodeURIComponent(raw));
     } catch {
-      /* next cookie */
+      /* already decoded */
+    }
+    for (const value of candidates) {
+      try {
+        const parsed = JSON.parse(value) as { email?: string; phone?: string };
+        if (parsed?.email) return { email: parsed.email.trim().toLowerCase(), phone: parsed.phone || "" };
+      } catch {
+        /* next encoding */
+      }
     }
   }
-  return "";
+  return { email: "", phone: "" };
+}
+
+function emailFrom(request: NextRequest) {
+  const fromQuery = request.nextUrl.searchParams.get("email")?.trim().toLowerCase() ?? "";
+  if (fromQuery) return fromQuery;
+  return sessionIdentity(request).email;
 }
 
 export function OPTIONS() {
@@ -26,8 +38,10 @@ export function OPTIONS() {
 
 export async function GET(request: NextRequest) {
   const email = emailFrom(request);
+  const session = sessionIdentity(request);
+  const phone = session.email && session.email === email ? session.phone : "";
   const [records, catalogs] = await Promise.all([
-    email ? liveRecordsForEmail(email) : Promise.resolve(null),
+    email ? liveRecordsForEmail(email, phone) : Promise.resolve(null),
     liveStatusCatalogs(),
   ]);
   return NextResponse.json(

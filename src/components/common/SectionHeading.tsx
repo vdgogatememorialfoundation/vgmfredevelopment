@@ -12,7 +12,6 @@ interface SectionHeadingProps {
 export default function SectionHeading({
   eyebrow,
   title,
-  description,
   align = "left",
   action,
 }: SectionHeadingProps) {
@@ -32,11 +31,6 @@ export default function SectionHeading({
         </div>
         {action}
       </div>
-      {description && (
-        <p className={classNames("mt-3 max-w-2xl text-sm leading-6 text-text-muted", alignCenter && "mx-auto")}>
-          {description}
-        </p>
-      )}
     </div>
   );
 }

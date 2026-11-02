@@ -76,7 +76,6 @@ export function VideosIndex() {
             </div>
             <div>
               <h2 className="heading-3">{featured.title}</h2>
-              <p className="mt-3 text-sm leading-6 text-text-muted">{featured.description}</p>
             </div>
           </div>
         </section>

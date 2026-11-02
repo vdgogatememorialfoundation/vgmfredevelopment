@@ -17,7 +17,7 @@ export default function PageHeader({
   eyebrow: baseEyebrow,
   title: baseTitle,
   description: baseDescription,
-  showDescription = true,
+  showDescription = false,
   breadcrumb,
 }: PageHeaderProps) {
   const { t } = useI18n();

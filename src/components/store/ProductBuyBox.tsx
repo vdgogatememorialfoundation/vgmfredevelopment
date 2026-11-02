@@ -231,15 +231,6 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </p>
         </div>
 
-        {!isAuthenticated && (
-          <p className="mt-4 rounded-xl border border-border bg-warm-cream px-3 py-2 text-xs text-text-muted">
-            Sign in or register to add this to your cart and place an order.{" "}
-            <Link href={`/login?mode=signin&next=${encodeURIComponent(nextUrl)}`} className="font-semibold text-burgundy">Sign in</Link>
-            {" · "}
-            <Link href={`/login?next=${encodeURIComponent(nextUrl)}`} className="font-semibold text-burgundy">Create account</Link>
-          </p>
-        )}
-
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <button
             type="button"

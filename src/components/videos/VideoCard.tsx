@@ -21,9 +21,6 @@ export default function VideoCard({ video }: { video: Video }) {
         <h3 className="mt-1 text-sm font-semibold leading-snug text-text-primary">
           {video.title}
         </h3>
-        <p className="mt-1 text-xs leading-relaxed text-text-muted">
-          {video.description}
-        </p>
       </div>
     </article>
   );

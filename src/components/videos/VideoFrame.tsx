@@ -1,3 +1,5 @@
+"use client";
+
 import { embedForVideo } from "@/lib/video-embed";
 import type { Video } from "@/types";
 
@@ -12,7 +14,18 @@ export default function VideoFrame({
   if (!embed) return null;
   if (embed.mode === "file") {
     return (
-      <video controls preload="metadata" poster={video.poster} className={`${className} object-contain`}>
+      <video
+        controls
+        playsInline
+        preload="metadata"
+        poster={video.poster}
+        controlsList="nodownload noremoteplayback noplaybackrate"
+        disablePictureInPicture
+        disableRemotePlayback
+        className={`${className} select-none object-contain`}
+        onContextMenu={(event) => event.preventDefault()}
+        onDragStart={(event) => event.preventDefault()}
+      >
         {embed.type ? <source src={embed.src} type={embed.type} /> : <source src={embed.src} />}
       </video>
     );

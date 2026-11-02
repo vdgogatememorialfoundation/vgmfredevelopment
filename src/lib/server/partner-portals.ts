@@ -117,6 +117,41 @@ function originFor(portal: PartnerPortalId) {
   return FELLOWSHIP_ORIGIN;
 }
 
+export function partnerOrigin(portal: PartnerPortalId) {
+  return originFor(portal);
+}
+
+/** The sister portal's own user id for this sign-in. The browser never supplies it. */
+export async function findPortalUser(portal: PartnerPortalId, email: string, phone: string) {
+  const db = poolFor(portal);
+  if (!db) return null;
+  const normalized = email.trim().toLowerCase();
+  const local = phone.replace(/\D/g, "").slice(-10);
+  try {
+    const byEmail = normalized
+      ? await db.query<{ id: number; email: string | null; phone: string | null }>(
+          `SELECT id, email, phone FROM users WHERE lower(email) = $1 ORDER BY id ASC LIMIT 8`,
+          [normalized]
+        )
+      : { rows: [] as { id: number; email: string | null; phone: string | null }[] };
+    let rows = byEmail.rows;
+    if (!rows.length && local.length >= 10) {
+      const byPhone = await db.query<{ id: number; email: string | null; phone: string | null }>(
+        `SELECT id, email, phone FROM users
+         WHERE right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = $1
+         ORDER BY id ASC LIMIT 8`,
+        [local]
+      );
+      rows = byPhone.rows;
+    }
+    const match = rows[0];
+    if (!match?.id) return null;
+    return { id: Number(match.id), email: String(match.email || ""), phone: String(match.phone || "") };
+  } catch {
+    return null;
+  }
+}
+
 function slugify(value: string) {
   const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   return slug || `item-${Date.now()}`;
@@ -1453,6 +1488,30 @@ async function liveSeminarLike(portal: Exclude<PartnerPortalId, "fellowship">, e
     ...attempts.map((row) => ({ ...row, id: `att-${row.id}` })),
     ...orders.map((row) => ({ ...row, id: `ord-${row.id}` })),
   ];
+  if (portal === "seminar") {
+    const purchases =
+      (await queryRows(
+        portal,
+        `SELECT p.id, p.amount_inr AS amount, p.status, p.created_at, p.year, v.title
+           FROM video_purchases p
+           LEFT JOIN users u ON u.id = p.user_id
+           LEFT JOIN video_items v ON v.id = p.video_id
+          WHERE lower(u.email) = $1 AND lower(coalesce(p.status, '')) = 'paid'`,
+        [email]
+      )) ?? [];
+    for (const item of purchases) {
+      payments.push({
+        id: `${portal}-vid-${item.id}`,
+        portal,
+        amount: asNumber(item.amount),
+        currency: "INR",
+        status: "Paid",
+        at: iso(item.created_at) || undefined,
+        eventName: str(item, ["title"]) || (item.year ? `Seminar ${item.year} videos` : "Seminar video"),
+        portalUrl: originFor(portal),
+      });
+    }
+  }
   for (const item of payRows) {
     const amount = asNumber(item.amount);
     const status = str(item, ["status"], "Recorded");
@@ -1542,7 +1601,60 @@ async function persistLiveEmail(email: string, tickets: PartnerTicketSummary[], 
   }
 }
 
-export async function liveRecordsForEmail(email: string): Promise<LivePartnerRecords> {
+async function applicationsFromPortalApi(portal: PartnerPortalId, email: string, phone: string) {
+  const person = await findPortalUser(portal, email, phone);
+  if (!person) return [] as PartnerTicketSummary[];
+  try {
+    const response = await fetch(`${originFor(portal)}/api/applications/${person.id}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!response.ok) return [];
+    const rows = (await response.json()) as unknown;
+    if (!Array.isArray(rows)) return [];
+    return rows.flatMap((row) => {
+      const record = asRecord(row);
+      if (!record) return [];
+      const id = str(record, ["id"]);
+      if (!id) return [];
+      return [
+        {
+          id: `${portal}-api-${id}`,
+          portal,
+          eventName: str(record, ["seminar_title", "title", "eventName"], `${partnerCategory(portal)} programme`),
+          status: str(record, ["status"], "Submitted"),
+          applicationNo: str(record, ["application_no", "application_number"]) || undefined,
+          issuedAt: iso(record.created_at || record.submitted_at) || undefined,
+          portalUrl: partnerTrackHref(portal),
+          kind: "registration" as const,
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function mergeTickets(current: PartnerTicketSummary[], incoming: PartnerTicketSummary[]) {
+  const seen = new Set(current.map((ticket) => `${ticket.portal}:${(ticket.applicationNo || ticket.id).toLowerCase()}`));
+  const next = [...current];
+  for (const ticket of incoming) {
+    const key = `${ticket.portal}:${(ticket.applicationNo || ticket.id).toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(ticket);
+  }
+  return next;
+}
+
+async function portalRecords(portal: PartnerPortalId, email: string, phone: string) {
+  const linked = await findPortalUser(portal, email, phone);
+  const lookup = linked?.email?.trim().toLowerCase() || email;
+  if (portal === "fellowship") return liveFellowship(lookup);
+  return liveSeminarLike(portal, lookup);
+}
+
+export async function liveRecordsForEmail(email: string, phone = ""): Promise<LivePartnerRecords> {
   const key = email.trim().toLowerCase();
   const tickets: PartnerTicketSummary[] = [];
   const payments: PartnerPaymentSummary[] = [];
@@ -1553,25 +1665,31 @@ export async function liveRecordsForEmail(email: string): Promise<LivePartnerRec
   };
   let fromDb = false;
   if (key && poolFor("seminar")) {
-    const data = await liveSeminarLike("seminar", key);
+    const data = await portalRecords("seminar", key, phone);
     tickets.push(...data.tickets);
     payments.push(...data.payments);
     statuses.seminar = data.statuses;
     fromDb = true;
   }
   if (key && poolFor("autism")) {
-    const data = await liveSeminarLike("autism", key);
+    const data = await portalRecords("autism", key, phone);
     tickets.push(...data.tickets);
     payments.push(...data.payments);
     statuses.autism = data.statuses;
     fromDb = true;
   }
   if (key && poolFor("fellowship")) {
-    const data = await liveFellowship(key);
+    const data = await portalRecords("fellowship", key, phone);
     tickets.push(...data.tickets);
     payments.push(...data.payments);
     statuses.fellowship = data.statuses;
     fromDb = true;
+  }
+  if (key) {
+    const apiTickets = (await Promise.all(partnerPortalIds.map((portal) => applicationsFromPortalApi(portal, key, phone)))).flat();
+    const merged = mergeTickets(tickets, apiTickets);
+    tickets.splice(0, tickets.length, ...merged);
+    if (apiTickets.length) fromDb = true;
   }
   if (!fromDb) {
     const snapshot = await loadPartnerSnapshot();

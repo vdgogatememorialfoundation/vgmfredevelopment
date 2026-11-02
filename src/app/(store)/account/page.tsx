@@ -48,12 +48,12 @@ export default function AccountDashboardPage() {
   ];
 
   const quickLinks = [
-    { title: "My Event Registrations", description: "Track Application IDs and status for Seminar, Autism and Fellowship programmes.", href: "/account/registrations", icon: "events" },
-    { title: "My Orders", description: "Track book orders, shipments and deliveries.", href: "/account/orders", icon: "orders" },
-    { title: "My Payments & Receipts", description: "View payment history from sister portals and the Foundation shop.", href: "/account/payments", icon: "payments" },
-    { title: "View Application Status", description: "Check the live status of Fellowship, Autism and Seminar applications.", href: "/account/applications", icon: "tracking" },
-    { title: "Support Tickets", description: "Raise and track support requests with the Foundation.", href: "/account/tickets", icon: "tickets" },
-    { title: "Edit Profile", description: "Update your details, contact information and preferences.", href: "/account/profile", icon: "profile" },
+    { title: "My Event Registrations", href: "/account/registrations", icon: "events" },
+    { title: "My Orders", href: "/account/orders", icon: "orders" },
+    { title: "My Payments & Receipts", href: "/account/payments", icon: "payments" },
+    { title: "View Application Status", href: "/account/applications", icon: "tracking" },
+    { title: "Support Tickets", href: "/account/tickets", icon: "tickets" },
+    { title: "Edit Profile", href: "/account/profile", icon: "profile" },
   ];
 
   return (
@@ -68,10 +68,6 @@ export default function AccountDashboardPage() {
         <div className="mt-3">
           <PartnerPortalBadges user={user} />
         </div>
-        <p className="mt-3 text-sm text-text-muted">
-          Manage your registrations, subscriptions, orders, payments and
-          profile from one place.
-        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -108,13 +104,8 @@ export default function AccountDashboardPage() {
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-burgundy/5 text-burgundy">
                 <QuickIcon name={link.icon} />
               </span>
-              <span>
-                <span className="font-semibold text-text-primary">
-                  {link.title}
-                </span>
-                <span className="mt-1 block text-sm text-text-muted">
-                  {link.description}
-                </span>
+              <span className="font-semibold text-text-primary">
+                {link.title}
               </span>
             </Link>
           ))}
