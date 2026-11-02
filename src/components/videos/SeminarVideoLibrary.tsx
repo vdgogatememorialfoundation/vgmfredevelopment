@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
+import { SEMINAR_ADSENSE_CLIENT, seminarDisplaySlot, seminarSavedTag, seminarVideoAdTag } from "@/lib/seminar-ads";
 
 type Access = {
   allowed?: boolean;
@@ -47,7 +49,7 @@ type SeminarYear = {
   videos: SeminarVideo[];
 };
 
-type Ads = { enabled?: boolean; adsenseClient?: string; adsenseSlot?: string };
+type Ads = { enabled?: boolean; adsenseClient?: string; adsenseSlot?: string; imaAdTag?: string };
 
 type Catalog = {
   years?: SeminarYear[];
@@ -78,10 +80,66 @@ declare global {
       };
     };
     adsbygoogle?: unknown[];
+    google?: { ima?: ImaNamespace };
   }
 }
 
+type ImaAdsManager = {
+  init: (width: number, height: number, viewMode: string) => void;
+  start: () => void;
+  destroy: () => void;
+  addEventListener: (type: string, handler: () => void) => void;
+};
+
+type ImaAdsLoader = {
+  requestAds: (request: {
+    adTagUrl: string;
+    linearAdSlotWidth: number;
+    linearAdSlotHeight: number;
+    nonLinearAdSlotWidth: number;
+    nonLinearAdSlotHeight: number;
+  }) => void;
+  contentComplete: () => void;
+  destroy: () => void;
+  addEventListener: (
+    type: string,
+    handler: (event: { getAdsManager?: (video: HTMLVideoElement, settings: { restoreCustomPlaybackStateOnAdBreakComplete: boolean }) => ImaAdsManager }) => void,
+    capture?: boolean
+  ) => void;
+};
+
+type ImaNamespace = {
+  settings: { setDisableCustomPlaybackForIOS10Plus: (value: boolean) => void };
+  AdDisplayContainer: new (container: HTMLElement, video: HTMLVideoElement) => { initialize: () => void; destroy: () => void };
+  AdsLoader: new (display: { initialize: () => void }) => ImaAdsLoader;
+  AdsRequest: new () => {
+    adTagUrl: string;
+    linearAdSlotWidth: number;
+    linearAdSlotHeight: number;
+    nonLinearAdSlotWidth: number;
+    nonLinearAdSlotHeight: number;
+  };
+  AdsRenderingSettings: new () => { restoreCustomPlaybackStateOnAdBreakComplete: boolean };
+  AdErrorEvent: { Type: { AD_ERROR: string } };
+  AdEvent: { Type: { CONTENT_PAUSE_REQUESTED: string; CONTENT_RESUME_REQUESTED: string; ALL_ADS_COMPLETED: string } };
+  AdsManagerLoadedEvent: { Type: { ADS_MANAGER_LOADED: string } };
+  ViewMode: { NORMAL: string };
+};
+
+type AdRuntime = {
+  loader: ImaAdsLoader;
+  manager: ImaAdsManager | null;
+  savedTag: string;
+  timeout: number;
+  cancelled: boolean;
+  onEnded: (() => void) | null;
+  onTime: (() => void) | null;
+  settle: (() => void) | null;
+};
+
 const HLS_SRC = "https://seminar.vaidyagogate.org/vendor/hls.light.min.js?v=1.7.3";
+const IMA_SRC = "https://imasdk.googleapis.com/js/sdkloader/ima3.js";
+const MIDROLL_AFTER_SEC = 8 * 60;
 
 function money(value?: number) {
   return `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -150,29 +208,23 @@ function loadScript(src: string, marker: string) {
   });
 }
 
-function AdBanner({ ads }: { ads?: Ads }) {
+function AdBanner({ slot }: { slot: string }) {
   const pushed = useRef(false);
-  const client = ads?.enabled && ads.adsenseClient && ads.adsenseSlot ? ads.adsenseClient : "";
-  const slot = ads?.enabled ? ads.adsenseSlot || "" : "";
   useEffect(() => {
-    if (!client || !slot || pushed.current) return;
+    if (!slot || pushed.current) return;
     pushed.current = true;
-    void loadScript(`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(client)}`, "vgmfAdsense")
-      .then(() => {
-        try {
-          (window.adsbygoogle = window.adsbygoogle || []).push({});
-        } catch {
-          /* the unit was already filled */
-        }
-      })
-      .catch(() => undefined);
-  }, [client, slot]);
-  if (!client || !slot) return null;
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch {
+      /* this unit was already filled */
+    }
+  }, [slot]);
+  if (!slot) return null;
   return (
     <ins
-      className="adsbygoogle my-4 block min-h-24"
+      className="adsbygoogle my-4 block"
       style={{ display: "block" }}
-      data-ad-client={client}
+      data-ad-client={SEMINAR_ADSENSE_CLIENT}
       data-ad-slot={slot}
       data-ad-format="auto"
       data-full-width-responsive="true"
@@ -183,8 +235,14 @@ function AdBanner({ ads }: { ads?: Ads }) {
 export function SeminarVideoLibrary() {
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<{ destroy: () => void; stopLoad: () => void } | null>(null);
+  const adContainerRef = useRef<HTMLDivElement>(null);
+  const adDisplayRef = useRef<{ initialize: () => void; destroy: () => void } | null>(null);
+  const adsRef = useRef<AdRuntime | null>(null);
+  const phaseRef = useRef<"idle" | "pre" | "content" | "mid" | "post">("idle");
+  const midRef = useRef(false);
+  const hlsRef = useRef<{ destroy: () => void; stopLoad: () => void; startLoad: () => void; recoverMediaError: () => void } | null>(null);
   const playRef = useRef<{ token: string; videoId: number; timer: number } | null>(null);
+  const catalogRef = useRef<Catalog | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [payments, setPayments] = useState<PaymentOption[]>([]);
   const [profile, setProfile] = useState({ name: "", email: "", phone: "" });
@@ -194,6 +252,7 @@ export function SeminarVideoLibrary() {
   const [qr, setQr] = useState("");
   const [playerTitle, setPlayerTitle] = useState("");
   const [watermark, setWatermark] = useState("");
+  const [adOn, setAdOn] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -232,12 +291,210 @@ export function SeminarVideoLibrary() {
   }, [user]);
 
   useEffect(() => {
+    catalogRef.current = catalog;
+  }, [catalog]);
+
+  useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!user) return;
+    void loadScript(IMA_SRC, "vgmfIma").catch(() => undefined);
+  }, [user]);
+
+  const releaseAds = useCallback((video: HTMLVideoElement | null) => {
+    const runtime = adsRef.current;
+    phaseRef.current = "idle";
+    midRef.current = false;
+    if (runtime) {
+      runtime.cancelled = true;
+      runtime.settle = null;
+      window.clearTimeout(runtime.timeout);
+      if (video && runtime.onEnded) video.removeEventListener("ended", runtime.onEnded);
+      if (video && runtime.onTime) video.removeEventListener("timeupdate", runtime.onTime);
+      try {
+        runtime.manager?.destroy();
+      } catch {
+        /* already closed */
+      }
+      try {
+        runtime.loader.destroy();
+      } catch {
+        /* already closed */
+      }
+      adsRef.current = null;
+    }
+    try {
+      adDisplayRef.current?.destroy();
+    } catch {
+      /* the ad display was already closed */
+    }
+    adDisplayRef.current = null;
+    setAdOn(false);
+  }, []);
+
+  const ensureDisplay = useCallback((video: HTMLVideoElement) => {
+    const ima = window.google?.ima;
+    const container = adContainerRef.current;
+    if (!ima || !container) return false;
+    ima.settings.setDisableCustomPlaybackForIOS10Plus(true);
+    if (!adDisplayRef.current) {
+      adDisplayRef.current = new ima.AdDisplayContainer(container, video);
+      try {
+        adDisplayRef.current.initialize();
+      } catch {
+        /* the display container was already initialized for this gesture */
+      }
+    }
+    return true;
+  }, []);
+
+  const openLoader = useCallback((video: HTMLVideoElement, savedTag: string) => {
+    const ima = window.google?.ima;
+    if (!ima || !adDisplayRef.current) return null;
+    const loader = new ima.AdsLoader(adDisplayRef.current);
+    const runtime: AdRuntime = {
+      loader,
+      manager: null,
+      savedTag,
+      timeout: 0,
+      cancelled: false,
+      onEnded: null,
+      onTime: null,
+      settle: null,
+    };
+    adsRef.current = runtime;
+    loader.addEventListener(
+      ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED,
+      (event) => {
+        const current = adsRef.current;
+        if (!current || current.cancelled || !event.getAdsManager) return;
+        const rendering = new ima.AdsRenderingSettings();
+        rendering.restoreCustomPlaybackStateOnAdBreakComplete = true;
+        let manager: ImaAdsManager;
+        try {
+          manager = event.getAdsManager(video, rendering);
+        } catch {
+          current.settle?.();
+          return;
+        }
+        try {
+          current.manager?.destroy();
+        } catch {
+          /* the previous break already ended */
+        }
+        current.manager = manager;
+        const stage = adContainerRef.current?.parentElement;
+        const width = stage?.clientWidth || 640;
+        const height = stage?.clientHeight || 360;
+        manager.addEventListener(ima.AdErrorEvent.Type.AD_ERROR, () => current.settle?.());
+        manager.addEventListener(ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, () => {
+          window.clearTimeout(current.timeout);
+          setAdOn(true);
+          try {
+            video.pause();
+          } catch {
+            /* the ad overlay owns playback */
+          }
+        });
+        manager.addEventListener(ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, () => current.settle?.());
+        manager.addEventListener(ima.AdEvent.Type.ALL_ADS_COMPLETED, () => {
+          setAdOn(false);
+          current.settle?.();
+        });
+        try {
+          manager.init(width, height, ima.ViewMode.NORMAL);
+          manager.start();
+        } catch {
+          current.settle?.();
+        }
+      },
+      false
+    );
+    loader.addEventListener(ima.AdErrorEvent.Type.AD_ERROR, () => adsRef.current?.settle?.(), false);
+    return runtime;
+  }, []);
+
+  const requestBreak = useCallback((when: "pre" | "mid" | "post", offsetMs: number, onDone: () => void) => {
+    const ima = window.google?.ima;
+    const runtime = adsRef.current;
+    const video = videoRef.current;
+    const container = adContainerRef.current;
+    if (!ima || !runtime || runtime.cancelled || !video || !container) {
+      onDone();
+      return;
+    }
+    phaseRef.current = when === "mid" ? "mid" : when === "post" ? "post" : "pre";
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(runtime.timeout);
+      runtime.settle = null;
+      setAdOn(false);
+      if (runtime.cancelled) return;
+      phaseRef.current = when === "post" ? "idle" : "content";
+      onDone();
+    };
+    runtime.settle = settle;
+    runtime.timeout = window.setTimeout(settle, 12000);
+    const stage = container.parentElement;
+    const width = stage?.clientWidth || 640;
+    const height = stage?.clientHeight || 360;
+    const request = new ima.AdsRequest();
+    request.adTagUrl = runtime.savedTag || seminarVideoAdTag(window.location.href, when, offsetMs);
+    request.linearAdSlotWidth = width;
+    request.linearAdSlotHeight = height;
+    request.nonLinearAdSlotWidth = width;
+    request.nonLinearAdSlotHeight = 150;
+    try {
+      runtime.loader.requestAds(request);
+    } catch {
+      settle();
+    }
+  }, []);
+
+  const armContentAds = useCallback((video: HTMLVideoElement, durationHint: number) => {
+    const runtime = adsRef.current;
+    if (!runtime || runtime.cancelled) return;
+    const onEnded = () => {
+      if (phaseRef.current !== "content") return;
+      if (runtime.savedTag) {
+        try {
+          runtime.loader.contentComplete();
+        } catch {
+          /* the saved tag has no post-roll */
+        }
+        return;
+      }
+      requestBreak("post", 0, () => undefined);
+    };
+    const onTime = () => {
+      if (runtime.savedTag || runtime.cancelled || midRef.current || phaseRef.current !== "content") return;
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : durationHint;
+      if (duration < MIDROLL_AFTER_SEC) return;
+      const mark = duration / 2;
+      if (video.currentTime > mark + 15) {
+        midRef.current = true;
+        return;
+      }
+      if (video.currentTime < Math.max(60, mark)) return;
+      midRef.current = true;
+      requestBreak("mid", Math.round(video.currentTime * 1000), () => {
+        void video.play().catch(() => undefined);
+      });
+    };
+    runtime.onEnded = onEnded;
+    runtime.onTime = onTime;
+    video.addEventListener("ended", onEnded);
+    video.addEventListener("timeupdate", onTime);
+  }, [requestBreak]);
 
   const stop = useCallback((silent = false) => {
     const current = playRef.current;
     const video = videoRef.current;
+    releaseAds(video);
     if (current) {
       window.clearInterval(current.timer);
       const position = video ? video.currentTime : null;
@@ -274,22 +531,30 @@ export function SeminarVideoLibrary() {
       setPlayerTitle("");
       setWatermark("");
     }
-  }, []);
+  }, [releaseAds]);
 
   useEffect(() => () => stop(true), [stop]);
 
-  const watch = async (videoId: number, title: string) => {
+  const watch = async (videoId: number, title: string, durationSec?: number | null) => {
     stop(true);
-    setPlayerTitle(title);
+    flushSync(() => {
+      setPlayerTitle(title);
+      setAdOn(false);
+    });
     setPayNote("");
     setNote("Preparing secure playback…");
+    const primed = videoRef.current;
+    if (primed) ensureDisplay(primed);
     try {
-      const response = await fetch("/api/seminar-videos", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "session", videoId, deviceId: deviceId() }),
-      });
+      const [response] = await Promise.all([
+        fetch("/api/seminar-videos", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "session", videoId, deviceId: deviceId() }),
+        }),
+        loadScript(IMA_SRC, "vgmfIma").catch(() => undefined),
+      ]);
       const session = (await response.json().catch(() => null)) as {
         error?: string;
         playlistUrl?: string;
@@ -298,13 +563,18 @@ export function SeminarVideoLibrary() {
         watermark?: { license?: string; name?: string; id?: string };
       } | null;
       if (!response.ok || !session?.playlistUrl || !session.token) throw new Error(session?.error || "This recording is locked.");
+      const playlistUrl = session.playlistUrl;
       const video = videoRef.current;
       if (!video) return;
       const mark = [session.watermark?.license, session.watermark?.name, session.watermark?.id].filter(Boolean).join(" · ");
       setWatermark(mark);
       setNote("");
       const start = Number(session.positionSec) || 0;
+      const token = session.token;
+      const durationHint = Number(durationSec) || 0;
       const begin = () => {
+        phaseRef.current = "content";
+        armContentAds(video, durationHint);
         if (start > 5) {
           try {
             video.currentTime = start;
@@ -314,42 +584,51 @@ export function SeminarVideoLibrary() {
         }
         void video.play().catch(() => undefined);
       };
-      const token = session.token;
-      playRef.current = {
-        token,
-        videoId,
-        timer: window.setInterval(() => {
-          void fetch("/api/seminar-videos", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ action: "progress", videoId, token, positionSec: video.currentTime }),
-          }).catch(() => undefined);
-        }, 15000),
+      const startPlayback = async () => {
+        playRef.current = {
+          token,
+          videoId,
+          timer: window.setInterval(() => {
+            void fetch("/api/seminar-videos", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ action: "progress", videoId, token, positionSec: video.currentTime }),
+            }).catch(() => undefined);
+          }, 15000),
+        };
+        if (video.canPlayType("application/vnd.apple.mpegurl") && !window.MediaSource) {
+          video.src = playlistUrl;
+          video.addEventListener("loadedmetadata", begin, { once: true });
+          return;
+        }
+        await loadScript(HLS_SRC, "vgmfHls");
+        const Hls = window.Hls;
+        if (!Hls || !Hls.isSupported()) throw new Error("This browser cannot play protected video. Use a current Chrome, Edge, Firefox, or Safari.");
+        const hls = new Hls({
+          enableWorker: false,
+          xhrSetup: (xhr: XMLHttpRequest) => {
+            xhr.setRequestHeader("X-Vgmf-Device", deviceId());
+          },
+        });
+        hlsRef.current = hls;
+        hls.on(Hls.Events.MANIFEST_PARSED, begin);
+        hls.on(Hls.Events.ERROR, (_event, err) => {
+          if (err?.response?.code === 403 || err?.response?.code === 410) setNote("Playback stopped because this video was opened somewhere else. Press Watch to continue here.");
+          else if (err?.fatal && err.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+          else if (err?.fatal && err.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+        });
+        hls.loadSource(playlistUrl);
+        hls.attachMedia(video);
       };
-      if (video.canPlayType("application/vnd.apple.mpegurl") && !window.MediaSource) {
-        video.src = session.playlistUrl;
-        video.addEventListener("loadedmetadata", begin, { once: true });
-        return;
+      const saved = seminarSavedTag(catalogRef.current?.ads?.imaAdTag);
+      try {
+        if (ensureDisplay(video)) openLoader(video, saved);
+      } catch {
+        releaseAds(video);
       }
-      await loadScript(HLS_SRC, "vgmfHls");
-      const Hls = window.Hls;
-      if (!Hls || !Hls.isSupported()) throw new Error("This browser cannot play protected video. Use a current Chrome, Edge, Firefox, or Safari.");
-      const hls = new Hls({
-        enableWorker: false,
-        xhrSetup: (xhr: XMLHttpRequest) => {
-          xhr.setRequestHeader("X-Vgmf-Device", deviceId());
-        },
-      });
-      hlsRef.current = hls;
-      hls.on(Hls.Events.MANIFEST_PARSED, begin);
-      hls.on(Hls.Events.ERROR, (_event, err) => {
-        if (err?.response?.code === 403 || err?.response?.code === 410) setNote("Playback stopped because this video was opened somewhere else. Press Watch to continue here.");
-        else if (err?.fatal && err.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-        else if (err?.fatal && err.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-      });
-      hls.loadSource(session.playlistUrl);
-      hls.attachMedia(video);
+      if (adsRef.current) requestBreak("pre", 0, () => void startPlayback().catch((error: Error) => setNote(error.message)));
+      else await startPlayback();
     } catch (error) {
       setNote((error as Error).message);
     }
@@ -461,11 +740,11 @@ export function SeminarVideoLibrary() {
 
   const years = catalog?.years || [];
   const pending = catalog?.pendingPurchases || [];
-  const ads = catalog?.ads;
+  const slot = seminarDisplaySlot(catalog?.ads);
 
   return (
     <div className="space-y-6">
-      <AdBanner ads={ads} />
+      <AdBanner slot={slot} />
       {!user && (
         <div className="rounded-2xl border border-border bg-white p-6">
           <p className="text-sm text-text-muted">Sign in with the email or phone on your seminar account. Volunteers and people who paid for that seminar watch here without another charge. Anyone who did not register can buy the recording.</p>
@@ -475,23 +754,28 @@ export function SeminarVideoLibrary() {
       {user && loading && <p className="text-sm text-text-muted">Loading seminar videos…</p>}
       {user && !loading && !linked && <p className="rounded-2xl border border-border bg-white p-6 text-sm text-text-muted">{note}</p>}
       {playerTitle && (
-        <div className="overflow-hidden rounded-2xl border border-border bg-black">
-          <div className="flex items-center justify-between gap-3 bg-ink px-4 py-3 text-white">
-            <p className="text-sm font-semibold">{playerTitle}</p>
-            <button type="button" className="text-xs font-semibold text-white/80" onClick={() => stop(false)}>Close</button>
+        <>
+          <AdBanner slot={slot} />
+          <div className="overflow-hidden rounded-2xl border border-border bg-black">
+            <div className="flex items-center justify-between gap-3 bg-ink px-4 py-3 text-white">
+              <p className="text-sm font-semibold">{playerTitle}</p>
+              <button type="button" className="text-xs font-semibold text-white/80" onClick={() => stop(false)}>Close</button>
+            </div>
+            <div className="relative">
+              <video
+                ref={videoRef}
+                controls
+                playsInline
+                controlsList="nodownload noremoteplayback noplaybackrate"
+                className="aspect-video w-full bg-black"
+                onContextMenu={(event) => event.preventDefault()}
+              />
+              <div ref={adContainerRef} className={`absolute inset-0 ${adOn ? "z-20" : "pointer-events-none"}`} />
+              {watermark && !adOn && <p className="pointer-events-none absolute bottom-14 right-3 z-10 max-w-[70%] rounded bg-black/50 px-2 py-1 text-[10px] text-white">{watermark}</p>}
+            </div>
           </div>
-          <div className="relative">
-            <video
-              ref={videoRef}
-              controls
-              playsInline
-              controlsList="nodownload noremoteplayback noplaybackrate"
-              className="aspect-video w-full bg-black"
-              onContextMenu={(event) => event.preventDefault()}
-            />
-            {watermark && <p className="pointer-events-none absolute bottom-14 right-3 max-w-[70%] rounded bg-black/50 px-2 py-1 text-[10px] text-white">{watermark}</p>}
-          </div>
-        </div>
+          <AdBanner slot={slot} />
+        </>
       )}
       {payNote && <p className="text-sm text-text-primary">{payNote}</p>}
       {qr && <img src={qr} alt="UPI payment QR" className="h-52 w-52 rounded-xl border border-border bg-white p-2" />}
@@ -553,7 +837,7 @@ export function SeminarVideoLibrary() {
       const resume = (item.positionSec || 0) > 30;
       return (
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="btn-primary" onClick={() => void watch(item.id, item.title)}>{resume ? "Resume" : "Watch"}</button>
+          <button type="button" className="btn-primary" onClick={() => void watch(item.id, item.title, item.durationSec)}>{resume ? "Resume" : "Watch"}</button>
           <span className="text-xs font-semibold text-emerald-800">{accessLabel(item.access)}</span>
         </div>
       );

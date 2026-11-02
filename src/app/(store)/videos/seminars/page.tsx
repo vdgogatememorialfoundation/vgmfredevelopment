@@ -13,7 +13,7 @@ export default function SeminarVideosPage() {
       <PageHeader
         eyebrow="Media"
         title="Seminar videos"
-        description="These recordings stay free for volunteers and for everyone who paid for that seminar, whether they attended or not. If you did not register, you can buy the recording here. The page is on the main site so display ads can run."
+        description="These recordings stay free for volunteers and for everyone who paid for that seminar, whether they attended or not. If you did not register, you can buy the recording here."
         breadcrumb={[{ name: "Videos", href: "/videos" }, { name: "Seminar videos", href: "/videos/seminars" }]}
       />
       <section className="section bg-background">
