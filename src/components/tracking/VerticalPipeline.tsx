@@ -91,7 +91,8 @@ export default function VerticalPipeline({
   const [openIdx, setOpenIdx] = useState(Math.max(0, nodeCurrentIdx));
   const frameRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
-  const phase = useRef<"start" | "at-step">("start");
+  const phase = useRef<"start" | "to-step" | "at-step">("start");
+  const readRef = useRef<(() => { left: number; top: number; reached: number; height: number } | null) | null>(null);
   const [line, setLine] = useState({ left: 14.5, top: 34, height: 0, transition: "none" });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -100,6 +101,7 @@ export default function VerticalPipeline({
   }, []);
   const terminal = new Set(["delivered", "picked", "failed", "cancelled", "refunded"]);
   const current = stages[nodeCurrentIdx];
+  // Time may carry the line into the open gap. It stays short of the next step until that step is reached.
   const creep =
     !pace ||
     !current ||
@@ -108,7 +110,9 @@ export default function VerticalPipeline({
     stages[nodeCurrentIdx + 1]?.reached ||
     pace.until <= pace.from
       ? 0
-      : Math.max(0, Math.min(0.88, (now - pace.from) / (pace.until - pace.from)));
+      : Math.max(0, Math.min(0.42, (now - pace.from) / (pace.until - pace.from)));
+  const creepRef = useRef(creep);
+  creepRef.current = creep;
 
   useEffect(() => {
     setOpenIdx(Math.max(0, nodeCurrentIdx));
@@ -120,70 +124,106 @@ export default function VerticalPipeline({
     if (!list || !frame || nodeCurrentIdx < 0) return;
     let cancelled = false;
     let growTimer = 0;
+    let creepTimer = 0;
     const read = () => {
       const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
-      const current = items[nodeCurrentIdx];
+      const step = items[nodeCurrentIdx];
       const firstDot = items[0]?.querySelector(".dot");
-      const currentDot = current?.querySelector(".dot");
+      const currentDot = step?.querySelector(".dot");
       if (!firstDot || !currentDot) return null;
       const frameBox = frame.getBoundingClientRect();
       const start = firstDot.getBoundingClientRect();
       const end = currentDot.getBoundingClientRect();
       const top = start.top + start.height / 2 - frameBox.top;
       const bottom = end.top + end.height / 2 - frameBox.top;
+      const reached = Math.max(0, bottom - top);
       const nextDot = items[nodeCurrentIdx + 1]?.querySelector(".dot");
-      let height = Math.max(0, bottom - top);
-      if (nextDot && creep > 0) {
+      let height = reached;
+      const portion = creepRef.current;
+      if (nextDot && portion > 0) {
         const nextBox = nextDot.getBoundingClientRect();
         const nextCenter = nextBox.top + nextBox.height / 2 - frameBox.top;
-        height += Math.max(0, nextCenter - bottom) * creep;
+        height += Math.max(0, nextCenter - bottom) * portion;
       }
       return {
         left: start.left + start.width / 2 - frameBox.left - 1.5,
         top,
+        reached,
         height,
       };
     };
+    readRef.current = read;
     const motion = (duration: string) =>
       window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "none" : duration;
     const paint = (next: { left: number; top: number; height: number }, duration: string) => {
       setLine({ left: next.left, top: next.top, height: next.height, transition: motion(duration) });
     };
+    const statusSeconds = Math.min(8, Math.max(2.2, nodeCurrentIdx * 2.2));
+    const settleCreep = () => {
+      creepTimer = window.setTimeout(() => {
+        if (cancelled) return;
+        const crept = read();
+        if (!crept) return;
+        phase.current = "at-step";
+        const extra = crept.height - crept.reached;
+        paint(crept, extra > 2 ? "height 24s linear" : "none");
+      }, statusSeconds * 1000 + 40);
+    };
     const apply = () => {
       const next = read();
       if (!next || cancelled) return;
+      if (motion("height 1s linear") === "none") {
+        phase.current = "at-step";
+        paint(next, "none");
+        return;
+      }
       if (phase.current === "start") {
         paint({ ...next, height: 0 }, "none");
         window.clearTimeout(growTimer);
+        window.clearTimeout(creepTimer);
         growTimer = window.setTimeout(() => {
           if (cancelled) return;
           const latest = read();
           if (!latest) return;
-          phase.current = "at-step";
-          paint(latest, "height 4.8s linear");
+          phase.current = "to-step";
+          paint({ ...latest, height: latest.reached }, `height ${statusSeconds}s linear`);
+          settleCreep();
         }, 70);
         return;
       }
-      paint(next, "height 12s linear");
+      window.clearTimeout(creepTimer);
+      phase.current = "to-step";
+      paint({ ...next, height: next.reached }, `height ${statusSeconds}s linear`);
+      settleCreep();
     };
     const timer = window.setTimeout(apply, 40);
     const follow = () => {
       if (cancelled || phase.current === "start") return;
       const next = read();
       if (!next) return;
-      paint(next, "height 2.6s linear");
+      setLine((currentLine) => ({ ...currentLine, left: next.left, top: next.top }));
     };
     const observer = new ResizeObserver(follow);
     observer.observe(list);
     window.addEventListener("resize", follow);
     return () => {
       cancelled = true;
+      readRef.current = null;
       window.clearTimeout(timer);
       window.clearTimeout(growTimer);
+      window.clearTimeout(creepTimer);
       observer.disconnect();
       window.removeEventListener("resize", follow);
     };
-  }, [nodeCurrentIdx, openIdx, stages.length, creep]);
+  }, [nodeCurrentIdx, openIdx, stages.length]);
+
+  useEffect(() => {
+    if (phase.current !== "at-step") return;
+    const next = readRef.current?.();
+    if (!next) return;
+    const transition = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "none" : "height 10s linear";
+    setLine({ left: next.left, top: next.top, height: next.height, transition });
+  }, [creep]);
 
   const firstUpcoming = stages.findIndex((stage, index) => pipeState(stage, index === nodeCurrentIdx) === "upcoming");
 
