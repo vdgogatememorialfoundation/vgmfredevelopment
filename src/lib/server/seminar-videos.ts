@@ -1,6 +1,6 @@
 import { Pool } from "pg";
-import { samePhone } from "@/lib/account-identity";
 import { SEMINAR_HOST } from "@/lib/platform";
+import { chooseSeminarViewer, portalAccountId, type SeminarUserRow } from "@/lib/seminar-viewer";
 
 /**
  * Seminar recordings stay in the seminar portal (access rules, purchases, encrypted playback).
@@ -49,40 +49,90 @@ export async function seminarOfficeAdminId() {
   return officeAdminId;
 }
 
-export async function findSeminarViewer(email: string, phone: string): Promise<SeminarViewer | null> {
-  const db = seminarPool();
-  if (!db) return null;
-  const normalized = email.trim().toLowerCase();
-  const byEmail = normalized
-    ? await db.query<{ id: number; email: string | null; phone: string | null; whatsapp: string | null; doctor_category: string | null }>(
-        `SELECT id, email, phone, whatsapp, doctor_category FROM users WHERE lower(email) = $1 ORDER BY id ASC LIMIT 8`,
-        [normalized]
-      )
-    : { rows: [] };
-  let rows = byEmail.rows;
-  const local = phone.replace(/\D/g, "").slice(-10);
-  if (!rows.length && local.length >= 10) {
-    const byPhone = await db.query<{ id: number; email: string | null; phone: string | null; whatsapp: string | null; doctor_category: string | null }>(
-      `SELECT id, email, phone, whatsapp, doctor_category
-       FROM users
-       WHERE right(regexp_replace(coalesce(phone, ''), '\\D', '', 'g'), 10) = $1
-          OR right(regexp_replace(coalesce(whatsapp, ''), '\\D', '', 'g'), 10) = $1
-       ORDER BY id ASC
-       LIMIT 8`,
-      [local]
-    );
-    rows = byPhone.rows;
-  }
-  if (!rows.length) return null;
-  const match =
-    rows.find((row) => normalized && String(row.email || "").toLowerCase() === normalized && (phone ? samePhone(row.phone, phone) || samePhone(row.whatsapp, phone) : true)) ||
-    rows[0];
+const USER_COLUMNS = `u.id, u.email, u.phone, u.whatsapp, u.doctor_category, u.user_id_string, u.role, u.user_role,
+       EXISTS (SELECT 1 FROM video_licenses l WHERE l.user_id = u.id) AS has_license`;
+
+function asViewer(match: SeminarUserRow): SeminarViewer {
   return {
     id: Number(match.id),
     email: String(match.email || ""),
     phone: String(match.phone || match.whatsapp || ""),
     volunteer: String(match.doctor_category || "").toLowerCase() === "volunteer",
   };
+}
+
+type CookieJar = { get(name: string): { value: string } | undefined };
+
+function readSession(raw: string | undefined) {
+  if (!raw) return null;
+  const candidates = [raw];
+  try {
+    candidates.push(decodeURIComponent(raw));
+  } catch {
+    /* already decoded */
+  }
+  for (const value of candidates) {
+    try {
+      const parsed = JSON.parse(value) as { email?: string; phone?: string; accountId?: string; id?: string; firstName?: string; lastName?: string };
+      if (parsed?.email) return parsed;
+    } catch {
+      /* next encoding */
+    }
+  }
+  return null;
+}
+
+/**
+ * Seminar videos follow the account on the dashboard. An admin session in the
+ * same browser must not replace that person, or a volunteer sees another login's
+ * license and a paywall.
+ */
+export function seminarDashboardViewer(cookies: CookieJar) {
+  const parsed = readSession(cookies.get("vgmf_session")?.value) || readSession(cookies.get("vgmf_admin_session")?.value);
+  if (!parsed?.email) return { email: "", phone: "", accountId: "", name: "" };
+  return {
+    email: parsed.email.trim().toLowerCase(),
+    phone: parsed.phone || "",
+    accountId: portalAccountId(parsed.accountId, parsed.id),
+    name: [parsed.firstName, parsed.lastName].filter(Boolean).join(" ").trim(),
+  };
+}
+
+export async function findSeminarViewer(email: string, phone: string, accountId = ""): Promise<SeminarViewer | null> {
+  const db = seminarPool();
+  if (!db) return null;
+  const portalId = portalAccountId(accountId);
+  const normalized = email.trim().toLowerCase();
+  const byPortal = portalId
+    ? await db.query<SeminarUserRow>(
+        `SELECT ${USER_COLUMNS} FROM users u WHERE btrim(coalesce(u.user_id_string, '')) = $1 ORDER BY u.id ASC LIMIT 4`,
+        [portalId]
+      )
+    : { rows: [] as SeminarUserRow[] };
+  const portalMatch = chooseSeminarViewer(byPortal.rows, normalized, phone, portalId);
+  if (portalMatch && String(portalMatch.user_id_string || "").trim() === portalId) return asViewer(portalMatch);
+  const byEmail = normalized
+    ? await db.query<SeminarUserRow>(
+        `SELECT ${USER_COLUMNS} FROM users u WHERE lower(btrim(u.email)) = $1 ORDER BY u.id ASC LIMIT 8`,
+        [normalized]
+      )
+    : { rows: [] as SeminarUserRow[] };
+  let rows = byEmail.rows;
+  const local = phone.replace(/\D/g, "").slice(-10);
+  if (!rows.length && local.length >= 10) {
+    const byPhone = await db.query<SeminarUserRow>(
+      `SELECT ${USER_COLUMNS}
+       FROM users u
+       WHERE right(regexp_replace(coalesce(u.phone, ''), '\\D', '', 'g'), 10) = $1
+          OR right(regexp_replace(coalesce(u.whatsapp, ''), '\\D', '', 'g'), 10) = $1
+       ORDER BY u.id ASC
+       LIMIT 8`,
+      [local]
+    );
+    rows = byPhone.rows;
+  }
+  const match = chooseSeminarViewer(rows, normalized, phone, portalId);
+  return match ? asViewer(match) : null;
 }
 
 export function seminarClientHeaders(request: { headers: { get(name: string): string | null } }) {
