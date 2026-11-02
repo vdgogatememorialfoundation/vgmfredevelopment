@@ -29,7 +29,7 @@ function sameSpot(a?: { lat?: number; lng?: number } | null, b?: { lat?: number;
 }
 
 function pin(color: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="46" height="58" viewBox="0 0 46 58"><ellipse cx="23" cy="54" rx="9" ry="2.4" fill="rgba(28,25,23,.22)"/><path fill="${color}" d="M23 2a18 18 0 0 0-18 18c0 13 18 36 18 36s18-23 18-36A18 18 0 0 0 23 2z"/><path fill="rgba(255,255,255,.38)" d="M23 3.2c-7.2 0-12.4 4.2-14.6 9.2 5.2-3.4 24-3.4 29.2 0C35.4 7.4 30.2 3.2 23 3.2z"/><circle cx="23" cy="20" r="8" fill="#fff"/><circle cx="20.5" cy="17.2" r="2.2" fill="rgba(255,255,255,.95)"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="46" height="58" viewBox="0 0 46 58"><path fill="${color}" d="M23 2a18 18 0 0 0-18 18c0 13 18 36 18 36s18-23 18-36A18 18 0 0 0 23 2z"/><circle cx="23" cy="20" r="7" fill="#fff"/></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
