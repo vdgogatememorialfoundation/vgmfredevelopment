@@ -60,7 +60,6 @@ export default function CheckoutClient() {
   const [payMethod, setPayMethod] = useState<"online" | "cod">("online");
   const [liveRates, setLiveRates] = useState<{ pincode: string; rates: CourierRate[] } | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
-  const [openBox, setOpenBox] = useState(true);
   const [address, setAddress] = useState<DeliveryAddress>({
     ...EMPTY_ADDRESS,
     fullName: user ? `${user.firstName} ${user.lastName}`.trim() : "",
@@ -91,10 +90,6 @@ export default function CheckoutClient() {
     const book = getBookById(item.bookId);
     return book ? [{ item, book }] : [];
   });
-
-  const rowBooksOpenBox = rows.map(({ book }) => book.openBoxDelivery);
-  const openBoxSupported =
-    rows.length > 0 && rowBooksOpenBox.every(Boolean);
 
   const quote: DeliveryQuote = checkCart(
     rows.map(({ item }) => ({ bookId: item.bookId, quantity: item.quantity })),
@@ -282,8 +277,6 @@ export default function CheckoutClient() {
               lastMile: selectedCourier.lastMile,
             }
           : undefined,
-      openBoxDelivery:
-        deliveryMode === "delivery" && openBoxSupported ? openBox : false,
       returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
       accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
       createdBy: user?.email ?? "guest checkout",
@@ -462,24 +455,6 @@ export default function CheckoutClient() {
                 )}
                 {domestic && quote && !quote.serviceable && pincodeValid && (
                   <p className="mt-3 text-sm text-red-700">{quote.note}</p>
-                )}
-
-                {openBoxSupported && (
-                  <label className="mt-5 flex items-start gap-3 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={openBox}
-                      onChange={(e) => setOpenBox(e.target.checked)}
-                      className="mt-0.5 h-5 w-5 accent-burgundy"
-                    />
-                    <span className="text-text-primary">
-                      <span className="font-semibold">Open-box delivery</span>{" "}
-                      <span className="text-text-muted">
-                        (optional) Inspect the item at the doorstep before
-                        accepting delivery. Offered for this item.
-                      </span>
-                    </span>
-                  </label>
                 )}
               </>
             )}
@@ -665,7 +640,6 @@ export default function CheckoutClient() {
               </p>
               <p className="mt-1">
                 Orders cannot be cancelled or returned from your account. If an item arrives damaged, share photos from My Orders. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.
-                {openBoxSupported ? " Open-box delivery helps you check the item at the doorstep." : ""}
               </p>
             </div>
 

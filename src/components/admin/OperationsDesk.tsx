@@ -420,7 +420,6 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
       { key: "returnableDays", label: "Return window (days)", fallback: "7" },
       { key: "cancellationHours", label: "Cancellation window (hours)", fallback: "24" },
       { key: "invoicePrefix", label: "Invoice prefix", fallback: "VGMF-INV" },
-      { key: "openBox", label: "Offer open-box delivery", kind: "toggle", fallback: "false" },
     ],
   },
   payments: {

@@ -1,3 +1,4 @@
+import type { OrderSettings } from "@/lib/integrations";
 import type { MobileAppearance } from "@/lib/mobile-appearance";
 import type { MobileAppConfig } from "@/lib/mobile-config";
 import type { PlatformCountries } from "@/lib/platform-countries";
@@ -47,4 +48,6 @@ export type MobileFeed = {
   seminarReviews?: SeminarReview[];
   productReviews?: Review[];
   siteText?: SiteText;
+  /** Public checkout rules (cash on delivery, shipping fee, pickup). No secrets. */
+  orderSettings?: OrderSettings;
 };

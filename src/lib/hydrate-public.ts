@@ -7,6 +7,7 @@ import { events as seededEvents } from "@/data/events";
 import { clinics as seededClinics } from "@/data/clinics";
 import { videos as seededVideos } from "@/data/videos";
 import { books as seededBooks } from "@/data/books";
+import { getOrderSettings, publicOrderSettings, saveOrderSettings } from "@/lib/integrations";
 import { appliedFeedAt, emptyFeedFallback, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
 import type { Flyer } from "@/types";
@@ -67,6 +68,7 @@ export async function hydratePublishedSite() {
         return;
       }
       if (dirty) return;
+      installPublishedOrderSettings(merged);
       const feedAt = merged.publishedAt || "";
       const catalogueAt = window.localStorage.getItem(CATALOGUE_STAMP) ?? "";
       if (feedAt && appliedFeedAt() !== feedAt) {
@@ -82,7 +84,16 @@ export async function hydratePublishedSite() {
   }
 }
 
+/** Phones keep default checkout rules until this runs. Missing settings must not wipe a saved copy. */
+function installPublishedOrderSettings(feed: MobileFeed) {
+  if (!feed.orderSettings || typeof window === "undefined") return;
+  const next = publicOrderSettings(feed.orderSettings);
+  if (JSON.stringify(getOrderSettings()) === JSON.stringify(next)) return;
+  tryWrite(() => saveOrderSettings(next));
+}
+
 function applyFeed(feed: MobileFeed) {
+  installPublishedOrderSettings(feed);
   const current = getSettings();
   tryWrite(() => {
     saveSettings({

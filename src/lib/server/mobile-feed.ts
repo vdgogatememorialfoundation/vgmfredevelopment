@@ -6,6 +6,7 @@ import { writePublishedFeed } from "@/lib/server/db";
 import { dataFile } from "@/lib/server/paths";
 import { defaultAppearance, sanitizeAppearance } from "@/lib/mobile-appearance";
 import { defaultMobileAppConfig } from "@/lib/mobile-config";
+import { publicOrderSettings } from "@/lib/integrations";
 import { type MobileFeed } from "@/lib/mobile-types";
 import { defaultPlatformCountries, readPlatformCountries, writePlatformCountries } from "@/lib/server/platform-countries";
 import { listNotices } from "@/lib/server/notices";
@@ -153,6 +154,7 @@ export function readMobileFeed(): MobileFeed {
     publishedAt: snapshot.publishedAt || base.publishedAt,
     appearance: sanitizeAppearance(snapshot.appearance ?? base.appearance ?? defaultAppearance),
     platformCountries: snapshot.platformCountries ?? base.platformCountries ?? defaultPlatformCountries,
+    orderSettings: snapshot.orderSettings ? publicOrderSettings(snapshot.orderSettings) : undefined,
     seminarReviews: (() => {
       const live = listReviews();
       return live.seminarReviews.length ? live.seminarReviews : snapshot.seminarReviews ?? base.seminarReviews;

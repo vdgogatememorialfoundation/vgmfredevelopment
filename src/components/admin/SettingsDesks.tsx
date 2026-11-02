@@ -1186,7 +1186,14 @@ export function OrderSettingsDesk() {
   const save = () => {
     saveOrderSettings(value);
     savePolicy({ ...getPolicy(), storePickupEnabled: value.pickupEnabled });
-    setNote("Saved. Checkout, product pages and customer orders use these rules now.");
+    setNote("Saving. Phones and other browsers will pick this up in a moment.");
+    void publishLiveSite().then((result) => {
+      setNote(
+        result?.ok
+          ? "Saved. Cash on delivery, shipping and pickup now load on phones and other browsers. Refresh those devices."
+          : "Saved on this browser. Publish the site again so other devices receive cash on delivery and shipping."
+      );
+    });
   };
 
   const feeModes = [
