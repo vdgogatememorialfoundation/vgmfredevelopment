@@ -64,7 +64,7 @@ export function canOrder(book: Pick<Book, "stock" | "stockStatus" | "preorder">)
 }
 
 export function availabilityText(book: Pick<Book, "stock" | "stockStatus" | "preorder">) {
-  if (isPurchasable(book)) return book.stock <= LOW_STOCK_AT ? `Only ${book.stock} left` : "In Stock";
+  if (isPurchasable(book)) return "In Stock";
   if (canPreorder(book)) return "Pre-order";
   return "Out of Stock";
 }

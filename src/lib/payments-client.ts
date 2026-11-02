@@ -392,3 +392,82 @@ export async function payOnPaytmEdc(input: {
     live: true,
   };
 }
+
+export type ReadyGateway = { id: "payu" | "easebuzz" | "cashfree" | "phonepe"; mode: "test" | "live" };
+
+export async function readyHostedGateways(): Promise<ReadyGateway[]> {
+  const response = await fetch("/api/payments/hosted", { cache: "no-store" });
+  const data = (await response.json().catch(() => ({}))) as { gateways?: ReadyGateway[] };
+  return data.gateways ?? [];
+}
+
+export async function pushPaymentVault() {
+  const settings = getIntegrations();
+  await fetch("/api/payments/hosted", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "save",
+      payments: { payu: settings.payu, easebuzz: settings.easebuzz, cashfree: settings.cashfree, phonepe: settings.phonepe },
+    }),
+  });
+}
+
+declare global {
+  interface Window {
+    Cashfree?: (options: { mode: "sandbox" | "production" }) => { checkout: (options: { paymentSessionId: string; redirectTarget: "_self" }) => Promise<unknown> };
+  }
+}
+
+export async function openHostedCheckout(input: { gateway: ReadyGateway["id"]; amount: number; orderId: string; name: string; email?: string; phone?: string }) {
+  const response = await fetch("/api/payments/hosted", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "start", ...input, product: `VGMF order ${input.orderId}` }),
+  });
+  const data = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    kind?: string;
+    url?: string;
+    fields?: Record<string, string>;
+    session?: string;
+    mode?: "test" | "live";
+  };
+  if (!response.ok || !data.ok) throw new Error(data.error || "The payment gateway did not open.");
+  if (data.kind === "form" && data.url && data.fields) {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = data.url;
+    for (const [name, value] of Object.entries(data.fields)) {
+      const field = document.createElement("input");
+      field.type = "hidden";
+      field.name = name;
+      field.value = value;
+      form.appendChild(field);
+    }
+    document.body.appendChild(form);
+    form.submit();
+    return;
+  }
+  if (data.kind === "cashfree" && data.session) {
+    await new Promise<void>((resolve, reject) => {
+      if (window.Cashfree) return resolve();
+      const script = document.createElement("script");
+      script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Cashfree checkout could not load."));
+      document.body.appendChild(script);
+    });
+    const checkout = window.Cashfree?.({ mode: data.mode === "live" ? "production" : "sandbox" });
+    if (!checkout) throw new Error("Cashfree checkout could not load.");
+    await checkout.checkout({ paymentSessionId: data.session, redirectTarget: "_self" });
+    return;
+  }
+  if (data.kind === "redirect" && data.url) {
+    window.location.href = data.url;
+    return;
+  }
+  throw new Error("The payment gateway did not return a checkout page.");
+}

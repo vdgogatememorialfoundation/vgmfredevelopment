@@ -482,6 +482,8 @@ export interface Order {
   discount: number;
   gst: number;
   shipping: number;
+  /** Flat platform fee for this order. Omitted when the fee is switched off. */
+  platformFee?: number;
   total: number;
   currency: string;
   paymentStatus: "Pending" | "Paid" | "Failed" | "Refunded" | "Partially Refunded";

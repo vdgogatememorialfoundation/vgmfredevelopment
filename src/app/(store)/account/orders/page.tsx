@@ -10,6 +10,8 @@ import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
+import { useOrderSettings } from "@/lib/use-cms";
+import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import { customerAddressLine, deliveryDatePhrase, deliveryExpectation } from "@/lib/delivery-expectation";
@@ -23,6 +25,7 @@ function latestStatusText(order: Order) {
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const orderSettings = useOrderSettings();
   const { ready, version } = useCommerceMirror();
   const [mounted, setMounted] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -170,6 +173,18 @@ export default function OrdersPage() {
                               − {formatPrice(order.discount)}
                             </dd>
                           </div>
+                          {order.gst > 0 && (
+                            <div className="flex justify-between">
+                              <dt className="text-text-muted">GST</dt>
+                              <dd className="font-medium text-text-primary">{formatPrice(order.gst)}</dd>
+                            </div>
+                          )}
+                          {(order.platformFee ?? 0) > 0 && (
+                            <div className="flex justify-between">
+                              <dt className="text-text-muted">Platform fee</dt>
+                              <dd className="font-medium text-text-primary">{formatPrice(order.platformFee || 0)}</dd>
+                            </div>
+                          )}
                           <div className="flex justify-between">
                             <dt className="text-text-muted">Shipping</dt>
                             <dd className="font-medium text-text-primary">
@@ -187,6 +202,11 @@ export default function OrdersPage() {
                             </dd>
                           </div>
                         </dl>
+                        {orderSettings.gst.invoiceEnabled && (
+                          <button type="button" className="btn-outline mt-4" onClick={() => printGstInvoice(order)}>
+                            GST invoice
+                          </button>
+                        )}
                       </div>
 
                       <div className="space-y-4">

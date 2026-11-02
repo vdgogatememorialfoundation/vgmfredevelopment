@@ -478,7 +478,7 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
     return {
       ...emptyOffers,
       pickupAvailable: false,
-      note: stock <= 0 ? "This product is out of stock." : `Only ${stock} in stock at ${location}.`,
+      note: stock <= 0 ? "This product is out of stock." : "That quantity is not available.",
     };
   }
 

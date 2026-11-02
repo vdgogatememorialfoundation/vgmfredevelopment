@@ -96,11 +96,8 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           }`}
         />
         <span className={purchasable ? "text-emerald-700" : preorder ? "text-burgundy" : "text-red-600"}>
-          {purchasable ? book.availability : preorder ? "Pre-order" : "Out of stock"}
+          {purchasable ? "In stock" : preorder ? "Pre-order" : "Out of stock"}
         </span>
-        {purchasable && (
-          <span className="text-text-muted">· {stock} in stock at {estimate?.stockingLocation ?? "the Foundation store"}</span>
-        )}
         {preorder && book.preorder?.releaseDate && (
           <span className="text-text-muted">· expected {book.preorder.releaseDate}</span>
         )}
@@ -227,7 +224,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             </button>
           </div>
           <p className="text-sm text-text-muted">
-            {purchasable ? `${stock} in stock` : preorder ? "Pre-order" : "Currently unavailable"}
+            {purchasable ? "In stock" : preorder ? "Pre-order" : "Currently unavailable"}
           </p>
         </div>
 

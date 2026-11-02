@@ -444,6 +444,16 @@ function noticesFromPublic(portal: PartnerPortalId, payload: unknown): { notices
   return { notices, announcements };
 }
 
+export async function publicPartnerSchedules() {
+  const portals: PartnerPortalId[] = ["seminar", "autism"];
+  const events: Event[] = [];
+  for (const portal of portals) {
+    const data = await pullPublic(portal);
+    events.push(...data.events.filter((event) => !isFellowshipEvent(event)));
+  }
+  return events;
+}
+
 async function pullPublic(portal: PartnerPortalId) {
   if (portal === "fellowship") return { events: [] as Event[], notices: [] as Notice[], announcements: [] as Announcement[] };
   const origin = originFor(portal);

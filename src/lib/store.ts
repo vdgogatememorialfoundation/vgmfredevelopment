@@ -19,7 +19,7 @@ import { getLiveBook, isPurchasable, canPreorder } from "@/lib/product-data";
 import { pushInbox } from "@/lib/inbox";
 import { queueNotification } from "@/lib/notify";
 import { checkPincode } from "@/lib/fulfillment";
-import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { commerceCharges, getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 
 const CART_KEY = "vgmf_cart";
 const ORDERS_KEY = "vgmf_orders";
@@ -110,6 +110,7 @@ export interface PriceBreakup {
   subtotal: number;
   discount: number;
   gst: number;
+  platformFee: number;
   shipping: number;
   total: number;
 }
@@ -123,11 +124,11 @@ export function computeTotals(
     0
   );
   const discount = Math.max(0, mrp - subtotal);
-  const gst = Math.round(subtotal * storeConfig.gstRate);
+  const charges = commerceCharges(subtotal);
   const units = items.reduce((sum, item) => sum + item.quantity, 0);
   const shipping = subtotal === 0 ? 0 : shippingFeeFor(subtotal, units, undefined, getOrderSettings());
-  const total = subtotal + gst + shipping;
-  return { mrp, subtotal, discount, gst, shipping, total };
+  const total = subtotal + charges.gst + charges.platformFee + shipping;
+  return { mrp, subtotal, discount, gst: charges.gst, platformFee: charges.platformFee, shipping, total };
 }
 
 export function formatPrice(amount: number) {

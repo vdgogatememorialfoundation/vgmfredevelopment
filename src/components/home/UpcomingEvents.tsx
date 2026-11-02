@@ -7,6 +7,7 @@ import { useLiveEvents } from "@/lib/use-cms";
 import { compareEventDates } from "@/lib/event-display";
 import { isEventPast } from "@/lib/event-status";
 import { useI18n } from "@/components/i18n/LanguageProvider";
+import EventSchedules from "@/components/events/EventSchedules";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
 
@@ -60,6 +61,8 @@ export default function UpcomingEvents() {
             </div>
           </div>
         ) : null}
+
+        <EventSchedules compact />
 
         <div className="mt-8">
           <Link href="/events" className="btn-primary">

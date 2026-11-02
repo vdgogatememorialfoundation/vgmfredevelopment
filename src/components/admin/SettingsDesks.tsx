@@ -24,7 +24,7 @@ import {
 import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
-import { testPaytmEdc, testRazorpay } from "@/lib/payments-client";
+import { pushPaymentVault, testPaytmEdc, testRazorpay } from "@/lib/payments-client";
 import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { fileToDataUrl } from "@/lib/images";
@@ -304,15 +304,29 @@ function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
 export function PaymentSettingsDesk() {
   const razorpay = useIntegrationSlice("razorpay");
   const paytm = useIntegrationSlice("paytm");
+  const payu = useIntegrationSlice("payu");
+  const easebuzz = useIntegrationSlice("easebuzz");
+  const cashfree = useIntegrationSlice("cashfree");
+  const phonepe = useIntegrationSlice("phonepe");
   const { value, setValue, note, setNote, save } = razorpay;
   const [busy, setBusy] = useState("");
   const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
   const setPaytm = (patch: Partial<typeof paytm.value>) => paytm.setValue({ ...paytm.value, ...patch });
+  const hosted = [
+    ["payu", "PayU", payu],
+    ["easebuzz", "Easebuzz", easebuzz],
+    ["cashfree", "Cashfree", cashfree],
+    ["phonepe", "PhonePe", phonepe],
+  ] as const;
 
   const saveAll = () => {
     save();
     paytm.save();
-    setNote("Saved.");
+    payu.save();
+    easebuzz.save();
+    cashfree.save();
+    phonepe.save();
+    void pushPaymentVault().then(() => setNote("Saved. Checkout on other devices can use PayU, Easebuzz, Cashfree and PhonePe once each one is switched on and the keys are filled in."));
   };
 
   const test = async () => {
@@ -384,6 +398,31 @@ export function PaymentSettingsDesk() {
           <p className="text-xs text-slate-500">
             Customers on other devices use the keys set on the host as RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET, because these settings are saved in this browser.
           </p>
+        </div>
+      </Card>
+      <Card title="PayU, Easebuzz, Cashfree and PhonePe" text="Switch a gateway on, choose test or live, and save the merchant key. Checkout shows it after the keys are stored on this server. PhonePe uses the merchant id and salt. Cashfree uses the app id as the key and the secret as the salt.">
+        <div className="space-y-6">
+          {hosted.map(([id, label, slice]) => (
+            <div key={id} className="rounded-xl border border-slate-200 p-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <Check label={`Accept ${label}`} checked={slice.value.enabled} onChange={(enabled) => slice.setValue({ ...slice.value, enabled })} />
+                <label className="block text-sm">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Mode</span>
+                  <select className={input} value={slice.value.mode} onChange={(event) => slice.setValue({ ...slice.value, mode: event.target.value === "live" ? "live" : "test" })}>
+                    <option value="test">Test</option>
+                    <option value="live">Live</option>
+                  </select>
+                </label>
+                {id === "phonepe" ? (
+                  <Text label="Merchant id" value={slice.value.merchantId} onChange={(merchantId) => slice.setValue({ ...slice.value, merchantId })} />
+                ) : (
+                  <Text label={id === "cashfree" ? "App id" : "Merchant key"} value={slice.value.key} onChange={(key) => slice.setValue({ ...slice.value, key })} />
+                )}
+                <Secret label={id === "cashfree" ? "Secret key" : "Salt"} value={slice.value.salt} onChange={(salt) => slice.setValue({ ...slice.value, salt })} />
+                {id === "phonepe" && <Text label="Salt index" value={slice.value.saltIndex} onChange={(saltIndex) => slice.setValue({ ...slice.value, saltIndex })} />}
+              </div>
+            </div>
+          ))}
         </div>
       </Card>
       <Card title="Razorpay EDC" text="In-store POS pushes the bill to this Razorpay POS machine. Device ID is required for wireless mode.">
@@ -1248,6 +1287,22 @@ export function OrderSettingsDesk() {
           )}
           {value.shippingFeeMode === "per_item" && <Text label="Fee per item (₹)" type="number" value={value.perItemFee} onChange={(fee) => set({ perItemFee: Number(fee) || 0 })} />}
           {value.shippingFeeMode === "free_above" && <Text label="Free above (₹)" type="number" value={value.freeAbove} onChange={(amount) => set({ freeAbove: Number(amount) || 0 })} />}
+        </div>
+      </Card>
+      <Card title="Platform fee">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Check label="Add a platform fee at checkout" hint="Switch this off to charge no platform fee." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
+          <Text label="Amount (₹)" type="number" value={value.platformFee.amount} onChange={(amount) => set({ platformFee: { ...value.platformFee, amount: Number(amount) || 0 } })} />
+        </div>
+      </Card>
+      <Card title="GST" text="Leave this off until the Foundation is GST compliant. Turning on GST adds it to checkout. Turning on invoices lets a customer print a GST invoice after payment.">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Check label="Charge GST" checked={value.gst.enabled} onChange={(enabled) => set({ gst: { ...value.gst, enabled } })} />
+          <Text label="GST rate (%)" type="number" value={value.gst.ratePercent} onChange={(rate) => set({ gst: { ...value.gst, ratePercent: Number(rate) || 0 } })} />
+          <Check label="Issue a GST invoice" checked={value.gst.invoiceEnabled} onChange={(invoiceEnabled) => set({ gst: { ...value.gst, invoiceEnabled } })} />
+          <Text label="Legal name on the invoice" value={value.gst.legalName} onChange={(legalName) => set({ gst: { ...value.gst, legalName } })} />
+          <Text label="GSTIN" value={value.gst.gstin} onChange={(gstin) => set({ gst: { ...value.gst, gstin } })} />
+          <Text label="State" value={value.gst.stateName} onChange={(stateName) => set({ gst: { ...value.gst, stateName } })} />
         </div>
       </Card>
       <div className="grid gap-5 lg:grid-cols-3">

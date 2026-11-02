@@ -21,7 +21,7 @@ import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/p
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
-import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { commerceCharges, getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { barcodeSvg } from "@/lib/barcode";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
@@ -545,8 +545,10 @@ export function createAdminOrder(input: {
     (sum, item) => sum + ((item.originalPrice ?? item.price) - item.price) * item.quantity,
     0
   );
-  const gst = Math.round(subtotal * storeConfig.gstRate);
   const settings = getOrderSettings();
+  const charges = commerceCharges(subtotal, settings);
+  const gst = charges.gst;
+  const platformFee = charges.platformFee;
   const itemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
   const shipping =
     input.deliveryMode === "store_pickup"
@@ -564,8 +566,9 @@ export function createAdminOrder(input: {
     subtotal,
     discount,
     gst,
+    platformFee,
     shipping: shipping + codFee,
-    total: subtotal + gst + shipping + codFee,
+    total: subtotal + gst + platformFee + shipping + codFee,
     currency: storeConfig.currency,
     paymentStatus: paid ? "Paid" : "Pending",
     paymentMethod: paid ? input.paymentMethod ?? "Recorded by admin" : cod ? "Cash on delivery" : undefined,
@@ -644,7 +647,9 @@ export function resaveOrder(
     (sum, item) => sum + ((item.originalPrice ?? item.price) - item.price) * item.quantity,
     0
   );
-  const gst = Math.round(subtotal * storeConfig.gstRate);
+  const charges = commerceCharges(subtotal);
+  const gst = charges.gst;
+  const platformFee = charges.platformFee;
   const next = withHistory(
     {
       ...order,
@@ -654,7 +659,8 @@ export function resaveOrder(
       subtotal,
       discount,
       gst,
-      total: subtotal + gst + order.shipping - (order.storeCreditUsed ?? 0),
+      platformFee,
+      total: subtotal + gst + platformFee + order.shipping - (order.storeCreditUsed ?? 0),
       stockCommitted: order.stockCommitted,
     },
     "Order edited"

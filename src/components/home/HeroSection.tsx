@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveFlyers, useSiteSettings } from "@/lib/use-cms";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
@@ -8,7 +8,7 @@ const INTERVAL = 7000;
 const isImage = (value?: string) =>
   Boolean(value && (/^(https?:|data:image|\/)/i.test(value) || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(value)));
 
-type ImageSlide = { id: string; title: string; image: string; href?: string };
+type ImageSlide = { id: string; title: string; image: string; href?: string; isMobile?: boolean; isDesktop?: boolean };
 
 const DEFAULT_SLIDES: ImageSlide[] = [
   { id: "slide-legacy", title: "Preserving Ayurveda. Advancing knowledge.", image: "/slides/legacy.svg", href: "/about" },
@@ -16,14 +16,23 @@ const DEFAULT_SLIDES: ImageSlide[] = [
   { id: "slide-shop", title: "Books and study materials from VGMF", image: "/slides/shop.svg", href: "/shop" },
 ];
 
-/** Compact strip heights from the current homepage setting. Large images stay inside this box. */
-const SLIDE_BOX = "relative h-[168px] w-full overflow-hidden sm:h-[188px] lg:h-[220px]";
+/** Phones get a tall frame so a poster is readable. Wider screens keep a short banner strip. */
+const SLIDE_BOX = "relative h-[70vw] min-h-[260px] max-h-[440px] w-full overflow-hidden bg-paper sm:h-[220px] sm:min-h-[220px] sm:max-h-[220px] lg:h-[240px] lg:min-h-[240px] lg:max-h-[240px]";
 
 export default function HeroSection() {
   const flyers = useLiveFlyers();
   const settings = useSiteSettings();
   const { t } = useI18n();
   const [failed, setFailed] = useState<Record<string, boolean>>({});
+  const [phone, setPhone] = useState(false);
+  const touchX = useRef<number | null>(null);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 767px)");
+    const apply = () => setPhone(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
   const slides = useMemo<ImageSlide[]>(() => {
     const fromCms = flyers
       .filter((flyer) => isImage(flyer.image) && !failed[flyer.id])
@@ -32,9 +41,13 @@ export default function HeroSection() {
         title: flyer.title,
         image: flyer.image,
         href: flyer.href?.trim() || undefined,
+        isMobile: flyer.isMobile,
+        isDesktop: flyer.isDesktop,
       }));
-    return fromCms.length ? fromCms : DEFAULT_SLIDES.filter((slide) => !failed[slide.id]);
-  }, [failed, flyers]);
+    const fitted = fromCms.filter((flyer) => (phone ? flyer.isMobile !== false : flyer.isDesktop !== false));
+    const chosen = (fitted.length ? fitted : fromCms).map(({ isMobile: _mobile, isDesktop: _desktop, ...slide }) => slide);
+    return chosen.length ? chosen : DEFAULT_SLIDES.filter((slide) => !failed[slide.id]);
+  }, [failed, flyers, phone]);
 
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -78,6 +91,16 @@ export default function HeroSection() {
       aria-label="Foundation slideshow"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onTouchStart={(event) => {
+        touchX.current = event.changedTouches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(event) => {
+        if (touchX.current == null) return;
+        const delta = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
+        touchX.current = null;
+        if (delta > 40) go(active - 1);
+        if (delta < -40) go(active + 1);
+      }}
     >
       <div className={SLIDE_BOX}>
         {slides.map((item, slideIndex) => {
@@ -87,8 +110,7 @@ export default function HeroSection() {
             <img
               src={item.image}
               alt={item.title || "Slideshow image"}
-              className={`absolute inset-0 object-contain object-center ${item.image.includes("/slides/") ? "object-bottom" : ""}`}
-              style={{ width: "100%", height: "100%", maxWidth: "none", maxHeight: "none" }}
+              className={`absolute inset-0 !h-full !w-full !max-w-none object-contain object-center ${item.image.includes("/slides/") ? "object-bottom" : ""}`}
               onError={() => setFailed((current) => ({ ...current, [item.id]: true }))}
             />
           );
@@ -140,6 +162,9 @@ export default function HeroSection() {
             >
               ›
             </button>
+            <p className="pointer-events-none absolute bottom-3 right-3 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-ink">
+              {active + 1} / {count}
+            </p>
             <div className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
               {slides.map((item, slideIndex) => (
                 <button

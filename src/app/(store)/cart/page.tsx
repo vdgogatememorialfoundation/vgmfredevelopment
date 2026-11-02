@@ -211,10 +211,18 @@ export default function CartPage() {
                     {formatPrice(totals.subtotal)}
                   </dd>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-text-muted">GST</dt>
-                  <dd className="font-medium text-text-primary">{formatPrice(totals.gst)}</dd>
-                </div>
+                {orderSettings.gst.enabled && (
+                  <div className="flex justify-between">
+                    <dt className="text-text-muted">GST ({orderSettings.gst.ratePercent}%)</dt>
+                    <dd className="font-medium text-text-primary">{formatPrice(totals.gst)}</dd>
+                  </div>
+                )}
+                {orderSettings.platformFee.enabled && (
+                  <div className="flex justify-between">
+                    <dt className="text-text-muted">Platform fee</dt>
+                    <dd className="font-medium text-text-primary">{formatPrice(totals.platformFee)}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-text-muted">Shipping</dt>
                   <dd className="font-medium text-text-primary">

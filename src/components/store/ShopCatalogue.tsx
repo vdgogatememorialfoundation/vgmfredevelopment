@@ -87,7 +87,7 @@ export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }
               ))}
             </select>
             <select value={stock} onChange={(event) => setStock(event.target.value)} className="rounded-lg border border-border bg-white px-3 py-2 text-sm" aria-label="Availability">
-              <option value="all">All stock</option>
+              <option value="all">All</option>
               <option value="in">In stock</option>
               <option value="out">Out of stock</option>
             </select>

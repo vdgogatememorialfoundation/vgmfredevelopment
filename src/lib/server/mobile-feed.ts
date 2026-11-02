@@ -51,9 +51,22 @@ function readPartnerPublicRows() {
 function mergeLiveEvents(published: Event[]) {
   const partner = readPartnerPublicRows().events;
   const byId = new Map<string, Event>();
-  for (const event of partner) byId.set(event.id, event);
   for (const event of published) {
     if (event?.id) byId.set(event.id, event);
+  }
+  for (const event of partner) {
+    const existing = byId.get(event.id);
+    if (!existing) {
+      byId.set(event.id, event);
+      continue;
+    }
+    byId.set(event.id, {
+      ...existing,
+      source: existing.source || event.source,
+      bannerUrl: existing.bannerUrl || event.bannerUrl,
+      schedule: existing.schedule?.length ? existing.schedule : event.schedule,
+      speakers: existing.speakers?.length ? existing.speakers : event.speakers,
+    });
   }
   return [...byId.values()]
     .filter((event) => !isPublicFellowshipEvent(event))

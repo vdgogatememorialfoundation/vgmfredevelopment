@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { Book } from "@/types";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { storeConfig } from "@/lib/constants";
-import { canOrder } from "@/lib/product-data";
+import { availabilityText, canOrder } from "@/lib/product-data";
 import { addToCart, getEstimatedDeliveryDate } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
 
@@ -49,7 +49,7 @@ export default function BookCard({ book }: { book: Book }) {
         </h3>
         <p className="mt-0.5 truncate text-xs text-text-muted">{book.author}</p>
         <p className="mt-2 text-sm font-bold text-burgundy">{formatCurrency(book.price, book.currency)}</p>
-        <p className="text-[11px] text-text-muted">{book.availability}</p>
+        <p className="text-[11px] text-text-muted">{availabilityText(book)}</p>
         <p className="mt-1 text-[11px] font-medium text-ink">Delivery by {delivery}</p>
         {book.storePickupAvailable !== false ? <p className="text-[11px] text-text-muted">Store pickup available</p> : null}
 

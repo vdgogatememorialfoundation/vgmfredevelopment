@@ -17,6 +17,7 @@ import {
   formatPrice,
   getEstimatedDeliveryDate,
   generateOrderId,
+  getOrders,
   pickupOtp,
   saveOrder,
   clearCart,
@@ -25,7 +26,8 @@ import { storeConfig } from "@/lib/constants";
 import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
 import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import { fetchCourierRates } from "@/lib/shipping-client";
-import { payWithRazorpay, paymentNotice } from "@/lib/payments-client";
+import { openHostedCheckout, payWithRazorpay, paymentNotice, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
+import { printGstInvoice } from "@/lib/gst-invoice";
 import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, sendEmail } from "@/lib/admin-store";
 import { commitStockForOrder } from "@/lib/product-data";
 import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
@@ -45,6 +47,8 @@ type CourierOption = CourierRate & { key: string; deliverBy: string };
 type Step = "address" | "review" | "payment" | "success";
 
 const EMPTY_ADDRESS: DeliveryAddress = emptyDeliveryAddress();
+const PENDING_CHECKOUT = "vgmf_pending_checkout";
+const GATEWAY_LABEL: Record<ReadyGateway["id"], string> = { payu: "PayU", easebuzz: "Easebuzz", cashfree: "Cashfree", phonepe: "PhonePe" };
 
 export default function CheckoutClient() {
   const searchParams = useSearchParams();
@@ -65,7 +69,8 @@ export default function CheckoutClient() {
     : !orderSettings.pickupEnabled
       ? "delivery"
       : chosenMode;
-  const [payMethod, setPayMethod] = useState<"online" | "cod">("online");
+  const [payMethod, setPayMethod] = useState<"online" | "cod" | ReadyGateway["id"]>("online");
+  const [hostedGateways, setHostedGateways] = useState<ReadyGateway[]>([]);
   const [liveRates, setLiveRates] = useState<{ pincode: string; rates: CourierRate[] } | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
   const [address, setAddress] = useState<DeliveryAddress>({
@@ -80,6 +85,7 @@ export default function CheckoutClient() {
   const [useCredit, setUseCredit] = useState(false);
   const seededRef = useRef(false);
   const addressSeeded = useRef(false);
+  const paymentReturn = useRef("");
   const savedAddresses = useSavedAddresses(user?.email);
   const savedCards = useSavedCards(user?.email);
   const [addressChoice, setAddressChoice] = useState("new");
@@ -103,6 +109,48 @@ export default function CheckoutClient() {
     setAddress({ ...chosen, email: chosen.email || user?.email || "" });
     setAddressChoice(chosen.id);
   }, [savedAddresses, user?.email]);
+
+  useEffect(() => {
+    void readyHostedGateways().then(setHostedGateways).catch(() => setHostedGateways([]));
+  }, []);
+
+  useEffect(() => {
+    const flag = searchParams.get("payment");
+    if (flag !== "paid" && flag !== "failed") return;
+    const key = searchParams.toString();
+    if (paymentReturn.current === key) return;
+    paymentReturn.current = key;
+    const raw = window.sessionStorage.getItem(PENDING_CHECKOUT);
+    if (flag === "failed") {
+      setError("The payment was not completed. You can try again.");
+      setStep("payment");
+      return;
+    }
+    if (!raw) {
+      setError("The payment returned, but this browser no longer has the checkout.");
+      return;
+    }
+    try {
+      const order = JSON.parse(raw) as Order;
+      if (searchParams.get("orderId") && searchParams.get("orderId") !== order.id) return;
+      const paid: Order = {
+        ...order,
+        paymentStatus: "Paid",
+        paidAt: new Date().toISOString(),
+        paymentMethod: GATEWAY_LABEL[searchParams.get("gateway") as ReadyGateway["id"]] || order.paymentMethod,
+        paymentRef: searchParams.get("ref") || order.paymentRef,
+      };
+      if (commitStockForOrder(paid)) paid.stockCommitted = true;
+      saveOrder(paid);
+      window.sessionStorage.removeItem(PENDING_CHECKOUT);
+      markCartRecovered();
+      clearCart();
+      setOrderId(paid.id);
+      setStep("success");
+    } catch {
+      setError("The payment returned, but the checkout could not be restored.");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (cardChoice || !savedCards.length) return;
@@ -181,18 +229,19 @@ export default function CheckoutClient() {
   const priced = computeTotals(orderItems);
   const itemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
   const codSelected = payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery";
+  const hostedSelected = payMethod === "payu" || payMethod === "easebuzz" || payMethod === "cashfree" || payMethod === "phonepe" ? payMethod : "";
   const codFee = codSelected ? orderSettings.codFee : 0;
   const shipping =
     deliveryMode === "store_pickup" || orderItems.length === 0
       ? 0
       : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
   const storeCredit = user?.email ? getStoreCredit(user.email) : 0;
-  const creditApplied = useCredit ? Math.min(storeCredit, Math.max(0, priced.subtotal + priced.gst + shipping + codFee)) : 0;
+  const creditApplied = useCredit ? Math.min(storeCredit, Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee)) : 0;
   const totals = {
     ...priced,
     shipping: shipping + codFee,
     storeCredit: creditApplied,
-    total: Math.max(0, priced.subtotal + priced.gst + shipping + codFee - creditApplied),
+    total: Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee - creditApplied),
   };
 
   const validateAddress = () => {
@@ -223,15 +272,18 @@ export default function CheckoutClient() {
   const placeOrder = async () => {
     const over = rows.find(({ item, book }) => item.quantity > quantityCap(book.id) || (book.stock <= 0 && !book.preorder?.enabled));
     if (over) {
-      setError(`${over.book.title} does not have enough stock. Lower the quantity or save it for later.`);
+      setError(`${over.book.title}: that quantity is not available. Lower the quantity or save it for later.`);
       return;
     }
     setProcessing(true);
     setError("");
     const id = generateOrderId();
     let payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean };
+    const hosted = hostedSelected;
     if (codSelected) {
       payment = { method: "Cash on delivery", paid: false };
+    } else if (hosted) {
+      payment = { method: GATEWAY_LABEL[hosted], paid: false };
     } else {
       try {
         const outcome = await payWithRazorpay({
@@ -278,6 +330,7 @@ export default function CheckoutClient() {
       subtotal: totals.subtotal,
       discount: totals.discount,
       gst: totals.gst,
+      platformFee: totals.platformFee,
       shipping: totals.shipping,
       total: totals.total,
       currency: "INR",
@@ -316,6 +369,24 @@ export default function CheckoutClient() {
         { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
       ],
     };
+    if (hosted) {
+      window.sessionStorage.setItem(PENDING_CHECKOUT, JSON.stringify(order));
+      try {
+        await openHostedCheckout({
+          gateway: hosted,
+          amount: totals.total,
+          orderId: id,
+          name: deliveryAddress.fullName,
+          email: deliveryAddress.email,
+          phone: deliveryAddress.phone,
+        });
+      } catch (problem) {
+        window.sessionStorage.removeItem(PENDING_CHECKOUT);
+        setError(problem instanceof Error ? problem.message : "The payment gateway did not open.");
+        setProcessing(false);
+      }
+      return;
+    }
     if (commitStockForOrder(order)) order.stockCommitted = true;
     saveOrder(order);
     if (deliveryAddress.email || deliveryAddress.phone) {
@@ -773,13 +844,22 @@ export default function CheckoutClient() {
             )}
 
             <div className="mt-5 grid gap-3">
-              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${payMethod === "online" || !codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
-                <input type="radio" name="payment-method" checked={!codSelected} onChange={() => setPayMethod("online")} className="mt-1 accent-burgundy" />
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${payMethod === "online" ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
+                <input type="radio" name="payment-method" checked={payMethod === "online"} onChange={() => setPayMethod("online")} className="mt-1 accent-burgundy" />
                 <span>
                   <span className="flex items-center gap-2 font-semibold text-text-primary"><Glyph name="card" className="h-4 w-4 text-burgundy" /> Pay online</span>
                   <span className="block text-xs text-text-muted">UPI, cards, net banking and wallets</span>
                 </span>
               </label>
+              {hostedGateways.map((gateway) => (
+                <label key={gateway.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${payMethod === gateway.id ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
+                  <input type="radio" name="payment-method" checked={payMethod === gateway.id} onChange={() => setPayMethod(gateway.id)} className="mt-1 accent-burgundy" />
+                  <span>
+                    <span className="flex items-center gap-2 font-semibold text-text-primary"><Glyph name="card" className="h-4 w-4 text-burgundy" /> {GATEWAY_LABEL[gateway.id]}</span>
+                    <span className="block text-xs text-text-muted">{gateway.mode === "live" ? "Secure hosted checkout" : "Test checkout"}</span>
+                  </span>
+                </label>
+              ))}
               {orderSettings.codEnabled && deliveryMode === "delivery" && (
                 <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
                   <input type="radio" name="payment-method" checked={codSelected} onChange={() => setPayMethod("cod")} className="mt-1 accent-burgundy" />
@@ -848,6 +928,18 @@ export default function CheckoutClient() {
               Live courier tracking on My Orders
             </p>
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+              {orderSettings.gst.invoiceEnabled && (
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => {
+                    const saved = getOrders().find((order) => order.id === orderId);
+                    if (saved) printGstInvoice(saved);
+                  }}
+                >
+                  GST invoice
+                </button>
+              )}
               <Link href="/account/orders" className="btn-primary">
                 Track Your Order
               </Link>
@@ -889,10 +981,18 @@ export default function CheckoutClient() {
                   {formatPrice(totals.subtotal)}
                 </dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-text-muted">GST</dt>
-                <dd className="font-medium text-text-primary">{formatPrice(totals.gst)}</dd>
-              </div>
+              {orderSettings.gst.enabled && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">GST ({orderSettings.gst.ratePercent}%)</dt>
+                  <dd className="font-medium text-text-primary">{formatPrice(totals.gst)}</dd>
+                </div>
+              )}
+              {orderSettings.platformFee.enabled && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">Platform fee</dt>
+                  <dd className="font-medium text-text-primary">{formatPrice(totals.platformFee)}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-text-muted">
                   Shipping

@@ -5,6 +5,15 @@ const INTEGRATIONS_KEY = "vgmf_integrations";
 const ORDER_SETTINGS_KEY = "vgmf_order_settings";
 
 export type PaymentMode = "demo" | "test" | "live";
+export type HostedGatewayId = "payu" | "easebuzz" | "cashfree" | "phonepe";
+export type HostedGatewaySettings = {
+  enabled: boolean;
+  mode: "test" | "live";
+  key: string;
+  salt: string;
+  merchantId: string;
+  saltIndex: string;
+};
 export type EmailProvider = "cpaas" | "zeptomail" | "zoho";
 export type MessageCopy = {
   emailSubject: string;
@@ -72,6 +81,10 @@ export interface IntegrationSettings {
     posDeviceId: string;
     posDeviceMode: "wired" | "wireless";
   };
+  payu: HostedGatewaySettings;
+  easebuzz: HostedGatewaySettings;
+  cashfree: HostedGatewaySettings;
+  phonepe: HostedGatewaySettings;
   paytm: {
     mode: PaymentMode | "staging";
     mid: string;
@@ -186,6 +199,18 @@ export interface OrderSettings {
   adminActions: {
     processAfterDelivery: boolean;
   };
+  platformFee: {
+    enabled: boolean;
+    amount: number;
+  };
+  gst: {
+    enabled: boolean;
+    ratePercent: number;
+    invoiceEnabled: boolean;
+    legalName: string;
+    gstin: string;
+    stateName: string;
+  };
 }
 
 export const defaultIntegrations: IntegrationSettings = {
@@ -200,6 +225,10 @@ export const defaultIntegrations: IntegrationSettings = {
     posDeviceId: "",
     posDeviceMode: "wireless",
   },
+  payu: { enabled: false, mode: "test", key: "", salt: "", merchantId: "", saltIndex: "1" },
+  easebuzz: { enabled: false, mode: "test", key: "", salt: "", merchantId: "", saltIndex: "1" },
+  cashfree: { enabled: false, mode: "test", key: "", salt: "", merchantId: "", saltIndex: "1" },
+  phonepe: { enabled: false, mode: "test", key: "", salt: "", merchantId: "", saltIndex: "1" },
   paytm: {
     mode: "demo",
     mid: "",
@@ -302,6 +331,8 @@ export const defaultOrderSettings: OrderSettings = {
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
   cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0 },
   adminActions: { processAfterDelivery: true },
+  platformFee: { enabled: false, amount: 0 },
+  gst: { enabled: false, ratePercent: 0, invoiceEnabled: false, legalName: "", gstin: "", stateName: "Maharashtra" },
 };
 
 function readJSON<T>(key: string, fallback: T): T {
@@ -483,7 +514,26 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     adminActions: {
       processAfterDelivery: merged.adminActions?.processAfterDelivery !== false,
     },
+    platformFee: {
+      enabled: Boolean(merged.platformFee?.enabled),
+      amount: Math.max(0, finiteNumber(merged.platformFee?.amount, 0)),
+    },
+    gst: {
+      enabled: Boolean(merged.gst?.enabled),
+      ratePercent: Math.max(0, finiteNumber(merged.gst?.ratePercent, 0)),
+      invoiceEnabled: Boolean(merged.gst?.invoiceEnabled),
+      legalName: String(merged.gst?.legalName ?? "").trim(),
+      gstin: String(merged.gst?.gstin ?? "").trim().toUpperCase(),
+      stateName: String(merged.gst?.stateName ?? "Maharashtra").trim() || "Maharashtra",
+    },
   };
+}
+
+export function commerceCharges(subtotal: number, settings = getOrderSettings()) {
+  const base = Math.max(0, subtotal);
+  const gst = settings.gst.enabled ? Math.round(base * (settings.gst.ratePercent / 100)) : 0;
+  const platformFee = settings.platformFee.enabled ? Math.round(settings.platformFee.amount) : 0;
+  return { gst, platformFee };
 }
 
 export function getOrderSettings(): OrderSettings {
