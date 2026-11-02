@@ -6,7 +6,7 @@ export const SITE = {
   tagline: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
   purpose:
     "This platform shares Vd. Ramchandra Ballal Gogate’s work and carries forward his vision — knowledge for all.",
-  email: "info@vaidyagogate.org",
+  email: "care@vaidyagogate.org",
   phone: "+91 20 1234 5678",
   address: "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
   nativeName: "वैद्य गोगटे स्मृती प्रतिष्ठान",

@@ -39,7 +39,7 @@ export const defaultPolicies: Record<PolicyId, PolicyDoc> = {
       },
       {
         title: "Your Rights",
-        body: "You may request a copy of the personal data we hold about you, ask for corrections, or request deletion of your account by contacting us at info@vaidyagogate.org.",
+        body: "You may request a copy of the personal data we hold about you, ask for corrections, or request deletion of your account by contacting us at care@vaidyagogate.org.",
       },
     ],
   },
@@ -103,7 +103,7 @@ export const defaultPolicies: Record<PolicyId, PolicyDoc> = {
       },
       {
         title: "How to start a return",
-        body: "Open the order in your account or write to info@vaidyagogate.org with the order number and reason. We will share the return pickup or drop-off steps.",
+        body: "Open the order in your account or write to care@vaidyagogate.org with the order number and reason. We will share the return pickup or drop-off steps.",
       },
     ],
   },
@@ -139,7 +139,7 @@ export const defaultPolicies: Record<PolicyId, PolicyDoc> = {
       },
       {
         title: "How to request a cancellation",
-        body: "Open the order in your account, or write to info@vaidyagogate.org with the order number. Approved cancellations are confirmed by email.",
+        body: "Open the order in your account, or write to care@vaidyagogate.org with the order number. Approved cancellations are confirmed by email.",
       },
     ],
   },

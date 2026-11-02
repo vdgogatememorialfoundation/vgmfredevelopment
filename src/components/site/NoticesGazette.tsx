@@ -99,7 +99,7 @@ export function NoticesGazette() {
                 ))}
               </select>
             </label>
-            <a href="mailto:info@vaidyagogate.org?subject=Notice%20board%20alert" className="block text-xs font-semibold text-burgundy hover:underline">
+            <a href="mailto:care@vaidyagogate.org?subject=Notice%20board%20alert" className="block text-xs font-semibold text-burgundy hover:underline">
               {t("notice.emailOffice")}
             </a>
           </aside>

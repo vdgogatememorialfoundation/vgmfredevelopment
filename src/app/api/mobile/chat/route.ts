@@ -40,7 +40,7 @@ function answer(question: string) {
     return "Vaidya Gogate Memorial Foundation shares the work of Vd. Ramchandra Ballal Gogate (1933–2015) and Dr. Anagha Gogate (1936–2019). Open About for biographies, awards, books and research, history and trustees.";
   }
   if (/contact|email|phone|address|pune/.test(q)) {
-    return `${feed.site?.address || "Vaidya Gogate Memorial Foundation, Pune"}. ${feed.site?.email || "info@vaidyagogate.org"} · ${feed.site?.phone || ""}`.trim();
+    return `${feed.site?.address || "Vaidya Gogate Memorial Foundation, Pune"}. ${feed.site?.email || "care@vaidyagogate.org"} · ${feed.site?.phone || ""}`.trim();
   }
   return "I can help with events, publications, tickets, sign-in, certificates, clinics and Foundation info. Ask another question, or open Support to talk to a person.";
 }

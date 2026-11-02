@@ -24,7 +24,7 @@ export const clinics: Clinic[] = [
     timings: "Monday to Thursday, 6:00 PM – 10:00 PM",
     weeklyHours: hours,
     about: "Foundation clinic at Ramprasad Chambers, New Nana Peth. Hours and the address can be changed from Admin → Clinics.",
-    email: "info@vaidyagogate.org",
+    email: "care@vaidyagogate.org",
     mapLink: "https://www.google.com/maps/search/?api=1&query=102+Ramprasad+Chambers+Jawaharlal+Nehru+Rd+Pune+411002",
   },
 ];

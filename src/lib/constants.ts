@@ -3,7 +3,7 @@ export const siteConfig = {
   shortName: "VGMF",
   tagline: "Preserving Ayurveda. Advancing Knowledge. Serving Society.",
   url: process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://vaidyagogate.org",
-  email: "info@vaidyagogate.org",
+  email: "care@vaidyagogate.org",
   phone: "093737 92952",
   whatsapp: "093737 92952",
   address:
