@@ -27,6 +27,29 @@ type Year = {
 
 type Row = { title: string; meta: string; state: string };
 
+type DeviceRow = { id: number; label: string; firstSeenAt?: string; lastSeenAt?: string; current?: boolean };
+
+type DeviceList = { license?: string; limit?: number; devices?: DeviceRow[] };
+
+function deviceId() {
+  const key = "vgmf_seminar_video_device";
+  let id = window.localStorage.getItem(key) || "";
+  if (!/^[a-f0-9]{32}$/.test(id)) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    window.localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+function whenLabel(iso?: string) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+}
+
 function accessLabel(access?: Access) {
   if (!access?.allowed) return "";
   if (access.reason === "public") return "Free";
@@ -88,16 +111,23 @@ function rowsFrom(years: Year[]) {
 export function SeminarSubscriptions() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [license, setLicense] = useState("");
+  const [devices, setDevices] = useState<DeviceList | null>(null);
+  const [limit, setLimit] = useState(1);
   const [note, setNote] = useState("");
 
   useEffect(() => {
     let cancel = false;
-    void fetch("/api/seminar-videos", { credentials: "same-origin", cache: "no-store" })
+    void fetch("/api/seminar-videos", {
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "x-vgmf-device": deviceId() },
+    })
       .then(async (response) => {
         const data = (await response.json().catch(() => null)) as {
           linked?: boolean;
           error?: string;
-          catalog?: { years?: Year[]; license?: string };
+          catalog?: { years?: Year[]; license?: string; maxDevices?: number };
+          devices?: DeviceList | null;
         } | null;
         if (cancel) return;
         if (response.status === 401) {
@@ -115,7 +145,9 @@ export function SeminarSubscriptions() {
           setRows([]);
           return;
         }
-        setLicense(String(data?.catalog?.license || ""));
+        setLicense(String(data?.catalog?.license || data?.devices?.license || ""));
+        setDevices(data?.devices || null);
+        setLimit(Number(data?.devices?.limit || data?.catalog?.maxDevices || 1));
         setRows(rowsFrom(data?.catalog?.years || []));
       })
       .catch(() => {
@@ -132,7 +164,29 @@ export function SeminarSubscriptions() {
   return (
     <div>
       <SectionHeader title="Subscriptions" />
-      {license && <p className="mb-4 text-sm text-text-muted">License ID <strong className="text-ink">{license}</strong></p>}
+      {license && <p className="mb-2 text-sm text-text-muted">License ID <strong className="text-ink">{license}</strong></p>}
+      {rows !== null && !note && (
+        <p className="mb-4 text-sm text-text-muted">Purchased access is read from the seminar office. Playback is limited to {limit} device{limit === 1 ? "" : "s"}.</p>
+      )}
+      {devices && (
+        <div className="mb-5 rounded-2xl border border-border bg-white p-4">
+          <p className="text-sm font-semibold text-ink">{(devices.devices || []).length} of {devices.limit || limit} devices in use</p>
+          <p className="mt-1 text-xs text-text-muted">To move your access to a new device, contact the seminar office.</p>
+          {(devices.devices || []).length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {(devices.devices || []).map((item) => (
+                <li key={item.id} className="text-sm text-ink">
+                  {item.label || "Device"}
+                  {item.current ? " · this device" : ""}
+                  <span className="mt-0.5 block text-xs text-text-muted">first used {whenLabel(item.firstSeenAt)} · last used {whenLabel(item.lastSeenAt)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-text-muted">No device has played a video yet. The first device you watch on is registered automatically.</p>
+          )}
+        </div>
+      )}
       {rows === null && <p className="text-sm text-text-muted">Loading…</p>}
       {rows && rows.length > 0 && (
         <div className="overflow-x-auto rounded-2xl border border-border bg-white">

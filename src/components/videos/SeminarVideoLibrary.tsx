@@ -61,6 +61,12 @@ type Catalog = {
   viewer?: { volunteer?: boolean };
 };
 
+type SeminarDevice = { id: number; label: string; firstSeenAt?: string; lastSeenAt?: string; current?: boolean };
+
+type DeviceList = { license?: string; limit?: number; devices?: SeminarDevice[] };
+
+type Watermark = { license: string; name: string; id: string; account: string };
+
 type PaymentOption = { id: string; gateway?: string; mode?: string };
 
 declare global {
@@ -174,6 +180,19 @@ function whyLocked(access?: Access) {
   return access?.detail || "Unlock this recording to watch it.";
 }
 
+function whenLabel(iso?: string) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+}
+
+function seminarApi(init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("x-vgmf-device", deviceId());
+  return fetch("/api/seminar-videos", { credentials: "same-origin", cache: "no-store", ...init, headers });
+}
+
 function deviceId() {
   const key = "vgmf_seminar_video_device";
   let id = window.localStorage.getItem(key) || "";
@@ -251,23 +270,27 @@ export function SeminarVideoLibrary() {
   const [payNote, setPayNote] = useState("");
   const [qr, setQr] = useState("");
   const [playerTitle, setPlayerTitle] = useState("");
-  const [watermark, setWatermark] = useState("");
+  const [mark, setMark] = useState<Watermark | null>(null);
+  const [spot, setSpot] = useState({ left: 8, top: 12, right: 8, bottom: 16 });
+  const [clock, setClock] = useState("");
+  const [devices, setDevices] = useState<DeviceList | null>(null);
   const [adOn, setAdOn] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (quiet = false) => {
     if (!user) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
-      const response = await fetch("/api/seminar-videos", { credentials: "same-origin", cache: "no-store" });
+      const response = await seminarApi();
       const data = (await response.json().catch(() => null)) as {
         ok?: boolean;
         linked?: boolean;
         error?: string;
         catalog?: Catalog;
+        devices?: DeviceList | null;
         paymentOptions?: PaymentOption[];
         viewer?: { name?: string; email?: string; phone?: string };
       } | null;
@@ -278,15 +301,18 @@ export function SeminarVideoLibrary() {
       if (!data?.ok && data?.linked !== false) throw new Error(data?.error || "Seminar videos could not be loaded.");
       setLinked(data.linked !== false);
       setCatalog(data.catalog || null);
+      setDevices(data.devices || null);
       setPayments(data.paymentOptions || []);
       setProfile({ name: data.viewer?.name || "", email: data.viewer?.email || "", phone: data.viewer?.phone || "" });
-      setNote(data.linked === false ? data.error || "" : "");
+      if (!quiet || data.linked === false) setNote(data.linked === false ? data.error || "" : "");
     } catch (error) {
+      if (quiet) return;
       setCatalog(null);
+      setDevices(null);
       setLinked(false);
       setNote((error as Error).message);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [user]);
 
@@ -498,16 +524,14 @@ export function SeminarVideoLibrary() {
     if (current) {
       window.clearInterval(current.timer);
       const position = video ? video.currentTime : null;
-      void fetch("/api/seminar-videos", {
+      void seminarApi({
         method: "POST",
-        credentials: "same-origin",
         headers: { "content-type": "application/json" },
         keepalive: true,
         body: JSON.stringify({ action: "progress", videoId: current.videoId, token: current.token, positionSec: position }),
       }).catch(() => undefined);
-      void fetch("/api/seminar-videos", {
+      void seminarApi({
         method: "POST",
-        credentials: "same-origin",
         headers: { "content-type": "application/json" },
         keepalive: true,
         body: JSON.stringify({ action: "end", videoId: current.videoId, token: current.token }),
@@ -529,11 +553,61 @@ export function SeminarVideoLibrary() {
     }
     if (!silent) {
       setPlayerTitle("");
-      setWatermark("");
+      setMark(null);
     }
   }, [releaseAds]);
 
   useEffect(() => () => stop(true), [stop]);
+
+  useEffect(() => {
+    if (!playerTitle) return;
+    const onKey = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && (key === "s" || key === "u")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    const onHide = () => {
+      if (document.hidden) videoRef.current?.pause();
+    };
+    const onPageHide = () => stop(true);
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    const video = videoRef.current;
+    const leavePicture = () => {
+      void document.exitPictureInPicture?.();
+    };
+    if (video) {
+      video.disablePictureInPicture = true;
+      video.disableRemotePlayback = true;
+      video.addEventListener("enterpictureinpicture", leavePicture);
+    }
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+      video?.removeEventListener("enterpictureinpicture", leavePicture);
+    };
+  }, [playerTitle, stop]);
+
+  useEffect(() => {
+    if (!mark || !playerTitle) return;
+    const place = () => {
+      const now = new Date();
+      setClock(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+      setSpot({
+        left: 4 + Math.random() * 58,
+        top: 8 + Math.random() * 62,
+        right: 8 + Math.random() * 18,
+        bottom: 10 + Math.random() * 22,
+      });
+    };
+    place();
+    const timer = window.setInterval(place, 4000);
+    return () => window.clearInterval(timer);
+  }, [mark, playerTitle]);
 
   const watch = async (videoId: number, title: string, durationSec?: number | null) => {
     stop(true);
@@ -547,9 +621,8 @@ export function SeminarVideoLibrary() {
     if (primed) ensureDisplay(primed);
     try {
       const [response] = await Promise.all([
-        fetch("/api/seminar-videos", {
+        seminarApi({
           method: "POST",
-          credentials: "same-origin",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ action: "session", videoId, deviceId: deviceId() }),
         }),
@@ -557,18 +630,28 @@ export function SeminarVideoLibrary() {
       ]);
       const session = (await response.json().catch(() => null)) as {
         error?: string;
+        code?: string;
         playlistUrl?: string;
         token?: string;
         positionSec?: number;
-        watermark?: { license?: string; name?: string; id?: string };
+        watermark?: { license?: string; name?: string; id?: string; account?: string };
       } | null;
-      if (!response.ok || !session?.playlistUrl || !session.token) throw new Error(session?.error || "This recording is locked.");
+      if (!response.ok || !session?.playlistUrl || !session.token) {
+        const failure = new Error(session?.error || "This recording is locked.") as Error & { code?: string };
+        failure.code = session?.code;
+        throw failure;
+      }
       const playlistUrl = session.playlistUrl;
       const video = videoRef.current;
       if (!video) return;
-      const mark = [session.watermark?.license, session.watermark?.name, session.watermark?.id].filter(Boolean).join(" · ");
-      setWatermark(mark);
+      setMark({
+        license: session.watermark?.license || "",
+        name: session.watermark?.name || "",
+        id: session.watermark?.id || "",
+        account: session.watermark?.account || "",
+      });
       setNote("");
+      void load(true);
       const start = Number(session.positionSec) || 0;
       const token = session.token;
       const durationHint = Number(durationSec) || 0;
@@ -585,16 +668,31 @@ export function SeminarVideoLibrary() {
         void video.play().catch(() => undefined);
       };
       const startPlayback = async () => {
+        const haltElsewhere = () => {
+          video.pause();
+          try {
+            hlsRef.current?.stopLoad();
+          } catch {
+            /* the stream already stopped */
+          }
+          const current = playRef.current;
+          if (current) window.clearInterval(current.timer);
+          playRef.current = null;
+          setNote("This video was opened on another device or tab, so playback stopped here. Press Watch to continue on this device.");
+        };
         playRef.current = {
           token,
           videoId,
           timer: window.setInterval(() => {
-            void fetch("/api/seminar-videos", {
+            void seminarApi({
               method: "POST",
-              credentials: "same-origin",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ action: "progress", videoId, token, positionSec: video.currentTime }),
-            }).catch(() => undefined);
+            })
+              .then((progress) => {
+                if (progress.status === 403 || progress.status === 410) haltElsewhere();
+              })
+              .catch(() => undefined);
           }, 15000),
         };
         if (video.canPlayType("application/vnd.apple.mpegurl") && !window.MediaSource) {
@@ -608,13 +706,14 @@ export function SeminarVideoLibrary() {
         const hls = new Hls({
           enableWorker: false,
           xhrSetup: (xhr: XMLHttpRequest) => {
+            xhr.withCredentials = true;
             xhr.setRequestHeader("X-Vgmf-Device", deviceId());
           },
         });
         hlsRef.current = hls;
         hls.on(Hls.Events.MANIFEST_PARSED, begin);
         hls.on(Hls.Events.ERROR, (_event, err) => {
-          if (err?.response?.code === 403 || err?.response?.code === 410) setNote("Playback stopped because this video was opened somewhere else. Press Watch to continue here.");
+          if (err?.response?.code === 403 || err?.response?.code === 410) haltElsewhere();
           else if (err?.fatal && err.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
           else if (err?.fatal && err.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
         });
@@ -631,13 +730,14 @@ export function SeminarVideoLibrary() {
       else await startPlayback();
     } catch (error) {
       setNote((error as Error).message);
+      const code = (error as Error & { code?: string }).code;
+      if (code === "device_limit" || code === "device_blocked") void load(true);
     }
   };
 
   const checkPayment = async (purchaseId: number) => {
-    const response = await fetch("/api/seminar-videos", {
+    const response = await seminarApi({
       method: "POST",
-      credentials: "same-origin",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "status", purchaseId }),
     });
@@ -656,9 +756,8 @@ export function SeminarVideoLibrary() {
       setPayNote("Razorpay is not available right now. Contact the seminar office and they can unlock the video after payment.");
       return;
     }
-    const response = await fetch("/api/seminar-videos", {
+    const response = await seminarApi({
       method: "POST",
-      credentials: "same-origin",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "purchase", videoId: target.videoId ?? null, year: target.year ?? null, mid: razor.id }),
     });
@@ -715,9 +814,8 @@ export function SeminarVideoLibrary() {
       prefill: { name: profile.name, email: profile.email, contact: profile.phone },
       theme: { color: "#8F2D2D" },
       handler: (payment: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
-        void fetch("/api/seminar-videos", {
+        void seminarApi({
           method: "POST",
-          credentials: "same-origin",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ action: "verify", purchaseId, ...payment }),
         })
@@ -753,6 +851,36 @@ export function SeminarVideoLibrary() {
       )}
       {user && loading && <p className="text-sm text-text-muted">Loading seminar videos…</p>}
       {user && !loading && !linked && <p className="rounded-2xl border border-border bg-white p-6 text-sm text-text-muted">{note}</p>}
+      {user && linked && !loading && (catalog?.license || devices) && (
+        <div className="rounded-2xl border border-border bg-white p-5">
+          {catalog?.license && (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Your video license</p>
+              <p className="mt-1 font-mono text-lg font-semibold tracking-widest text-ink">{catalog.license}</p>
+            </>
+          )}
+          <p className="mt-2 text-sm text-text-muted">
+            Purchases and access are read from the seminar office. Videos play on {devices?.limit || catalog?.maxDevices || 1} device{(devices?.limit || catalog?.maxDevices || 1) === 1 ? "" : "s"}.
+            The picture cannot be downloaded or sent to another screen, and playback pauses if you leave this page. Your license stays on the video.
+          </p>
+          <p className="mt-3 text-sm text-ink">
+            {(devices?.devices || []).length} of {devices?.limit || catalog?.maxDevices || 1} devices in use. To move your access to a new device, contact the seminar office.
+          </p>
+          {(devices?.devices || []).length > 0 ? (
+            <ul className="mt-3 space-y-2">
+              {(devices?.devices || []).map((item) => (
+                <li key={item.id} className="rounded-xl border border-border px-3 py-2 text-sm">
+                  <span className="font-semibold text-ink">{item.label || "Device"}</span>
+                  {item.current && <span className="ml-2 text-xs font-semibold text-emerald-800">this device</span>}
+                  <span className="mt-1 block text-xs text-text-muted">first used {whenLabel(item.firstSeenAt)} · last used {whenLabel(item.lastSeenAt)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-xs text-text-muted">No device has played a video yet. The first device you watch on is registered automatically.</p>
+          )}
+        </div>
+      )}
       {playerTitle && (
         <>
           <AdBanner slot={slot} />
@@ -761,17 +889,48 @@ export function SeminarVideoLibrary() {
               <p className="text-sm font-semibold">{playerTitle}</p>
               <button type="button" className="text-xs font-semibold text-white/80" onClick={() => stop(false)}>Close</button>
             </div>
-            <div className="relative">
+            <div className="relative select-none">
               <video
                 ref={videoRef}
                 controls
                 playsInline
                 controlsList="nodownload noremoteplayback noplaybackrate"
+                disablePictureInPicture
+                disableRemotePlayback
                 className="aspect-video w-full bg-black"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onDragStart={(event) => event.preventDefault()}
+              />
+              <div
+                className={`absolute inset-x-0 top-0 bottom-12 z-10 ${adOn ? "pointer-events-none" : ""}`}
+                onClick={() => {
+                  const video = videoRef.current;
+                  if (!video || adOn) return;
+                  if (video.paused) void video.play().catch(() => undefined);
+                  else video.pause();
+                }}
+                onDoubleClick={(event) => event.preventDefault()}
                 onContextMenu={(event) => event.preventDefault()}
               />
               <div ref={adContainerRef} className={`absolute inset-0 ${adOn ? "z-20" : "pointer-events-none"}`} />
-              {watermark && !adOn && <p className="pointer-events-none absolute bottom-14 right-3 z-10 max-w-[70%] rounded bg-black/50 px-2 py-1 text-[10px] text-white">{watermark}</p>}
+              {mark && !adOn && (
+                <>
+                  <div className="pointer-events-none absolute z-[2] max-w-[70%] text-white/70" style={{ left: `${spot.left}%`, top: `${spot.top}%` }}>
+                    <b className="block text-sm tracking-widest">{mark.license}</b>
+                    <span className="block text-xs">{mark.name}</span>
+                    <small className="block text-[10px]">{[mark.id, mark.account, clock].filter(Boolean).join(" · ")}</small>
+                  </div>
+                  <p className="pointer-events-none absolute left-1/2 top-1/2 z-[2] max-w-[90%] -translate-x-1/2 -translate-y-1/2 -rotate-[18deg] text-center text-lg font-extrabold tracking-widest text-white/25 mix-blend-screen">
+                    {[mark.license, mark.name].filter(Boolean).join("  ")}
+                  </p>
+                  <p className="pointer-events-none absolute z-[3] max-w-[70%] text-right text-[10px] font-semibold text-white/80" style={{ right: `${spot.right}%`, bottom: `${spot.bottom}%` }}>
+                    {[mark.license, mark.name, mark.id, mark.account].filter(Boolean).join(" · ")}
+                  </p>
+                </>
+              )}
             </div>
           </div>
           <AdBanner slot={slot} />
@@ -806,10 +965,10 @@ export function SeminarVideoLibrary() {
                 <article key={album.id} className="rounded-2xl border border-border bg-white p-5 lg:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-burgundy">Album</p>
                   <h3 className="mt-1 font-semibold text-ink">{album.title}</h3>
-                  <div className="mt-3">{renderActions(album, true)}</div>
+                  <div className="mt-3">{renderActions(album, true, album)}</div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     {partsOf(album.id).map((part) => (
-                      <div key={part.id} className="rounded-xl border border-border p-4">{renderCard(part, true)}</div>
+                      <div key={part.id} className="rounded-xl border border-border p-4">{renderCard(part, true, album)}</div>
                     ))}
                   </div>
                 </article>
@@ -825,7 +984,7 @@ export function SeminarVideoLibrary() {
     </div>
   );
 
-  function renderActions(item: SeminarVideo, insideAlbum = false) {
+  function renderActions(item: SeminarVideo, insideAlbum = false, album?: SeminarVideo) {
     const waiting = pending.find((row) => row.video_id === item.id || (item.albumId && row.video_id === item.albumId) || (!row.video_id && row.year === item.year));
     if (item.access?.allowed && item.kind !== "album") {
       const resume = (item.positionSec || 0) > 30;
@@ -847,7 +1006,17 @@ export function SeminarVideoLibrary() {
       );
     }
     if (item.priceTbd && !item.personalPrice) return <p className="text-xs text-text-muted">Price will be updated later. {whyLocked(item.access)}</p>;
-    if (insideAlbum && item.kind !== "album") return <p className="text-xs text-text-muted">Unlocks with the album. {whyLocked(item.access)}</p>;
+    if (insideAlbum && item.kind !== "album") {
+      if (album?.priceMode === "subscription" && !item.access?.allowed && (album.priceInr || 0) > 0 && !(album.priceTbd && !album.personalPrice)) {
+        return (
+          <div className="space-y-1">
+            <button type="button" className="btn-primary" onClick={() => void buy({ videoId: album.id })}>Unlock this lecture · {money(album.priceInr)}</button>
+            <p className="text-xs text-text-muted">{whyLocked(item.access)}</p>
+          </div>
+        );
+      }
+      return <p className="text-xs text-text-muted">Unlocks with the album. {whyLocked(item.access)}</p>;
+    }
     if ((item.priceInr || 0) > 0) {
       return (
         <div className="space-y-1">
@@ -859,7 +1028,10 @@ export function SeminarVideoLibrary() {
     return <p className="text-xs text-text-muted">{whyLocked(item.access)}</p>;
   }
 
-  function renderCard(item: SeminarVideo, insideAlbum: boolean) {
+  function renderCard(item: SeminarVideo, insideAlbum: boolean, album?: SeminarVideo) {
+    const progress = item.access?.allowed && item.durationSec && (item.positionSec || 0) > 0
+      ? Math.min(100, Math.round(((item.positionSec || 0) / item.durationSec) * 100))
+      : 0;
     return (
       <>
         <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
@@ -868,7 +1040,12 @@ export function SeminarVideoLibrary() {
         </div>
         <h3 className="mt-2 font-semibold text-ink">{item.title}</h3>
         {item.seminarTitle && <p className="mt-1 text-xs text-burgundy">{item.seminarTitle}</p>}
-        <div className="mt-3">{renderActions(item, insideAlbum)}</div>
+        {progress > 0 && (
+          <div className="mt-3 h-1 overflow-hidden rounded-full bg-stone-200">
+            <span className="block h-full bg-burgundy" style={{ width: `${progress}%` }} />
+          </div>
+        )}
+        <div className="mt-3">{renderActions(item, insideAlbum, album)}</div>
       </>
     );
   }

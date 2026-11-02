@@ -85,10 +85,19 @@ export async function findSeminarViewer(email: string, phone: string): Promise<S
   };
 }
 
-export async function seminarVideoRequest(path: string, init?: { method?: "GET" | "POST"; body?: Record<string, unknown> }) {
+export function seminarClientHeaders(request: { headers: { get(name: string): string | null } }) {
+  const headers: Record<string, string> = {};
+  const userAgent = request.headers.get("user-agent");
+  const forwarded = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "";
+  if (userAgent) headers["user-agent"] = userAgent.slice(0, 240);
+  if (forwarded) headers["x-forwarded-for"] = forwarded.slice(0, 240);
+  return headers;
+}
+
+export async function seminarVideoRequest(path: string, init?: { method?: "GET" | "POST"; body?: Record<string, unknown>; headers?: Record<string, string> }) {
   const response = await fetch(`${seminarVideoOrigin()}${path}`, {
     method: init?.method || "GET",
-    headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}) },
+    headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...(init?.headers || {}) },
     body: init?.body ? JSON.stringify(init.body) : undefined,
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),

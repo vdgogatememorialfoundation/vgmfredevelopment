@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
-import { findSeminarViewer, seminarVideoDbConfigured, seminarVideoRequest } from "@/lib/server/seminar-videos";
+import { findSeminarViewer, seminarClientHeaders, seminarVideoDbConfigured, seminarVideoRequest } from "@/lib/server/seminar-videos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,8 +44,13 @@ export async function GET(request: NextRequest) {
         error: "No seminar account matches this sign-in. Use the email or phone from your seminar registration.",
       });
     }
-    const catalog = await seminarVideoRequest(`/api/doctor/videos?userId=${person.id}`);
-    const payments = await seminarVideoRequest("/api/doctor/videos/payment-options");
+    const headers = seminarClientHeaders(request);
+    const deviceId = (request.headers.get("x-vgmf-device") || "").toLowerCase();
+    const catalog = await seminarVideoRequest(`/api/doctor/videos?userId=${person.id}`, { headers });
+    const payments = await seminarVideoRequest("/api/doctor/videos/payment-options", { headers });
+    const devices = /^[a-f0-9]{32}$/.test(deviceId)
+      ? await seminarVideoRequest(`/api/doctor/videos/devices?userId=${person.id}&deviceId=${deviceId}`, { headers })
+      : null;
     const profile = viewerName(request);
     return NextResponse.json(
       {
@@ -54,6 +59,7 @@ export async function GET(request: NextRequest) {
         volunteer: person.volunteer,
         viewer: { name: profile.name, email: profile.email || person.email, phone: profile.phone || person.phone },
         catalog: catalog.data,
+        devices: devices && devices.status < 400 ? devices.data : null,
         paymentOptions: Array.isArray(payments.data) ? payments.data : [],
         error: catalog.status >= 400 && catalog.data && typeof catalog.data === "object" && "error" in catalog.data ? String((catalog.data as { error?: string }).error || "") : "",
       },
@@ -76,11 +82,13 @@ export async function POST(request: NextRequest) {
     const person = await findSeminarViewer(viewer.email, viewer.phone);
     if (!person) return NextResponse.json({ ok: false, error: "No seminar account matches this sign-in." }, { status: 404 });
     const userId = person.id;
+    const headers = seminarClientHeaders(request);
     if (action === "session") {
       const videoId = Number(body?.videoId);
       const result = await seminarVideoRequest(`/api/doctor/videos/${videoId}/session`, {
         method: "POST",
-        body: { userId, deviceId: String(body?.deviceId || "") },
+        headers,
+        body: { userId, deviceId: String(body?.deviceId || "").toLowerCase() },
       });
       const data = result.data && typeof result.data === "object" ? (result.data as { playlistUrl?: string }) : null;
       if (data?.playlistUrl?.startsWith("/video-stream/")) {
@@ -92,6 +100,7 @@ export async function POST(request: NextRequest) {
       const videoId = Number(body?.videoId);
       const result = await seminarVideoRequest(`/api/doctor/videos/${videoId}/progress`, {
         method: "POST",
+        headers,
         body: { userId, token: String(body?.token || ""), positionSec: body?.positionSec },
       });
       return NextResponse.json(result.data, { status: result.status });
@@ -100,6 +109,7 @@ export async function POST(request: NextRequest) {
       const videoId = Number(body?.videoId);
       const result = await seminarVideoRequest(`/api/doctor/videos/${videoId}/session/end`, {
         method: "POST",
+        headers,
         body: { token: String(body?.token || "") },
       });
       return NextResponse.json(result.data, { status: result.status });
@@ -107,6 +117,7 @@ export async function POST(request: NextRequest) {
     if (action === "purchase") {
       const result = await seminarVideoRequest("/api/doctor/videos/purchase", {
         method: "POST",
+        headers,
         body: {
           userId,
           videoId: body?.videoId ?? null,
@@ -120,6 +131,7 @@ export async function POST(request: NextRequest) {
       const purchaseId = Number(body?.purchaseId);
       const result = await seminarVideoRequest(`/api/doctor/videos/purchase/${purchaseId}/verify`, {
         method: "POST",
+        headers,
         body: {
           userId,
           razorpay_order_id: body?.razorpay_order_id,
@@ -131,7 +143,7 @@ export async function POST(request: NextRequest) {
     }
     if (action === "status") {
       const purchaseId = Number(body?.purchaseId);
-      const result = await seminarVideoRequest(`/api/doctor/videos/purchase/${purchaseId}/status?userId=${userId}`);
+      const result = await seminarVideoRequest(`/api/doctor/videos/purchase/${purchaseId}/status?userId=${userId}`, { headers });
       return NextResponse.json(result.data, { status: result.status });
     }
     return NextResponse.json({ ok: false, error: "Unknown action." }, { status: 400 });
