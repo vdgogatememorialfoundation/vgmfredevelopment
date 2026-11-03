@@ -6,6 +6,7 @@ import SectionHeader from "@/components/account/SectionHeader";
 import EmptyState from "@/components/account/EmptyState";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
+import OrderTrackingPreview from "@/components/store/OrderTrackingPreview";
 import ReturnSection from "@/components/store/ReturnSection";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
@@ -14,14 +15,8 @@ import { useOrderSettings } from "@/lib/use-cms";
 import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
-import { customerAddressLine, deliveryDatePhrase, deliveryExpectation } from "@/lib/delivery-expectation";
+import { customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
-import type { Order } from "@/types";
-
-function latestStatusText(order: Order) {
-  const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
-  return deliveryExpectation(order.status, shipment?.expectedBy || order.eta, Date.now(), order.deliveryAddress?.country);
-}
 
 export default function OrdersPage() {
   const { user } = useAuth();
@@ -32,9 +27,11 @@ export default function OrdersPage() {
 
   useEffect(() => {
     purgeSampleOrders();
-    const frame = window.requestAnimationFrame(() => setMounted(true));
     const id = window.location.hash.replace(/^#/, "");
-    if (id) setExpandedId(id);
+    const frame = window.requestAnimationFrame(() => {
+      setMounted(true);
+      if (id) setExpandedId(id);
+    });
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
@@ -89,9 +86,7 @@ export default function OrdersPage() {
                         </span>
                       )}
                     </span>
-                    <span className="mt-1 block text-sm text-burgundy">
-                      {latestStatusText(order)}
-                    </span>
+                    <OrderTrackingPreview order={order} live={!expanded} />
                     <span className="mt-1 block text-xs text-text-muted">
                       Order ID: {order.id} · {formatDate(order.date)}
                     </span>
