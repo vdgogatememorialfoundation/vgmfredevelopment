@@ -9,7 +9,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q") ?? "";
-  if (q) return NextResponse.json({ ok: true, orders: searchShopOrders(q) }, { headers: { "cache-control": "no-store" } });
+  if (q) {
+    if (!commerceViewer(request).portal) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
+    return NextResponse.json({ ok: true, orders: searchShopOrders(q) }, { headers: { "cache-control": "no-store" } });
+  }
   const id = request.nextUrl.searchParams.get("id") ?? "";
   const phone = request.nextUrl.searchParams.get("phone") ?? "";
   if (id && phone) {

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { denyUnlessPortal } from "@/lib/server/portal-auth";
 import { certificatesGroupedByYear, listCertificates, publicCertificate, upsertCertificate } from "@/lib/server/certificates";
 
 export const runtime = "nodejs";
 
+/** Full list is for the admin desk only; the public page verifies one number at a time. */
 export function GET(request: NextRequest) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
   const yearParam = request.nextUrl.searchParams.get("year");
   const year = yearParam ? Number(yearParam) : Number.NaN;
   const event = (request.nextUrl.searchParams.get("event") ?? request.nextUrl.searchParams.get("eventSlug") ?? "").trim();
@@ -23,6 +27,8 @@ export function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const name = String(body.name ?? "").trim();
