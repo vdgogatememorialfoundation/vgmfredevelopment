@@ -10,6 +10,7 @@ import {
 } from "next/font/google";
 import JsonLd from "@/components/seo/JsonLd";
 import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
+import { SourceGuard } from "@/components/layout/SourceGuard";
 import { SiteTheme } from "@/components/theme/SiteTheme";
 import { platformEnv, publicSiteUrl } from "@/lib/platform";
 import { siteConfig } from "@/lib/constants";
@@ -150,6 +151,7 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-background font-sans antialiased">
         <SiteTheme />
+        <SourceGuard />
         <EnvironmentBanner />
         <JsonLd />
         {children}
