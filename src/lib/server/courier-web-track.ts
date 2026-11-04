@@ -1,3 +1,4 @@
+import { isCourierInfoLine } from "@/lib/order-pipeline";
 import { courierTrackingCode, courierTrackingLink, directCourier } from "@/lib/couriers";
 
 /**
@@ -76,10 +77,22 @@ function toIso(value: unknown, extraTime = ""): string {
   if (typeof value === "number") return new Date(value > 1e12 ? value : value * 1000).toISOString();
   const text = `${flatText(value)} ${extraTime}`.trim();
   if (!text) return "";
-  const direct = Date.parse(text);
-  if (Number.isFinite(direct)) return new Date(direct).toISOString();
+  // Courier sites print Indian time without a zone.
+  const zoned = /(z|[+-]\d{2}:?\d{2}|\bgmt\b|\butc\b)/i.test(text.replace(/^\d{4}-\d{2}-\d{2}/, ""));
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    const iso = text.length <= 10 ? `${text}T00:00:00` : text.replace(" ", "T");
+    const ms = Date.parse(zoned ? iso : `${iso}+05:30`);
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  if (zoned) {
+    const ms = Date.parse(text);
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
   const dmy = text.match(/(\d{1,2})[-/ ](\w{3,9}|\d{1,2})[-/ ,]+(\d{2,4})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?/i);
-  if (!dmy) return "";
+  if (!dmy) {
+    const ms = Date.parse(`${text} GMT+0530`);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
+  }
   const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
   const month = /^\d+$/.test(dmy[2]) ? Number(dmy[2]) - 1 : months.indexOf(dmy[2].slice(0, 3).toLowerCase());
   if (month < 0) return "";
@@ -151,28 +164,57 @@ function strip(html: string) {
   return html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
 }
 
-/** Scan tables on courier tracking pages: a row with a date cell plus a text cell. */
-function scansFromHtml(html: string): Scan[] {
+/** Courier tracking pages: scan tables (mapped by their header row) plus "Label | value" summary rows. */
+function scansFromHtml(html: string): { events: Scan[]; facts: Record<string, string> } {
   const rows = [...html.matchAll(/<tr[\s\S]*?<\/tr>/gi)].map((match) => [...match[0].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((cell) => strip(cell[1])));
   const dateCell = /(\d{1,2}[-/ ](\w{3,9}|\d{1,2})[-/ ,]+\d{2,4})|(\d{4}-\d{2}-\d{2})/;
-  const out: Scan[] = [];
+  const textCol = /(detail|status|activity|remark|description|event|scan)/;
+  const events: Scan[] = [];
+  const facts: Record<string, string> = {};
+  let header: string[] | null = null;
   for (const cells of rows) {
     if (cells.length < 2) continue;
+    const lower = cells.map((cell) => cell.toLowerCase());
+    if (lower.some((cell) => /(^|\s)date\b/.test(cell)) && lower.some((cell) => textCol.test(cell)) && !cells.some((cell) => dateCell.test(cell))) {
+      header = lower;
+      continue;
+    }
+    if (cells.length === 2 && cells[0] && cells[0].length < 40 && !dateCell.test(cells[0])) {
+      facts[lower[0].replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim()] = cells[1];
+      if (!dateCell.test(cells[1]) || isCourierInfoLine(cells[0])) continue;
+    }
+    if (header && cells.length === header.length) {
+      const cols = header;
+      const col = (pattern: RegExp) => cols.findIndex((name) => pattern.test(name));
+      const dateIdx = col(/(^|\s)date\b/);
+      const timeIdx = col(/time/);
+      const textIdx = col(textCol);
+      const placeIdx = col(/(location|place|city|office|hub|branch|origin)/);
+      const at = dateIdx >= 0 ? toIso(cells[dateIdx], timeIdx >= 0 && timeIdx !== dateIdx ? cells[timeIdx] : "") : "";
+      if (at && textIdx >= 0 && cells[textIdx]) {
+        events.push({ at, status: cells[textIdx].slice(0, 200), location: placeIdx >= 0 ? cells[placeIdx].slice(0, 120) || undefined : undefined });
+        continue;
+      }
+    }
     const dateIdx = cells.findIndex((cell) => dateCell.test(cell) && cell.length < 40);
     if (dateIdx < 0) continue;
     const timeIdx = cells.findIndex((cell, index) => index !== dateIdx && /^\d{1,2}:\d{2}/.test(cell));
     const rest = cells.filter((cell, index) => index !== dateIdx && index !== timeIdx && cell && !/^\d{1,2}:\d{2}/.test(cell));
-    if (!rest.length) continue;
+    if (!rest.length || rest.some((cell) => isCourierInfoLine(cell))) continue;
     const sorted = [...rest].sort((a, b) => b.length - a.length);
     const at = toIso(cells[dateIdx], timeIdx >= 0 ? cells[timeIdx] : "");
     if (!at) continue;
-    out.push({ at, status: sorted[0].slice(0, 200), location: sorted[1]?.slice(0, 120) });
+    events.push({ at, status: sorted[0].slice(0, 200), location: sorted[1]?.slice(0, 120) });
   }
-  return out;
+  return { events, facts };
 }
 
 function hit(courierId: string, awb: string, events: Scan[], source: string, status = "", expectedBy = ""): CourierWebHit | null {
-  const sorted = [...events].filter((event) => event.status).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const latest = Date.now() + 6 * 3600_000;
+  const sorted = [...events]
+    .filter((event) => event.status && !isCourierInfoLine(event.status) && Date.parse(event.at) <= latest)
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  if (isCourierInfoLine(status)) status = "";
   if (!sorted.length && !status) return null;
   return {
     status: status || sorted.at(-1)?.status || "",
@@ -233,7 +275,9 @@ async function trackingPage(courierId: string, awb: string) {
   if (!response.ok) return null;
   const json = parseJson(text);
   if (json) return fromJson(courierId, awb, json, new URL(url).hostname);
-  return hit(courierId, awb, scansFromHtml(text), new URL(url).hostname);
+  const page = scansFromHtml(text);
+  const expected = Object.entries(page.facts).find(([label]) => /(expected|estimated|edd|promise)/.test(label))?.[1] ?? "";
+  return hit(courierId, awb, page.events, new URL(url).hostname, page.facts.status ?? page.facts["current status"] ?? "", expected);
 }
 
 const SITE_READERS: Record<string, (awb: string) => Promise<CourierWebHit | null>> = {

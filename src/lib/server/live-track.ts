@@ -1,5 +1,5 @@
 import { customerCourierLabel } from "@/lib/courier-label";
-import { classifyCourierScan, isHyperlocalProvider } from "@/lib/order-pipeline";
+import { classifyCourierScan, isCourierInfoLine, isHyperlocalProvider } from "@/lib/order-pipeline";
 import {
   ithinkTrack,
   nimbusTrack,
@@ -104,7 +104,8 @@ export async function refreshStoredShipment(orderId: string) {
   const events = dedupe(hit.events?.length ? hit.events : shipment.tracking ?? []);
   const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
-  const latestStatus = hit.status || [...events].reverse().find((event) => event.status)?.status || "";
+  const latestStatus =
+    [hit.status, ...[...events].reverse().map((event) => event.status)].find((text) => text && classifyCourierScan(text)) || hit.status || "";
   const stage = classifyCourierScan(latestStatus);
   const orderForLeg = findShopOrder(orderId);
   const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile);
@@ -133,12 +134,17 @@ export async function refreshStoredShipment(orderId: string) {
   if (order) {
     const target = stage ? orderStatusFor(stage, hyperlocal) : undefined;
     const rank: Record<string, number> = { Packed: 1, Shipped: 2, "Out for Delivery": 3, Delivered: 4, Failed: 5 };
-    const move = Boolean(target && (rank[target] ?? 0) >= (rank[order.status] ?? 0) && order.status !== target);
+    const wrongDelivered =
+      order.status === "Delivered" &&
+      stage !== "delivered" &&
+      Boolean(target) &&
+      isCourierInfoLine([...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.note ?? "");
+    const move = Boolean(target && (wrongDelivered || ((rank[target] ?? 0) >= (rank[order.status] ?? 0) && order.status !== target)));
     if (move || order.courierName !== courier || (awb && order.trackingId !== awb)) {
       patchShopOrder(orderId, {
         courierName: courier,
         trackingId: awb || order.trackingId,
-        ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: latestStatus }] } : {}),
+        ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: wrongDelivered ? `Corrected from courier: ${latestStatus}` : latestStatus }] } : {}),
       });
     }
   }

@@ -53,9 +53,15 @@ export function isSampleOrder(order: Pick<Order, "id" | "paymentLink" | "payment
 
 export type CourierStage = "ordered" | "packed" | "shipped" | "out" | "delivered" | "failed" | "cancelled";
 
+/** Summary lines on courier pages ("Expected Date of Delivery", "Pickup Date") that are not scans. */
+export function isCourierInfoLine(text: string) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ");
+  return /\b(expected|estimated|promised|tentative|scheduled)\b[\w ]{0,20}\bdeliver|\bedd\b|\b(pickup|booking|ship|shipment|delivery|dispatch) date\b|\bdate of (delivery|pickup|booking|dispatch)\b/.test(value);
+}
+
 export function classifyCourierScan(text: string): CourierStage | null {
   const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!value) return null;
+  if (!value || isCourierInfoLine(value)) return null;
   if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|failed|declined|incomplete)\b/.test(value)) {
     return "failed";
   }
@@ -67,7 +73,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "packed";
   }
   if (
-    /\b(in transit|shipped|dispatch|departed|outscan|forwarded|connected to|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
+    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|connected to|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)
