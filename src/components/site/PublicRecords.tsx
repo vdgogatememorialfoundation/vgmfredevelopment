@@ -1,5 +1,6 @@
 "use client";
 
+import { LiveSeminarBlock } from "@/components/site/LiveSeminarBlock";
 import Link from "next/link";
 import Badge from "@/components/common/Badge";
 import PageHeader from "@/components/common/PageHeader";
@@ -15,7 +16,10 @@ import { useI18n } from "@/components/i18n/LanguageProvider";
 
 /** Older saved clinic copy carried a desk-only note; keep it off the public page. */
 function publicAbout(text?: string) {
-  return (text ?? "").replace(/\s*Hours and the address can be changed from Admin\s*→\s*Clinics\.?/gi, "").trim();
+  return (text ?? "")
+    .replace(/\s*Hours and the address can be changed from Admin\s*→\s*Clinics\.?/gi, "")
+    .replace(/\s*Foundation clinic at Ramprasad Chambers,\s*New Nana Peth\.?/gi, "")
+    .trim();
 }
 
 function clockLabel(value?: string) {
@@ -85,6 +89,7 @@ export function VideosIndex() {
           </div>
         </section>
       )}
+      <LiveSeminarBlock />
       <section className="section bg-background">
         <div className="container">
           <VideosGrid videos={videos} />
