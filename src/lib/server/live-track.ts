@@ -8,6 +8,7 @@ import {
   shipyaariTrack,
   tookanTrack,
 } from "@/lib/server/providers";
+import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
 import { findShopOrder, patchShopOrder } from "@/lib/server/shop-orders";
 import { findShopShipment, replaceShopShipment } from "@/lib/server/shop-shipments";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
@@ -85,20 +86,23 @@ export async function refreshStoredShipment(orderId: string) {
   const shipment = findShopShipment(orderId);
   if (!shipment) return { ok: false as const, error: "Shipment not on the server yet." };
   const provider = shipment.provider;
-  if (!shipment.live || !provider || provider === "local") {
+  const direct = !shipment.live && shipment.directCourier ? shipment.directCourier : "";
+  if (!direct && (!shipment.live || !provider || provider === "local")) {
     return { ok: true as const, live: false as const, shipment };
   }
   const creds = readShippingCreds() as Record<string, Record<string, unknown>>;
   let hit: TrackHit | null = null;
   try {
-    hit = (await track(provider, shipment.awb, shipment.providerOrderId, shipment.providerShipmentId, creds, orderId)) as TrackHit | null;
+    hit = direct
+      ? await courierWebTrack(direct, shipment.awb, (creds.tracker ?? {}) as TrackerCreds)
+      : ((await track(provider!, shipment.awb, shipment.providerOrderId, shipment.providerShipmentId, creds, orderId)) as TrackHit | null);
   } catch {
     return { ok: true as const, live: false as const, shipment };
   }
   if (!hit) return { ok: true as const, live: false as const, shipment };
 
   const events = dedupe(hit.events?.length ? hit.events : shipment.tracking ?? []);
-  const courier = customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
+  const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
   const latestStatus = hit.status || [...events].reverse().find((event) => event.status)?.status || "";
   const stage = classifyCourierScan(latestStatus);
@@ -111,7 +115,7 @@ export async function refreshStoredShipment(orderId: string) {
     awb,
     status: shipmentStatus ?? shipment.status,
     tracking: events.length ? events : shipment.tracking,
-    trackingUrl: hit.trackingUrl || shipment.trackingUrl,
+    trackingUrl: direct ? shipment.trackingUrl || hit.trackingUrl : hit.trackingUrl || shipment.trackingUrl,
     agentName: hit.accepted === false ? "" : hit.agentName || shipment.agentName,
     agentPhone: hit.accepted === false ? "" : hit.agentPhone || shipment.agentPhone,
     agentLat: hit.accepted === false ? undefined : hit.lat ?? shipment.agentLat,

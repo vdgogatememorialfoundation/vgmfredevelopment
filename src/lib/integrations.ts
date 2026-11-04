@@ -154,6 +154,8 @@ export interface IntegrationSettings {
     shipyaari: { email: string; password: string; apiKey: string; enabled: boolean };
     tookan: { apiKey: string; teamId: string; hyperlocal: boolean; parcel: boolean };
     shipday: { apiKey: string; enabled: boolean };
+    /** Fallback tracking service for couriers without an API account (their own site is read first). */
+    tracker: { service: "aftership" | "trackingmore" | "17track"; apiKey: string; enabled: boolean };
     scooterImage: string;
     hyperlocalPingSeconds: number;
     minWalletRupees: number;
@@ -289,6 +291,7 @@ export const defaultIntegrations: IntegrationSettings = {
     shipyaari: { email: "", password: "", apiKey: "", enabled: false },
     tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
     shipday: { apiKey: "", enabled: true },
+    tracker: { service: "aftership", apiKey: "", enabled: true },
     scooterImage: "",
     hyperlocalPingSeconds: 8,
     minWalletRupees: 50,

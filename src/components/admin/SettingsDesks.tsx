@@ -1028,6 +1028,24 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "shipday"} onClick={() => test("shipday")}>{busy === "shipday" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="Courier website tracking" text="Orders sent with Amazon Shipping, Ekart, Delhivery, Blue Dart, DTDC, India Post and other couriers fetch their status from the courier's own tracking site. When a site gives no scans, this tracking service is asked instead." right={<Check label="Use" checked={value.tracker?.enabled !== false} onChange={(enabled) => set({ tracker: { ...(value.tracker ?? { service: "aftership", apiKey: "" }), enabled } })} />}>
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-slate-700">
+              Fallback tracking service
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                value={value.tracker?.service ?? "aftership"}
+                onChange={(event) => set({ tracker: { ...(value.tracker ?? { apiKey: "", enabled: true }), service: event.target.value as "aftership" | "trackingmore" | "17track" } })}
+              >
+                <option value="aftership">AfterShip</option>
+                <option value="trackingmore">TrackingMore</option>
+                <option value="17track">17TRACK</option>
+              </select>
+            </label>
+            <Secret label="Tracking service API key (optional)" value={value.tracker?.apiKey ?? ""} onChange={(apiKey) => set({ tracker: { ...(value.tracker ?? { service: "aftership", enabled: true }), apiKey } })} />
+            <p className="text-xs text-slate-500">Status is checked again every few minutes while customers, support or admin view the order.</p>
+          </div>
+        </Card>
         <Card title="Shiprocket" text="apidocs.shiprocket.in — Settings → API → Create an API user. Login, serviceability, adhoc order, assign AWB, generate pickup, label, invoice, manifest, track AWB, cancel and reverse pickup all use this account." badge={<ProviderStatus id="shiprocket" />} right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
           <div className="space-y-3">
             <Text label="API user email" value={value.shiprocket.email} onChange={(email) => set({ shiprocket: { ...value.shiprocket, email } })} />

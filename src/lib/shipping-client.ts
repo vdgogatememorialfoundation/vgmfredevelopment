@@ -20,8 +20,21 @@ import { getLiveBooks } from "@/lib/product-data";
 type ShippingCreds = Record<string, Record<string, unknown>>;
 
 function credsFrom(settings: IntegrationSettings): ShippingCreds {
-  const { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday } = settings.shipping;
-  return { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday };
+  const { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday, tracker } = settings.shipping;
+  return { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday, tracker: tracker ?? {} };
+}
+
+/** Couriers without an API account: read scans from the courier's own site (or the saved tracking service). */
+async function trackDirect(shipment: ShipmentRecord) {
+  const result = await post<TrackHit>({
+    action: "track",
+    provider: "courier-site",
+    courier: shipment.directCourier,
+    awb: shipment.awb,
+    creds: credsFrom(getIntegrations()),
+  });
+  if (!result.ok) return null;
+  return { result, saved: applyTrackHit(shipment, { ...result, courierName: shipment.courier, trackingUrl: shipment.trackingUrl || result.trackingUrl }) };
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
@@ -363,7 +376,7 @@ export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "t
 
 /** Attach a parcel that was shipped outside Pack & book. The portal is asked for scans and the delivery time. */
 /** Parcel sent with a courier that has no connected API: keep its id, tracking page and manual updates. */
-export function attachDirectTracking(orderId: string, courierId: string, awb: string, courierName = "") {
+export async function attachDirectTracking(orderId: string, courierId: string, awb: string, courierName = "") {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
@@ -389,7 +402,9 @@ export function attachDirectTracking(orderId: string, courierId: string, awb: st
   };
   saveShipmentRecord(shipment);
   patchOrder(order.id, { shipmentId: shipment.id, trackingId, courierName: courier }, `Tracking ${trackingId} attached from ${courier}`);
-  return `${courier} · ${trackingId} attached. ${shipment.trackingUrl ? "Customers and support can open the courier tracking page from the order." : "Add status updates from the shipment as they come in."}`;
+  const fetched = await trackDirect(shipment).catch(() => null);
+  if (fetched?.result.status) return `${courier} · ${trackingId} attached. Latest from ${courier}: ${fetched.result.status}. Status updates are fetched automatically.`;
+  return `${courier} · ${trackingId} attached. ${shipment.trackingUrl ? "No scans on the courier site yet; they are fetched automatically." : "Add status updates from the shipment as they come in."}`;
 }
 
 export async function attachManualTracking(orderId: string, portal: (typeof MANUAL_PORTALS)[number]["id"], awb: string, courierName = "") {
@@ -805,12 +820,29 @@ export async function trackShipment(shipmentId: string) {
     applyTrackHit(shipment, result);
     return result.status || "No scan yet.";
   }
+  if (shipment.directCourier) {
+    const fetched = await trackDirect(shipment);
+    if (!fetched) return `${shipment.status} · ${shipment.courier} has no new scans on its site yet.`;
+    return fetched.result.status || fetched.saved.status;
+  }
   return shipment.status;
 }
 
 export async function pingLiveAgent(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
+  if (!shipment.live && shipment.directCourier) {
+    const fetched = await trackDirect(shipment).catch(() => null);
+    if (fetched) {
+      return {
+        status: fetched.result.status || fetched.saved.status,
+        events: fetched.saved.tracking ?? [],
+        trackingUrl: publicTrackingUrl(fetched.saved),
+        lat: undefined,
+        lng: undefined,
+      };
+    }
+  }
   if (!shipment.live || !shipment.provider || shipment.provider === "local") {
     return {
       status: shipment.status,

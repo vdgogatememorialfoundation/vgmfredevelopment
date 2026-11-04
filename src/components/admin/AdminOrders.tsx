@@ -959,7 +959,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <div className="mt-4 rounded-xl border border-border p-3">
                   <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    Choose the courier and paste its tracking id. Couriers open their own tracking page for customers and support; connected portals also send live scans and the delivery date.
+                    Choose the courier and paste its tracking id. Status is fetched from the courier's own tracking site (or the tracking service in Shipping APIs); connected portals also send the delivery date.
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
                     <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value)}>

@@ -46,6 +46,7 @@ import {
   tookanTrack,
   type RateOut,
 } from "@/lib/server/providers";
+import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
 import { mergeShippingCreds } from "@/lib/server/shipping-vault";
 import { listWebhooks } from "@/lib/server/webhooks";
 
@@ -188,6 +189,11 @@ export async function POST(request: NextRequest) {
       }
       case "track": {
         const awb = String(body.awb ?? body.providerOrderId ?? "");
+        if (provider === "courier-site") {
+          const site = await courierWebTrack(String(body.courier ?? ""), awb, (creds.tracker ?? {}) as TrackerCreds);
+          if (!site) return NextResponse.json({ ok: false, configured: true, error: "The courier has no scans for this tracking id yet." });
+          return NextResponse.json({ ok: true, configured: true, ...site });
+        }
         const result =
           provider === "shiprocket"
             ? await shiprocketTrack(own, awb)
