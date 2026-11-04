@@ -191,6 +191,14 @@ export interface Article {
   assignedTo?: string;
   reviewNote?: string;
   translations?: Record<string, ArticleLocaleCopy>;
+  style?: ArticleStyle;
+}
+
+export interface ArticleStyle {
+  font?: "serif" | "sans" | "book" | "indic";
+  size?: "sm" | "md" | "lg";
+  spacing?: "tight" | "normal" | "relaxed";
+  align?: "left" | "center" | "right" | "justify";
 }
 
 export interface ArticleAssignment {
@@ -759,6 +767,8 @@ export interface ShipmentRecord {
   pickedUpAt?: string;
   provider?: CourierRate["provider"];
   live?: boolean;
+  /** Set when the parcel went with a courier outside the connected APIs (see src/lib/couriers.ts). */
+  directCourier?: string;
   providerOrderId?: string;
   providerShipmentId?: string;
   labelUrl?: string;

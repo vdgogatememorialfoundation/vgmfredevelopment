@@ -20,6 +20,7 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Notices",
     items: [
       { label: "Notice board", href: "/admin/notices" },
+      { label: "Website notices", href: "/admin/website/notices" },
     ],
   },
 
@@ -42,6 +43,8 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Staff & co-admin", href: "/admin/accounts/staff" },
       { label: "Customers", href: "/admin/accounts/customers" },
+      { label: "Doctors", href: "/admin/accounts/doctors" },
+      { label: "Delivery partner accounts", href: "/admin/accounts/delivery-partners" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
     ],
   },
@@ -61,12 +64,26 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Competition awards", href: "/admin/website/awards" },
       { label: "Special thanks", href: "/admin/website/thanks" },
       { label: "Media Library", href: "/admin/website/media" },
-      { label: "Articles", href: "/admin/articles" },
       { label: "Gallery", href: "/admin/website/gallery" },
       { label: "Videos", href: "/admin/website/videos" },
       { label: "Seminar videos", href: "/admin/website/seminar-videos" },
       { label: "Clinics", href: "/admin/website/clinics" },
       { label: "Policies", href: "/admin/website/policies" },
+    ],
+  },
+
+  {
+    label: "Articles",
+    items: [
+      { label: "All articles", href: "/admin/articles" },
+      { label: "Create article", href: "/admin/articles/new" },
+    ],
+  },
+
+  {
+    label: "Article approvals",
+    items: [
+      { label: "Waiting for approval", href: "/admin/articles/approvals" },
     ],
   },
 
@@ -77,6 +94,39 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Create Event", href: "/admin/events/create" },
       { label: "Schedule", href: "/admin/events/schedule" },
       { label: "Speakers", href: "/admin/events/speakers" },
+      { label: "Registrations", href: "/admin/events/registrations" },
+      { label: "Applications", href: "/admin/events/applications" },
+      { label: "Tickets", href: "/admin/events/tickets" },
+      { label: "Attendance", href: "/admin/events/attendance" },
+      { label: "Event payments", href: "/admin/events/payments" },
+      { label: "Event certificates", href: "/admin/events/certificates" },
+    ],
+  },
+
+  {
+    label: "Certificates",
+    items: [
+      { label: "All certificates", href: "/admin/certificates" },
+      { label: "Issue certificate", href: "/admin/certificates/issue" },
+      { label: "Reissue certificate", href: "/admin/certificates/reissue" },
+      { label: "Verification", href: "/admin/certificates/verification" },
+    ],
+  },
+
+  {
+    label: "Shipping & couriers",
+    items: [
+      { label: "Shipments", href: "/admin/shipments" },
+      { label: "Shipment orders", href: "/admin/shipments/orders" },
+      { label: "Create shipment", href: "/admin/shipments/create" },
+      { label: "Tracking", href: "/admin/shipments/tracking" },
+      { label: "Exceptions", href: "/admin/shipments/exceptions" },
+      { label: "Manifests", href: "/admin/shipments/manifests" },
+      { label: "Delivery partners", href: "/admin/delivery-partners" },
+      { label: "Partner APIs", href: "/admin/delivery-partners/apis" },
+      { label: "Rider assignments", href: "/admin/delivery-partners/assignments" },
+      { label: "Partner onboarding", href: "/admin/delivery-partners/onboarding" },
+      { label: "Partner shipments", href: "/admin/delivery-partners/shipments" },
     ],
   },
 
@@ -96,6 +146,7 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Support",
     items: [
+      { label: "Support overview", href: "/admin/support" },
       { label: "Support Tickets", href: "/admin/support/tickets" },
       { label: "Live chat", href: "/admin/support/chat" },
       { label: "WhatsApp inbox", href: "/admin/support/whatsapp" },
@@ -145,6 +196,16 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "App appearance", href: "/admin/settings/appearance" },
       { label: "Domains & DNS", href: "/admin/settings/domains" },
       { label: "Security", href: "/admin/settings/security" },
+    ],
+  },
+
+  {
+    label: "Portals",
+    items: [
+      { label: "Support portal", href: "/support" },
+      { label: "Staff portal", href: "/staff" },
+      { label: "Doctor portal", href: "/doctor" },
+      { label: "Public website", href: "/" },
     ],
   },
 ]

@@ -1,5 +1,6 @@
 "use client";
 
+import { DIRECT_COURIERS } from "@/lib/couriers";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelOrder,
@@ -27,6 +28,7 @@ import { getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
+  attachDirectTracking,
   bookShipment,
   MANUAL_PORTALS,
   cancelShipment,
@@ -642,7 +644,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [picked, setPicked] = useState<number | undefined>();
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [pickupSlot, setPickupSlot] = useState(shipment?.pickupSlot || settings.pickupTimeslots[0]?.label || "10:00 – 13:00");
-  const [manualPortal, setManualPortal] = useState<(typeof MANUAL_PORTALS)[number]["id"]>("shiprocket");
+  const [manualPortal, setManualPortal] = useState<string>("delhivery");
   const [manualAwb, setManualAwb] = useState("");
   const [manualCourier, setManualCourier] = useState("");
   const [deliveryWhen, setDeliveryWhen] = useState("");
@@ -957,19 +959,31 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <div className="mt-4 rounded-xl border border-border p-3">
                   <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    Paste the tracking id and choose the portal that has the parcel. The site asks that portal for the scans and the delivery date and time, then keeps them updated.
+                    Choose the courier and paste its tracking id. Couriers open their own tracking page for customers and support; connected portals also send live scans and the delivery date.
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
-                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value as (typeof MANUAL_PORTALS)[number]["id"])}>
-                      {MANUAL_PORTALS.map((portal) => (
-                        <option key={portal.id} value={portal.id}>{portal.label}</option>
-                      ))}
+                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value)}>
+                      <optgroup label="Courier (opens its tracking page)">
+                        {DIRECT_COURIERS.map((courier) => (
+                          <option key={courier.id} value={courier.id}>{courier.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Connected portal (live scans)">
+                        {MANUAL_PORTALS.map((portal) => (
+                          <option key={portal.id} value={portal.id}>{portal.label}</option>
+                        ))}
+                      </optgroup>
                     </SelectInput>
                     <TextInput placeholder="Tracking id" value={manualAwb} onChange={(event) => setManualAwb(event.target.value)} />
                     <TextInput placeholder="Courier name, if you know it" value={manualCourier} onChange={(event) => setManualCourier(event.target.value)} />
                     <Button
                       disabled={busy === "manual"}
-                      onClick={() => run("manual", () => attachManualTracking(order.id, manualPortal, manualAwb, manualCourier))}
+                      onClick={() =>
+                        run("manual", async () => {
+                          const portal = MANUAL_PORTALS.find((item) => item.id === manualPortal);
+                          return portal ? attachManualTracking(order.id, portal.id, manualAwb, manualCourier) : attachDirectTracking(order.id, manualPortal, manualAwb, manualCourier);
+                        })
+                      }
                     >
                       {busy === "manual" ? "Fetching…" : "Fetch tracking"}
                     </Button>

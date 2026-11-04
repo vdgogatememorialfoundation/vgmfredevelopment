@@ -1,3 +1,4 @@
+import { courierTrackingLink, directCourier } from "@/lib/couriers";
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
@@ -361,6 +362,36 @@ export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "t
 ];
 
 /** Attach a parcel that was shipped outside Pack & book. The portal is asked for scans and the delivery time. */
+/** Parcel sent with a courier that has no connected API: keep its id, tracking page and manual updates. */
+export function attachDirectTracking(orderId: string, courierId: string, awb: string, courierName = "") {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
+  const trackingId = awb.trim();
+  if (trackingId.length < 3) throw new Error("Paste the tracking id from the courier.");
+  const courierInfo = directCourier(courierId);
+  const courier = courierName.trim() || courierInfo?.label || "Courier";
+  const shipment: ShipmentRecord = {
+    id: `SHP${Date.now()}`,
+    orderId: order.id,
+    courier,
+    awb: trackingId,
+    charges: 0,
+    toAddress: { ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "" }) },
+    items: order.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
+    status: "Booked",
+    generatedAt: new Date().toISOString(),
+    live: false,
+    directCourier: courierInfo?.id ?? "other",
+    trackingUrl: courierTrackingLink(courierInfo?.id, trackingId) || undefined,
+    note: `Sent with ${courier}.`,
+    tracking: [{ at: new Date().toISOString(), status: `Handed to ${courier}` }],
+  };
+  saveShipmentRecord(shipment);
+  patchOrder(order.id, { shipmentId: shipment.id, trackingId, courierName: courier }, `Tracking ${trackingId} attached from ${courier}`);
+  return `${courier} · ${trackingId} attached. ${shipment.trackingUrl ? "Customers and support can open the courier tracking page from the order." : "Add status updates from the shipment as they come in."}`;
+}
+
 export async function attachManualTracking(orderId: string, portal: (typeof MANUAL_PORTALS)[number]["id"], awb: string, courierName = "") {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");

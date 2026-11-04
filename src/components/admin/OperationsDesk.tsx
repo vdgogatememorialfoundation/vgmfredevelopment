@@ -28,7 +28,7 @@ import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { certificates as seededCertificates } from "@/data/content";
-import { deleteCertificate, publishCertificate } from "@/lib/certificates-client";
+import { deleteCertificate, publishCertificate, syncCertificatesWithServer } from "@/lib/certificates-client";
 import type { Order } from "@/types";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -182,6 +182,18 @@ const useIssuedCertificates = collectionHook<IssuedCertificate>(
 
 export function CertificateRegistry({ mode, eventName }: { mode: "list" | "issue" | "reissue"; eventName?: string }) {
   const records = useIssuedCertificates();
+  const [syncNote, setSyncNote] = useState("");
+  useEffect(() => {
+    let live = true;
+    void syncCertificatesWithServer()
+      .then(({ pulled, pushed }) => {
+        if (live) setSyncNote(pulled || pushed ? `Synced with the website: ${pulled} updated here, ${pushed} sent to the public page.` : "In sync with the public certificate page.");
+      })
+      .catch(() => live && setSyncNote("Could not reach the server. Certificates will sync on the next visit."));
+    return () => {
+      live = false;
+    };
+  }, []);
   const heading = mode === "issue" ? "Issue certificate" : mode === "reissue" ? "Reissue certificate" : "Certificates";
   const description =
     mode === "reissue"
@@ -232,7 +244,7 @@ export function CertificateRegistry({ mode, eventName }: { mode: "list" | "issue
         hideLabel="Revoke"
       />
       <p className="text-xs text-slate-500">
-        Revoke removes the certificate from the public verification page.
+        Revoke removes the certificate from the public verification page.{syncNote ? ` ${syncNote}` : ""}
       </p>
     </div>
   );

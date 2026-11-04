@@ -243,7 +243,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   return (
     <div className="vgmf-trk">
       {tiles}
-      {order.deliveryMode === "delivery" ? (
+      {showLiveMap(order, shipment) ? (
         <div className="vgmf-hl">
           <div className="vgmf-hl-sheet">{pipe}</div>
           <div className="vgmf-hl-map">
@@ -264,4 +264,11 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       ) : null}
     </div>
   );
+}
+
+/** The rider map is only for hyperlocal deliveries, and only once a rider has been booked. */
+function showLiveMap(order: Order, shipment?: ShipmentRecord | null) {
+  if (order.deliveryMode !== "delivery" || !shipment) return false;
+  if (["Delivered", "Cancelled", "Failed"].includes(order.status)) return false;
+  return isHyperlocalProvider(shipment.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
 }
