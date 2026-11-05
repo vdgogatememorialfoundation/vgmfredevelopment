@@ -261,3 +261,32 @@ iframe {
     display: none !important;
   }
 }
+
+/* Live tracking lines: a soft light runs along the moving segment. */
+@keyframes vgmf-flow-x {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@keyframes vgmf-flow-y {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(100%); }
+}
+.vgmf-flow-x { overflow: hidden; }
+.vgmf-flow-x::after,
+.vgmf-ship-fill:not(.is-failed)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: vgmf-flow-x 1.8s linear infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+}
+.vgmf-ship-fill:not(.is-failed) { overflow: hidden; }
+.vgmf-ship-fill:not(.is-failed)::after {
+  animation-name: vgmf-flow-y;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vgmf-flow-x::after,
+  .vgmf-ship-fill::after { animation: none; display: none; }
+}

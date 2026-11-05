@@ -166,7 +166,9 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
             {index > 0 ? (
               <span className="relative h-0.5 flex-1 overflow-hidden rounded-full bg-border">
                 <span
-                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] duration-[60s] ease-linear`}
+                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] duration-[60s] ease-linear ${
+                    index === stepIdx + 1 && !terminal ? "vgmf-flow-x" : ""
+                  }`}
                   style={{ width: index <= stepIdx ? "100%" : index === stepIdx + 1 && !terminal ? `${creep}%` : "0%" }}
                 />
               </span>
