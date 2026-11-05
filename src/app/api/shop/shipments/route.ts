@@ -3,7 +3,7 @@ import { orderBelongsTo, phonesMatch } from "@/lib/commerce-stamp";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { findShopOrder, orderPhoneMatches } from "@/lib/server/shop-orders";
-import { deleteShopShipments, findShopShipment, listShopShipments, upsertShopShipment } from "@/lib/server/shop-shipments";
+import { deleteShopShipments, deletedShopShipmentIds, findShopShipment, listShopShipments, upsertShopShipment } from "@/lib/server/shop-shipments";
 import type { Order, ShipmentRecord } from "@/types";
 
 export const runtime = "nodejs";
@@ -28,7 +28,12 @@ export async function GET(request: NextRequest) {
   const phone = request.nextUrl.searchParams.get("phone") ?? "";
   const sync = request.nextUrl.searchParams.get("sync");
   if (sync) {
-    if (viewer.portal) return NextResponse.json({ ok: true, shipments: listShopShipments() }, { headers: { "cache-control": "no-store" } });
+    if (viewer.portal) {
+      return NextResponse.json(
+        { ok: true, shipments: listShopShipments(), deleted: deletedShopShipmentIds() },
+        { headers: { "cache-control": "no-store" } }
+      );
+    }
     if (viewer.email || viewer.phone || viewer.id) {
       const mine = listShopShipments().filter((shipment) => {
         const order = findShopOrder(shipment.orderId);

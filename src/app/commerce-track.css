@@ -93,7 +93,7 @@
   color: #fff;
 }
 .vgmf-ship-pipe > li.active > .dot {
-  animation: vgmfTrkPulse 2.4s ease-out 3;
+  animation: vgmfTrkPulse 1.6s ease-out infinite;
 }
 .vgmf-ship-copy {
   min-width: 0;

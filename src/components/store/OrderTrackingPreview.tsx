@@ -166,9 +166,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
             {index > 0 ? (
               <span className="relative h-0.5 flex-1 overflow-hidden rounded-full bg-border">
                 <span
-                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] duration-[60s] ease-linear ${
-                    index === stepIdx + 1 && !terminal ? "vgmf-flow-x" : ""
-                  }`}
+                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] duration-[60s] ease-linear`}
                   style={{ width: index <= stepIdx ? "100%" : index === stepIdx + 1 && !terminal ? `${creep}%` : "0%" }}
                 />
               </span>
@@ -176,7 +174,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
             <span
               title={label}
               className={`h-2.5 w-2.5 shrink-0 rounded-full ${index <= stepIdx ? fill : "bg-border"} ${
-                index === stepIdx && !terminal ? "ring-4 ring-emerald-100" : ""
+                index === stepIdx && !terminal ? "vgmf-dot-pulse" : ""
               }`}
             />
           </Fragment>

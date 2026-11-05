@@ -133,8 +133,13 @@ async function pullCommerce() {
     }
   }
   if (shipsRes.ok) {
-    const data = (await shipsRes.json()) as { shipments?: ShipmentRecord[] };
-    rememberShipments(data.shipments ?? []);
+    const data = (await shipsRes.json()) as { shipments?: ShipmentRecord[]; deleted?: string[] };
+    const gone = new Set(data.deleted ?? []);
+    if (gone.size && getShipments().some((shipment) => gone.has(shipment.id))) {
+      writeShipments(getShipments().filter((shipment) => !gone.has(shipment.id)));
+      window.dispatchEvent(new Event("vgmf-cms"));
+    }
+    rememberShipments((data.shipments ?? []).filter((shipment) => !gone.has(shipment.id)));
   }
   window.sessionStorage.setItem("vgmf_commerce_pulled", `${viewer}|${Date.now()}`);
 }
