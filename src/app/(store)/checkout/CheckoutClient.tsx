@@ -398,7 +398,7 @@ export default function CheckoutClient() {
         phone: deliveryAddress.phone,
       });
     const firstStatus: Order["status"] =
-      orderSettings.confirmMode !== "manual" && orderItems.every((item) => !item.preorder) ? "Ordered" : "Awaiting Confirmation";
+      orderSettings.confirmMode !== "manual" && orderItems.every((item) => !item.preorder) && rows.every(({ item, book }) => book.stock >= item.quantity) ? "Ordered" : "Awaiting Confirmation";
     const order: Order = {
       id,
       userId: account?.id ?? user?.id ?? "guest",
