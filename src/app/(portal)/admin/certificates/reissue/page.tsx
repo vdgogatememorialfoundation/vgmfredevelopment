@@ -1,12 +1,5 @@
-"use client";
-
-import ClientOnly from "@/components/common/ClientOnly";
-import { CertificateRegistry } from "@/components/admin/OperationsDesk";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return (
-    <ClientOnly>
-      <CertificateRegistry mode="reissue" />
-    </ClientOnly>
-  );
+  redirect("/admin/certificates");
 }

@@ -20,7 +20,6 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Notices",
     items: [
       { label: "Notice board", href: "/admin/notices" },
-      { label: "Website notices", href: "/admin/website/notices" },
     ],
   },
 
@@ -43,8 +42,6 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Staff & co-admin", href: "/admin/accounts/staff" },
       { label: "Customers", href: "/admin/accounts/customers" },
-      { label: "Doctors", href: "/admin/accounts/doctors" },
-      { label: "Delivery partner accounts", href: "/admin/accounts/delivery-partners" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
     ],
   },
@@ -91,15 +88,8 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Events",
     items: [
       { label: "All Events", href: "/admin/events" },
-      { label: "Create Event", href: "/admin/events/create" },
       { label: "Schedule", href: "/admin/events/schedule" },
       { label: "Speakers", href: "/admin/events/speakers" },
-      { label: "Registrations", href: "/admin/events/registrations" },
-      { label: "Applications", href: "/admin/events/applications" },
-      { label: "Tickets", href: "/admin/events/tickets" },
-      { label: "Attendance", href: "/admin/events/attendance" },
-      { label: "Event payments", href: "/admin/events/payments" },
-      { label: "Event certificates", href: "/admin/events/certificates" },
     ],
   },
 
@@ -107,8 +97,6 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Certificates",
     items: [
       { label: "All certificates", href: "/admin/certificates" },
-      { label: "Issue certificate", href: "/admin/certificates/issue" },
-      { label: "Reissue certificate", href: "/admin/certificates/reissue" },
       { label: "Verification", href: "/admin/certificates/verification" },
     ],
   },
@@ -116,17 +104,7 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Shipping & couriers",
     items: [
-      { label: "Shipments", href: "/admin/shipments" },
       { label: "Shipment orders", href: "/admin/shipments/orders" },
-      { label: "Create shipment", href: "/admin/shipments/create" },
-      { label: "Tracking", href: "/admin/shipments/tracking" },
-      { label: "Exceptions", href: "/admin/shipments/exceptions" },
-      { label: "Manifests", href: "/admin/shipments/manifests" },
-      { label: "Delivery partners", href: "/admin/delivery-partners" },
-      { label: "Partner APIs", href: "/admin/delivery-partners/apis" },
-      { label: "Rider assignments", href: "/admin/delivery-partners/assignments" },
-      { label: "Partner onboarding", href: "/admin/delivery-partners/onboarding" },
-      { label: "Partner shipments", href: "/admin/delivery-partners/shipments" },
     ],
   },
 
@@ -134,7 +112,6 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Payments",
     items: [
       { label: "Transactions", href: "/admin/payments" },
-      { label: "Gateway", href: "/admin/payments/gateway" },
       { label: "Successful", href: "/admin/payments/successful" },
       { label: "Failed", href: "/admin/payments/failed" },
       { label: "Pending", href: "/admin/payments/pending" },
@@ -146,11 +123,9 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Support",
     items: [
-      { label: "Support overview", href: "/admin/support" },
-      { label: "Support Tickets", href: "/admin/support/tickets" },
+      { label: "Tickets & enquiries", href: "/admin/support" },
       { label: "Live chat", href: "/admin/support/chat" },
       { label: "WhatsApp inbox", href: "/admin/support/whatsapp" },
-      { label: "Contact Enquiries", href: "/admin/support/contact" },
     ],
   },
 
@@ -185,11 +160,9 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Orders, returns & refunds", href: "/admin/settings/orders" },
       { label: "Delivery zones", href: "/admin/settings/shipping" },
       { label: "Processing Timelines", href: "/admin/settings/timelines" },
-      { label: "Notifications", href: "/admin/settings/notifications" },
       { label: "Registration", href: "/admin/settings/registration" },
       { label: "Countries", href: "/admin/settings/countries" },
       { label: "Events", href: "/admin/settings/events" },
-      { label: "Certificate verification", href: "/admin/settings/api-keys" },
       { label: "Sister portals", href: "/admin/settings/portals" },
       { label: "Media storage", href: "/admin/settings/media" },
       { label: "Mobile app", href: "/admin/settings/mobile" },
