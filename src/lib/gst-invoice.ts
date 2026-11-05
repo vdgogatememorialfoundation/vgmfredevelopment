@@ -40,6 +40,7 @@ export function printGstInvoice(order: Order, settings: OrderSettings = getOrder
       .right { text-align: right; }
       .muted { color: #57534e; font-size: 13px; }
     </style></head><body>
+    <img src="${esc(window.location.origin)}/uploads/site-logo.png" alt="" style="height:56px;width:auto;max-width:160px;object-fit:contain" onerror="this.style.display='none'"/>
     <p class="muted">GST invoice</p>
     <h1>${esc(settings.gst.legalName || "Vaidya Gogate Memorial Foundation")}</h1>
     <p class="muted">GSTIN ${esc(settings.gst.gstin || "To be added")} · ${esc(settings.gst.stateName)}</p>

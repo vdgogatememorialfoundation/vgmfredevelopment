@@ -1006,14 +1006,43 @@ function rupees(value: number) {
   return `₹${Math.round(value).toLocaleString("en-IN")}`;
 }
 
+function logoSrc() {
+  const url = getSettings().logoUrl || "/uploads/site-logo.png";
+  if (/^(https?:|data:)/.test(url) || typeof window === "undefined") return url;
+  return `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+function logoImg(cls = "logo") {
+  return `<img class="${cls}" src="${esc(logoSrc())}" alt="" onerror="this.style.display='none'"/>`;
+}
+
+export type LabelSize = "4x6" | "a4" | "a5" | "roll";
+const LABEL_SIZE_KEY = "vgmf-label-size";
+export const LABEL_SIZES: { id: LabelSize; label: string }[] = [
+  { id: "4x6", label: "4×6 in tag (thermal)" },
+  { id: "roll", label: "Paper roll 80 mm" },
+  { id: "a5", label: "A5 sheet" },
+  { id: "a4", label: "A4 sheet" },
+];
+
+export function getLabelSize(): LabelSize {
+  if (typeof window === "undefined") return "4x6";
+  const saved = window.localStorage.getItem(LABEL_SIZE_KEY) as LabelSize | null;
+  return LABEL_SIZES.some((item) => item.id === saved) ? (saved as LabelSize) : "4x6";
+}
+
+export function setLabelSize(size: LabelSize) {
+  if (typeof window !== "undefined") window.localStorage.setItem(LABEL_SIZE_KEY, size);
+}
+
 function letterhead() {
   return `<header class="head">
-    <div>
+    <div class="head-brand">${logoImg()}<div>
       <p class="brand">${esc(siteConfig.name)}</p>
       <p class="addr">${esc(siteConfig.address)}</p>
       <p class="addr">Phone ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}</p>
       <p class="addr">Clinic hours: Monday to Thursday, 6:00 PM – 10:00 PM</p>
-    </div>
+    </div></div>
     <div class="mark">VGMF</div>
   </header>`;
 }
@@ -1028,13 +1057,24 @@ function printHtml(title: string, html: string, page = "A4") {
   if (typeof window === "undefined") return;
   const win = window.open("", "_blank");
   if (!win) return;
-  const margin = page === "A4" ? "12mm" : "4mm";
+  const margin = page === "A4" || page === "A5" ? "10mm" : "3mm";
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
   <style>
     @page { size: ${page}; margin: ${margin}; }
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", Arial, sans-serif; color: #1c1917; margin: 0; }
     .head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #8F2D2D; padding-bottom: 12px; }
+    .head-brand { display: flex; gap: 12px; align-items: center; }
+    .logo { height: 56px; width: auto; max-width: 160px; object-fit: contain; }
+    .label-logo { height: 34px; width: auto; max-width: 110px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+    .label-brand { display: flex; gap: 8px; align-items: center; }
+    .size-a4 .label-sheet { width: 150mm; margin: 0 auto; }
+    .size-a5 .label-sheet { width: 128mm; margin: 0 auto; }
+    .size-roll { font-size: 11px; }
+    .size-roll .grid { display: block; }
+    .size-roll .box { margin-top: 8px; min-width: 0; }
+    .size-roll .awb { font-size: 18px; }
+    .size-roll svg { max-width: 100%; height: auto; }
     .brand { font-size: 18px; font-weight: 700; color: #6A1F1F; margin: 0; }
     .addr { margin: 2px 0; font-size: 11px; color: #44403c; line-height: 1.45; }
     .mark { font-weight: 800; letter-spacing: 0.14em; color: #8F2D2D; font-size: 13px; }
@@ -1069,18 +1109,19 @@ function printHtml(title: string, html: string, page = "A4") {
 
 export function printShippingLabel(
   shipment: ShipmentRecord,
-  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string }
+  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string },
+  size: LabelSize = getLabelSize()
 ) {
   const to = shipment.toAddress;
   const awb = details?.awb || shipment.awb;
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";
   const hub = details?.destination || shipment.destinationHub || "";
-  const html = `<div class="label-sheet">
+  const html = `<div class="size-${size}"><div class="label-sheet">
     <div class="label-band">
-      <div>
-        <b>VGMF</b>
-        <div>${esc(siteConfig.name)}</div>
+      <div class="label-brand">
+        ${logoImg("label-logo")}
+        <div><b>VGMF</b><div>${esc(siteConfig.name)}</div></div>
       </div>
       <span>Shipping label</span>
     </div>
@@ -1113,8 +1154,9 @@ export function printShippingLabel(
       </table>
       <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
     </div>
-  </div>`;
-  printHtml(`Label ${awb}`, html, "100mm 150mm");
+  </div></div>`;
+  const page = size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
+  printHtml(`Label ${awb}`, html, page);
 }
 
 export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {

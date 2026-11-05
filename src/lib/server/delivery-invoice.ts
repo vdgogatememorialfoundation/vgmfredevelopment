@@ -70,7 +70,7 @@ td{border-bottom:1px solid #eee7da;padding:8px}.r{text-align:right}
 .print{display:inline-block;margin:16px auto 0;padding:8px 16px;background:#8F2D2D;color:#fff;border:0;border-radius:8px;font:inherit;cursor:pointer}
 @media print{body{background:#fff}.page{border:0;margin:0}.print{display:none}}
 </style></head><body><div class="page">
-<div class="head"><div><h1>Vaidya Gogate Memorial Foundation</h1><p class="muted">Pune, Maharashtra, India</p></div>
+<div class="head"><div style="display:flex;gap:12px;align-items:center"><img src="${siteUrl()}/uploads/site-logo.png" alt="" style="height:56px;width:auto;max-width:160px;object-fit:contain" onerror="this.style.display='none'"/><div><h1>Vaidya Gogate Memorial Foundation</h1><p class="muted">Pune, Maharashtra, India</p></div></div>
 <div style="text-align:right"><p style="margin:0;font-size:18px"><b>Tax invoice</b></p>
 <p class="muted">Invoice no. ${esc(invoice.number)}<br>Invoice date ${esc(day(invoice.issuedAt))}<br>Order no. ${esc(order.id)}<br>Order date ${esc(day(order.date))}</p></div></div>
 <div class="grid"><div><b>Billed and shipped to</b><br>${esc(address?.fullName)}<br>${esc(address?.line1)}${address?.landmark ? `, ${esc(address.landmark)}` : ""}<br>${esc(address?.city)}, ${esc(address?.state)} ${esc(address?.pincode)}</div>

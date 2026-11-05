@@ -59,6 +59,7 @@ import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesF
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { LABEL_SIZES, getLabelSize, setLabelSize, type LabelSize } from "@/lib/admin-store";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
@@ -1264,6 +1265,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => printOrderInvoice(order, shipment)}>Print invoice</Button>
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
+        {shipment && <LabelSizePicker />}
         {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Print shipping label</Button>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
@@ -1290,5 +1292,25 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </div>
       )}
     </Panel>
+  );
+}
+
+function LabelSizePicker() {
+  const [size, setSize] = useState<LabelSize>(() => getLabelSize());
+  return (
+    <select
+      aria-label="Label size"
+      className="rounded-lg border border-border bg-white px-2 py-1.5 text-sm"
+      value={size}
+      onChange={(event) => {
+        const next = event.target.value as LabelSize;
+        setSize(next);
+        setLabelSize(next);
+      }}
+    >
+      {LABEL_SIZES.map((item) => (
+        <option key={item.id} value={item.id}>{item.label}</option>
+      ))}
+    </select>
   );
 }
