@@ -635,6 +635,8 @@ export interface CourierRate {
   courierName: string;
   rate: number;
   etaDays: number;
+  /** The courier's own expected delivery date, when it gives one. */
+  deliverBy?: string;
   live: boolean;
   cod?: boolean;
   lastMile?: "porter" | "shadowfax" | "flash";

@@ -142,13 +142,13 @@ export async function fetchCourierRates(input: {
   cod?: boolean;
   declaredValue: number;
   bookIds?: string[];
+  pickupPincode?: string;
 }): Promise<RateQuote> {
   const settings = getIntegrations();
   const { shipping } = settings;
   const notes: string[] = [];
-  const wanted = CHECKOUT_PROVIDERS.filter(
-    (id) => shipping[id].enabled && hasShippingCredentials(id, settings)
-  );
+  // Keys may live only on the host (customer browsers never hold them); the server reports unconfigured accounts.
+  const wanted = CHECKOUT_PROVIDERS.filter((id) => shipping[id].enabled);
   let live: CourierRate[] = [];
   if (/^\d{6}$/.test(input.deliveryPincode) && wanted.length) {
     try {
@@ -157,7 +157,7 @@ export async function fetchCourierRates(input: {
         providers: wanted,
         creds: credsFrom(settings),
         parcel: {
-          pickupPincode: shipping.pickup.pincode,
+          pickupPincode: input.pickupPincode || shipping.pickup.pincode,
           deliveryPincode: input.deliveryPincode,
           weightKg: input.weightKg,
           cod: Boolean(input.cod),
@@ -204,7 +204,7 @@ export function pickRate(rates: CourierRate[], rule = getIntegrations().shipping
   return [...rates].sort((a, b) => a.rate - b.rate || a.etaDays - b.etaDays)[0];
 }
 
-function bookingPayload(order: Order, choice: CourierRate, settings: IntegrationSettings) {
+function bookingPayload(order: Order, choice: CourierRate, settings: IntegrationSettings, pickup = settings.shipping.pickup) {
   const address = order.deliveryAddress;
   const books = getLiveBooks();
   return {
@@ -229,7 +229,7 @@ function bookingPayload(order: Order, choice: CourierRate, settings: Integration
       state: address?.state ?? "",
       pincode: address?.pincode ?? "",
     },
-    pickup: settings.shipping.pickup,
+    pickup,
     items: order.items.map((item) => ({
       name: item.title,
       sku: books.find((book) => book.id === item.bookId)?.sku ?? item.bookId,
@@ -252,7 +252,7 @@ function statusAfterBooking(status: Order["status"]): Order["status"] {
  * aggregator charges its wallet for the AWB; the ledger keeps what the
  * customer paid next to what the courier cost.
  */
-export async function bookShipment(orderId: string, override?: CourierRate): Promise<BookingResult> {
+export async function bookShipment(orderId: string, override?: CourierRate, pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>): Promise<BookingResult> {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not need a courier.");
@@ -260,6 +260,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
 
   const settings = getIntegrations();
+  const pickup = { ...settings.shipping.pickup, ...pickupOverride };
   let choice = override ?? order.courierChoice;
   if (!choice) {
     const quote = await fetchCourierRates({
@@ -314,7 +315,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
     action: "book",
     provider: choice.provider,
     creds: credsFrom(settings),
-    order: bookingPayload(order, choice, settings),
+    order: bookingPayload(order, choice, settings, pickup),
     schedulePickup: settings.shipping.autoSchedulePickup,
   });
   if (!result.ok || !result.awb) {

@@ -59,6 +59,7 @@ import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesF
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { listPickupLocations } from "@/lib/shipping-client";
 import { LABEL_SIZES, getLabelSize, getOrder as getStoredOrder, patchOrder as patchStoredOrder, setLabelSize, type LabelSize } from "@/lib/admin-store";
 
 const ALL_STATUSES: Order["status"][] = [
@@ -639,6 +640,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState<Order["status"]>(order.status);
   const [extraId, setExtraId] = useState("");
+  const [pickupChoices, setPickupChoices] = useState<{ nickname: string; city: string; pincode: string; phone?: string; address?: string }[]>([]);
+  const [pickupNick, setPickupNick] = useState("");
   const extraStatuses = getOrderSettings().customStatuses.filter((row) => row.label.trim());
   const [method, setMethod] = useState("UPI");
   const [reference, setReference] = useState("");
@@ -695,8 +698,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
   const loadRates = () =>
     run("rates", async () => {
+      const locations = pickupChoices.length ? { locations: pickupChoices } : await listPickupLocations().catch(() => ({ locations: [] }));
+      setPickupChoices(locations.locations ?? []);
+      const from = (locations.locations ?? []).find((row) => row.nickname === pickupNick);
       const result = await fetchCourierRates({
         deliveryPincode: order.deliveryAddress?.pincode ?? "",
+        pickupPincode: from?.pincode,
         weightKg: orderWeightKg(order),
         declaredValue: order.total,
         cod: order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid",
@@ -974,11 +981,20 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ? <>Customer chose <b className="text-text-primary">{order.courierChoice.courierName}</b> ({rupees(order.courierChoice.rate)}, {order.courierChoice.etaDays} days).</>
                     : "No courier chosen yet. The cheapest or fastest is picked by the rule in Shipping APIs."}
                 </p>
+                {pickupChoices.length > 0 && (
+                  <div className="mt-3 max-w-md">
+                    <SelectInput value={pickupNick} onChange={(event) => { setPickupNick(event.target.value); setQuote(null); setPicked(undefined); }}>
+                      <option value="">Pickup from: default address in Shipping settings</option>
+                      {pickupChoices.map((row) => <option key={row.nickname} value={row.nickname}>Pickup from: {row.nickname} · {[row.city, row.pincode].filter(Boolean).join(" ")}</option>)}
+                    </SelectInput>
+                    {!quote && <p className="mt-1 text-xs text-text-muted">Click Show couriers & rates again for rates from this pickup.</p>}
+                  </div>
+                )}
                 {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     disabled={busy === "book"}
-                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
+                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined, pickupOverride(pickupChoices.find((row) => row.nickname === pickupNick)))).message)}
                   >
                     {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pack & book courier"}
                   </Button>
@@ -1342,4 +1358,9 @@ function LabelSizePicker() {
       ))}
     </select>
   );
+}
+
+function pickupOverride(row?: { nickname: string; city: string; pincode: string; phone?: string; address?: string }) {
+  if (!row) return undefined;
+  return { nickname: row.nickname, city: row.city, pincode: row.pincode, ...(row.address ? { line1: row.address } : {}), ...(row.phone ? { phone: row.phone } : {}) };
 }

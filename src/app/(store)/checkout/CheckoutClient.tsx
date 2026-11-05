@@ -44,6 +44,12 @@ import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries
 
 type CourierOption = CourierRate & { key: string; deliverBy: string };
 
+/** The courier's own delivery date, shown like our estimates (e.g. 8 Nov 2026). */
+function courierDate(value?: string) {
+  const at = value ? Date.parse(value) : NaN;
+  return Number.isNaN(at) ? "" : new Date(at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
 type Step = "address" | "review" | "payment" | "success";
 
 const EMPTY_ADDRESS: DeliveryAddress = emptyDeliveryAddress();
@@ -277,7 +283,7 @@ export default function CheckoutClient() {
         .map((rate) => ({
           ...rate,
           key: `${rate.provider}:${rate.courierId}`,
-          deliverBy: getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
+          deliverBy: courierDate(rate.deliverBy) || getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
         }))
       : [];
   const selectedCourier =

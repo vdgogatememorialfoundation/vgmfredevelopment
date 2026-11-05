@@ -47,7 +47,7 @@ import {
   type RateOut,
 } from "@/lib/server/providers";
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
-import { mergeShippingCreds } from "@/lib/server/shipping-vault";
+import { mergeShippingCreds, readShippingCreds } from "@/lib/server/shipping-vault";
 import { listWebhooks } from "@/lib/server/webhooks";
 
 type Body = Record<string, unknown> & {
@@ -77,12 +77,15 @@ export async function POST(request: NextRequest) {
         const wanted = Array.isArray(body.providers)
           ? (body.providers as string[])
           : ["shiprocket", "nimbuspost", "ithink", "shipyaari"];
+        // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
+        const stored = readShippingCreds() as typeof creds;
+        const keys = (id: keyof typeof creds) => ({ ...(stored[id] ?? {}), ...Object.fromEntries(Object.entries(creds[id] ?? {}).filter(([, value]) => value !== "" && value != null)) });
         const jobs: Promise<{ provider: string; rates: RateOut[] | null; error?: string }>[] = wanted.map(async (id) => {
           try {
-            if (id === "shiprocket") return { provider: id, rates: await shiprocketRates(creds.shiprocket ?? {}, parcel) };
-            if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(creds.nimbuspost ?? {}, parcel) };
-            if (id === "ithink") return { provider: id, rates: await ithinkRates(creds.ithink ?? {}, parcel) };
-            if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(creds.shipyaari ?? {}, parcel) };
+            if (id === "shiprocket") return { provider: id, rates: await shiprocketRates(keys("shiprocket"), parcel) };
+            if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(keys("nimbuspost"), parcel) };
+            if (id === "ithink") return { provider: id, rates: await ithinkRates(keys("ithink"), parcel) };
+            if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(keys("shipyaari"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };

@@ -525,6 +525,8 @@ export type RateOut = {
   etaDays: number;
   live: true;
   cod?: boolean;
+  /** The courier's own expected delivery date, when it gives one. */
+  deliverBy?: string;
 };
 
 type Parcel = {
@@ -591,6 +593,7 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     etaDays: Number(courier.estimated_delivery_days ?? 5),
     cod: Boolean(courier.cod),
     live: true as const,
+    deliverBy: courier.etd ? String(courier.etd) : undefined,
   }));
 }
 
