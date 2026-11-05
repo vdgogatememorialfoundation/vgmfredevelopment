@@ -139,13 +139,13 @@ export function LiveEventPage({ slug }: { slug: string }) {
                 <p className="mt-3 whitespace-pre-line text-text-secondary">{event.description}</p>
               </div>
             ) : null}
-            {event.introVideoUrl || event.whatsappUrl ? (
+            {event.introVideoUrl || event.groupChatUrl ? (
               <div className="flex flex-wrap gap-3">
                 {event.introVideoUrl ? (
                   <a href={event.introVideoUrl} target="_blank" rel="noopener noreferrer" className="btn-outline">Watch the introduction video</a>
                 ) : null}
-                {event.whatsappUrl ? (
-                  <a href={event.whatsappUrl} target="_blank" rel="noopener noreferrer" className="btn-outline">Join the WhatsApp group</a>
+                {event.groupChatUrl ? (
+                  <a href={event.groupChatUrl} target="_blank" rel="noopener noreferrer" className="btn-outline">Join the WhatsApp group</a>
                 ) : null}
               </div>
             ) : null}

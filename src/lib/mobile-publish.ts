@@ -42,6 +42,8 @@ export function collectMobileSnapshot(): MobileFeed {
       address: siteConfig.address,
       social: settings.social ?? siteConfig.social,
       tickerSeconds: settings.tickerSeconds || 36,
+      shlokaBar: Boolean(settings.shlokaBar),
+      shlokas: (settings.shlokas ?? []).map((line) => line.trim()).filter(Boolean),
     },
     flags: getSiteFlags(),
     visibility: getSiteVisibility().public,

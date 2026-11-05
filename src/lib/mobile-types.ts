@@ -18,6 +18,8 @@ export type MobileFeed = {
     address: string;
     social?: SocialLinks;
     tickerSeconds?: number;
+    shlokaBar?: boolean;
+    shlokas?: string[];
   };
   flags: {
     supportUs: boolean;

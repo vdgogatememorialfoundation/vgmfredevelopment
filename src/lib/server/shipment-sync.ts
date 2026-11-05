@@ -1,7 +1,7 @@
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { listShopShipments } from "@/lib/server/shop-shipments";
 
-const EVERY_MS = 10 * 60 * 1000;
+const EVERY_MS = 3 * 60 * 1000;
 const DONE = new Set(["Delivered", "Failed", "Cancelled", "RTO Delivered"]);
 
 let started = false;
@@ -34,6 +34,6 @@ export async function syncOpenShipments() {
 export function startShipmentSync() {
   if (started) return;
   started = true;
-  setTimeout(() => void syncOpenShipments(), 60_000).unref?.();
+  setTimeout(() => void syncOpenShipments(), 20_000).unref?.();
   setInterval(() => void syncOpenShipments(), EVERY_MS).unref?.();
 }

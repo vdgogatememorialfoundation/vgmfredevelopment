@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import SiteLogo from "@/components/common/SiteLogo";
+import ShlokaBar from "@/components/layout/ShlokaBar";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -219,6 +220,8 @@ export default function Header() {
     : "";
 
   return (
+    <>
+    <ShlokaBar />
     <header className="relative z-30 overflow-visible border-b border-gold/40 bg-white shadow-[0_8px_24px_rgba(11,31,58,0.06)]">
       <div className="container">
         <div className="flex h-[78px] items-center justify-between gap-4">
@@ -608,6 +611,7 @@ export default function Header() {
           )
         : null}
     </header>
+    </>
   );
 }
 

@@ -219,6 +219,20 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
+      <Card title="Shloka strip" text="A slim line above the header for shlokas, quotes or a welcome. Put one per line; several lines take turns every few seconds. Saving publishes it with the rest of the site.">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={Boolean(settings.shlokaBar)} onChange={(event) => set({ shlokaBar: event.target.checked })} />
+          Show the strip above the header
+        </label>
+        <textarea
+          rows={4}
+          className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+          placeholder={"सर्वे भवन्तु सुखिनः सर्वे सन्तु निरामयाः ।\nधर्मार्थकाममोक्षाणाम् आरोग्यं मूलमुत्तमम् ।"}
+          value={(settings.shlokas ?? []).join("\n")}
+          onChange={(event) => set({ shlokas: event.target.value.split("\n") })}
+        />
+      </Card>
+
       <Card title="Announcement ticker" text="How fast the bar under the header moves. A lower number is faster. Saving publishes it with the rest of the site.">
         <label className="block text-sm text-slate-700">
           Speed · {Math.min(90, Math.max(12, settings.tickerSeconds || 36))} seconds for one pass
@@ -297,8 +311,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas };
 }
 
 /* ---------------- Payments ---------------- */

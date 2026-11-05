@@ -107,6 +107,8 @@ function applyFeed(feed: MobileFeed) {
       supportPhone: feed.site.phone || current.supportPhone,
       social: { ...current.social, ...feed.site.social },
       tickerSeconds: feed.site.tickerSeconds || current.tickerSeconds || 36,
+      shlokaBar: feed.site.shlokaBar ?? current.shlokaBar,
+      shlokas: feed.site.shlokas ?? current.shlokas,
     });
   });
 

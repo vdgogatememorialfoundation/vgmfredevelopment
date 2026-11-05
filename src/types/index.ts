@@ -26,7 +26,7 @@ export type PartnerPortalId = "seminar" | "autism" | "fellowship";
 export interface Event {
   termsConditions?: string;
   introVideoUrl?: string;
-  whatsappUrl?: string;
+  groupChatUrl?: string;
   id: string;
   name: string;
   slug: string;
@@ -730,6 +730,9 @@ export interface SiteSettings {
   liveChatOnline?: boolean;
   /** Seconds for one pass of the announcement ticker. */
   tickerSeconds?: number;
+  /** Slim strip above the header for shlokas, quotes or a line of welcome. */
+  shlokaBar?: boolean;
+  shlokas?: string[];
 }
 
 export interface AdminCategory {

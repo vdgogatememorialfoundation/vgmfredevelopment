@@ -201,6 +201,8 @@ export function useSiteSettings(): SiteSettings | null {
         logoUrl: local.logoUrl || published?.logoUrl || "",
         logoText: local.logoText || published?.logoText || local.logoText,
         faviconUrl: local.faviconUrl || published?.faviconUrl || "",
+        shlokaBar: hasLocal ? local.shlokaBar : published?.shlokaBar ?? local.shlokaBar,
+        shlokas: hasLocal ? local.shlokas : published?.shlokas ?? local.shlokas,
       };
       return settingsValue;
     },
@@ -212,6 +214,8 @@ export function useSiteSettings(): SiteSettings | null {
         ...local,
         siteName: published.name || local.siteName,
         tagline: published.tagline || local.tagline,
+        shlokaBar: published.shlokaBar,
+        shlokas: published.shlokas,
         logoUrl: published.logoUrl || "",
         logoText: published.logoText || local.logoText,
         faviconUrl: published.faviconUrl || "",

@@ -377,7 +377,7 @@ function eventFromSeminar(
     description: str(seminar, ["description"]),
     termsConditions: str(seminar, ["terms_conditions"]) || undefined,
     introVideoUrl: str(seminar, ["intro_video_url"]) || undefined,
-    whatsappUrl: str(seminar, ["whatsapp_group_url"]) || undefined,
+    groupChatUrl: str(seminar, ["whatsapp_group_url"]) || undefined,
     bannerUrl: mediaUrl(origin, seminar.hero_image_path || seminar.flyer_path),
     startDate: start || dateOnly(),
     endDate: end || start || dateOnly(),
