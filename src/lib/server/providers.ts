@@ -1321,6 +1321,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             job_pickup_name: order.pickup.contactName,
             job_pickup_phone: order.pickup.phone,
             order_id: order.orderId,
+            barcode: order.orderId,
           },
         ],
         deliveries: [
@@ -1333,6 +1334,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             customer_phone: order.customer.phone,
             customer_email: order.customer.email ?? "",
             order_id: order.orderId,
+            barcode: order.orderId,
           },
         ],
       },
