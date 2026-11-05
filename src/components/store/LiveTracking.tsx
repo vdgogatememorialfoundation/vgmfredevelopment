@@ -42,6 +42,7 @@ export default function LiveTracking({
 
   const provider = shipment?.provider ?? order.courierChoice?.provider;
   const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile);
+  if (!hyperlocal || shipment?.directCourier) return null;
   const partner = customerCourierLabel({ provider, courier: shipment?.courier || order.courierName });
   const latest = [...(shipment?.tracking ?? [])].reverse().find((scan) => scan.status)?.status ?? shipment?.status ?? "";
   const status = customerStatusLabel(latest, provider);

@@ -281,5 +281,6 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
 function showLiveMap(order: Order, shipment?: ShipmentRecord | null) {
   if (order.deliveryMode !== "delivery" || !shipment) return false;
   if (["Delivered", "Cancelled", "Failed"].includes(order.status)) return false;
+  if (shipment.directCourier) return false;
   return isHyperlocalProvider(shipment.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
 }
