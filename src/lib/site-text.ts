@@ -1,6 +1,7 @@
 import { subscribeCms } from "@/lib/cms";
 import { getPublishedFeed } from "@/lib/hydrate-public";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { normalizeFestivals, type FestivalSchedule } from "@/lib/festival-themes";
 
 const KEY = "vgmf_site_text";
 
@@ -65,6 +66,7 @@ export type SiteText = {
   developing: Partial<Record<string, boolean>>;
   reviews: ReviewsControls;
   theme: SiteTheme;
+  festivals?: FestivalSchedule[];
 };
 
 export const defaultSiteTheme: SiteTheme = {
@@ -238,6 +240,7 @@ export function defaultSiteText(): SiteText {
     developing: {},
     reviews: { ...defaultReviewsControls },
     theme: { ...defaultSiteTheme },
+    festivals: [],
   };
 }
 
@@ -267,6 +270,7 @@ export function normalizeSiteText(input?: Partial<SiteText> | null): SiteText {
       autoplaySeconds: Number.isFinite(seconds) ? Math.min(60, Math.max(0, Math.round(seconds))) : base.reviews.autoplaySeconds,
     },
     theme: normalizeTheme(input.theme),
+    festivals: normalizeFestivals(input.festivals),
   };
 }
 

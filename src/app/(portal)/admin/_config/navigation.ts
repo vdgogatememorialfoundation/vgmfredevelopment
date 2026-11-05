@@ -53,6 +53,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Pages", href: "/admin/website/pages" },
       { label: "Site & portal switches", href: "/admin/website/visibility" },
       { label: "Colours & site text", href: "/admin/website/text" },
+      { label: "Festival themes", href: "/admin/website/festivals" },
       { label: "About Us", href: "/admin/website/about" },
       { label: "Reviews", href: "/admin/website/reviews" },
       { label: "Announcements", href: "/admin/website/announcements" },
