@@ -9,6 +9,7 @@ import {
   tookanTrack,
 } from "@/lib/server/providers";
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
+import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
 import { findShopOrder, patchShopOrder } from "@/lib/server/shop-orders";
 import { findShopShipment, replaceShopShipment } from "@/lib/server/shop-shipments";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
@@ -147,6 +148,7 @@ export async function refreshStoredShipment(orderId: string) {
         ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: wrongDelivered ? `Corrected from courier: ${latestStatus}` : latestStatus }] } : {}),
       });
     }
+    if (move && target === "Delivered") void issueDeliveryInvoice(orderId);
   }
   return {
     ok: true as const,

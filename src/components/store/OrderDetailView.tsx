@@ -136,6 +136,16 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                 GST invoice
               </button>
             )}
+            {order.status === "Delivered" && order.trackToken ? (
+              <a
+                className="btn-outline mt-4 ml-2 inline-block"
+                href={`/api/shop/invoice/${order.trackToken}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Download invoice
+              </a>
+            ) : null}
           </div>
 
           <div className="space-y-4">
