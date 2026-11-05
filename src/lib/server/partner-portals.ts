@@ -1195,24 +1195,28 @@ async function attachCmsSpeakers(portal: PartnerPortalId, events: Event[]) {
   const fallback =
     [...events].filter((event) => (event.endDate || event.startDate) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ??
     [...events].sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
+  const curated = new Map<Event, NonNullable<Event["speakers"]>>();
   rows.forEach((row, index) => {
     const seminar = titleKey(String(row.seminar ?? ""));
     const event =
       (seminar && events.find((item) => titleKey(item.name).startsWith(seminar) || seminar.startsWith(titleKey(item.name)))) || fallback;
     if (!event) return;
-    const name = String(row.name).trim();
-    const photo = mediaUrl(origin, row.image || row.imagePath) || undefined;
-    const existing = (event.speakers ?? []).find((item) => item.name.trim().toLowerCase() === name.toLowerCase());
-    if (existing) {
-      if (!existing.photo && photo) existing.photo = photo;
-      if (!existing.designation && row.org) existing.designation = String(row.org).trim();
-      return;
-    }
-    event.speakers = [
-      ...(event.speakers ?? []),
-      { id: `${portal}-cms-spk-${index + 1}`, name, designation: String(row.org ?? "").trim(), topic: "", photo },
-    ];
+    const name = String(row.name).trim().replace(/^(dr|vd|vaidya|prof)\.\s*/i, (m) => `${m.replace(/\s+/g, "")} `);
+    const surname = name.split(/\s+/).pop()?.toLowerCase() ?? "";
+    const scheduled = (event.speakers ?? []).find((item) => surname && item.name.toLowerCase().split(/\s+/).pop() === surname);
+    const list = curated.get(event) ?? [];
+    list.push({
+      id: `${portal}-cms-spk-${index + 1}`,
+      name,
+      designation: String(row.org ?? "").trim(),
+      topic: "",
+      bio: scheduled?.bio,
+      photo: mediaUrl(origin, row.image || row.imagePath) || undefined,
+    });
+    curated.set(event, list);
   });
+  // The portal's own speaker list (with photos) replaces names guessed from schedule rows.
+  for (const [event, list] of curated) event.speakers = list;
 }
 
 export async function syncPartnerPortals(mode: "full" | "public" = "full"): Promise<PartnerSnapshot> {
