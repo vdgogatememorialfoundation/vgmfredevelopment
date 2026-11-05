@@ -8,7 +8,7 @@ import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
 import { pickupOtp, pickupOtpReady } from "@/lib/store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
-import { aggregatorName, customerCourierLabel } from "@/lib/courier-label";
+import { customerCourierLabel } from "@/lib/courier-label";
 import { getIntegrations } from "@/lib/integrations";
 import { buildTrackingStages, isHyperlocalProvider, shipmentScans, type CourierScan } from "@/lib/order-pipeline";
 import { pingLiveAgent } from "@/lib/shipping-client";
@@ -98,7 +98,6 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const { stages: rawStages } = useMemo(() => buildTrackingStages(order, shownScans, shipment), [order, shownScans, shipment]);
   const returnRequest = order.returnRequest;
   const courier = customerCourierLabel({ provider, courier: shipment?.courier || order.courierName });
-  const via = aggregatorName(provider);
   const trackingId = shipment?.awb || order.trackingId || "";
   const placed = new Date(order.date);
   const expectedFrom = addDays(placed, storeConfig.orderPreparationDays + 2);
@@ -120,7 +119,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const stages: PipelineStageShape[] = rawStages.map((stage) => {
     const next: PipelineStageShape = { ...stage };
     if (stage.id === "shipped" && (trackingId || courier) && stage.reached) {
-      const viaNote = via && via !== courier ? `via ${via}` : hyperlocal ? "Hyperlocal" : "Logistics";
+      const viaNote = hyperlocal ? "Hyperlocal" : "Logistics";
       next.courierNote = {
         title: courier,
         detail: [viaNote, trackingId ? `Tracking ID ${trackingId}` : ""].filter(Boolean).join(" · "),
@@ -223,7 +222,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       <Tile label="Order" value={order.id} />
       <Tile label="Date" value={formatDate(order.date)} />
       <Tile label="Status" value={currentStatus} />
-      {pickupDone ? <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} /> : null}
+      {pickupDone ? <Tile label="Courier" value={courier} /> : null}
       {pickupDone && !delivered && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
       {shipment?.deliveryOtp && !delivered ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
       {pickupOtpReady(order) && order.status !== "Delivered" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}

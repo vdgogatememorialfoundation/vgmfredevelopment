@@ -18,6 +18,8 @@ import { useSavedAddresses } from "@/lib/account-wallet";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { Book, CourierRate } from "@/types";
 
+const AGGREGATOR = /shiprocket|nimbus|ithink|shipyaari/i;
+
 type CourierPromise = CourierRate & { deliverBy: string; dayLabel?: string; express: boolean };
 
 export default function ProductBuyBox({ book }: { book: Book }) {
@@ -43,6 +45,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const preorder = canPreorder({ ...book, stock });
   const orderable = canOrder({ ...book, stock });
   const pickup = getPickupLocation();
+  const courierShown = estimate?.courier && !AGGREGATOR.test(estimate.courier) ? estimate.courier : "";
   const nextUrl = `/shop/${book.slug}`;
 
   const requireAccount = (then: () => void) => {
@@ -227,9 +230,9 @@ export default function ProductBuyBox({ book }: { book: Book }) {
 
         {checked && estimate?.serviceable && (
           <div className="mt-3 rounded-lg bg-white p-3 text-xs">
-            {estimate.courier && estimate.deliverBy ? (
+            {courierShown && estimate.deliverBy ? (
               <p className="font-semibold text-text-primary">
-                Deliverable to {estimate.pincode} by {estimate.deliverBy} via {estimate.courier}
+                Deliverable to {estimate.pincode} by {estimate.deliverBy} via {courierShown}
               </p>
             ) : (
               <p className="font-semibold text-text-primary">
@@ -242,9 +245,9 @@ export default function ProductBuyBox({ book }: { book: Book }) {
                 Processing and packing: {estimate.processingDays} business day
                 {estimate.processingDays === 1 ? "" : "s"} · dispatch {estimate.dispatchBy}
               </li>
-              {estimate.courier ? (
+              {courierShown ? (
                 <li>
-                  {estimate.courier} transit: {estimate.transitDays} business day
+                  {courierShown} transit: {estimate.transitDays} business day
                   {estimate.transitDays === 1 ? "" : "s"}
                 </li>
               ) : null}
@@ -274,7 +277,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             )}
             {!couriers.length && estimate.offers.length > 0 && (
               <ul className="mt-2 space-y-1 border-t border-border pt-2 text-text-muted">
-                {estimate.offers.slice(0, 4).map((offer) => (
+                {estimate.offers.filter((offer) => !AGGREGATOR.test(offer.name)).slice(0, 4).map((offer) => (
                   <li key={offer.id}>
                     {offer.name}: {offer.deliverBy}
                   </li>
