@@ -1,5 +1,7 @@
 "use client";
 
+import { BookContentFields, BookSpecFields } from "@/components/admin/BookDetailsFields";
+import { isValidIsbn } from "@/lib/book-details";
 import { useMemo, useRef, useState } from "react";
 import {
   deleteCategory,
@@ -337,7 +339,8 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     const productCode = (form.productCode ?? "").trim() || generateProductCode(form.id);
     if (isSkuTaken(sku, form.id)) return setError(`SKU ${sku} is already used.`);
     if (isProductCodeTaken(productCode, form.id)) return setError(`Product code ${productCode} is already used.`);
-    const isbn = (form.licenses ?? []).find((item) => item.label.toLowerCase() === "isbn")?.value || form.isbn;
+    const isbn = ((form.licenses ?? []).find((item) => item.label.toLowerCase() === "isbn")?.value || form.isbn || "").trim();
+    if (isbn && !isValidIsbn(isbn)) return setError(`${isbn} is not a valid ISBN. Leave the ISBN blank unless one is assigned; the product code is shown instead.`);
     const inStock = form.stockStatus === "in_stock";
     const stock = inStock ? Math.max(0, Math.floor(form.stock)) : 0;
     if (inStock && stock < 1) return setError("In-stock products need a quantity of at least 1.");
@@ -365,6 +368,8 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
         ...(form.language ? [{ label: "Language", value: form.language }] : []),
         ...(form.publisher?.name ? [{ label: "Publisher", value: form.publisher.name }] : []),
       ],
+      audience: (form.audience ?? []).filter(Boolean),
+      contributors: (form.contributors ?? []).filter((person) => person.name.trim()),
     };
     try {
       saveProduct(record);
@@ -403,9 +408,11 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             <Field label="Language"><TextInput value={form.language ?? ""} onChange={(event) => set({ language: event.target.value })} /></Field>
             <Field label="Weight (kg)"><TextInput type="number" step="0.1" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
           </div>
+          <BookSpecFields form={form} set={set} />
           <Field label="Description">
             <TextArea rows={5} value={form.description} onChange={(event) => set({ description: event.target.value })} />
           </Field>
+          <BookContentFields form={form} set={set} />
 
           <div>
             <p className="mb-2 text-sm font-semibold text-text-primary">Licences & identifiers</p>

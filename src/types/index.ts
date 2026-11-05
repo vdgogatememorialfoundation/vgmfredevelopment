@@ -297,6 +297,26 @@ export interface Book {
   media?: ProductMedia[];
   specifications?: { label: string; value: string }[];
   countryOfOrigin?: string;
+  editor?: string;
+  /** YYYY-MM-DD */
+  publicationDate?: string;
+  dimensions?: string;
+  paperQuality?: string;
+  printing?: string;
+  subject?: string;
+  audience?: string[];
+  details?: {
+    about?: string;
+    learn?: string;
+    highlights?: string;
+    whoShouldRead?: string;
+    chapters?: string;
+    outcomes?: string;
+    authorInfo?: string;
+    publisherInfo?: string;
+    editionInfo?: string;
+  };
+  contributors?: { name: string; role: string; bio?: string; photo?: string }[];
   expectedDelivery?: string;
   storePickupAvailable?: boolean;
   deliveryAvailable?: boolean;
