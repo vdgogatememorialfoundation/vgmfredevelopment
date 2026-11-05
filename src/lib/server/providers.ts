@@ -581,10 +581,24 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     breadth: String(parcel.breadth),
     height: String(parcel.height),
   });
-  const data = await call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  const list = ((data.data as Json)?.available_courier_companies as Json[]) ?? [];
+  // Without `mode` Shiprocket returns only its recommended subset, so ask for Surface and Air too and merge.
+  const replies = await Promise.allSettled(
+    ["", "Surface", "Air"].map((mode) =>
+      call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}${mode ? `&mode=${mode}` : ""}`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+    )
+  );
+  const ok = replies.filter((reply): reply is PromiseFulfilledResult<Json> => reply.status === "fulfilled");
+  if (!ok.length) throw (replies[0] as PromiseRejectedResult).reason;
+  const byId = new Map<string, Json>();
+  for (const reply of ok) {
+    for (const courier of ((reply.value.data as Json)?.available_courier_companies as Json[]) ?? []) {
+      const id = String(courier.courier_company_id);
+      if (!byId.has(id)) byId.set(id, courier);
+    }
+  }
+  const list = [...byId.values()];
   return list.map((courier) => ({
     provider: "shiprocket",
     courierId: String(courier.courier_company_id),
