@@ -152,6 +152,8 @@ function minutesFromNow(minutes: number) {
   return new Date(Date.now() + minutes * 60000).toISOString();
 }
 
+type PickupLocation = { nickname: string; city: string; pincode: string; phone?: string; address?: string };
+
 export function GeneralSettingsDesk() {
   const [settings, setSettings] = useState<SiteSettings>(() => getSettings());
   const [note, setNote] = useState("");
@@ -1001,8 +1003,17 @@ export function ShippingApisDesk() {
     setStamp((current) => current + 1);
   };
 
+  const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const pickup = value.pickup;
   const setPickup = (patch: Partial<typeof pickup>) => set({ pickup: { ...pickup, ...patch } });
+  const applyPickupLocation = (location: PickupLocation) =>
+    setPickup({
+      nickname: location.nickname,
+      city: location.city || pickup.city,
+      pincode: location.pincode || pickup.pincode,
+      phone: location.phone || pickup.phone,
+      line1: location.address || pickup.line1,
+    });
 
   return (
     <div className="space-y-5">
@@ -1138,8 +1149,8 @@ export function ShippingApisDesk() {
                   setNote(`Shiprocket pickup list: ${result.error}`);
                   return;
                 }
-                const names = (result.locations ?? []).map((location) => `${location.nickname} (${location.city} ${location.pincode})`);
-                setNote(names.length ? `Shiprocket pickup locations: ${names.join(" · ")}` : "Shiprocket returned no pickup locations.");
+                setPickupLocations(result.locations ?? []);
+                setNote(result.locations?.length ? `Shiprocket has ${result.locations.length} pickup address(es). Pick one below.` : "Shiprocket returned no pickup locations.");
               }}
             >
               List locations
@@ -1147,6 +1158,24 @@ export function ShippingApisDesk() {
           </div>
         }
       >
+        {pickupLocations.length ? (
+          <div className="mb-4 space-y-2">
+            <p className="text-sm font-medium text-text-primary">Pickup addresses on Shiprocket</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {pickupLocations.map((location) => (
+                <button
+                  key={location.nickname}
+                  type="button"
+                  onClick={() => applyPickupLocation(location)}
+                  className={`rounded-xl border p-3 text-left text-sm ${location.nickname === pickup.nickname ? "border-burgundy bg-burgundy/5" : "border-border bg-white hover:border-burgundy"}`}
+                >
+                  <span className="block font-semibold text-text-primary">{location.nickname}{location.nickname === pickup.nickname ? " · in use" : ""}</span>
+                  <span className="block text-text-muted">{[location.address, location.city, location.pincode].filter(Boolean).join(", ")}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-3">
           <Text label="Nickname" value={pickup.nickname} onChange={(nickname) => setPickup({ nickname })} />
           <Text label="Contact name" value={pickup.contactName} onChange={(contactName) => setPickup({ contactName })} />

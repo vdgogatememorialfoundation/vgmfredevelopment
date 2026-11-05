@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import {
   getShipments,
+  patchOrder,
+  removeOrderShipments,
   updateShipmentStatus,
 } from "@/lib/admin-store";
 import { downloadLabel } from "@/lib/shipping-client";
@@ -81,6 +83,17 @@ export function ShipmentsSection() {
                     </SelectInput>
                     <Button variant="ghost" onClick={() => void downloadLabel(shipment.id).catch(() => undefined)}>
                       Shipping label
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        if (!window.confirm(`Delete the shipment for order #${shipment.orderId}? The order stays; its AWB is removed.`)) return;
+                        removeOrderShipments(shipment.orderId);
+                        if (order) patchOrder(order.id, { shipmentId: undefined, trackingId: "" }, `Shipment ${shipment.awb || shipment.id} deleted`);
+                        refresh();
+                      }}
+                    >
+                      Delete shipment
                     </Button>
                     <span className="text-xs text-text-muted">
                       {order ? `${order.items.length} item(s)` : ""} · ₹{order?.total ?? 0}

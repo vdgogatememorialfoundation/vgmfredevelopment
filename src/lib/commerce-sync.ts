@@ -119,8 +119,18 @@ async function pullCommerce() {
     fetch("/api/shop/shipments?sync=1", { cache: "no-store", credentials: "same-origin" }),
   ]);
   if (ordersRes.ok) {
-    const data = (await ordersRes.json()) as { orders?: Order[] };
+    const data = (await ordersRes.json()) as { orders?: Order[]; deleted?: string[] };
     rememberOrders(data.orders ?? []);
+    const gone = new Set(data.deleted ?? []);
+    if (gone.size) {
+      const orders = getOrders();
+      const shipments = getShipments();
+      if (orders.some((order) => gone.has(order.id)) || shipments.some((shipment) => gone.has(shipment.orderId))) {
+        window.localStorage.setItem("vgmf_orders", JSON.stringify(orders.filter((order) => !gone.has(order.id))));
+        window.localStorage.setItem("vgmf_shipments", JSON.stringify(shipments.filter((shipment) => !gone.has(shipment.orderId))));
+        window.dispatchEvent(new Event("vgmf-cms"));
+      }
+    }
   }
   if (shipsRes.ok) {
     const data = (await shipsRes.json()) as { shipments?: ShipmentRecord[] };

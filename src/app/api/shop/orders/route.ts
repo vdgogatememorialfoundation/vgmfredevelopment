@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
-import { deleteShopOrder, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
+import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
 import type { Order } from "@/types";
 
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       : viewer.email || viewer.phone || viewer.id
         ? ordersForAccount(viewer)
         : [];
-    return NextResponse.json({ ok: true, orders }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ ok: true, orders, deleted: deletedShopOrderIds() }, { headers: { "cache-control": "no-store" } });
   }
   return NextResponse.json({ ok: true, orders: [] }, { headers: { "cache-control": "no-store" } });
 }
