@@ -236,7 +236,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
               </p>
             ) : (
               <p className="font-semibold text-text-primary">
-                Deliverable to {estimate.pincode}. A courier date appears after a shipping API is connected.
+                Deliverable to {estimate.pincode}.
               </p>
             )}
             <ul className="mt-2 space-y-1 text-text-muted">
