@@ -11,6 +11,8 @@ export type RemoteAccount = {
   phone: string;
   whatsapp?: string;
   alternatePhone?: string;
+  birthDate?: string;
+  extraFields?: Record<string, string>;
   name: string;
   createdAt?: string;
 };
@@ -27,6 +29,8 @@ export function remoteAccountToUser(account: RemoteAccount, extras: Partial<User
     phone: account.phone,
     whatsapp: extras.whatsapp || account.whatsapp || account.phone,
     alternatePhone: extras.alternatePhone || account.alternatePhone || account.phone,
+    birthDate: extras.birthDate || account.birthDate,
+    extraFields: extras.extraFields || account.extraFields,
     role: extras.role || "customer",
     status: extras.status || "active",
     storeCredit: extras.storeCredit ?? 0,

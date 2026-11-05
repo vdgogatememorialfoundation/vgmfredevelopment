@@ -2,6 +2,18 @@ import { subscribeCms } from "@/lib/cms";
 import { getPublishedFeed } from "@/lib/hydrate-public";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { normalizeFestivals, type FestivalSchedule } from "@/lib/festival-themes";
+import {
+  defaultBirthday,
+  defaultSignupControls,
+  normalizeBirthday,
+  normalizeDisclaimers,
+  normalizeReels,
+  normalizeSignup,
+  type BirthdayControls,
+  type InstagramReel,
+  type SignupControls,
+  type SiteDisclaimer,
+} from "@/lib/site-extras";
 
 const KEY = "vgmf_site_text";
 
@@ -18,6 +30,7 @@ export const homeSections = [
   { id: "books", label: "Shop & publications" },
   { id: "articles", label: "Articles" },
   { id: "notices", label: "Notice board" },
+  { id: "reels", label: "Instagram reels" },
   { id: "clinics", label: "Clinics" },
 ] as const;
 
@@ -67,6 +80,10 @@ export type SiteText = {
   reviews: ReviewsControls;
   theme: SiteTheme;
   festivals?: FestivalSchedule[];
+  disclaimers?: SiteDisclaimer[];
+  signup?: SignupControls;
+  reels?: InstagramReel[];
+  birthday?: BirthdayControls;
 };
 
 export const defaultSiteTheme: SiteTheme = {
@@ -241,6 +258,10 @@ export function defaultSiteText(): SiteText {
     reviews: { ...defaultReviewsControls },
     theme: { ...defaultSiteTheme },
     festivals: [],
+    disclaimers: [],
+    signup: { ...defaultSignupControls, fields: [] },
+    reels: [],
+    birthday: { ...defaultBirthday },
   };
 }
 
@@ -271,6 +292,10 @@ export function normalizeSiteText(input?: Partial<SiteText> | null): SiteText {
     },
     theme: normalizeTheme(input.theme),
     festivals: normalizeFestivals(input.festivals),
+    disclaimers: normalizeDisclaimers(input.disclaimers),
+    signup: normalizeSignup(input.signup),
+    reels: normalizeReels(input.reels),
+    birthday: normalizeBirthday(input.birthday),
   };
 }
 

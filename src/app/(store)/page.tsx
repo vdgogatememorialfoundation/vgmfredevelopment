@@ -12,6 +12,7 @@ import SupportUs from "@/components/home/SupportUs";
 import AwardsSection from "@/components/home/AwardsSection";
 import { SpeakerBoard } from "@/components/events/EventSchedules";
 import HomeSections from "@/components/home/HomeSections";
+import InstagramReels from "@/components/home/InstagramReels";
 
 export default function HomePage() {
   return (
@@ -29,6 +30,7 @@ export default function HomePage() {
         books: <FeaturedBooks />,
         articles: <FeaturedArticles />,
         notices: <NoticeBoard />,
+        reels: <InstagramReels />,
         clinics: <ClinicsSection />,
       }}
     />

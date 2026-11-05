@@ -11,6 +11,8 @@ import {
   publicAccount,
   setAccountPassword,
   upsertAccount,
+  cleanBirthDate,
+  cleanExtra,
 } from "@/lib/server/accounts";
 import { lookupPartnerIdentity } from "@/lib/server/partner-portals";
 import {
@@ -129,6 +131,8 @@ export async function POST(request: NextRequest) {
         phone,
         whatsapp: String(body?.whatsapp ?? phone),
         alternatePhone: String(body?.alternatePhone ?? phone),
+        birthDate: cleanBirthDate(body?.birthDate) ?? "",
+        extraFields: JSON.stringify(cleanExtra(body?.extraFields) ?? {}),
       },
       message: `A code was sent to ${email}.`,
     });
@@ -148,6 +152,8 @@ export async function POST(request: NextRequest) {
         phone: String(body?.phone ?? ""),
         whatsapp: String(body?.whatsapp ?? ""),
         alternatePhone: String(body?.alternatePhone ?? ""),
+        birthDate: cleanBirthDate(body?.birthDate),
+        extraFields: cleanExtra(body?.extraFields),
         password: String(body?.password ?? "") || undefined,
       });
       const name = [account.firstName, account.lastName].filter(Boolean).join(" ");

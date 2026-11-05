@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { SALUTATIONS } from "@/lib/admin-store";
 import { countryByCode } from "@/lib/geo";
 import { usePlatformCountries } from "@/lib/use-platform-countries";
+import { useSiteText } from "@/lib/use-site-text";
 
 interface DetailsFormProps {
   form: {
@@ -13,6 +14,8 @@ interface DetailsFormProps {
     phone: string;
     whatsapp: string;
     alternatePhone: string;
+    birthDate?: string;
+    extraFields?: string;
     country?: string;
     countryCode?: string;
   };
@@ -28,6 +31,9 @@ export default function DetailsForm({
   busy,
 }: DetailsFormProps) {
   const [sameAsPhone, setSameAsPhone] = useState(true);
+  const signup = useSiteText().signup;
+  const extra = readExtra(form.extraFields);
+  const setExtra = (id: string, value: string) => onChange("extraFields", JSON.stringify({ ...extra, [id]: value }));
   const { countries, allowInternational } = usePlatformCountries();
   const country = countries.find((item) => item.code === form.countryCode) ?? countries[0] ?? countryByCode("IN");
 
@@ -216,6 +222,65 @@ export default function DetailsForm({
         </p>
       </div>
 
+      {signup?.birthDate !== "hidden" ? (
+        <div className="mt-5">
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="birth-date">
+            Date of birth{signup?.birthDate === "required" ? "" : " (optional)"}
+          </label>
+          <input
+            id="birth-date"
+            type="date"
+            max={new Date().toISOString().slice(0, 10)}
+            value={form.birthDate ?? ""}
+            onChange={(event) => onChange("birthDate", event.target.value)}
+            className="input-field"
+          />
+          <p className="mt-2 text-xs text-text-muted">We send you a birthday wish.</p>
+        </div>
+      ) : null}
+
+      {(signup?.fields ?? [])
+        .filter((field) => field.enabled)
+        .map((field) => (
+          <div key={field.id} className="mt-5">
+            <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`extra-${field.id}`}>
+              {field.label}
+              {field.required ? "" : " (optional)"}
+            </label>
+            {field.type === "textarea" ? (
+              <textarea
+                id={`extra-${field.id}`}
+                rows={3}
+                placeholder={field.placeholder}
+                value={extra[field.id] ?? ""}
+                onChange={(event) => setExtra(field.id, event.target.value)}
+                className="input-field"
+              />
+            ) : field.type === "select" ? (
+              <select
+                id={`extra-${field.id}`}
+                value={extra[field.id] ?? ""}
+                onChange={(event) => setExtra(field.id, event.target.value)}
+                className="input-field"
+              >
+                <option value="">Select</option>
+                {(field.options ?? []).map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={`extra-${field.id}`}
+                type={field.type}
+                placeholder={field.placeholder}
+                value={extra[field.id] ?? ""}
+                onChange={(event) => setExtra(field.id, event.target.value)}
+                className="input-field"
+              />
+            )}
+          </div>
+        ))}
+
       <label className="mt-6 flex items-start gap-3 text-sm text-text-muted">
         <input
           type="checkbox"
@@ -232,4 +297,13 @@ export default function DetailsForm({
       </button>
     </form>
   );
+}
+
+function readExtra(raw?: string): Record<string, string> {
+  try {
+    const value = JSON.parse(raw || "{}") as unknown;
+    return value && typeof value === "object" ? (value as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
 }

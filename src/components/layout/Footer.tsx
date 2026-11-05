@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
 import SocialLinks from "@/components/layout/SocialLinks";
+import SiteDisclaimers from "@/components/layout/SiteDisclaimers";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
 import { siteConfig } from "@/lib/constants";
@@ -139,6 +140,7 @@ export default function Footer() {
           </div>
         </div>
 
+        <SiteDisclaimers />
         <div className="mt-6 flex flex-col gap-3 border-t border-gold/30 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-text-muted">
             © {new Date().getFullYear()} {siteConfig.name}. {t("footer.rights")}

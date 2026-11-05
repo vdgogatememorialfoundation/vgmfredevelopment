@@ -14,6 +14,8 @@ export type FoundationAccount = {
   phone: string;
   whatsapp?: string;
   alternatePhone?: string;
+  birthDate?: string;
+  extraFields?: Record<string, string>;
   passwordHash?: string;
   passwordSalt?: string;
   createdAt: string;
@@ -53,6 +55,35 @@ function samePhone(left: string, right: string) {
   return localA.length >= 10 && localA === localB;
 }
 
+export function cleanBirthDate(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return undefined;
+  const when = Date.parse(`${text}T00:00:00Z`);
+  return Number.isFinite(when) && when < Date.now() && when > Date.UTC(1900, 0, 1) ? text : undefined;
+}
+
+export function cleanExtra(value: unknown) {
+  let source = value;
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!source || typeof source !== "object") return undefined;
+  const entries = Object.entries(source as Record<string, unknown>)
+    .filter(([key, item]) => /^[\w-]{1,40}$/.test(key) && typeof item === "string" && item.trim())
+    .slice(0, 30)
+    .map(([key, item]) => [key, String(item).trim().slice(0, 500)]);
+  return entries.length ? (Object.fromEntries(entries) as Record<string, string>) : undefined;
+}
+
+/** Accounts whose birthday falls on `today` (YYYY-MM-DD). */
+export function accountsWithBirthday(today: string, match: (birthDate: string | undefined, today: string) => boolean) {
+  return load().filter((account) => match(account.birthDate, today));
+}
+
 function hashPassword(password: string, salt: string) {
   return createHash("sha256").update(`${salt}:${password}`).digest("hex");
 }
@@ -69,6 +100,8 @@ export function publicAccount(account: FoundationAccount) {
     phone: account.phone,
     whatsapp: account.whatsapp,
     alternatePhone: account.alternatePhone,
+    birthDate: account.birthDate,
+    extraFields: account.extraFields,
     name: [account.salutation, account.firstName, account.middleName, account.lastName].filter(Boolean).join(" "),
     createdAt: account.createdAt,
   };
@@ -103,6 +136,8 @@ export function createAccount(input: {
   phone: string;
   whatsapp?: string;
   alternatePhone?: string;
+  birthDate?: string;
+  extraFields?: Record<string, string>;
   password?: string;
 }) {
   const email = input.email.trim().toLowerCase();
@@ -126,6 +161,8 @@ export function createAccount(input: {
     phone,
     whatsapp: input.whatsapp?.trim() || phone,
     alternatePhone: input.alternatePhone?.trim() || phone,
+    birthDate: cleanBirthDate(input.birthDate),
+    extraFields: cleanExtra(input.extraFields),
     passwordSalt: salt || undefined,
     passwordHash: input.password && salt ? hashPassword(input.password, salt) : undefined,
     createdAt: new Date().toISOString(),

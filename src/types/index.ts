@@ -417,6 +417,10 @@ export interface User {
   whatsapp: string;
   /** Second number collected at signup — may match `phone`. */
   alternatePhone?: string;
+  /** YYYY-MM-DD, collected at signup for birthday wishes. */
+  birthDate?: string;
+  /** Answers to admin-configured signup fields, keyed by field id. */
+  extraFields?: Record<string, string>;
   accountId?: string;
   role?: UserRole;
   password?: string;
