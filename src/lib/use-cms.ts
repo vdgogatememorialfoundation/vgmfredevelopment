@@ -203,6 +203,9 @@ export function useSiteSettings(): SiteSettings | null {
         faviconUrl: local.faviconUrl || published?.faviconUrl || "",
         shlokaBar: hasLocal ? local.shlokaBar : published?.shlokaBar ?? local.shlokaBar,
         shlokas: hasLocal ? local.shlokas : published?.shlokas ?? local.shlokas,
+        queryButton: hasLocal ? local.queryButton : published?.queryButton ?? local.queryButton,
+        queryNumber: hasLocal ? local.queryNumber : published?.queryNumber ?? local.queryNumber,
+        queryMessage: hasLocal ? local.queryMessage : published?.queryMessage ?? local.queryMessage,
       };
       return settingsValue;
     },
@@ -216,6 +219,9 @@ export function useSiteSettings(): SiteSettings | null {
         tagline: published.tagline || local.tagline,
         shlokaBar: published.shlokaBar,
         shlokas: published.shlokas,
+        queryButton: published.queryButton,
+        queryNumber: published.queryNumber,
+        queryMessage: published.queryMessage,
         logoUrl: published.logoUrl || "",
         logoText: published.logoText || local.logoText,
         faviconUrl: published.faviconUrl || "",

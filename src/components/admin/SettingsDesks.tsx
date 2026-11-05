@@ -233,6 +233,32 @@ export function GeneralSettingsDesk() {
         />
       </Card>
 
+      <Card title="WhatsApp query button" text="A round WhatsApp button on the right side of every public page. Visitors tap it to message this number. Saving publishes it with the rest of the site.">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={Boolean(settings.queryButton)} onChange={(event) => set({ queryButton: event.target.checked })} />
+          Show the WhatsApp button
+        </label>
+        <label className="mt-3 block text-sm text-slate-700">
+          WhatsApp number with country code
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+            placeholder="919876543210"
+            inputMode="tel"
+            value={settings.queryNumber ?? ""}
+            onChange={(event) => set({ queryNumber: event.target.value })}
+          />
+        </label>
+        <label className="mt-3 block text-sm text-slate-700">
+          First message (optional)
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+            placeholder="Namaskar, I have a question about…"
+            value={settings.queryMessage ?? ""}
+            onChange={(event) => set({ queryMessage: event.target.value })}
+          />
+        </label>
+      </Card>
+
       <Card title="Announcement ticker" text="How fast the bar under the header moves. A lower number is faster. Saving publishes it with the rest of the site.">
         <label className="block text-sm text-slate-700">
           Speed · {Math.min(90, Math.max(12, settings.tickerSeconds || 36))} seconds for one pass
@@ -311,8 +337,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage };
 }
 
 /* ---------------- Payments ---------------- */

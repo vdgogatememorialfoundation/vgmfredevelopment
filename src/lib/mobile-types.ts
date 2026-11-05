@@ -20,6 +20,9 @@ export type MobileFeed = {
     tickerSeconds?: number;
     shlokaBar?: boolean;
     shlokas?: string[];
+    queryButton?: boolean;
+    queryNumber?: string;
+    queryMessage?: string;
   };
   flags: {
     supportUs: boolean;

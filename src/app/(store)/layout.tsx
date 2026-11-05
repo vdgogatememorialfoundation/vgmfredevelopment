@@ -2,6 +2,7 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import AnnouncementTicker from "@/components/common/AnnouncementTicker";
 import BackToTop from "@/components/common/BackToTop";
+import WhatsAppQueryButton from "@/components/common/WhatsAppQueryButton";
 import BannerPopup from "@/components/home/BannerPopup";
 import { SiteChat } from "@/components/chatbot/LiveChatWidget";
 import { VisitorBeacon } from "@/components/analytics/VisitorBeacon";
@@ -67,6 +68,7 @@ export default function StoreLayout({
             </main>
             <Footer />
             <BackToTop />
+            <WhatsAppQueryButton />
             <BannerPopup />
             <VisitorBeacon />
             <GoogleAnalytics />

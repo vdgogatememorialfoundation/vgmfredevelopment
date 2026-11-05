@@ -735,6 +735,10 @@ export interface SiteSettings {
   /** Slim strip above the header for shlokas, quotes or a line of welcome. */
   shlokaBar?: boolean;
   shlokas?: string[];
+  /** Floating WhatsApp button for visitor questions. */
+  queryButton?: boolean;
+  queryNumber?: string;
+  queryMessage?: string;
 }
 
 export interface AdminCategory {
