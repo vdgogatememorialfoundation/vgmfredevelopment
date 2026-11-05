@@ -558,6 +558,7 @@ async function pullPublic(portal: PartnerPortalId) {
     }
     events = [...byId.values()];
   }
+  await attachCmsSpeakers(portal, events).catch(() => undefined);
   const copied = noticesFromPublic(portal, announcements);
   return { events, ...copied };
 }
