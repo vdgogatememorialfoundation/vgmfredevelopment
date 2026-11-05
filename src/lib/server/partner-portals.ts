@@ -1176,6 +1176,45 @@ async function persistPartnerNotices(notices: Notice[]) {
   }
 }
 
+type CmsSpeaker = { name?: string; role?: string; seminar?: string; org?: string; image?: string; imagePath?: string };
+
+const titleKey = (value: string) => value.toLowerCase().replace(/\.0\b/g, "").replace(/[^a-z0-9]+/g, "");
+
+/** Speakers (with photos) configured on each portal's public site CMS, attached to the matching event. */
+async function attachCmsSpeakers(portal: PartnerPortalId, events: Event[]) {
+  if (!events.length) return;
+  const origin = originFor(portal);
+  const payload = (await fetch(`${origin}/api/public/site-cms`, { signal: AbortSignal.timeout(15000), cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null)) as { cms?: { speakers?: CmsSpeaker[] }; speakers?: CmsSpeaker[] } | null;
+  const rows = (payload?.cms?.speakers ?? payload?.speakers ?? []).filter(
+    (row) => row && String(row.name ?? "").trim() && (String(row.role ?? "").trim() || String(row.image ?? row.imagePath ?? "").trim())
+  );
+  if (!rows.length) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const fallback =
+    [...events].filter((event) => (event.endDate || event.startDate) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ??
+    [...events].sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
+  rows.forEach((row, index) => {
+    const seminar = titleKey(String(row.seminar ?? ""));
+    const event =
+      (seminar && events.find((item) => titleKey(item.name).startsWith(seminar) || seminar.startsWith(titleKey(item.name)))) || fallback;
+    if (!event) return;
+    const name = String(row.name).trim();
+    const photo = mediaUrl(origin, row.image || row.imagePath) || undefined;
+    const existing = (event.speakers ?? []).find((item) => item.name.trim().toLowerCase() === name.toLowerCase());
+    if (existing) {
+      if (!existing.photo && photo) existing.photo = photo;
+      if (!existing.designation && row.org) existing.designation = String(row.org).trim();
+      return;
+    }
+    event.speakers = [
+      ...(event.speakers ?? []),
+      { id: `${portal}-cms-spk-${index + 1}`, name, designation: String(row.org ?? "").trim(), topic: "", photo },
+    ];
+  });
+}
+
 export async function syncPartnerPortals(mode: "full" | "public" = "full"): Promise<PartnerSnapshot> {
   const { readPartnerSnapshot, writePartnerSnapshot } = await import("@/lib/server/partner-store");
   const previous = (await readPartnerSnapshot()) ?? emptySnapshot();
@@ -1189,6 +1228,7 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     const publicData = await pullPublic(portal);
     const dbData = mode === "full" ? await pullDatabase(portal) : null;
     const events = dbData?.events?.length ? mergeById(dbData.events, publicData.events) : publicData.events;
+    await attachCmsSpeakers(portal, events).catch(() => undefined);
     const notices = mergeById(publicData.notices, dbData?.notices ?? []);
     const announcements = mergeById(publicData.announcements, dbData?.announcements ?? []);
     snapshot.events.push(...events);
