@@ -141,6 +141,15 @@
   font-weight: 700;
   color: var(--tl-green);
 }
+.vgmf-ship-label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vgmf-ship-expect.is-inline {
+  margin: 0;
+}
 .vgmf-ship-expect.is-late {
   background: #fff7ed;
   color: var(--tl-failed);
