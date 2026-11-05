@@ -186,6 +186,10 @@ export interface OrderSettings {
   /** Keep our own Tookan / Shipday fleet off the checkout courier list. */
   hideTookanAtCheckout: boolean;
   hideShipdayAtCheckout: boolean;
+  /** Hours the desk needs to pack an order before the courier can collect it. */
+  processingHours: number;
+  /** Orders packed after this India time (HH:MM) are dispatched the next day. */
+  dispatchCutoff: string;
   /** Customer-facing names for statuses and tracking steps, keyed by the built-in name. */
   statusLabels: Record<string, string>;
   /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
@@ -341,6 +345,8 @@ export const defaultOrderSettings: OrderSettings = {
   showCourierChoice: true,
   hideTookanAtCheckout: false,
   hideShipdayAtCheckout: false,
+  processingHours: 4,
+  dispatchCutoff: "17:00",
   statusLabels: {},
   customStatuses: [],
   returns: {
@@ -516,6 +522,8 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     showCourierChoice: Boolean(merged.showCourierChoice),
     hideTookanAtCheckout: Boolean(merged.hideTookanAtCheckout),
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
+    processingHours: Math.max(0, finiteNumber(merged.processingHours, defaultOrderSettings.processingHours)),
+    dispatchCutoff: /^\d{1,2}:\d{2}$/.test(String(merged.dispatchCutoff ?? "")) ? String(merged.dispatchCutoff) : defaultOrderSettings.dispatchCutoff,
     statusLabels: Object.fromEntries(
       Object.entries(merged.statusLabels && typeof merged.statusLabels === "object" ? merged.statusLabels : {})
         .map(([key, text]) => [key, String(text ?? "").trim()])

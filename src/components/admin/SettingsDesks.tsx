@@ -1360,6 +1360,8 @@ export function OrderSettingsDesk() {
           <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
           <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
+          <Text label="Packing / processing time (hours)" type="number" value={value.processingHours} onChange={(hours) => set({ processingHours: Math.max(0, Number(hours) || 0) })} />
+          <Text label="Dispatch cut-off (India time, HH:MM)" value={value.dispatchCutoff} onChange={(dispatchCutoff) => set({ dispatchCutoff })} />
           {value.codEnabled && <Text label="COD fee (₹)" type="number" value={value.codFee} onChange={(fee) => set({ codFee: Number(fee) || 0 })} />}
         </div>
       </Card>

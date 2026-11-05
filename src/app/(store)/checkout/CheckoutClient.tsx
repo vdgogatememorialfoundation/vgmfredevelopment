@@ -22,7 +22,7 @@ import {
   clearCart,
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
-import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
+import { checkCart, getOriginPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
 import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import { fetchCourierRates } from "@/lib/shipping-client";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
@@ -41,12 +41,41 @@ import { saveAddress, useSavedAddresses, useSavedCards, brandLabel } from "@/lib
 import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
 import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
 
-type CourierOption = CourierRate & { key: string; deliverBy: string };
+type CourierOption = CourierRate & { key: string; deliverBy: string; dayLabel?: string; express: boolean };
 
 /** The courier's own delivery date, shown like our estimates (e.g. 8 Nov 2026). */
 function courierDate(value?: string) {
   const at = value ? Date.parse(value) : NaN;
   return Number.isNaN(at) ? "" : new Date(at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const IST_MS = 5.5 * 60 * 60 * 1000;
+const istDayIndex = (ms: number) => Math.floor((ms + IST_MS) / DAY_MS);
+
+function isExpressCourier(rate: CourierRate) {
+  return Boolean(rate.lastMile) || rate.etaDays <= 1 || /express|air|instant|same.?day|flash|priority|hyperlocal/i.test(rate.courierName);
+}
+
+/**
+ * Delivery day from the desk's packing time and dispatch cut-off.
+ * Same-pincode orders read Today / Tomorrow; other routes never promise earlier than dispatch + transit.
+ */
+function promiseFor(rate: CourierRate, courierAt: number, samePincode: boolean, processingHours: number, cutoff: string, now = Date.now()) {
+  const [hour, minute] = cutoff.split(":").map(Number);
+  const ready = now + processingHours * 60 * 60 * 1000;
+  let dispatchDay = istDayIndex(ready);
+  const readyMinutes = Math.floor(((ready + IST_MS) % DAY_MS) / 60000);
+  if (readyMinutes > (hour || 0) * 60 + (minute || 0)) dispatchDay += 1;
+  const transit = samePincode ? (rate.lastMile || rate.etaDays === 0 ? 0 : 1) : Math.max(1, rate.etaDays);
+  let day = dispatchDay + transit;
+  if (!samePincode && Number.isFinite(courierAt)) day = Math.max(day, istDayIndex(courierAt));
+  const today = istDayIndex(now);
+  const at = day * DAY_MS + 12 * 60 * 60 * 1000 - IST_MS;
+  return {
+    deliverBy: new Date(at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }),
+    dayLabel: day === today ? "Today" : day === today + 1 ? "Tomorrow" : undefined,
+  };
 }
 
 type Step = "address" | "review" | "payment" | "success";
@@ -279,17 +308,23 @@ export default function CheckoutClient() {
           if (orderSettings.hideShipdayAtCheckout && id.includes("shipday")) return false;
           return true;
         })
-        .map((rate) => ({
-          ...rate,
-          key: `${rate.provider}:${rate.courierId}`,
-          deliverBy: courierDate(rate.deliverBy) || getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
-        }))
+        .map((rate) => {
+          const samePincode = address.pincode.replace(/\D/g, "") === getOriginPincode();
+          const promise = promiseFor(rate, rate.deliverBy ? Date.parse(rate.deliverBy) : NaN, samePincode, orderSettings.processingHours, orderSettings.dispatchCutoff);
+          return {
+            ...rate,
+            key: `${rate.provider}:${rate.courierId}`,
+            deliverBy: promise.deliverBy || courierDate(rate.deliverBy) || getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
+            dayLabel: promise.dayLabel,
+            express: isExpressCourier(rate),
+          };
+        })
       : [];
   const selectedCourier =
     courierOptions.find((option) => option.key === courierId) ?? courierOptions[0];
   const activeCourierId = selectedCourier?.key ?? "";
   const selectedOffer = selectedCourier
-    ? { name: selectedCourier.courierName, deliverBy: selectedCourier.deliverBy }
+    ? { name: selectedCourier.courierName, deliverBy: selectedCourier.dayLabel ? `${selectedCourier.dayLabel}, ${selectedCourier.deliverBy}` : selectedCourier.deliverBy }
     : undefined;
   const pickupLocation = getPickupLocation();
 
@@ -692,7 +727,15 @@ export default function CheckoutClient() {
                               onChange={() => setCourierId(offer.key)}
                             />
                             <span>
-                              <span className="font-semibold text-text-primary">{offer.courierName}</span>
+                              <span className="flex flex-wrap items-center gap-1.5 font-semibold text-text-primary">
+                                {offer.courierName}
+                                {offer.express && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                                    <Glyph name="truck" className="h-3 w-3" />
+                                    {offer.dayLabel === "Today" ? "Same day" : "Express"}
+                                  </span>
+                                )}
+                              </span>
                               <span className="mt-0.5 block text-xs text-text-muted">
                                 {offer.provider === "tookan" || offer.provider === "shipday" || offer.courierName === "Gogate Products"
                                   ? ""
@@ -705,7 +748,7 @@ export default function CheckoutClient() {
                             </span>
                           </span>
                           <span className="text-right text-xs">
-                            <span className="block font-semibold text-emerald-700">by {offer.deliverBy}</span>
+                            <span className="block font-semibold text-emerald-700">{offer.dayLabel ? `Delivery by ${offer.dayLabel}` : `by ${offer.deliverBy}`}</span>
                             {orderSettings.shippingFeeMode === "courier_rate" && (
                               <span className="block font-semibold text-text-primary">{formatPrice(Math.round(offer.rate))}</span>
                             )}
