@@ -24,6 +24,9 @@ export type EventMode = "Online" | "Offline" | "Hybrid";
 export type PartnerPortalId = "seminar" | "autism" | "fellowship";
 
 export interface Event {
+  termsConditions?: string;
+  introVideoUrl?: string;
+  whatsappUrl?: string;
   id: string;
   name: string;
   slug: string;

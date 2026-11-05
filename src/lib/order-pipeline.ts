@@ -73,7 +73,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "packed";
   }
   if (
-    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|connected to|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
+    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)

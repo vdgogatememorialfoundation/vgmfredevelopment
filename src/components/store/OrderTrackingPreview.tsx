@@ -128,6 +128,12 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   const fill = bad ? "bg-red-600" : "bg-emerald-600";
   const detail = current?.id === "ordered" ? "Placed" : latest?.title ?? "";
   const stamp = status === "Delivered" ? dayLabel(latest?.at, country) : shortStamp(latest?.at, country);
+  const stepAt = Date.parse(latest?.at || order.date);
+  const dueAt = Date.parse(shipment?.expectedBy || "") || (Number.isFinite(stepAt) ? stepAt + 72 * 60 * 60 * 1000 : NaN);
+  const creep =
+    Number.isFinite(stepAt) && Number.isFinite(dueAt) && dueAt > stepAt
+      ? Math.round(Math.min(85, Math.max(8, ((now - stepAt) / (dueAt - stepAt)) * 85)))
+      : 8;
   const steps = pickup ? stages.map((stage) => stage.label) : STEPS;
   const stepIdx = pickup ? currentIdx : Math.max(STEP_OF[status] ?? 0, STEP_OF[order.status] ?? 0);
 
@@ -142,7 +148,14 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
       <span className="mt-2.5 flex items-center" aria-label={`Progress: ${steps[stepIdx] ?? status}`}>
         {steps.map((label, index) => (
           <Fragment key={label}>
-            {index > 0 ? <span className={`h-0.5 flex-1 ${index <= stepIdx ? fill : "bg-border"}`} /> : null}
+            {index > 0 ? (
+              <span className="relative h-0.5 flex-1 overflow-hidden rounded-full bg-border">
+                <span
+                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] duration-[60s] ease-linear`}
+                  style={{ width: index <= stepIdx ? "100%" : index === stepIdx + 1 && !terminal ? `${creep}%` : "0%" }}
+                />
+              </span>
+            ) : null}
             <span
               title={label}
               className={`h-2.5 w-2.5 shrink-0 rounded-full ${index <= stepIdx ? fill : "bg-border"} ${

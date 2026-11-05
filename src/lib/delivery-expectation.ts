@@ -147,6 +147,15 @@ function istDay(ms: number, zone = "Asia/Kolkata") {
 export function deliveryDatePhrase(text?: string) {
   const trimmed = text?.trim() ?? "";
   if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed) && Number.isFinite(Date.parse(trimmed))) {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(trimmed));
+  }
   return trimmed
     .replace(/,?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?/gi, "")
     .replace(/\s+(?:IST|UTC)\b/gi, "")

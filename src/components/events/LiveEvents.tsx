@@ -133,6 +133,22 @@ export function LiveEventPage({ slug }: { slug: string }) {
       <section className="section bg-background">
         <div className="container grid gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
+            {event.description?.trim() ? (
+              <div>
+                <h2 className="heading-3">About this event</h2>
+                <p className="mt-3 whitespace-pre-line text-text-secondary">{event.description}</p>
+              </div>
+            ) : null}
+            {event.introVideoUrl || event.whatsappUrl ? (
+              <div className="flex flex-wrap gap-3">
+                {event.introVideoUrl ? (
+                  <a href={event.introVideoUrl} target="_blank" rel="noopener noreferrer" className="btn-outline">Watch the introduction video</a>
+                ) : null}
+                {event.whatsappUrl ? (
+                  <a href={event.whatsappUrl} target="_blank" rel="noopener noreferrer" className="btn-outline">Join the WhatsApp group</a>
+                ) : null}
+              </div>
+            ) : null}
             {event.tbd?.speakers ? (
               <div>
                 <h2 className="heading-3">Speakers</h2>
@@ -151,6 +167,12 @@ export function LiveEventPage({ slug }: { slug: string }) {
                 </ul>
               </div>
             )}
+            {event.termsConditions?.trim() ? (
+              <details className="rounded-xl border border-border bg-white p-4">
+                <summary className="cursor-pointer font-semibold text-text-primary">Terms &amp; conditions</summary>
+                <p className="mt-3 whitespace-pre-line text-sm text-text-secondary">{event.termsConditions}</p>
+              </details>
+            ) : null}
           </div>
           <aside className="rounded-2xl border border-border bg-white p-6">
             <p className="text-sm text-text-muted">Registration fee</p>
@@ -161,6 +183,10 @@ export function LiveEventPage({ slug }: { slug: string }) {
               {eventTimeText(event) && <div className="flex justify-between gap-3"><dt className="text-text-muted">Time</dt><dd className="text-right font-medium">{eventTimeText(event)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
+              {event.capacity ? <div className="flex justify-between gap-3"><dt className="text-text-muted">Seats</dt><dd className="text-right font-medium">{event.capacity}</dd></div> : null}
+              {event.source && event.source !== "vgmf" && event.sourceUrl ? (
+                <div className="flex justify-between gap-3"><dt className="text-text-muted">Organised on</dt><dd className="text-right font-medium"><a href={event.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-burgundy hover:underline">{event.source === "autism" ? "Autism portal" : "Seminar portal"}</a></dd></div>
+              ) : null}
             </dl>
             {configuredWindows(event).length ? null : event.source && event.source !== "vgmf" && Number(String(event.id).split("-").pop()) > 0 && !isRegistrationClosed(event, now) ? (
               <PartnerRegister portal={event.source} seminarId={Number(String(event.id).split("-").pop())} />
