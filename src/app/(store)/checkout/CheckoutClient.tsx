@@ -18,7 +18,6 @@ import {
   getEstimatedDeliveryDate,
   generateOrderId,
   getOrders,
-  pickupOtp,
   saveOrder,
   clearCart,
 } from "@/lib/store";
@@ -75,7 +74,7 @@ export default function CheckoutClient() {
     : !orderSettings.pickupEnabled
       ? "delivery"
       : chosenMode;
-  const [payMethod, setPayMethod] = useState<"online" | "cod" | ReadyGateway["id"]>("online");
+  const [payMethod, setPayMethod] = useState<"online" | "cod" | "store" | ReadyGateway["id"]>("online");
   const [hostedGateways, setHostedGateways] = useState<ReadyGateway[]>([]);
   const [liveRates, setLiveRates] = useState<{ pincode: string; rates: CourierRate[] } | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
@@ -305,9 +304,10 @@ export default function CheckoutClient() {
 
   const priced = computeTotals(orderItems);
   const itemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
-  const codSelected = payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery";
+  const cashAtStoreSelected = payMethod === "store" && orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup";
+  const codSelected = (payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery") || cashAtStoreSelected;
   const hostedSelected = payMethod === "payu" || payMethod === "easebuzz" || payMethod === "cashfree" || payMethod === "phonepe" ? payMethod : "";
-  const codFee = codSelected ? orderSettings.codFee : 0;
+  const codFee = codSelected && !cashAtStoreSelected ? orderSettings.codFee : 0;
   const shipping =
     deliveryMode === "store_pickup" || orderItems.length === 0
       ? 0
@@ -358,7 +358,9 @@ export default function CheckoutClient() {
     let payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean };
     let awaitingGateway = false;
     const hosted = hostedSelected;
-    if (codSelected) {
+    if (cashAtStoreSelected) {
+      payment = { method: "Cash at Store", paid: false };
+    } else if (codSelected) {
       payment = { method: "Cash on delivery", paid: false };
     } else if (hosted) {
       payment = { method: GATEWAY_LABEL[hosted], paid: false };
@@ -503,7 +505,7 @@ export default function CheckoutClient() {
       const pickupNote =
         deliveryMode === "delivery"
           ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.`
-          : `Pickup from ${pickupLocation.name}.\n${pickupLocation.address}\nPhone: ${pickupLocation.phone}\nPickup OTP: ${pickupOtp(id)}\nShow this code at the clinic counter. The desk can resend it. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`;
+          : `Pickup from ${pickupLocation.name}.\n${pickupLocation.address}\nPhone: ${pickupLocation.phone}\nWe will send your pickup OTP once the order is ready for pickup. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`;
       sendEmail({
         to: deliveryAddress.email || "",
         phone: deliveryAddress.phone,
@@ -976,6 +978,15 @@ export default function CheckoutClient() {
                   </span>
                 </label>
               )}
+              {orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup" && (
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${cashAtStoreSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
+                  <input type="radio" name="payment-method" checked={cashAtStoreSelected} onChange={() => setPayMethod("store")} className="mt-1 accent-burgundy" />
+                  <span>
+                    <span className="flex items-center gap-2 font-semibold text-text-primary"><Glyph name="package" className="h-4 w-4 text-burgundy" /> Cash at Store</span>
+                    <span className="block text-xs text-text-muted">Pay at the clinic counter when you collect the order</span>
+                  </span>
+                </label>
+              )}
             </div>
 
             {holdingNote && (
@@ -995,7 +1006,7 @@ export default function CheckoutClient() {
             >
               {processing
                 ? codSelected ? "Placing order…" : "Processing payment…"
-                : codSelected ? `Place order · pay ${formatPrice(totals.total)} on delivery` : `Pay ${formatPrice(totals.total)}`}
+                : codSelected ? `Place order · pay ${formatPrice(totals.total)} ${cashAtStoreSelected ? "at the store" : "on delivery"}` : `Pay ${formatPrice(totals.total)}`}
             </button>
 
             {paymentNotice() && !codSelected && (
@@ -1023,7 +1034,7 @@ export default function CheckoutClient() {
             </div>
             <h2 className="heading-2 mt-5">Order placed successfully!</h2>
             <p className="mt-2 text-sm text-text-muted">
-              {codSelected ? "Pay in cash when the order arrives." : "Your payment was received."} Track your order anytime from My Orders.
+              {cashAtStoreSelected ? "Pay at the clinic counter when you collect the order." : codSelected ? "Pay in cash when the order arrives." : "Your payment was received."} Track your order anytime from My Orders.
             </p>
             <div className="mx-auto mt-6 inline-flex flex-col items-center rounded-2xl border border-emerald-200 bg-white px-8 py-5">
               <p className="text-xs uppercase tracking-[0.14em] text-text-muted">

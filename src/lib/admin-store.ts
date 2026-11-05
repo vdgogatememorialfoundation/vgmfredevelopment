@@ -13,7 +13,7 @@ import type {
   User,
 } from "@/types";
 import { siteConfig, storeConfig } from "@/lib/constants";
-import { generateOrderId, getOrders, pickupOtp, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
+import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
@@ -600,7 +600,7 @@ export function createAdminOrder(input: {
     template: "order-placed",
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\n${
       order.deliveryMode === "store_pickup"
-        ? `Pickup from ${siteConfig.name}.\n${siteConfig.address}\nPhone: ${siteConfig.phone}\nPickup OTP: ${pickupOtp(order.id)}\nShow this code at the clinic counter. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`
+        ? `Pickup from ${siteConfig.name}.\n${siteConfig.address}\nPhone: ${siteConfig.phone}\nWe will send your pickup OTP once the order is ready for pickup. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`
         : `Expected delivery: ${formatDate(order.plan.deliveredBy)}`
     }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
@@ -753,6 +753,7 @@ export function setOrderStatus(orderId: string, status: OrderStatus) {
   if (status === "Delivered" && order.paymentMethod === "Cash on delivery") {
     next.paymentStatus = "Paid";
   }
+  if (!pickupOtpReady(order) && pickupOtpReady(next)) sendPickupOtp(next);
   if (status === "Cancelled" && order.stockCommitted) {
     releaseStockForOrder(order);
     next.stockCommitted = false;
@@ -803,6 +804,19 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
     template: "refund",
     body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
+}
+
+/** Sends the store-pickup OTP; only once the seller has processed the order. */
+export function sendPickupOtp(order: Order) {
+  if (!pickupOtpReady(order)) return false;
+  sendOtpCode({
+    email: order.deliveryAddress?.email,
+    phone: order.deliveryAddress?.phone,
+    name: order.deliveryAddress?.fullName,
+    code: pickupOtp(order.id),
+    purpose: `store pickup for order ${order.id}`,
+  });
+  return true;
 }
 
 export function setPaymentStatus(orderId: string, paymentStatus: Order["paymentStatus"]) {
@@ -1180,7 +1194,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
       <p class="label">${order.deliveryMode === "store_pickup" ? "Store pickup" : "Shipment"}</p>
       ${
         order.deliveryMode === "store_pickup"
-          ? `Collect from the clinic.<br/>Pickup OTP ${esc(pickupOtp(order.id))}`
+          ? `Collect from the clinic.${pickupOtpReady(order) && order.status !== "Delivered" ? `<br/>Pickup OTP ${esc(pickupOtp(order.id))}` : ""}`
           : shipment
             ? `${esc(shipment.courier)}<br/>AWB ${esc(shipment.awb)}`
             : "Packed at the clinic. AWB is printed after the courier is booked."

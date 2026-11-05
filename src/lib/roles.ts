@@ -6,6 +6,7 @@ export const staffModules = [
   { id: "orders", label: "Orders & shipments", paths: ["/admin/commerce/orders", "/admin/commerce/shipments", "/admin/shipments", "/admin/payments/refunds"] },
   { id: "portals", label: "Portal links", paths: ["/staff", "/doctor", "/"] },
   { id: "pos", label: "In-store POS", paths: ["/admin/commerce/pos"] },
+  { id: "pickup", label: "Store pickup orders", paths: ["/admin/commerce/pickup"] },
   { id: "catalog", label: "Products & inventory", paths: ["/admin/commerce/products", "/admin/commerce/inventory", "/admin/commerce/serviceability"] },
   { id: "payments", label: "Payments", paths: ["/admin/payments", "/admin/commerce/payments"] },
   { id: "customers", label: "Customers", paths: ["/admin/accounts/customers"] },

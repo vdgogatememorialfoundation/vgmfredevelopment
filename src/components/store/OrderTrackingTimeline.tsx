@@ -5,7 +5,7 @@ import { formatDate } from "@/lib/utils";
 import { deliveryDatePhrase, parseExpected, statusStamp, statusDay } from "@/lib/delivery-expectation";
 import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
-import { pickupOtp } from "@/lib/store";
+import { pickupOtp, pickupOtpReady } from "@/lib/store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { aggregatorName, customerCourierLabel } from "@/lib/courier-label";
 import { getIntegrations } from "@/lib/integrations";
@@ -224,7 +224,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       {pickupDone ? <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} /> : null}
       {pickupDone && !delivered && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
       {shipment?.deliveryOtp && !delivered ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
-      {order.deliveryMode === "store_pickup" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
+      {pickupOtpReady(order) && order.status !== "Delivered" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
     </div>
   );
 

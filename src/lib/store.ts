@@ -11,7 +11,7 @@ import { getSession, isPortalRole } from "@/lib/auth";
 import { orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { buildTrackingStages as buildCourierStages, isSampleOrder } from "@/lib/order-pipeline";
 export type { TrackingStage, TrackingStageId } from "@/lib/order-pipeline";
-export { pickupOtp } from "@/lib/order-pipeline";
+export { pickupOtp, pickupOtpReady } from "@/lib/order-pipeline";
 import { storeConfig } from "@/lib/constants";
 import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";

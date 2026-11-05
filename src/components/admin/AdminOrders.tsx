@@ -84,7 +84,7 @@ const PAYMENT_TONES: Record<string, string> = {
   Refunded: "bg-slate-100 text-slate-600",
   "Partially Refunded": "bg-amber-50 text-amber-700",
 };
-const PAYMENT_METHODS = ["UPI", "Bank transfer", "Cash", "Card (POS)", "Cheque", "Razorpay (manual)", "Cash on delivery"];
+const PAYMENT_METHODS = ["UPI", "Bank transfer", "Cash", "Card (POS)", "Cheque", "Razorpay (manual)", "Cash on delivery", "Cash at Store"];
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
@@ -123,7 +123,7 @@ export function OrdersDashboard() {
 
   const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
   const toPack = orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length;
-  const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery").length;
+  const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery" && order.paymentMethod !== "Cash at Store").length;
   const toShip = orders.filter((order) => order.status === "To Ship" || order.status === "Ready to Ship" || order.status === "Packed").length;
   const outForDelivery = orders.filter((order) => order.status === "Out for Delivery").length;
   const delivered = orders.filter((order) => order.status === "Delivered").length;

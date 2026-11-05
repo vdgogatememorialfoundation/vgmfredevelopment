@@ -10,6 +10,13 @@ export function pickupOtp(orderId: string): string {
   return String(100000 + (hash % 900000));
 }
 
+const PICKUP_PROCESSED: Order["status"][] = ["Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered"];
+
+/** The pickup OTP is usable only after the seller has packed (processed) a store-pickup order. */
+export function pickupOtpReady(order: Pick<Order, "deliveryMode" | "status">) {
+  return order.deliveryMode === "store_pickup" && PICKUP_PROCESSED.includes(order.status);
+}
+
 export type TrackingStageId =
   | "ordered"
   | "packed"
@@ -396,7 +403,7 @@ export function buildTrackingStages(
     shipmentLeft ||
     ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ||
     STAGE_RANK[progress] >= STAGE_RANK.shipped;
-  let outReached = STAGE_RANK[progress] >= STAGE_RANK.out || (hyperlocal && shippedReached);
+  const outReached = STAGE_RANK[progress] >= STAGE_RANK.out || (hyperlocal && shippedReached);
   if (hyperlocal) shippedReached = false;
   const courierDelivered = order.status === "Delivered" || shipment?.status === "Delivered";
   const deliveredReached = (progress === "delivered" || courierDelivered) && !failedReached;

@@ -173,6 +173,8 @@ export interface OrderSettings {
   deliveryEnabled: boolean;
   pickupEnabled: boolean;
   codEnabled: boolean;
+  /** Store-pickup orders may be paid in cash at the counter. */
+  cashAtStoreEnabled: boolean;
   codFee: number;
   /** "auto" confirms an order at once when every item is in stock; "manual" waits for the desk. */
   confirmMode: "auto" | "manual";
@@ -329,6 +331,7 @@ export const defaultOrderSettings: OrderSettings = {
   deliveryEnabled: true,
   pickupEnabled: true,
   codEnabled: false,
+  cashAtStoreEnabled: true,
   codFee: 30,
   confirmMode: "auto",
   shippingFeeMode: "free_above",
@@ -503,6 +506,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     deliveryEnabled: Boolean(merged.deliveryEnabled),
     pickupEnabled: Boolean(merged.pickupEnabled),
     codEnabled: Boolean(merged.codEnabled),
+    cashAtStoreEnabled: merged.cashAtStoreEnabled !== false,
     codFee: Math.max(0, finiteNumber(merged.codFee, defaultOrderSettings.codFee)),
     confirmMode: merged.confirmMode === "manual" ? "manual" : "auto",
     shippingFeeMode: mode,
