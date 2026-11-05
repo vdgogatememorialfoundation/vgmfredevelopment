@@ -330,6 +330,25 @@ type ScheduleRow = {
   seminar_title?: string;
 };
 
+const speakerPhotos = new Map<PartnerPortalId, Map<string, string>>();
+
+async function loadSpeakerPhotos(portal: PartnerPortalId, origin: string) {
+  const row = ((await queryRows(portal, "SELECT value FROM global_settings WHERE key = 'public_site_cms'")) ?? [])[0];
+  let cms: { speakers?: { name?: string; image?: string; imagePath?: string }[] } = {};
+  try {
+    cms = JSON.parse(String(row?.value ?? "{}"));
+  } catch {
+    return;
+  }
+  const photos = new Map<string, string>();
+  for (const speaker of Array.isArray(cms.speakers) ? cms.speakers : []) {
+    const name = String(speaker?.name ?? "").trim().toLowerCase();
+    const url = mediaUrl(origin, speaker?.image || speaker?.imagePath);
+    if (name && url) photos.set(name, url);
+  }
+  speakerPhotos.set(portal, photos);
+}
+
 function eventFromSeminar(
   portal: PartnerPortalId,
   seminar: Record<string, unknown>,
@@ -356,6 +375,7 @@ function eventFromSeminar(
       designation: "",
       topic: row.title || "",
       bio: row.speaker_bio || undefined,
+      photo: speakerPhotos.get(portal)?.get(String(row.speaker_name || "").trim().toLowerCase()),
     }));
   const schedule = sessions.map((row) => ({
     id: `${portal}-sch-${row.id}`,
@@ -835,6 +855,7 @@ async function pullDatabase(portal: PartnerPortalId) {
   if (!poolFor(portal)) return null;
   if (portal === "fellowship") return pullFellowshipDatabase();
   const origin = originFor(portal);
+  await loadSpeakerPhotos(portal, origin).catch(() => undefined);
   const seminars = (await queryRows(portal, "SELECT * FROM seminars ORDER BY event_date DESC NULLS LAST, id DESC")) ?? [];
   const schedules = (await queryRows(
     portal,

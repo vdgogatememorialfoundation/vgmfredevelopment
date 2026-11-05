@@ -2,12 +2,17 @@
 
 import { useState, type ReactNode } from "react";
 import { publishLiveSite } from "@/lib/mobile-publish";
+import { uploadMediaFile } from "@/lib/media-client";
 import { getSiteText, saveSiteText } from "@/lib/site-text";
 import {
+  BUILTIN_FIELDS,
   normalizeBirthday,
   normalizeSignup,
-  reelCode,
+  reelEmbed,
   type BirthdayControls,
+  type BuiltinField,
+  type BuiltinKey,
+  type LoginCopy,
   type InstagramReel,
   type SignupControls,
   type SignupField,
@@ -32,6 +37,7 @@ export function SiteExtrasDesk() {
   const start = getSiteText();
   const [disclaimers, setDisclaimers] = useState<SiteDisclaimer[]>(start.disclaimers ?? []);
   const [reels, setReels] = useState<InstagramReel[]>(start.reels ?? []);
+  const [reelNote, setReelNote] = useState("");
   const [signup, setSignup] = useState<SignupControls>(normalizeSignup(start.signup));
   const [birthday, setBirthday] = useState<BirthdayControls>(normalizeBirthday(start.birthday));
   const [note, setNote] = useState("");
@@ -56,13 +62,20 @@ export function SiteExtrasDesk() {
         <p className="mt-1 text-sm text-text-muted">Changes go live on the website and mobile app when you save.</p>
       </div>
 
-      <Card title="Disclaimers" help="Shown at the bottom of every public page, above the copyright line.">
+      <Card title="Disclaimers" help="Choose where each one shows: at the top of every public page, at the bottom above the copyright line, or both.">
         {disclaimers.map((row, index) => (
           <div key={row.id} className="rounded-lg border border-border p-3">
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm font-semibold text-ink">
                 <input type="checkbox" checked={row.enabled} onChange={(event) => setDisclaimers((list) => list.map((item, i) => (i === index ? { ...item, enabled: event.target.checked } : item)))} />
                 Show
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink">Position
+                <select className="rounded-lg border border-border bg-white px-2 py-1 text-sm" value={row.placement ?? "bottom"} onChange={(event) => setDisclaimers((list) => list.map((item, i) => (i === index ? { ...item, placement: event.target.value as SiteDisclaimer["placement"] } : item)))}>
+                  <option value="top">Top of page</option>
+                  <option value="bottom">Bottom of page</option>
+                  <option value="both">Top and bottom</option>
+                </select>
               </label>
               <button type="button" className="ml-auto text-sm font-semibold text-red-700" onClick={() => setDisclaimers((list) => list.filter((_, i) => i !== index))}>Remove</button>
             </div>
@@ -74,15 +87,34 @@ export function SiteExtrasDesk() {
             </label>
           </div>
         ))}
-        <button type="button" className={small} onClick={() => setDisclaimers((list) => [...list, { id: newId(), title: "", body: "", enabled: true }])}>+ Add disclaimer</button>
+        <button type="button" className={small} onClick={() => setDisclaimers((list) => [...list, { id: newId(), title: "", body: "", enabled: true, placement: "bottom" }])}>+ Add disclaimer</button>
       </Card>
 
-      <Card title="Instagram reels" help="Paste reel links (instagram.com/reel/…). They show in the Instagram reels section on the homepage; move or hide that section under Colours & site text.">
+      <Card title="Reels" help="Upload a video file, or paste an Instagram, YouTube or Facebook link to embed it. They show in the reels section on the homepage; move or hide that section under Colours & site text.">
         {reels.map((row, index) => (
           <div key={row.id} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
-            <label className="text-xs text-text-muted">Reel link
-              <input className={input} value={row.url} placeholder="https://www.instagram.com/reel/…" onChange={(event) => setReels((list) => list.map((item, i) => (i === index ? { ...item, url: event.target.value } : item)))} />
-            </label>
+            <div className="text-xs text-text-muted">
+              <label className="block">Video link
+                <input className={input} value={row.url} placeholder="Instagram / YouTube / Facebook link" onChange={(event) => setReels((list) => list.map((item, i) => (i === index ? { ...item, url: event.target.value } : item)))} />
+              </label>
+              <label className="mt-2 block">…or upload a video
+                <input type="file" accept="video/mp4,video/webm,video/quicktime" className="mt-1 block text-xs" onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  setReelNote("Uploading…");
+                  try {
+                    const url = await uploadMediaFile(file);
+                    setReels((list) => list.map((item, i) => (i === index ? { ...item, video: url } : item)));
+                    setReelNote("Video uploaded. Save to publish it.");
+                  } catch (error) {
+                    setReelNote(error instanceof Error ? error.message : "Upload failed.");
+                  }
+                }} />
+              </label>
+              {row.video ? (
+                <p className="mt-1 text-ink">Uploaded video set. <button type="button" className="font-semibold text-red-700" onClick={() => setReels((list) => list.map((item, i) => (i === index ? { ...item, video: undefined } : item)))}>Remove video</button></p>
+              ) : null}
+            </div>
             <label className="text-xs text-text-muted">Caption (optional)
               <input className={input} value={row.caption ?? ""} onChange={(event) => setReels((list) => list.map((item, i) => (i === index ? { ...item, caption: event.target.value } : item)))} />
             </label>
@@ -91,13 +123,67 @@ export function SiteExtrasDesk() {
               Show
             </label>
             <button type="button" className="text-sm font-semibold text-red-700" onClick={() => setReels((list) => list.filter((_, i) => i !== index))}>Remove</button>
-            {row.url && !reelCode(row.url) ? <p className="text-xs text-red-700 sm:col-span-4">Not an Instagram reel or post link; it won&apos;t be shown.</p> : null}
+            {(row.url || row.video) && !reelEmbed(row) ? <p className="text-xs text-red-700 sm:col-span-4">This link can&apos;t be embedded; use an Instagram, YouTube or Facebook link, or upload the video.</p> : null}
           </div>
         ))}
         <button type="button" className={small} onClick={() => setReels((list) => [...list, { id: newId(), url: "", enabled: true }])}>+ Add reel</button>
+        {reelNote ? <p className="text-xs text-text-muted">{reelNote}</p> : null}
       </Card>
 
-      <Card title="Signup form" help="Name, email, phone and WhatsApp are always asked. Add your own questions below; answers are saved on the account.">
+      <Card title="Login form" help="Leave a box empty to keep the standard wording.">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {([
+            ["heading", "Heading", "Welcome back"],
+            ["intro", "Intro text (password sign-in)", "Sign in with your Foundation website password…"],
+            ["identifierLabel", "Account field label", "Email, Phone or Account ID"],
+            ["identifierPlaceholder", "Account field placeholder", "name@example.com / +91 98765 43210 / 12-digit Account ID"],
+            ["passwordLabel", "Password label", "Password"],
+            ["passwordPlaceholder", "Password placeholder", "Your password"],
+            ["button", "Sign-in button text", "Sign in"],
+          ] as [keyof LoginCopy, string, string][]).map(([key, label, hint]) => (
+            <label key={key} className={`block text-xs text-text-muted${key === "intro" ? " sm:col-span-2" : ""}`}>{label}
+              <input className={input} value={signup.login?.[key] ?? ""} placeholder={hint} onChange={(event) => setSignup((current) => ({ ...current, login: { ...current.login, [key]: event.target.value } }))} />
+            </label>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Signup form" help="Change the label, placeholder and whether each standard field is asked. First/last name, email and phone are always required. Add your own questions below; answers are saved on the account.">
+        <div className="space-y-2">
+          {BUILTIN_FIELDS.map((base) => {
+            const row = signup.builtins?.[base.key] ?? {};
+            const patch = (next: Partial<BuiltinField>) => setSignup((current) => ({ ...current, builtins: { ...current.builtins, [base.key as BuiltinKey]: { ...current.builtins?.[base.key as BuiltinKey], ...next } } }));
+            return (
+              <div key={base.key} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-3 sm:items-end">
+                <label className="text-xs text-text-muted">{base.label} — label
+                  <input className={input} value={row.label ?? ""} placeholder={base.label} onChange={(event) => patch({ label: event.target.value })} />
+                </label>
+                <label className="text-xs text-text-muted">Placeholder
+                  <input className={input} value={row.placeholder ?? ""} placeholder={base.placeholder || "—"} onChange={(event) => patch({ placeholder: event.target.value })} />
+                </label>
+                <label className="text-xs text-text-muted">Asked
+                  {base.fixed ? (
+                    <span className="mt-1 block py-1.5 text-sm text-ink">Always, required</span>
+                  ) : (
+                    <select className={input} value={row.mode ?? (base.key === "whatsapp" ? "required" : "optional")} onChange={(event) => patch({ mode: event.target.value as BuiltinField["mode"] })}>
+                      <option value="optional">Ask, optional</option>
+                      <option value="required">Ask, required</option>
+                      <option value="hidden">Don&apos;t ask</option>
+                    </select>
+                  )}
+                </label>
+              </div>
+            );
+          })}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="block text-xs text-text-muted">Terms checkbox text
+            <input className={input} value={signup.terms ?? ""} placeholder="I agree to the Foundation's terms and privacy policy." onChange={(event) => setSignup((current) => ({ ...current, terms: event.target.value }))} />
+          </label>
+          <label className="block text-xs text-text-muted">Signup button text
+            <input className={input} value={signup.submit ?? ""} placeholder="Create account" onChange={(event) => setSignup((current) => ({ ...current, submit: event.target.value }))} />
+          </label>
+        </div>
         <label className="block text-xs text-text-muted">Date of birth
           <select className={input} value={signup.birthDate} onChange={(event) => setSignup((current) => ({ ...current, birthDate: event.target.value as SignupControls["birthDate"] }))}>
             <option value="optional">Ask, optional</option>

@@ -17,6 +17,7 @@ import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, ev
 import { isEventPast, isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
 import { EventRegistration } from "@/components/events/EventRegistration";
 import PartnerRegister from "@/components/events/PartnerRegister";
+import { SpeakerPhoto } from "@/components/events/EventSchedules";
 import { configuredWindows, registrationBadge } from "@/lib/registration-windows";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
@@ -159,9 +160,12 @@ export function LiveEventPage({ slug }: { slug: string }) {
                 <h2 className="heading-3">Speakers</h2>
                 <ul className="mt-4 space-y-3">
                   {event.speakers.map((speaker) => (
-                    <li key={speaker.id} className="rounded-xl border border-border bg-white p-4">
-                      <p className="font-semibold">{speaker.name}</p>
-                      <p className="text-sm text-text-muted">{speaker.designation} · {speaker.topic}</p>
+                    <li key={speaker.id} className="flex items-center gap-4 rounded-xl border border-border bg-white p-4">
+                      <SpeakerPhoto speaker={speaker} />
+                      <div>
+                        <p className="font-semibold">{speaker.name}</p>
+                        {speaker.designation ? <p className="text-sm text-text-muted">{speaker.designation}</p> : null}
+                      </div>
                     </li>
                   ))}
                 </ul>

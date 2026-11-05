@@ -116,6 +116,8 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
       : deliveredOn
         ? `Delivered on ${deliveredOn}`
         : "Your order is delivered";
+  } else if (status === "Awaiting Confirmation") {
+    headline = "Awaiting confirmation from the Foundation desk";
   } else if (pickup && current?.id === "ready") {
     headline = "Ready for pickup at the Foundation office";
   } else {

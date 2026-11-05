@@ -174,6 +174,8 @@ export interface OrderSettings {
   pickupEnabled: boolean;
   codEnabled: boolean;
   codFee: number;
+  /** "auto" confirms an order at once when every item is in stock; "manual" waits for the desk. */
+  confirmMode: "auto" | "manual";
   shippingFeeMode: "free" | "flat" | "per_item" | "free_above" | "courier_rate";
   flatFee: number;
   perItemFee: number;
@@ -321,6 +323,7 @@ export const defaultOrderSettings: OrderSettings = {
   pickupEnabled: true,
   codEnabled: false,
   codFee: 30,
+  confirmMode: "auto",
   shippingFeeMode: "free_above",
   flatFee: 49,
   perItemFee: 25,
@@ -490,6 +493,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     pickupEnabled: Boolean(merged.pickupEnabled),
     codEnabled: Boolean(merged.codEnabled),
     codFee: Math.max(0, finiteNumber(merged.codFee, defaultOrderSettings.codFee)),
+    confirmMode: merged.confirmMode === "manual" ? "manual" : "auto",
     shippingFeeMode: mode,
     flatFee: Math.max(0, finiteNumber(merged.flatFee, defaultOrderSettings.flatFee)),
     perItemFee: Math.max(0, finiteNumber(merged.perItemFee, defaultOrderSettings.perItemFee)),

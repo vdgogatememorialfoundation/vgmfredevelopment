@@ -64,6 +64,7 @@ import { LABEL_SIZES, getLabelSize, setLabelSize, type LabelSize } from "@/lib/a
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
   "Processing",
+  "Awaiting Confirmation",
   "Ordered",
   "Accepted",
   "Packed",
@@ -185,6 +186,7 @@ export function OrdersDashboard() {
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">{selectedIds.length} selected</span>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ordered", (id) => setOrderStatus(id, "Ordered"))}>Confirm</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
             setOrderStatus(id, "Packed");

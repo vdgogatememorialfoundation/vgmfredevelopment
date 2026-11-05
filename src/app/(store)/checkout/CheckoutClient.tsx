@@ -397,6 +397,8 @@ export default function CheckoutClient() {
         email: deliveryAddress.email,
         phone: deliveryAddress.phone,
       });
+    const firstStatus: Order["status"] =
+      orderSettings.confirmMode !== "manual" && orderItems.every((item) => !item.preorder) ? "Ordered" : "Awaiting Confirmation";
     const order: Order = {
       id,
       userId: account?.id ?? user?.id ?? "guest",
@@ -414,7 +416,7 @@ export default function CheckoutClient() {
       paidAt: payment.paid ? now : undefined,
       razorpayPaymentId: payment.paymentId,
       razorpayOrderId: payment.razorpayOrderId,
-      status: "Ordered",
+      status: firstStatus,
       channel: "online",
       storeCreditUsed: creditApplied || undefined,
       stockCommitted: false,
@@ -441,7 +443,7 @@ export default function CheckoutClient() {
       accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
       createdBy: user?.email ?? "guest checkout",
       history: [
-        { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
+        { at: now, status: firstStatus, note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
       ],
     };
     if (hosted || awaitingGateway) {

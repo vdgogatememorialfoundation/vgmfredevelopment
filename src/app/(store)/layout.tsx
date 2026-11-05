@@ -1,5 +1,6 @@
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import SiteDisclaimers from "@/components/layout/SiteDisclaimers";
 import AnnouncementTicker from "@/components/common/AnnouncementTicker";
 import BackToTop from "@/components/common/BackToTop";
 import WhatsAppQueryButton from "@/components/common/WhatsAppQueryButton";
@@ -58,6 +59,7 @@ export default function StoreLayout({
         <MaintenanceGate>
           <HydratePublishedSite initial={initial}>
             <PartnerDrawerProvider>
+            <SiteDisclaimers placement="top" />
             <div className="sticky top-0 z-50">
             <Header />
             <AnnouncementTicker />

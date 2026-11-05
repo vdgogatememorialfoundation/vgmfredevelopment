@@ -126,6 +126,7 @@ export interface Speaker {
   designation: string;
   topic: string;
   bio?: string;
+  photo?: string;
 }
 
 export interface ScheduleItem {
@@ -558,6 +559,7 @@ export interface Order {
     | "Pending"
     | "Paid"
     | "Processing"
+    | "Awaiting Confirmation"
     | "Ordered"
     | "Accepted"
     | "Packed"

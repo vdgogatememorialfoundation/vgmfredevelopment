@@ -3,6 +3,7 @@ import { SALUTATIONS } from "@/lib/admin-store";
 import { countryByCode } from "@/lib/geo";
 import { usePlatformCountries } from "@/lib/use-platform-countries";
 import { useSiteText } from "@/lib/use-site-text";
+import { builtinField, type BuiltinKey } from "@/lib/site-extras";
 
 interface DetailsFormProps {
   form: {
@@ -32,6 +33,9 @@ export default function DetailsForm({
 }: DetailsFormProps) {
   const [sameAsPhone, setSameAsPhone] = useState(true);
   const signup = useSiteText().signup;
+  const f = (key: BuiltinKey) => builtinField(signup, key);
+  const shown = (key: BuiltinKey) => f(key).mode !== "hidden";
+  const opt = (key: BuiltinKey) => (f(key).mode === "optional" && !/optional/i.test(f(key).label) ? " (optional)" : "");
   const extra = readExtra(form.extraFields);
   const setExtra = (id: string, value: string) => onChange("extraFields", JSON.stringify({ ...extra, [id]: value }));
   const { countries, allowInternational } = usePlatformCountries();
@@ -53,9 +57,9 @@ export default function DetailsForm({
       noValidate
     >
       <div className="grid gap-5 sm:grid-cols-2">
-        <div>
+        {shown("salutation") ? <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="salutation">
-            Salutation
+            {f("salutation").label}
           </label>
           <select
             id="salutation"
@@ -67,42 +71,43 @@ export default function DetailsForm({
               <option key={item}>{item}</option>
             ))}
           </select>
-        </div>
+        </div> : null}
         <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="first-name">
-            First Name
+            {f("firstName").label}
           </label>
           <input
             id="first-name"
             type="text"
-            placeholder="Enter first name"
+            placeholder={f("firstName").placeholder}
             value={form.firstName}
             onChange={(event) => onChange("firstName", event.target.value)}
             required
             className="input-field"
           />
         </div>
-        <div>
+        {shown("middleName") ? <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="middle-name">
-            Middle Name
+            {f("middleName").label}{opt("middleName")}
           </label>
           <input
             id="middle-name"
             type="text"
-            placeholder="Optional"
+            placeholder={f("middleName").placeholder}
             value={form.middleName}
             onChange={(event) => onChange("middleName", event.target.value)}
+            required={f("middleName").mode === "required"}
             className="input-field"
           />
-        </div>
+        </div> : null}
         <div>
           <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="last-name">
-            Last Name
+            {f("lastName").label}
           </label>
           <input
             id="last-name"
             type="text"
-            placeholder="Enter last name"
+            placeholder={f("lastName").placeholder}
             value={form.lastName}
             onChange={(event) => onChange("lastName", event.target.value)}
             required
@@ -113,12 +118,12 @@ export default function DetailsForm({
 
       <div className="mt-5">
         <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="email">
-          Email Address
+          {f("email").label}
         </label>
         <input
           id="email"
           type="email"
-          placeholder="name@example.com"
+          placeholder={f("email").placeholder}
           value={form.email}
           onChange={(event) => onChange("email", event.target.value)}
           required
@@ -155,12 +160,12 @@ export default function DetailsForm({
 
       <div className="mt-5">
         <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="phone">
-          Phone Number {allowInternational ? "(international)" : ""}
+          {f("phone").label} {allowInternational ? "(international)" : ""}
         </label>
         <input
           id="phone"
           type="tel"
-          placeholder={`${country.dial} 98765 43210`}
+          placeholder={f("phone").placeholder || `${country.dial} 98765 43210`}
           value={form.phone}
           onChange={(event) => {
             onChange("phone", event.target.value);
@@ -172,14 +177,14 @@ export default function DetailsForm({
         />
       </div>
 
-      <div className="mt-5">
+      {shown("alternatePhone") ? <div className="mt-5">
         <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="alternate-phone">
-          Alternate phone number
+          {f("alternatePhone").label}{opt("alternatePhone")}
         </label>
         <input
           id="alternate-phone"
           type="tel"
-          placeholder={`${country.dial} 98765 43210`}
+          placeholder={f("alternatePhone").placeholder || `${country.dial} 98765 43210`}
           value={form.alternatePhone}
           onChange={(event) => {
             setSameAsPhone(false);
@@ -201,21 +206,23 @@ export default function DetailsForm({
           />
           <span>Same as the phone number above</span>
         </label>
-      </div>
+      </div> : null}
 
       <div className="mt-5">
+        {shown("whatsapp") ? <>
         <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="whatsapp">
-          WhatsApp Number
+          {f("whatsapp").label}{opt("whatsapp")}
         </label>
         <input
           id="whatsapp"
           type="tel"
-          placeholder={`${country.dial} 98765 43210`}
+          placeholder={f("whatsapp").placeholder || `${country.dial} 98765 43210`}
           value={form.whatsapp}
           onChange={(event) => onChange("whatsapp", event.target.value)}
-          required
+          required={f("whatsapp").mode === "required"}
           className="input-field"
         />
+        </> : null}
 
         <p className="mt-2 text-xs text-text-muted">
           We use this number for order and ticket updates. One email and phone can create only one account.
@@ -288,12 +295,12 @@ export default function DetailsForm({
           className="mt-1 h-4 w-4 rounded border-border"
         />
         <span>
-          I agree to the Foundation&apos;s terms and privacy policy.
+          {signup?.terms || "I agree to the Foundation\u2019s terms and privacy policy."}
         </span>
       </label>
 
       <button type="submit" className="btn-primary mt-7 w-full" disabled={busy}>
-        {busy ? "Checking…" : "Continue & Verify"}
+        {busy ? "Checking…" : signup?.submit || "Continue & Verify"}
       </button>
     </form>
   );
