@@ -427,7 +427,10 @@ export function getPickupLocation() {
       "102, Ramprasad Chambers, 368/1, Jawaharlal Nehru Rd, near Kirad Hospital, above Shraddha Medicals, New Nana Peth, Pune, Maharashtra 411002";
     return { name: "Vaidya Gogate Memorial Foundation Clinic", address, phone: "093737 92952", contactName: "", contactPhone: "093737 92952", mapUrl: mapFor(address), hours };
   }
-  const address = [active.address, active.city, [active.state, active.pincode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const own = active.address.trim().replace(/[.,\s]+$/, "");
+  const address = /\b\d{6}\b/.test(own)
+    ? own
+    : [own, active.city, [active.state, active.pincode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
   return {
     name: active.name,
     address,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addToCart,
   getEstimatedDeliveryDate,
@@ -14,6 +14,7 @@ import { checkPincode, getOriginPincode, getPickupLocation, type DeliveryQuote }
 import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { useOrderSettings } from "@/lib/use-cms";
+import { useSavedAddresses } from "@/lib/account-wallet";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { Book, CourierRate } from "@/types";
 
@@ -31,6 +32,9 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const [couriers, setCouriers] = useState<CourierPromise[]>([]);
   const [ratesBusy, setRatesBusy] = useState(false);
   const orderSettings = useOrderSettings();
+  const saved = useSavedAddresses(user?.email);
+  const [addressId, setAddressId] = useState("");
+  const autoChecked = useRef(false);
   const [notifyEmail, setNotifyEmail] = useState("");
   const [notifyNote, setNotifyNote] = useState("");
 
@@ -64,14 +68,14 @@ export default function ProductBuyBox({ book }: { book: Book }) {
     });
   };
 
-  const checkDelivery = () => {
-    setEstimate(checkPincode(pincode, book.id, quantity));
+  const checkDelivery = (code = pincode) => {
+    setEstimate(checkPincode(code, book.id, quantity));
     setCouriers([]);
-    if (/^\d{6}$/.test(pincode)) {
+    if (/^\d{6}$/.test(code)) {
       setRatesBusy(true);
-      const same = pincode === getOriginPincode();
+      const same = code === getOriginPincode();
       fetchCourierRates({
-        deliveryPincode: pincode,
+        deliveryPincode: code,
         weightKg: orderWeightKg({ items: [{ bookId: book.id, title: book.title, quantity, price: book.price, currency: "INR" }] }),
         declaredValue: book.price * quantity,
         bookIds: [book.id],
@@ -95,6 +99,21 @@ export default function ProductBuyBox({ book }: { book: Book }) {
     }
     setChecked(true);
   };
+
+  useEffect(() => {
+    if (autoChecked.current || !saved.length) return;
+    const chosen = saved.find((item) => item.isDefault) ?? saved[0];
+    const code = chosen.pincode.replace(/\D/g, "").slice(0, 6);
+    if (code.length !== 6) return;
+    const timer = window.setTimeout(() => {
+      autoChecked.current = true;
+      setAddressId(chosen.id);
+      setPincode(code);
+      checkDelivery(code);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved]);
 
   return (
     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
@@ -157,6 +176,29 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </span>
         </div>
 
+        {saved.length > 0 && (
+          <select
+            aria-label="Deliver to a saved address"
+            value={addressId}
+            onChange={(e) => {
+              const chosen = saved.find((item) => item.id === e.target.value);
+              setAddressId(e.target.value);
+              if (!chosen) return;
+              const code = chosen.pincode.replace(/\D/g, "").slice(0, 6);
+              setPincode(code);
+              checkDelivery(code);
+            }}
+            className="input-field mt-3 py-2.5 text-xs"
+          >
+            <option value="">Deliver to a saved address…</option>
+            {saved.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.fullName} · {[item.line1, item.city].filter(Boolean).join(", ")} · {item.pincode}
+              </option>
+            ))}
+          </select>
+        )}
+
         <div className="mt-3 flex gap-2">
           <input
             type="text"
@@ -166,6 +208,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             value={pincode}
             onChange={(e) => {
               setPincode(e.target.value.replace(/\D/g, "").slice(0, 6));
+              setAddressId("");
               setChecked(false);
             }}
             onKeyDown={(e) => {
@@ -175,7 +218,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           />
           <button
             type="button"
-            onClick={checkDelivery}
+            onClick={() => checkDelivery()}
             className="btn-secondary shrink-0 px-4 py-2.5 text-xs"
           >
             Check
