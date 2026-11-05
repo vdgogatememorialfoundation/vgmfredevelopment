@@ -690,7 +690,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
       ...order,
       paymentStatus: refundAmount >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: `RF${Date.now()}`, at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", note, by: currentActor() }],
     },
     "Store credit issued",
     `₹${refundAmount} · balance ₹${balance}`
@@ -787,7 +787,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
       ...order,
       paymentStatus: refundAmount + (order.refundAmount ?? 0) >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: `RF${Date.now()}`, at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor() }],
     },
     "Refunded",
     note ?? `₹${refundAmount}`
@@ -895,7 +895,7 @@ export function createShipment(input: {
   if (!order || order.deliveryMode !== "delivery") return;
 
   const shipment: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier: input.courier,
     awb: generateAWB(input.courier),

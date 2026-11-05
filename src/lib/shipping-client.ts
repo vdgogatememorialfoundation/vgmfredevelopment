@@ -276,7 +276,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   }
 
   const base: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier: choice.courierName,
     awb: "",
@@ -386,7 +386,7 @@ export async function attachDirectTracking(orderId: string, courierId: string, a
   const courierInfo = directCourier(courierId);
   const courier = courierName.trim() || courierInfo?.label || "Courier";
   const shipment: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier,
     awb: trackingId,
@@ -427,7 +427,7 @@ export async function attachManualTracking(orderId: string, portal: (typeof MANU
   }
   const courier = customerCourierLabel({ provider: portal, courier: result.courierName || courierName || label(portal) });
   const shipment: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier,
     awb: result.awb || trackingId,

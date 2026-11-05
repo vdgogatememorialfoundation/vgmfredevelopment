@@ -359,7 +359,7 @@ export function EventRecordsDesk({ kind }: { kind: EventRecordKind }) {
         for (const item of config.fields) {
           record[item.key] = item.kind === "select" ? item.options?.[0] ?? "" : "";
         }
-        if (kind === "tickets") record.code = `TKT-${Date.now().toString().slice(-6)}`;
+        if (kind === "tickets") record.code = String(Math.floor(100000000000 + Math.random() * 900000000000));
         return record;
       }}
       onSave={(record) => saveEventRecord(kind, record)}

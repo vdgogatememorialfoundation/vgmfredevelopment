@@ -317,5 +317,5 @@ export function demoAccountId() {
 export function demoApplicationId() {
   const year = new Date().getFullYear();
   const suffix = Math.floor(100000 + Math.random() * 900000);
-  return `VGMF-${year}-${suffix}`;
+  return `${year}${suffix}`;
 }
