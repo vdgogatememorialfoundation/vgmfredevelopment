@@ -601,7 +601,8 @@ export interface Order {
   createdBy?: string;
   cancelReason?: string;
   refundAmount?: number;
-  history?: { at: string; status: string; note?: string; by?: string }[];
+  /** `custom` is the tracking step id an admin-added status shows under. */
+  history?: { at: string; status: string; note?: string; by?: string; custom?: string }[];
 }
 
 export interface RefundRecord {

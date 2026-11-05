@@ -10,6 +10,7 @@ import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store
 import { useOrderSettings } from "@/lib/use-cms";
 import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
+import { orderStatusText } from "@/lib/integrations";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import { customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
@@ -44,7 +45,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
         <>
           <h1 className="mt-4 text-xl font-semibold text-text-primary">Order {order.id}</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Placed {formatDate(order.date)} · {order.status}
+            Placed {formatDate(order.date)} · {orderStatusText(order.status)}
           </p>
           <div className="mt-5">
       <div className="border-t border-border bg-warm-cream/40 p-5 sm:p-6">

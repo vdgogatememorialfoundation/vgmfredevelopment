@@ -1362,6 +1362,32 @@ export function OrderSettingsDesk() {
           {value.codEnabled && <Text label="COD fee (₹)" type="number" value={value.codFee} onChange={(fee) => set({ codFee: Number(fee) || 0 })} />}
         </div>
       </Card>
+      <Card title="Order status names & extra tracking statuses" text="Rename any status or tracking step the customer sees (leave blank to keep the built-in name). Extra statuses are added by the desk from an order's Status box and show inside the chosen tracking step.">
+        <div className="grid gap-3 md:grid-cols-3">
+          {["Awaiting Confirmation", "Ordered", "Packed", "Shipped", "Out for Delivery", "Delivered", "Ready for Pickup", "Picked Up", "Failed", "Cancelled"].map((name) => (
+            <Text key={name} label={name} placeholder={name} value={value.statusLabels[name] ?? ""} onChange={(text) => set({ statusLabels: { ...value.statusLabels, [name]: text } })} />
+          ))}
+        </div>
+        <div className="mt-5 space-y-2">
+          {value.customStatuses.map((row, index) => (
+            <div key={row.id} className="flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1">
+                <Text label="Extra status" placeholder="e.g. Reached Pune hub" value={row.label} onChange={(label) => set({ customStatuses: value.customStatuses.map((item, at) => (at === index ? { ...item, label } : item)) })} />
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Shows under</span>
+                <select className={input} value={row.stage} onChange={(event) => set({ customStatuses: value.customStatuses.map((item, at) => (at === index ? { ...item, stage: event.target.value } : item)) })}>
+                  {[["ordered", "Ordered"], ["packed", "Packed"], ["shipped", "Shipped"], ["out", "Out for Delivery"], ["delivered", "Delivered"], ["ready", "Ready for Pickup"], ["picked", "Picked Up"]].map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="px-2 py-2 text-sm font-semibold text-red-600" onClick={() => set({ customStatuses: value.customStatuses.filter((_, at) => at !== index) })}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className={primary} onClick={() => set({ customStatuses: [...value.customStatuses, { id: String(Date.now()), label: "", stage: "shipped" }] })}>+ Add status</button>
+        </div>
+      </Card>
       <Card title="Shipping fee">
         <div className="space-y-2">
           {feeModes.map((mode) => (

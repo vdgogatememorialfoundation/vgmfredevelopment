@@ -1,6 +1,7 @@
 import type { Order, ShipmentEvent, ShipmentRecord } from "@/types";
 import { customerCourierLabel } from "@/lib/courier-label";
 import { siteConfig, storeConfig } from "@/lib/constants";
+import { getOrderSettings, orderStatusText } from "@/lib/integrations";
 
 /** Deterministic 6-digit pickup OTP derived from the order id. */
 export function pickupOtp(orderId: string): string {
@@ -295,7 +296,7 @@ export function buildTrackingStages(
         )
       );
     }
-    return tally(stages);
+    return tally(stages, order);
   }
 
   if (order.deliveryMode === "store_pickup") {
@@ -365,7 +366,7 @@ export function buildTrackingStages(
         picked
       ),
     ];
-    return tally(holdBeforeNext(stages));
+    return tally(holdBeforeNext(stages), order);
   }
 
   const shipmentBooked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.status));
@@ -515,11 +516,11 @@ export function buildTrackingStages(
 
   if (failedReached) {
     stages.push(makeStage("failed", "Failed", "Delivery failed", failedEvents, true));
-    return tally(stages.filter((stage) => stage.reached || stage.id === "failed"));
+    return tally(stages.filter((stage) => stage.reached || stage.id === "failed"), order);
   }
   stages.push(makeStage("delivered", "Delivered", "Delivered to the address", deliveredEvents, deliveredReached));
 
-  return tally(holdBeforeNext(stages));
+  return tally(holdBeforeNext(stages), order);
 }
 
 /** The current step stays open so the line moves toward the next one and stops before it. */
@@ -536,7 +537,15 @@ function holdBeforeNext(stages: TrackingStage[]) {
   return copy;
 }
 
-function tally(stages: TrackingStage[]) {
+function tally(stages: TrackingStage[], order?: Order) {
+  const { statusLabels } = getOrderSettings();
+  (order?.history ?? []).forEach((item, index) => {
+    if (!item.custom) return;
+    const stage = stages.find((row) => row.id === item.custom) ?? [...stages].reverse().find((row) => row.reached);
+    stage?.events.push({ id: `custom-${index}`, title: item.status, at: item.at, reached: true, detail: item.note });
+    stage?.events.sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")));
+  });
+  for (const stage of stages) stage.label = orderStatusText(stage.label, statusLabels);
   const totalEvents = Math.max(1, stages.length);
   const reachedEvents = stages.filter((stage) => stage.reached).length + (stages.some((stage) => stage.partial) ? 0.45 : 0);
   return { stages, reachedEvents, totalEvents };

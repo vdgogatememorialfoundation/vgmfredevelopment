@@ -1268,6 +1268,14 @@ function tookanDatetime(from = new Date(), extraHours = 4) {
   return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())} ${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
 }
 
+/** Tookan's message, plus what to do when no hub covers the address. */
+function tookanError(data: Json, fallback: string) {
+  const message = String(data.message ?? fallback);
+  return /hub/i.test(message)
+    ? `${message}. No Tookan hub covers this address: in Tookan, open Hubs and add a hub (linked to your team) whose radius covers the pickup and delivery pincodes.`
+    : message;
+}
+
 const tookanStatusLabel: Record<number, string> = {
   0: "Assigned",
   1: "Started",
@@ -1329,7 +1337,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
         ],
       },
     });
-    if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the parcel task."));
+    if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the parcel task."));
     const task = (data.data as Json) ?? {};
     return {
       provider: "tookan-parcel",
@@ -1366,7 +1374,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
       timezone: -330,
     },
   });
-  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the hyperlocal task."));
+  if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the hyperlocal task."));
   const task = (data.data as Json) ?? {};
   const pickupId = String(task.pickup_job_id ?? task.job_id ?? "");
   const deliveryId = String(task.delivery_job_id ?? task.job_id ?? "");

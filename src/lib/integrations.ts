@@ -184,6 +184,10 @@ export interface OrderSettings {
   /** Keep our own Tookan / Shipday fleet off the checkout courier list. */
   hideTookanAtCheckout: boolean;
   hideShipdayAtCheckout: boolean;
+  /** Customer-facing names for statuses and tracking steps, keyed by the built-in name. */
+  statusLabels: Record<string, string>;
+  /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
+  customStatuses: { id: string; label: string; stage: string }[];
   returns: {
     enabled: boolean;
     windowDays: number;
@@ -334,6 +338,8 @@ export const defaultOrderSettings: OrderSettings = {
   showCourierChoice: true,
   hideTookanAtCheckout: false,
   hideShipdayAtCheckout: false,
+  statusLabels: {},
+  customStatuses: [],
   returns: {
     enabled: false,
     windowDays: 7,
@@ -506,6 +512,16 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     showCourierChoice: Boolean(merged.showCourierChoice),
     hideTookanAtCheckout: Boolean(merged.hideTookanAtCheckout),
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
+    statusLabels: Object.fromEntries(
+      Object.entries(merged.statusLabels && typeof merged.statusLabels === "object" ? merged.statusLabels : {})
+        .map(([key, text]) => [key, String(text ?? "").trim()])
+        .filter(([, text]) => text)
+    ),
+    customStatuses: Array.isArray(merged.customStatuses)
+      ? merged.customStatuses
+          .filter((row) => row && typeof row === "object")
+          .map((row, index) => ({ id: String(row.id || index + 1), label: String(row.label ?? ""), stage: String(row.stage || "shipped") }))
+      : [],
     returns: {
       enabled: false,
       windowDays: Math.max(0, finiteNumber(merged.returns?.windowDays, defaultOrderSettings.returns.windowDays)),
@@ -555,6 +571,12 @@ export function commerceCharges(subtotal: number, settings = getOrderSettings())
 
 export function getOrderSettings(): OrderSettings {
   return publicOrderSettings(readJSON<Partial<OrderSettings> | null>(ORDER_SETTINGS_KEY, null));
+}
+
+/** The admin's name for a status or tracking step (case-insensitive), or the built-in name. */
+export function orderStatusText(status: string, labels = getOrderSettings().statusLabels) {
+  const key = Object.keys(labels ?? {}).find((name) => name.toLowerCase() === String(status).toLowerCase());
+  return (key && labels[key]) || status;
 }
 
 export function saveOrderSettings(settings: OrderSettings) {

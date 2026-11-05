@@ -25,7 +25,7 @@ import {
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
 import { getLiveBooks } from "@/lib/product-data";
-import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
+import { getIntegrations, getOrderSettings, orderStatusText, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
   attachDirectTracking,
@@ -59,7 +59,7 @@ import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesF
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
-import { LABEL_SIZES, getLabelSize, setLabelSize, type LabelSize } from "@/lib/admin-store";
+import { LABEL_SIZES, getLabelSize, getOrder as getStoredOrder, patchOrder as patchStoredOrder, setLabelSize, type LabelSize } from "@/lib/admin-store";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
@@ -638,6 +638,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState<Order["status"]>(order.status);
+  const [extraId, setExtraId] = useState("");
+  const extraStatuses = getOrderSettings().customStatuses.filter((row) => row.label.trim());
   const [method, setMethod] = useState("UPI");
   const [reference, setReference] = useState("");
   const refundCap = maxRefundable(order);
@@ -832,11 +834,36 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <div className="flex flex-wrap gap-2">
             <div className="min-w-44 flex-1">
               <SelectInput value={status} onChange={(event) => setStatus(event.target.value as Order["status"])}>
-                {ALL_STATUSES.map((item) => <option key={item}>{item}</option>)}
+                {ALL_STATUSES.map((item) => <option key={item} value={item}>{orderStatusText(item)}</option>)}
               </SelectInput>
             </div>
             <Button onClick={applyStatus} disabled={busy === "status" || status === order.status}>{busy === "status" ? "Saving…" : "Update status"}</Button>
           </div>
+          {extraStatuses.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <div className="min-w-44 flex-1">
+                <SelectInput value={extraId} onChange={(event) => setExtraId(event.target.value)}>
+                  <option value="">Add a tracking update…</option>
+                  {extraStatuses.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
+                </SelectInput>
+              </div>
+              <Button
+                disabled={!extraId || busy === "extra"}
+                onClick={() =>
+                  run("extra", () => {
+                    const row = extraStatuses.find((item) => item.id === extraId);
+                    if (!row) return;
+                    const latest = getStoredOrder(order.id) ?? order;
+                    patchStoredOrder(order.id, { history: [...(latest.history ?? []), { at: new Date().toISOString(), status: row.label, by: "admin", custom: row.stage }] });
+                    setExtraId("");
+                    return `Tracking update "${row.label}" added. The customer sees it in their tracking.`;
+                  })
+                }
+              >
+                Add update
+              </Button>
+            </div>
+          )}
           {order.status !== "Cancelled" && (
             <div className="mt-3 rounded-lg border border-red-100 bg-red-50/60 p-3">
               <p className="text-xs font-semibold text-red-800">Cancel this order</p>
