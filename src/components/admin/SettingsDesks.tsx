@@ -152,6 +152,8 @@ function minutesFromNow(minutes: number) {
   return new Date(Date.now() + minutes * 60000).toISOString();
 }
 
+type PickupLocation = { nickname: string; city: string; pincode: string; phone?: string; address?: string };
+
 export function GeneralSettingsDesk() {
   const [settings, setSettings] = useState<SiteSettings>(() => getSettings());
   const [note, setNote] = useState("");
@@ -215,6 +217,46 @@ export function GeneralSettingsDesk() {
             />
           ))}
         </div>
+      </Card>
+
+      <Card title="Shloka strip" text="A slim line above the header for shlokas, quotes or a welcome. Put one per line; several lines take turns every few seconds. Saving publishes it with the rest of the site.">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={Boolean(settings.shlokaBar)} onChange={(event) => set({ shlokaBar: event.target.checked })} />
+          Show the strip above the header
+        </label>
+        <textarea
+          rows={4}
+          className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+          placeholder={"सर्वे भवन्तु सुखिनः सर्वे सन्तु निरामयाः ।\nधर्मार्थकाममोक्षाणाम् आरोग्यं मूलमुत्तमम् ।"}
+          value={(settings.shlokas ?? []).join("\n")}
+          onChange={(event) => set({ shlokas: event.target.value.split("\n") })}
+        />
+      </Card>
+
+      <Card title="WhatsApp query button" text="A round WhatsApp button on the right side of every public page. Visitors tap it to message this number. Saving publishes it with the rest of the site.">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={Boolean(settings.queryButton)} onChange={(event) => set({ queryButton: event.target.checked })} />
+          Show the WhatsApp button
+        </label>
+        <label className="mt-3 block text-sm text-slate-700">
+          WhatsApp number with country code
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+            placeholder="919876543210"
+            inputMode="tel"
+            value={settings.queryNumber ?? ""}
+            onChange={(event) => set({ queryNumber: event.target.value })}
+          />
+        </label>
+        <label className="mt-3 block text-sm text-slate-700">
+          First message (optional)
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+            placeholder="Namaskar, I have a question about…"
+            value={settings.queryMessage ?? ""}
+            onChange={(event) => set({ queryMessage: event.target.value })}
+          />
+        </label>
       </Card>
 
       <Card title="Announcement ticker" text="How fast the bar under the header moves. A lower number is faster. Saving publishes it with the rest of the site.">
@@ -295,8 +337,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage };
 }
 
 /* ---------------- Payments ---------------- */
@@ -1001,8 +1043,17 @@ export function ShippingApisDesk() {
     setStamp((current) => current + 1);
   };
 
+  const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const pickup = value.pickup;
   const setPickup = (patch: Partial<typeof pickup>) => set({ pickup: { ...pickup, ...patch } });
+  const applyPickupLocation = (location: PickupLocation) =>
+    setPickup({
+      nickname: location.nickname,
+      city: location.city || pickup.city,
+      pincode: location.pincode || pickup.pincode,
+      phone: location.phone || pickup.phone,
+      line1: location.address || pickup.line1,
+    });
 
   return (
     <div className="space-y-5">
@@ -1026,6 +1077,24 @@ export function ShippingApisDesk() {
           <div className="space-y-3">
             <Secret label="Shipday API key" value={value.shipday.apiKey} onChange={(apiKey) => set({ shipday: { ...value.shipday, apiKey } })} />
             <button type="button" className={primary} disabled={busy === "shipday"} onClick={() => test("shipday")}>{busy === "shipday" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
+        <Card title="Courier website tracking" text="Orders sent with Amazon Shipping, Ekart, Delhivery, Blue Dart, DTDC, India Post and other couriers fetch their status from the courier's own tracking site. When a site gives no scans, this tracking service is asked instead." right={<Check label="Use" checked={value.tracker?.enabled !== false} onChange={(enabled) => set({ tracker: { ...(value.tracker ?? { service: "aftership", apiKey: "" }), enabled } })} />}>
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-slate-700">
+              Fallback tracking service
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                value={value.tracker?.service ?? "aftership"}
+                onChange={(event) => set({ tracker: { ...(value.tracker ?? { apiKey: "", enabled: true }), service: event.target.value as "aftership" | "trackingmore" | "17track" } })}
+              >
+                <option value="aftership">AfterShip</option>
+                <option value="trackingmore">TrackingMore</option>
+                <option value="17track">17TRACK</option>
+              </select>
+            </label>
+            <Secret label="Tracking service API key (optional)" value={value.tracker?.apiKey ?? ""} onChange={(apiKey) => set({ tracker: { ...(value.tracker ?? { service: "aftership", enabled: true }), apiKey } })} />
+            <p className="text-xs text-slate-500">Status is checked again every few minutes while customers, support or admin view the order.</p>
           </div>
         </Card>
         <Card title="Shiprocket" text="apidocs.shiprocket.in — Settings → API → Create an API user. Login, serviceability, adhoc order, assign AWB, generate pickup, label, invoice, manifest, track AWB, cancel and reverse pickup all use this account." badge={<ProviderStatus id="shiprocket" />} right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
@@ -1120,8 +1189,8 @@ export function ShippingApisDesk() {
                   setNote(`Shiprocket pickup list: ${result.error}`);
                   return;
                 }
-                const names = (result.locations ?? []).map((location) => `${location.nickname} (${location.city} ${location.pincode})`);
-                setNote(names.length ? `Shiprocket pickup locations: ${names.join(" · ")}` : "Shiprocket returned no pickup locations.");
+                setPickupLocations(result.locations ?? []);
+                setNote(result.locations?.length ? `Shiprocket has ${result.locations.length} pickup address(es). Pick one below.` : "Shiprocket returned no pickup locations.");
               }}
             >
               List locations
@@ -1129,6 +1198,24 @@ export function ShippingApisDesk() {
           </div>
         }
       >
+        {pickupLocations.length ? (
+          <div className="mb-4 space-y-2">
+            <p className="text-sm font-medium text-text-primary">Pickup addresses on Shiprocket</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {pickupLocations.map((location) => (
+                <button
+                  key={location.nickname}
+                  type="button"
+                  onClick={() => applyPickupLocation(location)}
+                  className={`rounded-xl border p-3 text-left text-sm ${location.nickname === pickup.nickname ? "border-burgundy bg-burgundy/5" : "border-border bg-white hover:border-burgundy"}`}
+                >
+                  <span className="block font-semibold text-text-primary">{location.nickname}{location.nickname === pickup.nickname ? " · in use" : ""}</span>
+                  <span className="block text-text-muted">{[location.address, location.city, location.pincode].filter(Boolean).join(", ")}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-3">
           <Text label="Nickname" value={pickup.nickname} onChange={(nickname) => setPickup({ nickname })} />
           <Text label="Contact name" value={pickup.contactName} onChange={(contactName) => setPickup({ contactName })} />
@@ -1268,8 +1355,38 @@ export function OrderSettingsDesk() {
           <Check label="Home delivery" checked={value.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} />
           <Check label="Pickup from store" checked={value.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} />
           <Check label="Customer chooses the delivery partner" hint="Shows couriers and rates at checkout." checked={value.showCourierChoice} onChange={(showCourierChoice) => set({ showCourierChoice })} />
+          <Check label="Hide Gogate Products-Tookan at checkout" checked={value.hideTookanAtCheckout} onChange={(hideTookanAtCheckout) => set({ hideTookanAtCheckout })} />
+          <Check label="Hide Gogate Products-Shipday at checkout" checked={value.hideShipdayAtCheckout} onChange={(hideShipdayAtCheckout) => set({ hideShipdayAtCheckout })} />
+          <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
+          <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
           {value.codEnabled && <Text label="COD fee (₹)" type="number" value={value.codFee} onChange={(fee) => set({ codFee: Number(fee) || 0 })} />}
+        </div>
+      </Card>
+      <Card title="Order status names & extra tracking statuses" text="Rename any status or tracking step the customer sees (leave blank to keep the built-in name). Extra statuses are added by the desk from an order's Status box and show inside the chosen tracking step.">
+        <div className="grid gap-3 md:grid-cols-3">
+          {["Awaiting Confirmation", "Ordered", "Packed", "Shipped", "Out for Delivery", "Delivered", "Ready for Pickup", "Picked Up", "Failed", "Cancelled"].map((name) => (
+            <Text key={name} label={name} placeholder={name} value={value.statusLabels[name] ?? ""} onChange={(text) => set({ statusLabels: { ...value.statusLabels, [name]: text } })} />
+          ))}
+        </div>
+        <div className="mt-5 space-y-2">
+          {value.customStatuses.map((row, index) => (
+            <div key={row.id} className="flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1">
+                <Text label="Extra status" placeholder="e.g. Reached Pune hub" value={row.label} onChange={(label) => set({ customStatuses: value.customStatuses.map((item, at) => (at === index ? { ...item, label } : item)) })} />
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Shows under</span>
+                <select className={input} value={row.stage} onChange={(event) => set({ customStatuses: value.customStatuses.map((item, at) => (at === index ? { ...item, stage: event.target.value } : item)) })}>
+                  {[["ordered", "Ordered"], ["packed", "Packed"], ["shipped", "Shipped"], ["out", "Out for Delivery"], ["delivered", "Delivered"], ["ready", "Ready for Pickup"], ["picked", "Picked Up"]].map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="px-2 py-2 text-sm font-semibold text-red-600" onClick={() => set({ customStatuses: value.customStatuses.filter((_, at) => at !== index) })}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className={primary} onClick={() => set({ customStatuses: [...value.customStatuses, { id: String(Date.now()), label: "", stage: "shipped" }] })}>+ Add status</button>
         </div>
       </Card>
       <Card title="Shipping fee">

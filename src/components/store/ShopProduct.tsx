@@ -7,6 +7,7 @@ import BookCard from "@/components/books/BookCard";
 import ProductBuyBox from "@/components/store/ProductBuyBox";
 import MediaGallery from "@/components/store/MediaGallery";
 import ProductReviews from "@/components/store/ProductReviews";
+import BookDetails from "@/components/store/BookDetails";
 import Stars from "@/components/store/Stars";
 import { averageRating, useProductReviews } from "@/lib/reviews";
 import { useLiveBooks } from "@/lib/use-cms";
@@ -109,34 +110,13 @@ export default function ShopProduct({
       <section className="section bg-background">
         <div className="container mx-auto max-w-3xl">
           <h2 className="heading-3 mb-5">Product information</h2>
-          <p className="text-body">{book.description}</p>
-          {(book.specifications?.length ?? 0) > 0 && (
-            <div className="mt-10">
-              <h2 className="heading-3 mb-5">Specifications</h2>
-              <div className="overflow-hidden rounded-2xl border border-border bg-white">
-                <dl>
-                  {(book.specifications ?? []).map((spec, index) => (
-                    <div key={spec.label} className={`grid grid-cols-3 gap-4 px-5 py-3.5 text-sm ${index % 2 === 1 ? "bg-warm-cream/60" : ""}`}>
-                      <dt className="font-medium text-text-muted">{spec.label}</dt>
-                      <dd className="col-span-2 text-text-primary">{spec.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-          )}
+          <BookDetails book={book} />
           <div className="mt-10 grid gap-4 sm:grid-cols-3">
             {publisher && (
               <div className="rounded-xl border border-border bg-white p-4">
                 <dt className="text-xs text-text-muted">Publisher</dt>
                 <dd className="mt-1 text-sm font-semibold text-text-primary">{publisher}</dd>
                 {book.publisher?.address && <p className="mt-1 text-xs text-text-muted">{book.publisher.address}</p>}
-              </div>
-            )}
-            {book.isbn && (
-              <div className="rounded-xl border border-border bg-white p-4">
-                <dt className="text-xs text-text-muted">ISBN</dt>
-                <dd className="mt-1 text-sm font-semibold text-text-primary">{book.isbn}</dd>
               </div>
             )}
             {book.countryOfOrigin && (

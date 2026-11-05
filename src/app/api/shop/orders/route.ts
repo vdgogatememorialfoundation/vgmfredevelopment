@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
-import { deleteShopOrder, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
+import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
+import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
 import type { Order } from "@/types";
 
@@ -9,7 +10,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q") ?? "";
-  if (q) return NextResponse.json({ ok: true, orders: searchShopOrders(q) }, { headers: { "cache-control": "no-store" } });
+  if (q) {
+    if (!commerceViewer(request).portal) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
+    return NextResponse.json({ ok: true, orders: searchShopOrders(q) }, { headers: { "cache-control": "no-store" } });
+  }
   const id = request.nextUrl.searchParams.get("id") ?? "";
   const phone = request.nextUrl.searchParams.get("phone") ?? "";
   if (id && phone) {
@@ -24,7 +28,7 @@ export async function GET(request: NextRequest) {
       : viewer.email || viewer.phone || viewer.id
         ? ordersForAccount(viewer)
         : [];
-    return NextResponse.json({ ok: true, orders }, { headers: { "cache-control": "no-store" } });
+    return NextResponse.json({ ok: true, orders, deleted: deletedShopOrderIds() }, { headers: { "cache-control": "no-store" } });
   }
   return NextResponse.json({ ok: true, orders: [] }, { headers: { "cache-control": "no-store" } });
 }
@@ -45,5 +49,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Send the order." }, { status: 400 });
   }
   upsertShopOrder(order);
+  if (order.status === "Delivered") void issueDeliveryInvoice(order.id);
   return NextResponse.json({ ok: true });
 }

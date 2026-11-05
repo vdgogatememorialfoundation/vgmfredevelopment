@@ -1,5 +1,7 @@
+import { isCourierInfoLine } from "@/lib/order-pipeline";
+import { courierTrackingLink, directCourier } from "@/lib/couriers";
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
-import { customerCourierLabel, GOGATE_COURIER, isOwnFleet } from "@/lib/courier-label";
+import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
 import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
@@ -19,8 +21,21 @@ import { getLiveBooks } from "@/lib/product-data";
 type ShippingCreds = Record<string, Record<string, unknown>>;
 
 function credsFrom(settings: IntegrationSettings): ShippingCreds {
-  const { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday } = settings.shipping;
-  return { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday };
+  const { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday, tracker } = settings.shipping;
+  return { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday, tracker: tracker ?? {} };
+}
+
+/** Couriers without an API account: read scans from the courier's own site (or the saved tracking service). */
+async function trackDirect(shipment: ShipmentRecord) {
+  const result = await post<TrackHit>({
+    action: "track",
+    provider: "courier-site",
+    courier: shipment.directCourier,
+    awb: shipment.awb,
+    creds: credsFrom(getIntegrations()),
+  });
+  if (!result.ok) return null;
+  return { result, saved: applyTrackHit(shipment, { ...result, courierName: shipment.courier, trackingUrl: shipment.trackingUrl || result.trackingUrl }) };
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
@@ -49,13 +64,13 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
   if (hasShippingCredentials("tookan", settings)) {
     const tookan = settings.shipping.tookan;
     if (tookan.hyperlocal && sameCity) {
-      rates.push({ provider: "tookan", courierId: "tookan", courierName: GOGATE_COURIER, rate: 39, etaDays: 0, live: true });
+      rates.push({ provider: "tookan", courierId: "tookan", courierName: fleetCourierLabel("tookan"), rate: 39, etaDays: 0, live: true });
     }
     if (tookan.parcel && (!sameCity || !tookan.hyperlocal)) {
       rates.push({
         provider: "tookan-parcel",
         courierId: "tookan-parcel",
-        courierName: GOGATE_COURIER,
+        courierName: fleetCourierLabel("tookan-parcel"),
         rate: 45,
         etaDays: sameCity ? 1 : 3,
         live: true,
@@ -63,7 +78,7 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
     }
   }
   if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && sameCity) {
-    rates.push({ provider: "shipday", courierId: "shipday", courierName: GOGATE_COURIER, rate: 49, etaDays: 0, live: true });
+    rates.push({ provider: "shipday", courierId: "shipday", courierName: fleetCourierLabel("shipday"), rate: 49, etaDays: 0, live: true });
   }
   return rates;
 }
@@ -127,13 +142,13 @@ export async function fetchCourierRates(input: {
   cod?: boolean;
   declaredValue: number;
   bookIds?: string[];
+  pickupPincode?: string;
 }): Promise<RateQuote> {
   const settings = getIntegrations();
   const { shipping } = settings;
   const notes: string[] = [];
-  const wanted = CHECKOUT_PROVIDERS.filter(
-    (id) => shipping[id].enabled && hasShippingCredentials(id, settings)
-  );
+  // Keys may live only on the host (customer browsers never hold them); the server reports unconfigured accounts.
+  const wanted = CHECKOUT_PROVIDERS.filter((id) => shipping[id].enabled);
   let live: CourierRate[] = [];
   if (/^\d{6}$/.test(input.deliveryPincode) && wanted.length) {
     try {
@@ -142,7 +157,7 @@ export async function fetchCourierRates(input: {
         providers: wanted,
         creds: credsFrom(settings),
         parcel: {
-          pickupPincode: shipping.pickup.pincode,
+          pickupPincode: input.pickupPincode || shipping.pickup.pincode,
           deliveryPincode: input.deliveryPincode,
           weightKg: input.weightKg,
           cod: Boolean(input.cod),
@@ -189,7 +204,7 @@ export function pickRate(rates: CourierRate[], rule = getIntegrations().shipping
   return [...rates].sort((a, b) => a.rate - b.rate || a.etaDays - b.etaDays)[0];
 }
 
-function bookingPayload(order: Order, choice: CourierRate, settings: IntegrationSettings) {
+function bookingPayload(order: Order, choice: CourierRate, settings: IntegrationSettings, pickup = settings.shipping.pickup) {
   const address = order.deliveryAddress;
   const books = getLiveBooks();
   return {
@@ -214,7 +229,7 @@ function bookingPayload(order: Order, choice: CourierRate, settings: Integration
       state: address?.state ?? "",
       pincode: address?.pincode ?? "",
     },
-    pickup: settings.shipping.pickup,
+    pickup,
     items: order.items.map((item) => ({
       name: item.title,
       sku: books.find((book) => book.id === item.bookId)?.sku ?? item.bookId,
@@ -237,7 +252,7 @@ function statusAfterBooking(status: Order["status"]): Order["status"] {
  * aggregator charges its wallet for the AWB; the ledger keeps what the
  * customer paid next to what the courier cost.
  */
-export async function bookShipment(orderId: string, override?: CourierRate): Promise<BookingResult> {
+export async function bookShipment(orderId: string, override?: CourierRate, pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>): Promise<BookingResult> {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not need a courier.");
@@ -245,6 +260,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
 
   const settings = getIntegrations();
+  const pickup = { ...settings.shipping.pickup, ...pickupOverride };
   let choice = override ?? order.courierChoice;
   if (!choice) {
     const quote = await fetchCourierRates({
@@ -261,7 +277,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   }
 
   const base: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier: choice.courierName,
     awb: "",
@@ -299,7 +315,7 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
     action: "book",
     provider: choice.provider,
     creds: credsFrom(settings),
-    order: bookingPayload(order, choice, settings),
+    order: bookingPayload(order, choice, settings, pickup),
     schedulePickup: settings.shipping.autoSchedulePickup,
   });
   if (!result.ok || !result.awb) {
@@ -361,6 +377,38 @@ export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "t
 ];
 
 /** Attach a parcel that was shipped outside Pack & book. The portal is asked for scans and the delivery time. */
+/** Parcel sent with a courier that has no connected API: keep its id, tracking page and manual updates. */
+export async function attachDirectTracking(orderId: string, courierId: string, awb: string, courierName = "") {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
+  const trackingId = awb.trim();
+  if (trackingId.length < 3) throw new Error("Paste the tracking id from the courier.");
+  const courierInfo = directCourier(courierId);
+  const courier = courierName.trim() || courierInfo?.label || "Courier";
+  const shipment: ShipmentRecord = {
+    id: String(Date.now()),
+    orderId: order.id,
+    courier,
+    awb: trackingId,
+    charges: 0,
+    toAddress: { ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "" }) },
+    items: order.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
+    status: "Booked",
+    generatedAt: new Date().toISOString(),
+    live: false,
+    directCourier: courierInfo?.id ?? "other",
+    trackingUrl: courierTrackingLink(courierInfo?.id, trackingId) || undefined,
+    note: `Sent with ${courier}.`,
+    tracking: [{ at: new Date().toISOString(), status: `Handed to ${courier}` }],
+  };
+  saveShipmentRecord(shipment);
+  patchOrder(order.id, { shipmentId: shipment.id, trackingId, courierName: courier }, `Tracking ${trackingId} attached from ${courier}`);
+  const fetched = await trackDirect(shipment).catch(() => null);
+  if (fetched?.result.status) return `${courier} · ${trackingId} attached. Latest from ${courier}: ${fetched.result.status}. Status updates are fetched automatically.`;
+  return `${courier} · ${trackingId} attached. ${shipment.trackingUrl ? "No scans on the courier site yet; they are fetched automatically." : "Add status updates from the shipment as they come in."}`;
+}
+
 export async function attachManualTracking(orderId: string, portal: (typeof MANUAL_PORTALS)[number]["id"], awb: string, courierName = "") {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
@@ -380,7 +428,7 @@ export async function attachManualTracking(orderId: string, portal: (typeof MANU
   }
   const courier = customerCourierLabel({ provider: portal, courier: result.courierName || courierName || label(portal) });
   const shipment: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier,
     awb: result.awb || trackingId,
@@ -650,6 +698,7 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
     providerOrderId?: string;
     providerShipmentId?: string;
     courierCost?: number;
+    labelUrl?: string;
   }>({
     action: "return",
     provider,
@@ -669,6 +718,7 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
     courierName: result.courierName,
     providerOrderId: result.providerOrderId,
     providerShipmentId: result.providerShipmentId,
+    labelUrl: result.labelUrl || undefined,
     note: `Return booked on ${label(provider)}. AWB ${result.awb}.`,
   };
 }
@@ -676,14 +726,16 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
 const statusOrder: ShipmentRecord["status"][] = ["Booked", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
 
 function mapCourierStatus(text: string): ShipmentRecord["status"] | undefined {
-  const value = text.toLowerCase();
-  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed)\b/.test(value)) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ");
+  if (isCourierInfoLine(value)) return undefined;
+  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|incomplete)\b/.test(value)) {
     return "Failed";
   }
-  if (value.includes("deliver") && !value.includes("out") && !value.includes("un") && !value.includes("fail")) return "Delivered";
-  if (value.includes("out for")) return "Out for Delivery";
+  if (/\b(already delivered|delivered|successful|completed)\b/.test(value) && !/\b(attempt|fail|undeliver)\b/.test(value)) return "Delivered";
+  if (/\b(out for delivery|ready to deliver|started|in progress|on the way)\b/.test(value)) return "Out for Delivery";
   if (value.includes("transit") || value.includes("shipped") || value.includes("dispatch")) return "In Transit";
-  if (value.includes("picked")) return "Picked Up";
+  if (/\bpicked/.test(value)) return "Picked Up";
+  if (/\b(not assigned|not accepted|not started|booked)\b/.test(value)) return "Booked";
   return undefined;
 }
 
@@ -739,7 +791,8 @@ function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
   if (result.dropLat != null) update.dropLat = result.dropLat;
   if (result.dropLng != null) update.dropLng = result.dropLng;
   if (result.agentLeg) update.agentLeg = result.agentLeg;
-  if (result.expectedBy) update.expectedBy = result.expectedBy;
+  if (mapped === "Delivered") update.expectedBy = "";
+  else if (result.expectedBy) update.expectedBy = result.expectedBy;
   if (result.accepted === false) {
     update.agentName = "";
     update.agentPhone = "";
@@ -766,10 +819,16 @@ export async function trackShipment(shipmentId: string) {
       awb: shipment.awb,
       providerOrderId: shipment.providerOrderId,
       providerShipmentId: shipment.providerShipmentId,
+      orderNumber: shipment.orderId,
     });
     if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
     applyTrackHit(shipment, result);
     return result.status || "No scan yet.";
+  }
+  if (shipment.directCourier) {
+    const fetched = await trackDirect(shipment);
+    if (!fetched) return `${shipment.status} · ${shipment.courier} has no new scans on its site yet.`;
+    return fetched.result.status || fetched.saved.status;
   }
   return shipment.status;
 }
@@ -777,6 +836,18 @@ export async function trackShipment(shipmentId: string) {
 export async function pingLiveAgent(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
+  if (!shipment.live && shipment.directCourier) {
+    const fetched = await trackDirect(shipment).catch(() => null);
+    if (fetched) {
+      return {
+        status: fetched.result.status || fetched.saved.status,
+        events: fetched.saved.tracking ?? [],
+        trackingUrl: publicTrackingUrl(fetched.saved),
+        lat: undefined,
+        lng: undefined,
+      };
+    }
+  }
   if (!shipment.live || !shipment.provider || shipment.provider === "local") {
     return {
       status: shipment.status,
@@ -793,6 +864,7 @@ export async function pingLiveAgent(shipmentId: string) {
     awb: shipment.awb,
     providerOrderId: shipment.providerOrderId,
     providerShipmentId: shipment.providerShipmentId,
+    orderNumber: shipment.orderId,
   });
   if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
   const saved = applyTrackHit(shipment, result);

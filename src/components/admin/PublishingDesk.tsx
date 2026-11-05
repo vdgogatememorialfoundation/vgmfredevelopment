@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { verifyCertificate } from "@/lib/certificates-client";
@@ -43,13 +43,25 @@ import {
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
 import { useAllArticles, useLiveAnnouncements, useLiveEvents } from "@/lib/use-cms";
-import type { Announcement, Article, ArticleAssignment, ArticleLocaleCopy, ArticleStatus, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
+import type { Announcement, Article, ArticleAssignment, ArticleLocaleCopy, ArticleStatus, ArticleStyle, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { ShareBar } from "@/components/common/ShareBar";
 import { articlePublicUrl, articleShareText } from "@/lib/article-display";
 import { getSession } from "@/lib/auth";
 import { displayName } from "@/lib/admin-store";
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
+import {
+  ArticleImportButton,
+  ArticleStyleControls,
+  PublisherLine,
+  RichTextToolbar,
+  exportArticles,
+  notifyArticlePublished,
+  notifyArticleReturned,
+  publisherName,
+  runBulkAction,
+  type BulkAction,
+} from "@/components/admin/ArticleTools";
 import { EventLocationField } from "@/components/events/EventLocationField";
 import type { OrderStatus } from "@/lib/admin-store";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/schedule";
@@ -95,7 +107,7 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const existing = articleId ? getArticle(articleId) : undefined;
   const session = getSession();
   const isAdmin = session?.role === "admin";
-  const [email, setEmail] = useState(() => session?.email ?? "admin@vaidyagogate.org");
+  const [email] = useState(() => session?.email ?? "admin@vaidyagogate.org");
   const [title, setTitle] = useState(existing?.title ?? assignment?.title ?? "");
   const [excerpt, setExcerpt] = useState(existing?.excerpt ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
@@ -112,6 +124,11 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const [status, setStatus] = useState<ArticleStatus | "">(existing?.status ?? "");
   const [reviewNote, setReviewNote] = useState(existing?.reviewNote ?? "");
   const [error, setError] = useState("");
+  const [articleStyle, setArticleStyle] = useState<ArticleStyle>(existing?.style ?? {});
+  const [emailReaders, setEmailReaders] = useState(false);
+  const [emailNote, setEmailNote] = useState("");
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const translationRef = useRef<HTMLTextAreaElement>(null);
   const staff = getAccounts().filter((account) => account.role === "staff" || account.role === "admin");
 
   const insertImage = (index: number) =>
@@ -138,7 +155,7 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       slug: existing?.slug ?? slugify(title),
       excerpt: excerpt.trim() || content.replace(/\[\[image:\d+\]\]/g, "").trim().slice(0, 160),
       content: content.trim(),
-      author: (session ? displayName(session) : author.trim()) || "VGMF",
+      author: session ? publisherName(session) : author.trim() || publisherName(null),
       publishedByEmail: session?.email || email.trim() || undefined,
       category: category.trim() || "Ayurveda",
       date: existing?.date ?? new Date().toISOString().slice(0, 10),
@@ -151,6 +168,7 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       assignedTo: assignedTo || undefined,
       reviewNote: nextStatus === "published" ? undefined : reviewNote || existing?.reviewNote,
       translations,
+      style: articleStyle,
     };
     if (!article.tags?.length) article.tags = [article.category];
     try {
@@ -165,6 +183,10 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       }
       setStatus(nextStatus);
       setSaved(article.slug);
+      if (nextStatus === "published" && existing?.status !== "published") {
+        const sent = notifyArticlePublished(article, { readers: emailReaders, writer: Boolean(existing && existing.publishedByEmail !== session?.email) });
+        setEmailNote(sent ? `Publish email sent to ${sent} recipient${sent === 1 ? "" : "s"}.` : "");
+      }
     } catch {
       setError("The browser storage is full. Use smaller images or image URLs instead of uploads.");
     }
@@ -178,7 +200,7 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
         <h1 className="text-2xl font-bold text-slate-900">{existing ? "Edit article" : "Create article"}</h1>
         <Link href="/admin/articles" className={ghost}>Back to articles</Link>
       </div>
-      <EditorGate moduleId="articles" email={email} onEmail={setEmail} />
+      <PublisherLine user={session} />
       {!isAdmin && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Staff articles go to admin for review before they appear on the public site. You can keep editing at any time.
@@ -207,36 +229,46 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
             <>
               <input className={field} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
               <textarea className={field} rows={3} placeholder="Excerpt shown on article cards" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} />
-              <textarea className={`${field} font-mono`} rows={14} placeholder="Article body. Leave a blank line between paragraphs." value={content} onChange={(event) => setContent(event.target.value)} />
+              <RichTextToolbar target={bodyRef} value={content} onChange={setContent} imageCount={images.filter((image) => image.src).length} />
+              <textarea ref={bodyRef} className={field} rows={16} placeholder="Article body. Leave a blank line between paragraphs." value={content} onChange={(event) => setContent(event.target.value)} />
             </>
           ) : (
             <>
               <p className="text-xs text-slate-500">Translation for {LOCALES.find((item) => item.id === localeEdit)?.name}. Leave a field empty to keep the original English.</p>
               <input className={field} placeholder="Translated title" value={translation.title ?? ""} onChange={(event) => setTranslation({ title: event.target.value })} />
               <textarea className={field} rows={3} placeholder="Translated excerpt" value={translation.excerpt ?? ""} onChange={(event) => setTranslation({ excerpt: event.target.value })} />
-              <textarea className={`${field} font-mono`} rows={14} placeholder="Translated body" value={translation.content ?? ""} onChange={(event) => setTranslation({ content: event.target.value })} />
+              <RichTextToolbar target={translationRef} value={translation.content ?? ""} onChange={(next) => setTranslation({ content: next })} imageCount={images.filter((image) => image.src).length} />
+              <textarea ref={translationRef} className={field} rows={16} placeholder="Translated body" value={translation.content ?? ""} onChange={(event) => setTranslation({ content: event.target.value })} />
             </>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               className={field}
-              placeholder="Published by (account name)"
-              value={session ? displayName(session) : author}
+              placeholder="Publisher"
+              value={session ? publisherName(session) : author}
               onChange={(event) => setAuthor(event.target.value)}
               readOnly={Boolean(session)}
-              title="Articles show the signed-in account name as publisher."
+              title="Admin articles show the Foundation as publisher; staff articles show the writer's name."
             />
             <input className={field} placeholder="Category" value={category} onChange={(event) => setCategory(event.target.value)} />
           </div>
           <input className={field} placeholder="Tags, separated by commas" value={tags} onChange={(event) => setTags(event.target.value)} />
+          <ArticleStyleControls value={articleStyle} onChange={setArticleStyle} />
           <p className="text-xs text-slate-500">
-            Start a line with <code>## </code> for a sub-heading. <code>[[image:2]]</code> on its own line places gallery image 2 inside the article;
-            images not placed in the text are shown as a gallery at the end.
+            Select text and use the toolbar for bold, italic, headings, points, quotes, alignment, links, videos and reference images.
+            Gallery images not placed in the text are shown at the end.
           </p>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />
             Feature on the homepage and at the top of Articles
           </label>
+          {isAdmin && (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={emailReaders} onChange={(event) => setEmailReaders(event.target.checked)} />
+              Email this article to registered readers when it is published
+            </label>
+          )}
+          {emailNote && <p className="text-xs text-emerald-700">{emailNote}</p>}
           {isAdmin && (
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
               Assigned writer
@@ -303,10 +335,15 @@ const statusLabel: Record<ArticleStatus, string> = {
   rejected: "Returned",
 };
 
-export function ArticleAdmin() {
+export function ArticleAdmin({ mode = "all" }: { mode?: "all" | "approvals" }) {
   const articles = useAllArticles();
   const session = getSession();
-  const isAdmin = session?.role === "admin";
+  const isAdmin = session?.role === "admin" || session?.role === "coadmin";
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<BulkAction | "">("");
+  const [filter, setFilter] = useState<ArticleStatus | "all">(mode === "approvals" ? "pending" : "all");
+  const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState("");
   const [assignments, setAssignments] = useState(() => getArticleAssignments());
   const [brief, setBrief] = useState({ title: "", notes: "", assignedTo: "", dueDate: "" });
   const [shareId, setShareId] = useState<string | null>(null);
@@ -338,19 +375,59 @@ export function ArticleAdmin() {
             article.assignedTo?.toLowerCase() === session.email.toLowerCase()
         )
       : articles;
+  const shown = listed.filter(
+    (article) =>
+      (filter === "all" || (article.status ?? "published") === filter) &&
+      (!query.trim() || `${article.title} ${article.category} ${article.author ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
+  );
+  const picked = shown.filter((article) => selected.has(article.id));
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const applyBulk = () => {
+    if (!bulk || !picked.length) return;
+    if (bulk === "delete" && !window.confirm(`Delete ${picked.length} selected article(s)?`)) return;
+    runBulkAction(bulk, picked);
+    setNotice(`${bulk === "export" ? "Exported" : "Updated"} ${picked.length} article${picked.length === 1 ? "" : "s"}.`);
+    setSelected(new Set());
+    setBulk("");
+  };
+  const bulkChoices: { id: BulkAction; label: string; admin?: boolean }[] = [
+    { id: "publish", label: "Approve and publish", admin: true },
+    { id: "return", label: "Return for changes", admin: true },
+    { id: "pending", label: "Send for approval" },
+    { id: "draft", label: "Move to drafts", admin: true },
+    { id: "feature", label: "Feature on homepage", admin: true },
+    { id: "unfeature", label: "Remove from featured", admin: true },
+    { id: "export", label: "Export selected" },
+    { id: "delete", label: "Delete", admin: true },
+  ];
   const sharing = listed.find((article) => article.id === shareId);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Articles</h1>
-          <p className="mt-1 text-sm text-slate-500">Staff drafts wait for admin approval. Share a live article to social networks or copy its link.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{mode === "approvals" ? "Article approvals" : "Articles"}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {mode === "approvals"
+              ? "Articles sent by staff wait here. Approve to publish them, or return them with a note."
+              : "Staff drafts wait for admin approval. Share a live article to social networks or copy its link."}
+          </p>
         </div>
-        <Link href="/admin/articles/new" className={button}>+ Create article</Link>
+        <div className="flex flex-wrap gap-2">
+          {session && <ArticleImportButton user={session} onDone={setNotice} />}
+          <button type="button" className={ghost} onClick={() => exportArticles(shown)}>Export {filter === "all" ? "all" : statusLabel[filter].toLowerCase()}</button>
+          <Link href="/admin/articles/new" className={button}>+ Create article</Link>
+        </div>
       </div>
+      {notice && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
 
-      {isAdmin && (
+      {isAdmin && mode === "all" && (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
           <p className="font-semibold text-slate-900">Assign an article to write</p>
           <div className="grid gap-3 md:grid-cols-2">
@@ -368,7 +445,7 @@ export function ArticleAdmin() {
         </div>
       )}
 
-      {mine.length > 0 && (
+      {mode === "all" && mine.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <p className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-900">Writing assignments</p>
           <ul>
@@ -397,17 +474,43 @@ export function ArticleAdmin() {
         </div>
       )}
 
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3">
+        <input className={`${field} max-w-xs`} placeholder="Search articles" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <select className={`${field} max-w-[11rem]`} value={filter} onChange={(event) => setFilter(event.target.value as ArticleStatus | "all")}>
+          <option value="all">All statuses</option>
+          {(Object.keys(statusLabel) as ArticleStatus[]).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
+        </select>
+        <span className="mx-1 h-6 w-px bg-slate-200" />
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={shown.length > 0 && picked.length === shown.length}
+            onChange={(event) => setSelected(event.target.checked ? new Set(shown.map((article) => article.id)) : new Set())}
+          />
+          Select all ({picked.length}/{shown.length})
+        </label>
+        <select className={`${field} max-w-[13rem]`} value={bulk} onChange={(event) => setBulk(event.target.value as BulkAction | "")}>
+          <option value="">Bulk action…</option>
+          {bulkChoices.filter((choice) => isAdmin || !choice.admin).map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+        </select>
+        <button type="button" className={button} onClick={applyBulk} disabled={!bulk || !picked.length}>Apply</button>
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
         <ul className="min-w-[36rem]">
-          {listed.map((article) => (
+          {shown.length === 0 && <li className="px-5 py-8 text-center text-sm text-slate-500">{mode === "approvals" ? "Nothing is waiting for approval." : "No articles match."}</li>}
+          {shown.map((article) => (
             <li key={article.id} className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              <div className="flex items-start gap-3">
+                <input type="checkbox" className="mt-1" checked={selected.has(article.id)} onChange={() => toggle(article.id)} aria-label={`Select ${article.title}`} />
+                <div>
                 <p className="font-semibold text-slate-900">{article.title}</p>
                 <p className="text-xs text-slate-500">
-                  {statusLabel[article.status ?? "published"]} · {article.category} · Published by {article.author || "VGMF"}
+                  {statusLabel[article.status ?? "published"]} · {article.category} · {article.author && article.author !== publisherName(null) ? `By ${article.author}` : `Published by ${publisherName(null)}`}
                   {article.assignedTo ? ` · Writer ${article.assignedTo}` : ""}
                   {article.reviewNote && (article.status === "rejected" || article.status === "pending") ? ` · Note: ${article.reviewNote}` : ""}
                 </p>
+                </div>
               </div>
               <div className="flex flex-wrap gap-3 text-sm font-semibold">
                 <Link className="text-burgundy" href={`/admin/articles/new?id=${article.id}`}>Edit</Link>
@@ -424,6 +527,7 @@ export function ArticleAdmin() {
                       className="text-emerald-700"
                       onClick={() => {
                         saveArticle({ ...article, status: "published", reviewNote: undefined });
+                        notifyArticlePublished({ ...article, status: "published" }, { readers: false, writer: true });
                       }}
                     >
                       Approve
@@ -434,6 +538,7 @@ export function ArticleAdmin() {
                       onClick={() => {
                         const note = window.prompt("Note for the writer (optional)", article.reviewNote ?? "") ?? "";
                         saveArticle({ ...article, status: "rejected", reviewNote: note.trim() || undefined });
+                        notifyArticleReturned(article, note.trim());
                       }}
                     >
                       Return

@@ -11,7 +11,7 @@ import { getSession, isPortalRole } from "@/lib/auth";
 import { orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { buildTrackingStages as buildCourierStages, isSampleOrder } from "@/lib/order-pipeline";
 export type { TrackingStage, TrackingStageId } from "@/lib/order-pipeline";
-export { pickupOtp } from "@/lib/order-pipeline";
+export { pickupOtp, pickupOtpReady } from "@/lib/order-pipeline";
 import { storeConfig } from "@/lib/constants";
 import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";
@@ -366,7 +366,7 @@ export function syncReplacementProgress(order: Order) {
       kind: "order",
       title: `Replacement is ${order.status}`,
       body: detail,
-      href: `/account/orders#${parentId}`,
+      href: `/account/orders/${encodeURIComponent(parentId)}`,
     });
   }
   pushInbox({
@@ -434,6 +434,70 @@ function generateReplacementOrder(source: Order): Order {
   };
 }
 
+const REPLACEMENT_STAGES: ShipmentEvent[] = [
+  { id: "requested", title: "Replacement requested", at: "", reached: false },
+  { id: "review", title: "Under review", at: "", reached: false },
+  { id: "decision", title: "Decision", at: "", reached: false, detail: "Accepted requests get a return label for the defective item." },
+  { id: "return-label", title: "Return label shared", at: "", reached: false, detail: "Download the return label, paste it on the parcel with the defective item and hand it to the courier." },
+  { id: "return-pickup", title: "Defective item picked up", at: "", reached: false, detail: "The courier brings the defective item back to the Foundation." },
+  { id: "inspected", title: "Received and checked", at: "", reached: false, detail: "The desk checks the returned item." },
+  { id: "replacement", title: "Replacement order sent", at: "", reached: false, detail: "A new free order is placed after the check." },
+];
+
+/** Replacement steps in order: return of the defective item first, then the new order. */
+function withReplacementStages(existing: ShipmentEvent[]) {
+  const byId = new Map(existing.map((stage) => [stage.id, stage]));
+  const base = REPLACEMENT_STAGES.map((stage) => {
+    const found = byId.get(stage.id);
+    return found ? { ...stage, ...found, title: stage.id === "replacement" ? stage.title : found.title } : stage;
+  });
+  const extra = existing.filter((stage) => !REPLACEMENT_STAGES.some((item) => item.id === stage.id));
+  return [...base, ...extra];
+}
+
+/** Moves a replacement request to its next status and marks that step on the pipeline. */
+export function advanceReturnRequest(orderId: string, status: ReturnRequest["status"], stageId: string, detail?: string) {
+  const current = getReturnRequest(orderId) ?? getOrders().find((order) => order.id === orderId)?.returnRequest;
+  if (!current) return undefined;
+  const now = new Date().toISOString();
+  const stages = (current.kind === "replacement" ? withReplacementStages(current.stages ?? []) : current.stages ?? []).map((stage) =>
+    stage.id === stageId ? { ...stage, at: now, reached: true, detail: detail || stage.detail } : stage
+  );
+  const next: ReturnRequest = { ...current, status, stages };
+  persistReturnRequest(orderId, next);
+  const source = getOrders().find((order) => order.id === orderId);
+  const title = stages.find((stage) => stage.id === stageId)?.title ?? status;
+  if (source) notifyReplacement(source, `${current.kind === "replacement" ? "Replacement" : "Return"} ${current.id}: ${title}`, detail || title, "customer");
+  return next;
+}
+
+/** After the defective item is back and checked, the free replacement order is placed. */
+export function sendReplacementAfterInspection(orderId: string, by?: string) {
+  const current = getReturnRequest(orderId) ?? getOrders().find((order) => order.id === orderId)?.returnRequest;
+  if (!current || current.kind !== "replacement") throw new Error("No replacement is open on this order.");
+  if (current.replacementOrderId) throw new Error(`Replacement order ${current.replacementOrderId} is already placed.`);
+  const source = getOrders().find((order) => order.id === orderId);
+  if (!source) throw new Error("The original order could not be found.");
+  const replacement = generateReplacementOrder(source);
+  saveOrder(replacement);
+  const now = new Date().toISOString();
+  const request: ReturnRequest = {
+    ...current,
+    status: "Replacement Created",
+    decidedBy: current.decidedBy || by,
+    replacementOrderId: replacement.id,
+    stages: withReplacementStages(current.stages ?? []).map((stage) => {
+      if (stage.id === "return-pickup" && !stage.reached) return { ...stage, at: now, reached: true };
+      if (stage.id === "inspected") return { ...stage, at: now, reached: true, detail: "The returned item was received and checked." };
+      if (stage.id === "replacement") return { ...stage, at: now, reached: true, detail: `Free replacement order ${replacement.id} placed.` };
+      return stage;
+    }),
+  };
+  persistReturnRequest(orderId, request);
+  notifyReplacement(source, `Replacement order ${replacement.id} placed`, `We received and checked the returned item. Follow order ${replacement.id} until it is delivered.`, "both");
+  return request;
+}
+
 export function requestDamagedReplacement(
   order: Order,
   input: { reason?: string; images: string[]; note?: string }
@@ -452,12 +516,10 @@ export function requestDamagedReplacement(
     returnCharges: 0,
     images: input.images,
     note: input.note?.trim() || undefined,
-    stages: [
+    stages: withReplacementStages([
       { id: "requested", title: "Replacement requested", at: requestedAt, reached: true, detail: "Photos received. The Foundation desk will review this request." },
       { id: "review", title: "Under review", at: requestedAt, reached: true, detail: "Admin will accept or reject after checking the images." },
-      { id: "decision", title: "Decision", at: "", reached: false, detail: "Accepted requests receive a free replacement order." },
-      { id: "replacement", title: "Replacement order", at: "", reached: false, detail: "A new free order is placed when the request is accepted." },
-    ],
+    ]),
   };
   persistReturnRequest(order.id, request);
   notifyReplacement(order, `Replacement request ${request.id}`, "Photos received. The desk will accept or reject this request.", "customer");
@@ -479,7 +541,7 @@ function notifyReplacement(order: Order, title: string, body: string, who: "cust
       kind: "order",
       title,
       body,
-      href: `/account/orders#${order.id}`,
+      href: `/account/orders/${encodeURIComponent(order.id)}`,
     });
   }
   if (who === "both" || who === "customer") {
@@ -521,23 +583,18 @@ export function reviewReplacementRequest(
   }
   const source = getOrders().find((order) => order.id === orderId);
   if (!source) throw new Error("The original order could not be found.");
-  const replacement = generateReplacementOrder(source);
-  saveOrder(replacement);
   const request: ReturnRequest = {
     ...current,
-    status: "Replacement Created",
+    status: "Return Approved",
     decidedAt: now,
     decidedBy: input.by,
-    decisionNote: input.note?.trim() || "Accepted. A free replacement order was placed.",
-    replacementOrderId: replacement.id,
-    stages: current.stages.map((stage) => {
-      if (stage.id === "decision") return { ...stage, at: now, reached: true, detail: "Accepted after reviewing the photos." };
-      if (stage.id === "replacement") return { ...stage, at: now, reached: true, detail: `Free replacement order ${replacement.id} placed.` };
-      return stage;
-    }),
+    decisionNote: input.note?.trim() || "Accepted. Send the defective item back with the return label; the replacement ships after the check.",
+    stages: withReplacementStages(current.stages ?? []).map((stage) =>
+      stage.id === "decision" ? { ...stage, at: now, reached: true, detail: "Accepted after reviewing the photos. A return label follows." } : stage
+    ),
   };
   persistReturnRequest(orderId, request);
-  notifyReplacement(source, `Replacement order ${replacement.id} placed`, `Your request was accepted. Follow order ${replacement.id} until it is delivered.`, "both");
+  notifyReplacement(source, `Replacement request ${request.id} accepted`, "Please send the defective item back first. We will share a return label; paste it on the parcel and hand it to the courier. The replacement ships once we have checked the item.", "both");
   return request;
 }
 
@@ -556,25 +613,11 @@ export function initiateReturn(
     if (input.source === "customer") {
       return requestDamagedReplacement(order, { reason: input.reason, images: input.images ?? [], note: input.reason });
     }
-    const replacement = generateReplacementOrder(order);
-    saveOrder(replacement);
-
-    const stages: ShipmentEvent[] = [
-      {
-        id: "requested",
-        title: "Replacement opened by admin",
-        at: requestedAt,
-        reached: true,
-      },
-      {
-        id: "approved",
-        title: "Free replacement order created",
-        at: requestedAt,
-        location: "Pune, Maharashtra, India",
-        reached: true,
-        detail: `Replacement order ${replacement.id} created — no extra charge.`,
-      },
-    ];
+    const stages = withReplacementStages([
+      { id: "requested", title: "Replacement opened by the desk", at: requestedAt, reached: true },
+      { id: "review", title: "Under review", at: requestedAt, reached: true },
+      { id: "decision", title: "Decision", at: requestedAt, reached: true, detail: "Approved. A return label follows for the defective item." },
+    ]);
 
     const request: ReturnRequest = {
       id,
@@ -583,9 +626,8 @@ export function initiateReturn(
       reason: input.reason,
       requestedAt,
       source: "admin",
-      status: "Replacement Created",
+      status: "Return Approved",
       returnCharges: 0,
-      replacementOrderId: replacement.id,
       images: input.images,
       stages,
     };

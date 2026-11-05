@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { statusStamp } from "@/lib/delivery-expectation";
+import { statusDay, statusStamp } from "@/lib/delivery-expectation";
 import type { ShipmentEvent } from "@/types";
 
 export type PipelineTone = "emerald" | "sky" | "red";
@@ -110,7 +110,7 @@ export default function VerticalPipeline({
     stages[nodeCurrentIdx + 1]?.reached ||
     pace.until <= pace.from
       ? 0
-      : Math.max(0, Math.min(0.42, (now - pace.from) / (pace.until - pace.from)));
+      : Math.max(0, Math.min(0.8, (now - pace.from) / (pace.until - pace.from)));
   const creepRef = useRef(creep);
   creepRef.current = creep;
 
@@ -135,7 +135,13 @@ export default function VerticalPipeline({
       const start = firstDot.getBoundingClientRect();
       const end = currentDot.getBoundingClientRect();
       const top = start.top + start.height / 2 - frameBox.top;
-      const bottom = end.top + end.height / 2 - frameBox.top;
+      // The line follows the courier scans inside the current step, down to the latest one.
+      const latestScan = [...(step?.querySelectorAll<HTMLElement>(".vgmf-ship-kids > li") ?? [])].pop();
+      const scanBox = latestScan?.getBoundingClientRect();
+      const bottom = Math.max(
+        end.top + end.height / 2 - frameBox.top,
+        scanBox ? scanBox.top + 10 - frameBox.top : 0
+      );
       const reached = Math.max(0, bottom - top);
       const nextDot = items[nodeCurrentIdx + 1]?.querySelector(".dot");
       let height = reached;
@@ -260,15 +266,19 @@ export default function VerticalPipeline({
               </span>
               <div className="vgmf-ship-copy">
                 <div className="vgmf-ship-title">
-                  <b>{stage.label}</b>
+                  <span className="vgmf-ship-label">
+                    <b>{stage.label}</b>
+                    {timing && state !== "upcoming" ? (
+                      <span className={`vgmf-ship-expect is-inline${timing.tone === "red" ? " is-late" : ""}`}>{timing.label}</span>
+                    ) : null}
+                  </span>
                   {stamp && state !== "upcoming" ? <span className="vgmf-ship-time">{stamp}</span> : null}
                 </div>
                 {stage.caption && state !== "upcoming" ? <div className="vgmf-ship-msg">{stage.caption}</div> : null}
                 {nextHint && state === "upcoming" ? <div className="vgmf-ship-next">{nextHint}</div> : null}
-                {timing && state !== "upcoming" ? (
-                  <span className={`vgmf-ship-expect${timing.tone === "red" ? " is-late" : ""}`}>{timing.label}</span>
+                {stage.expected && state !== "done" && !(nextHint && state === "upcoming") ? (
+                  <span className="vgmf-ship-expect">{stage.expected}</span>
                 ) : null}
-                {stage.expected && state !== "done" ? <span className="vgmf-ship-expect">{stage.expected}</span> : null}
                 {stage.courierNote && state !== "upcoming" ? (
                   <div className="vgmf-ship-courier">
                     <b>{stage.courierNote.title}</b>
@@ -280,7 +290,7 @@ export default function VerticalPipeline({
                     {kids.map((event) => (
                       <li key={event.id} className={/fail|undeliver|rto/i.test(event.title) ? "failed" : ""}>
                         <b>{event.title}</b>
-                        {event.at ? <div className="when">{statusStamp(event.at, country)}</div> : null}
+                        {event.at ? <div className="when">{stage.id === "delivered" || stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)}</div> : null}
                         {event.location ? <div className="where">{event.location}</div> : null}
                         {event.detail ? <div className="where">{event.detail}</div> : null}
                         {event.agent?.name || event.agent?.phone ? (

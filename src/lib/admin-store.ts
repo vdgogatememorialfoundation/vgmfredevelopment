@@ -13,7 +13,7 @@ import type {
   User,
 } from "@/types";
 import { siteConfig, storeConfig } from "@/lib/constants";
-import { generateOrderId, getOrders, pickupOtp, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
+import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
@@ -600,7 +600,7 @@ export function createAdminOrder(input: {
     template: "order-placed",
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\n${
       order.deliveryMode === "store_pickup"
-        ? `Pickup from ${siteConfig.name}.\n${siteConfig.address}\nPhone: ${siteConfig.phone}\nPickup OTP: ${pickupOtp(order.id)}\nShow this code at the clinic counter. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`
+        ? `Pickup from ${siteConfig.name}.\n${siteConfig.address}\nPhone: ${siteConfig.phone}\nWe will send your pickup OTP once the order is ready for pickup. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`
         : `Expected delivery: ${formatDate(order.plan.deliveredBy)}`
     }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
@@ -690,7 +690,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
       ...order,
       paymentStatus: refundAmount >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: `RF${Date.now()}`, at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", note, by: currentActor() }],
     },
     "Store credit issued",
     `₹${refundAmount} · balance ₹${balance}`
@@ -753,6 +753,7 @@ export function setOrderStatus(orderId: string, status: OrderStatus) {
   if (status === "Delivered" && order.paymentMethod === "Cash on delivery") {
     next.paymentStatus = "Paid";
   }
+  if (!pickupOtpReady(order) && pickupOtpReady(next)) sendPickupOtp(next);
   if (status === "Cancelled" && order.stockCommitted) {
     releaseStockForOrder(order);
     next.stockCommitted = false;
@@ -787,7 +788,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
       ...order,
       paymentStatus: refundAmount + (order.refundAmount ?? 0) >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: `RF${Date.now()}`, at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor() }],
     },
     "Refunded",
     note ?? `₹${refundAmount}`
@@ -803,6 +804,41 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
     template: "refund",
     body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
+}
+
+/** Sends the store-pickup OTP; only once the seller has processed the order. */
+export function sendPickupOtp(order: Order) {
+  if (!pickupOtpReady(order)) return false;
+  sendOtpCode({
+    email: order.deliveryAddress?.email,
+    phone: order.deliveryAddress?.phone,
+    name: order.deliveryAddress?.fullName,
+    code: pickupOtp(order.id),
+    purpose: `store pickup for order ${order.id}`,
+  });
+  return true;
+}
+
+/** Customer paid only the courier charge for a store-pickup order: it becomes a courier delivery, ready to book. */
+export function recordCourierPayment(orderId: string, input: { method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  const upgrade = order?.courierUpgrade;
+  if (!order || !upgrade || upgrade.paidAt) return;
+  const next = withHistory(
+    {
+      ...order,
+      deliveryMode: "delivery",
+      shipping: (order.shipping ?? 0) + upgrade.amount,
+      total: order.total + upgrade.amount,
+      courierChoice: upgrade.rate,
+      courierName: upgrade.rate.courierName,
+      courierUpgrade: { ...upgrade, paidAt: new Date().toISOString(), paymentRef: input.reference },
+    },
+    "Courier charge paid",
+    `Switched from store pickup to ${upgrade.rate.courierName} · ₹${upgrade.amount} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
 }
 
 export function setPaymentStatus(orderId: string, paymentStatus: Order["paymentStatus"]) {
@@ -895,7 +931,7 @@ export function createShipment(input: {
   if (!order || order.deliveryMode !== "delivery") return;
 
   const shipment: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier: input.courier,
     awb: generateAWB(input.courier),
@@ -1006,14 +1042,43 @@ function rupees(value: number) {
   return `₹${Math.round(value).toLocaleString("en-IN")}`;
 }
 
+function logoSrc() {
+  const url = getSettings().logoUrl || "/uploads/site-logo.png";
+  if (/^(https?:|data:)/.test(url) || typeof window === "undefined") return url;
+  return `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+function logoImg(cls = "logo") {
+  return `<img class="${cls}" src="${esc(logoSrc())}" alt="" onerror="this.style.display='none'"/>`;
+}
+
+export type LabelSize = "4x6" | "a4" | "a5" | "roll";
+const LABEL_SIZE_KEY = "vgmf-label-size";
+export const LABEL_SIZES: { id: LabelSize; label: string }[] = [
+  { id: "4x6", label: "4×6 in tag (thermal)" },
+  { id: "roll", label: "Paper roll 80 mm" },
+  { id: "a5", label: "A5 sheet" },
+  { id: "a4", label: "A4 sheet" },
+];
+
+export function getLabelSize(): LabelSize {
+  if (typeof window === "undefined") return "4x6";
+  const saved = window.localStorage.getItem(LABEL_SIZE_KEY) as LabelSize | null;
+  return LABEL_SIZES.some((item) => item.id === saved) ? (saved as LabelSize) : "4x6";
+}
+
+export function setLabelSize(size: LabelSize) {
+  if (typeof window !== "undefined") window.localStorage.setItem(LABEL_SIZE_KEY, size);
+}
+
 function letterhead() {
   return `<header class="head">
-    <div>
+    <div class="head-brand">${logoImg()}<div>
       <p class="brand">${esc(siteConfig.name)}</p>
       <p class="addr">${esc(siteConfig.address)}</p>
       <p class="addr">Phone ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}</p>
       <p class="addr">Clinic hours: Monday to Thursday, 6:00 PM – 10:00 PM</p>
-    </div>
+    </div></div>
     <div class="mark">VGMF</div>
   </header>`;
 }
@@ -1028,13 +1093,24 @@ function printHtml(title: string, html: string, page = "A4") {
   if (typeof window === "undefined") return;
   const win = window.open("", "_blank");
   if (!win) return;
-  const margin = page === "A4" ? "12mm" : "4mm";
+  const margin = page === "A4" || page === "A5" ? "10mm" : "3mm";
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
   <style>
     @page { size: ${page}; margin: ${margin}; }
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", Arial, sans-serif; color: #1c1917; margin: 0; }
     .head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #8F2D2D; padding-bottom: 12px; }
+    .head-brand { display: flex; gap: 12px; align-items: center; }
+    .logo { height: 56px; width: auto; max-width: 160px; object-fit: contain; }
+    .label-logo { height: 34px; width: auto; max-width: 110px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+    .label-brand { display: flex; gap: 8px; align-items: center; }
+    .size-a4 .label-sheet { width: 150mm; margin: 0 auto; }
+    .size-a5 .label-sheet { width: 128mm; margin: 0 auto; }
+    .size-roll { font-size: 11px; }
+    .size-roll .grid { display: block; }
+    .size-roll .box { margin-top: 8px; min-width: 0; }
+    .size-roll .awb { font-size: 18px; }
+    .size-roll svg { max-width: 100%; height: auto; }
     .brand { font-size: 18px; font-weight: 700; color: #6A1F1F; margin: 0; }
     .addr { margin: 2px 0; font-size: 11px; color: #44403c; line-height: 1.45; }
     .mark { font-weight: 800; letter-spacing: 0.14em; color: #8F2D2D; font-size: 13px; }
@@ -1069,18 +1145,19 @@ function printHtml(title: string, html: string, page = "A4") {
 
 export function printShippingLabel(
   shipment: ShipmentRecord,
-  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string }
+  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string },
+  size: LabelSize = getLabelSize()
 ) {
   const to = shipment.toAddress;
   const awb = details?.awb || shipment.awb;
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";
   const hub = details?.destination || shipment.destinationHub || "";
-  const html = `<div class="label-sheet">
+  const html = `<div class="size-${size}"><div class="label-sheet">
     <div class="label-band">
-      <div>
-        <b>VGMF</b>
-        <div>${esc(siteConfig.name)}</div>
+      <div class="label-brand">
+        ${logoImg("label-logo")}
+        <div><b>VGMF</b><div>${esc(siteConfig.name)}</div></div>
       </div>
       <span>Shipping label</span>
     </div>
@@ -1113,8 +1190,9 @@ export function printShippingLabel(
       </table>
       <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
     </div>
-  </div>`;
-  printHtml(`Label ${awb}`, html, "100mm 150mm");
+  </div></div>`;
+  const page = size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
+  printHtml(`Label ${awb}`, html, page);
 }
 
 export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
@@ -1138,7 +1216,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
       <p class="label">${order.deliveryMode === "store_pickup" ? "Store pickup" : "Shipment"}</p>
       ${
         order.deliveryMode === "store_pickup"
-          ? `Collect from the clinic.<br/>Pickup OTP ${esc(pickupOtp(order.id))}`
+          ? `Collect from the clinic.${pickupOtpReady(order) && order.status !== "Delivered" ? `<br/>Pickup OTP ${esc(pickupOtp(order.id))}` : ""}`
           : shipment
             ? `${esc(shipment.courier)}<br/>AWB ${esc(shipment.awb)}`
             : "Packed at the clinic. AWB is printed after the courier is booked."
@@ -1280,7 +1358,7 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
     template: "order-status",
     body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${order.replacementOf ? `Your replacement for order ${order.replacementOf} (${order.id}) is now ${status}.` : `Your order ${order.id} is now ${status}.`}${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\nFollow each step in My Orders.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
-  const ordersHref = order.replacementOf ? `/account/orders#${order.replacementOf}` : "/account/orders";
+  const ordersHref = order.replacementOf ? `/account/orders/${encodeURIComponent(order.replacementOf)}` : "/account/orders";
   if (to) {
     pushInbox({
       audience: "customer",

@@ -93,7 +93,7 @@
   color: #fff;
 }
 .vgmf-ship-pipe > li.active > .dot {
-  animation: vgmfTrkPulse 2.4s ease-out 3;
+  animation: vgmfTrkPulse 1.6s ease-out infinite;
 }
 .vgmf-ship-copy {
   min-width: 0;
@@ -140,6 +140,15 @@
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--tl-green);
+}
+.vgmf-ship-label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vgmf-ship-expect.is-inline {
+  margin: 0;
 }
 .vgmf-ship-expect.is-late {
   background: #fff7ed;

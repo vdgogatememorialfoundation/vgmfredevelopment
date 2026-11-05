@@ -11,6 +11,7 @@ import type { Article, CaptionedImage } from "@/types";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { articlePublicUrl, articleShareText, localizedArticle } from "@/lib/article-display";
 import { ShareBar } from "@/components/common/ShareBar";
+import { ArticleRichText } from "@/components/articles/ArticleRichText";
 
 function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
   return (
@@ -25,25 +26,11 @@ function ArticleBody({ article }: { article: Article }) {
   const { t } = useI18n();
   const images = article.images ?? [];
   const placed = new Set<number>();
-  const blocks = article.content.split(/\n\s*\n/).map((block, index) => {
-    const text = block.trim();
-    const token = text.match(/^\[\[image:(\d+)\]\]$/);
-    if (token) {
-      const position = Number(token[1]) - 1;
-      const image = images[position];
-      if (!image) return null;
-      placed.add(position);
-      return <Figure key={index} image={image} alt={article.title} />;
-    }
-    if (text.startsWith("## ")) {
-      return <h2 key={index} className="heading-3 mb-4 mt-8">{text.slice(3)}</h2>;
-    }
-    return <p key={index} className="text-body mb-6 whitespace-pre-line">{text}</p>;
-  });
+  const body = <ArticleRichText content={article.content} images={images} title={article.title} style={article.style} placed={placed} />;
   const remaining = images.filter((_, index) => !placed.has(index));
   return (
     <>
-      {blocks}
+      {body}
       {remaining.length > 0 && (
         <div className="mt-10 border-t border-border pt-8">
           <h2 className="heading-3 mb-5">{t("article.gallery")}</h2>
@@ -112,10 +99,13 @@ export function ArticlesIndex() {
   );
 }
 
-export function ArticleView({ slug }: { slug: string }) {
+export function ArticleView({ slug, initial }: { slug: string; initial?: Article | null }) {
   const articles = useLiveArticles();
   const { t, locale } = useI18n();
-  const found = articles.find((item) => item.slug === slug);
+  const live = articles.find((item) => item.slug === slug);
+  const found = live && !live.content && initial?.slug === slug
+    ? { ...live, content: initial.content, translations: initial.translations ?? live.translations }
+    : live ?? initial ?? undefined;
   if (!found) {
     return (
       <main className="container py-20">

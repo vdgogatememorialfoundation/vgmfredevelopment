@@ -1,7 +1,9 @@
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import SiteDisclaimers from "@/components/layout/SiteDisclaimers";
 import AnnouncementTicker from "@/components/common/AnnouncementTicker";
 import BackToTop from "@/components/common/BackToTop";
+import WhatsAppQueryButton from "@/components/common/WhatsAppQueryButton";
 import BannerPopup from "@/components/home/BannerPopup";
 import { SiteChat } from "@/components/chatbot/LiveChatWidget";
 import { VisitorBeacon } from "@/components/analytics/VisitorBeacon";
@@ -16,6 +18,16 @@ import AbandonedCartNotice from "@/components/store/AbandonedCartNotice";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 
 export const revalidate = 60;
+
+type FeedArticle = NonNullable<ReturnType<typeof readMobileFeed>["articles"]>[number];
+
+/** Every page gets article cards only; the full text loads on the article's own page. */
+function withoutArticleBody(article: FeedArticle): FeedArticle {
+  const translations = article.translations
+    ? Object.fromEntries(Object.entries(article.translations).map(([key, copy]) => [key, copy ? { ...copy, content: undefined } : copy]))
+    : article.translations;
+  return { ...article, content: "", translations } as FeedArticle;
+}
 
 export default function StoreLayout({
   children,
@@ -33,7 +45,7 @@ export default function StoreLayout({
     siteText: feed.siteText,
     books: feed.books ?? [],
     events: feed.events ?? [],
-    articles: feed.articles ?? [],
+    articles: (feed.articles ?? []).map(withoutArticleBody),
     clinics: feed.clinics ?? [],
     videos: feed.videos ?? [],
     notices: feed.notices ?? [],
@@ -47,6 +59,7 @@ export default function StoreLayout({
         <MaintenanceGate>
           <HydratePublishedSite initial={initial}>
             <PartnerDrawerProvider>
+            <SiteDisclaimers placement="top" />
             <div className="sticky top-0 z-50">
             <Header />
             <AnnouncementTicker />
@@ -57,6 +70,7 @@ export default function StoreLayout({
             </main>
             <Footer />
             <BackToTop />
+            <WhatsAppQueryButton />
             <BannerPopup />
             <VisitorBeacon />
             <GoogleAnalytics />

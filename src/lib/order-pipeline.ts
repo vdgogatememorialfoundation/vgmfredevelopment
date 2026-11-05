@@ -1,12 +1,20 @@
 import type { Order, ShipmentEvent, ShipmentRecord } from "@/types";
 import { customerCourierLabel } from "@/lib/courier-label";
 import { siteConfig, storeConfig } from "@/lib/constants";
+import { getOrderSettings, orderStatusText } from "@/lib/integrations";
 
 /** Deterministic 6-digit pickup OTP derived from the order id. */
 export function pickupOtp(orderId: string): string {
   let hash = 0;
   for (const char of orderId) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return String(100000 + (hash % 900000));
+}
+
+const PICKUP_PROCESSED: Order["status"][] = ["Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered"];
+
+/** The pickup OTP is usable only after the seller has packed (processed) a store-pickup order. */
+export function pickupOtpReady(order: Pick<Order, "deliveryMode" | "status">) {
+  return order.deliveryMode === "store_pickup" && PICKUP_PROCESSED.includes(order.status);
 }
 
 export type TrackingStageId =
@@ -39,7 +47,11 @@ export type CourierScan = {
   otp?: string;
 };
 
-export function isHyperlocalProvider(provider?: string, lastMile?: string) {
+const REGULAR_COURIER = /blue\s*dart|dtdc|delhivery|ekart|fedex|india\s*post|speed\s*post|trackon|amazon|xpressbees|ecom\s*express|professional\s*couriers?|maruti|\bgati\b|\bdhl\b|aramex|\bups\b|smartr/i;
+
+/** Rider map / live rider details only for local riders; never for a regular courier, whatever was booked earlier. */
+export function isHyperlocalProvider(provider?: string, lastMile?: string, courier?: string) {
+  if (REGULAR_COURIER.test(`${courier ?? ""} ${provider ?? ""}`)) return false;
   return Boolean(lastMile) || provider === "porter" || provider === "shadowfax" || provider === "flash" || provider === "tookan" || provider === "shipday";
 }
 
@@ -53,9 +65,15 @@ export function isSampleOrder(order: Pick<Order, "id" | "paymentLink" | "payment
 
 export type CourierStage = "ordered" | "packed" | "shipped" | "out" | "delivered" | "failed" | "cancelled";
 
+/** Summary lines on courier pages ("Expected Date of Delivery", "Pickup Date") that are not scans. */
+export function isCourierInfoLine(text: string) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ");
+  return /\b(expected|estimated|promised|tentative|scheduled)\b[\w ]{0,20}\bdeliver|\bedd\b|\b(pickup|booking|ship|shipment|delivery|dispatch) date\b|\bdate of (delivery|pickup|booking|dispatch)\b/.test(value);
+}
+
 export function classifyCourierScan(text: string): CourierStage | null {
   const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!value) return null;
+  if (!value || isCourierInfoLine(value)) return null;
   if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|failed|declined|incomplete)\b/.test(value)) {
     return "failed";
   }
@@ -67,7 +85,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "packed";
   }
   if (
-    /\b(in transit|shipped|dispatch|departed|outscan|forwarded|connected to|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
+    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)
@@ -285,38 +303,19 @@ export function buildTrackingStages(
         )
       );
     }
-    return tally(stages);
+    return tally(stages, order);
   }
 
   if (order.deliveryMode === "store_pickup") {
-    const packed = ["Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered"].includes(order.status);
-    const ready = packed;
+    const ready = PICKUP_PROCESSED.includes(order.status);
     const picked = order.status === "Delivered";
     const stages = [
       makeStage(
         "ordered",
-        "Ordered",
+        "Order Confirmed",
         "Order placed",
         [{ id: "placed", title: "Your order has been placed", at: order.date, location: origin, reached: true }],
         true
-      ),
-      makeStage(
-        "packed",
-        "Packed",
-        "Packing at store",
-        packed
-          ? [
-              {
-                id: "packed",
-                title: "Your item is packed at our facility",
-                at: packedAt || order.date,
-                location: origin,
-                reached: true,
-              },
-            ]
-          : [],
-        packed,
-        false
       ),
       makeStage(
         "ready",
@@ -355,7 +354,7 @@ export function buildTrackingStages(
         picked
       ),
     ];
-    return tally(holdBeforeNext(stages));
+    return tally(holdBeforeNext(stages), order);
   }
 
   const shipmentBooked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.status));
@@ -379,15 +378,16 @@ export function buildTrackingStages(
   const shipmentLeft = Boolean(
     shipment && ["Picked Up", "In Transit", "Out for Delivery", "Delivered"].includes(shipment.status ?? "")
   );
-  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
+  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   let shippedReached =
     collected ||
     shipmentLeft ||
     ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ||
     STAGE_RANK[progress] >= STAGE_RANK.shipped;
-  let outReached = STAGE_RANK[progress] >= STAGE_RANK.out || (hyperlocal && shippedReached);
+  const outReached = STAGE_RANK[progress] >= STAGE_RANK.out || (hyperlocal && shippedReached);
   if (hyperlocal) shippedReached = false;
-  const deliveredReached = progress === "delivered" && !failedReached;
+  const courierDelivered = order.status === "Delivered" || shipment?.status === "Delivered";
+  const deliveredReached = (progress === "delivered" || courierDelivered) && !failedReached;
 
   const packedEvents: ShipmentEvent[] = [];
   if (packedReached) {
@@ -458,6 +458,17 @@ export function buildTrackingStages(
     .filter((item) => item.mapped === "delivered")
     .map((item) => scanEvent(item.scan, item.index, deliveredReached));
 
+  if (deliveredReached && deliveredEvents.length === 0) {
+    const markedAt = order.history?.find((item) => item.status === "Delivered")?.at || fromScans.at || order.date;
+    deliveredEvents.push({
+      id: "delivered-confirm",
+      title: "Delivered",
+      at: markedAt,
+      location: dest,
+      reached: true,
+    });
+  }
+
   const failedEvents = liveScans
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
     .filter((item) => item.mapped === "failed")
@@ -493,11 +504,11 @@ export function buildTrackingStages(
 
   if (failedReached) {
     stages.push(makeStage("failed", "Failed", "Delivery failed", failedEvents, true));
-    return tally(stages.filter((stage) => stage.reached || stage.id === "failed"));
+    return tally(stages.filter((stage) => stage.reached || stage.id === "failed"), order);
   }
   stages.push(makeStage("delivered", "Delivered", "Delivered to the address", deliveredEvents, deliveredReached));
 
-  return tally(holdBeforeNext(stages));
+  return tally(holdBeforeNext(stages), order);
 }
 
 /** The current step stays open so the line moves toward the next one and stops before it. */
@@ -514,7 +525,15 @@ function holdBeforeNext(stages: TrackingStage[]) {
   return copy;
 }
 
-function tally(stages: TrackingStage[]) {
+function tally(stages: TrackingStage[], order?: Order) {
+  const { statusLabels } = getOrderSettings();
+  (order?.history ?? []).forEach((item, index) => {
+    if (!item.custom) return;
+    const stage = stages.find((row) => row.id === item.custom) ?? [...stages].reverse().find((row) => row.reached);
+    stage?.events.push({ id: `custom-${index}`, title: item.status, at: item.at, reached: true, detail: item.note });
+    stage?.events.sort((a, b) => String(a.at ?? "").localeCompare(String(b.at ?? "")));
+  });
+  for (const stage of stages) stage.label = orderStatusText(stage.label, statusLabels);
   const totalEvents = Math.max(1, stages.length);
   const reachedEvents = stages.filter((stage) => stage.reached).length + (stages.some((stage) => stage.partial) ? 0.45 : 0);
   return { stages, reachedEvents, totalEvents };

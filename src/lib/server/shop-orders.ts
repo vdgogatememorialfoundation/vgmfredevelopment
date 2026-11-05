@@ -60,10 +60,26 @@ export function upsertShopOrder(order: Order) {
   return orders[0];
 }
 
+function deletedFile() {
+  return dataFile("shop-orders-deleted.json");
+}
+
+/** Ids the desk deleted, so customers' browsers drop their cached copy too. */
+export function deletedShopOrderIds(): string[] {
+  try {
+    const parsed = JSON.parse(readFileSync(deletedFile(), "utf8"));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function deleteShopOrder(id: string) {
   const clean = id.trim();
   if (!clean) return;
   writeAll(readAll().filter((order) => order.id !== clean));
+  const gone = deletedShopOrderIds().filter((item) => item !== clean);
+  writeFileSync(deletedFile(), JSON.stringify([clean, ...gone].slice(0, 2000)));
 }
 
 export function patchShopOrder(id: string, update: Partial<Order>) {

@@ -1,5 +1,6 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
+import { shipdayActivity, shipdayLookupIds, shipdayOrderRow, shipdayOrderState } from "@/lib/shipday-status";
 
 /**
  * Provider clients used by the API routes. Each call takes credentials from
@@ -524,6 +525,8 @@ export type RateOut = {
   etaDays: number;
   live: true;
   cod?: boolean;
+  /** The courier's own expected delivery date, when it gives one. */
+  deliverBy?: string;
 };
 
 type Parcel = {
@@ -565,11 +568,32 @@ async function nimbusToken(input: Json) {
   return String(data.data);
 }
 
+const shiprocketOrigins = new Map<string, { pins: string[]; at: number }>();
+
+/** Rates must be asked from a pincode Shiprocket has as an active pickup address, or it returns far fewer couriers. */
+async function shiprocketOrigin(token: string, wanted: string) {
+  let cached = shiprocketOrigins.get(token);
+  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
+    try {
+      const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", { headers: { authorization: `Bearer ${token}` } });
+      const rows = ((data.data as Json)?.shipping_address as Json[]) ?? [];
+      const active = rows.filter((row) => Number(row.status ?? 1) === 1);
+      const primary = active.filter((row) => Number(row.is_primary_location ?? 0) === 1);
+      const pins = [...primary, ...active].map((row) => String(row.pin_code ?? row.pincode ?? "")).filter(Boolean);
+      cached = { pins: [...new Set(pins)], at: Date.now() };
+      shiprocketOrigins.set(token, cached);
+    } catch {
+      return wanted;
+    }
+  }
+  return !cached.pins.length || cached.pins.includes(wanted) ? wanted : cached.pins[0];
+}
+
 export async function shiprocketRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
   const params = new URLSearchParams({
-    pickup_postcode: parcel.pickupPincode,
+    pickup_postcode: await shiprocketOrigin(token, parcel.pickupPincode),
     delivery_postcode: parcel.deliveryPincode,
     weight: String(parcel.weightKg),
     cod: parcel.cod ? "1" : "0",
@@ -578,10 +602,24 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     breadth: String(parcel.breadth),
     height: String(parcel.height),
   });
-  const data = await call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  const list = ((data.data as Json)?.available_courier_companies as Json[]) ?? [];
+  // Without `mode` Shiprocket returns only its recommended subset, so ask for Surface and Air too and merge.
+  const replies = await Promise.allSettled(
+    ["", "Surface", "Air"].map((mode) =>
+      call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}${mode ? `&mode=${mode}` : ""}`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+    )
+  );
+  const ok = replies.filter((reply): reply is PromiseFulfilledResult<Json> => reply.status === "fulfilled");
+  if (!ok.length) throw (replies[0] as PromiseRejectedResult).reason;
+  const byId = new Map<string, Json>();
+  for (const reply of ok) {
+    for (const courier of ((reply.value.data as Json)?.available_courier_companies as Json[]) ?? []) {
+      const id = String(courier.courier_company_id);
+      if (!byId.has(id)) byId.set(id, courier);
+    }
+  }
+  const list = [...byId.values()];
   return list.map((courier) => ({
     provider: "shiprocket",
     courierId: String(courier.courier_company_id),
@@ -590,6 +628,7 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     etaDays: Number(courier.estimated_delivery_days ?? 5),
     cod: Boolean(courier.cod),
     live: true as const,
+    deliverBy: courier.etd ? String(courier.etd) : undefined,
   }));
 }
 
@@ -1146,7 +1185,7 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
   return {
     provider: "shipday",
     awb: String(data.orderId ?? order.orderId),
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Shipday",
     providerOrderId: String(data.orderId ?? ""),
   };
 }
@@ -1180,24 +1219,34 @@ function shipdayOrders(data: unknown): Json[] {
   return [];
 }
 
-export async function shipdayTrack(input: Json, orderId: string) {
+export async function shipdayTrack(input: Json, orderNumber: string, providerOrderId = "") {
   const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
   if (!apiKey) return null;
   let match: Json | null = null;
-  try {
-    const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(orderId)}`, { headers: shipdayAuth(apiKey) });
-    match = Array.isArray(one) ? (one[0] as Json) : (one as Json);
-  } catch {
-    const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
-    match =
-      shipdayOrders(data).find(
-        (order) => String(order.orderId) === orderId || String(order.orderNumber) === orderId || String(order.id) === orderId
-      ) ?? null;
+  for (const id of shipdayLookupIds(orderNumber, providerOrderId)) {
+    try {
+      const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(id)}`, { headers: shipdayAuth(apiKey) });
+      match = shipdayOrderRow(one) as Json | null;
+      if (match) break;
+    } catch {
+      /* the numeric Shipday id is not the lookup key; try the order number */
+    }
+  }
+  if (!match) {
+    try {
+      const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
+      const wanted = new Set(shipdayLookupIds(orderNumber, providerOrderId));
+      match =
+        shipdayOrders(data).find((order) => wanted.has(String(order.orderId)) || wanted.has(String(order.orderNumber)) || wanted.has(String(order.id))) ??
+        null;
+    } catch {
+      match = null;
+    }
   }
   if (!match) {
     return { status: "Not found", events: [] as { at: string; status: string; location: string }[] };
   }
-  const status = String(match.orderStatus ?? match.status ?? "");
+  const status = shipdayOrderState(match);
   const carrier = (match.assignedCarrier as Json | undefined) ?? (match.carrier as Json | undefined) ?? {};
   const carrierName = String(carrier.name ?? "");
   const lat = Number(match.carrierLatitude ?? match.latitude ?? carrier.latitude);
@@ -1206,16 +1255,16 @@ export async function shipdayTrack(input: Json, orderId: string) {
   const pickupLng = Number(match.pickupLongitude ?? match.restaurantLongitude ?? (match.restaurant as Json | undefined)?.longitude);
   const dropLat = Number(match.deliveryLatitude ?? match.customerLatitude ?? (match.delivery as Json | undefined)?.latitude);
   const dropLng = Number(match.deliveryLongitude ?? match.customerLongitude ?? (match.delivery as Json | undefined)?.longitude);
-  const feed = ((match.activityLog as Json[]) ?? (match.activityFeed as Json[]) ?? []).map((entry) => ({
-    at: String(entry.time ?? entry.createdAt ?? ""),
-    status: String(entry.description ?? entry.status ?? ""),
-    location: String(entry.location ?? ""),
-  }));
+  const feed = shipdayActivity(match).filter((entry) => entry.status);
+  if (status && !feed.some((entry) => entry.status.toLowerCase() === status.toLowerCase())) {
+    feed.push({ at: new Date().toISOString(), status, location: "" });
+  }
+  const delivered = /\b(already delivered|delivered|successful|completed)\b/.test(status.toLowerCase().replace(/[_-]+/g, " "));
   return {
     status,
-    courierName: "Gogate Products",
-    awb: orderId,
-    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: carrierName }],
+    courierName: "Gogate Products-Shipday",
+    awb: String(match.orderId ?? (providerOrderId || orderNumber)),
+    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: "" }],
     lat: Number.isFinite(lat) ? lat : undefined,
     lng: Number.isFinite(lng) ? lng : undefined,
     agentName: carrierName,
@@ -1225,7 +1274,7 @@ export async function shipdayTrack(input: Json, orderId: string) {
     dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
     dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
-    expectedBy: promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
+    expectedBy: delivered ? "" : promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.etaTime, match.deliveryTime, match.expected_delivery),
   };
 }
 
@@ -1255,6 +1304,14 @@ function tookanDatetime(from = new Date(), extraHours = 4) {
   const ist = new Date(when.getTime() + 330 * 60 * 1000);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())} ${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
+}
+
+/** Tookan's message, plus what to do when no hub covers the address. */
+function tookanError(data: Json, fallback: string) {
+  const message = String(data.message ?? fallback);
+  return /hub/i.test(message)
+    ? `${message}. No Tookan hub covers this address: in Tookan, open Hubs and add a hub (linked to your team) whose radius covers the pickup and delivery pincodes.`
+    : message;
 }
 
 const tookanStatusLabel: Record<number, string> = {
@@ -1302,6 +1359,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             job_pickup_name: order.pickup.contactName,
             job_pickup_phone: order.pickup.phone,
             order_id: order.orderId,
+            barcode: order.orderId,
           },
         ],
         deliveries: [
@@ -1314,16 +1372,17 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             customer_phone: order.customer.phone,
             customer_email: order.customer.email ?? "",
             order_id: order.orderId,
+            barcode: order.orderId,
           },
         ],
       },
     });
-    if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the parcel task."));
+    if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the parcel task."));
     const task = (data.data as Json) ?? {};
     return {
       provider: "tookan-parcel",
       awb: String(task.delivery_job_id ?? task.job_id ?? ""),
-      courierName: "Gogate Products",
+      courierName: "Gogate Products-Tookan",
       providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
       providerShipmentId: String(task.delivery_job_id ?? ""),
       trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1355,14 +1414,14 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
       timezone: -330,
     },
   });
-  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the hyperlocal task."));
+  if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the hyperlocal task."));
   const task = (data.data as Json) ?? {};
   const pickupId = String(task.pickup_job_id ?? task.job_id ?? "");
   const deliveryId = String(task.delivery_job_id ?? task.job_id ?? "");
   return {
     provider: "tookan",
     awb: deliveryId || pickupId,
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Tookan",
     providerOrderId: pickupId || deliveryId,
     providerShipmentId: deliveryId,
     trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1412,7 +1471,7 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
   return {
     status: currentLabel,
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Tookan",
     awb: String(delivery?.job.job_id ?? jobId),
     accepted,
     agentLeg: pickupOpen ? "pickup" : "delivery",
@@ -1727,9 +1786,21 @@ export async function shiprocketReturn(input: Json, order: BookInput): Promise<B
     json: { shipment_id: shipmentId, is_return: 1, courier_id: order.courierId || undefined },
   });
   const awbData = ((assigned.response as Json)?.data as Json) ?? {};
+  let labelUrl = "";
+  try {
+    const label = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
+      method: "POST",
+      headers: auth,
+      json: { shipment_id: [shipmentId] },
+    });
+    labelUrl = String(label.label_url ?? "");
+  } catch {
+    labelUrl = "";
+  }
   return {
     provider: "shiprocket",
     awb: String(awbData.awb_code ?? created.awb_code ?? ""),
+    labelUrl: labelUrl || undefined,
     courierName: String(awbData.courier_name ?? "Return courier"),
     providerOrderId: String(created.order_id ?? ""),
     providerShipmentId: shipmentId,

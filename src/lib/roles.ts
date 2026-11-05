@@ -4,7 +4,9 @@ const ROLES_KEY = "vgmf_staff_roles";
 
 export const staffModules = [
   { id: "orders", label: "Orders & shipments", paths: ["/admin/commerce/orders", "/admin/commerce/shipments", "/admin/shipments", "/admin/payments/refunds"] },
+  { id: "portals", label: "Portal links", paths: ["/staff", "/doctor", "/"] },
   { id: "pos", label: "In-store POS", paths: ["/admin/commerce/pos"] },
+  { id: "pickup", label: "Store pickup orders", paths: ["/admin/commerce/pickup"] },
   { id: "catalog", label: "Products & inventory", paths: ["/admin/commerce/products", "/admin/commerce/inventory", "/admin/commerce/serviceability"] },
   { id: "payments", label: "Payments", paths: ["/admin/payments", "/admin/commerce/payments"] },
   { id: "customers", label: "Customers", paths: ["/admin/accounts/customers"] },
@@ -12,11 +14,13 @@ export const staffModules = [
   { id: "notices", label: "Notice board", paths: ["/admin/notices", "/admin/website/notices"] },
   { id: "about", label: "About Us pages", paths: ["/admin/website/about"] },
   { id: "articles", label: "Articles", paths: ["/admin/articles"] },
+  { id: "article-approvals", label: "Article approvals", paths: ["/admin/articles/approvals"] },
+  { id: "certificates", label: "Certificates", paths: ["/admin/certificates", "/admin/events/certificates"] },
   { id: "clinics", label: "Clinics", paths: ["/admin/website/clinics"] },
   { id: "events", label: "Events", paths: ["/admin/events"] },
   { id: "reports", label: "Reports", paths: ["/admin/reports", "/admin/analytics"] },
   { id: "policies", label: "Policies", paths: ["/admin/website/policies"] },
-  { id: "support", label: "Support", paths: ["/admin/support"] },
+  { id: "support", label: "Support", paths: ["/admin/support", "/support"] },
   { id: "analytics", label: "Analytics", paths: ["/admin/analytics"] },
   { id: "delivery", label: "Shipping APIs", paths: ["/admin/settings/shipping-apis", "/admin/delivery-partners"] },
   { id: "communication", label: "Email & notifications", paths: ["/admin/email", "/admin/settings/notifications", "/admin/settings/email", "/admin/settings/whatsapp", "/admin/settings/sms"] },
@@ -149,6 +153,13 @@ export function canOpen(user: User | null | undefined, path: string) {
   if (path === "/admin" || path === "/admin/") return allowed.length > 0;
   const owner = moduleForPath(path);
   return owner ? allowed.includes(owner) : false;
+}
+
+/** Admins, co-admins and staff whose role includes the Support module. */
+export function isSupportAgent(user: User | null | undefined) {
+  if (!user) return false;
+  if (user.role === "admin" || user.role === "coadmin") return true;
+  return user.role === "staff" && canOpen(user, "/admin/support");
 }
 
 export function firstPathFor(moduleId: StaffModuleId) {

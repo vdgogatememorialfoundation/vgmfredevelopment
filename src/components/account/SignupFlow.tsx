@@ -9,6 +9,7 @@ import AccountCreated from "@/components/account/AccountCreated";
 import { useAuth } from "@/components/auth/AuthContext";
 import { ACCOUNT_EXISTS_MESSAGE } from "@/lib/account-identity";
 import { isAccountConflict, remoteAccountToUser, remoteRegister, remoteSync, remoteVerifyRegister } from "@/lib/account-api";
+import { getSiteText } from "@/lib/site-text";
 import { demoAccountId, findAccountByIdentifier, saveAccount, setSession } from "@/lib/auth";
 import { countryByCode, isValidPhone, withDial } from "@/lib/geo";
 import { defaultEnabledCountry, getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
@@ -43,6 +44,8 @@ export default function SignupFlow() {
     phone: "",
     whatsapp: "",
     alternatePhone: "",
+    birthDate: "",
+    extraFields: "{}",
     country: defaultEnabledCountry().name,
     countryCode: defaultEnabledCountry().code,
   });
@@ -94,6 +97,11 @@ export default function SignupFlow() {
       const country = countryByCode(form.countryCode);
       if (!isCountryEnabled(country.code, countries)) {
         setError("The Foundation is not available in this country yet.");
+        return;
+      }
+      const missing = signupGap(form.birthDate, form.extraFields);
+      if (missing) {
+        setError(missing);
         return;
       }
       const phone = withDial(form.phone, country.dial);
@@ -157,6 +165,8 @@ export default function SignupFlow() {
       phone: form.phone,
       whatsapp: form.whatsapp,
       alternatePhone: form.alternatePhone.trim() || form.phone,
+      birthDate: form.birthDate || undefined,
+      extraFields: parseExtra(form.extraFields),
       accountId: accountIdValue,
       role: "customer",
       status: "active",
@@ -204,6 +214,8 @@ export default function SignupFlow() {
           const user = remoteAccountToUser(result.account, {
             whatsapp: form.whatsapp,
             alternatePhone: form.alternatePhone.trim() || form.phone,
+            birthDate: form.birthDate || undefined,
+            extraFields: parseExtra(form.extraFields),
           });
           saveAccount(user);
           sendAccountDetails(user.email, true);
@@ -316,4 +328,23 @@ export default function SignupFlow() {
       )}
     </>
   );
+}
+
+function parseExtra(raw: string): Record<string, string> | undefined {
+  try {
+    const value = JSON.parse(raw || "{}") as Record<string, string>;
+    return Object.keys(value).length ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function signupGap(birthDate: string, extraRaw: string) {
+  const controls = getSiteText().signup;
+  if (!controls) return "";
+  if (controls.birthDate === "required" && !birthDate) return "Enter your date of birth.";
+  if (birthDate && Date.parse(`${birthDate}T00:00:00Z`) > Date.now()) return "Date of birth cannot be in the future.";
+  const extra = parseExtra(extraRaw) ?? {};
+  const gap = controls.fields.find((field) => field.enabled && field.required && !extra[field.id]?.trim());
+  return gap ? `Fill in ${gap.label}.` : "";
 }

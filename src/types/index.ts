@@ -24,6 +24,9 @@ export type EventMode = "Online" | "Offline" | "Hybrid";
 export type PartnerPortalId = "seminar" | "autism" | "fellowship";
 
 export interface Event {
+  termsConditions?: string;
+  introVideoUrl?: string;
+  groupChatUrl?: string;
   id: string;
   name: string;
   slug: string;
@@ -123,6 +126,7 @@ export interface Speaker {
   designation: string;
   topic: string;
   bio?: string;
+  photo?: string;
 }
 
 export interface ScheduleItem {
@@ -191,6 +195,14 @@ export interface Article {
   assignedTo?: string;
   reviewNote?: string;
   translations?: Record<string, ArticleLocaleCopy>;
+  style?: ArticleStyle;
+}
+
+export interface ArticleStyle {
+  font?: "serif" | "sans" | "book" | "indic";
+  size?: "sm" | "md" | "lg";
+  spacing?: "tight" | "normal" | "relaxed";
+  align?: "left" | "center" | "right" | "justify";
 }
 
 export interface ArticleAssignment {
@@ -286,6 +298,26 @@ export interface Book {
   media?: ProductMedia[];
   specifications?: { label: string; value: string }[];
   countryOfOrigin?: string;
+  editor?: string;
+  /** YYYY-MM-DD */
+  publicationDate?: string;
+  dimensions?: string;
+  paperQuality?: string;
+  printing?: string;
+  subject?: string;
+  audience?: string[];
+  details?: {
+    about?: string;
+    learn?: string;
+    highlights?: string;
+    whoShouldRead?: string;
+    chapters?: string;
+    outcomes?: string;
+    authorInfo?: string;
+    publisherInfo?: string;
+    editionInfo?: string;
+  };
+  contributors?: { name: string; role: string; bio?: string; photo?: string }[];
   expectedDelivery?: string;
   storePickupAvailable?: boolean;
   deliveryAvailable?: boolean;
@@ -406,6 +438,10 @@ export interface User {
   whatsapp: string;
   /** Second number collected at signup — may match `phone`. */
   alternatePhone?: string;
+  /** YYYY-MM-DD, collected at signup for birthday wishes. */
+  birthDate?: string;
+  /** Answers to admin-configured signup fields, keyed by field id. */
+  extraFields?: Record<string, string>;
   accountId?: string;
   role?: UserRole;
   password?: string;
@@ -523,6 +559,7 @@ export interface Order {
     | "Pending"
     | "Paid"
     | "Processing"
+    | "Awaiting Confirmation"
     | "Ordered"
     | "Accepted"
     | "Packed"
@@ -560,11 +597,20 @@ export interface Order {
   razorpayPaymentId?: string;
   paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
   courierChoice?: CourierRate;
+  /** A store-pickup order switched to courier delivery once the customer pays only the courier charge. */
+  courierUpgrade?: {
+    amount: number;
+    rate: CourierRate;
+    link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
+    paidAt?: string;
+    paymentRef?: string;
+  };
   weightKg?: number;
   createdBy?: string;
   cancelReason?: string;
   refundAmount?: number;
-  history?: { at: string; status: string; note?: string; by?: string }[];
+  /** `custom` is the tracking step id an admin-added status shows under. */
+  history?: { at: string; status: string; note?: string; by?: string; custom?: string }[];
 }
 
 export interface RefundRecord {
@@ -587,6 +633,8 @@ export interface ReturnShipment {
   providerShipmentId?: string;
   createdAt: string;
   note?: string;
+  /** Label the customer prints and pastes on the parcel going back. */
+  labelUrl?: string;
 }
 
 export interface CourierRate {
@@ -595,6 +643,8 @@ export interface CourierRate {
   courierName: string;
   rate: number;
   etaDays: number;
+  /** The courier's own expected delivery date, when it gives one. */
+  deliverBy?: string;
   live: boolean;
   cod?: boolean;
   lastMile?: "porter" | "shadowfax" | "flash";
@@ -719,6 +769,13 @@ export interface SiteSettings {
   liveChatOnline?: boolean;
   /** Seconds for one pass of the announcement ticker. */
   tickerSeconds?: number;
+  /** Slim strip above the header for shlokas, quotes or a line of welcome. */
+  shlokaBar?: boolean;
+  shlokas?: string[];
+  /** Floating WhatsApp button for visitor questions. */
+  queryButton?: boolean;
+  queryNumber?: string;
+  queryMessage?: string;
 }
 
 export interface AdminCategory {
@@ -759,6 +816,8 @@ export interface ShipmentRecord {
   pickedUpAt?: string;
   provider?: CourierRate["provider"];
   live?: boolean;
+  /** Set when the parcel went with a courier outside the connected APIs (see src/lib/couriers.ts). */
+  directCourier?: string;
   providerOrderId?: string;
   providerShipmentId?: string;
   labelUrl?: string;

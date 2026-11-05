@@ -1,5 +1,6 @@
 "use client";
 
+import { LiveSeminarBlock } from "@/components/site/LiveSeminarBlock";
 import Link from "next/link";
 import Badge from "@/components/common/Badge";
 import PageHeader from "@/components/common/PageHeader";
@@ -12,6 +13,14 @@ import { formatDate } from "@/lib/utils";
 import { clinicDirectionsUrl, clinicMapEmbed } from "@/lib/maps";
 import { NoticesGazette } from "@/components/site/NoticesGazette";
 import { useI18n } from "@/components/i18n/LanguageProvider";
+
+/** Older saved clinic copy carried a desk-only note; keep it off the public page. */
+function publicAbout(text?: string) {
+  return (text ?? "")
+    .replace(/\s*Hours and the address can be changed from Admin\s*→\s*Clinics\.?/gi, "")
+    .replace(/\s*Foundation clinic at Ramprasad Chambers,\s*New Nana Peth\.?/gi, "")
+    .trim();
+}
 
 function clockLabel(value?: string) {
   if (!value) return "";
@@ -80,6 +89,7 @@ export function VideosIndex() {
           </div>
         </section>
       )}
+      <LiveSeminarBlock />
       <section className="section bg-background">
         <div className="container">
           <VideosGrid videos={videos} />
@@ -150,7 +160,7 @@ export function ClinicDetail({ slug }: { slug: string }) {
       <section className="section bg-background">
         <div className="container grid gap-8 lg:grid-cols-3">
           <div className="space-y-8 lg:col-span-2">
-            {clinic.about && <p className="text-body whitespace-pre-line">{clinic.about}</p>}
+            {publicAbout(clinic.about) && <p className="text-body whitespace-pre-line">{publicAbout(clinic.about)}</p>}
             {clinic.services && clinic.services.length > 0 && (
               <div>
                 <h2 className="heading-3 mb-4">{t("clinic.services")}</h2>

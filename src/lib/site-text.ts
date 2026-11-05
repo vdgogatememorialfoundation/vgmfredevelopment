@@ -1,6 +1,19 @@
 import { subscribeCms } from "@/lib/cms";
 import { getPublishedFeed } from "@/lib/hydrate-public";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { normalizeFestivals, type FestivalSchedule } from "@/lib/festival-themes";
+import {
+  defaultBirthday,
+  defaultSignupControls,
+  normalizeBirthday,
+  normalizeDisclaimers,
+  normalizeReels,
+  normalizeSignup,
+  type BirthdayControls,
+  type InstagramReel,
+  type SignupControls,
+  type SiteDisclaimer,
+} from "@/lib/site-extras";
 
 const KEY = "vgmf_site_text";
 
@@ -17,6 +30,7 @@ export const homeSections = [
   { id: "books", label: "Shop & publications" },
   { id: "articles", label: "Articles" },
   { id: "notices", label: "Notice board" },
+  { id: "reels", label: "Instagram reels" },
   { id: "clinics", label: "Clinics" },
 ] as const;
 
@@ -61,8 +75,15 @@ export type SiteText = {
   pages: Record<string, PageCopy>;
   homeOrder: HomeSectionId[];
   homeHidden: Partial<Record<HomeSectionId, boolean>>;
+  /** Keys are home:section, page:id, or account:/path. True shows an under-development notice. */
+  developing: Partial<Record<string, boolean>>;
   reviews: ReviewsControls;
   theme: SiteTheme;
+  festivals?: FestivalSchedule[];
+  disclaimers?: SiteDisclaimer[];
+  signup?: SignupControls;
+  reels?: InstagramReel[];
+  birthday?: BirthdayControls;
 };
 
 export const defaultSiteTheme: SiteTheme = {
@@ -233,8 +254,14 @@ export function defaultSiteText(): SiteText {
     pages: {},
     homeOrder: homeSections.map((section) => section.id),
     homeHidden: {},
+    developing: {},
     reviews: { ...defaultReviewsControls },
     theme: { ...defaultSiteTheme },
+    festivals: [],
+    disclaimers: [],
+    signup: { ...defaultSignupControls, fields: [] },
+    reels: [],
+    birthday: { ...defaultBirthday },
   };
 }
 
@@ -255,12 +282,20 @@ export function normalizeSiteText(input?: Partial<SiteText> | null): SiteText {
     pages: input.pages && typeof input.pages === "object" ? input.pages : {},
     homeOrder: order,
     homeHidden: input.homeHidden && typeof input.homeHidden === "object" ? input.homeHidden : {},
+    developing: Object.fromEntries(
+      Object.entries(input.developing ?? {}).filter(([, value]) => value === true)
+    ),
     reviews: {
       ...base.reviews,
       ...(input.reviews ?? {}),
       autoplaySeconds: Number.isFinite(seconds) ? Math.min(60, Math.max(0, Math.round(seconds))) : base.reviews.autoplaySeconds,
     },
     theme: normalizeTheme(input.theme),
+    festivals: normalizeFestivals(input.festivals),
+    disclaimers: normalizeDisclaimers(input.disclaimers),
+    signup: normalizeSignup(input.signup),
+    reels: normalizeReels(input.reels),
+    birthday: normalizeBirthday(input.birthday),
   };
 }
 
@@ -306,6 +341,14 @@ export function saveSiteText(next: SiteText) {
 export function applyPublishedSiteText(value: Partial<SiteText> | undefined) {
   if (typeof window === "undefined" || !value) return;
   window.localStorage.setItem(KEY, JSON.stringify(normalizeSiteText(value)));
+}
+
+export function developingKey(kind: "home" | "page" | "account", id: string) {
+  return `${kind}:${id}`;
+}
+
+export function isDeveloping(kind: "home" | "page" | "account", id: string, text = getSiteText()) {
+  return text.developing?.[developingKey(kind, id)] === true;
 }
 
 export function textOverride(key: MessageKey): string | undefined {

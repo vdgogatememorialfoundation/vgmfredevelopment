@@ -330,6 +330,25 @@ type ScheduleRow = {
   seminar_title?: string;
 };
 
+const speakerPhotos = new Map<PartnerPortalId, Map<string, string>>();
+
+async function loadSpeakerPhotos(portal: PartnerPortalId, origin: string) {
+  const row = ((await queryRows(portal, "SELECT value FROM global_settings WHERE key = 'public_site_cms'")) ?? [])[0];
+  let cms: { speakers?: { name?: string; image?: string; imagePath?: string }[] } = {};
+  try {
+    cms = JSON.parse(String(row?.value ?? "{}"));
+  } catch {
+    return;
+  }
+  const photos = new Map<string, string>();
+  for (const speaker of Array.isArray(cms.speakers) ? cms.speakers : []) {
+    const name = String(speaker?.name ?? "").trim().toLowerCase();
+    const url = mediaUrl(origin, speaker?.image || speaker?.imagePath);
+    if (name && url) photos.set(name, url);
+  }
+  speakerPhotos.set(portal, photos);
+}
+
 function eventFromSeminar(
   portal: PartnerPortalId,
   seminar: Record<string, unknown>,
@@ -356,6 +375,7 @@ function eventFromSeminar(
       designation: "",
       topic: row.title || "",
       bio: row.speaker_bio || undefined,
+      photo: speakerPhotos.get(portal)?.get(String(row.speaker_name || "").trim().toLowerCase()),
     }));
   const schedule = sessions.map((row) => ({
     id: `${portal}-sch-${row.id}`,
@@ -374,7 +394,8 @@ function eventFromSeminar(
     name: title,
     slug,
     shortDescription: str(seminar, ["description"]).slice(0, 240) || `${title} on the ${partnerCategory(portal)} portal.`,
-    description: str(seminar, ["description"]) || str(seminar, ["terms_conditions"]),
+    description: str(seminar, ["description"]),
+    termsConditions: str(seminar, ["terms_conditions"]) || undefined,
     bannerUrl: mediaUrl(origin, seminar.hero_image_path || seminar.flyer_path),
     startDate: start || dateOnly(),
     endDate: end || start || dateOnly(),
@@ -400,7 +421,7 @@ function eventFromSeminar(
     sourceUrl: origin,
     tbd: {
       venue: !venue,
-      city: !city,
+      city: !city && !venue,
       registration: false,
       fee: !asNumber(seminar.price),
     },
@@ -535,6 +556,7 @@ async function pullPublic(portal: PartnerPortalId) {
     }
     events = [...byId.values()];
   }
+  await attachCmsSpeakers(portal, events).catch(() => undefined);
   const copied = noticesFromPublic(portal, announcements);
   return { events, ...copied };
 }
@@ -832,6 +854,7 @@ async function pullDatabase(portal: PartnerPortalId) {
   if (!poolFor(portal)) return null;
   if (portal === "fellowship") return pullFellowshipDatabase();
   const origin = originFor(portal);
+  await loadSpeakerPhotos(portal, origin).catch(() => undefined);
   const seminars = (await queryRows(portal, "SELECT * FROM seminars ORDER BY event_date DESC NULLS LAST, id DESC")) ?? [];
   const schedules = (await queryRows(
     portal,
@@ -1152,6 +1175,49 @@ async function persistPartnerNotices(notices: Notice[]) {
   }
 }
 
+type CmsSpeaker = { name?: string; role?: string; seminar?: string; org?: string; image?: string; imagePath?: string };
+
+const titleKey = (value: string) => value.toLowerCase().replace(/\.0\b/g, "").replace(/[^a-z0-9]+/g, "");
+
+/** Speakers (with photos) configured on each portal's public site CMS, attached to the matching event. */
+async function attachCmsSpeakers(portal: PartnerPortalId, events: Event[]) {
+  if (!events.length) return;
+  const origin = originFor(portal);
+  const payload = (await fetch(`${origin}/api/public/site-cms`, { signal: AbortSignal.timeout(15000), cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null)) as { cms?: { speakers?: CmsSpeaker[] }; speakers?: CmsSpeaker[] } | null;
+  const rows = (payload?.cms?.speakers ?? payload?.speakers ?? []).filter(
+    (row) => row && String(row.name ?? "").trim() && (String(row.role ?? "").trim() || String(row.image ?? row.imagePath ?? "").trim())
+  );
+  if (!rows.length) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const fallback =
+    [...events].filter((event) => (event.endDate || event.startDate) >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ??
+    [...events].sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
+  const curated = new Map<Event, NonNullable<Event["speakers"]>>();
+  rows.forEach((row, index) => {
+    const seminar = titleKey(String(row.seminar ?? ""));
+    const event =
+      (seminar && events.find((item) => titleKey(item.name).startsWith(seminar) || seminar.startsWith(titleKey(item.name)))) || fallback;
+    if (!event) return;
+    const name = String(row.name).trim().replace(/^(dr|vd|vaidya|prof)\.\s*/i, (m) => `${m.replace(/\s+/g, "")} `);
+    const surname = name.split(/\s+/).pop()?.toLowerCase() ?? "";
+    const scheduled = (event.speakers ?? []).find((item) => surname && item.name.toLowerCase().split(/\s+/).pop() === surname);
+    const list = curated.get(event) ?? [];
+    list.push({
+      id: `${portal}-cms-spk-${index + 1}`,
+      name,
+      designation: String(row.org ?? "").trim(),
+      topic: "",
+      bio: scheduled?.bio,
+      photo: mediaUrl(origin, row.image || row.imagePath) || undefined,
+    });
+    curated.set(event, list);
+  });
+  // The portal's own speaker list (with photos) replaces names guessed from schedule rows.
+  for (const [event, list] of curated) event.speakers = list;
+}
+
 export async function syncPartnerPortals(mode: "full" | "public" = "full"): Promise<PartnerSnapshot> {
   const { readPartnerSnapshot, writePartnerSnapshot } = await import("@/lib/server/partner-store");
   const previous = (await readPartnerSnapshot()) ?? emptySnapshot();
@@ -1165,6 +1231,7 @@ export async function syncPartnerPortals(mode: "full" | "public" = "full"): Prom
     const publicData = await pullPublic(portal);
     const dbData = mode === "full" ? await pullDatabase(portal) : null;
     const events = dbData?.events?.length ? mergeById(dbData.events, publicData.events) : publicData.events;
+    await attachCmsSpeakers(portal, events).catch(() => undefined);
     const notices = mergeById(publicData.notices, dbData?.notices ?? []);
     const announcements = mergeById(publicData.announcements, dbData?.announcements ?? []);
     snapshot.events.push(...events);
@@ -1248,7 +1315,12 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
   const eventRow = asRecord(payload.event) ?? asRecord(payload.seminar);
   if (eventRow && portal !== "fellowship") {
     const event = eventFromSeminar(portal, eventRow, []);
-    snapshot.events = upsertList(snapshot.events, event);
+    const previous = snapshot.events.find((row) => row.id === event.id);
+    snapshot.events = upsertList(snapshot.events, {
+      ...event,
+      speakers: event.speakers?.length ? event.speakers : previous?.speakers ?? [],
+      schedule: event.schedule?.length ? event.schedule : previous?.schedule ?? [],
+    });
   }
   const noticeRow = asRecord(payload.notice);
   if (noticeRow) {

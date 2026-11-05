@@ -10,6 +10,7 @@ import { findAccountByIdentifier, loginBlockReason, saveAccount } from "@/lib/au
 import { sendOtpCode } from "@/lib/admin-store";
 import { getAuthAccess } from "@/lib/auth-access";
 import { subscribeCms } from "@/lib/cms";
+import { useSiteText } from "@/lib/use-site-text";
 import { issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import { hasFoundationPassword, lookupPartnerAccount, SISTER_PASSWORD_HINT } from "@/lib/partner-hydrate";
 import type { User } from "@/types";
@@ -21,6 +22,7 @@ export default function SignInFlow() {
   const router = useRouter();
   const { signIn } = useAuth();
   const [access, setAccess] = useState(getAuthAccess);
+  const login = useSiteText().signup?.login ?? {};
   useEffect(() => subscribeCms(() => setAccess(getAuthAccess())), []);
   const [step, setStep] = useState<Step>("identifier");
   const [method, setMethod] = useState<Method>("password");
@@ -303,11 +305,11 @@ export default function SignInFlow() {
         </p>
 
         <h2 className="text-xl font-semibold text-text-primary">
-          Welcome back
+          {login.heading || "Welcome back"}
         </h2>
 
         <p className="mt-3 text-sm leading-6 text-text-muted">
-          {method === "sms"
+          {login.intro && method === "password" ? login.intro : method === "sms"
             ? "Sign in with the mobile number on your account. We send a one-time SMS code."
             : method === "otp"
               ? "Sign in with a one-time code emailed to your registered address."
@@ -338,7 +340,7 @@ export default function SignInFlow() {
             className="mb-2 block text-sm font-semibold text-text-primary"
             htmlFor="signin-identifier"
           >
-            {method === "sms" ? "Registered mobile number" : "Email, Phone or Account ID"}
+            {method === "sms" ? "Registered mobile number" : login.identifierLabel || "Email, Phone or Account ID"}
           </label>
           <input
             id="signin-identifier"
@@ -347,14 +349,14 @@ export default function SignInFlow() {
             value={identifier}
             onChange={(event) => setIdentifier(event.target.value)}
             className="input-field"
-            placeholder={method === "sms" ? "+91 98765 43210" : "name@example.com / +91 98765 43210 / 12-digit Account ID"}
+            placeholder={method === "sms" ? "+91 98765 43210" : login.identifierPlaceholder || "name@example.com / +91 98765 43210 / 12-digit Account ID"}
             autoComplete="username"
           />
         </div>
         {method === "password" && (
           <div>
             <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="signin-password">
-              Password
+              {login.passwordLabel || "Password"}
             </label>
             <input
               id="signin-password"
@@ -363,7 +365,7 @@ export default function SignInFlow() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="input-field"
-              placeholder="Your password"
+              placeholder={login.passwordPlaceholder || "Your password"}
               autoComplete="current-password"
             />
           </div>
@@ -384,7 +386,7 @@ export default function SignInFlow() {
                 ? "Send email code"
                 : access.emailOtp
                   ? "Continue to verification"
-                  : "Sign in"}
+                  : login.button || "Sign in"}
         </button>
         {method === "password" && (
           <button type="button" className="w-full text-sm font-semibold text-burgundy" onClick={() => setStep("forgot")}>

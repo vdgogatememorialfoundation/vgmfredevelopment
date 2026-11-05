@@ -1,5 +1,5 @@
 import { customerCourierLabel } from "@/lib/courier-label";
-import { classifyCourierScan, isHyperlocalProvider } from "@/lib/order-pipeline";
+import { classifyCourierScan, isCourierInfoLine, isHyperlocalProvider } from "@/lib/order-pipeline";
 import {
   ithinkTrack,
   nimbusTrack,
@@ -8,6 +8,8 @@ import {
   shipyaariTrack,
   tookanTrack,
 } from "@/lib/server/providers";
+import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
+import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
 import { findShopOrder, patchShopOrder } from "@/lib/server/shop-orders";
 import { findShopShipment, replaceShopShipment } from "@/lib/server/shop-shipments";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
@@ -48,7 +50,8 @@ async function track(
   awb: string,
   providerOrderId: string | undefined,
   extraId: string | undefined,
-  creds: Record<string, Record<string, unknown>>
+  creds: Record<string, Record<string, unknown>>,
+  shopOrderId = ""
 ) {
   const own = creds[provider] ?? creds[provider.replace("-parcel", "")] ?? {};
   if (provider === "shiprocket") return shiprocketTrack(own, awb);
@@ -58,7 +61,7 @@ async function track(
   if (provider === "tookan" || provider === "tookan-parcel") {
     return tookanTrack(creds.tookan ?? own, String(providerOrderId || awb), String(extraId || awb));
   }
-  if (provider === "shipday") return shipdayTrack(own, String(providerOrderId ?? awb));
+  if (provider === "shipday") return shipdayTrack(own, shopOrderId, String(providerOrderId ?? awb));
   return null;
 }
 
@@ -84,25 +87,29 @@ export async function refreshStoredShipment(orderId: string) {
   const shipment = findShopShipment(orderId);
   if (!shipment) return { ok: false as const, error: "Shipment not on the server yet." };
   const provider = shipment.provider;
-  if (!shipment.live || !provider || provider === "local") {
+  const direct = !shipment.live && shipment.directCourier ? shipment.directCourier : "";
+  if (!direct && (!shipment.live || !provider || provider === "local")) {
     return { ok: true as const, live: false as const, shipment };
   }
   const creds = readShippingCreds() as Record<string, Record<string, unknown>>;
   let hit: TrackHit | null = null;
   try {
-    hit = (await track(provider, shipment.awb, shipment.providerOrderId, shipment.providerShipmentId, creds)) as TrackHit | null;
+    hit = direct
+      ? await courierWebTrack(direct, shipment.awb, (creds.tracker ?? {}) as TrackerCreds)
+      : ((await track(provider!, shipment.awb, shipment.providerOrderId, shipment.providerShipmentId, creds, orderId)) as TrackHit | null);
   } catch {
     return { ok: true as const, live: false as const, shipment };
   }
   if (!hit) return { ok: true as const, live: false as const, shipment };
 
   const events = dedupe(hit.events?.length ? hit.events : shipment.tracking ?? []);
-  const courier = customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
+  const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
-  const latestStatus = hit.status || [...events].reverse().find((event) => event.status)?.status || "";
+  const latestStatus =
+    [hit.status, ...[...events].reverse().map((event) => event.status)].find((text) => text && classifyCourierScan(text)) || hit.status || "";
   const stage = classifyCourierScan(latestStatus);
   const orderForLeg = findShopOrder(orderId);
-  const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile);
+  const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile, hit.courierName || shipment.courier || orderForLeg?.courierName);
   const shipmentStatus = stage ? shipmentStatusFor(stage) : undefined;
   const next: ShipmentRecord = {
     ...shipment,
@@ -110,32 +117,38 @@ export async function refreshStoredShipment(orderId: string) {
     awb,
     status: shipmentStatus ?? shipment.status,
     tracking: events.length ? events : shipment.tracking,
-    trackingUrl: hit.trackingUrl || shipment.trackingUrl,
-    agentName: hit.accepted === false ? "" : hit.agentName || shipment.agentName,
-    agentPhone: hit.accepted === false ? "" : hit.agentPhone || shipment.agentPhone,
-    agentLat: hit.accepted === false ? undefined : hit.lat ?? shipment.agentLat,
-    agentLng: hit.accepted === false ? undefined : hit.lng ?? shipment.agentLng,
+    trackingUrl: direct ? shipment.trackingUrl || hit.trackingUrl : hit.trackingUrl || shipment.trackingUrl,
+    agentName: hit.accepted === false || stage === "delivered" ? "" : hit.agentName || shipment.agentName,
+    agentPhone: hit.accepted === false || stage === "delivered" ? "" : hit.agentPhone || shipment.agentPhone,
+    agentLat: hit.accepted === false || stage === "delivered" ? undefined : hit.lat ?? shipment.agentLat,
+    agentLng: hit.accepted === false || stage === "delivered" ? undefined : hit.lng ?? shipment.agentLng,
     agentLeg: hit.agentLeg ?? shipment.agentLeg,
     pickupLat: hit.pickupLat ?? shipment.pickupLat,
     pickupLng: hit.pickupLng ?? shipment.pickupLng,
     dropLat: hit.dropLat ?? shipment.dropLat,
     dropLng: hit.dropLng ?? shipment.dropLng,
     deliveryOtp: hit.otp || shipment.deliveryOtp,
-    expectedBy: hit.expectedBy || shipment.expectedBy,
+    expectedBy: stage === "delivered" ? "" : hit.expectedBy || shipment.expectedBy,
   };
   replaceShopShipment(next);
   const order = orderForLeg;
   if (order) {
     const target = stage ? orderStatusFor(stage, hyperlocal) : undefined;
     const rank: Record<string, number> = { Packed: 1, Shipped: 2, "Out for Delivery": 3, Delivered: 4, Failed: 5 };
-    const move = Boolean(target && (rank[target] ?? 0) >= (rank[order.status] ?? 0) && order.status !== target);
+    const wrongDelivered =
+      order.status === "Delivered" &&
+      stage !== "delivered" &&
+      Boolean(target) &&
+      isCourierInfoLine([...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.note ?? "");
+    const move = Boolean(target && (wrongDelivered || ((rank[target] ?? 0) >= (rank[order.status] ?? 0) && order.status !== target)));
     if (move || order.courierName !== courier || (awb && order.trackingId !== awb)) {
       patchShopOrder(orderId, {
         courierName: courier,
         trackingId: awb || order.trackingId,
-        ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: latestStatus }] } : {}),
+        ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: wrongDelivered ? `Corrected from courier: ${latestStatus}` : latestStatus }] } : {}),
       });
     }
+    if (move && target === "Delivered") void issueDeliveryInvoice(orderId);
   }
   return {
     ok: true as const,

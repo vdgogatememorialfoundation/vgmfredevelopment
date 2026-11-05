@@ -1,5 +1,6 @@
 "use client";
 
+import { DIRECT_COURIERS } from "@/lib/couriers";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelOrder,
@@ -20,13 +21,15 @@ import {
   refundToStoreCredit,
   resaveOrder,
   setOrderStatus,
+  recordCourierPayment,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, updateReturnRequest } from "@/lib/store";
+import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
 import { getLiveBooks } from "@/lib/product-data";
-import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
+import { getIntegrations, getOrderSettings, orderStatusText, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
+  attachDirectTracking,
   bookShipment,
   MANUAL_PORTALS,
   cancelShipment,
@@ -43,7 +46,7 @@ import {
   trackShipment,
   type RateQuote,
 } from "@/lib/shipping-client";
-import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
+import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway, createCourierPaymentLink, refreshCourierPaymentLink } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -57,10 +60,13 @@ import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesF
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { listPickupLocations } from "@/lib/shipping-client";
+import { LABEL_SIZES, getLabelSize, getOrder as getStoredOrder, patchOrder as patchStoredOrder, setLabelSize, type LabelSize } from "@/lib/admin-store";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
   "Processing",
+  "Awaiting Confirmation",
   "Ordered",
   "Accepted",
   "Packed",
@@ -72,6 +78,14 @@ const ALL_STATUSES: Order["status"][] = [
   "Failed",
   "Cancelled",
 ];
+/** Store pickup has its own steps; the stored status stays canonical. */
+const PICKUP_STATUSES: { status: Order["status"]; label: string }[] = [
+  { status: "Awaiting Confirmation", label: "Awaiting Confirmation" },
+  { status: "Ordered", label: "Order Confirmed" },
+  { status: "Packed", label: "Ready for Pickup" },
+  { status: "Delivered", label: "Picked Up" },
+  { status: "Cancelled", label: "Cancelled" },
+];
 const PAYMENT_TONES: Record<string, string> = {
   Paid: "bg-emerald-50 text-emerald-700",
   Pending: "bg-amber-50 text-amber-700",
@@ -79,7 +93,7 @@ const PAYMENT_TONES: Record<string, string> = {
   Refunded: "bg-slate-100 text-slate-600",
   "Partially Refunded": "bg-amber-50 text-amber-700",
 };
-const PAYMENT_METHODS = ["UPI", "Bank transfer", "Cash", "Card (POS)", "Cheque", "Razorpay (manual)", "Cash on delivery"];
+const PAYMENT_METHODS = ["UPI", "Bank transfer", "Cash", "Card (POS)", "Cheque", "Razorpay (manual)", "Cash on delivery", "Cash at Store"];
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
@@ -118,7 +132,7 @@ export function OrdersDashboard() {
 
   const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
   const toPack = orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length;
-  const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery").length;
+  const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery" && order.paymentMethod !== "Cash at Store").length;
   const toShip = orders.filter((order) => order.status === "To Ship" || order.status === "Ready to Ship" || order.status === "Packed").length;
   const outForDelivery = orders.filter((order) => order.status === "Out for Delivery").length;
   const delivered = orders.filter((order) => order.status === "Delivered").length;
@@ -182,6 +196,7 @@ export function OrdersDashboard() {
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">{selectedIds.length} selected</span>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ordered", (id) => setOrderStatus(id, "Ordered"))}>Confirm</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
             setOrderStatus(id, "Packed");
@@ -633,6 +648,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState<Order["status"]>(order.status);
+  const [extraId, setExtraId] = useState("");
+  const [pickupChoices, setPickupChoices] = useState<{ nickname: string; city: string; pincode: string; phone?: string; address?: string }[]>([]);
+  const [pickupNick, setPickupNick] = useState("");
+  const extraStatuses = getOrderSettings().customStatuses.filter((row) => row.label.trim());
   const [method, setMethod] = useState("UPI");
   const [reference, setReference] = useState("");
   const refundCap = maxRefundable(order);
@@ -642,7 +661,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [picked, setPicked] = useState<number | undefined>();
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [pickupSlot, setPickupSlot] = useState(shipment?.pickupSlot || settings.pickupTimeslots[0]?.label || "10:00 – 13:00");
-  const [manualPortal, setManualPortal] = useState<(typeof MANUAL_PORTALS)[number]["id"]>("shiprocket");
+  const [manualPortal, setManualPortal] = useState<string>("delhivery");
   const [manualAwb, setManualAwb] = useState("");
   const [manualCourier, setManualCourier] = useState("");
   const [deliveryWhen, setDeliveryWhen] = useState("");
@@ -688,8 +707,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
   const loadRates = () =>
     run("rates", async () => {
+      const locations = pickupChoices.length ? { locations: pickupChoices } : await listPickupLocations().catch(() => ({ locations: [] }));
+      setPickupChoices(locations.locations ?? []);
+      const from = (locations.locations ?? []).find((row) => row.nickname === pickupNick);
       const result = await fetchCourierRates({
         deliveryPincode: order.deliveryAddress?.pincode ?? "",
+        pickupPincode: from?.pincode,
         weightKg: orderWeightKg(order),
         declaredValue: order.total,
         cod: order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid",
@@ -827,11 +850,38 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <div className="flex flex-wrap gap-2">
             <div className="min-w-44 flex-1">
               <SelectInput value={status} onChange={(event) => setStatus(event.target.value as Order["status"])}>
-                {ALL_STATUSES.map((item) => <option key={item}>{item}</option>)}
+                {order.deliveryMode === "store_pickup"
+                  ? PICKUP_STATUSES.map((item) => <option key={item.status} value={item.status}>{orderStatusText(item.label)}</option>)
+                  : ALL_STATUSES.map((item) => <option key={item} value={item}>{orderStatusText(item)}</option>)}
               </SelectInput>
             </div>
             <Button onClick={applyStatus} disabled={busy === "status" || status === order.status}>{busy === "status" ? "Saving…" : "Update status"}</Button>
           </div>
+          {extraStatuses.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <div className="min-w-44 flex-1">
+                <SelectInput value={extraId} onChange={(event) => setExtraId(event.target.value)}>
+                  <option value="">Add a tracking update…</option>
+                  {extraStatuses.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
+                </SelectInput>
+              </div>
+              <Button
+                disabled={!extraId || busy === "extra"}
+                onClick={() =>
+                  run("extra", () => {
+                    const row = extraStatuses.find((item) => item.id === extraId);
+                    if (!row) return;
+                    const latest = getStoredOrder(order.id) ?? order;
+                    patchStoredOrder(order.id, { history: [...(latest.history ?? []), { at: new Date().toISOString(), status: row.label, by: "admin", custom: row.stage }] });
+                    setExtraId("");
+                    return `Tracking update "${row.label}" added. The customer sees it in their tracking.`;
+                  })
+                }
+              >
+                Add update
+              </Button>
+            </div>
+          )}
           {order.status !== "Cancelled" && (
             <div className="mt-3 rounded-lg border border-red-100 bg-red-50/60 p-3">
               <p className="text-xs font-semibold text-red-800">Cancel this order</p>
@@ -929,6 +979,53 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </Section>
       </div>
 
+      {order.deliveryMode === "store_pickup" && order.status !== "Cancelled" && order.status !== "Delivered" && (
+        <div className="mt-4">
+          <Section
+            title="Switch to courier delivery"
+            action={<Button variant="outline" onClick={loadRates} disabled={busy === "rates"}>{busy === "rates" ? "Checking…" : "Show couriers & rates"}</Button>}
+          >
+            <p className="text-sm text-text-muted">
+              If the customer cannot come to the store, send a link to pay only the courier charge. Once paid, the order becomes a courier delivery and can be booked.
+            </p>
+            {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                disabled={busy === "courier-link" || picked === undefined || !quote}
+                onClick={() => run("courier-link", async () => {
+                  const rate = picked !== undefined ? quote?.rates[picked] : undefined;
+                  if (!rate) throw new Error("Pick a courier first.");
+                  const link = await createCourierPaymentLink(order.id, rate);
+                  return `Courier payment link sent: ${link.url}`;
+                })}
+              >
+                {busy === "courier-link" ? "Creating…" : picked !== undefined && quote ? `Send link to pay ${rupees(quote.rates[picked]?.rate ?? 0)} for ${quote.rates[picked]?.courierName}` : "Send courier payment link"}
+              </Button>
+              {order.courierUpgrade?.link && (
+                <>
+                  <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(order.courierUpgrade!.link!.url); setMessage("Link copied."); }}>Copy link</Button>
+                  <Button variant="ghost" onClick={() => run("courier-check", () => refreshCourierPaymentLink(order.id))}>Check status</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => run("courier-paid", () => {
+                      recordCourierPayment(order.id, { method, reference: reference || undefined });
+                      return "Courier charge recorded. The order is now a courier delivery; book the courier below.";
+                    })}
+                  >
+                    Record courier charge paid ({method})
+                  </Button>
+                </>
+              )}
+            </div>
+            {order.courierUpgrade?.link && (
+              <p className="mt-2 break-all rounded bg-warm-cream px-2 py-1 font-mono text-[11px] text-text-muted">
+                {order.courierUpgrade.rate.courierName} · {rupees(order.courierUpgrade.amount)} · {order.courierUpgrade.link.url}
+              </p>
+            )}
+          </Section>
+        </div>
+      )}
+
       {order.deliveryMode === "delivery" && order.status !== "Cancelled" && (
         <div className="mt-4">
           <Section
@@ -942,11 +1039,20 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ? <>Customer chose <b className="text-text-primary">{order.courierChoice.courierName}</b> ({rupees(order.courierChoice.rate)}, {order.courierChoice.etaDays} days).</>
                     : "No courier chosen yet. The cheapest or fastest is picked by the rule in Shipping APIs."}
                 </p>
+                {pickupChoices.length > 0 && (
+                  <div className="mt-3 max-w-md">
+                    <SelectInput value={pickupNick} onChange={(event) => { setPickupNick(event.target.value); setQuote(null); setPicked(undefined); }}>
+                      <option value="">Pickup from: default address in Shipping settings</option>
+                      {pickupChoices.map((row) => <option key={row.nickname} value={row.nickname}>Pickup from: {row.nickname} · {[row.city, row.pincode].filter(Boolean).join(" ")}</option>)}
+                    </SelectInput>
+                    {!quote && <p className="mt-1 text-xs text-text-muted">Click Show couriers & rates again for rates from this pickup.</p>}
+                  </div>
+                )}
                 {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     disabled={busy === "book"}
-                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
+                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined, pickupOverride(pickupChoices.find((row) => row.nickname === pickupNick)))).message)}
                   >
                     {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pack & book courier"}
                   </Button>
@@ -957,19 +1063,31 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <div className="mt-4 rounded-xl border border-border p-3">
                   <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    Paste the tracking id and choose the portal that has the parcel. The site asks that portal for the scans and the delivery date and time, then keeps them updated.
+                    Choose the courier and paste its tracking id. Status is fetched from the courier's own tracking site (or the tracking service in Shipping APIs); connected portals also send the delivery date.
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
-                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value as (typeof MANUAL_PORTALS)[number]["id"])}>
-                      {MANUAL_PORTALS.map((portal) => (
-                        <option key={portal.id} value={portal.id}>{portal.label}</option>
-                      ))}
+                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value)}>
+                      <optgroup label="Courier (opens its tracking page)">
+                        {DIRECT_COURIERS.map((courier) => (
+                          <option key={courier.id} value={courier.id}>{courier.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Connected portal (live scans)">
+                        {MANUAL_PORTALS.map((portal) => (
+                          <option key={portal.id} value={portal.id}>{portal.label}</option>
+                        ))}
+                      </optgroup>
                     </SelectInput>
                     <TextInput placeholder="Tracking id" value={manualAwb} onChange={(event) => setManualAwb(event.target.value)} />
                     <TextInput placeholder="Courier name, if you know it" value={manualCourier} onChange={(event) => setManualCourier(event.target.value)} />
                     <Button
                       disabled={busy === "manual"}
-                      onClick={() => run("manual", () => attachManualTracking(order.id, manualPortal, manualAwb, manualCourier))}
+                      onClick={() =>
+                        run("manual", async () => {
+                          const portal = MANUAL_PORTALS.find((item) => item.id === manualPortal);
+                          return portal ? attachManualTracking(order.id, portal.id, manualAwb, manualCourier) : attachDirectTracking(order.id, manualPortal, manualAwb, manualCourier);
+                        })
+                      }
                     >
                       {busy === "manual" ? "Fetching…" : "Fetch tracking"}
                     </Button>
@@ -1129,9 +1247,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {returnRequest.status === "Pending Review" && returnRequest.kind === "replacement" && (
                     <>
                       <Button variant="success" onClick={() => run("rt", () => {
-                        const next = reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
-                        return `Accepted. Free replacement order ${next.replacementOrderId} placed.`;
-                      })}>Accept & place free order</Button>
+                        reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
+                        return "Accepted. Create the return AWB next; the replacement ships after the item is back and checked.";
+                      })}>Accept & ask for the item back</Button>
                       <Button variant="danger" onClick={() => {
                         const reason = window.prompt("Reason for rejecting this replacement request?");
                         if (reason === null) return;
@@ -1156,14 +1274,36 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                           courierName: created.courierName,
                           createdAt: new Date().toISOString(),
                           note: created.note,
+                          labelUrl: created.labelUrl,
                         },
                       }, "Return pickup booked");
-                      updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                      if (returnRequest.kind === "replacement") {
+                        advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${created.awb} · ${created.courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                      } else {
+                        updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                      }
                       return created.note ?? `Return pickup booked. AWB ${created.awb}.`;
-                    })}>Book reverse pickup</Button>
+                    })}>Create return AWB & label</Button>
+                  )}
+                  {returnRequest.status === "Return Approved" && returnRequest.kind === "replacement" && (
+                    <Button variant="ghost" onClick={() => {
+                      const awb = window.prompt("Return AWB / tracking number")?.trim();
+                      if (!awb) return;
+                      const courierName = window.prompt("Courier for the return (e.g. India Post, DTDC)")?.trim() || "Courier";
+                      const labelUrl = window.prompt("Link to the return label (optional)")?.trim() || undefined;
+                      run("rt", () => {
+                        patchOrder(order.id, { returnShipment: { provider: "local", live: false, awb, courierName, createdAt: new Date().toISOString(), labelUrl } }, `Return AWB ${awb} entered`);
+                        advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${awb} · ${courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                        return `Return AWB ${awb} shared with the customer.`;
+                      });
+                    }}>Enter return AWB manually</Button>
                   )}
                   {returnRequest.status === "Pickup Scheduled" && (
                     <Button variant="outline" onClick={() => run("rt", async () => {
+                      if (returnRequest.kind === "replacement") {
+                        advanceReturnRequest(order.id, "Picked Up", "return-pickup", "The courier collected the defective item.");
+                        return "Marked as picked up. Check the item when it arrives, then send the replacement.";
+                      }
                       updateReturnRequest(order.id, { status: "Picked Up" });
                       if (returnRequest.kind === "return" && getOrderSettings().refunds.autoRefundOnReturnPickup && paid) {
                         const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
@@ -1172,6 +1312,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       }
                       return "Marked as picked up.";
                     })}>Mark picked up</Button>
+                  )}
+                  {returnRequest.kind === "replacement" && ["Picked Up", "Pickup Scheduled"].includes(returnRequest.status) && !returnRequest.replacementOrderId && (
+                    <Button variant="success" onClick={() => {
+                      if (!window.confirm("Has the defective item arrived and been checked? This places the free replacement order.")) return;
+                      run("rt", () => {
+                        const next = sendReplacementAfterInspection(order.id);
+                        return `Checked. Free replacement order ${next.replacementOrderId} placed.`;
+                      });
+                    }}>Item received & checked — send replacement</Button>
                   )}
                   {returnRequest.kind === "return" && returnRequest.status === "Picked Up" && paid && (
                     <Button variant="danger" onClick={() => run("rt", async () => {
@@ -1219,6 +1368,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => printOrderInvoice(order, shipment)}>Print invoice</Button>
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
+        {shipment && <LabelSizePicker />}
         {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Print shipping label</Button>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
@@ -1246,4 +1396,29 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       )}
     </Panel>
   );
+}
+
+function LabelSizePicker() {
+  const [size, setSize] = useState<LabelSize>(() => getLabelSize());
+  return (
+    <select
+      aria-label="Label size"
+      className="rounded-lg border border-border bg-white px-2 py-1.5 text-sm"
+      value={size}
+      onChange={(event) => {
+        const next = event.target.value as LabelSize;
+        setSize(next);
+        setLabelSize(next);
+      }}
+    >
+      {LABEL_SIZES.map((item) => (
+        <option key={item.id} value={item.id}>{item.label}</option>
+      ))}
+    </select>
+  );
+}
+
+function pickupOverride(row?: { nickname: string; city: string; pincode: string; phone?: string; address?: string }) {
+  if (!row) return undefined;
+  return { nickname: row.nickname, city: row.city, pincode: row.pincode, ...(row.address ? { line1: row.address } : {}), ...(row.phone ? { phone: row.phone } : {}) };
 }

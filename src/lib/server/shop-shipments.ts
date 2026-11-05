@@ -20,6 +20,27 @@ function writeAll(list: ShipmentRecord[]) {
   writeFileSync(file(), JSON.stringify(list.slice(0, 2000)));
 }
 
+type Deleted = { ids: string[]; awbs: string[] };
+
+function readDeleted(): Deleted {
+  try {
+    const parsed = JSON.parse(readFileSync(dataFile("shop-shipments-deleted.json"), "utf8")) as Partial<Deleted>;
+    return { ids: Array.isArray(parsed.ids) ? parsed.ids : [], awbs: Array.isArray(parsed.awbs) ? parsed.awbs : [] };
+  } catch {
+    return { ids: [], awbs: [] };
+  }
+}
+
+/** Shipment ids deleted from the desk, so stale browser copies can't bring them back. */
+export function deletedShopShipmentIds() {
+  return readDeleted().ids;
+}
+
+function isDeleted(shipment: ShipmentRecord, deleted = readDeleted()) {
+  const awb = shipment.awb?.trim();
+  return deleted.ids.includes(shipment.id) || Boolean(awb && deleted.awbs.includes(awb));
+}
+
 export function listShopShipments() {
   return readAll();
 }
@@ -29,7 +50,7 @@ export function findShopShipment(orderId: string) {
 }
 
 export function upsertShopShipment(shipment: ShipmentRecord) {
-  if (!shipment?.id || !shipment.orderId) return;
+  if (!shipment?.id || !shipment.orderId || isDeleted(shipment)) return;
   const all = readAll();
   const prev = all.find((item) => item.id === shipment.id || item.orderId === shipment.orderId);
   if (prev && shipmentActivityAt(prev) > shipmentActivityAt(shipment)) return prev;
@@ -42,7 +63,15 @@ export function upsertShopShipment(shipment: ShipmentRecord) {
 export function deleteShopShipments(orderId: string) {
   const id = orderId.trim();
   if (!id) return;
-  writeAll(readAll().filter((item) => item.orderId !== id));
+  const all = readAll();
+  const gone = all.filter((item) => item.orderId === id);
+  if (gone.length) {
+    const deleted = readDeleted();
+    const ids = [...new Set([...gone.map((item) => item.id), ...deleted.ids])].slice(0, 5000);
+    const awbs = [...new Set([...gone.map((item) => item.awb?.trim()).filter((awb): awb is string => Boolean(awb)), ...deleted.awbs])].slice(0, 5000);
+    writeFileSync(dataFile("shop-shipments-deleted.json"), JSON.stringify({ ids, awbs }));
+  }
+  writeAll(all.filter((item) => item.orderId !== id));
 }
 
 export function replaceShopShipment(shipment: ShipmentRecord) {

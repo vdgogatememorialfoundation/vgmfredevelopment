@@ -46,7 +46,8 @@ import {
   tookanTrack,
   type RateOut,
 } from "@/lib/server/providers";
-import { mergeShippingCreds } from "@/lib/server/shipping-vault";
+import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
+import { mergeShippingCreds, readShippingCreds } from "@/lib/server/shipping-vault";
 import { listWebhooks } from "@/lib/server/webhooks";
 
 type Body = Record<string, unknown> & {
@@ -76,12 +77,15 @@ export async function POST(request: NextRequest) {
         const wanted = Array.isArray(body.providers)
           ? (body.providers as string[])
           : ["shiprocket", "nimbuspost", "ithink", "shipyaari"];
+        // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
+        const stored = readShippingCreds() as typeof creds;
+        const keys = (id: keyof typeof creds) => ({ ...(stored[id] ?? {}), ...Object.fromEntries(Object.entries(creds[id] ?? {}).filter(([, value]) => value !== "" && value != null)) });
         const jobs: Promise<{ provider: string; rates: RateOut[] | null; error?: string }>[] = wanted.map(async (id) => {
           try {
-            if (id === "shiprocket") return { provider: id, rates: await shiprocketRates(creds.shiprocket ?? {}, parcel) };
-            if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(creds.nimbuspost ?? {}, parcel) };
-            if (id === "ithink") return { provider: id, rates: await ithinkRates(creds.ithink ?? {}, parcel) };
-            if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(creds.shipyaari ?? {}, parcel) };
+            if (id === "shiprocket") return { provider: id, rates: await shiprocketRates(keys("shiprocket"), parcel) };
+            if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(keys("nimbuspost"), parcel) };
+            if (id === "ithink") return { provider: id, rates: await ithinkRates(keys("ithink"), parcel) };
+            if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(keys("shipyaari"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -188,6 +192,11 @@ export async function POST(request: NextRequest) {
       }
       case "track": {
         const awb = String(body.awb ?? body.providerOrderId ?? "");
+        if (provider === "courier-site") {
+          const site = await courierWebTrack(String(body.courier ?? ""), awb, (creds.tracker ?? {}) as TrackerCreds);
+          if (!site) return NextResponse.json({ ok: false, configured: true, error: "The courier has no scans for this tracking id yet." });
+          return NextResponse.json({ ok: true, configured: true, ...site });
+        }
         const result =
           provider === "shiprocket"
             ? await shiprocketTrack(own, awb)
@@ -198,7 +207,7 @@ export async function POST(request: NextRequest) {
                 : provider === "tookan" || provider === "tookan-parcel"
                   ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId || awb), String(body.providerShipmentId || awb))
                   : provider === "shipday"
-                    ? await shipdayTrack(own, String(body.providerOrderId ?? awb))
+                    ? await shipdayTrack(own, String(body.orderNumber ?? body.orderId ?? ""), String(body.providerOrderId ?? awb))
                     : provider === "shipyaari"
                       ? await shipyaariTrack(creds.shipyaari ?? own, awb)
                       : undefined;

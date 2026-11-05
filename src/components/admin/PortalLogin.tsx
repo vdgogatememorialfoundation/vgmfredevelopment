@@ -9,17 +9,21 @@ import { ensureAdminCredentials, getAccounts, sendOtpCode } from "@/lib/admin-st
 import { loginBlockReason } from "@/lib/auth";
 import { OTP_RESEND_SECONDS, issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
+import { isSupportAgent } from "@/lib/roles";
 import type { User } from "@/types";
 
 const copy = {
   admin: { label: "Admin", target: "/admin", hint: "administrator" },
   staff: { label: "Staff", target: "/staff", hint: "staff" },
   doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
+  support: { label: "Customer support", target: "/support", hint: "support" },
 } as const;
+
+type PortalId = keyof typeof copy;
 
 type Mode = "password" | "mfa" | "otp" | "forgot";
 
-export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }) {
+export function PortalLogin({ portal }: { portal: PortalId }) {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
   const [email, setEmail] = useState("");
@@ -161,7 +165,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
   if (mode === "forgot") {
     return (
       <Card portal={portal}>
-        <ForgotPasswordForm role={portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
+        <ForgotPasswordForm role={portal === "support" ? "staff" : portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
       </Card>
     );
   }
@@ -281,8 +285,9 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
   );
 }
 
-function matchesPortal(account: Pick<User, "role">, portal: "admin" | "staff" | "doctor") {
+function matchesPortal(account: User, portal: PortalId) {
   if (portal === "staff") return account.role === "staff" || account.role === "coadmin";
+  if (portal === "support") return isSupportAgent(account);
   return account.role === portal;
 }
 
@@ -345,7 +350,7 @@ function Card({
   portal,
   children,
 }: {
-  portal: "admin" | "staff" | "doctor";
+  portal: PortalId;
   children: React.ReactNode;
 }) {
   const { label, hint } = copy[portal];
@@ -365,6 +370,8 @@ function Card({
           <p className="mt-2 text-center text-sm text-text-muted">
             {portal === "staff"
               ? "Staff and co-administrators sign in here with email, password and a one-time email code."
+              : portal === "support"
+                ? "Foundation support executives, staff with the Support module and administrators sign in with email, password and a one-time email code."
               : `Use your ${hint} email and password, then the email verification code. Sessions stay signed in until Logout.`}
           </p>
           <div className="mt-7">{children}</div>

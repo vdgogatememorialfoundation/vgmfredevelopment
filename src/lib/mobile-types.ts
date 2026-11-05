@@ -18,6 +18,11 @@ export type MobileFeed = {
     address: string;
     social?: SocialLinks;
     tickerSeconds?: number;
+    shlokaBar?: boolean;
+    shlokas?: string[];
+    queryButton?: boolean;
+    queryNumber?: string;
+    queryMessage?: string;
   };
   flags: {
     supportUs: boolean;

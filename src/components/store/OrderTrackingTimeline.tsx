@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils";
-import { deliveryDatePhrase, parseExpected, statusStamp } from "@/lib/delivery-expectation";
+import { deliveryDatePhrase, parseExpected, statusStamp, statusDay } from "@/lib/delivery-expectation";
 import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
-import { pickupOtp } from "@/lib/store";
+import { pickupOtp, pickupOtpReady } from "@/lib/store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { aggregatorName, customerCourierLabel } from "@/lib/courier-label";
 import { getIntegrations } from "@/lib/integrations";
@@ -35,7 +35,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const [remote, setRemote] = useState<ShipmentRecord | null>(null);
   const shipment = remote ?? localShipment;
   const provider = shipment?.provider ?? order.courierChoice?.provider;
-  const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile);
+  const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
 
   useEffect(() => {
@@ -88,8 +88,9 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     };
   }, [order.id, order.status, phone, hyperlocal]);
 
+  const delivered = order.status === "Delivered";
   const shownScans = scans.map((scan, index, list) =>
-    index === list.length - 1 && (shipment?.agentName || shipment?.agentPhone)
+    !delivered && index === list.length - 1 && (shipment?.agentName || shipment?.agentPhone)
       ? { ...scan, agent: { name: shipment.agentName, phone: shipment.agentPhone }, otp: shipment.deliveryOtp || scan.otp }
       : scan
   );
@@ -125,7 +126,8 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       };
     }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
-    if (stage.id === "delivered" && !stage.reached) {
+    const alreadyDelivered = order.status === "Delivered" || shipment?.status === "Delivered" || stage.reached;
+    if (stage.id === "delivered" && !alreadyDelivered) {
       next.expected = shipment?.expectedBy ? `Expected by ${deliveryDatePhrase(shipment.expectedBy)}` : "Expected delivery date is pending from the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;
@@ -160,11 +162,11 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       case "out":
         return stage.reached ? statusStamp(stage.events.at(-1)?.at, order.deliveryAddress?.country) || "Out for delivery" : "";
       case "delivered":
-        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
+        return stage.reached && deliveredAt ? statusDay(deliveredAt, order.deliveryAddress?.country) : "";
       case "ready":
         return stage.reached ? `OTP ${pickupOtp(order.id)}` : "";
       case "picked":
-        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
+        return stage.reached && deliveredAt ? statusDay(deliveredAt, order.deliveryAddress?.country) : "";
       case "cancel-review":
         return "Reviewed by admin";
       case "cancelled":
@@ -186,12 +188,12 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         : order.status === "Delivered"
           ? "Delivered — confirmation received from the courier."
           : order.status === "Out for Delivery"
-            ? "The line moves down through the delivery window, and it stops before Delivered."
+            ? ""
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
               : hyperlocal
                 ? ""
-                : "The line runs from the top to the latest green step. The tracking number appears when Shipped turns green.";
+                : "";
 
   const stepStamp = Date.parse(rawStages[nodeCurrentIdx]?.events.at(-1)?.at || order.date);
   const paceFrom = Number.isFinite(stepStamp) ? stepStamp : placed.getTime();
@@ -220,9 +222,9 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       <Tile label="Date" value={formatDate(order.date)} />
       <Tile label="Status" value={currentStatus} />
       {pickupDone ? <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} /> : null}
-      {pickupDone && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
-      {shipment?.deliveryOtp ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
-      {order.deliveryMode === "store_pickup" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
+      {pickupDone && !delivered && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
+      {shipment?.deliveryOtp && !delivered ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
+      {pickupOtpReady(order) && order.status !== "Delivered" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
     </div>
   );
 
@@ -239,10 +241,20 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       }
     : null;
 
+  const returnActive = Boolean(returnPipeline && returnRequest && returnRequest.status !== "Rejected");
+
   return (
     <div className="vgmf-trk">
       {tiles}
-      {order.deliveryMode === "delivery" ? (
+      {returnActive && returnRequest && returnPipeline ? (
+        <div>
+          <p className="vgmf-trk-note">
+            {returnRequest.kind === "replacement" ? "Replacement tracking" : "Return tracking"} · {returnRequest.status}
+            {returnRequest.replacementOrderId ? ` · New order ${returnRequest.replacementOrderId}` : ""}
+          </p>
+          <VerticalPipeline stages={returnPipeline.stages} />
+        </div>
+      ) : showLiveMap(order, shipment) ? (
         <div className="vgmf-hl">
           <div className="vgmf-hl-sheet">{pipe}</div>
           <div className="vgmf-hl-map">
@@ -253,7 +265,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         pipe
       )}
 
-      {returnPipeline && returnRequest ? (
+      {returnPipeline && returnRequest && !returnActive ? (
         <div className="mt-6">
           <p className="vgmf-trk-note">
             {returnRequest.kind === "replacement" ? "Replacement tracking" : "Return tracking"} · {returnRequest.status}
@@ -263,4 +275,12 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       ) : null}
     </div>
   );
+}
+
+/** The rider map is only for hyperlocal deliveries, and only once a rider has been booked. */
+function showLiveMap(order: Order, shipment?: ShipmentRecord | null) {
+  if (order.deliveryMode !== "delivery" || !shipment) return false;
+  if (["Delivered", "Cancelled", "Failed"].includes(order.status)) return false;
+  if (shipment.directCourier) return false;
+  return isHyperlocalProvider(shipment.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile, shipment.courier || order.courierName);
 }
