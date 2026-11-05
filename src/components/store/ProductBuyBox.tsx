@@ -10,9 +10,14 @@ import {
   toggleWishlist,
 } from "@/lib/store";
 import { addStockAlert, canOrder, canPreorder, isPurchasable } from "@/lib/product-data";
-import { checkPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
+import { checkPincode, getOriginPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
+import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
+import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
+import { useOrderSettings } from "@/lib/use-cms";
 import { useAuth } from "@/components/auth/AuthContext";
-import type { Book } from "@/types";
+import type { Book, CourierRate } from "@/types";
+
+type CourierPromise = CourierRate & { deliverBy: string; dayLabel?: string; express: boolean };
 
 export default function ProductBuyBox({ book }: { book: Book }) {
   const router = useRouter();
@@ -23,6 +28,9 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const [pincode, setPincode] = useState("");
   const [estimate, setEstimate] = useState<DeliveryQuote | null>(null);
   const [checked, setChecked] = useState(false);
+  const [couriers, setCouriers] = useState<CourierPromise[]>([]);
+  const [ratesBusy, setRatesBusy] = useState(false);
+  const orderSettings = useOrderSettings();
   const [notifyEmail, setNotifyEmail] = useState("");
   const [notifyNote, setNotifyNote] = useState("");
 
@@ -58,6 +66,33 @@ export default function ProductBuyBox({ book }: { book: Book }) {
 
   const checkDelivery = () => {
     setEstimate(checkPincode(pincode, book.id, quantity));
+    setCouriers([]);
+    if (/^\d{6}$/.test(pincode)) {
+      setRatesBusy(true);
+      const same = pincode === getOriginPincode();
+      fetchCourierRates({
+        deliveryPincode: pincode,
+        weightKg: orderWeightKg({ items: [{ bookId: book.id, title: book.title, quantity, price: book.price, currency: "INR" }] }),
+        declaredValue: book.price * quantity,
+        bookIds: [book.id],
+      })
+        .then((quote) =>
+          setCouriers(
+            quote.rates
+              .filter((rate) => {
+                const id = `${rate.provider} ${rate.courierName}`.toLowerCase();
+                return !(orderSettings.hideTookanAtCheckout && id.includes("tookan")) && !(orderSettings.hideShipdayAtCheckout && id.includes("shipday"));
+              })
+              .map((rate) => ({
+                ...rate,
+                ...promiseFor(rate, rate.deliverBy ? Date.parse(rate.deliverBy) : NaN, same, orderSettings.processingHours, orderSettings.dispatchCutoff),
+                express: isExpressCourier(rate),
+              }))
+          )
+        )
+        .catch(() => setCouriers([]))
+        .finally(() => setRatesBusy(false));
+    }
     setChecked(true);
   };
 
@@ -171,7 +206,30 @@ export default function ProductBuyBox({ book }: { book: Book }) {
                 </li>
               ) : null}
             </ul>
-            {estimate.offers.length > 0 && (
+            {ratesBusy && <p className="mt-2 text-text-muted">Checking delivery options…</p>}
+            {couriers.length > 0 && (
+              <ul className="mt-2 space-y-1.5 border-t border-border pt-2">
+                {couriers.map((offer) => (
+                  <li key={`${offer.provider}:${offer.courierId}`} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex flex-wrap items-center gap-1.5 font-medium text-text-primary">
+                      {offer.courierName}
+                      {offer.express && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <path d="M3 7h11v10H3zM14 10h4l3 3v4h-7" />
+                            <circle cx="7" cy="18" r="1.6" />
+                            <circle cx="17" cy="18" r="1.6" />
+                          </svg>
+                          {offer.dayLabel === "Today" ? "Same day" : "Express"}
+                        </span>
+                      )}
+                    </span>
+                    <span className="font-semibold text-emerald-700">{offer.dayLabel ? `Delivery by ${offer.dayLabel}` : `by ${offer.deliverBy}`}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!couriers.length && estimate.offers.length > 0 && (
               <ul className="mt-2 space-y-1 border-t border-border pt-2 text-text-muted">
                 {estimate.offers.slice(0, 4).map((offer) => (
                   <li key={offer.id}>

@@ -570,7 +570,7 @@ export interface Order {
     | "Delivered"
     | "Failed"
     | "Cancelled";
-  channel?: "online" | "admin" | "pos";
+  channel?: "online" | "admin" | "pos" | "shipment";
   stockCommitted?: boolean;
   storeCreditUsed?: number;
   refunds?: RefundRecord[];
