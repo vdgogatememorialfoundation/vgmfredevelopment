@@ -1252,16 +1252,6 @@ export function ShippingApisDesk() {
             hint="Upload the bike picture. The live map uses it for the rider and turns it to follow the road."
           />
         </div>
-        <div className="mt-4">
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">When the customer did not choose</span>
-            <select className={input} value={value.rateChoice} onChange={(event) => set({ rateChoice: event.target.value as typeof value.rateChoice })}>
-              <option value="customer">Cheapest (customer picks at checkout)</option>
-              <option value="cheapest">Always cheapest</option>
-              <option value="fastest">Always fastest</option>
-            </select>
-          </label>
-        </div>
       </Card>
 
       <Card title="Check rates for a pincode">
