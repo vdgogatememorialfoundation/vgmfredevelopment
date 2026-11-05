@@ -39,7 +39,11 @@ export type CourierScan = {
   otp?: string;
 };
 
-export function isHyperlocalProvider(provider?: string, lastMile?: string) {
+const REGULAR_COURIER = /blue\s*dart|dtdc|delhivery|ekart|fedex|india\s*post|speed\s*post|trackon|amazon|xpressbees|ecom\s*express|professional\s*couriers?|maruti|\bgati\b|\bdhl\b|aramex|\bups\b|smartr/i;
+
+/** Rider map / live rider details only for local riders; never for a regular courier, whatever was booked earlier. */
+export function isHyperlocalProvider(provider?: string, lastMile?: string, courier?: string) {
+  if (REGULAR_COURIER.test(`${courier ?? ""} ${provider ?? ""}`)) return false;
   return Boolean(lastMile) || provider === "porter" || provider === "shadowfax" || provider === "flash" || provider === "tookan" || provider === "shipday";
 }
 
@@ -385,7 +389,7 @@ export function buildTrackingStages(
   const shipmentLeft = Boolean(
     shipment && ["Picked Up", "In Transit", "Out for Delivery", "Delivered"].includes(shipment.status ?? "")
   );
-  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
+  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   let shippedReached =
     collected ||
     shipmentLeft ||

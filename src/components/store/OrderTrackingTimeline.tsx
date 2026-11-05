@@ -35,7 +35,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const [remote, setRemote] = useState<ShipmentRecord | null>(null);
   const shipment = remote ?? localShipment;
   const provider = shipment?.provider ?? order.courierChoice?.provider;
-  const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile);
+  const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
 
   useEffect(() => {
@@ -282,5 +282,5 @@ function showLiveMap(order: Order, shipment?: ShipmentRecord | null) {
   if (order.deliveryMode !== "delivery" || !shipment) return false;
   if (["Delivered", "Cancelled", "Failed"].includes(order.status)) return false;
   if (shipment.directCourier) return false;
-  return isHyperlocalProvider(shipment.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile);
+  return isHyperlocalProvider(shipment.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile, shipment.courier || order.courierName);
 }

@@ -53,7 +53,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
             <h3 className="font-semibold text-text-primary">
               Tracking
             </h3>
-            {!isHyperlocalProvider(order.courierChoice?.provider, order.courierChoice?.lastMile) &&
+            {!isHyperlocalProvider(order.courierChoice?.provider, order.courierChoice?.lastMile, order.courierName) &&
             order.trackingId &&
             ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ? (
               <span className="max-w-[46%] text-right text-xs font-semibold break-all text-burgundy">

@@ -109,7 +109,7 @@ export async function refreshStoredShipment(orderId: string) {
     [hit.status, ...[...events].reverse().map((event) => event.status)].find((text) => text && classifyCourierScan(text)) || hit.status || "";
   const stage = classifyCourierScan(latestStatus);
   const orderForLeg = findShopOrder(orderId);
-  const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile);
+  const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile, hit.courierName || shipment.courier || orderForLeg?.courierName);
   const shipmentStatus = stage ? shipmentStatusFor(stage) : undefined;
   const next: ShipmentRecord = {
     ...shipment,
