@@ -134,8 +134,23 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
     Number.isFinite(stepAt) && Number.isFinite(dueAt) && dueAt > stepAt
       ? Math.round(Math.min(85, Math.max(8, ((now - stepAt) / (dueAt - stepAt)) * 85)))
       : 8;
-  const steps = pickup ? stages.map((stage) => stage.label) : STEPS;
-  const stepIdx = pickup ? currentIdx : Math.max(STEP_OF[status] ?? 0, STEP_OF[order.status] ?? 0);
+  const returnRequest = order.returnRequest && order.returnRequest.status !== "Rejected" ? order.returnRequest : undefined;
+  const returnStages = returnRequest?.stages ?? [];
+  const steps = returnRequest && returnStages.length
+    ? returnStages.map((stage) => stage.title)
+    : pickup
+      ? stages.map((stage) => stage.label)
+      : STEPS;
+  const stepIdx = returnRequest && returnStages.length
+    ? Math.max(0, returnStages.map((stage) => Boolean(stage.reached)).lastIndexOf(true))
+    : pickup
+      ? currentIdx
+      : Math.max(STEP_OF[status] ?? 0, STEP_OF[order.status] ?? 0);
+  if (returnRequest) {
+    headline = `${returnRequest.kind === "replacement" ? "Replacement" : "Return"} · ${returnRequest.status}${
+      returnRequest.replacementOrderId ? ` · new order ${returnRequest.replacementOrderId}` : ""
+    }`;
+  }
 
   return (
     <span className="mt-1 block" data-order-preview={order.id}>

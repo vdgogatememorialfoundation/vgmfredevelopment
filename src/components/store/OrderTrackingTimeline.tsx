@@ -88,8 +88,9 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     };
   }, [order.id, order.status, phone, hyperlocal]);
 
+  const delivered = order.status === "Delivered";
   const shownScans = scans.map((scan, index, list) =>
-    index === list.length - 1 && (shipment?.agentName || shipment?.agentPhone)
+    !delivered && index === list.length - 1 && (shipment?.agentName || shipment?.agentPhone)
       ? { ...scan, agent: { name: shipment.agentName, phone: shipment.agentPhone }, otp: shipment.deliveryOtp || scan.otp }
       : scan
   );
@@ -221,8 +222,8 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       <Tile label="Date" value={formatDate(order.date)} />
       <Tile label="Status" value={currentStatus} />
       {pickupDone ? <Tile label="Courier" value={via && via !== courier ? `${courier} · via ${via}` : courier} /> : null}
-      {pickupDone && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
-      {shipment?.deliveryOtp ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
+      {pickupDone && !delivered && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
+      {shipment?.deliveryOtp && !delivered ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
       {order.deliveryMode === "store_pickup" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
     </div>
   );
@@ -240,10 +241,20 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       }
     : null;
 
+  const returnActive = Boolean(returnPipeline && returnRequest && returnRequest.status !== "Rejected");
+
   return (
     <div className="vgmf-trk">
       {tiles}
-      {showLiveMap(order, shipment) ? (
+      {returnActive && returnRequest && returnPipeline ? (
+        <div>
+          <p className="vgmf-trk-note">
+            {returnRequest.kind === "replacement" ? "Replacement tracking" : "Return tracking"} · {returnRequest.status}
+            {returnRequest.replacementOrderId ? ` · New order ${returnRequest.replacementOrderId}` : ""}
+          </p>
+          <VerticalPipeline stages={returnPipeline.stages} />
+        </div>
+      ) : showLiveMap(order, shipment) ? (
         <div className="vgmf-hl">
           <div className="vgmf-hl-sheet">{pipe}</div>
           <div className="vgmf-hl-map">
@@ -254,7 +265,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         pipe
       )}
 
-      {returnPipeline && returnRequest ? (
+      {returnPipeline && returnRequest && !returnActive ? (
         <div className="mt-6">
           <p className="vgmf-trk-note">
             {returnRequest.kind === "replacement" ? "Replacement tracking" : "Return tracking"} · {returnRequest.status}
