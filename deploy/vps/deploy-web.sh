@@ -52,7 +52,7 @@ for ENV in "${ENVS[@]}"; do
   ENVFILE="$ROOT/secrets/$ENV.env"
 
   say "[$ENV] Backing up data"
-  [ -d "$ROOT/data/$ENV" ] && tar -C "$ROOT/data" -czf "$BK/data-$ENV.tgz" "$ENV"
+  if [ -d "$ROOT/data/$ENV" ]; then tar --warning=no-file-changed -C "$ROOT/data" -czf "$BK/data-$ENV.tgz" "$ENV" || [ $? -eq 1 ]; fi
   [ -f "$APP/.next/BUILD_ID" ] && echo "Previous build: $(cat "$APP/.next/BUILD_ID")"
 
   say "[$ENV] Building"
