@@ -267,7 +267,14 @@ export default function CheckoutClient() {
 
   const courierOptions: CourierOption[] =
     liveRates && liveRates.pincode === address.pincode
-      ? liveRates.rates.map((rate) => ({
+      ? liveRates.rates
+        .filter((rate) => {
+          const id = `${rate.provider} ${rate.courierName}`.toLowerCase();
+          if (orderSettings.hideTookanAtCheckout && id.includes("tookan")) return false;
+          if (orderSettings.hideShipdayAtCheckout && id.includes("shipday")) return false;
+          return true;
+        })
+        .map((rate) => ({
           ...rate,
           key: `${rate.provider}:${rate.courierId}`,
           deliverBy: getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
@@ -658,9 +665,6 @@ export default function CheckoutClient() {
                     <legend className="mb-2 text-sm font-semibold text-text-primary">
                       Choose your delivery partner {loadingRates && <span className="text-xs font-normal text-text-muted">· checking live rates…</span>}
                     </legend>
-                    <p className="mb-3 text-xs text-text-muted">
-                      Shiprocket, Nimbuspost and iThink Logistics. Same-city orders can use their Porter, Shadowfax Flash or Flash last-mile.
-                    </p>
                     <div className="grid gap-2">
                       {courierOptions.map((offer) => (
                         <label
@@ -683,7 +687,7 @@ export default function CheckoutClient() {
                               <span className="font-semibold text-text-primary">{offer.courierName}</span>
                               <span className="mt-0.5 block text-xs text-text-muted">
                                 {offer.provider === "tookan" || offer.provider === "shipday" || offer.courierName === "Gogate Products"
-                                  ? "The rider's name appears after allotment, once delivery has started"
+                                  ? ""
                                   : offer.lastMile || offer.provider === "tookan-parcel"
                                     ? "Live rider, phone and location from the courier, on our map, after delivery starts"
                                     : offer.etaDays === 0

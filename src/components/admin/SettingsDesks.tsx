@@ -1355,6 +1355,8 @@ export function OrderSettingsDesk() {
           <Check label="Home delivery" checked={value.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} />
           <Check label="Pickup from store" checked={value.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} />
           <Check label="Customer chooses the delivery partner" hint="Shows couriers and rates at checkout." checked={value.showCourierChoice} onChange={(showCourierChoice) => set({ showCourierChoice })} />
+          <Check label="Hide Gogate Products-Tookan at checkout" checked={value.hideTookanAtCheckout} onChange={(hideTookanAtCheckout) => set({ hideTookanAtCheckout })} />
+          <Check label="Hide Gogate Products-Shipday at checkout" checked={value.hideShipdayAtCheckout} onChange={(hideShipdayAtCheckout) => set({ hideShipdayAtCheckout })} />
           <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
           {value.codEnabled && <Text label="COD fee (₹)" type="number" value={value.codFee} onChange={(fee) => set({ codFee: Number(fee) || 0 })} />}

@@ -181,6 +181,9 @@ export interface OrderSettings {
   perItemFee: number;
   freeAbove: number;
   showCourierChoice: boolean;
+  /** Keep our own Tookan / Shipday fleet off the checkout courier list. */
+  hideTookanAtCheckout: boolean;
+  hideShipdayAtCheckout: boolean;
   returns: {
     enabled: boolean;
     windowDays: number;
@@ -329,6 +332,8 @@ export const defaultOrderSettings: OrderSettings = {
   perItemFee: 25,
   freeAbove: 499,
   showCourierChoice: true,
+  hideTookanAtCheckout: false,
+  hideShipdayAtCheckout: false,
   returns: {
     enabled: false,
     windowDays: 7,
@@ -499,6 +504,8 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     perItemFee: Math.max(0, finiteNumber(merged.perItemFee, defaultOrderSettings.perItemFee)),
     freeAbove: Math.max(0, finiteNumber(merged.freeAbove, defaultOrderSettings.freeAbove)),
     showCourierChoice: Boolean(merged.showCourierChoice),
+    hideTookanAtCheckout: Boolean(merged.hideTookanAtCheckout),
+    hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
     returns: {
       enabled: false,
       windowDays: Math.max(0, finiteNumber(merged.returns?.windowDays, defaultOrderSettings.returns.windowDays)),
