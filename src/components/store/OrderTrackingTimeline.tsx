@@ -1,5 +1,6 @@
 "use client";
 
+import { getPickupLocation } from "@/lib/fulfillment";
 import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils";
 import { deliveryDatePhrase, parseExpected, statusStamp, statusDay } from "@/lib/delivery-expectation";
@@ -216,6 +217,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     />
   );
 
+  const pickupAt = getPickupLocation();
   const tiles = (
     <div className="vgmf-trk-tiles">
       <Tile label="Order" value={order.id} />
@@ -225,6 +227,17 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       {pickupDone && !delivered && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
       {shipment?.deliveryOtp && !delivered ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
       {pickupOtpReady(order) && order.status !== "Delivered" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
+      {order.deliveryMode === "store_pickup" && order.status !== "Delivered" && order.status !== "Cancelled" ? (
+        <>
+          <Tile label="Pickup at" value={`${pickupAt.name}, ${pickupAt.address}`} />
+          <Tile label="Point of contact" value={[pickupAt.contactName, pickupAt.contactPhone].filter(Boolean).join(" · ")} />
+          <Tile label="Pickup timings" value={pickupAt.hours} />
+          <div className="vgmf-trk-tile">
+            <b>Location</b>
+            <a href={pickupAt.mapUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-burgundy underline">Open in Google Maps</a>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 

@@ -703,6 +703,11 @@ export interface FulfillmentLocation {
   pincode: string;
   phone: string;
   active: boolean;
+  /** Store pickup: who the customer meets, where to go and when. */
+  contactName?: string;
+  contactPhone?: string;
+  mapUrl?: string;
+  pickupHours?: string;
 }
 
 export interface PickupTimeslot {

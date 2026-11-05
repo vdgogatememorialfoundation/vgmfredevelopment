@@ -12,6 +12,7 @@ import type {
   FAQItem,
   User,
 } from "@/types";
+import { pickupInstructions } from "@/lib/fulfillment";
 import { siteConfig, storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
@@ -600,7 +601,7 @@ export function createAdminOrder(input: {
     template: "order-placed",
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\n${
       order.deliveryMode === "store_pickup"
-        ? `Pickup from ${siteConfig.name}.\n${siteConfig.address}\nPhone: ${siteConfig.phone}\nWe will send your pickup OTP once the order is ready for pickup. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`
+        ? pickupInstructions()
         : `Expected delivery: ${formatDate(order.plan.deliveredBy)}`
     }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });

@@ -410,21 +410,32 @@ export function getOriginPincode() {
   return (active?.pincode || "411005").replace(/\D/g, "").slice(0, 6);
 }
 
+/** Plain-text pickup instructions for emails and order notes. */
+export function pickupInstructions() {
+  const at = getPickupLocation();
+  const contact = [at.contactName, at.contactPhone].filter(Boolean).join(" · ");
+  return `Pickup from ${at.name}.\n${at.address}\nMap: ${at.mapUrl}\n${contact ? `Point of contact: ${contact}\n` : ""}Pickup timings: ${at.hours}\nWe will send your pickup OTP once the order is ready for pickup.`;
+}
+
 export function getPickupLocation() {
   const settings = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
   const active = settings?.fulfillmentLocations?.find((location) => location.active);
+  const hours = "Monday to Thursday, 6:00 PM – 10:00 PM";
+  const mapFor = (address: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   if (!active) {
-    return {
-      name: "Vaidya Gogate Memorial Foundation Clinic",
-      address:
-        "102, Ramprasad Chambers, 368/1, Jawaharlal Nehru Rd, near Kirad Hospital, above Shraddha Medicals, New Nana Peth, Pune, Maharashtra 411002",
-      phone: "093737 92952",
-    };
+    const address =
+      "102, Ramprasad Chambers, 368/1, Jawaharlal Nehru Rd, near Kirad Hospital, above Shraddha Medicals, New Nana Peth, Pune, Maharashtra 411002";
+    return { name: "Vaidya Gogate Memorial Foundation Clinic", address, phone: "093737 92952", contactName: "", contactPhone: "093737 92952", mapUrl: mapFor(address), hours };
   }
+  const address = [active.address, active.city, [active.state, active.pincode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
   return {
     name: active.name,
-    address: `${active.address}, ${active.city}, ${active.state} ${active.pincode}`,
+    address,
     phone: active.phone,
+    contactName: active.contactName?.trim() ?? "",
+    contactPhone: active.contactPhone?.trim() || active.phone,
+    mapUrl: active.mapUrl?.trim() || mapFor(`${active.name}, ${address}`),
+    hours: active.pickupHours?.trim() || hours,
   };
 }
 

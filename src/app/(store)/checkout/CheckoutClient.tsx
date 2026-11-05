@@ -22,7 +22,7 @@ import {
   clearCart,
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
-import { checkCart, getOriginPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
+import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
 import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import { fetchCourierRates } from "@/lib/shipping-client";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
@@ -540,7 +540,7 @@ export default function CheckoutClient() {
       const pickupNote =
         deliveryMode === "delivery"
           ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.`
-          : `Pickup from ${pickupLocation.name}.\n${pickupLocation.address}\nPhone: ${pickupLocation.phone}\nWe will send your pickup OTP once the order is ready for pickup. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`;
+          : pickupInstructions();
       sendEmail({
         to: deliveryAddress.email || "",
         phone: deliveryAddress.phone,
@@ -769,7 +769,13 @@ export default function CheckoutClient() {
                 <p className="font-semibold text-text-primary">Pickup from store</p>
                 <p className="mt-1 text-text-primary">{pickupLocation.name}</p>
                 <p className="mt-1 text-text-muted">{pickupLocation.address}</p>
-                <p className="mt-1 text-text-muted">{pickupLocation.phone}</p>
+                <p className="mt-1 text-text-muted">
+                  Point of contact: {[pickupLocation.contactName, pickupLocation.contactPhone].filter(Boolean).join(" · ")}
+                </p>
+                <p className="mt-1 text-text-muted">Pickup timings: {pickupLocation.hours}</p>
+                <a href={pickupLocation.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 font-semibold text-burgundy underline">
+                  <Glyph name="pin" className="h-3.5 w-3.5" /> Open in Google Maps
+                </a>
                 {quote?.pickupAvailable && (
                   <p className="mt-2 font-medium text-emerald-700">
                     Ready {quote.pickupReadyBy} · held until {quote.pickupHoldUntil}
