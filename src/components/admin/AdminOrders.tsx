@@ -21,6 +21,7 @@ import {
   refundToStoreCredit,
   resaveOrder,
   setOrderStatus,
+  recordCourierPayment,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
@@ -45,7 +46,7 @@ import {
   trackShipment,
   type RateQuote,
 } from "@/lib/shipping-client";
-import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
+import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway, createCourierPaymentLink, refreshCourierPaymentLink } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -76,6 +77,14 @@ const ALL_STATUSES: Order["status"][] = [
   "Delivered",
   "Failed",
   "Cancelled",
+];
+/** Store pickup has its own steps; the stored status stays canonical. */
+const PICKUP_STATUSES: { status: Order["status"]; label: string }[] = [
+  { status: "Awaiting Confirmation", label: "Awaiting Confirmation" },
+  { status: "Ordered", label: "Order Confirmed" },
+  { status: "Packed", label: "Ready for Pickup" },
+  { status: "Delivered", label: "Picked Up" },
+  { status: "Cancelled", label: "Cancelled" },
 ];
 const PAYMENT_TONES: Record<string, string> = {
   Paid: "bg-emerald-50 text-emerald-700",
@@ -841,7 +850,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <div className="flex flex-wrap gap-2">
             <div className="min-w-44 flex-1">
               <SelectInput value={status} onChange={(event) => setStatus(event.target.value as Order["status"])}>
-                {ALL_STATUSES.map((item) => <option key={item} value={item}>{orderStatusText(item)}</option>)}
+                {order.deliveryMode === "store_pickup"
+                  ? PICKUP_STATUSES.map((item) => <option key={item.status} value={item.status}>{orderStatusText(item.label)}</option>)
+                  : ALL_STATUSES.map((item) => <option key={item} value={item}>{orderStatusText(item)}</option>)}
               </SelectInput>
             </div>
             <Button onClick={applyStatus} disabled={busy === "status" || status === order.status}>{busy === "status" ? "Saving…" : "Update status"}</Button>
@@ -967,6 +978,53 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           )}
         </Section>
       </div>
+
+      {order.deliveryMode === "store_pickup" && order.status !== "Cancelled" && order.status !== "Delivered" && (
+        <div className="mt-4">
+          <Section
+            title="Switch to courier delivery"
+            action={<Button variant="outline" onClick={loadRates} disabled={busy === "rates"}>{busy === "rates" ? "Checking…" : "Show couriers & rates"}</Button>}
+          >
+            <p className="text-sm text-text-muted">
+              If the customer cannot come to the store, send a link to pay only the courier charge. Once paid, the order becomes a courier delivery and can be booked.
+            </p>
+            {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                disabled={busy === "courier-link" || picked === undefined || !quote}
+                onClick={() => run("courier-link", async () => {
+                  const rate = picked !== undefined ? quote?.rates[picked] : undefined;
+                  if (!rate) throw new Error("Pick a courier first.");
+                  const link = await createCourierPaymentLink(order.id, rate);
+                  return `Courier payment link sent: ${link.url}`;
+                })}
+              >
+                {busy === "courier-link" ? "Creating…" : picked !== undefined && quote ? `Send link to pay ${rupees(quote.rates[picked]?.rate ?? 0)} for ${quote.rates[picked]?.courierName}` : "Send courier payment link"}
+              </Button>
+              {order.courierUpgrade?.link && (
+                <>
+                  <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(order.courierUpgrade!.link!.url); setMessage("Link copied."); }}>Copy link</Button>
+                  <Button variant="ghost" onClick={() => run("courier-check", () => refreshCourierPaymentLink(order.id))}>Check status</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => run("courier-paid", () => {
+                      recordCourierPayment(order.id, { method, reference: reference || undefined });
+                      return "Courier charge recorded. The order is now a courier delivery; book the courier below.";
+                    })}
+                  >
+                    Record courier charge paid ({method})
+                  </Button>
+                </>
+              )}
+            </div>
+            {order.courierUpgrade?.link && (
+              <p className="mt-2 break-all rounded bg-warm-cream px-2 py-1 font-mono text-[11px] text-text-muted">
+                {order.courierUpgrade.rate.courierName} · {rupees(order.courierUpgrade.amount)} · {order.courierUpgrade.link.url}
+              </p>
+            )}
+          </Section>
+        </div>
+      )}
 
       {order.deliveryMode === "delivery" && order.status !== "Cancelled" && (
         <div className="mt-4">

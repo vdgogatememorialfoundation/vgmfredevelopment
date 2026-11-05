@@ -568,11 +568,32 @@ async function nimbusToken(input: Json) {
   return String(data.data);
 }
 
+const shiprocketOrigins = new Map<string, { pins: string[]; at: number }>();
+
+/** Rates must be asked from a pincode Shiprocket has as an active pickup address, or it returns far fewer couriers. */
+async function shiprocketOrigin(token: string, wanted: string) {
+  let cached = shiprocketOrigins.get(token);
+  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
+    try {
+      const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", { headers: { authorization: `Bearer ${token}` } });
+      const rows = ((data.data as Json)?.shipping_address as Json[]) ?? [];
+      const active = rows.filter((row) => Number(row.status ?? 1) === 1);
+      const primary = active.filter((row) => Number(row.is_primary_location ?? 0) === 1);
+      const pins = [...primary, ...active].map((row) => String(row.pin_code ?? row.pincode ?? "")).filter(Boolean);
+      cached = { pins: [...new Set(pins)], at: Date.now() };
+      shiprocketOrigins.set(token, cached);
+    } catch {
+      return wanted;
+    }
+  }
+  return !cached.pins.length || cached.pins.includes(wanted) ? wanted : cached.pins[0];
+}
+
 export async function shiprocketRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
   const params = new URLSearchParams({
-    pickup_postcode: parcel.pickupPincode,
+    pickup_postcode: await shiprocketOrigin(token, parcel.pickupPincode),
     delivery_postcode: parcel.deliveryPincode,
     weight: String(parcel.weightKg),
     cod: parcel.cod ? "1" : "0",

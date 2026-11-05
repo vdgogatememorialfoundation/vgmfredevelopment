@@ -307,34 +307,15 @@ export function buildTrackingStages(
   }
 
   if (order.deliveryMode === "store_pickup") {
-    const packed = ["Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered"].includes(order.status);
-    const ready = packed;
+    const ready = PICKUP_PROCESSED.includes(order.status);
     const picked = order.status === "Delivered";
     const stages = [
       makeStage(
         "ordered",
-        "Ordered",
+        "Order Confirmed",
         "Order placed",
         [{ id: "placed", title: "Your order has been placed", at: order.date, location: origin, reached: true }],
         true
-      ),
-      makeStage(
-        "packed",
-        "Packed",
-        "Packing at store",
-        packed
-          ? [
-              {
-                id: "packed",
-                title: "Your item is packed at our facility",
-                at: packedAt || order.date,
-                location: origin,
-                reached: true,
-              },
-            ]
-          : [],
-        packed,
-        false
       ),
       makeStage(
         "ready",

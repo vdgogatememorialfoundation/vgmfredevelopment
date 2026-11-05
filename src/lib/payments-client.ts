@@ -1,7 +1,7 @@
-import type { Order } from "@/types";
+import type { CourierRate, Order } from "@/types";
 import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
-import { getOrder, maxRefundable, patchOrder, recordPayment, refundOrder, sendEmail } from "@/lib/admin-store";
+import { getOrder, maxRefundable, patchOrder, recordCourierPayment, recordPayment, refundOrder, sendEmail } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 
@@ -176,14 +176,14 @@ export async function payWithRazorpay(input: {
   };
 }
 
-function encodeSummary(order: Order) {
+function encodeSummary(order: Order, amount = order.total, items = order.items.map((item) => `${item.quantity} × ${item.title}`)) {
   const summary = {
     id: order.id,
-    amount: order.total,
+    amount,
     name: order.deliveryAddress?.fullName ?? "",
     email: order.deliveryAddress?.email ?? "",
     phone: order.deliveryAddress?.phone ?? "",
-    items: order.items.map((item) => `${item.quantity} × ${item.title}`),
+    items,
   };
   const bytes = new TextEncoder().encode(JSON.stringify(summary));
   let binary = "";
@@ -239,6 +239,63 @@ export async function createPaymentLink(orderId: string) {
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${order.total.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
+}
+
+/** Link for a store-pickup customer to pay only the courier charge; paying switches the order to courier delivery. */
+export async function createCourierPaymentLink(orderId: string, rate: CourierRate) {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.deliveryMode !== "store_pickup") throw new Error("Only store-pickup orders can be switched to courier delivery.");
+  const address = order.deliveryAddress;
+  if (!address?.line1 || !/^\d{6}$/.test(address.pincode ?? "")) throw new Error("Add the customer's full delivery address and pincode with Edit first.");
+  const amount = Math.round(rate.rate * 100) / 100;
+  if (!(amount > 0)) throw new Error("Pick a courier with a charge to collect.");
+  const settings = getIntegrations();
+  const label = `Courier delivery · ${rate.courierName}`;
+  let link: NonNullable<NonNullable<Order["courierUpgrade"]>["link"]>;
+  if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
+    link = { url: `${window.location.origin}/pay/${order.id}?part=courier&d=${encodeSummary(order, amount, [label])}`, provider: "demo", createdAt: new Date().toISOString() };
+  } else {
+    const result = await api<{ id: string; url: string }>({
+      action: "link",
+      amount,
+      orderId: `${order.id}-C`,
+      name: address.fullName || "Customer",
+      email: address.email,
+      phone: address.phone,
+      description: `Courier charge for VGMF order ${order.id}`,
+      callbackUrl: `${window.location.origin}/pay/${order.id}?part=courier&done=1`,
+      expiryHours: settings.razorpay.linkExpiryHours,
+    });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
+  }
+  patchOrder(order.id, { courierUpgrade: { amount, rate, link } }, `Courier payment link created · ${rate.courierName} ₹${amount}`);
+  sendEmail({
+    to: address.email ?? "",
+    phone: address.phone,
+    name: address.fullName,
+    params: [address.fullName || "Customer", order.id, `₹${amount}`, link.url],
+    subject: `Courier delivery for your VGMF order ${order.id}`,
+    template: "payment-link",
+    body: `Dear ${address.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nAs requested, we can send order ${order.id} by courier (${rate.courierName}) instead of store pickup. Please pay only the courier charge of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nThe courier is booked once the payment is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  return link;
+}
+
+export async function refreshCourierPaymentLink(orderId: string) {
+  const order = getOrder(orderId);
+  const link = order?.courierUpgrade?.link;
+  if (!order || !link) throw new Error("This order has no courier payment link.");
+  if (order.courierUpgrade?.paidAt) return "Courier charge already paid.";
+  if (link.provider !== "razorpay" || !link.id) return "Demo links are marked paid when the customer pays, or record the courier payment manually.";
+  const result = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: link.id });
+  if (!result.ok) throw new Error(result.error ?? "Could not read the link status.");
+  if (result.status === "paid") {
+    recordCourierPayment(order.id, { method: "Razorpay payment link", reference: result.paymentId });
+    return "Courier charge paid. The order is now a courier delivery; book the courier below.";
+  }
+  return `Razorpay link status: ${result.status}.`;
 }
 
 export async function refreshPaymentLink(orderId: string) {

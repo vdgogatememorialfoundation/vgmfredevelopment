@@ -819,6 +819,28 @@ export function sendPickupOtp(order: Order) {
   return true;
 }
 
+/** Customer paid only the courier charge for a store-pickup order: it becomes a courier delivery, ready to book. */
+export function recordCourierPayment(orderId: string, input: { method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  const upgrade = order?.courierUpgrade;
+  if (!order || !upgrade || upgrade.paidAt) return;
+  const next = withHistory(
+    {
+      ...order,
+      deliveryMode: "delivery",
+      shipping: (order.shipping ?? 0) + upgrade.amount,
+      total: order.total + upgrade.amount,
+      courierChoice: upgrade.rate,
+      courierName: upgrade.rate.courierName,
+      courierUpgrade: { ...upgrade, paidAt: new Date().toISOString(), paymentRef: input.reference },
+    },
+    "Courier charge paid",
+    `Switched from store pickup to ${upgrade.rate.courierName} · ₹${upgrade.amount} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
+}
+
 export function setPaymentStatus(orderId: string, paymentStatus: Order["paymentStatus"]) {
   const order = getOrder(orderId);
   if (!order) return;

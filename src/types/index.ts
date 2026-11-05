@@ -597,6 +597,14 @@ export interface Order {
   razorpayPaymentId?: string;
   paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
   courierChoice?: CourierRate;
+  /** A store-pickup order switched to courier delivery once the customer pays only the courier charge. */
+  courierUpgrade?: {
+    amount: number;
+    rate: CourierRate;
+    link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
+    paidAt?: string;
+    paymentRef?: string;
+  };
   weightKg?: number;
   createdBy?: string;
   cancelReason?: string;
