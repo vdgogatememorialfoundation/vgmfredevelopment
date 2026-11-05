@@ -174,13 +174,9 @@ export function LiveEventPage({ slug }: { slug: string }) {
             <EventRegistration event={event} />
             <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Dates</dt><dd className="text-right font-medium">{eventDateText(event)}</dd></div>
-              {eventTimeText(event) && <div className="flex justify-between gap-3"><dt className="text-text-muted">Time</dt><dd className="text-right font-medium">{eventTimeText(event)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
-              {event.capacity ? <div className="flex justify-between gap-3"><dt className="text-text-muted">Seats</dt><dd className="text-right font-medium">{event.capacity}</dd></div> : null}
-              {event.source && event.source !== "vgmf" && event.sourceUrl ? (
-                <div className="flex justify-between gap-3"><dt className="text-text-muted">Organised on</dt><dd className="text-right font-medium"><a href={event.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-burgundy hover:underline">{event.source === "autism" ? "Autism portal" : "Seminar portal"}</a></dd></div>
-              ) : null}
+              {registrationDay(event.registrationStart) ? <div className="flex justify-between gap-3"><dt className="text-text-muted">Registration opens</dt><dd className="text-right font-medium">{registrationDay(event.registrationStart)}</dd></div> : null}
+              {registrationDay(event.registrationEnd) ? <div className="flex justify-between gap-3"><dt className="text-text-muted">Registration closes</dt><dd className="text-right font-medium">{registrationDay(event.registrationEnd)}</dd></div> : null}
             </dl>
             {configuredWindows(event).length ? null : event.source && event.source !== "vgmf" && Number(String(event.id).split("-").pop()) > 0 && !isRegistrationClosed(event, now) ? (
               <PartnerRegister portal={event.source} seminarId={Number(String(event.id).split("-").pop())} />
@@ -211,4 +207,11 @@ export function LiveEventPage({ slug }: { slug: string }) {
       </section>
     </main>
   );
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function registrationDay(value?: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ""));
+  return match ? `${Number(match[3])} ${MONTHS[Number(match[2]) - 1]} ${match[1]}` : "";
 }
