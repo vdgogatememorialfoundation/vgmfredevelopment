@@ -188,12 +188,12 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         : order.status === "Delivered"
           ? "Delivered — confirmation received from the courier."
           : order.status === "Out for Delivery"
-            ? "The line moves down through the delivery window, and it stops before Delivered."
+            ? ""
             : order.deliveryMode === "store_pickup"
               ? "Pickup orders do not go through the courier."
               : hyperlocal
                 ? ""
-                : "The line runs from the top to the latest green step. The tracking number appears when Shipped turns green.";
+                : "";
 
   const stepStamp = Date.parse(rawStages[nodeCurrentIdx]?.events.at(-1)?.at || order.date);
   const paceFrom = Number.isFinite(stepStamp) ? stepStamp : placed.getTime();

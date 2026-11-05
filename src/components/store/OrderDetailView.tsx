@@ -52,9 +52,6 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-text-primary">
               Tracking
-              <span className="ml-2 text-xs font-normal text-text-muted">
-                Live scans synced from the courier
-              </span>
             </h3>
             {!isHyperlocalProvider(order.courierChoice?.provider, order.courierChoice?.lastMile) &&
             order.trackingId &&
