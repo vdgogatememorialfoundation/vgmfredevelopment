@@ -540,9 +540,7 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
       ...emptyOffers,
       serviceable: true,
       deliveryAvailable: true,
-      note: pickupAvailable
-        ? "No shipping API is connected yet, so courier names and delivery dates are not shown. Pickup from store still uses the Foundation packing calendar."
-        : "No shipping API is connected yet. Add keys in Admin → Settings → Shipping APIs before courier dates can be shown.",
+      note: "",
     };
   }
 
