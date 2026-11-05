@@ -99,10 +99,13 @@ export function ArticlesIndex() {
   );
 }
 
-export function ArticleView({ slug }: { slug: string }) {
+export function ArticleView({ slug, initial }: { slug: string; initial?: Article | null }) {
   const articles = useLiveArticles();
   const { t, locale } = useI18n();
-  const found = articles.find((item) => item.slug === slug);
+  const live = articles.find((item) => item.slug === slug);
+  const found = live && !live.content && initial?.slug === slug
+    ? { ...live, content: initial.content, translations: initial.translations ?? live.translations }
+    : live ?? initial ?? undefined;
   if (!found) {
     return (
       <main className="container py-20">

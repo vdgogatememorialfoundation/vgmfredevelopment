@@ -133,24 +133,6 @@ export function LiveEventPage({ slug }: { slug: string }) {
       <section className="section bg-background">
         <div className="container grid gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            {event.tbd?.schedule ? (
-              <div>
-                <h2 className="heading-3">Schedule</h2>
-                <p className="mt-3 rounded-xl border border-dashed border-border bg-warm-cream p-4 text-sm text-text-muted">The programme schedule is {TBA.toLowerCase()}.</p>
-              </div>
-            ) : event.schedule.length > 0 && (
-              <div>
-                <h2 className="heading-3">Schedule</h2>
-                <ul className="mt-4 space-y-3">
-                  {event.schedule.map((item) => (
-                    <li key={item.id} className="rounded-xl border border-border bg-white p-4">
-                      <p className="text-sm font-semibold text-burgundy">{item.time}</p>
-                      <p className="font-semibold">{item.title}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
             {event.tbd?.speakers ? (
               <div>
                 <h2 className="heading-3">Speakers</h2>

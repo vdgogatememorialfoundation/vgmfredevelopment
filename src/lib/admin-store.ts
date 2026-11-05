@@ -1280,7 +1280,7 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
     template: "order-status",
     body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${order.replacementOf ? `Your replacement for order ${order.replacementOf} (${order.id}) is now ${status}.` : `Your order ${order.id} is now ${status}.`}${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\nFollow each step in My Orders.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
-  const ordersHref = order.replacementOf ? `/account/orders#${order.replacementOf}` : "/account/orders";
+  const ordersHref = order.replacementOf ? `/account/orders/${encodeURIComponent(order.replacementOf)}` : "/account/orders";
   if (to) {
     pushInbox({
       audience: "customer",

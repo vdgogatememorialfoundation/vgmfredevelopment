@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils";
-import { deliveryDatePhrase, parseExpected, statusStamp } from "@/lib/delivery-expectation";
+import { deliveryDatePhrase, parseExpected, statusStamp, statusDay } from "@/lib/delivery-expectation";
 import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
 import { pickupOtp } from "@/lib/store";
@@ -161,11 +161,11 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       case "out":
         return stage.reached ? statusStamp(stage.events.at(-1)?.at, order.deliveryAddress?.country) || "Out for delivery" : "";
       case "delivered":
-        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
+        return stage.reached && deliveredAt ? statusDay(deliveredAt, order.deliveryAddress?.country) : "";
       case "ready":
         return stage.reached ? `OTP ${pickupOtp(order.id)}` : "";
       case "picked":
-        return stage.reached && deliveredAt ? statusStamp(deliveredAt, order.deliveryAddress?.country) : "";
+        return stage.reached && deliveredAt ? statusDay(deliveredAt, order.deliveryAddress?.country) : "";
       case "cancel-review":
         return "Reviewed by admin";
       case "cancelled":

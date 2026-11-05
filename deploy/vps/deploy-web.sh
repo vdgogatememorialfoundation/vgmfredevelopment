@@ -103,7 +103,7 @@ for ENV in "${ENVS[@]}"; do
       restart "$ENV"
       exit 1
     fi
-    for path in / /support /admin /admin/articles/approvals /articles /my-orders; do
+    for path in / /support /admin /admin/articles/approvals /articles /account/orders; do
       printf '[%s] %-28s %s\n' "$ENV" "$path" "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT$path")"
     done
   fi

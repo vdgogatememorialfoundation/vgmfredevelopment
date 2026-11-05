@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { getShipments } from "@/lib/admin-store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { buildTrackingStages, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
@@ -18,6 +18,16 @@ const STAGE_STATUS: Partial<Record<TrackingStageId, Order["status"]>> = {
   cancelled: "Cancelled",
   "cancel-review": "Cancelled",
   refunded: "Cancelled",
+};
+
+const STEPS = ["Ordered", "Packed", "Shipped", "Out for delivery", "Delivered"];
+const STEP_OF: Partial<Record<Order["status"], number>> = {
+  Packed: 1,
+  "Ready to Ship": 1,
+  "To Ship": 1,
+  Shipped: 2,
+  "Out for Delivery": 3,
+  Delivered: 4,
 };
 
 const FINAL = new Set<Order["status"]>(["Delivered", "Cancelled", "Failed"]);
@@ -117,7 +127,9 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   const tone = bad ? "text-red-700" : good ? "text-emerald-700" : "text-burgundy";
   const fill = bad ? "bg-red-600" : "bg-emerald-600";
   const detail = current?.id === "ordered" ? "Placed" : latest?.title ?? "";
-  const stamp = shortStamp(latest?.at, country);
+  const stamp = status === "Delivered" ? dayLabel(latest?.at, country) : shortStamp(latest?.at, country);
+  const steps = pickup ? stages.map((stage) => stage.label) : STEPS;
+  const stepIdx = pickup ? currentIdx : Math.max(STEP_OF[status] ?? 0, STEP_OF[order.status] ?? 0);
 
   return (
     <span className="mt-1 block" data-order-preview={order.id}>
@@ -127,21 +139,28 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
           {[detail, stamp].filter(Boolean).join(" · ")}
         </span>
       )}
-      <span className="mt-2 flex items-center gap-1" aria-label={`Progress: ${current?.label ?? status}`}>
-        {stages.map((stage, index) => (
-          <span
-            key={stage.id}
-            title={stage.label}
-            className={`h-1.5 flex-1 rounded-full ${index <= currentIdx ? fill : "bg-border"} ${
-              index === currentIdx && !terminal ? "animate-pulse" : ""
-            }`}
-          />
+      <span className="mt-2.5 flex items-center" aria-label={`Progress: ${steps[stepIdx] ?? status}`}>
+        {steps.map((label, index) => (
+          <Fragment key={label}>
+            {index > 0 ? <span className={`h-0.5 flex-1 ${index <= stepIdx ? fill : "bg-border"}`} /> : null}
+            <span
+              title={label}
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${index <= stepIdx ? fill : "bg-border"} ${
+                index === stepIdx && !terminal ? "ring-4 ring-emerald-100" : ""
+              }`}
+            />
+          </Fragment>
         ))}
       </span>
-      <span className="mt-1 flex justify-between text-[10px] font-medium uppercase tracking-[0.08em] text-text-muted">
-        <span className={currentIdx === 0 ? tone : ""}>{stages[0]?.label}</span>
-        {currentIdx > 0 && currentIdx < stages.length - 1 ? <span className={tone}>{current?.label}</span> : null}
-        <span className={currentIdx === stages.length - 1 ? tone : ""}>{stages.at(-1)?.label}</span>
+      <span className="mt-1 flex justify-between gap-1 text-[10px] font-medium leading-tight text-text-muted">
+        {steps.map((label, index) => (
+          <span
+            key={label}
+            className={`${index === 0 ? "text-left" : index === steps.length - 1 ? "text-right" : "text-center"} ${index === stepIdx ? tone : ""}`}
+          >
+            {label}
+          </span>
+        ))}
       </span>
     </span>
   );

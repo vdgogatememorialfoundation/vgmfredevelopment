@@ -118,6 +118,20 @@ export function statusStamp(at?: string, country?: string) {
   return `${text} ${zoneSuffix(zone)}`;
 }
 
+/** Weekday and date only, for delivery steps. Customers see the day, not the clock. */
+export function statusDay(at?: string, country?: string) {
+  if (!at) return "";
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return deliveryDatePhrase(at);
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: clockZone(country),
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
 function istDay(ms: number, zone = "Asia/Kolkata") {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: zone,

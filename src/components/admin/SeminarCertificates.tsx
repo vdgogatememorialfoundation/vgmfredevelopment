@@ -15,6 +15,13 @@ type Row = {
 
 type Filter = "all" | "enabled" | "disabled";
 
+type Lookup = {
+  number: string;
+  status: string;
+  sourceLabel?: string;
+  certificate?: { certificateNumber: string; name: string; event: string; certificateType: string; issueDate?: string; status?: string } | null;
+};
+
 export function SeminarCertificates() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState("");
@@ -54,6 +61,28 @@ export function SeminarCertificates() {
   }, [rows, query, filter, kind]);
 
   const enabledCount = rows?.filter((row) => row.enabled).length ?? 0;
+  const [lookup, setLookup] = useState<Lookup | null>(null);
+  const lookupDigits = query.replace(/\D/g, "");
+  const lookupNumber = query.trim().length >= 6 && (lookupDigits.length >= 6 || /\d/.test(query)) ? query.trim() : "";
+
+  useEffect(() => {
+    if (!lookupNumber) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      setLookup({ number: lookupNumber, status: "checking" });
+      fetch(`/api/certificates/verify?number=${encodeURIComponent(lookupNumber)}`, { cache: "no-store" })
+        .then((response) => response.json())
+        .then((data: { status?: string; sourceLabel?: string; certificate?: Lookup["certificate"] }) => {
+          if (live) setLookup({ number: lookupNumber, status: data.status || (data.certificate ? "valid" : "not_found"), sourceLabel: data.sourceLabel, certificate: data.certificate ?? null });
+        })
+        .catch(() => live && setLookup({ number: lookupNumber, status: "unavailable" }));
+    }, 500);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [lookupNumber]);
+  const shownLookup = lookupNumber && lookup?.number === lookupNumber ? lookup : null;
 
   return (
     <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -69,8 +98,8 @@ export function SeminarCertificates() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Certificate no., name or event"
-            className="w-64 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+            placeholder="Any certificate no. (seminar, autism, foundation), name or event"
+            className="w-80 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
           />
           <select value={filter} onChange={(event) => setFilter(event.target.value as Filter)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
             <option value="all">All statuses</option>
@@ -84,6 +113,30 @@ export function SeminarCertificates() {
           </select>
         </div>
       </div>
+      {shownLookup ? (
+        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm" data-cert-lookup>
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-900">Same check as the public verification page · {shownLookup.number}</p>
+          {shownLookup.status === "checking" ? (
+            <p className="mt-1 text-slate-600">Checking this site, the seminar site and the autism site…</p>
+          ) : shownLookup.certificate ? (
+            <p className="mt-1 text-slate-800">
+              <span className="font-semibold text-blue-950">{shownLookup.certificate.name}</span>
+              {` · ${shownLookup.certificate.certificateType} · ${shownLookup.certificate.event}`}
+              {shownLookup.certificate.issueDate ? ` · issued ${shownLookup.certificate.issueDate}` : ""}
+              {shownLookup.sourceLabel ? ` · ${shownLookup.sourceLabel}` : ""}
+              <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Valid · verifies</span>
+            </p>
+          ) : (
+            <p className="mt-1 text-slate-700">
+              {shownLookup.status === "not_issued"
+                ? "This number exists but the certificate is not enabled, so it does not verify."
+                : shownLookup.status === "unavailable"
+                  ? "The certificate sites did not answer. Try again."
+                  : "No issued certificate matches this number on this site, the seminar site or the autism site."}
+            </p>
+          )}
+        </div>
+      ) : null}
       {error ? <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</p> : null}
       {!rows && !error ? <p className="mt-4 text-sm text-slate-500">Loading seminar certificates…</p> : null}
       {rows ? (

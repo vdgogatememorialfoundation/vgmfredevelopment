@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { statusStamp } from "@/lib/delivery-expectation";
+import { statusDay, statusStamp } from "@/lib/delivery-expectation";
 import type { ShipmentEvent } from "@/types";
 
 export type PipelineTone = "emerald" | "sky" | "red";
@@ -282,7 +282,7 @@ export default function VerticalPipeline({
                     {kids.map((event) => (
                       <li key={event.id} className={/fail|undeliver|rto/i.test(event.title) ? "failed" : ""}>
                         <b>{event.title}</b>
-                        {event.at ? <div className="when">{statusStamp(event.at, country)}</div> : null}
+                        {event.at ? <div className="when">{stage.id === "delivered" || stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)}</div> : null}
                         {event.location ? <div className="where">{event.location}</div> : null}
                         {event.detail ? <div className="where">{event.detail}</div> : null}
                         {event.agent?.name || event.agent?.phone ? (

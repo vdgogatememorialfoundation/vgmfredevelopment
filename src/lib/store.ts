@@ -366,7 +366,7 @@ export function syncReplacementProgress(order: Order) {
       kind: "order",
       title: `Replacement is ${order.status}`,
       body: detail,
-      href: `/account/orders#${parentId}`,
+      href: `/account/orders/${encodeURIComponent(parentId)}`,
     });
   }
   pushInbox({
@@ -479,7 +479,7 @@ function notifyReplacement(order: Order, title: string, body: string, who: "cust
       kind: "order",
       title,
       body,
-      href: `/account/orders#${order.id}`,
+      href: `/account/orders/${encodeURIComponent(order.id)}`,
     });
   }
   if (who === "both" || who === "customer") {

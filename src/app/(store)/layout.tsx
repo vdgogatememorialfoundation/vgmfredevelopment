@@ -17,6 +17,16 @@ import { readMobileFeed } from "@/lib/server/mobile-feed";
 
 export const revalidate = 60;
 
+type FeedArticle = NonNullable<ReturnType<typeof readMobileFeed>["articles"]>[number];
+
+/** Every page gets article cards only; the full text loads on the article's own page. */
+function withoutArticleBody(article: FeedArticle): FeedArticle {
+  const translations = article.translations
+    ? Object.fromEntries(Object.entries(article.translations).map(([key, copy]) => [key, copy ? { ...copy, content: undefined } : copy]))
+    : article.translations;
+  return { ...article, content: "", translations } as FeedArticle;
+}
+
 export default function StoreLayout({
   children,
 }: {
@@ -33,7 +43,7 @@ export default function StoreLayout({
     siteText: feed.siteText,
     books: feed.books ?? [],
     events: feed.events ?? [],
-    articles: feed.articles ?? [],
+    articles: (feed.articles ?? []).map(withoutArticleBody),
     clinics: feed.clinics ?? [],
     videos: feed.videos ?? [],
     notices: feed.notices ?? [],

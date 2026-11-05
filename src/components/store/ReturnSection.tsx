@@ -6,7 +6,9 @@ import { classNames } from "@/lib/utils";
 import { getOrders, getReturnRequest, requestDamagedReplacement } from "@/lib/store";
 import { canCustomerRequestReplacement, customerOrderPolicyCopy } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
+import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
 import { fileToDataUrl } from "@/lib/images";
+import { statusDay } from "@/lib/delivery-expectation";
 import type { Order, ReturnRequest } from "@/types";
 
 export default function ReturnSection({ order }: { order: Order }) {
@@ -199,10 +201,10 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
     || request.stages.find((stage) => stage.reached && stage.at && names.includes(stage.title))?.at
     || "";
   const steps = [
-    { id: "requested", title: "Request received", reached: true, at: request.requestedAt, detail: "Photos and the damage note are with the desk." },
-    { id: "review", title: "Desk review", reached: true, at: request.requestedAt, detail: "The Foundation desk checks the photos." },
+    { id: "Submitted", title: "Request received", reached: true, at: request.requestedAt, detail: "Photos and the damage note are with the desk." },
+    { id: "Under Review", title: "Desk review", reached: true, at: request.requestedAt, detail: "The Foundation desk checks the photos." },
     {
-      id: "decision",
+      id: request.status === "Rejected" ? "Rejected" : "Approved",
       title: request.status === "Rejected" ? "Request rejected" : "Decision",
       reached: request.status !== "Pending Review",
       at: request.decidedAt,
@@ -211,13 +213,22 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
     ...(request.status === "Rejected"
       ? []
       : [
-          { id: "placed", title: "Free replacement order", reached: Boolean(replacement), at: request.decidedAt, detail: replacement ? `Order ${replacement.id}` : "Placed when the request is accepted." },
+          { id: "ordered", title: "Free replacement order", reached: Boolean(replacement), at: request.decidedAt, detail: replacement ? `Order ${replacement.id}` : "Placed when the request is accepted." },
           { id: "packed", title: "Packed", reached: rank >= statusRank("Packed"), at: stampFor(["Packed", "Ready to Ship", "To Ship"]), detail: "The replacement is packed for dispatch." },
           { id: "shipped", title: "Shipped", reached: rank >= statusRank("Shipped"), at: stampFor(["Shipped"]), detail: replacement?.trackingId ? `Tracking ${replacement.trackingId}` : "Handed to the courier." },
           { id: "out", title: "Out for delivery", reached: rank >= statusRank("Out for Delivery"), at: stampFor(["Out for Delivery"]), detail: "On the way to you." },
           { id: "delivered", title: "Delivered", reached: rank >= statusRank("Delivered"), at: stampFor(["Delivered"]), detail: "The replacement has been delivered." },
         ]),
   ];
+
+  const pipeline: PipelineStageShape[] = steps.map((step) => ({
+    id: step.id,
+    label: step.title,
+    caption: step.detail,
+    reached: step.reached,
+    partial: false,
+    events: [],
+  }));
 
   return (
     <div className="mt-3 space-y-3">
@@ -245,22 +256,18 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
         ) : null}
       </div>
 
-      <ol className="space-y-3">
-        {steps.map((step) => (
-          <li key={step.id} className="flex gap-3">
-            <span className={classNames("mt-1 h-2.5 w-2.5 shrink-0 rounded-full", step.reached ? "bg-burgundy" : "bg-border")} />
-            <span>
-              <span className={classNames("block text-sm font-semibold", step.reached ? "text-ink" : "text-text-muted")}>{step.title}</span>
-              {step.detail && <span className="mt-0.5 block">{step.detail}</span>}
-              {step.reached && step.at && <span className="mt-0.5 block">{whenLabel(step.at)} IST</span>}
-            </span>
-          </li>
-        ))}
-      </ol>
+      <VerticalPipeline
+        stages={pipeline}
+        failed={request.status === "Rejected"}
+        metaFor={(stage) => {
+          const at = steps.find((step) => step.id === stage.id)?.at;
+          return at ? (stage.id === "delivered" ? statusDay(at) : `${whenLabel(at)} IST`) : "";
+        }}
+      />
 
       {replacement && (
         <p>
-          <Link href={`/account/orders#${replacement.id}`} className="font-semibold text-burgundy">
+          <Link href={`/account/orders/${encodeURIComponent(replacement.id)}`} className="font-semibold text-burgundy">
             Open replacement order {replacement.id}
           </Link>
         </p>
