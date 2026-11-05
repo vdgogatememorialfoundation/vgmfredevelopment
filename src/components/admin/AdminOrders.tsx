@@ -23,7 +23,7 @@ import {
   setOrderStatus,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, updateReturnRequest } from "@/lib/store";
+import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
 import { getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
@@ -1143,9 +1143,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {returnRequest.status === "Pending Review" && returnRequest.kind === "replacement" && (
                     <>
                       <Button variant="success" onClick={() => run("rt", () => {
-                        const next = reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
-                        return `Accepted. Free replacement order ${next.replacementOrderId} placed.`;
-                      })}>Accept & place free order</Button>
+                        reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
+                        return "Accepted. Create the return AWB next; the replacement ships after the item is back and checked.";
+                      })}>Accept & ask for the item back</Button>
                       <Button variant="danger" onClick={() => {
                         const reason = window.prompt("Reason for rejecting this replacement request?");
                         if (reason === null) return;
@@ -1170,14 +1170,36 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                           courierName: created.courierName,
                           createdAt: new Date().toISOString(),
                           note: created.note,
+                          labelUrl: created.labelUrl,
                         },
                       }, "Return pickup booked");
-                      updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                      if (returnRequest.kind === "replacement") {
+                        advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${created.awb} · ${created.courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                      } else {
+                        updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                      }
                       return created.note ?? `Return pickup booked. AWB ${created.awb}.`;
-                    })}>Book reverse pickup</Button>
+                    })}>Create return AWB & label</Button>
+                  )}
+                  {returnRequest.status === "Return Approved" && returnRequest.kind === "replacement" && (
+                    <Button variant="ghost" onClick={() => {
+                      const awb = window.prompt("Return AWB / tracking number")?.trim();
+                      if (!awb) return;
+                      const courierName = window.prompt("Courier for the return (e.g. India Post, DTDC)")?.trim() || "Courier";
+                      const labelUrl = window.prompt("Link to the return label (optional)")?.trim() || undefined;
+                      run("rt", () => {
+                        patchOrder(order.id, { returnShipment: { provider: "local", live: false, awb, courierName, createdAt: new Date().toISOString(), labelUrl } }, `Return AWB ${awb} entered`);
+                        advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${awb} · ${courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                        return `Return AWB ${awb} shared with the customer.`;
+                      });
+                    }}>Enter return AWB manually</Button>
                   )}
                   {returnRequest.status === "Pickup Scheduled" && (
                     <Button variant="outline" onClick={() => run("rt", async () => {
+                      if (returnRequest.kind === "replacement") {
+                        advanceReturnRequest(order.id, "Picked Up", "return-pickup", "The courier collected the defective item.");
+                        return "Marked as picked up. Check the item when it arrives, then send the replacement.";
+                      }
                       updateReturnRequest(order.id, { status: "Picked Up" });
                       if (returnRequest.kind === "return" && getOrderSettings().refunds.autoRefundOnReturnPickup && paid) {
                         const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
@@ -1186,6 +1208,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       }
                       return "Marked as picked up.";
                     })}>Mark picked up</Button>
+                  )}
+                  {returnRequest.kind === "replacement" && ["Picked Up", "Pickup Scheduled"].includes(returnRequest.status) && !returnRequest.replacementOrderId && (
+                    <Button variant="success" onClick={() => {
+                      if (!window.confirm("Has the defective item arrived and been checked? This places the free replacement order.")) return;
+                      run("rt", () => {
+                        const next = sendReplacementAfterInspection(order.id);
+                        return `Checked. Free replacement order ${next.replacementOrderId} placed.`;
+                      });
+                    }}>Item received & checked — send replacement</Button>
                   )}
                   {returnRequest.kind === "return" && returnRequest.status === "Picked Up" && paid && (
                     <Button variant="danger" onClick={() => run("rt", async () => {

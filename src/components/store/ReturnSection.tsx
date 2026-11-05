@@ -6,7 +6,6 @@ import { classNames } from "@/lib/utils";
 import { getOrders, getReturnRequest, requestDamagedReplacement } from "@/lib/store";
 import { canCustomerRequestReplacement, customerOrderPolicyCopy } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
-import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
 import { fileToDataUrl } from "@/lib/images";
 import { statusDay } from "@/lib/delivery-expectation";
 import type { Order, ReturnRequest } from "@/types";
@@ -62,7 +61,7 @@ export default function ReturnSection({ order }: { order: Order }) {
       <p className="font-semibold text-text-primary">Replacement for damaged items</p>
 
       {request ? (
-        <ReplacementStatus request={request} />
+        <ReplacementStatus request={request} order={order} />
       ) : canRequest ? (
         <>
           {!showForm ? (
@@ -165,70 +164,15 @@ export default function ReturnSection({ order }: { order: Order }) {
   );
 }
 
-const FULFILLMENT = ["Pending", "Paid", "Processing", "Ordered", "Accepted", "Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered"];
-
-function statusRank(status?: string) {
-  const index = FULFILLMENT.indexOf(status || "");
-  return index < 0 ? -1 : index;
-}
-
-function whenLabel(iso?: string) {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return "";
-  return date.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function ReplacementStatus({ request }: { request: ReturnRequest }) {
+function ReplacementStatus({ request, order }: { request: ReturnRequest; order: Order }) {
   const tone =
     request.status === "Rejected"
       ? "bg-red-50 text-red-700"
       : request.status === "Replacement Created" || request.status === "Accepted"
         ? "bg-emerald-50 text-emerald-700"
         : "bg-burgundy/10 text-burgundy";
-  const replacement = request.replacementOrderId ? getOrders().find((order) => order.id === request.replacementOrderId) : undefined;
-  const rank = statusRank(replacement?.status);
-  const stampFor = (names: string[]) =>
-    replacement?.history?.find((entry) => names.includes(entry.status))?.at
-    || request.stages.find((stage) => stage.reached && stage.at && names.includes(stage.title))?.at
-    || "";
-  const steps = [
-    { id: "Submitted", title: "Request received", reached: true, at: request.requestedAt, detail: "Photos and the damage note are with the desk." },
-    { id: "Under Review", title: "Desk review", reached: true, at: request.requestedAt, detail: "The Foundation desk checks the photos." },
-    {
-      id: request.status === "Rejected" ? "Rejected" : "Approved",
-      title: request.status === "Rejected" ? "Request rejected" : "Decision",
-      reached: request.status !== "Pending Review",
-      at: request.decidedAt,
-      detail: request.decisionNote || (request.status === "Pending Review" ? "Waiting for accept or reject." : "Accepted."),
-    },
-    ...(request.status === "Rejected"
-      ? []
-      : [
-          { id: "ordered", title: "Free replacement order", reached: Boolean(replacement), at: request.decidedAt, detail: replacement ? `Order ${replacement.id}` : "Placed when the request is accepted." },
-          { id: "packed", title: "Packed", reached: rank >= statusRank("Packed"), at: stampFor(["Packed", "Ready to Ship", "To Ship"]), detail: "The replacement is packed for dispatch." },
-          { id: "shipped", title: "Shipped", reached: rank >= statusRank("Shipped"), at: stampFor(["Shipped"]), detail: replacement?.trackingId ? `Tracking ${replacement.trackingId}` : "Handed to the courier." },
-          { id: "out", title: "Out for delivery", reached: rank >= statusRank("Out for Delivery"), at: stampFor(["Out for Delivery"]), detail: "On the way to you." },
-          { id: "delivered", title: "Delivered", reached: rank >= statusRank("Delivered"), at: stampFor(["Delivered"]), detail: "The replacement has been delivered." },
-        ]),
-  ];
-
-  const pipeline: PipelineStageShape[] = steps.map((step) => ({
-    id: step.id,
-    label: step.title,
-    caption: step.detail,
-    reached: step.reached,
-    partial: false,
-    events: [],
-  }));
+  const replacement = request.replacementOrderId ? getOrders().find((item) => item.id === request.replacementOrderId) : undefined;
+  const back = order.returnShipment;
 
   return (
     <div className="mt-3 space-y-3">
@@ -238,7 +182,7 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className={classNames("rounded-full px-2.5 py-0.5 text-[11px] font-bold", tone)}>{request.status}</span>
-          <span>Requested {whenLabel(request.requestedAt)} IST</span>
+          <span>Requested {statusDay(request.requestedAt)}</span>
         </div>
         {request.reason && (
           <p className="mt-2">
@@ -246,6 +190,7 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
           </p>
         )}
         {request.note && <p className="mt-1">{request.note}</p>}
+        {request.decisionNote && request.status !== "Pending Review" && <p className="mt-1">{request.decisionNote}</p>}
         {request.images?.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {request.images.map((src, index) => (
@@ -256,14 +201,23 @@ function ReplacementStatus({ request }: { request: ReturnRequest }) {
         ) : null}
       </div>
 
-      <VerticalPipeline
-        stages={pipeline}
-        failed={request.status === "Rejected"}
-        metaFor={(stage) => {
-          const at = steps.find((step) => step.id === stage.id)?.at;
-          return at ? (stage.id === "delivered" ? statusDay(at) : `${whenLabel(at)} IST`) : "";
-        }}
-      />
+      {back?.awb && !request.replacementOrderId ? (
+        <div className="rounded-xl border border-burgundy/30 bg-white p-3">
+          <p className="font-semibold text-text-primary">Send the defective item back</p>
+          <p className="mt-1">
+            Return AWB <span className="font-mono text-burgundy">{back.awb}</span>
+            {back.courierName ? ` · ${back.courierName}` : ""}
+          </p>
+          <p className="mt-1">Download the label, paste it on the parcel with the defective item and hand it to the courier. The replacement ships once we have checked the item.</p>
+          {back.labelUrl ? (
+            <a href={back.labelUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block rounded-full bg-burgundy px-4 py-1.5 text-xs font-semibold text-white">
+              Download return label
+            </a>
+          ) : (
+            <p className="mt-1 text-xs">The desk will share the label shortly.</p>
+          )}
+        </div>
+      ) : null}
 
       {replacement && (
         <p>

@@ -598,6 +598,8 @@ export interface ReturnShipment {
   providerShipmentId?: string;
   createdAt: string;
   note?: string;
+  /** Label the customer prints and pastes on the parcel going back. */
+  labelUrl?: string;
 }
 
 export interface CourierRate {

@@ -1738,9 +1738,21 @@ export async function shiprocketReturn(input: Json, order: BookInput): Promise<B
     json: { shipment_id: shipmentId, is_return: 1, courier_id: order.courierId || undefined },
   });
   const awbData = ((assigned.response as Json)?.data as Json) ?? {};
+  let labelUrl = "";
+  try {
+    const label = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
+      method: "POST",
+      headers: auth,
+      json: { shipment_id: [shipmentId] },
+    });
+    labelUrl = String(label.label_url ?? "");
+  } catch {
+    labelUrl = "";
+  }
   return {
     provider: "shiprocket",
     awb: String(awbData.awb_code ?? created.awb_code ?? ""),
+    labelUrl: labelUrl || undefined,
     courierName: String(awbData.courier_name ?? "Return courier"),
     providerOrderId: String(created.order_id ?? ""),
     providerShipmentId: shipmentId,
