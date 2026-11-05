@@ -11,6 +11,7 @@ import {
 } from "@/lib/store";
 import { addStockAlert, canOrder, canPreorder, isPurchasable } from "@/lib/product-data";
 import { checkPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
+import { getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { Book } from "@/types";
 
@@ -187,6 +188,8 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           <p className={`mt-2 text-xs ${estimate.pickupAvailable ? "text-text-muted" : "text-red-700"}`}>{estimate.note}</p>
         )}
 
+        <DeliveryCharges price={book.price} quantity={quantity} />
+
         <div className="mt-3 rounded-lg border border-border bg-white p-3 text-xs">
           <p className="font-semibold text-text-primary">Pickup from store</p>
           {(estimate ? estimate.pickupAvailable : book.storePickupAvailable !== false) ? (
@@ -317,6 +320,28 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </Link>
         </div>
       )}
+    </div>
+  );
+}
+function DeliveryCharges({ price, quantity }: { price: number; quantity: number }) {
+  const settings = getOrderSettings();
+  const subtotal = price * quantity;
+  const fee = shippingFeeFor(subtotal, quantity, undefined, settings);
+  const short = settings.shippingFeeMode === "free_above" ? Math.max(0, settings.freeAbove - subtotal) : 0;
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-white p-3 text-xs text-text-muted">
+      <p className="font-semibold text-text-primary">
+        {fee === 0 ? "FREE delivery" : `Delivery ₹${fee}`}
+        {settings.shippingFeeMode === "courier_rate" ? " (final rate shown at checkout)" : ""}
+      </p>
+      {settings.shippingFeeMode === "free_above" && (
+        <p className="mt-1">
+          {short > 0 ? `Add ₹${short} more for free delivery (free above ₹${settings.freeAbove}).` : `Free delivery on orders above ₹${settings.freeAbove}.`}
+        </p>
+      )}
+      <p className="mt-1">
+        {settings.codEnabled ? `Cash on delivery available${settings.codFee ? ` · ₹${settings.codFee} COD fee` : ""}.` : "Cash on delivery is not available."}
+      </p>
     </div>
   );
 }
