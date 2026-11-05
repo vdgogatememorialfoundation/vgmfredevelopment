@@ -27,7 +27,7 @@ export function formatDateRange(startDate: string, endDate: string) {
   const sameYear = start.getFullYear() === end.getFullYear();
   const sameMonth = start.getMonth() === end.getMonth();
 
-  if (start.getTime() === end.getTime() || String(startDate).slice(0, 10) === String(endDate).slice(0, 10)) {
+  if (start.getTime() === end.getTime() || formatDate(startDate) === formatDate(endDate)) {
     return formatDate(startDate);
   }
 
