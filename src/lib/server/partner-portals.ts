@@ -1312,7 +1312,12 @@ export async function ingestPartnerPayload(request: { headers: Headers; nextUrl:
   const eventRow = asRecord(payload.event) ?? asRecord(payload.seminar);
   if (eventRow && portal !== "fellowship") {
     const event = eventFromSeminar(portal, eventRow, []);
-    snapshot.events = upsertList(snapshot.events, event);
+    const previous = snapshot.events.find((row) => row.id === event.id);
+    snapshot.events = upsertList(snapshot.events, {
+      ...event,
+      speakers: event.speakers?.length ? event.speakers : previous?.speakers ?? [],
+      schedule: event.schedule?.length ? event.schedule : previous?.schedule ?? [],
+    });
   }
   const noticeRow = asRecord(payload.notice);
   if (noticeRow) {
