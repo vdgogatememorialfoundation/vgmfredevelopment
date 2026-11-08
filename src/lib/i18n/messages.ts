@@ -36,6 +36,7 @@ const en = {
   "footer.shipping": "Shipping",
   "footer.returns": "Returns",
   "footer.refund": "Refund",
+  "footer.faq": "FAQ",
   "footer.cancellation": "Cancellation",
   "footer.developed": "Developed by Capture Visual Studios",
   "footer.rights": "All rights reserved.",

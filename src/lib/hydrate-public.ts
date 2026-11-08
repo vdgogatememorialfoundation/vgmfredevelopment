@@ -152,6 +152,16 @@ function applyFeed(feed: MobileFeed) {
     tryWrite(() => window.localStorage.setItem("vgmf_site_text", JSON.stringify(feed.siteText)));
   }
 
+  if (Array.isArray(feed.faqs)) {
+    tryWrite(() => {
+      const live = feed.faqs ?? [];
+      const liveIds = new Set(live.map((item) => item.id));
+      const local = JSON.parse(window.localStorage.getItem("vgmf_faqs") || "[]") as typeof live;
+      const hidden = local.filter((item) => item.active === false && !liveIds.has(item.id));
+      window.localStorage.setItem("vgmf_faqs", JSON.stringify([...live, ...hidden]));
+    });
+  }
+
   if (feed.seminarReviews?.length) {
     tryWrite(() => replaceSeminarReviews(feed.seminarReviews ?? []));
   }

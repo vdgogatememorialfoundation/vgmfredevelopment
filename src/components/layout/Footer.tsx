@@ -20,6 +20,7 @@ const legalLinks: { key: MessageKey; href: string }[] = [
   { key: "footer.returns", href: "/return-policy" },
   { key: "footer.refund", href: "/refund-policy" },
   { key: "footer.cancellation", href: "/cancellation-policy" },
+  { key: "footer.faq", href: "/faq" },
 ];
 
 function cmsSnapshot() {

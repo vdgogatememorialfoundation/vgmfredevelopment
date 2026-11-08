@@ -437,9 +437,16 @@ function FaqManager() {
     <div className="space-y-4">
       <div className="space-y-3 rounded-xl border border-border p-4">
         <Field label="Question"><TextInput value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} /></Field>
-        <Field label="Answer"><TextArea rows={2} value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} /></Field>
-        <div className="flex gap-2">
-          <Button onClick={save}>{form.id ? "Update FAQ" : "Add FAQ"}</Button>
+        <Field label="Answer"><TextArea rows={4} value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} /></Field>
+        <Field label="Category (groups questions on /faq)"><TextInput value={form.category ?? ""} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field>
+        <label className="flex items-center gap-2 text-sm text-text-primary">
+          <input type="checkbox" checked={form.active !== false} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+          Show on the website
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={!form.question.trim() || !form.answer.trim()} onClick={save}>{form.id ? "Update FAQ" : "Add FAQ"}</Button>
+          {form.id ? <Button variant="ghost" onClick={() => setForm({ id: "", question: "", answer: "", category: "General", active: true })}>Cancel</Button> : null}
+          <a href="/faq" target="_blank" rel="noreferrer" className="self-center text-sm font-semibold text-burgundy underline">Open /faq</a>
         </div>
       </div>
       {faqs.length === 0 ? (
@@ -450,6 +457,7 @@ function FaqManager() {
             <li key={f.id} className="flex items-start justify-between gap-3 rounded-xl border border-border p-3 text-sm">
               <div>
                 <p className="font-semibold text-text-primary">{f.question}</p>
+                <p className="text-[11px] uppercase tracking-wide text-text-muted">{f.category || "General"}{f.active === false ? " · hidden" : ""}</p>
                 <p className="mt-0.5 text-xs text-text-muted">{f.answer}</p>
               </div>
               <div className="flex shrink-0 gap-1">
