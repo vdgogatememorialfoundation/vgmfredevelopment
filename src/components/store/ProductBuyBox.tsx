@@ -1,5 +1,6 @@
 "use client";
 
+import { saveDeliveryCheck } from "@/lib/delivery-check";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -85,20 +86,20 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         declaredValue: book.price * quantity,
         bookIds: [book.id],
       })
-        .then((quote) =>
-          setCouriers(
-            quote.rates
-              .filter((rate) => {
-                const id = `${rate.provider} ${rate.courierName}`.toLowerCase();
-                return !(orderSettings.hideTookanAtCheckout && id.includes("tookan")) && !(orderSettings.hideShipdayAtCheckout && id.includes("shipday"));
-              })
-              .map((rate) => ({
-                ...rate,
-                ...promiseFor(rate, rate.deliverBy ? Date.parse(rate.deliverBy) : NaN, same, orderSettings.processingHours, orderSettings.dispatchCutoff),
-                express: isExpressCourier(rate),
-              }))
-          )
-        )
+        .then((quote) => {
+          const list = quote.rates
+            .filter((rate) => {
+              const id = `${rate.provider} ${rate.courierName}`.toLowerCase();
+              return !(orderSettings.hideTookanAtCheckout && id.includes("tookan")) && !(orderSettings.hideShipdayAtCheckout && id.includes("shipday"));
+            })
+            .map((rate) => ({
+              ...rate,
+              ...promiseFor(rate, rate.deliverBy ? Date.parse(rate.deliverBy) : NaN, same, orderSettings.processingHours, orderSettings.dispatchCutoff),
+              express: isExpressCourier(rate),
+            }));
+          setCouriers(list);
+          if (list[0]?.deliverBy) saveDeliveryCheck({ pincode: code, deliverBy: list[0].deliverBy, dayLabel: list[0].dayLabel, courierName: list[0].courierName });
+        })
         .catch(() => setCouriers([]))
         .finally(() => setRatesBusy(false));
     }

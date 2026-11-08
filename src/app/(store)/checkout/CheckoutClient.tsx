@@ -90,6 +90,7 @@ export default function CheckoutClient() {
   const [holdingNote, setHoldingNote] = useState("");
   const [razorpayHold, setRazorpayHold] = useState("");
   const [orderId, setOrderId] = useState("");
+  const [placedEta, setPlacedEta] = useState("");
   const [useCredit, setUseCredit] = useState(false);
   const seededRef = useRef(false);
   const addressSeeded = useRef(false);
@@ -538,6 +539,7 @@ export default function CheckoutClient() {
       });
     }
     setOrderId(id);
+    setPlacedEta(order.eta ?? "");
     markCartRecovered();
     clearCart();
     setStep("success");
@@ -846,7 +848,9 @@ export default function CheckoutClient() {
                       </p>
                       <p className="mt-1 text-xs text-emerald-700">
                         Expected delivery{" "}
-                        {getEstimatedDeliveryDate(6)}
+                        {deliveryMode === "store_pickup"
+                          ? `ready for pickup ${quote?.pickupReadyBy || ""}`.trim()
+                          : selectedOffer?.deliverBy || quote?.deliverBy || "shown once you enter the delivery pincode"}
                       </p>
 
                       <p className="mt-1 text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</p>
@@ -1086,7 +1090,7 @@ export default function CheckoutClient() {
               </p>
             </div>
             <p className="mt-3 text-xs text-text-muted">
-              Estimated delivery: {getEstimatedDeliveryDate(6)} ·
+              {placedEta ? `Estimated delivery: ${placedEta} · ` : ""}
               Live courier tracking on My Orders
             </p>
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">

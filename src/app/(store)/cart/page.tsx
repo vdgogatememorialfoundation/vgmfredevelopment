@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import PageHeader from "@/components/common/PageHeader";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { useCart } from "@/lib/use-cart";
+import { deliveryCheckText, readDeliveryCheck, type DeliveryCheck } from "@/lib/delivery-check";
 import { shippingIsFree } from "@/lib/integrations";
 import {
   getBookById,
@@ -24,6 +26,11 @@ import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
 import Glyph from "@/components/store/Glyph";
 
 export default function CartPage() {
+  const [deliveryCheck, setDeliveryCheck] = useState<DeliveryCheck | null>(null);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setDeliveryCheck(readDeliveryCheck()));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const { items, count } = useCart();
   const saved = useSavedLater();
   const catalogue = useLiveBooks();
@@ -109,7 +116,8 @@ export default function CartPage() {
                     </div>
                     <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
                       <Glyph name="truck" className="h-3.5 w-3.5" />
-                      Delivery by {getEstimatedDeliveryDate(6)} · {book.expectedDelivery}
+                      {deliveryCheck ? `Delivery by ${deliveryCheckText(deliveryCheck)} to ${deliveryCheck.pincode}` : "Delivery date for your pincode is shown at checkout"}
+                      {book.expectedDelivery ? ` · ${book.expectedDelivery}` : ""}
                     </p>
 
                     {!isPurchasable(book) && <p className="mt-2 text-xs font-semibold text-burgundy">Out of stock</p>}
