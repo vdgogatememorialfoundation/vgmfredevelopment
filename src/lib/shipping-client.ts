@@ -4,7 +4,7 @@ import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
-import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId, nextStoreWorkingDay } from "@/lib/integrations";
+import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type PickupAddress, type ShippingProviderId, nextStoreWorkingDay } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import {
   getOrder,
@@ -977,6 +977,15 @@ export async function syncPickupAddress() {
     provider: "shiprocket",
     creds: credsFrom(settings),
     pickup: settings.shipping.pickup,
+  });
+}
+
+export async function addPickupLocation(pickup: PickupAddress) {
+  return post<{ saved?: boolean }>({
+    action: "pickup-address",
+    provider: "shiprocket",
+    creds: credsFrom(getIntegrations()),
+    pickup,
   });
 }
 

@@ -54,6 +54,8 @@ export function PosDesk() {
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [address, setAddress] = useState<DeliveryAddress>(emptyDeliveryAddress());
   const [scanOpen, setScanOpen] = useState(false);
+  const [fulfil, setFulfil] = useState<"counter" | "delivery">("counter");
+  const [deliveryCharge, setDeliveryCharge] = useState("0");
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -77,8 +79,9 @@ export function PosDesk() {
     .filter(Boolean) as { line: Line; book: Book }[];
   const subtotal = rows.reduce((sum, row) => sum + row.book.price * row.line.quantity, 0);
   const gst = Math.round(subtotal * storeConfig.gstRate);
-  const creditApplied = useCredit ? Math.min(credit, subtotal + gst) : 0;
-  const total = Math.max(0, subtotal + gst - creditApplied);
+  const charge = fulfil === "delivery" ? Math.max(0, Math.round(Number(deliveryCharge) || 0)) : 0;
+  const creditApplied = useCredit ? Math.min(credit, subtotal + gst + charge) : 0;
+  const total = Math.max(0, subtotal + gst + charge - creditApplied);
 
   const addByCode = (code: string) => {
     const book = getProductByCode(code) || books.find((item) => matchesBarcode(item, code));
@@ -120,6 +123,10 @@ export function PosDesk() {
     }
     if (rows.length === 0) {
       setError("Add at least one product.");
+      return;
+    }
+    if (fulfil === "delivery" && (!address.line1.trim() || !address.city.trim() || !address.state.trim() || !/^\d{6}$/.test(address.pincode))) {
+      setError("For home delivery, fill the customer's address, city, state and 6-digit pincode.");
       return;
     }
     setBusy(true);
@@ -228,33 +235,37 @@ export function PosDesk() {
         userId: account?.id,
         deliverTo,
         items: cart,
-        deliveryMode: "store_pickup",
+        deliveryMode: fulfil === "delivery" ? "delivery" : "store_pickup",
         payment: "paid",
         paymentMethod,
         paymentRef,
         razorpayOrderId,
         razorpayPaymentId,
         channel: "pos",
-        shippingOverride: 0,
+        shippingOverride: charge,
       });
-      const updates: Partial<Order> = { status: "Delivered" };
+      const updates: Partial<Order> = fulfil === "delivery" ? {} : { status: "Delivered" };
       if (creditApplied > 0 && account) {
         const balance = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
         updates.storeCreditUsed = creditApplied;
         updates.total = total;
         updates.subtotal = subtotal;
         updates.gst = gst;
-        updates.shipping = 0;
+        updates.shipping = charge;
         patchOrder(order.id, updates, `Store credit ₹${creditApplied} · balance ₹${balance}`);
       } else {
-        patchOrder(order.id, updates, "Collected at counter");
+        patchOrder(order.id, updates, fulfil === "delivery" ? "Paid at counter · home delivery" : "Collected at counter");
       }
       const paid = { ...order, ...updates, paymentMethod, paymentRef, razorpayOrderId, razorpayPaymentId };
       setLastOrder(paid);
       setCart([]);
       setReference("");
       setUseCredit(false);
-      setMessage(`Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}.`);
+      setMessage(
+        fulfil === "delivery"
+          ? `Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}. Home delivery: it is in Orders for picking, packing and courier booking.`
+          : `Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}.`
+      );
       printPosReceipt(paid);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not complete the sale.");
@@ -365,7 +376,7 @@ export function PosDesk() {
               </p>
             )}
             <div className="mt-4">
-              <p className="mb-2 text-sm font-semibold text-text-primary">Registered address</p>
+              <p className="mb-2 text-sm font-semibold text-text-primary">{fulfil === "delivery" ? "Delivery address" : "Registered address"}</p>
               <p className="mb-3 text-xs text-text-muted">
                 The customer&apos;s saved address is shown when you pick an account. The counter can add or correct it.
               </p>
@@ -389,9 +400,27 @@ export function PosDesk() {
                 ))}
               </ul>
             )}
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-text-primary">Handover</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant={fulfil === "counter" ? "primary" : "outline"} onClick={() => setFulfil("counter")}>Take away now</Button>
+                <Button variant={fulfil === "delivery" ? "primary" : "outline"} onClick={() => setFulfil("delivery")}>Home delivery</Button>
+              </div>
+              {fulfil === "delivery" && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <Field label="Delivery charge (₹)">
+                    <TextInput type="number" min={0} value={deliveryCharge} onChange={(event) => setDeliveryCharge(event.target.value)} />
+                  </Field>
+                  <p className="self-end text-xs text-text-muted">Ships to the address above. The order goes to Orders for picking, packing and courier booking.</p>
+                </div>
+              )}
+            </div>
             <dl className="mt-4 space-y-1 border-t border-border pt-3 text-sm">
               <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(subtotal)}</dd></div>
               <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(gst)}</dd></div>
+              {fulfil === "delivery" && (
+                <div className="flex justify-between"><dt className="text-text-muted">Delivery</dt><dd>{rupees(charge)}</dd></div>
+              )}
               {creditApplied > 0 && (
                 <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(creditApplied)}</dd></div>
               )}

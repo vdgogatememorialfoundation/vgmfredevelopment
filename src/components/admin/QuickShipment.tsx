@@ -4,14 +4,35 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button, Field, Panel, TextInput } from "@/components/admin/AdminUI";
 import { RatesTable } from "@/components/admin/SettingsDesks";
-import { bookShipment, downloadLabel, downloadManifest, fetchCourierRates, listPickupLocations, type RateQuote } from "@/lib/shipping-client";
-import { getIntegrations } from "@/lib/integrations";
+import { addPickupLocation, bookShipment, downloadLabel, downloadManifest, fetchCourierRates, listPickupLocations, type RateQuote } from "@/lib/shipping-client";
+import { getIntegrations, hasShippingCredentials, saveIntegrations, type PickupAddress } from "@/lib/integrations";
 import { generateOrderId, saveOrder } from "@/lib/store";
 import type { DeliveryAddress, Order } from "@/types";
 
 const EMPTY: DeliveryAddress = { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "", country: "India", countryCode: "IN" };
 
-type PickupRow = { nickname: string; city: string; pincode: string; phone?: string; address?: string };
+type PickupRow = { nickname: string; city: string; pincode: string; phone?: string; address?: string; state?: string; contactName?: string; email?: string };
+
+const NEW_PICKUP: PickupAddress = { nickname: "", contactName: "", phone: "", email: "", line1: "", line2: "", city: "", state: "", pincode: "", country: "India" };
+
+function savedPickups(): PickupRow[] {
+  return (getIntegrations().shipping.pickupAddresses ?? []).map((row) => ({
+    nickname: row.nickname,
+    city: row.city,
+    pincode: row.pincode,
+    phone: row.phone,
+    state: row.state,
+    contactName: row.contactName,
+    email: row.email,
+    address: [row.line1, row.line2].filter(Boolean).join(", "),
+  }));
+}
+
+function mergePickups(...lists: PickupRow[][]) {
+  const seen = new Map<string, PickupRow>();
+  for (const row of lists.flat()) if (row.nickname && !seen.has(row.nickname.toLowerCase())) seen.set(row.nickname.toLowerCase(), row);
+  return [...seen.values()];
+}
 
 /** Book a courier for a parcel that has no store order (samples, documents, replacements sent by hand). */
 export function QuickShipment() {
@@ -28,19 +49,58 @@ export function QuickShipment() {
   const [error, setError] = useState("");
   const [booked, setBooked] = useState("");
   const [shipmentId, setShipmentId] = useState("");
-  const [pickups, setPickups] = useState<PickupRow[]>([]);
+  const [pickups, setPickups] = useState<PickupRow[]>(() => savedPickups());
   const [pickupNick, setPickupNick] = useState("");
+  const [pickupInfo, setPickupInfo] = useState("");
+  const [draft, setDraft] = useState<PickupAddress | null>(null);
   const pickup = pickups.find((row) => row.nickname === pickupNick);
 
   useEffect(() => {
     let live = true;
     listPickupLocations()
-      .then((result) => live && setPickups(result.locations ?? []))
-      .catch(() => undefined);
+      .then((result) => {
+        if (!live) return;
+        if (result.ok) setPickups((current) => mergePickups(current, result.locations ?? []));
+        else if (result.error) setPickupInfo(`Shiprocket pickup addresses: ${result.error}`);
+      })
+      .catch(() => live && setPickupInfo("Could not load Shiprocket pickup addresses."));
     return () => {
       live = false;
     };
   }, []);
+
+  const savePickup = async () => {
+    if (!draft) return;
+    const row = { ...draft, nickname: draft.nickname.trim(), phone: draft.phone.replace(/\D/g, "").slice(-10) };
+    if (!row.nickname || !row.contactName.trim() || row.phone.length !== 10 || !row.line1.trim() || !row.city.trim() || !row.state.trim() || !/^\d{6}$/.test(row.pincode)) {
+      setPickupInfo("Fill nickname, contact name, 10-digit phone, address, city, state and a 6-digit pincode.");
+      return;
+    }
+    const settings = getIntegrations();
+    const others = (settings.shipping.pickupAddresses ?? []).filter((item) => item.nickname.toLowerCase() !== row.nickname.toLowerCase());
+    saveIntegrations({ ...settings, shipping: { ...settings.shipping, pickupAddresses: [...others, row] } });
+    setPickups((current) => mergePickups(savedPickups(), current));
+    setPickupNick(row.nickname);
+    setQuote(null);
+    setDraft(null);
+    if (!hasShippingCredentials("shiprocket", settings)) {
+      setPickupInfo(`Pickup address ${row.nickname} saved. Shiprocket is not connected, so it is used for in-house and other couriers only.`);
+      return;
+    }
+    setBusy("pickup");
+    try {
+      const result = await addPickupLocation(row);
+      setPickupInfo(
+        result.ok
+          ? `Pickup address ${row.nickname} saved and added to Shiprocket. If Shiprocket asks to verify the phone number, finish that in the Shiprocket panel.`
+          : `Pickup address ${row.nickname} saved here, but Shiprocket refused it: ${result.error || "unknown error"}.`
+      );
+    } catch {
+      setPickupInfo(`Pickup address ${row.nickname} saved here, but Shiprocket could not be reached.`);
+    } finally {
+      setBusy("");
+    }
+  };
 
   const set = (patch: Partial<DeliveryAddress>) => {
     setTo((current) => ({ ...current, ...patch }));
@@ -102,7 +162,7 @@ export function QuickShipment() {
       const result = await bookShipment(
         order.id,
         rate,
-        pickup ? { nickname: pickup.nickname, city: pickup.city, pincode: pickup.pincode, ...(pickup.address ? { line1: pickup.address } : {}), ...(pickup.phone ? { phone: pickup.phone } : {}) } : undefined
+        pickup ? { nickname: pickup.nickname, city: pickup.city, pincode: pickup.pincode, ...(pickup.address ? { line1: pickup.address } : {}), ...(pickup.phone ? { phone: pickup.phone } : {}), ...(pickup.state ? { state: pickup.state } : {}), ...(pickup.contactName ? { contactName: pickup.contactName } : {}), ...(pickup.email ? { email: pickup.email } : {}) } : undefined
       );
       setBooked(order.id);
       setShipmentId(result.shipment.id);
@@ -130,6 +190,24 @@ export function QuickShipment() {
                 ))}
               </select>
             </Field>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => { setDraft(draft ? null : { ...NEW_PICKUP }); setPickupInfo(""); }}>{draft ? "Cancel new pickup address" : "+ Add pickup address"}</Button>
+              {pickupInfo && <span className="text-xs text-slate-600">{pickupInfo}</span>}
+            </div>
+            {draft && (
+              <div className="mt-3 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+                <Field label="Nickname (e.g. Pune clinic)"><TextInput value={draft.nickname} onChange={(e) => setDraft({ ...draft, nickname: e.target.value })} /></Field>
+                <Field label="Contact name"><TextInput value={draft.contactName} onChange={(e) => setDraft({ ...draft, contactName: e.target.value })} /></Field>
+                <Field label="Phone"><TextInput inputMode="tel" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /></Field>
+                <Field label="Email"><TextInput value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} /></Field>
+                <div className="sm:col-span-2"><Field label="Address (house / building, street)"><TextInput value={draft.line1} onChange={(e) => setDraft({ ...draft, line1: e.target.value })} /></Field></div>
+                <Field label="Area / landmark"><TextInput value={draft.line2} onChange={(e) => setDraft({ ...draft, line2: e.target.value })} /></Field>
+                <Field label="City"><TextInput value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></Field>
+                <Field label="State"><TextInput value={draft.state} onChange={(e) => setDraft({ ...draft, state: e.target.value })} /></Field>
+                <Field label="Pincode"><TextInput inputMode="numeric" value={draft.pincode} onChange={(e) => setDraft({ ...draft, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })} /></Field>
+                <div className="sm:col-span-3"><Button onClick={() => void savePickup()} disabled={busy === "pickup"}>{busy === "pickup" ? "Saving…" : "Save pickup address"}</Button></div>
+              </div>
+            )}
           </div>
           <div className="sm:col-span-2"><Field label="Address"><TextInput value={to.line1} onChange={(e) => set({ line1: e.target.value })} /></Field></div>
           <Field label="Landmark / line 2"><TextInput value={to.landmark ?? ""} onChange={(e) => set({ landmark: e.target.value })} /></Field>

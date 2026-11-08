@@ -168,6 +168,8 @@ export interface IntegrationSettings {
     minWalletRupees: number;
     connection: Partial<Record<ShippingProviderId, ShippingConnection>>;
     pickup: PickupAddress;
+    /** Extra dispatch points added from Quick shipment; also registered with Shiprocket when it is connected. */
+    pickupAddresses?: PickupAddress[];
     defaultWeightKg: number;
     packageCm: { length: number; breadth: number; height: number };
     autoBookOnPack: boolean;
