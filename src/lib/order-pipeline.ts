@@ -307,8 +307,8 @@ export function buildTrackingStages(
   }
 
   if (order.deliveryMode === "store_pickup") {
-    const ready = PICKUP_PROCESSED.includes(order.status);
     const picked = order.status === "Delivered";
+    const ready = picked || PICKUP_PROCESSED.includes(order.status);
     const stages = [
       makeStage(
         "ordered",
@@ -517,6 +517,8 @@ export function buildTrackingStages(
 /** The current step stays open so the line moves toward the next one and stops before it. */
 function holdBeforeNext(stages: TrackingStage[]) {
   const terminal = new Set(["delivered", "picked", "failed", "cancelled", "refunded"]);
+  // Once a final step (Delivered, Picked Up…) is reached nothing is in progress, so the line stops there.
+  if (stages.some((stage) => stage.reached && terminal.has(stage.id))) return stages;
   let index = -1;
   stages.forEach((stage, position) => {
     if (stage.reached && !terminal.has(stage.id)) index = position;
