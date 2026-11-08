@@ -670,6 +670,8 @@ export interface CourierRate {
   live: boolean;
   cod?: boolean;
   lastMile?: "porter" | "shadowfax" | "flash";
+  /** Courier rating out of 5 as reported by the aggregator. */
+  rating?: number;
 }
 
 export type ReturnKind = "return" | "replacement";

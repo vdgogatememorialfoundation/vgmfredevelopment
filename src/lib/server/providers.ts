@@ -550,6 +550,7 @@ export type RateOut = {
   cod?: boolean;
   /** The courier's own expected delivery date, when it gives one. */
   deliverBy?: string;
+  rating?: number;
 };
 
 type Parcel = {
@@ -652,6 +653,7 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     cod: Boolean(courier.cod),
     live: true as const,
     deliverBy: courier.etd ? String(courier.etd) : undefined,
+    rating: Number.isFinite(Number(courier.rating)) && Number(courier.rating) > 0 ? Math.round(Number(courier.rating) * 10) / 10 : undefined,
   }));
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { deliveryDatePhrase } from "@/lib/delivery-expectation";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChangePasswordForm } from "@/components/account/PasswordResetForm";
 import { getSession } from "@/lib/auth";
@@ -19,8 +20,7 @@ import {
   type NotificationEventId,
   type OrderSettings,
   type ShippingProviderId,
-  type WhatsAppTemplate,
-} from "@/lib/integrations";
+  type WhatsAppTemplate, nextStoreWorkingDay } from "@/lib/integrations";
 import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
@@ -1279,6 +1279,7 @@ export function ShippingApisDesk() {
 }
 
 export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick?: (index: number) => void; picked?: number }) {
+  const pickupDay = new Date(nextStoreWorkingDay(Date.now())).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
   return (
     <div className="mt-4 space-y-2">
       <p className="text-xs text-slate-500">
@@ -1298,7 +1299,15 @@ export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick
                 <span className="font-medium text-slate-800">{rate.courierName}</span>
                 <span className="text-xs uppercase text-slate-400">{rate.provider === "local" ? "estimate" : rate.provider}</span>
               </label>
-              <span className="text-slate-600">{rate.etaDays} day{rate.etaDays === 1 ? "" : "s"} · <b>₹{Math.round(rate.rate)}</b></span>
+              <span className="text-right text-slate-600">
+                <span className="block">
+                  {rate.etaDays} day{rate.etaDays === 1 ? "" : "s"} · <b>₹{Math.round(rate.rate)}</b>
+                  {rate.rating ? <span className="ml-1 text-amber-600">★ {rate.rating}</span> : null}
+                </span>
+                <span className="block text-xs text-slate-500">
+                  Pickup {pickupDay} · delivery {rate.deliverBy ? deliveryDatePhrase(rate.deliverBy) : `in ${rate.etaDays} day${rate.etaDays === 1 ? "" : "s"}`}
+                </span>
+              </span>
             </li>
           ))}
         </ul>
