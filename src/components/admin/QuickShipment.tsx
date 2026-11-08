@@ -15,6 +15,7 @@ export function QuickShipment() {
   const [to, setTo] = useState<DeliveryAddress>(EMPTY);
   const [contents, setContents] = useState("");
   const [weight, setWeight] = useState("0.5");
+  const [dims, setDims] = useState({ length: "25", breadth: "20", height: "5" });
   const [value, setValue] = useState("500");
   const [cod, setCod] = useState("0");
   const [quote, setQuote] = useState<RateQuote | null>(null);
@@ -29,6 +30,7 @@ export function QuickShipment() {
     if (patch.pincode !== undefined) setQuote(null);
   };
   const weightKg = Math.max(0.05, Number(weight) || 0.5);
+  const parcel = { length: Math.max(1, Number(dims.length) || 1), breadth: Math.max(1, Number(dims.breadth) || 1), height: Math.max(1, Number(dims.height) || 1) };
   const declared = Math.max(1, Number(value) || 1);
   const codAmount = Math.max(0, Number(cod) || 0);
 
@@ -38,7 +40,7 @@ export function QuickShipment() {
     if (!/^\d{6}$/.test(to.pincode)) return setError("Enter a 6-digit delivery pincode.");
     setBusy("rates");
     try {
-      const result = await fetchCourierRates({ deliveryPincode: to.pincode, weightKg, declaredValue: declared, cod: codAmount > 0 });
+      const result = await fetchCourierRates({ deliveryPincode: to.pincode, weightKg, declaredValue: declared, cod: codAmount > 0, dims: parcel });
       setQuote(result);
       setPicked(result.rates.length ? 0 : undefined);
       if (!result.rates.length) setError("No courier returned a rate for this pincode.");
@@ -74,6 +76,7 @@ export function QuickShipment() {
       deliveryMode: "delivery",
       deliveryAddress: to,
       weightKg,
+      parcel: { ...parcel, boxes: 1, kind: "single", contents: contents.trim() || undefined },
       courierChoice: rate,
       channel: "shipment",
     } as Order;
@@ -102,6 +105,9 @@ export function QuickShipment() {
           <Field label="Pincode"><TextInput inputMode="numeric" value={to.pincode} onChange={(e) => set({ pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })} /></Field>
           <Field label="Contents"><TextInput value={contents} placeholder="e.g. Books, documents" onChange={(e) => setContents(e.target.value)} /></Field>
           <Field label="Weight (kg)"><TextInput type="number" value={weight} onChange={(e) => { setWeight(e.target.value); setQuote(null); }} /></Field>
+          <Field label="Length (cm)"><TextInput type="number" value={dims.length} onChange={(e) => { setDims({ ...dims, length: e.target.value }); setQuote(null); }} /></Field>
+          <Field label="Breadth (cm)"><TextInput type="number" value={dims.breadth} onChange={(e) => { setDims({ ...dims, breadth: e.target.value }); setQuote(null); }} /></Field>
+          <Field label="Height (cm)"><TextInput type="number" value={dims.height} onChange={(e) => { setDims({ ...dims, height: e.target.value }); setQuote(null); }} /></Field>
           <Field label="Declared value (₹)"><TextInput type="number" value={value} onChange={(e) => { setValue(e.target.value); setQuote(null); }} /></Field>
           <Field label="Collect on delivery (₹, 0 = prepaid)"><TextInput type="number" value={cod} onChange={(e) => { setCod(e.target.value); setQuote(null); }} /></Field>
         </div>

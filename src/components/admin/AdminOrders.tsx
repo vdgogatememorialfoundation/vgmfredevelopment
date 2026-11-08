@@ -719,6 +719,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         declaredValue: order.total,
         cod: order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid",
         bookIds: order.items.map((item) => item.bookId),
+        dims: order.parcel,
       });
       setQuote(result);
       const current = order.courierChoice ? result.rates.findIndex((rate) => rate.courierId === order.courierChoice?.courierId && rate.provider === order.courierChoice?.provider) : -1;
@@ -1086,6 +1087,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     {!quote && <p className="mt-1 text-xs text-text-muted">Click Show couriers & rates again for rates from this pickup.</p>}
                   </div>
                 )}
+                <ParcelEditor key={`${order.id}:${order.weightKg ?? ""}:${order.parcel ? JSON.stringify(order.parcel) : ""}`} order={order} onSaved={() => { setQuote(null); setPicked(undefined); setMessage("Package saved. Click Show couriers & rates for rates with this package."); }} />
                 {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
@@ -1462,4 +1464,58 @@ function LabelSizePicker() {
 function pickupOverride(row?: { nickname: string; city: string; pincode: string; phone?: string; address?: string }) {
   if (!row) return undefined;
   return { nickname: row.nickname, city: row.city, pincode: row.pincode, ...(row.address ? { line1: row.address } : {}), ...(row.phone ? { phone: row.phone } : {}) };
+}
+
+/** Box size, weight and count for this shipment; rates and the booking sent to the aggregator use these. */
+function ParcelEditor({ order, onSaved }: { order: Order; onSaved: () => void }) {
+  const box = getIntegrations().shipping.packageCm;
+  const [form, setForm] = useState({
+    kind: order.parcel?.kind ?? (order.items.reduce((sum, item) => sum + item.quantity, 0) > 1 ? "bulk" : "single"),
+    boxes: String(order.parcel?.boxes ?? 1),
+    length: String(order.parcel?.length ?? box.length),
+    breadth: String(order.parcel?.breadth ?? box.breadth),
+    height: String(order.parcel?.height ?? box.height),
+    weight: String(orderWeightKg(order)),
+    contents: order.parcel?.contents ?? "",
+  });
+  const [error, setError] = useState("");
+  const set = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
+  const save = () => {
+    const length = Number(form.length);
+    const breadth = Number(form.breadth);
+    const height = Number(form.height);
+    const weightKg = Number(form.weight);
+    const boxes = Math.max(1, Math.floor(Number(form.boxes) || 1));
+    if (![length, breadth, height].every((value) => value > 0)) return setError("Enter length, breadth and height in cm.");
+    if (!(weightKg > 0)) return setError("Enter the packed weight in kg.");
+    setError("");
+    patchOrder(
+      order.id,
+      { weightKg, parcel: { kind: form.kind === "bulk" ? "bulk" : "single", boxes, length, breadth, height, contents: form.contents.trim() || undefined } },
+      `Package ${length}×${breadth}×${height} cm · ${weightKg} kg${boxes > 1 ? ` · ${boxes} boxes` : ""}`
+    );
+    onSaved();
+  };
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Package for this shipment</p>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <Field label="Type">
+          <SelectInput value={form.kind} onChange={(event) => set({ kind: event.target.value === "bulk" ? "bulk" : "single" })}>
+            <option value="single">Single</option>
+            <option value="bulk">Bulk</option>
+          </SelectInput>
+        </Field>
+        <Field label="Boxes"><TextInput type="number" min={1} value={form.boxes} onChange={(event) => set({ boxes: event.target.value })} /></Field>
+        <Field label="Length (cm)"><TextInput type="number" min={1} value={form.length} onChange={(event) => set({ length: event.target.value })} /></Field>
+        <Field label="Breadth (cm)"><TextInput type="number" min={1} value={form.breadth} onChange={(event) => set({ breadth: event.target.value })} /></Field>
+        <Field label="Height (cm)"><TextInput type="number" min={1} value={form.height} onChange={(event) => set({ height: event.target.value })} /></Field>
+        <Field label="Weight (kg)"><TextInput type="number" min={0.01} step={0.01} value={form.weight} onChange={(event) => set({ weight: event.target.value })} /></Field>
+        <Field label="Contents"><TextInput placeholder="e.g. Books" value={form.contents} onChange={(event) => set({ contents: event.target.value })} /></Field>
+      </div>
+      <p className="mt-1 text-xs text-text-muted">For several boxes, enter the total packed weight and the size of the largest box. Aggregators charge on the higher of actual and volumetric weight (L×B×H ÷ 5000).</p>
+      {error ? <p className="mt-1 text-xs text-red-700">{error}</p> : null}
+      <Button variant="outline" onClick={save}>Save package</Button>
+    </div>
+  );
 }

@@ -190,7 +190,7 @@ export async function syncWallet() {
 export async function syncCart() {
   if (typeof window === "undefined") return;
   const user = getSession();
-  if (!user?.email || isPortalRole(user.role)) return;
+  if (!user?.email) return;
   const items = getCart();
   // A cart saved before syncing existed has no stamp: upload it as the oldest copy so a newer one elsewhere still wins.
   if (items.length && !window.localStorage.getItem("vgmf_cart_at")) window.localStorage.setItem("vgmf_cart_at", "1");

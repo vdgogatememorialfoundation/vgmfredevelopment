@@ -143,6 +143,7 @@ export async function fetchCourierRates(input: {
   declaredValue: number;
   bookIds?: string[];
   pickupPincode?: string;
+  dims?: { length: number; breadth: number; height: number };
 }): Promise<RateQuote> {
   const settings = getIntegrations();
   const { shipping } = settings;
@@ -162,9 +163,9 @@ export async function fetchCourierRates(input: {
           weightKg: input.weightKg,
           cod: Boolean(input.cod),
           declaredValue: input.declaredValue,
-          length: shipping.packageCm.length,
-          breadth: shipping.packageCm.breadth,
-          height: shipping.packageCm.height,
+          length: input.dims?.length || shipping.packageCm.length,
+          breadth: input.dims?.breadth || shipping.packageCm.breadth,
+          height: input.dims?.height || shipping.packageCm.height,
         },
       });
       live = (result.rates ?? []).map((rate) => ({ ...(rate as unknown as CourierRate), live: true }));
@@ -216,9 +217,10 @@ function bookingPayload(order: Order, choice: CourierRate, settings: Integration
     subtotal: order.subtotal,
     shippingCharge: order.shipping,
     weightKg: orderWeightKg(order, settings),
-    length: settings.shipping.packageCm.length,
-    breadth: settings.shipping.packageCm.breadth,
-    height: settings.shipping.packageCm.height,
+    length: order.parcel?.length || settings.shipping.packageCm.length,
+    breadth: order.parcel?.breadth || settings.shipping.packageCm.breadth,
+    height: order.parcel?.height || settings.shipping.packageCm.height,
+    boxes: order.parcel?.boxes || 1,
     customer: {
       name: address?.fullName ?? "Customer",
       phone: address?.phone ?? "",
@@ -268,6 +270,7 @@ export async function bookShipment(orderId: string, override?: CourierRate, pick
       weightKg: orderWeightKg(order, settings),
       declaredValue: order.total,
       bookIds: order.items.map((item) => item.bookId),
+      dims: order.parcel,
     });
     choice = pickRate(quote.rates);
   }

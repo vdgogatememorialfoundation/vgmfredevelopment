@@ -616,6 +616,8 @@ export interface Order {
     link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
   };
   weightKg?: number;
+  /** Packed parcel for this shipment (single or bulk). Overrides the default box size in Shipping settings. */
+  parcel?: { length: number; breadth: number; height: number; boxes: number; kind: "single" | "bulk"; contents?: string };
   createdBy?: string;
   cancelReason?: string;
   refundAmount?: number;
