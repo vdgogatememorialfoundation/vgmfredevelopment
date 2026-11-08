@@ -141,6 +141,38 @@ export function OrdersDashboard() {
   const inTransit = orders.filter((order) => order.status === "Shipped" || order.status === "Out for Delivery").length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
 
+  /** Store-pickup orders become ready at the counter (OTP unlocks); courier orders are packed and booked, one shipment each. */
+  const readyForPickup = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkBusy("Ready to pickup");
+    setBulkNote("");
+    let counter = 0;
+    let booked = 0;
+    const failed: string[] = [];
+    for (const id of selectedIds) {
+      const order = getOrderByAdmin(id);
+      if (!order || order.status === "Cancelled" || order.status === "Delivered") continue;
+      try {
+        if (order.deliveryMode === "store_pickup") {
+          setOrderStatus(id, "Packed");
+          counter += 1;
+        } else {
+          setOrderStatus(id, "Ready to Ship");
+          await bookShipment(id);
+          booked += 1;
+        }
+      } catch (error) {
+        failed.push(`${id}: ${error instanceof Error ? error.message : "could not book"}`);
+      }
+    }
+    setBulkNote(
+      [`${counter} store-pickup order${counter === 1 ? "" : "s"} ready at the counter`, `${booked} courier shipment${booked === 1 ? "" : "s"} booked for pickup`, ...failed].join(" · ")
+    );
+    setPicked({});
+    refresh();
+    setBulkBusy("");
+  };
+
   const bulk = async (label: string, task: (id: string) => Promise<void> | void) => {
     if (selectedIds.length === 0) return;
     setBulkBusy(label);
@@ -210,6 +242,7 @@ export function OrdersDashboard() {
             const order = getOrderByAdmin(id);
             if (order?.deliveryMode === "delivery") await bookShipment(id);
           })}>To Ship</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => void readyForPickup()}>Ready to pickup</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Out for Delivery", (id) => setOrderStatus(id, "Out for Delivery"))}>Out for Delivery</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Delivered", (id) => setOrderStatus(id, "Delivered"))}>Delivered</Button>
           <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]))}>Excel</Button>

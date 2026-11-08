@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Field, Panel, TextInput } from "@/components/admin/AdminUI";
 import { RatesTable } from "@/components/admin/SettingsDesks";
-import { bookShipment, fetchCourierRates, type RateQuote } from "@/lib/shipping-client";
+import { bookShipment, downloadLabel, downloadManifest, fetchCourierRates, listPickupLocations, type RateQuote } from "@/lib/shipping-client";
+import { getIntegrations } from "@/lib/integrations";
 import { generateOrderId, saveOrder } from "@/lib/store";
 import type { DeliveryAddress, Order } from "@/types";
 
 const EMPTY: DeliveryAddress = { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "", country: "India", countryCode: "IN" };
+
+type PickupRow = { nickname: string; city: string; pincode: string; phone?: string; address?: string };
 
 /** Book a courier for a parcel that has no store order (samples, documents, replacements sent by hand). */
 export function QuickShipment() {
@@ -24,6 +27,20 @@ export function QuickShipment() {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [booked, setBooked] = useState("");
+  const [shipmentId, setShipmentId] = useState("");
+  const [pickups, setPickups] = useState<PickupRow[]>([]);
+  const [pickupNick, setPickupNick] = useState("");
+  const pickup = pickups.find((row) => row.nickname === pickupNick);
+
+  useEffect(() => {
+    let live = true;
+    listPickupLocations()
+      .then((result) => live && setPickups(result.locations ?? []))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const set = (patch: Partial<DeliveryAddress>) => {
     setTo((current) => ({ ...current, ...patch }));
@@ -40,7 +57,7 @@ export function QuickShipment() {
     if (!/^\d{6}$/.test(to.pincode)) return setError("Enter a 6-digit delivery pincode.");
     setBusy("rates");
     try {
-      const result = await fetchCourierRates({ deliveryPincode: to.pincode, weightKg, declaredValue: declared, cod: codAmount > 0, dims: parcel });
+      const result = await fetchCourierRates({ deliveryPincode: to.pincode, pickupPincode: pickup?.pincode, weightKg, declaredValue: declared, cod: codAmount > 0, dims: parcel });
       setQuote(result);
       setPicked(result.rates.length ? 0 : undefined);
       if (!result.rates.length) setError("No courier returned a rate for this pincode.");
@@ -82,8 +99,13 @@ export function QuickShipment() {
     } as Order;
     try {
       saveOrder(order);
-      const result = await bookShipment(order.id, rate);
+      const result = await bookShipment(
+        order.id,
+        rate,
+        pickup ? { nickname: pickup.nickname, city: pickup.city, pincode: pickup.pincode, ...(pickup.address ? { line1: pickup.address } : {}), ...(pickup.phone ? { phone: pickup.phone } : {}) } : undefined
+      );
       setBooked(order.id);
+      setShipmentId(result.shipment.id);
       setNote(result.message);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not create the shipment.");
@@ -99,7 +121,18 @@ export function QuickShipment() {
           <Field label="Recipient name"><TextInput value={to.fullName} onChange={(e) => set({ fullName: e.target.value })} /></Field>
           <Field label="Phone"><TextInput value={to.phone} onChange={(e) => set({ phone: e.target.value })} /></Field>
           <Field label="Email (optional)"><TextInput value={to.email ?? ""} onChange={(e) => set({ email: e.target.value })} /></Field>
-          <div className="sm:col-span-3"><Field label="Address"><TextInput value={to.line1} onChange={(e) => set({ line1: e.target.value })} /></Field></div>
+          <div className="sm:col-span-3">
+            <Field label="Pickup from">
+              <select className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={pickupNick} onChange={(e) => { setPickupNick(e.target.value); setQuote(null); }}>
+                <option value="">Default pickup address · {[getIntegrations().shipping.pickup.city, getIntegrations().shipping.pickup.pincode].filter(Boolean).join(" ")}</option>
+                {pickups.map((row) => (
+                  <option key={row.nickname} value={row.nickname}>{row.nickname} · {[row.address, row.city, row.pincode].filter(Boolean).join(", ")}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="sm:col-span-2"><Field label="Address"><TextInput value={to.line1} onChange={(e) => set({ line1: e.target.value })} /></Field></div>
+          <Field label="Landmark / line 2"><TextInput value={to.landmark ?? ""} onChange={(e) => set({ landmark: e.target.value })} /></Field>
           <Field label="City"><TextInput value={to.city} onChange={(e) => set({ city: e.target.value })} /></Field>
           <Field label="State"><TextInput value={to.state} onChange={(e) => set({ state: e.target.value })} /></Field>
           <Field label="Pincode"><TextInput inputMode="numeric" value={to.pincode} onChange={(e) => set({ pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })} /></Field>
@@ -123,6 +156,12 @@ export function QuickShipment() {
           <p className="mt-3 text-sm text-emerald-700">
             {note} Reference {booked}. <Link href="/admin/commerce/shipments" className="underline">Open Shipment Management</Link>
           </p>
+        )}
+        {shipmentId && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void downloadLabel(shipmentId).then(setNote).catch((problem) => setError(problem instanceof Error ? problem.message : "No label yet."))}>Download waybill / label</Button>
+            <Button variant="outline" onClick={() => void downloadManifest(shipmentId).then(setNote).catch((problem) => setError(problem instanceof Error ? problem.message : "No manifest yet."))}>Download manifest</Button>
+          </div>
         )}
       </Panel>
     </div>
