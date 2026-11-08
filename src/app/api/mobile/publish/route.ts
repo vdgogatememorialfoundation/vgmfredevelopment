@@ -5,7 +5,7 @@ import { saveMobileEmailCreds, type MobileEmailCreds } from "@/lib/server/mobile
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; sections?: Partial<MobileFeed> };
+type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; sections?: Partial<MobileFeed> };
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
@@ -25,18 +25,35 @@ export async function POST(request: NextRequest) {
     const current = readMobileFeed();
     const { publishedAt: _ignored, ...sections } = body.sections;
     void _ignored;
+    if (body.email) saveMobileEmailCreds(body.email);
     const feed = saveMobileFeed({
       ...current,
       ...sections,
       site: { ...current.site, ...sections.site },
       publishedAt: new Date().toISOString(),
     });
-    return NextResponse.json({ ok: true, publishedAt: feed.publishedAt, sections: Object.keys(sections) }, { headers: corsHeaders });
+    return NextResponse.json(
+      {
+        ok: true,
+        publishedAt: feed.publishedAt,
+        sections: Object.keys(sections),
+        counts: { events: feed.events?.length ?? 0, articles: feed.articles?.length ?? 0, books: feed.books?.length ?? 0 },
+      },
+      { headers: corsHeaders }
+    );
   }
-  if (!body || typeof body !== "object" || !body.site?.name) {
+  // Whole-site snapshots came from admin tabs running an older build and could roll live content back.
+  if (!body?.force) {
+    return NextResponse.json(
+      { ok: false, error: "This admin tab is running an older version. Hard-reload it once, then publish again." },
+      { status: 409, headers: corsHeaders }
+    );
+  }
+  if (!body.site?.name) {
     return NextResponse.json({ ok: false, error: "Send a full app snapshot from the admin console." }, { status: 400, headers: corsHeaders });
   }
-  const { email, ...snapshot } = body;
+  const { email, force: _force, ...snapshot } = body;
+  void _force;
   saveMobileEmailCreds(email);
   const feed = saveMobileFeed({
     ...snapshot,
