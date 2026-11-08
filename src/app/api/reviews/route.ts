@@ -65,6 +65,12 @@ export async function POST(request: NextRequest) {
         verified: body.verified !== false,
         hidden: body.hidden === true,
         reply: body.reply && typeof body.reply === "object" ? (body.reply as { text: string; date: string; author?: string }) : undefined,
+        media: Array.isArray(body.media)
+          ? (body.media as { url?: unknown; kind?: unknown }[])
+              .map((item) => ({ url: String(item?.url ?? ""), kind: item?.kind === "video" ? ("video" as const) : ("image" as const) }))
+              .filter((item) => /^(\/|https:\/\/)/.test(item.url) && !/^javascript:/i.test(item.url))
+              .slice(0, 6)
+          : undefined,
       };
       if (!review.productId || !review.name || !review.text || !email) {
         return NextResponse.json({ ok: false, error: "Add the product review details." }, { status: 400 });
