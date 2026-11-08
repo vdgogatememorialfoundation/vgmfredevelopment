@@ -883,14 +883,14 @@ export default function CheckoutClient() {
                       {formatAddressLine(address)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-text-muted">Expected delivery</dt>
-                    <dd className="text-right font-medium text-emerald-700">
-                      {selectedOffer?.deliverBy || quote?.deliverBy
-                        ? `${selectedOffer?.deliverBy ?? quote?.deliverBy}${selectedOffer?.name || quote?.courier ? ` via ${selectedOffer?.name ?? quote?.courier}` : ""}`
-                        : "Confirmed after a courier is booked"}
-                    </dd>
-                  </div>
+                  {selectedOffer?.deliverBy || quote?.deliverBy ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-text-muted">Expected delivery</dt>
+                      <dd className="text-right font-medium text-emerald-700">
+                        {`${selectedOffer?.deliverBy ?? quote?.deliverBy}${selectedOffer?.name || quote?.courier ? ` via ${selectedOffer?.name ?? quote?.courier}` : ""}`}
+                      </dd>
+                    </div>
+                  ) : null}
                 </dl>
               ) : (
                 <p className="text-sm text-text-muted">

@@ -35,9 +35,9 @@ function AccountShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="border-t border-border bg-background">
       <div className="container py-10 lg:py-14">
-        <div className="grid gap-8 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
           {/* Sidebar */}
-          <aside className="lg:col-span-1">
+          <aside className="min-w-0 lg:col-span-1">
             <div className="rounded-2xl border border-border bg-white p-6">
               {user && (
                 <div className="flex items-center gap-4 border-b border-border pb-5">
@@ -97,7 +97,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
           </aside>
 
           {/* Content */}
-          <div className="lg:col-span-3">{children}</div>
+          <div className="min-w-0 break-words lg:col-span-3">{children}</div>
         </div>
       </div>
     </div>
