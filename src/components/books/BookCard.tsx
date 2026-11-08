@@ -1,8 +1,10 @@
 "use client";
 
+import { deliveryCheckText, readDeliveryCheck, type DeliveryCheck } from "@/lib/delivery-check";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Book } from "@/types";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { storeConfig } from "@/lib/constants";
@@ -14,7 +16,13 @@ export default function BookCard({ book }: { book: Book }) {
   const router = useRouter();
   const [note, setNote] = useState("");
   const orderable = canOrder(book);
-  const delivery = book.expectedDelivery?.trim() || getEstimatedDeliveryDate(storeConfig.orderPreparationDays + storeConfig.defaultDeliveryDays);
+  const [checked, setChecked] = useState<DeliveryCheck | null>(null);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setChecked(readDeliveryCheck()));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  // Same courier date the product page found for the shopper's pincode; no guessed date otherwise.
+  const delivery = book.expectedDelivery?.trim() || (checked ? `${deliveryCheckText(checked)} to ${checked.pincode}` : "");
 
   const add = () => {
     if (!orderable) return;
@@ -50,7 +58,7 @@ export default function BookCard({ book }: { book: Book }) {
         <p className="mt-0.5 truncate text-xs text-text-muted">{book.author}</p>
         <p className="mt-2 text-sm font-bold text-burgundy">{formatCurrency(book.price, book.currency)}</p>
         <p className="text-[11px] text-text-muted">{availabilityText(book)}</p>
-        <p className="mt-1 text-[11px] font-medium text-ink">Delivery by {delivery}</p>
+        <p className="mt-1 text-[11px] font-medium text-ink">{delivery ? `Delivery by ${delivery}` : "Check delivery date for your pincode"}</p>
         {book.storePickupAvailable !== false ? <p className="text-[11px] text-text-muted">Store pickup available</p> : null}
 
         <div className="mt-3 flex flex-wrap gap-1.5">

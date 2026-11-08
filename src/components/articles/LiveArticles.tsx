@@ -131,7 +131,7 @@ export function ArticleView({ slug, initial }: { slug: string; initial?: Article
             <time className="text-sm text-text-muted" dateTime={article.date}>{formatDate(article.date)}</time>
           </div>
           <h1 className="heading-1 mt-4 max-w-4xl">{article.title}</h1>
-          {article.author && <ArticleByline author={article.author} />}
+          {article.author && <ArticleByline author={/\badmin\b|^vgmf$/i.test(article.author.trim()) ? "Vaidya Gogate Memorial Foundation" : article.author} />}
           <div className="mt-6">
             <ShareBar url={articlePublicUrl(article)} title={article.title} text={articleShareText(article)} />
           </div>
