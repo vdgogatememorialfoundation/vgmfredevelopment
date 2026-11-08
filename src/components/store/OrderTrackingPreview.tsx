@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { getShipments } from "@/lib/admin-store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { buildTrackingStages, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
-import { clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
+import { agreedDelivery, clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
 import type { Order, ShipmentRecord } from "@/types";
 
 const STAGE_STATUS: Partial<Record<TrackingStageId, Order["status"]>> = {
@@ -121,7 +121,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   } else if (pickup && current?.id === "ready") {
     headline = "Ready for pickup at the Foundation office";
   } else {
-    headline = deliveryExpectation(status, shipment?.expectedBy || order.eta, now, country);
+    headline = deliveryExpectation(status, agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date)), now, country);
   }
 
   const bad = status === "Failed" || status === "Cancelled";

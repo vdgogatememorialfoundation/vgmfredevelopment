@@ -3,7 +3,7 @@
 import { getPickupLocation } from "@/lib/fulfillment";
 import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils";
-import { deliveryDatePhrase, parseExpected, statusStamp, statusDay } from "@/lib/delivery-expectation";
+import { agreedDelivery, deliveryDatePhrase, parseExpected, statusStamp, statusDay } from "@/lib/delivery-expectation";
 import { storeConfig } from "@/lib/constants";
 import { getShipments } from "@/lib/admin-store";
 import { pickupOtp, pickupOtpReady } from "@/lib/store";
@@ -41,6 +41,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const provider = shipment?.provider ?? order.courierChoice?.provider;
   const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
+  const expectedText = agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date) || now);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +132,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
     const alreadyDelivered = order.status === "Delivered" || shipment?.status === "Delivered" || stage.reached;
     if (stage.id === "delivered" && !alreadyDelivered) {
-      next.expected = shipment?.expectedBy ? `Expected by ${deliveryDatePhrase(shipment.expectedBy)}` : "Expected delivery date is pending from the courier";
+      next.expected = expectedText ? `Expected by ${deliveryDatePhrase(expectedText)}` : "Expected delivery date is pending from the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = order.status === "Delivered" ? "OTP verified" : `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
@@ -202,7 +203,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
 
   const stepStamp = Date.parse(rawStages[nodeCurrentIdx]?.events.at(-1)?.at || order.date);
   const paceFrom = Number.isFinite(stepStamp) ? stepStamp : placed.getTime();
-  const promisedAt = parseExpected(shipment?.expectedBy, paceFrom);
+  const promisedAt = parseExpected(expectedText, paceFrom);
   const paceUntil = promisedAt && promisedAt > paceFrom + 60_000 ? promisedAt : paceFrom + (hyperlocal ? 8 : 72) * 60 * 60 * 1000;
   const latestTitle = rawStages[nodeCurrentIdx]?.events.at(-1)?.title ?? "";
   const facilityStatus = /^(Pickup scheduled|Shipment arrived at courier facility|Shipment left courier facility)/.test(latestTitle);

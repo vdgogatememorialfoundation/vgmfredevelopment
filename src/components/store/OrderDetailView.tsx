@@ -12,7 +12,7 @@ import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
 import { orderStatusText } from "@/lib/integrations";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
-import { customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
+import { agreedDelivery, customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
 
 /** One order on its own page: live tracking, items, totals, delivery details and replacement requests. */
@@ -177,7 +177,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-muted">Expected delivery</dt>
                     <dd className="text-right font-medium text-emerald-700">
-                      {deliveryDatePhrase(shipment?.expectedBy) || deliveryDatePhrase(order.eta) || order.eta || "Within 5 business days"}
+                      {deliveryDatePhrase(agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date))) || "Within 5 business days"}
                     </dd>
                   </div>
                 </dl>

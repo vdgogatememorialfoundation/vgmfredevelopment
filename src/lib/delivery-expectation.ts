@@ -192,3 +192,13 @@ export function deliveryExpectation(status: string, expectedText?: string, now =
   }).format(new Date(expected));
   return `Delivery expected by ${dateLabel}`;
 }
+
+/** The date promised at checkout, unless the courier has since given a later one. */
+export function agreedDelivery(eta: string | undefined, courier: string | undefined, around: number) {
+  const promised = eta?.replace(/^(today|tomorrow),\s*/i, "").trim() || "";
+  const promisedAt = parseExpected(promised, around);
+  const courierAt = parseExpected(courier, around);
+  if (promisedAt == null) return courier || promised;
+  if (courierAt == null) return promised;
+  return courierAt > promisedAt + 18 * 60 * 60 * 1000 ? courier || promised : promised;
+}
