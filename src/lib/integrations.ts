@@ -20,6 +20,12 @@ export type MessageCopy = {
   emailBody: string;
   smsBody: string;
 };
+export type CustomMessageTemplate = MessageCopy & {
+  id: string;
+  label: string;
+  smsTemplateId: string;
+  whatsappTemplate: string;
+};
 export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
 export type SmsProvider = "none" | "msg91";
 export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari";
@@ -105,6 +111,7 @@ export interface IntegrationSettings {
     zohoDomain: string;
   };
   messages: Partial<Record<NotificationEventId, MessageCopy>>;
+  customTemplates: CustomMessageTemplate[];
   whatsapp: {
     provider: WhatsAppProvider;
     metaAppId: string;
@@ -313,6 +320,7 @@ export const defaultIntegrations: IntegrationSettings = {
     mapping: {},
   },
   messages: {},
+  customTemplates: [],
   shipping: {
     shiprocket: { email: "", password: "", channelId: "", enabled: true },
     nimbuspost: { email: "", password: "", enabled: true },
@@ -496,6 +504,7 @@ function persistMailStatus(settings: IntegrationSettings) {
       whatsapp: settings.whatsapp,
       sms: settings.sms,
       messages: settings.messages,
+      customTemplates: settings.customTemplates,
     }),
   }).catch(() => undefined);
 }

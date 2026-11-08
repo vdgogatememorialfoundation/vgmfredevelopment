@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         whatsapp: mergeCreds(asRecord(stored.whatsapp), asRecord(body.whatsapp)),
         sms: mergeCreds(asRecord(stored.sms), asRecord(body.sms)),
         messages: { ...asRecord(stored.messages), ...asRecord(body.messages) },
+        ...(Array.isArray(body.customTemplates) ? { customTemplates: body.customTemplates.slice(0, 100) } : {}),
       };
       await writeKv("admin", "notify-creds", next);
       await writeKv("admin", "email-creds", next.email);

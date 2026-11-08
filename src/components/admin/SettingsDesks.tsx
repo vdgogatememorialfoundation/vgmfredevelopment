@@ -18,6 +18,7 @@ import {
   type IntegrationSettings,
   type MessageCopy,
   type NotificationEventId,
+  type CustomMessageTemplate,
   type OrderSettings,
   type ShippingProviderId,
   type WhatsAppTemplate, nextStoreWorkingDay } from "@/lib/integrations";
@@ -899,13 +900,41 @@ export function MessageTemplatesDesk() {
   const [whatsapp, setWhatsapp] = useState(() => getIntegrations().whatsapp);
   const [sms, setSms] = useState(() => getIntegrations().sms);
   const [open, setOpen] = useState<NotificationEventId>("otp");
+  const [customs, setCustoms] = useState<CustomMessageTemplate[]>(() => getIntegrations().customTemplates ?? []);
+  const [openCustom, setOpenCustom] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const custom = customs.find((item) => item.id === openCustom) ?? null;
+  const patchCustom = (patch: Partial<CustomMessageTemplate>) =>
+    setCustoms((list) => list.map((item) => (item.id === openCustom ? { ...item, ...patch } : item)));
+  const addCustom = () => {
+    const id = `custom-${Date.now().toString(36)}`;
+    setCustoms((list) => [
+      ...list,
+      {
+        id,
+        label: "New template",
+        emailSubject: "A message from Vaidya Gogate Memorial Foundation",
+        emailBody: "Dear {name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n\n\nWith warm regards,\nVaidya Gogate Memorial Foundation",
+        smsBody: "Vaidya Gogate Memorial Foundation: ",
+        smsTemplateId: "",
+        whatsappTemplate: "",
+      },
+    ]);
+    setOpenCustom(id);
+    setNote("New template added. Name it, fill the copy, then click Save templates.");
+  };
+  const removeCustom = () => {
+    setCustoms((list) => list.filter((item) => item.id !== openCustom));
+    setOpenCustom(null);
+    setNote("Template removed. Click Save templates to keep this change.");
+  };
 
   const save = () => {
     const current = getIntegrations();
     saveIntegrations({
       ...current,
       messages,
+      customTemplates: customs.filter((item) => item.label.trim()),
       whatsapp: { ...current.whatsapp, mapping: whatsapp.mapping },
       sms: { ...current.sms, mapping: sms.mapping },
     });
@@ -949,14 +978,62 @@ export function MessageTemplatesDesk() {
               <button
                 key={item.id}
                 type="button"
-                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${open === item.id ? "bg-burgundy/10 font-semibold text-burgundy" : "text-slate-700 hover:bg-slate-50"}`}
-                onClick={() => setOpen(item.id)}
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${!custom && open === item.id ? "bg-burgundy/10 font-semibold text-burgundy" : "text-slate-700 hover:bg-slate-50"}`}
+                onClick={() => { setOpen(item.id); setOpenCustom(null); }}
               >
                 {item.label}
               </button>
             ))}
+            <p className="px-3 pt-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Your templates</p>
+            {customs.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${openCustom === item.id ? "bg-burgundy/10 font-semibold text-burgundy" : "text-slate-700 hover:bg-slate-50"}`}
+                onClick={() => setOpenCustom(item.id)}
+              >
+                {item.label || "Untitled template"}
+              </button>
+            ))}
+            <button type="button" className={`${ghost} mt-2 w-full`} onClick={addCustom}>+ Add template</button>
           </div>
         </Card>
+        {custom ? (
+          <div className="space-y-5">
+            <Card title="Template">
+              <div className="space-y-3">
+                <Text label="Template name" value={custom.label} onChange={(label) => patchCustom({ label })} />
+                <button type="button" className={ghost} onClick={removeCustom}>Delete template</button>
+              </div>
+            </Card>
+            <Card title="Email">
+              <div className="space-y-3">
+                <Text label="Email subject" value={custom.emailSubject} onChange={(emailSubject) => patchCustom({ emailSubject })} />
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Email body</span>
+                  <textarea className={input} rows={10} value={custom.emailBody} onChange={(event) => patchCustom({ emailBody: event.target.value })} />
+                </label>
+              </div>
+            </Card>
+            <Card title="SMS">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">SMS body</span>
+                <textarea className={input} rows={4} value={custom.smsBody} onChange={(event) => patchCustom({ smsBody: event.target.value })} />
+              </label>
+              <div className="mt-3">
+                <Text label="MSG91 / DLT template ID (optional)" value={custom.smsTemplateId} onChange={(smsTemplateId) => patchCustom({ smsTemplateId })} />
+              </div>
+            </Card>
+            <Card title="WhatsApp">
+              <Text
+                label="WhatsApp template / campaign / CPaaS alias"
+                value={custom.whatsappTemplate}
+                onChange={(whatsappTemplate) => patchCustom({ whatsappTemplate })}
+                hint="Must match an approved template on Meta, Zoho CPaaS or AiSensy."
+              />
+            </Card>
+          </div>
+        ) : (
         <div className="space-y-5">
           <Card title={`${notificationEvents.find((item) => item.id === open)?.label} · Email`}>
             <div className="space-y-3">
@@ -989,6 +1066,7 @@ export function MessageTemplatesDesk() {
             />
           </Card>
         </div>
+        )}
       </div>
     </div>
   );
@@ -1279,7 +1357,7 @@ export function ShippingApisDesk() {
 }
 
 export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick?: (index: number) => void; picked?: number }) {
-  const pickupDay = new Date(nextStoreWorkingDay(Date.now())).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+  const [pickupDay] = useState(() => new Date(nextStoreWorkingDay(Date.now())).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }));
   return (
     <div className="mt-4 space-y-2">
       <p className="text-xs text-slate-500">
