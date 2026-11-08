@@ -48,8 +48,17 @@ export function LivePublishBridge() {
       timer.current = window.setTimeout(flush, SETTLE_MS);
     };
 
+    let warned = false;
+    const onConflict = () => {
+      if (warned) return;
+      warned = true;
+      window.alert("Another device updated the live site after this page loaded, so your older copy was not published over it. Hard-reload this page to get the latest content, then make your edit again.");
+    };
+
     window.addEventListener("vgmf-cms", onCms);
+    window.addEventListener("vgmf-publish-conflict", onConflict);
     return () => {
+      window.removeEventListener("vgmf-publish-conflict", onConflict);
       window.clearTimeout(unlock);
       window.clearTimeout(timer.current);
       window.removeEventListener("pointerdown", markTouched);

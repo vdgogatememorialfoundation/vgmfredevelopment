@@ -328,7 +328,10 @@ export function buildTrackingStages(
                 title: "Your item is ready for store pickup",
                 at: packedAt || order.date,
                 location: siteConfig.address,
-                detail: `Pickup OTP: ${pickupOtp(order.id)} — share it with the front desk. Held for ${storeConfig.pickupHoldingDays} days. Carry a valid ID.`,
+                detail:
+                  order.status === "Delivered"
+                    ? "OTP verified · collected from the store."
+                    : `Pickup OTP: ${pickupOtp(order.id)} — share it with the front desk. Held for ${storeConfig.pickupHoldingDays} days. Carry a valid ID.`,
                 reached: true,
               },
             ]

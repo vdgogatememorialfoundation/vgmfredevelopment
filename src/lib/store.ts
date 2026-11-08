@@ -53,7 +53,9 @@ export function getCart(): CartItem[] {
 export function persistCart(cart: CartItem[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  window.localStorage.setItem("vgmf_cart_at", String(Date.now()));
   publishCartChange();
+  window.dispatchEvent(new Event("vgmf-cart-edit"));
 }
 
 export function addToCart(bookId: string, quantity = 1) {

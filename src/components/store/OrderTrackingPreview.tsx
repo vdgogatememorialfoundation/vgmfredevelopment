@@ -75,6 +75,12 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   const pickup = order.deliveryMode === "store_pickup";
   const latest = current?.events.at(-1);
 
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setShown(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
@@ -168,16 +174,21 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
             {index > 0 ? (
               <span className="relative h-0.5 flex-1 overflow-hidden rounded-full bg-border">
                 <span
-                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] duration-[60s] ease-linear`}
-                  style={{ width: index <= stepIdx ? "100%" : index === stepIdx + 1 && !terminal ? `${creep}%` : "0%" }}
+                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] ease-linear`}
+                  style={{
+                    width: !shown ? "0%" : index <= stepIdx ? "100%" : index === stepIdx + 1 && !terminal ? `${creep}%` : "0%",
+                    transitionDuration: index <= stepIdx ? "450ms" : "60s",
+                    transitionDelay: `${index <= stepIdx ? (index - 1) * 450 : stepIdx * 450}ms`,
+                  }}
                 />
               </span>
             ) : null}
             <span
               title={label}
-              className={`h-2.5 w-2.5 shrink-0 rounded-full ${index <= stepIdx ? fill : "bg-border"} ${
+              className={`h-2.5 w-2.5 shrink-0 rounded-full transition-colors ${index <= stepIdx && (shown || index === 0) ? fill : "bg-border"} ${
                 index === stepIdx && !terminal ? "vgmf-dot-pulse" : ""
               }`}
+              style={{ transitionDelay: `${Math.max(0, index) * 450}ms` }}
             />
           </Fragment>
         ))}

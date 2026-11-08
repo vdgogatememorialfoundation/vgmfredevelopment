@@ -212,13 +212,24 @@ export function publishLiveSite() {
   return fetch("/api/mobile/publish", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ partial: true, sections: body }),
+    body: JSON.stringify({ partial: true, basedOn: appliedFeedAt(), sections: body }),
   })
     .then(async (response) => {
-      const data = (await response.json().catch(() => null)) as { ok?: boolean; publishedAt?: string; error?: string } | null;
-      if (data?.ok && data.publishedAt) {
+      const data = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        publishedAt?: string;
+        previousAt?: string;
+        rejected?: string[];
+        error?: string;
+      } | null;
+      const clean = !data?.rejected?.length && data?.previousAt === appliedFeedAt();
+      // Only claim to be up to date when nobody else published in between; otherwise the next load pulls the live copy.
+      if (data?.ok && data.publishedAt && clean) {
         setAppliedFeedAt(data.publishedAt);
         if (baseline) recordFeedBaseline(snapshot);
+      }
+      if (data?.rejected?.length) {
+        window.dispatchEvent(new CustomEvent("vgmf-publish-conflict", { detail: data.rejected }));
       }
       return data ?? { ok: false as const };
     })

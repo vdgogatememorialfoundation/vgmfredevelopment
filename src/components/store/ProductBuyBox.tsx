@@ -45,6 +45,8 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const preorder = canPreorder({ ...book, stock });
   const orderable = canOrder({ ...book, stock });
   const pickup = getPickupLocation();
+  // Checkout pre-selects the first courier in this same order, so the headline date matches it.
+  const fastest = couriers[0];
   const courierShown = estimate?.courier && !AGGREGATOR.test(estimate.courier) ? estimate.courier : "";
   const nextUrl = `/shop/${book.slug}`;
 
@@ -171,11 +173,19 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </svg>
           Expected delivery:
           <span className="font-semibold">
-            {estimate?.deliverBy
-              ? estimate.deliverBy
-              : estimate && checked
-                ? "Confirmed after a courier is booked"
-                : "Check your pincode"}
+            {fastest
+              ? fastest.dayLabel
+                ? `${fastest.dayLabel}, ${fastest.deliverBy}`
+                : fastest.deliverBy
+              : estimate?.deliverBy
+                ? estimate.deliverBy
+                : estimate && checked
+                  ? ratesBusy
+                    ? "Checking…"
+                    : estimate.serviceable
+                      ? "Deliverable"
+                      : ""
+                  : "Check your pincode"}
           </span>
         </div>
 
@@ -230,7 +240,11 @@ export default function ProductBuyBox({ book }: { book: Book }) {
 
         {checked && estimate?.serviceable && (
           <div className="mt-3 rounded-lg bg-white p-3 text-xs">
-            {courierShown && estimate.deliverBy ? (
+            {fastest ? (
+              <p className="font-semibold text-text-primary">
+                Deliverable to {estimate.pincode} by {fastest.dayLabel ? `${fastest.dayLabel}, ${fastest.deliverBy}` : fastest.deliverBy} via {fastest.courierName}
+              </p>
+            ) : courierShown && estimate.deliverBy ? (
               <p className="font-semibold text-text-primary">
                 Deliverable to {estimate.pincode} by {estimate.deliverBy} via {courierShown}
               </p>

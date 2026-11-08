@@ -5,7 +5,7 @@ import { saveMobileEmailCreds, type MobileEmailCreds } from "@/lib/server/mobile
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; sections?: Partial<MobileFeed> };
+type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; basedOn?: string; sections?: Partial<MobileFeed> };
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
@@ -23,19 +23,43 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as PublishBody | null;
   if (body?.partial && body.sections && typeof body.sections === "object") {
     const current = readMobileFeed();
-    const { publishedAt: _ignored, ...sections } = body.sections;
+    const { publishedAt: _ignored, sectionAt: _stamps, ...incoming } = body.sections;
     void _ignored;
+    void _stamps;
+    const basedOn = typeof body.basedOn === "string" ? body.basedOn : "";
+    const rejected: string[] = [];
+    const sections: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(incoming)) {
+      // A section changed on another device after this browser loaded the live site is kept, not overwritten.
+      const changedAt = current.sectionAt?.[key] || current.publishedAt || "";
+      if (key !== "site" && (!basedOn || (changedAt && changedAt > basedOn))) rejected.push(key);
+      else sections[key] = value;
+    }
     if (body.email) saveMobileEmailCreds(body.email);
+    if (!Object.keys(sections).length) {
+      return NextResponse.json(
+        {
+          ok: false,
+          rejected,
+          error: "Another device updated this content after this page loaded. Hard-reload admin to get the latest copy, then edit again.",
+        },
+        { status: 409, headers: corsHeaders }
+      );
+    }
+    const publishedAt = new Date().toISOString();
     const feed = saveMobileFeed({
       ...current,
-      ...sections,
-      site: { ...current.site, ...sections.site },
-      publishedAt: new Date().toISOString(),
+      ...(sections as Partial<MobileFeed>),
+      site: { ...current.site, ...(sections.site as Partial<MobileFeed["site"]> | undefined) },
+      sectionAt: { ...current.sectionAt, ...Object.fromEntries(Object.keys(sections).map((key) => [key, publishedAt])) },
+      publishedAt,
     });
     return NextResponse.json(
       {
         ok: true,
         publishedAt: feed.publishedAt,
+        previousAt: current.publishedAt || "",
+        rejected,
         sections: Object.keys(sections),
         counts: { events: feed.events?.length ?? 0, articles: feed.articles?.length ?? 0, books: feed.books?.length ?? 0 },
       },
@@ -55,9 +79,11 @@ export async function POST(request: NextRequest) {
   const { email, force: _force, ...snapshot } = body;
   void _force;
   saveMobileEmailCreds(email);
+  const forcedAt = new Date().toISOString();
   const feed = saveMobileFeed({
     ...snapshot,
-    publishedAt: new Date().toISOString(),
+    sectionAt: Object.fromEntries(Object.keys(snapshot).map((key) => [key, forcedAt])),
+    publishedAt: forcedAt,
   });
   return NextResponse.json(
     {

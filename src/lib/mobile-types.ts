@@ -7,6 +7,8 @@ import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice
 
 export type MobileFeed = {
   publishedAt: string;
+  /** When each section last changed, so a browser holding an older copy cannot overwrite it. */
+  sectionAt?: Record<string, string>;
   site: {
     name: string;
     tagline: string;

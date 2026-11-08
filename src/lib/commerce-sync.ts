@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { orderActivityAt, shipmentActivityAt } from "@/lib/commerce-stamp";
 import { getSettings, getShipments } from "@/lib/admin-store";
 import { getSession, isPortalRole } from "@/lib/auth";
-import { getOrders, getWishlist, withAccountEmail } from "@/lib/store";
-import type { Order, ShipmentRecord } from "@/types";
+import { getCart, getOrders, getWishlist, withAccountEmail } from "@/lib/store";
+import { publishCartChange } from "@/lib/cart-store";
+import type { CartItem, Order, ShipmentRecord } from "@/types";
 
 function writeOrders(orders: Order[]) {
   window.localStorage.setItem("vgmf_orders", JSON.stringify(orders));
@@ -170,6 +171,30 @@ async function syncWishlist() {
   window.dispatchEvent(new Event("vgmf-wishlist"));
 }
 
+/** Keep the signed-in customer's cart the same on every device: the newest edit wins. */
+export async function syncCart() {
+  if (typeof window === "undefined") return;
+  const user = getSession();
+  if (!user?.email || isPortalRole(user.role)) return;
+  const at = Number(window.localStorage.getItem("vgmf_cart_at") || 0);
+  const items = getCart();
+  if (at) {
+    await fetch("/api/shop/cart", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ items, at }),
+    }).catch(() => undefined);
+  }
+  const response = await fetch("/api/shop/cart", { cache: "no-store", credentials: "same-origin" }).catch(() => undefined);
+  if (!response?.ok) return;
+  const data = (await response.json()) as { items?: CartItem[]; at?: number };
+  if (!data.at || data.at <= at) return;
+  window.localStorage.setItem("vgmf_cart", JSON.stringify(Array.isArray(data.items) ? data.items : []));
+  window.localStorage.setItem("vgmf_cart_at", String(data.at));
+  publishCartChange();
+}
+
 /** Publish this browser's bookings, then pull the server copy onto this device. */
 export async function syncCommerce() {
   if (typeof window === "undefined") return;
@@ -177,6 +202,7 @@ export async function syncCommerce() {
   await pushLocalCommerce();
   await pullCommerce();
   await syncWishlist();
+  await syncCart();
 }
 
 /** Load the signed-in account's orders onto this phone, then re-render when they arrive. */

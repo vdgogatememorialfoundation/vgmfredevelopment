@@ -24,7 +24,7 @@ import {
 import { storeConfig } from "@/lib/constants";
 import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
 import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
-import { fetchCourierRates } from "@/lib/shipping-client";
+import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
 import { printGstInvoice } from "@/lib/gst-invoice";
@@ -254,7 +254,9 @@ export default function CheckoutClient() {
       try {
         const result = await fetchCourierRates({
           deliveryPincode: address.pincode,
-          weightKg: Math.max(0.5, cartUnits * 0.5),
+          weightKg: orderWeightKg({
+            items: cartKey.split(",").map((part) => ({ bookId: part.split("x")[0], quantity: Number(part.split("x")[1]) || 1 })) as Order["items"],
+          }),
           declaredValue: cartValue,
           bookIds: cartKey.split(",").map((part) => part.split("x")[0]),
         });
