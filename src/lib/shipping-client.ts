@@ -1,4 +1,4 @@
-import { isCourierInfoLine } from "@/lib/order-pipeline";
+import { isCourierInfoLine, isFailedAttempt } from "@/lib/order-pipeline";
 import { courierTrackingLink, directCourier } from "@/lib/couriers";
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
@@ -731,6 +731,7 @@ const statusOrder: ShipmentRecord["status"][] = ["Booked", "Picked Up", "In Tran
 function mapCourierStatus(text: string): ShipmentRecord["status"] | undefined {
   const value = text.toLowerCase().replace(/[_-]+/g, " ");
   if (isCourierInfoLine(value)) return undefined;
+  if (isFailedAttempt(value)) return "Out for Delivery";
   if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|incomplete)\b/.test(value)) {
     return "Failed";
   }
