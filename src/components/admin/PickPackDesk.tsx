@@ -32,7 +32,7 @@ function ring() {
 }
 
 /** Store pickers get assigned orders with a bell, scan items to pick, then the order QR and items to pack. */
-export function PickPackDesk({ mode = "all" }: { mode?: "pick" | "pack" | "all" }) {
+export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pick" | "pack" | "all"; cameraFirst?: boolean }) {
   const { version } = useCommerceMirror();
   const [tick, setTick] = useState(0);
   const me = getSession()?.email?.toLowerCase() ?? "";
@@ -125,9 +125,9 @@ export function PickPackDesk({ mode = "all" }: { mode?: "pick" | "pack" | "all" 
                 </ul>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {!order.pick?.acceptedAt ? (
-                    <Button onClick={() => { acceptPick(order.id); setActive(order.id); setTick((value) => value + 1); }}>Accept & start picking</Button>
+                    <Button onClick={() => { acceptPick(order.id); setActive(order.id); setCamera(cameraFirst); setTick((value) => value + 1); }}>Accept & start picking</Button>
                   ) : (
-                    <Button variant={active === order.id ? "primary" : "outline"} onClick={() => setActive(order.id)}>{active === order.id ? "Scanning this order" : "Scan for this order"}</Button>
+                    <Button variant={active === order.id ? "primary" : "outline"} onClick={() => { setActive(order.id); setCamera(cameraFirst); }}>{active === order.id ? "Scanning this order" : "Scan for this order"}</Button>
                   )}
                 </div>
               </li>
@@ -145,7 +145,7 @@ export function PickPackDesk({ mode = "all" }: { mode?: "pick" | "pack" | "all" 
         ) : null}
         {note ? <p className="mt-2 text-sm text-emerald-700">{note}</p> : null}
         {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
-        {camera ? <BarcodeCamera label="Scan a product barcode or the order QR" onScan={(value) => { setCamera(false); scan(value); }} onClose={() => setCamera(false)} /> : null}
+        {camera ? <BarcodeCamera label="Scan a product barcode or the order QR" onScan={(value) => { setCamera(false); scan(value); if (cameraFirst) window.setTimeout(() => setCamera(true), 900); }} onClose={() => setCamera(false)} /> : null}
       </Panel>
 
       {lead && mode !== "pack" ? (

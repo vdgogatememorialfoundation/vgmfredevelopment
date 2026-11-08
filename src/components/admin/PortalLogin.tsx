@@ -9,7 +9,7 @@ import { ensureAdminCredentials, getAccounts, sendOtpCode } from "@/lib/admin-st
 import { loginBlockReason } from "@/lib/auth";
 import { OTP_RESEND_SECONDS, issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
-import { isSupportAgent } from "@/lib/roles";
+import { canOpen, isSupportAgent } from "@/lib/roles";
 import type { User } from "@/types";
 
 const copy = {
@@ -17,6 +17,7 @@ const copy = {
   staff: { label: "Staff", target: "/staff", hint: "staff" },
   doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
   support: { label: "Customer support", target: "/support", hint: "support" },
+  scanner: { label: "Picker & packer scanner", target: "/scanner", hint: "picker or packer" },
 } as const;
 
 type PortalId = keyof typeof copy;
@@ -165,7 +166,7 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
   if (mode === "forgot") {
     return (
       <Card portal={portal}>
-        <ForgotPasswordForm role={portal === "support" ? "staff" : portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
+        <ForgotPasswordForm role={portal === "support" || portal === "scanner" ? "staff" : portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
       </Card>
     );
   }
@@ -288,6 +289,7 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
 function matchesPortal(account: User, portal: PortalId) {
   if (portal === "staff") return account.role === "staff" || account.role === "coadmin";
   if (portal === "support") return isSupportAgent(account);
+  if (portal === "scanner") return account.role === "admin" || account.role === "coadmin" || (account.role === "staff" && (canOpen(account, "/admin/commerce/picker") || canOpen(account, "/admin/commerce/packer")));
   return account.role === portal;
 }
 
