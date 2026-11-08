@@ -14,6 +14,7 @@ import { buildTrackingStages, cleanScanText, isHyperlocalProvider, shipmentScans
 import { pingLiveAgent } from "@/lib/shipping-client";
 import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
 import LiveTracking from "@/components/store/LiveTracking";
+import HyperlocalStatus from "@/components/store/HyperlocalStatus";
 import RefundDetails from "@/components/store/RefundDetails";
 import type { Order, ShipmentRecord } from "@/types";
 
@@ -289,11 +290,13 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
         </div>
       ) : showLiveMap(order, shipment) ? (
         <div className="vgmf-hl">
-          <div className="vgmf-hl-sheet">{pipe}</div>
+          <div className="vgmf-hl-sheet"><HyperlocalStatus order={order} shipment={shipment} /></div>
           <div className="vgmf-hl-map">
             <LiveTracking order={order} shipment={shipment} />
           </div>
         </div>
+      ) : hyperlocal && order.deliveryMode === "delivery" && order.status !== "Cancelled" && order.status !== "Failed" ? (
+        <HyperlocalStatus order={order} shipment={shipment} />
       ) : (
         pipe
       )}
