@@ -48,12 +48,17 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
       order.status !== "Cancelled" &&
       (mode === "all" || (mode === "pick" ? !order.pick.pickedAt : Boolean(order.pick.pickedAt)))
   );
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
   const schedule = getOrderSettings().pickSchedule;
   const dueBy = (order: Order) => {
     const from = Date.parse((order.pick?.pickedAt ?? order.pick?.assignedAt) || "");
     if (!Number.isFinite(from)) return "";
     const due = from + (order.pick?.pickedAt ? schedule.packMinutes : schedule.pickMinutes) * 60000;
-    const late = Date.now() > due;
+    const late = now > due;
     return `${order.pick?.pickedAt ? "Pack" : "Pick"} by ${new Date(due).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${late ? " · late" : ""}`;
   };
   const unassigned = orders.filter((order) => OPEN.has(order.status) && !order.pick);

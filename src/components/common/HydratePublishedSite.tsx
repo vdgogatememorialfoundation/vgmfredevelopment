@@ -45,5 +45,17 @@ export function HydratePublishedSite({
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void hydratePartnerFeed();
+    };
+    const timer = window.setInterval(refresh, 60 * 1000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   return <>{children}</>;
 }

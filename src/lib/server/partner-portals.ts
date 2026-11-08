@@ -21,7 +21,7 @@ import type {
 } from "@/types";
 
 const FETCH_MS = 6000;
-const STALE_MS = 10 * 60 * 1000;
+const STALE_MS = 2 * 60 * 1000;
 const PRIVATE = /^(email|e-mail|phone|mobile|whatsapp|token|qrtoken|qr|otp|password|secret|authorization|qr_code|qrcode|provider_transaction|provider_order|razorpay|metadata_json|form_data)/i;
 
 export type SanitizedPartnerAccount = User & { sourceId: string };
