@@ -615,6 +615,17 @@ export interface Order {
     balanceRef?: string;
     link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
   };
+  /** Warehouse pick & pack: who picks, and what has been scanned. */
+  pick?: {
+    assignee: string;
+    assignedAt: string;
+    acceptedAt?: string;
+    picked: Record<string, number>;
+    pickedAt?: string;
+    packScan: Record<string, number>;
+    orderScannedAt?: string;
+    packedAt?: string;
+  };
   weightKg?: number;
   /** Packed parcel for this shipment (single or bulk). Overrides the default box size in Shipping settings. */
   parcel?: { length: number; breadth: number; height: number; boxes: number; kind: "single" | "bulk"; contents?: string };

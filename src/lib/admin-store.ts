@@ -18,6 +18,7 @@ import { formatDate } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
+import { matchesBarcode } from "@/lib/barcode";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
@@ -785,6 +786,61 @@ export function printOrdersPdf(orders: Order[]) {
     "Orders",
     `<h1>Vaidya Gogate Memorial Foundation orders</h1><table><tr><th>ID</th><th>Customer</th><th>Status</th><th>Payment</th><th>Total</th></tr>${rows}</table>`
   );
+}
+
+/* ---------------- Pick & pack ---------------- */
+
+export function assignPicker(orderId: string, assignee: string) {
+  const order = getOrder(orderId);
+  const email = assignee.trim().toLowerCase();
+  if (!order || !email) throw new Error("Pick a staff member to assign.");
+  updateOrderInStore(withHistory({ ...order, pick: { assignee: email, assignedAt: new Date().toISOString(), picked: {}, packScan: {} } }, "Picker assigned", email));
+}
+
+export function acceptPick(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order?.pick) return;
+  updateOrderInStore(withHistory({ ...order, pick: { ...order.pick, acceptedAt: new Date().toISOString() } }, "Picking started", order.pick.assignee));
+}
+
+/** One scan in the store. Before picking is complete a product barcode counts as picked; afterwards the order QR then each product marks it packed. */
+export function recordPickScan(orderId: string, code: string): string {
+  const order = getOrder(orderId);
+  const pick = order?.pick;
+  if (!order || !pick) throw new Error("This order has no picker assigned.");
+  const value = code.trim();
+  const books = getLiveBooks();
+  const needed = (map: Record<string, number>) => order.items.every((item) => (map[item.bookId] ?? 0) >= item.quantity);
+  const matchItem = (map: Record<string, number>) =>
+    order.items.find((item) => {
+      const book = books.find((row) => row.id === item.bookId);
+      return (book ? matchesBarcode(book, value) : item.bookId === value || item.sku === value) && (map[item.bookId] ?? 0) < item.quantity;
+    });
+  if (!pick.pickedAt) {
+    const item = matchItem(pick.picked);
+    if (!item) throw new Error("This barcode is not an item still to pick on this order.");
+    const picked = { ...pick.picked, [item.bookId]: (pick.picked[item.bookId] ?? 0) + 1 };
+    const done = needed(picked);
+    const next = { ...order, pick: { ...pick, acceptedAt: pick.acceptedAt ?? new Date().toISOString(), picked, pickedAt: done ? new Date().toISOString() : undefined } };
+    updateOrderInStore(done ? withHistory(next, "Item picked", "All items picked from inventory") : next);
+    return done ? "All items picked. Scan the order QR, then each item to pack." : `Picked ${item.title}.`;
+  }
+  if (pick.packedAt) return "Already packed and ready for dispatch.";
+  if (!pick.orderScannedAt) {
+    if (value.replace(/\D/g, "") !== order.id.replace(/\D/g, "") && !value.includes(order.id)) throw new Error("Scan the order QR first.");
+    updateOrderInStore({ ...order, pick: { ...pick, orderScannedAt: new Date().toISOString() } });
+    return "Order matched. Now scan each item into the box.";
+  }
+  const item = matchItem(pick.packScan);
+  if (!item) throw new Error("This barcode is not an item still to pack on this order.");
+  const packScan = { ...pick.packScan, [item.bookId]: (pick.packScan[item.bookId] ?? 0) + 1 };
+  if (!needed(packScan)) {
+    updateOrderInStore({ ...order, pick: { ...pick, packScan } });
+    return `Packed ${item.title}.`;
+  }
+  updateOrderInStore({ ...order, pick: { ...pick, packScan, packedAt: new Date().toISOString() } });
+  setOrderStatus(order.id, order.deliveryMode === "store_pickup" ? "Packed" : "Ready to Ship");
+  return order.deliveryMode === "store_pickup" ? "Packed. Ready for store pickup (OTP unlocked)." : "Packed and ready for dispatch. Allocate a courier from Orders.";
 }
 
 export function setOrderStatus(orderId: string, status: OrderStatus) {
