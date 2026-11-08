@@ -1361,6 +1361,8 @@ export function OrderSettingsDesk() {
           <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
           <Text label="Packing / processing time (hours)" type="number" value={value.processingHours} onChange={(hours) => set({ processingHours: Math.max(0, Number(hours) || 0) })} />
           <Text label="Dispatch cut-off (India time, HH:MM)" value={value.dispatchCutoff} onChange={(dispatchCutoff) => set({ dispatchCutoff })} />
+          <Text label="Picker time per order (minutes)" type="number" value={value.pickSchedule.pickMinutes} onChange={(minutes) => set({ pickSchedule: { ...value.pickSchedule, pickMinutes: Math.max(1, Number(minutes) || 1) } })} />
+          <Text label="Packer time per order (minutes)" type="number" value={value.pickSchedule.packMinutes} onChange={(minutes) => set({ pickSchedule: { ...value.pickSchedule, packMinutes: Math.max(1, Number(minutes) || 1) } })} />
           <Check label="Saturday is a working day" hint="Off: Saturday orders are processed on the next working day." checked={value.workingDays.saturday} onChange={(saturday) => set({ workingDays: { ...value.workingDays, saturday } })} />
           <Check label="Sunday is a working day" hint="Off: Sunday orders are processed on the next working day." checked={value.workingDays.sunday} onChange={(sunday) => set({ workingDays: { ...value.workingDays, sunday } })} />
           <label className="block md:col-span-3">

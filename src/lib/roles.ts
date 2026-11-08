@@ -7,7 +7,7 @@ export const staffModules = [
   { id: "portals", label: "Portal links", paths: ["/staff", "/doctor", "/"] },
   { id: "pos", label: "In-store POS", paths: ["/admin/commerce/pos"] },
   { id: "pickup", label: "Store pickup orders", paths: ["/admin/commerce/pickup"] },
-  { id: "picking", label: "Pick & pack scanner", paths: ["/admin/commerce/picking"] },
+  { id: "picking", label: "Pick & pack scanner", paths: ["/admin/commerce/picking", "/admin/commerce/picker", "/admin/commerce/packer"] },
   { id: "quick-shipment", label: "Quick shipment", paths: ["/admin/commerce/quick-shipment"] },
   { id: "catalog", label: "Products & inventory", paths: ["/admin/commerce/products", "/admin/commerce/inventory", "/admin/commerce/serviceability"] },
   { id: "payments", label: "Payments", paths: ["/admin/payments", "/admin/commerce/payments"] },

@@ -192,6 +192,8 @@ export interface OrderSettings {
   dispatchCutoff: string;
   /** Days the store processes, packs and hands over orders. Holidays are YYYY-MM-DD. */
   workingDays: { saturday: boolean; sunday: boolean; holidays: string[] };
+  /** Minutes a picker / packer has after being assigned. */
+  pickSchedule: { pickMinutes: number; packMinutes: number };
   /** Customer-facing names for statuses and tracking steps, keyed by the built-in name. */
   statusLabels: Record<string, string>;
   /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
@@ -360,6 +362,7 @@ export const defaultOrderSettings: OrderSettings = {
   processingHours: 4,
   dispatchCutoff: "17:00",
   workingDays: { saturday: false, sunday: false, holidays: [] },
+  pickSchedule: { pickMinutes: 30, packMinutes: 30 },
   statusLabels: {},
   customStatuses: [],
   preorderPayment: { mode: "full", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
@@ -540,6 +543,10 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
     processingHours: Math.max(0, finiteNumber(merged.processingHours, defaultOrderSettings.processingHours)),
     dispatchCutoff: /^\d{1,2}:\d{2}$/.test(String(merged.dispatchCutoff ?? "")) ? String(merged.dispatchCutoff) : defaultOrderSettings.dispatchCutoff,
+    pickSchedule: {
+      pickMinutes: Math.max(1, finiteNumber(merged.pickSchedule?.pickMinutes, 30)),
+      packMinutes: Math.max(1, finiteNumber(merged.pickSchedule?.packMinutes, 30)),
+    },
     workingDays: {
       saturday: Boolean(merged.workingDays?.saturday),
       sunday: Boolean(merged.workingDays?.sunday),

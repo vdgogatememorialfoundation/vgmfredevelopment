@@ -16,6 +16,7 @@ import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/
 import LiveTracking from "@/components/store/LiveTracking";
 import HyperlocalStatus from "@/components/store/HyperlocalStatus";
 import RefundDetails from "@/components/store/RefundDetails";
+import { beep } from "@/lib/scan-beep";
 import type { Order, ShipmentRecord } from "@/types";
 
 function addDays(date: Date, days: number) {
@@ -34,6 +35,13 @@ function Tile({ label, value }: { label: string; value: string }) {
 }
 
 export default function OrderTrackingTimeline({ order, phone = "" }: { order: Order; phone?: string }) {
+  useEffect(() => {
+    if (order.status !== "Delivered") return;
+    const key = `vgmf_delivered_beep_${order.id}`;
+    if (window.localStorage.getItem(key)) return;
+    window.localStorage.setItem(key, "1");
+    beep("delivered");
+  }, [order.id, order.status]);
   const [pickupAt] = useState(() => getPickupLocation());
   const [now] = useState(() => Date.now());
   const localShipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled") ?? null;

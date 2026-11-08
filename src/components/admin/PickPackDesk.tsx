@@ -8,6 +8,8 @@ import { getOrders } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import type { Order } from "@/types";
+import { beep } from "@/lib/scan-beep";
+import { getOrderSettings } from "@/lib/integrations";
 
 const OPEN = new Set(["Ordered", "Accepted", "Processing", "Awaiting Confirmation"]);
 
@@ -30,7 +32,7 @@ function ring() {
 }
 
 /** Store pickers get assigned orders with a bell, scan items to pick, then the order QR and items to pack. */
-export function PickPackDesk() {
+export function PickPackDesk({ mode = "all" }: { mode?: "pick" | "pack" | "all" }) {
   const { version } = useCommerceMirror();
   const [tick, setTick] = useState(0);
   const me = getSession()?.email?.toLowerCase() ?? "";
@@ -39,7 +41,21 @@ export function PickPackDesk() {
   const orders = getOrders();
   void version;
   void tick;
-  const mine = orders.filter((order) => order.pick?.assignee === me && !order.pick.packedAt && order.status !== "Cancelled");
+  const mine = orders.filter(
+    (order) =>
+      order.pick?.assignee === me &&
+      !order.pick.packedAt &&
+      order.status !== "Cancelled" &&
+      (mode === "all" || (mode === "pick" ? !order.pick.pickedAt : Boolean(order.pick.pickedAt)))
+  );
+  const schedule = getOrderSettings().pickSchedule;
+  const dueBy = (order: Order) => {
+    const from = Date.parse((order.pick?.pickedAt ?? order.pick?.assignedAt) || "");
+    if (!Number.isFinite(from)) return "";
+    const due = from + (order.pick?.pickedAt ? schedule.packMinutes : schedule.pickMinutes) * 60000;
+    const late = Date.now() > due;
+    return `${order.pick?.pickedAt ? "Pack" : "Pick"} by ${new Date(due).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${late ? " · late" : ""}`;
+  };
   const unassigned = orders.filter((order) => OPEN.has(order.status) && !order.pick);
   const staff = getAccounts().filter((account) => account.role === "staff" || account.role === "admin" || account.role === "coadmin");
   const [active, setActive] = useState("");
@@ -70,7 +86,9 @@ export function PickPackDesk() {
     try {
       setError("");
       setNote(recordPickScan(active, value));
+      beep("success");
     } catch (problem) {
+      beep("fail");
       setNote("");
       setError(problem instanceof Error ? problem.message : "Scan failed.");
     }
@@ -96,7 +114,9 @@ export function PickPackDesk() {
               <li key={order.id} className={`rounded-xl border p-3 ${active === order.id ? "border-blue-400 bg-blue-50/50" : "border-slate-200"}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-slate-900">Order {order.id} · {order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
-                  <span className="text-xs font-semibold text-blue-800">{order.pick?.acceptedAt ? progress(order) : "New"}</span>
+                  <span className="text-xs font-semibold text-blue-800">
+                    {order.pick?.acceptedAt ? progress(order) : "New"} · <span className={dueBy(order).endsWith("late") ? "text-red-700" : ""}>{dueBy(order)}</span>
+                  </span>
                 </div>
                 <ul className="mt-1 text-sm text-slate-700">
                   {order.items.map((item) => (
@@ -128,7 +148,7 @@ export function PickPackDesk() {
         {camera ? <BarcodeCamera label="Scan a product barcode or the order QR" onScan={(value) => { setCamera(false); scan(value); }} onClose={() => setCamera(false)} /> : null}
       </Panel>
 
-      {lead ? (
+      {lead && mode !== "pack" ? (
         <Panel title="Assign pickers" description="Confirmed orders waiting for a picker. The assigned person's scanner rings.">
           {unassigned.length === 0 ? (
             <p className="text-sm text-slate-500">Every open order has a picker.</p>
