@@ -30,7 +30,6 @@ import {
   type ContentModuleId,
   type SiteFlags,
 } from "@/lib/cms";
-import { partnerSites } from "@/lib/partner-keys";
 import {
   ensureBootstrapped,
   getAccounts,
@@ -1016,19 +1015,18 @@ export function SupportUsDesk() {
 
 export function CertificateApiDesk() {
   const [number, setNumber] = useState("");
-  const [siteId, setSiteId] = useState<(typeof partnerSites)[number]["id"]>("seminar");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const site = partnerSites.find((item) => item.id === siteId) ?? partnerSites[0];
 
   const run = async () => {
     setBusy(true);
     try {
-      const data = await verifyCertificate(number, site.apiKey);
+      const data = await verifyCertificate(number);
+      const from = data.certificate?.sourceLabel || data.sourceLabel;
       setNote(
         data.verified && data.certificate
-          ? `Verified ${data.certificate.certificateNumber} · ${data.certificate.name} · ${data.certificate.event}.`
-          : `No issued certificate matches that number.`
+          ? `Verified ${data.certificate.certificateNumber} · ${data.certificate.name} · ${data.certificate.event}${from ? ` · ${from}` : ""}.`
+          : data.error || "No issued certificate matches that number on this site, the seminar site or the autism site."
       );
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Verification did not complete.");
@@ -1044,15 +1042,8 @@ export function CertificateApiDesk() {
         <p className="mt-1 text-sm text-slate-500">Check a certificate number against this site, the seminar site, or the autism site.</p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <div className="grid gap-3 sm:grid-cols-[1fr_12rem_auto]">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
           <input className={field} value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Certificate number" />
-          <select className={field} value={siteId} onChange={(event) => setSiteId(event.target.value as typeof siteId)}>
-            {partnerSites.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
           <button type="button" disabled={busy} className={button} onClick={() => void run()}>
             {busy ? "Checking…" : "Check"}
           </button>
