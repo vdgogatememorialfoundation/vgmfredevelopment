@@ -29,9 +29,6 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Orders", href: "/admin/commerce/orders" },
       { label: "In-store POS", href: "/admin/commerce/pos" },
       { label: "Store pickup orders", href: "/admin/commerce/pickup" },
-      { label: "Picker scanner", href: "/admin/commerce/picker" },
-      { label: "Packer scanner", href: "/admin/commerce/packer" },
-      { label: "Pick & pack (all)", href: "/admin/commerce/picking" },
       { label: "Shipment Management", href: "/admin/commerce/shipments" },
       { label: "Quick shipment", href: "/admin/commerce/quick-shipment" },
       { label: "Inventory Management", href: "/admin/commerce/inventory" },
@@ -39,6 +36,16 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Serviceability", href: "/admin/commerce/serviceability" },
       { label: "Courier performance", href: "/admin/delivery-partners/performance" },
       { label: "Payments", href: "/admin/commerce/payments" },
+    ],
+  },
+
+  {
+    label: "Scanner",
+    items: [
+      { label: "Assign pickers & packing board", href: "/admin/commerce/picking" },
+      { label: "Picker app (admin)", href: "/admin/commerce/picker" },
+      { label: "Packer app (admin)", href: "/admin/commerce/packer" },
+      { label: "Staff scanner app", href: "/scanner" },
     ],
   },
 
@@ -184,7 +191,6 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Support portal", href: "/support" },
       { label: "Staff portal", href: "/staff" },
-      { label: "Picker & packer scanner app", href: "/scanner" },
       { label: "Doctor portal", href: "/doctor" },
       { label: "Public website", href: "/" },
     ],

@@ -11,7 +11,7 @@ import type { Order } from "@/types";
 import { beep } from "@/lib/scan-beep";
 import { getOrderSettings } from "@/lib/integrations";
 
-const OPEN = new Set(["Ordered", "Accepted", "Processing", "Awaiting Confirmation"]);
+const OPEN = new Set(["Paid", "Ordered", "Accepted", "Processing", "Awaiting Confirmation", "To Ship"]);
 
 function ring() {
   try {
@@ -43,7 +43,8 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   void tick;
   const mine = orders.filter(
     (order) =>
-      order.pick?.assignee === me &&
+      order.pick &&
+      (lead || order.pick.assignee === me) &&
       !order.pick.packedAt &&
       order.status !== "Cancelled" &&
       (mode === "all" || (mode === "pick" ? !order.pick.pickedAt : Boolean(order.pick.pickedAt)))
@@ -110,15 +111,15 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
 
   return (
     <div className="space-y-5">
-      <Panel title="My pick list" description="New assignments ring a bell. Accept, scan each product to pick it, then scan the order QR and each product again to pack. Packed orders become ready for dispatch.">
+      <Panel title={lead ? (mode === "pack" ? "Orders to pack" : mode === "pick" ? "Orders being picked" : "Pick & pack board") : "My pick list"} description="New assignments ring a bell. Accept, scan each product to pick it, then scan the order QR and each product again to pack. Packed orders become ready for dispatch.">
         {mine.length === 0 ? (
-          <p className="text-sm text-slate-500">No orders assigned to you right now.</p>
+          <p className="text-sm text-slate-500">{lead ? (mode === "pack" ? "Nothing is waiting to be packed. Orders appear here once every item is picked." : "No orders are being picked. Assign a picker below.") : "No orders assigned to you right now."}</p>
         ) : (
           <ul className="space-y-3">
             {mine.map((order) => (
               <li key={order.id} className={`rounded-xl border p-3 ${active === order.id ? "border-blue-400 bg-blue-50/50" : "border-slate-200"}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-900">Order {order.id} · {order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
+                  <p className="font-semibold text-slate-900">Order {order.id} · {order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}{lead && order.pick?.assignee !== me ? <span className="ml-1 text-xs font-normal text-slate-500">· {order.pick?.assignee}</span> : null}</p>
                   <span className="text-xs font-semibold text-blue-800">
                     {order.pick?.acceptedAt ? progress(order) : "New"} · <span className={dueBy(order).endsWith("late") ? "text-red-700" : ""}>{dueBy(order)}</span>
                   </span>
