@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "app.dart";
+import "customer.dart";
 import "flavor.dart";
 import "theme.dart";
 
@@ -19,7 +20,7 @@ class VgmfRoot extends StatelessWidget {
       title: flavor.displayName,
       debugShowCheckedModeBanner: false,
       theme: vgmfTheme(seed: flavor.accent),
-      home: VgmfShell(flavor: flavor),
+      home: flavor.id == "customer" ? const CustomerApp() : VgmfShell(flavor: flavor),
     );
   }
 }
