@@ -14,6 +14,7 @@ import { buildTrackingStages, isHyperlocalProvider, shipmentScans, type CourierS
 import { pingLiveAgent } from "@/lib/shipping-client";
 import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
 import LiveTracking from "@/components/store/LiveTracking";
+import RefundDetails from "@/components/store/RefundDetails";
 import type { Order, ShipmentRecord } from "@/types";
 
 function addDays(date: Date, days: number) {
@@ -32,6 +33,8 @@ function Tile({ label, value }: { label: string; value: string }) {
 }
 
 export default function OrderTrackingTimeline({ order, phone = "" }: { order: Order; phone?: string }) {
+  const [pickupAt] = useState(() => getPickupLocation());
+  const [now] = useState(() => Date.now());
   const localShipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled") ?? null;
   const [remote, setRemote] = useState<ShipmentRecord | null>(null);
   const shipment = remote ?? localShipment;
@@ -138,7 +141,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     if (stage.id === "failed") return { label: "Failed", tone: "red" };
     if (stage.id === "shipped" || stage.id === "out") {
       if (!stage.reached) return null;
-      return Date.now() > expectedTo.getTime() ? { label: "Delayed", tone: "red" } : { label: "On time", tone: "emerald" };
+      return now > expectedTo.getTime() ? { label: "Delayed", tone: "red" } : { label: "On time", tone: "emerald" };
     }
     if (stage.id === "delivered" && stage.reached && deliveredAt) {
       const deliveredTime = new Date(deliveredAt).getTime();
@@ -186,7 +189,9 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       : failed
         ? "The line stays on Failed until a reattempt is booked."
         : order.status === "Delivered"
-          ? "Delivered — confirmation received from the courier."
+          ? order.deliveryMode === "store_pickup"
+            ? ""
+            : "Delivered — confirmation received from the courier."
           : order.status === "Out for Delivery"
             ? ""
             : order.deliveryMode === "store_pickup"
@@ -216,7 +221,6 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     />
   );
 
-  const pickupAt = getPickupLocation();
   const tiles = (
     <div className="vgmf-trk-tiles">
       <Tile label="Order" value={order.id} />
@@ -258,6 +262,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   return (
     <div className="vgmf-trk">
       {tiles}
+      <RefundDetails order={order} />
       {returnActive && returnRequest && returnPipeline ? (
         <div>
           <p className="vgmf-trk-note">

@@ -8,7 +8,7 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { videos as seededVideos } from "@/data/videos";
 import { books as seededBooks } from "@/data/books";
 import { getOrderSettings, publicOrderSettings, saveOrderSettings } from "@/lib/integrations";
-import { appliedFeedAt, emptyFeedFallback, setAppliedFeedAt } from "@/lib/mobile-publish";
+import { appliedFeedAt, emptyFeedFallback, hasFeedBaseline, recordFeedBaseline, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
 import type { Flyer } from "@/types";
 
@@ -74,8 +74,12 @@ export async function hydratePublishedSite() {
       if (feedAt && appliedFeedAt() !== feedAt) {
         applyFeed(merged);
         setAppliedFeedAt(feedAt);
+        recordFeedBaseline();
       } else if (feedAt && catalogueAt !== feedAt) {
         installPublishedCatalogue(merged);
+        if (!hasFeedBaseline()) recordFeedBaseline();
+      } else if (feedAt && !hasFeedBaseline()) {
+        recordFeedBaseline();
       }
       return;
     } catch {

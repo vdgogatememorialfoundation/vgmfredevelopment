@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import OrderPaymentPanel from "@/components/admin/OrderPaymentPanel";
 import { verifyCertificate } from "@/lib/certificates-client";
 import { AccountsSection } from "@/components/admin/AdminAccounts";
 import {
@@ -35,7 +36,6 @@ import {
   getAccounts,
   getOutbox,
   getSettings,
-  refundOrder,
   saveSettings,
   sendEmail,
   setOrderStatus,
@@ -865,6 +865,7 @@ export function RefundsDesk() {
   const { version } = useCommerceMirror();
   const [orders, setOrders] = useState<Order[]>(() => getOrders());
   const refresh = () => setOrders(getOrders());
+  const [open, setOpen] = useState("");
   useEffect(() => {
     setOrders(getOrders());
   }, [version]);
@@ -904,19 +905,12 @@ export function RefundsDesk() {
                     <option key={status}>{status}</option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  className={ghost}
-                  disabled={order.paymentStatus === "Refunded"}
-                  onClick={() => {
-                    refundOrder(order.id);
-                    refresh();
-                  }}
-                >
-                  {order.paymentStatus === "Refunded" ? "Refunded" : "Issue refund"}
+                <button type="button" className={ghost} onClick={() => setOpen(open === order.id ? "" : order.id)}>
+                  {open === order.id ? "Hide payment" : order.refunds?.length ? "Payment & refunds" : "Payment & refund"}
                 </button>
               </div>
             </div>
+            {open === order.id ? <OrderPaymentPanel order={order} onChange={refresh} /> : null}
           </li>
         ))}
       </ul>

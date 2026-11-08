@@ -5,7 +5,7 @@ import { saveMobileEmailCreds, type MobileEmailCreds } from "@/lib/server/mobile
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PublishBody = MobileFeed & { email?: MobileEmailCreds };
+type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; sections?: Partial<MobileFeed> };
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
@@ -21,6 +21,18 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as PublishBody | null;
+  if (body?.partial && body.sections && typeof body.sections === "object") {
+    const current = readMobileFeed();
+    const { publishedAt: _ignored, ...sections } = body.sections;
+    void _ignored;
+    const feed = saveMobileFeed({
+      ...current,
+      ...sections,
+      site: { ...current.site, ...sections.site },
+      publishedAt: new Date().toISOString(),
+    });
+    return NextResponse.json({ ok: true, publishedAt: feed.publishedAt, sections: Object.keys(sections) }, { headers: corsHeaders });
+  }
   if (!body || typeof body !== "object" || !body.site?.name) {
     return NextResponse.json({ ok: false, error: "Send a full app snapshot from the admin console." }, { status: 400, headers: corsHeaders });
   }

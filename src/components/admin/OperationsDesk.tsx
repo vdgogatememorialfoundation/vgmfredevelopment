@@ -20,7 +20,6 @@ import {
 import {
   getSettings,
   getShipments,
-  refundOrder,
   saveSettings,
   setPaymentStatus,
 } from "@/lib/admin-store";
@@ -29,6 +28,7 @@ import { getOrders } from "@/lib/store";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { certificates as seededCertificates } from "@/data/content";
 import { deleteCertificate, publishCertificate, syncCertificatesWithServer } from "@/lib/certificates-client";
+import OrderPaymentPanel from "@/components/admin/OrderPaymentPanel";
 import type { Order } from "@/types";
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
@@ -57,6 +57,7 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
   useEffect(() => {
     setOrders(getOrders());
   }, [version]);
+  const [open, setOpen] = useState("");
   const shown = filter === "all" ? orders : orders.filter((order) => order.paymentStatus === filter);
   const total = shown.reduce((sum, order) => sum + order.total, 0);
 
@@ -83,11 +84,14 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
       ) : (
         <ul className="space-y-3">
           {shown.map((order) => (
-            <li key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+            <li key={order.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-semibold text-slate-900">Order #{order.id} · {money(order.total)}</p>
                 <p className="text-xs text-slate-500">
-                  {order.deliveryAddress?.fullName ?? "Customer"} · {order.paymentStatus} · {order.status}
+                  {order.deliveryAddress?.fullName ?? "Customer"} · {new Date(order.date).toLocaleDateString("en-IN")} · {order.paymentMethod || "—"} · {order.paymentStatus} · {order.status}
+                  {order.razorpayPaymentId ? ` · ${order.razorpayPaymentId}` : ""}
+                  {order.refundAmount ? ` · refunded ${money(order.refundAmount)}` : ""}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -101,12 +105,12 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
                     Mark failed
                   </button>
                 )}
-                {order.paymentStatus === "Paid" && (
-                  <button type="button" className={ghost} onClick={() => { refundOrder(order.id); refresh(); }}>
-                    Issue refund
-                  </button>
-                )}
+                <button type="button" className={ghost} onClick={() => setOpen(open === order.id ? "" : order.id)}>
+                  {open === order.id ? "Hide details" : "Payment details & refund"}
+                </button>
               </div>
+              </div>
+              {open === order.id ? <OrderPaymentPanel order={order} onChange={refresh} /> : null}
             </li>
           ))}
         </ul>

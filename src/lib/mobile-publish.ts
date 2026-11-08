@@ -150,22 +150,76 @@ export function publishBrand() {
     .catch(() => ({ ok: false as const }));
 }
 
-/** Push logo, slideshow and other public CMS fields so phones and other browsers can load them. */
+const BASELINE_KEY = "vgmf_feed_section_hashes";
+
+function hashText(text: string) {
+  let hash = 5381;
+  for (let index = 0; index < text.length; index += 1) hash = ((hash << 5) + hash + text.charCodeAt(index)) | 0;
+  return `${text.length}:${hash >>> 0}`;
+}
+
+function sectionHashes(snapshot: MobileFeed) {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (key === "publishedAt") continue;
+    out[key] = hashText(JSON.stringify(value ?? null));
+  }
+  return out;
+}
+
+function readBaseline(): Record<string, string> | null {
+  try {
+    const raw = window.localStorage.getItem(BASELINE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remember this browser's content as matching the live feed, so later publishes send only what was edited here. */
+export function recordFeedBaseline(snapshot: MobileFeed = collectMobileSnapshot()) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(BASELINE_KEY, JSON.stringify(sectionHashes(snapshot)));
+  } catch {
+    /* storage full */
+  }
+}
+
+export function hasFeedBaseline() {
+  return typeof window !== "undefined" && readBaseline() !== null;
+}
+
+/**
+ * Push the sections edited in this browser. A browser holding older content (another device, a fresh login)
+ * never overwrites slides, banners or anything else it did not change.
+ */
 export function publishLiveSite() {
   if (typeof window === "undefined") return Promise.resolve({ ok: false as const });
   markLiveDirty(true);
   const snapshot = collectMobileSnapshot();
-  return publishBrand()
-    .then(() =>
-      fetch("/api/mobile/publish", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(snapshot),
-      })
-    )
+  const baseline = readBaseline();
+  const hashes = sectionHashes(snapshot);
+  const sections = Object.fromEntries(
+    Object.entries(snapshot).filter(([key]) => key !== "publishedAt" && (!baseline || baseline[key] !== hashes[key]))
+  ) as Partial<MobileFeed>;
+  // Without a baseline this browser never loaded the live feed, so only its own branding is safe to send.
+  const body = baseline ? sections : { site: snapshot.site };
+  if (!Object.keys(body).length) {
+    markLiveDirty(false);
+    return Promise.resolve({ ok: true as const, publishedAt: appliedFeedAt(), unchanged: true });
+  }
+  return fetch("/api/mobile/publish", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ partial: true, sections: body }),
+  })
     .then(async (response) => {
       const data = (await response.json().catch(() => null)) as { ok?: boolean; publishedAt?: string; error?: string } | null;
-      if (data?.publishedAt) setAppliedFeedAt(data.publishedAt);
+      if (data?.ok && data.publishedAt) {
+        setAppliedFeedAt(data.publishedAt);
+        if (baseline) recordFeedBaseline(snapshot);
+      }
       return data ?? { ok: false as const };
     })
     .catch(() => ({ ok: false as const }))

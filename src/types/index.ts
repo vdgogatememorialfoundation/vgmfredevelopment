@@ -622,6 +622,16 @@ export interface RefundRecord {
   reference?: string;
   note?: string;
   by?: string;
+  gateway?: "razorpay";
+  gatewayRefundId?: string;
+  status?: "pending" | "processed" | "failed";
+  /** Bank reference from the gateway's acquirer data (RRN, ARN or UTR). */
+  rrn?: string;
+  arn?: string;
+  utr?: string;
+  speed?: string;
+  processedAt?: string;
+  checkedAt?: string;
 }
 
 export interface ReturnShipment {

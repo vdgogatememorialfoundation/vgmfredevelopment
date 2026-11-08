@@ -212,7 +212,7 @@ function scansFromHtml(html: string): { events: Scan[]; facts: Record<string, st
 function hit(courierId: string, awb: string, events: Scan[], source: string, status = "", expectedBy = ""): CourierWebHit | null {
   const latest = Date.now() + 6 * 3600_000;
   const sorted = [...events]
-    .filter((event) => event.status && !isCourierInfoLine(event.status) && Date.parse(event.at) <= latest)
+    .filter((event) => event.status && !isCourierInfoLine(event.status) && Date.parse(event.at) <= latest && Date.parse(event.at) > Date.UTC(2015, 0, 1))
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
   if (isCourierInfoLine(status)) status = "";
   if (!sorted.length && !status) return null;
@@ -250,7 +250,26 @@ async function delhivery(awb: string) {
   if (!response.ok) return null;
   const data = parseJson(text) as Json | null;
   if (!data || !Array.isArray(data.data) || !data.data.length) return null;
-  return fromJson("delhivery", awb, data.data, "delhivery.com");
+  const row = data.data[0] as Json;
+  const current = (row.status as Json) ?? {};
+  const scans = ((row.trackingStates as Json[]) ?? []).flatMap((state) =>
+    ((state.scans as Json[]) ?? []).map((scan) => ({ scan, state }))
+  );
+  const place = (scan?: Json) => flatText(scan?.cityLocation) || flatText(scan?.scannedLocation) || undefined;
+  const events: Scan[] = [];
+  for (const { scan, state } of scans) {
+    const at = toIso(flatText(scan.scanDateTime) || flatText(scan.scanDate) || flatText(state.scanDateTime) || flatText(state.date));
+    const text = flatText(scan.scanNslRemark) || flatText(scan.scan) || flatText(state.label);
+    if (at && text) events.push({ at, status: text.slice(0, 200), location: place(scan) });
+  }
+  // Delhivery leaves the latest scan undated; its time is the shipment's statusDateTime.
+  const latestAt = toIso(flatText(current.statusDateTime));
+  const last = scans.at(-1)?.scan;
+  if (latestAt && !events.some((event) => event.at === latestAt)) {
+    const text = flatText(last?.scanNslRemark) || flatText(row.hqStatus) || flatText(current.instructions);
+    if (text) events.push({ at: latestAt, status: text.slice(0, 200), location: place(last) });
+  }
+  return hit("delhivery", awb, events, "delhivery.com", flatText(row.hqStatus), flatText(row.promiseDeliveryDate));
 }
 
 async function ekart(awb: string) {

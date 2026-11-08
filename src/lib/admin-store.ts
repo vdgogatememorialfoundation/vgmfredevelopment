@@ -10,8 +10,7 @@ import type {
   SupportMessage,
   SupportTicket,
   FAQItem,
-  User,
-} from "@/types";
+  User, RefundRecord } from "@/types";
 import { pickupInstructions } from "@/lib/fulfillment";
 import { siteConfig, storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
@@ -778,7 +777,7 @@ export function cancelOrder(orderId: string, reason?: string) {
   sendOrderStatusEmail(next, "Cancelled");
 }
 
-export function refundOrder(orderId: string, amount?: number, note?: string) {
+export function refundOrder(orderId: string, amount?: number, note?: string, extra?: Partial<RefundRecord>) {
   const order = getOrder(orderId);
   if (!order) return;
   const cap = maxRefundable(order);
@@ -789,7 +788,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
       ...order,
       paymentStatus: refundAmount + (order.refundAmount ?? 0) >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor(), ...extra }],
     },
     "Refunded",
     note ?? `₹${refundAmount}`
@@ -805,6 +804,18 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
     template: "refund",
     body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
+}
+
+/** Gateway status update for one refund (status, bank RRN/ARN). Earlier refund entries stay as recorded. */
+export function updateRefund(orderId: string, refundId: string, patch: Partial<RefundRecord>) {
+  const order = getOrder(orderId);
+  const current = order?.refunds?.find((refund) => refund.id === refundId);
+  if (!order || !current) return;
+  const changed = patch.status && patch.status !== current.status;
+  const merged = { ...order, refunds: order.refunds!.map((refund) => (refund.id === refundId ? { ...refund, ...patch } : refund)) };
+  const next = changed ? withHistory(merged, `Refund ${patch.status}`, [`₹${current.amount}`, patch.rrn && `RRN ${patch.rrn}`, patch.arn && `ARN ${patch.arn}`].filter(Boolean).join(" · ")) : merged;
+  updateOrderInStore(next);
+  return next;
 }
 
 /** Sends the store-pickup OTP; only once the seller has processed the order. */

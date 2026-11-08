@@ -1,7 +1,7 @@
 import type { CourierRate, Order } from "@/types";
 import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
-import { getOrder, maxRefundable, patchOrder, recordCourierPayment, recordPayment, refundOrder, sendEmail } from "@/lib/admin-store";
+import { getOrder, maxRefundable, patchOrder, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 
@@ -320,13 +320,48 @@ export async function refundThroughGateway(orderId: string, amount?: number) {
   const value = Math.min(amount ?? cap, cap);
   if (value <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
   if (order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") && paymentMode() !== "demo") {
-    const result = await api<{ refundId: string; status: string }>({ action: "refund", paymentId: order.razorpayPaymentId, amount: value });
+    const result = await api<RefundView>({ action: "refund", paymentId: order.razorpayPaymentId, amount: value });
     if (!result.ok) throw new Error(result.error ?? "Razorpay refused the refund.");
-    refundOrder(order.id, value, `Razorpay refund ${result.refundId} (${result.status})`);
-    return `Refund ${result.refundId} created on Razorpay.`;
+    refundOrder(order.id, value, `Razorpay refund ${result.refundId} (${result.status})`, {
+      gateway: "razorpay",
+      gatewayRefundId: result.refundId,
+      reference: result.refundId,
+      status: refundState(result.status),
+      rrn: result.rrn || undefined,
+      arn: result.arn || undefined,
+      utr: result.utr || undefined,
+      speed: result.speed || undefined,
+      checkedAt: new Date().toISOString(),
+    });
+    return `Refund ${result.refundId} created on Razorpay (${result.status}).`;
   }
   refundOrder(order.id, value, order.razorpayPaymentId ? "Demo refund" : "Refund recorded");
   return order.razorpayPaymentId ? "Demo refund recorded." : "Refund recorded. Pay it back through the original method.";
+}
+
+type RefundView = { refundId: string; status: string; amount: number; rrn: string; arn: string; utr: string; speed: string; createdAt: string };
+
+function refundState(status: string) {
+  return status === "processed" || status === "failed" ? status : "pending";
+}
+
+/** Reads the refund back from Razorpay and stores its status and bank RRN/ARN on the order. */
+export async function refreshRefundStatus(orderId: string, refundId: string) {
+  const refund = getOrder(orderId)?.refunds?.find((item) => item.id === refundId);
+  if (!refund?.gatewayRefundId) throw new Error("This refund was recorded by hand, so there is no gateway status to check.");
+  const result = await api<RefundView>({ action: "refund-status", refundId: refund.gatewayRefundId });
+  if (!result.ok) throw new Error(result.error ?? "Could not read the refund from Razorpay.");
+  const status = refundState(result.status);
+  updateRefund(orderId, refundId, {
+    status,
+    rrn: result.rrn || refund.rrn,
+    arn: result.arn || refund.arn,
+    utr: result.utr || refund.utr,
+    speed: result.speed || refund.speed,
+    processedAt: status === "processed" ? refund.processedAt || new Date().toISOString() : refund.processedAt,
+    checkedAt: new Date().toISOString(),
+  });
+  return `Razorpay refund ${refund.gatewayRefundId}: ${status}${result.rrn ? ` · RRN ${result.rrn}` : ""}${result.arn ? ` · ARN ${result.arn}` : ""}.`;
 }
 
 export async function testRazorpay() {

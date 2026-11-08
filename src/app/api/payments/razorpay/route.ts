@@ -9,6 +9,7 @@ import {
   razorpayOrder,
   razorpayOrderPayments,
   razorpayRefund,
+  razorpayRefundStatus,
   razorpayVerify,
 } from "@/lib/server/providers";
 
@@ -69,6 +70,8 @@ export async function POST(request: NextRequest) {
           configured: true,
           ...(await razorpayRefund(creds, String(body.paymentId), body.amount ? Number(body.amount) : undefined)),
         });
+      case "refund-status":
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayRefundStatus(creds, String(body.refundId))) });
       case "edc-start": {
         const deviceMode = body.deviceMode === "wired" ? "wired" : "wireless";
         const order = await razorpayOrder(creds, Number(body.amount), String(body.receipt ?? ""), deviceMode);

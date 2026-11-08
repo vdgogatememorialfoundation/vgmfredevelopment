@@ -118,7 +118,30 @@ export async function razorpayRefund(creds: { keyId: string; keySecret: string }
     headers: { authorization: razorpayAuth(creds) },
     json: amountRupees ? { amount: Math.round(amountRupees * 100) } : {},
   });
-  return { refundId: String(data.id), status: String(data.status) };
+  return razorpayRefundView(data);
+}
+
+function razorpayRefundView(data: Json) {
+  const acquirer = (data.acquirer_data as Json) ?? {};
+  const text = (value: unknown) => (value === null || value === undefined ? "" : String(value));
+  return {
+    refundId: text(data.id),
+    status: text(data.status),
+    amount: Number(data.amount ?? 0) / 100,
+    rrn: text(acquirer.rrn),
+    arn: text(acquirer.arn),
+    utr: text(acquirer.utr),
+    speed: text(data.speed_processed || data.speed_requested),
+    createdAt: data.created_at ? new Date(Number(data.created_at) * 1000).toISOString() : "",
+  };
+}
+
+/** GET /v1/refunds/:id — status plus the bank's RRN/ARN/UTR once the refund is processed. */
+export async function razorpayRefundStatus(creds: { keyId: string; keySecret: string }, refundId: string) {
+  const data = await call(`https://api.razorpay.com/v1/refunds/${encodeURIComponent(refundId)}`, {
+    headers: { authorization: razorpayAuth(creds) },
+  });
+  return razorpayRefundView(data);
 }
 
 export async function razorpayDeviceActivity(

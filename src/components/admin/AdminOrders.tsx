@@ -46,7 +46,8 @@ import {
   trackShipment,
   type RateQuote,
 } from "@/lib/shipping-client";
-import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway, createCourierPaymentLink, refreshCourierPaymentLink } from "@/lib/payments-client";
+import RefundDetails from "@/components/store/RefundDetails";
+import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -976,6 +977,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               )}
             </div>
           )}
+          <RefundDetails order={order} busyId={busy} onCheck={(refund) => run(refund.id, () => refreshRefundStatus(order.id, refund.id))} />
         </Section>
       </div>
 
