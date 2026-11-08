@@ -105,6 +105,12 @@ class VgmfApi {
     if (data["ok"] != true) throw Exception(data["error"] ?? "Could not create the ticket.");
   }
 
+  Future<Map<String, dynamic>> replyTicket(String id, String body) async {
+    final data = await _parse(await http.post(Uri.parse("$base/api/mobile/tickets"), headers: _headers, body: jsonEncode({"action": "reply", "id": id, "body": body})));
+    if (data["ok"] != true) throw Exception(data["error"] ?? "Could not send the reply.");
+    return Map<String, dynamic>.from(data["ticket"] as Map);
+  }
+
   Future<List<dynamic>> orders() async {
     final data = await _parse(await http.get(Uri.parse("$base/api/mobile/orders"), headers: _headers));
     if (data["ok"] != true) throw Exception(data["error"] ?? "Could not load orders.");

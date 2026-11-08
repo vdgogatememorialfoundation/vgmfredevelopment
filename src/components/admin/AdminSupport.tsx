@@ -32,6 +32,7 @@ import {
   transferChat,
 } from "@/lib/live-chat";
 import type { FAQItem, SupportTicket } from "@/types";
+import { pullTickets } from "@/lib/ticket-sync";
 import {
   Button,
   EmptyState,
@@ -66,6 +67,16 @@ export function SupportSection() {
     setTickets(ticketsVisibleTo(user));
     setFaqs(getFaqs());
   };
+  useEffect(() => {
+    let alive = true;
+    const sync = () => void pullTickets().then(() => alive && setTickets(ticketsVisibleTo(user)));
+    sync();
+    const timer = window.setInterval(sync, 15000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [user]);
 
   return (
     <div className="space-y-5">

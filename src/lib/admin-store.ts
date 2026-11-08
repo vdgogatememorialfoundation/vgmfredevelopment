@@ -28,6 +28,7 @@ import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
 import { emptySocial } from "@/lib/social";
 import { staffReplyTo } from "@/lib/account-mail";
+import { pushTicket } from "@/lib/ticket-sync";
 
 export type OrderStatus = Order["status"];
 
@@ -1686,6 +1687,7 @@ export function addTicket(input: {
   const list = getTickets();
   list.push(ticket);
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
   sendEmail({
     to: ticket.email,
     phone: ticket.phone,
@@ -1721,6 +1723,7 @@ export function assignTicket(id: string, assignedTo: string) {
   ticket.updatedAt = new Date().toISOString();
   if (ticket.status === "Open" && assignedTo) ticket.status = "In Progress";
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
   return ticket;
 }
 
@@ -1732,6 +1735,7 @@ export function respondToTicket(id: string, from: string, text: string) {
   if (ticket.status === "Open") ticket.status = "In Progress";
   ticket.updatedAt = new Date().toISOString();
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
   sendEmail({
     to: ticket.email,
     subject: `Update on your ticket ${ticket.id}`,
@@ -1748,6 +1752,19 @@ export function respondToTicket(id: string, from: string, text: string) {
   });
 }
 
+/** A customer's follow-up on their own ticket; reopens it if it was resolved. */
+export function customerReplyToTicket(id: string, from: string, text: string) {
+  const list = getTickets();
+  const ticket = list.find((t) => t.id === id);
+  if (!ticket || !text.trim()) return;
+  const at = new Date().toISOString();
+  ticket.responses.push({ at, from, text: text.trim() });
+  if (ticket.status === "Resolved" || ticket.status === "Closed") ticket.status = "Open";
+  ticket.updatedAt = at;
+  writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
+}
+
 export function updateTicketStatus(id: string, status: SupportTicket["status"]) {
   const list = getTickets();
   const ticket = list.find((t) => t.id === id);
@@ -1755,6 +1772,7 @@ export function updateTicketStatus(id: string, status: SupportTicket["status"]) 
   ticket.status = status;
   ticket.updatedAt = new Date().toISOString();
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
 }
 
 export function getFaqs(): FAQItem[] {

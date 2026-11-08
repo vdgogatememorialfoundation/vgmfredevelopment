@@ -841,6 +841,7 @@ class MoreTab extends StatelessWidget {
                   ),
             ]))),
       link("My orders & tracking", Icons.local_shipping_outlined, () => push(context, const Scaffold(body: SafeArea(child: OrdersTab())))),
+      link("Support tickets", Icons.support_agent, () => push(context, s.api.session == null ? const SignInPage() : const TicketsPage())),
       if (s.on("clinics")) link("Clinics", Icons.local_hospital_outlined, () => push(context, ListPage("Clinics", [for (final c in s.list("clinics").where((c) => c["hidden"] != true)) Tile(kicker: str(c["city"]), title: str(c["name"]), subtitle: [str(c["doctor"]), str(c["address"]), str(c["timings"]), str(c["phone"])].where((x) => x.isNotEmpty).join("\n"))]))),
       if (s.on("notices")) link("Notice board", Icons.campaign_outlined, () => push(context, ListPage("Notice board", [for (final n in s.list("notices")) Tile(kicker: day(n["date"]), title: str(n["title"]), subtitle: str(n["description"]))]))),
       if (s.on("videos")) link("Videos", Icons.play_circle_outline, () => push(context, ListPage("Videos", [for (final v in s.list("videos")) Tile(title: str(v["title"]), subtitle: str(v["description"]), onTap: () => openExternal(str(v["youtubeUrl"], str(v["src"]))))]))),
@@ -854,5 +855,182 @@ class MoreTab extends StatelessWidget {
         }),
       Padding(padding: const EdgeInsets.only(top: 16), child: Text("${str(s.map("site")["address"])}\n${str(s.map("site")["email"])} · ${str(s.map("site")["phone"])}", textAlign: TextAlign.center, style: const TextStyle(color: VgmfColors.muted))),
     ]);
+  }
+}
+
+String errText(Object e) => "$e".replaceFirst("Exception: ", "");
+
+class TicketsPage extends StatefulWidget {
+  const TicketsPage({super.key});
+  @override
+  State<TicketsPage> createState() => _TicketsPageState();
+}
+
+class _TicketsPageState extends State<TicketsPage> {
+  List<Map<String, dynamic>> tickets = [];
+  var loading = true;
+  var error = "";
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  Future<void> load() async {
+    try {
+      final list = await Store.i.api.tickets();
+      if (!mounted) return;
+      setState(() {
+        tickets = list.whereType<Map>().map((t) => Map<String, dynamic>.from(t)).toList();
+        loading = false;
+        error = "";
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          error = errText(e);
+        });
+      }
+    }
+  }
+
+  Future<void> create() async {
+    final subject = TextEditingController(), body = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("New support ticket"),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: subject, decoration: const InputDecoration(labelText: "Subject")),
+          TextField(controller: body, minLines: 3, maxLines: 6, decoration: const InputDecoration(labelText: "How can we help?")),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text("Submit")),
+        ],
+      ),
+    );
+    final session = Store.i.api.session;
+    if (ok != true || session == null || subject.text.trim().isEmpty || body.text.trim().isEmpty) return;
+    try {
+      await Store.i.api.createTicket(name: session.name.isEmpty ? session.email : session.name, email: session.email, subject: subject.text.trim(), body: body.text.trim());
+      await load();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errText(e))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(backgroundColor: Colors.white, foregroundColor: VgmfColors.ink, title: const Text("Support tickets")),
+        floatingActionButton: FloatingActionButton.extended(onPressed: create, icon: const Icon(Icons.add), label: const Text("New ticket")),
+        body: RefreshIndicator(
+          onRefresh: load,
+          child: ListView(padding: const EdgeInsets.all(16), children: [
+            if (loading) const Center(child: CircularProgressIndicator()),
+            if (error.isNotEmpty) Text(error, style: const TextStyle(color: VgmfColors.burgundy)),
+            if (!loading && tickets.isEmpty && error.isEmpty) const Text("No tickets yet. Tap New ticket to ask the Foundation team.", style: TextStyle(color: VgmfColors.muted)),
+            for (final t in tickets)
+              Tile(
+                kicker: "${str(t["status"])} · ${day(t["updatedAt"] ?? t["createdAt"])}",
+                title: "#${str(t["id"])} — ${str(t["subject"])}",
+                subtitle: "${((t["responses"] as List?) ?? []).length} replies · tap to open",
+                onTap: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (_) => TicketThreadPage(t)));
+                  load();
+                },
+              ),
+          ]),
+        ),
+      );
+}
+
+class TicketThreadPage extends StatefulWidget {
+  const TicketThreadPage(this.ticket, {super.key});
+  final Map<String, dynamic> ticket;
+  @override
+  State<TicketThreadPage> createState() => _TicketThreadPageState();
+}
+
+class _TicketThreadPageState extends State<TicketThreadPage> {
+  late Map<String, dynamic> t = widget.ticket;
+  final reply = TextEditingController();
+  var sending = false;
+
+  Future<void> reload() async {
+    final list = await Store.i.api.tickets();
+    final fresh = list.whereType<Map>().where((x) => str(x["id"]) == str(t["id"])).toList();
+    if (fresh.isNotEmpty && mounted) setState(() => t = Map<String, dynamic>.from(fresh.first));
+  }
+
+  Future<void> send() async {
+    final text = reply.text.trim();
+    if (text.isEmpty) return;
+    setState(() => sending = true);
+    try {
+      final next = await Store.i.api.replyTicket(str(t["id"]), text);
+      if (!mounted) return;
+      reply.clear();
+      setState(() => t = next);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errText(e))));
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Widget bubble(String from, dynamic at, String text, bool mine) => Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.all(12),
+          constraints: const BoxConstraints(maxWidth: 320),
+          decoration: BoxDecoration(
+            color: mine ? const Color(0xFFEAF1FB) : const Color(0xFFFFF8EC),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE6DCC8)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text("$from · ${day(at)}", style: const TextStyle(fontSize: 11, color: VgmfColors.muted)),
+            const SizedBox(height: 4),
+            Text(text),
+          ]),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final name = str(t["name"]);
+    final responses = ((t["responses"] as List?) ?? []).whereType<Map>().toList();
+    return Scaffold(
+      appBar: AppBar(backgroundColor: Colors.white, foregroundColor: VgmfColors.ink, title: Text("Ticket #${str(t["id"])}")),
+      body: Column(children: [
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: reload,
+            child: ListView(padding: const EdgeInsets.all(16), children: [
+              Text(str(t["subject"]), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text("Status: ${str(t["status"])}", style: const TextStyle(color: VgmfColors.muted)),
+              const SizedBox(height: 10),
+              bubble("You", t["createdAt"], str(t["body"]), true),
+              for (final r in responses) bubble(str(r["from"]) == name ? "You" : str(r["from"]), r["at"], str(r["text"]), str(r["from"]) == name),
+            ]),
+          ),
+        ),
+        SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+            child: Row(children: [
+              Expanded(child: TextField(controller: reply, minLines: 1, maxLines: 4, decoration: const InputDecoration(hintText: "Write a reply", border: OutlineInputBorder(), filled: true, fillColor: Colors.white))),
+              const SizedBox(width: 8),
+              IconButton.filled(onPressed: sending ? null : send, icon: const Icon(Icons.send), tooltip: "Send"),
+            ]),
+          ),
+        ),
+      ]),
+    );
   }
 }
