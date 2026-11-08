@@ -243,6 +243,11 @@ async function amazon(awb: string) {
   return fromJson("amazon-shipping", awb, data, "track.amazon.in");
 }
 
+/** Delhivery's tracking API prints UTC times without a zone. */
+function utcIso(text: string) {
+  return toIso(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(text) ? `${text}Z` : text);
+}
+
 async function delhivery(awb: string) {
   const { response, text } = await fetchText(`https://dlv-api.delhivery.com/v3/unified-tracking?wbn=${encodeURIComponent(awb)}`, {
     headers: { accept: "application/json", origin: "https://www.delhivery.com", referer: "https://www.delhivery.com/" },
@@ -258,12 +263,12 @@ async function delhivery(awb: string) {
   const place = (scan?: Json) => flatText(scan?.cityLocation) || flatText(scan?.scannedLocation) || undefined;
   const events: Scan[] = [];
   for (const { scan, state } of scans) {
-    const at = toIso(flatText(scan.scanDateTime) || flatText(scan.scanDate) || flatText(state.scanDateTime) || flatText(state.date));
+    const at = utcIso(flatText(scan.scanDateTime) || flatText(scan.scanDate) || flatText(state.scanDateTime) || flatText(state.date));
     const text = flatText(scan.scanNslRemark) || flatText(scan.scan) || flatText(state.label);
     if (at && text) events.push({ at, status: text.slice(0, 200), location: place(scan) });
   }
   // Delhivery leaves the latest scan undated; its time is the shipment's statusDateTime.
-  const latestAt = toIso(flatText(current.statusDateTime));
+  const latestAt = utcIso(flatText(current.statusDateTime));
   const last = scans.at(-1)?.scan;
   if (latestAt && !events.some((event) => event.at === latestAt)) {
     const text = flatText(last?.scanNslRemark) || flatText(row.hqStatus) || flatText(current.instructions);
