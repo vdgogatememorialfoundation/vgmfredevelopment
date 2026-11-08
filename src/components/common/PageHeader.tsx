@@ -27,10 +27,18 @@ export default function PageHeader({
   const eyebrow = copy.eyebrow?.trim() || baseEyebrow;
   const title = copy.title?.trim() || baseTitle;
   const description = showDescription ? copy.description?.trim() || baseDescription : "";
+  const parts = pathname.split("/").filter(Boolean);
+  const crumbs =
+    breadcrumb && breadcrumb.length > 0
+      ? breadcrumb
+      : parts.map((part, index) => ({
+          name: index === parts.length - 1 ? title : decodeURIComponent(part).replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase()),
+          href: `/${parts.slice(0, index + 1).join("/")}`,
+        }));
   return (
     <section className="border-b border-border bg-paper">
       <div className="container py-7 sm:py-8">
-        {breadcrumb && breadcrumb.length > 0 && (
+        {crumbs.length > 0 && (
           <nav aria-label="Breadcrumb" className="mb-3">
             <ol className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
               <li>
@@ -41,10 +49,10 @@ export default function PageHeader({
                   {t("common.home")}
                 </Link>
               </li>
-              {breadcrumb.map((item, index) => (
+              {crumbs.map((item, index) => (
                 <li key={item.href} className="flex items-center gap-2">
                   <span aria-hidden="true">/</span>
-                  {index === breadcrumb.length - 1 ? (
+                  {index === crumbs.length - 1 ? (
                     <span className="font-medium text-text-primary">
                       {item.name}
                     </span>
