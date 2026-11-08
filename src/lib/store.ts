@@ -15,7 +15,7 @@ export { pickupOtp, pickupOtpReady } from "@/lib/order-pipeline";
 import { storeConfig } from "@/lib/constants";
 import { publishCartChange } from "@/lib/cart-store";
 import { formatDate } from "@/lib/utils";
-import { getLiveBook, isPurchasable, canPreorder } from "@/lib/product-data";
+import { getLiveBook, isPurchasable, canPreorder, restockProduct } from "@/lib/product-data";
 import { pushInbox } from "@/lib/inbox";
 import { queueNotification } from "@/lib/notify";
 import { checkPincode } from "@/lib/fulfillment";
@@ -466,6 +466,12 @@ export function advanceReturnRequest(orderId: string, status: ReturnRequest["sta
     stage.id === stageId ? { ...stage, at: now, reached: true, detail: detail || stage.detail } : stage
   );
   const next: ReturnRequest = { ...current, status, stages };
+  // Returned (or wrongly delivered) units go back on the shelf once, when the return is closed.
+  if ((status === "Refunded" || status === "Replacement Created") && !current.restockedAt) {
+    const original = getOrders().find((order) => order.id === orderId);
+    for (const item of original?.items ?? []) restockProduct(item.bookId, item.quantity);
+    next.restockedAt = now;
+  }
   persistReturnRequest(orderId, next);
   const source = getOrders().find((order) => order.id === orderId);
   const title = stages.find((stage) => stage.id === stageId)?.title ?? status;

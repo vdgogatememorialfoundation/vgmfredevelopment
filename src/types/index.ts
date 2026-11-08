@@ -712,6 +712,8 @@ export interface ReturnRequest {
   decidedAt?: string;
   decidedBy?: string;
   decisionNote?: string;
+  /** Set once the returned units are put back into stock. */
+  restockedAt?: string;
   stages: ShipmentEvent[];
 }
 
