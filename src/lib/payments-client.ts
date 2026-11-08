@@ -1,7 +1,7 @@
 import type { CourierRate, Order } from "@/types";
 import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
-import { getOrder, maxRefundable, patchOrder, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
+import { getOrder, maxRefundable, patchOrder, recordBalancePayment, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 
@@ -281,6 +281,61 @@ export async function createCourierPaymentLink(orderId: string, rate: CourierRat
     body: `Dear ${address.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nAs requested, we can send order ${order.id} by courier (${rate.courierName}) instead of store pickup. Please pay only the courier charge of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nThe courier is booked once the payment is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
+}
+
+/** Sends the pre-order customer a link for the remaining balance. */
+export async function createBalancePaymentLink(orderId: string) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan) throw new Error("This order has no pre-order balance.");
+  if (plan.balancePaidAt) throw new Error("The balance is already paid.");
+  const address = order.deliveryAddress;
+  const amount = Math.round(plan.balance * 100) / 100;
+  const settings = getIntegrations();
+  let link: NonNullable<NonNullable<Order["preorderPayment"]>["link"]>;
+  if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
+    link = { url: `${window.location.origin}/pay/${order.id}?part=balance&d=${encodeSummary(order, amount, ["Pre-order balance"])}`, provider: "demo", createdAt: new Date().toISOString() };
+  } else {
+    const result = await api<{ id: string; url: string }>({
+      action: "link",
+      amount,
+      orderId: `${order.id}-B`,
+      name: address?.fullName || "Customer",
+      email: address?.email,
+      phone: address?.phone,
+      description: `Balance for VGMF pre-order ${order.id}`,
+      callbackUrl: `${window.location.origin}/pay/${order.id}?part=balance&done=1`,
+      expiryHours: settings.razorpay.linkExpiryHours,
+    });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
+  }
+  patchOrder(order.id, { preorderPayment: { ...plan, link } }, `Balance payment link created · ₹${amount}`);
+  sendEmail({
+    to: address?.email ?? "",
+    phone: address?.phone,
+    name: address?.fullName,
+    params: [address?.fullName || "Customer", order.id, `₹${amount}`, link.url],
+    subject: `Your VGMF pre-order ${order.id} is ready — balance due`,
+    template: "payment-link",
+    body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour pre-order ${order.id} is ready. Please pay the remaining balance of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nWe dispatch the order once the balance is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  return link;
+}
+
+export async function refreshBalancePaymentLink(orderId: string) {
+  const order = getOrder(orderId);
+  const link = order?.preorderPayment?.link;
+  if (!order || !link) throw new Error("This order has no balance payment link.");
+  if (order.preorderPayment?.balancePaidAt) return "Balance already paid.";
+  if (link.provider !== "razorpay" || !link.id) return "Demo links are marked paid when the customer pays, or record the balance manually.";
+  const result = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: link.id });
+  if (!result.ok) throw new Error(result.error ?? "Could not read the link status.");
+  if (result.status === "paid") {
+    recordBalancePayment(order.id, { method: "Razorpay payment link", reference: result.paymentId });
+    return "Balance paid. The order is fully paid.";
+  }
+  return `Razorpay link status: ${result.status}.`;
 }
 
 export async function refreshCourierPaymentLink(orderId: string) {

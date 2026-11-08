@@ -24,6 +24,39 @@ function Fact({ label, value }: { label: string; value?: string }) {
   );
 }
 
+/** Initiated → With the bank → Credited, like order tracking; a step fills only when the gateway reports it. */
+function RefundSteps({ refund }: { refund: RefundRecord }) {
+  if (refund.destination === "store_credit" || !refund.gatewayRefundId) return null;
+  const failed = refund.status === "failed";
+  const done = refund.status === "processed";
+  const steps = [
+    { label: "Refund initiated", at: stamp(refund.at), reached: true },
+    { label: "With the bank", at: refund.rrn || refund.arn || refund.utr ? `Ref ${refund.rrn || refund.arn || refund.utr}` : "", reached: true },
+    { label: failed ? "Refund failed" : "Credited to your account", at: stamp(refund.processedAt), reached: done || failed },
+  ];
+  const current = done || failed ? 2 : 1;
+  return (
+    <ol className="mt-3 flex items-start">
+      {steps.map((step, index) => (
+        <li key={step.label} className="relative flex flex-1 flex-col items-center text-center">
+          {index > 0 ? (
+            <span className="absolute right-1/2 top-[5px] h-0.5 w-full overflow-hidden rounded-full bg-slate-200">
+              <span className={`absolute inset-y-0 left-0 ${failed && index === 2 ? "bg-red-500" : "bg-emerald-600"} transition-[width] duration-700`} style={{ width: index <= current ? "100%" : "0%" }} />
+            </span>
+          ) : null}
+          <span
+            className={`relative z-10 h-3 w-3 rounded-full ${step.reached ? (failed && index === 2 ? "bg-red-500" : "bg-emerald-600") : "bg-slate-200"} ${
+              index === current && !done && !failed ? "vgmf-dot-pulse" : ""
+            }`}
+          />
+          <span className="mt-1.5 text-[11px] font-semibold text-slate-800">{step.label}</span>
+          {step.at ? <span className="break-all text-[10px] text-slate-500">{step.at}</span> : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** Refund status and the bank references the gateway returned (RRN/ARN/UTR), for customers and the desk. */
 export default function RefundDetails({
   order,
@@ -50,6 +83,7 @@ export default function RefundDetails({
               <p className="text-sm font-bold text-slate-900">₹{refund.amount.toLocaleString("en-IN")}</p>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone(refund)}`}>{refundStateLabel(refund)}</span>
             </div>
+            <RefundSteps refund={refund} />
             <dl className="mt-2 grid gap-2 sm:grid-cols-3">
               <Fact label="Initiated" value={stamp(refund.at)} />
               <Fact label="Processed" value={stamp(refund.processedAt)} />

@@ -3,15 +3,26 @@
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
-import { getOrder, recordCourierPayment, recordPayment } from "@/lib/admin-store";
+import { getOrder, recordBalancePayment, recordCourierPayment, recordPayment } from "@/lib/admin-store";
 import { subscribeCms } from "@/lib/cms";
 import { decodeSummary, payWithRazorpay, paymentNotice, waitForRazorpay } from "@/lib/payments-client";
 import { formatPrice } from "@/lib/store";
 
 type Summary = { id: string; amount: number; name: string; email: string; phone: string; items: string[]; paid: boolean };
 
-function readSummary(orderId: string, encoded: string | null, courier: boolean): Summary | null {
+function readSummary(orderId: string, encoded: string | null, courier: boolean, balance = false): Summary | null {
   const order = getOrder(orderId);
+  if (order && balance && order.preorderPayment) {
+    return {
+      id: order.id,
+      amount: order.preorderPayment.balance,
+      name: order.deliveryAddress?.fullName ?? "",
+      email: order.deliveryAddress?.email ?? "",
+      phone: order.deliveryAddress?.phone ?? "",
+      items: ["Pre-order balance", ...order.items.map((item) => `${item.quantity} × ${item.title}`)],
+      paid: Boolean(order.preorderPayment.balancePaidAt),
+    };
+  }
   if (order && courier && order.courierUpgrade) {
     return {
       id: order.id,
@@ -23,7 +34,7 @@ function readSummary(orderId: string, encoded: string | null, courier: boolean):
       paid: Boolean(order.courierUpgrade.paidAt),
     };
   }
-  if (order && !courier) {
+  if (order && !courier && !balance) {
     return {
       id: order.id,
       amount: order.total,
@@ -43,9 +54,11 @@ export default function PayClient({ orderId }: { orderId: string }) {
   const params = useSearchParams();
   const encoded = params.get("d");
   const courier = params.get("part") === "courier";
+  const balance = params.get("part") === "balance";
   const settle = (input: { method: string; reference?: string; razorpayPaymentId?: string }) => {
     if (!getOrder(orderId)) return;
-    if (courier) recordCourierPayment(orderId, input);
+    if (balance) recordBalancePayment(orderId, input);
+    else if (courier) recordCourierPayment(orderId, input);
     else recordPayment(orderId, input);
   };
   const returned = params.get("done") === "1" || params.get("razorpay_payment_link_status") === "paid";
@@ -56,7 +69,7 @@ export default function PayClient({ orderId }: { orderId: string }) {
 
   if (!ready) return <main className="container py-20 text-center text-text-muted">Loading payment…</main>;
 
-  const summary = readSummary(orderId, encoded, courier);
+  const summary = readSummary(orderId, encoded, courier, balance);
 
   if (returned || result || summary?.paid) {
     return (

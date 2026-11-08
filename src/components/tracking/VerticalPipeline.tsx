@@ -92,6 +92,7 @@ export default function VerticalPipeline({
   const frameRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   const phase = useRef<"start" | "to-step" | "at-step">("start");
+  const shownIdx = useRef(-1);
   const readRef = useRef<(() => { left: number; top: number; reached: number; height: number } | null) | null>(null);
   const [line, setLine] = useState({ left: 14.5, top: 34, height: 0, transition: "none" });
   const [now, setNow] = useState(() => Date.now());
@@ -102,15 +103,16 @@ export default function VerticalPipeline({
   const terminal = new Set(["delivered", "picked", "failed", "cancelled", "refunded"]);
   const current = stages[nodeCurrentIdx];
   // Time may carry the line into the open gap. It stays short of the next step until that step is reached.
+  // Past the current step the line always shows a short lead, then grows with the courier's expected timing.
   const creep =
-    !pace ||
     !current ||
     terminal.has(current.id) ||
     nodeCurrentIdx >= stages.length - 1 ||
-    stages[nodeCurrentIdx + 1]?.reached ||
-    pace.until <= pace.from
+    stages[nodeCurrentIdx + 1]?.reached
       ? 0
-      : Math.max(0, Math.min(0.8, (now - pace.from) / (pace.until - pace.from)));
+      : !pace || pace.until <= pace.from
+        ? 0.15
+        : Math.max(0.15, Math.min(0.8, (now - pace.from) / (pace.until - pace.from)));
   const creepRef = useRef(creep);
   creepRef.current = creep;
 
@@ -122,6 +124,11 @@ export default function VerticalPipeline({
     const list = listRef.current;
     const frame = frameRef.current;
     if (!list || !frame || nodeCurrentIdx < 0) return;
+    // A new status replays the line from the first step instead of jumping from where it was.
+    if (shownIdx.current !== nodeCurrentIdx) {
+      shownIdx.current = nodeCurrentIdx;
+      phase.current = "start";
+    }
     let cancelled = false;
     let growTimer = 0;
     let creepTimer = 0;

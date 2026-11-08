@@ -263,6 +263,23 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   return (
     <div className="vgmf-trk">
       {tiles}
+      {order.preorderPayment ? (
+        <p className="vgmf-trk-note">
+          Pre-order · advance ₹{order.preorderPayment.advance.toLocaleString("en-IN")} {order.preorderPayment.advancePaidAt ? "paid" : "pending"} · balance ₹
+          {order.preorderPayment.balance.toLocaleString("en-IN")}{" "}
+          {order.preorderPayment.balancePaidAt
+            ? "paid"
+            : order.preorderPayment.link
+              ? (
+                  <a href={order.preorderPayment.link.url} className="font-semibold text-burgundy underline">
+                    pay now
+                  </a>
+                )
+              : order.preorderPayment.balanceWhen === "on_ready"
+                ? "due when the item is ready — we will send a payment link"
+                : "due before dispatch — we will send a payment link"}
+        </p>
+      ) : null}
       <RefundDetails order={order} />
       {returnActive && returnRequest && returnPipeline ? (
         <div>

@@ -194,11 +194,21 @@ export interface OrderSettings {
   statusLabels: Record<string, string>;
   /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
   customStatuses: { id: string; label: string; stage: string }[];
+  /** Pre-orders: pay in full, or an advance at order time and the balance later. */
+  preorderPayment: {
+    mode: "full" | "advance";
+    advanceType: "percent" | "amount";
+    advanceValue: number;
+    balanceWhen: "on_ready" | "before_dispatch";
+  };
   returns: {
     enabled: boolean;
     windowDays: number;
     pickupCharge: number;
     replacementAllowed: boolean;
+    /** Store-pickup orders may be returned / replaced only when these are on. */
+    pickupReturns: boolean;
+    pickupReplacement: boolean;
     reasons: string[];
   };
   refunds: {
@@ -349,11 +359,14 @@ export const defaultOrderSettings: OrderSettings = {
   dispatchCutoff: "17:00",
   statusLabels: {},
   customStatuses: [],
+  preorderPayment: { mode: "full", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
   returns: {
     enabled: false,
     windowDays: 7,
     pickupCharge: 0,
     replacementAllowed: true,
+    pickupReturns: false,
+    pickupReplacement: false,
     reasons: ["Damaged or defective item"],
   },
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
@@ -534,11 +547,19 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
           .filter((row) => row && typeof row === "object")
           .map((row, index) => ({ id: String(row.id || index + 1), label: String(row.label ?? ""), stage: String(row.stage || "shipped") }))
       : [],
+    preorderPayment: {
+      mode: merged.preorderPayment?.mode === "advance" ? "advance" : "full",
+      advanceType: merged.preorderPayment?.advanceType === "amount" ? "amount" : "percent",
+      advanceValue: Math.max(0, finiteNumber(merged.preorderPayment?.advanceValue, defaultOrderSettings.preorderPayment.advanceValue)),
+      balanceWhen: merged.preorderPayment?.balanceWhen === "on_ready" ? "on_ready" : "before_dispatch",
+    },
     returns: {
       enabled: false,
       windowDays: Math.max(0, finiteNumber(merged.returns?.windowDays, defaultOrderSettings.returns.windowDays)),
       pickupCharge: Math.max(0, finiteNumber(merged.returns?.pickupCharge, defaultOrderSettings.returns.pickupCharge)),
       replacementAllowed: true,
+      pickupReturns: Boolean(merged.returns?.pickupReturns),
+      pickupReplacement: Boolean(merged.returns?.pickupReplacement),
       reasons: Array.isArray(merged.returns?.reasons)
         ? merged.returns.reasons.map((item) => String(item ?? "").trim()).filter(Boolean)
         : defaultOrderSettings.returns.reasons,
@@ -636,6 +657,11 @@ export function shippingFeeFor(
   }
 }
 
+/** True only when the admin's shipping rule makes this order's shipping free. */
+export function shippingIsFree(subtotal: number, settings = getOrderSettings()) {
+  return settings.shippingFeeMode === "free" || (settings.shippingFeeMode === "free_above" && subtotal >= settings.freeAbove);
+}
+
 export function shippingFeeSummary(settings = getOrderSettings()) {
   switch (settings.shippingFeeMode) {
     case "free":
@@ -661,8 +687,17 @@ export function canCustomerReturn(_order?: Order, _settings = getOrderSettings()
 
 export function canCustomerRequestReplacement(order: Order, settings = getOrderSettings()) {
   if (!settings.returns.replacementAllowed || order.status !== "Delivered" || order.returnRequest) return false;
+  if (order.deliveryMode === "store_pickup" && !settings.returns.pickupReplacement) return false;
   const deliveredAt = order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
   return (Date.now() - Date.parse(deliveredAt)) / 864e5 <= (order.returnableDays || settings.returns.windowDays);
+}
+
+/** What a pre-order customer pays when ordering: the full total, or the advance set in Order settings. */
+export function preorderAdvance(total: number, settings = getOrderSettings()) {
+  const rule = settings.preorderPayment;
+  if (rule.mode !== "advance" || total <= 0) return total;
+  const raw = rule.advanceType === "amount" ? rule.advanceValue : (total * rule.advanceValue) / 100;
+  return Math.min(total, Math.max(1, Math.round(raw)));
 }
 
 export function customerOrderPolicyCopy() {

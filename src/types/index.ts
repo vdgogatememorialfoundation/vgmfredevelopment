@@ -554,7 +554,7 @@ export interface Order {
   platformFee?: number;
   total: number;
   currency: string;
-  paymentStatus: "Pending" | "Paid" | "Failed" | "Refunded" | "Partially Refunded";
+  paymentStatus: "Pending" | "Paid" | "Partially Paid" | "Failed" | "Refunded" | "Partially Refunded";
   status:
     | "Pending"
     | "Paid"
@@ -604,6 +604,16 @@ export interface Order {
     link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
     paidAt?: string;
     paymentRef?: string;
+  };
+  /** Pre-order paid as an advance now and the balance later. */
+  preorderPayment?: {
+    advance: number;
+    balance: number;
+    balanceWhen: "on_ready" | "before_dispatch";
+    advancePaidAt?: string;
+    balancePaidAt?: string;
+    balanceRef?: string;
+    link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
   };
   weightKg?: number;
   createdBy?: string;

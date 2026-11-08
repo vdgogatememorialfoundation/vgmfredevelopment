@@ -21,6 +21,7 @@ import {
   refundToStoreCredit,
   resaveOrder,
   setOrderStatus,
+  recordBalancePayment,
   recordCourierPayment,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
@@ -47,7 +48,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink } from "@/lib/payments-client";
+import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -1028,6 +1029,41 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </div>
       )}
 
+      {order.preorderPayment && order.status !== "Cancelled" && (
+        <div className="mt-4">
+          <Section title="Pre-order balance">
+            <p className="text-sm text-text-muted">
+              Advance {rupees(order.preorderPayment.advance)} {order.preorderPayment.advancePaidAt ? "paid" : "pending"} · balance {rupees(order.preorderPayment.balance)}{" "}
+              {order.preorderPayment.balancePaidAt
+                ? `paid ${formatDateTime(order.preorderPayment.balancePaidAt)}${order.preorderPayment.balanceRef ? ` · ${order.preorderPayment.balanceRef}` : ""}`
+                : `due ${order.preorderPayment.balanceWhen === "on_ready" ? "when the item is ready" : "before dispatch"}`}
+            </p>
+            {!order.preorderPayment.balancePaidAt && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button disabled={busy === "balance-link"} onClick={() => run("balance-link", async () => {
+                  const link = await createBalancePaymentLink(order.id);
+                  return `Balance payment link sent: ${link.url}`;
+                })}>
+                  {busy === "balance-link" ? "Creating…" : `Send link to pay ${rupees(order.preorderPayment.balance)}`}
+                </Button>
+                {order.preorderPayment.link && (
+                  <>
+                    <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(order.preorderPayment!.link!.url); setMessage("Link copied."); }}>Copy link</Button>
+                    <Button variant="ghost" onClick={() => run("balance-check", () => refreshBalancePaymentLink(order.id))}>Check status</Button>
+                  </>
+                )}
+                <Button variant="outline" onClick={() => run("balance-paid", () => {
+                  recordBalancePayment(order.id, { method, reference: reference || undefined });
+                  return "Balance recorded. The order is fully paid.";
+                })}>
+                  Record balance paid ({method})
+                </Button>
+              </div>
+            )}
+          </Section>
+        </div>
+      )}
+
       {order.deliveryMode === "delivery" && order.status !== "Cancelled" && (
         <div className="mt-4">
           <Section
@@ -1339,6 +1375,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {getOrderSettings().returns.reasons.map((reason) => <option key={reason}>{reason}</option>)}
                 </SelectInput>
                 <div className="flex flex-wrap gap-2">
+                  {(order.deliveryMode !== "store_pickup" || getOrderSettings().returns.pickupReturns) && (
                   <Button variant="outline" onClick={() => run("rt", async () => {
                     initiateReturn(order, { kind: "return", reason: returnReason });
                     const created = await createReturnShipment(order.id);
@@ -1354,7 +1391,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     }, "Return opened");
                     return created.note ?? "Return opened and reverse pickup requested.";
                   })}>Create return (reverse pickup)</Button>
-                  {(getOrderSettings().returns.replacementAllowed || getOrderSettings().adminActions.processAfterDelivery) && (
+                  )}
+                  {(getOrderSettings().returns.replacementAllowed || getOrderSettings().adminActions.processAfterDelivery) &&
+                    (order.deliveryMode !== "store_pickup" || getOrderSettings().returns.pickupReplacement) && (
                     <Button variant="outline" onClick={() => run("rt", () => {
                       const replacement = createReplacement(order.id);
                       return replacement ? `Replacement order ${replacement.id} created separately.` : "Could not create replacement.";

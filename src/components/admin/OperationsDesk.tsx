@@ -44,6 +44,7 @@ type PaymentFilter = "all" | Order["paymentStatus"];
 const paymentTitles: Record<PaymentFilter, string> = {
   all: "Transactions",
   Paid: "Successful payments",
+  "Partially Paid": "Advance paid (balance due)",
   Failed: "Failed payments",
   Pending: "Pending payments",
   Refunded: "Refunded payments",

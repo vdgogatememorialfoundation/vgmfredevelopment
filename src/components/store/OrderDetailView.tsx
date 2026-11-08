@@ -10,7 +10,7 @@ import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store
 import { useOrderSettings } from "@/lib/use-cms";
 import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
-import { orderStatusText } from "@/lib/integrations";
+import { orderStatusText, shippingIsFree } from "@/lib/integrations";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import { agreedDelivery, customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
@@ -118,9 +118,11 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
               <div className="flex justify-between">
                 <dt className="text-text-muted">Shipping</dt>
                 <dd className="font-medium text-text-primary">
-                  {order.shipping === 0
-                    ? "FREE"
-                    : formatPrice(order.shipping)}
+                  {order.deliveryMode === "store_pickup"
+                    ? "Store pickup · no charge"
+                    : order.shipping > 0 || !shippingIsFree(order.subtotal)
+                      ? formatPrice(order.shipping)
+                      : "FREE"}
                 </dd>
               </div>
               <div className="flex justify-between border-t border-border pt-2 text-sm">

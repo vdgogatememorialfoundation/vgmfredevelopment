@@ -244,12 +244,12 @@ export function ensureProductBarcodes() {
 }
 
 /** SKU like VGMF-CLI-0007: category prefix and the next free running number. */
-export function generateSku(category: string, ignoreId?: string) {
-  const prefix = (category.replace(/[^a-z]/gi, "").slice(0, 3) || "GEN").toUpperCase();
-  const used = new Set(getAllProducts().filter((book) => book.id !== ignoreId).map((book) => book.sku?.toUpperCase()));
-  let n = getAllProducts().length + 1;
+/** Unique 10-digit numeric SKU. */
+export function generateSku(_category?: string, ignoreId?: string) {
+  void _category;
+  const used = new Set(getAllProducts().filter((book) => book.id !== ignoreId).flatMap((book) => [book.sku, book.productCode]));
   let sku = "";
-  do sku = `VGMF-${prefix}-${String(n++).padStart(4, "0")}`;
+  do sku = String(Math.floor(1000000000 + Math.random() * 9000000000));
   while (used.has(sku));
   return sku;
 }

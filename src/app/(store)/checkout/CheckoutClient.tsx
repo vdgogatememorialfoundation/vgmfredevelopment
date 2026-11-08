@@ -23,7 +23,7 @@ import {
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
 import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
-import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
+import { preorderAdvance, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
 import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
@@ -355,6 +355,9 @@ export default function CheckoutClient() {
     return "";
   };
 
+  const preorderBalanceLater = orderItems.some((item) => item.preorder) && orderSettings.preorderPayment.mode === "advance" && payMethod === "online";
+  const payNow = preorderBalanceLater ? preorderAdvance(totals.total, orderSettings) : totals.total;
+
   const placeOrder = async () => {
     const over = rows.find(({ item, book }) => item.quantity > quantityCap(book.id) || (book.stock <= 0 && !book.preorder?.enabled));
     if (over) {
@@ -376,7 +379,7 @@ export default function CheckoutClient() {
     } else {
       try {
         const outcome = await payWithRazorpay({
-          amount: totals.total,
+          amount: payNow,
           receipt: id,
           name: address.fullName || (user ? `${user.firstName} ${user.lastName}` : "Customer"),
           email: address.email || user?.email,
@@ -435,7 +438,7 @@ export default function CheckoutClient() {
       shipping: totals.shipping,
       total: totals.total,
       currency: "INR",
-      paymentStatus: payment.paid ? "Paid" : "Pending",
+      paymentStatus: payment.paid ? (payNow < totals.total ? "Partially Paid" : "Paid") : "Pending",
       paymentMethod: payment.method,
       paidAt: payment.paid ? now : undefined,
       razorpayPaymentId: payment.paymentId,
@@ -443,6 +446,15 @@ export default function CheckoutClient() {
       status: firstStatus,
       channel: "online",
       storeCreditUsed: creditApplied || undefined,
+      preorderPayment:
+        payNow < totals.total
+          ? {
+              advance: payNow,
+              balance: Math.round((totals.total - payNow) * 100) / 100,
+              balanceWhen: orderSettings.preorderPayment.balanceWhen,
+              advancePaidAt: payment.paid ? now : undefined,
+            }
+          : undefined,
       stockCommitted: false,
       deliveryMode,
       deliveryAddress,
@@ -955,10 +967,16 @@ export default function CheckoutClient() {
 
             <div className="mt-5 flex items-center justify-between rounded-xl border border-border bg-warm-cream p-5">
               <div>
-                <p className="text-sm text-text-muted">Amount payable</p>
+                <p className="text-sm text-text-muted">{payNow < totals.total ? "Advance payable now" : "Amount payable"}</p>
                 <p className="mt-1 text-2xl font-bold text-burgundy">
-                  {formatPrice(totals.total)}
+                  {formatPrice(payNow)}
                 </p>
+                {payNow < totals.total ? (
+                  <p className="mt-1 text-xs text-text-muted">
+                    Pre-order: balance {formatPrice(totals.total - payNow)} of {formatPrice(totals.total)}{" "}
+                    {orderSettings.preorderPayment.balanceWhen === "on_ready" ? "when the item is ready" : "before dispatch"}. We send you a payment link.
+                  </p>
+                ) : null}
               </div>
               <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-text-muted">
                 INR
@@ -1142,7 +1160,13 @@ export default function CheckoutClient() {
                   Shipping
                 </dt>
                 <dd className="font-medium text-text-primary">
-                  {deliveryMode === "store_pickup" || shipping === 0 ? "FREE" : formatPrice(shipping)}
+                  {deliveryMode === "store_pickup"
+                    ? "Store pickup · no charge"
+                    : shipping > 0
+                      ? formatPrice(shipping)
+                      : shippingIsFree(priced.subtotal, orderSettings)
+                        ? "FREE"
+                        : "Choose a courier"}
                 </dd>
               </div>
               {codFee > 0 && (

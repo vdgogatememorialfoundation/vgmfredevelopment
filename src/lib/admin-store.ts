@@ -711,7 +711,8 @@ export function resaveOrder(
 export function maxRefundable(order: Order) {
   const settings = getOrderSettings();
   const kept = settings.platformFee.enabled && !settings.platformFee.refundable ? Math.max(0, order.platformFee ?? 0) : 0;
-  return Math.max(0, order.total - kept - (order.refundAmount ?? 0));
+  const collected = order.preorderPayment && !order.preorderPayment.balancePaidAt ? order.preorderPayment.advance : order.total;
+  return Math.max(0, collected - kept - (order.refundAmount ?? 0));
 }
 
 export function refundToStoreCredit(orderId: string, amount?: number, note?: string) {
@@ -888,6 +889,24 @@ export function recordCourierPayment(orderId: string, input: { method: string; r
     },
     "Courier charge paid",
     `Switched from store pickup to ${upgrade.rate.courierName} · ₹${upgrade.amount} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
+}
+
+export function recordBalancePayment(orderId: string, input: { method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan || plan.balancePaidAt) return;
+  const next = withHistory(
+    {
+      ...order,
+      paymentStatus: "Paid",
+      paidAt: order.paidAt ?? new Date().toISOString(),
+      preorderPayment: { ...plan, balancePaidAt: new Date().toISOString(), balanceRef: input.reference },
+    },
+    "Balance paid",
+    `Pre-order balance ₹${plan.balance} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
   );
   updateOrderInStore(next);
   return next;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { useCart } from "@/lib/use-cart";
+import { shippingIsFree } from "@/lib/integrations";
 import {
   getBookById,
   setCartQuantity,
@@ -226,7 +227,11 @@ export default function CartPage() {
                 <div className="flex justify-between">
                   <dt className="text-text-muted">Shipping</dt>
                   <dd className="font-medium text-text-primary">
-                    {totals.shipping === 0 ? "FREE" : formatPrice(totals.shipping)}
+                    {totals.shipping > 0
+                      ? formatPrice(totals.shipping)
+                      : shippingIsFree(totals.subtotal, orderSettings)
+                        ? "FREE"
+                        : "Calculated at checkout"}
                   </dd>
                 </div>
                 <div className="flex justify-between border-t border-border pt-3">
