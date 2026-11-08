@@ -1,5 +1,5 @@
 import { books } from "@/data/books";
-import { getIntegrations, hasShippingCredentials, shippingProviderId } from "@/lib/integrations";
+import { getIntegrations, hasShippingCredentials, isStoreWorkingDay, shippingProviderId } from "@/lib/integrations";
 import type { Book, ProcessingTimeline, ProductOverride, SiteSettings } from "@/types";
 import { formatDate } from "@/lib/utils";
 
@@ -702,7 +702,7 @@ function orderAnchor(now: Date, cutoffHour: number) {
 }
 
 function isBusinessDay(date: Date) {
-  return date.getDay() !== 0;
+  return isStoreWorkingDay(date);
 }
 
 function startOfDay(date: Date) {

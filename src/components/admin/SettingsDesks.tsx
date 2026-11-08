@@ -1352,6 +1352,19 @@ export function OrderSettingsDesk() {
           <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
           <Text label="Packing / processing time (hours)" type="number" value={value.processingHours} onChange={(hours) => set({ processingHours: Math.max(0, Number(hours) || 0) })} />
           <Text label="Dispatch cut-off (India time, HH:MM)" value={value.dispatchCutoff} onChange={(dispatchCutoff) => set({ dispatchCutoff })} />
+          <Check label="Saturday is a working day" hint="Off: Saturday orders are processed on the next working day." checked={value.workingDays.saturday} onChange={(saturday) => set({ workingDays: { ...value.workingDays, saturday } })} />
+          <Check label="Sunday is a working day" hint="Off: Sunday orders are processed on the next working day." checked={value.workingDays.sunday} onChange={(sunday) => set({ workingDays: { ...value.workingDays, sunday } })} />
+          <label className="block md:col-span-3">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Holidays (one date per line, YYYY-MM-DD)</span>
+            <textarea
+              className={input}
+              rows={3}
+              defaultValue={value.workingDays.holidays.join("\n")}
+              placeholder={"2026-11-14\n2026-12-25"}
+              onBlur={(event) => set({ workingDays: { ...value.workingDays, holidays: event.target.value.split(/[\s,]+/).map((day) => day.trim()).filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)) } })}
+            />
+            <span className="mt-1 block text-xs text-slate-500">Processing, store-pickup ready dates, courier pickups and every delivery date shown skip these days and the weekly offs.</span>
+          </label>
           {value.codEnabled && <Text label="COD fee (₹)" type="number" value={value.codFee} onChange={(fee) => set({ codFee: Number(fee) || 0 })} />}
         </div>
       </Card>

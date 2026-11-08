@@ -4,7 +4,7 @@ import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
-import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
+import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId, nextStoreWorkingDay } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import {
   getOrder,
@@ -320,6 +320,8 @@ export async function bookShipment(orderId: string, override?: CourierRate, pick
     creds: credsFrom(settings),
     order: bookingPayload(order, choice, settings, pickup),
     schedulePickup: settings.shipping.autoSchedulePickup,
+    // Courier pickup goes on the next day the store is working (weekly offs and holidays skipped).
+    pickupDate: new Date(nextStoreWorkingDay(Date.now()) + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10),
   });
   if (!result.ok || !result.awb) {
     throw new Error(

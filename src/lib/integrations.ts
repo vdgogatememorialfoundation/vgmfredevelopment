@@ -190,6 +190,8 @@ export interface OrderSettings {
   processingHours: number;
   /** Orders packed after this India time (HH:MM) are dispatched the next day. */
   dispatchCutoff: string;
+  /** Days the store processes, packs and hands over orders. Holidays are YYYY-MM-DD. */
+  workingDays: { saturday: boolean; sunday: boolean; holidays: string[] };
   /** Customer-facing names for statuses and tracking steps, keyed by the built-in name. */
   statusLabels: Record<string, string>;
   /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
@@ -357,6 +359,7 @@ export const defaultOrderSettings: OrderSettings = {
   hideShipdayAtCheckout: false,
   processingHours: 4,
   dispatchCutoff: "17:00",
+  workingDays: { saturday: false, sunday: false, holidays: [] },
   statusLabels: {},
   customStatuses: [],
   preorderPayment: { mode: "full", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
@@ -537,6 +540,13 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
     processingHours: Math.max(0, finiteNumber(merged.processingHours, defaultOrderSettings.processingHours)),
     dispatchCutoff: /^\d{1,2}:\d{2}$/.test(String(merged.dispatchCutoff ?? "")) ? String(merged.dispatchCutoff) : defaultOrderSettings.dispatchCutoff,
+    workingDays: {
+      saturday: Boolean(merged.workingDays?.saturday),
+      sunday: Boolean(merged.workingDays?.sunday),
+      holidays: Array.isArray(merged.workingDays?.holidays)
+        ? [...new Set(merged.workingDays.holidays.map((day) => String(day ?? "").trim()).filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)))].sort()
+        : [],
+    },
     statusLabels: Object.fromEntries(
       Object.entries(merged.statusLabels && typeof merged.statusLabels === "object" ? merged.statusLabels : {})
         .map(([key, text]) => [key, String(text ?? "").trim()])
@@ -658,6 +668,24 @@ export function shippingFeeFor(
 }
 
 /** True only when the admin's shipping rule makes this order's shipping free. */
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+/** True when the store works on this India calendar day (weekend switches and the holiday list in Order settings). */
+export function isStoreWorkingDay(at: Date | number, settings = getOrderSettings()) {
+  const ist = new Date((typeof at === "number" ? at : at.getTime()) + IST_OFFSET_MS);
+  const weekday = ist.getUTCDay();
+  if (weekday === 6 && !settings.workingDays.saturday) return false;
+  if (weekday === 0 && !settings.workingDays.sunday) return false;
+  return !settings.workingDays.holidays.includes(ist.toISOString().slice(0, 10));
+}
+
+/** The same moment moved forward, a day at a time, to the next working day (unchanged if already one). */
+export function nextStoreWorkingDay(at: number, settings = getOrderSettings()) {
+  let value = at;
+  for (let guard = 0; guard < 60 && !isStoreWorkingDay(value, settings); guard += 1) value += 24 * 60 * 60 * 1000;
+  return value;
+}
+
 export function shippingIsFree(subtotal: number, settings = getOrderSettings()) {
   return settings.shippingFeeMode === "free" || (settings.shippingFeeMode === "free_above" && subtotal >= settings.freeAbove);
 }

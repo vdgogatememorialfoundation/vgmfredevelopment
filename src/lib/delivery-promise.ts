@@ -1,4 +1,5 @@
 import type { CourierRate } from "@/types";
+import { getOrderSettings, isStoreWorkingDay } from "@/lib/integrations";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IST_MS = 5.5 * 60 * 60 * 1000;
@@ -18,6 +19,9 @@ export function promiseFor(rate: CourierRate, courierAt: number, samePincode: bo
   let dispatchDay = istDayIndex(ready);
   const readyMinutes = Math.floor(((ready + IST_MS) % DAY_MS) / 60000);
   if (readyMinutes > (hour || 0) * 60 + (minute || 0)) dispatchDay += 1;
+  // The store does not pack or hand over on its weekly offs and holidays.
+  const calendar = getOrderSettings();
+  for (let guard = 0; guard < 60 && !isStoreWorkingDay(dispatchDay * DAY_MS + 12 * 60 * 60 * 1000 - IST_MS, calendar); guard += 1) dispatchDay += 1;
   const transit = samePincode ? (rate.lastMile || rate.etaDays === 0 ? 0 : 1) : Math.max(1, rate.etaDays);
   let day = dispatchDay + transit;
   if (!samePincode && Number.isFinite(courierAt)) day = Math.max(day, istDayIndex(courierAt));
