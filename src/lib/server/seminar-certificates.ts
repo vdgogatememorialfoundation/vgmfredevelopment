@@ -27,7 +27,7 @@ export type SeminarCertificateRow = {
 };
 
 const SELECT = (table: string, kind: string) => `
-  SELECT '${kind}' AS kind, c.certificate_id_string AS number,
+  SELECT '${kind}' AS kind, c.certificate_id_string AS number, c.user_id, c.seminar_id,
          COALESCE(NULLIF(trim(c.display_name), ''), trim(concat(u.first_name, ' ', u.last_name))) AS name,
          COALESCE(s.title, '') AS event, COALESCE(s.event_date::text, '') AS event_date,
          COALESCE(c.enabled, 0)::int AS enabled, COALESCE(c.scan_verified, 0)::int AS scan_verified,
@@ -67,6 +67,30 @@ export async function findSeminarCertificate(digits: string): Promise<SeminarCer
     const result = await db.query(
       `SELECT * FROM (${SELECT("user_certificates", "participant")} UNION ALL ${SELECT("volunteer_certificates", "volunteer")}) x
         WHERE right(regexp_replace(x.number, '\\D', '', 'g'), 12) = $1 LIMIT 1`,
+      [digits]
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A seminar ticket id (e.g. VOL_669990394803) resolved to the certificate issued to that ticket holder. */
+export async function findSeminarCertificateByTicket(digits: string): Promise<SeminarCertificateRow | null> {
+  const db = seminarDb();
+  if (!db || digits.length !== 12) return null;
+  try {
+    const result = await db.query(
+      `WITH holder AS (
+         SELECT seminar_id, doctor_user_id AS user_id FROM ticket_scan_events
+          WHERE right(regexp_replace(coalesce(ticket_id_string, ''), '\\D', '', 'g'), 12) = $1 AND doctor_user_id IS NOT NULL
+         UNION
+         SELECT seminar_id, user_id FROM seminar_volunteers
+          WHERE right(regexp_replace(coalesce(volunteer_ticket_id_string, ''), '\\D', '', 'g'), 12) = $1
+       )
+       SELECT x.* FROM (${SELECT("user_certificates", "participant")} UNION ALL ${SELECT("volunteer_certificates", "volunteer")}) x
+        JOIN holder h ON h.user_id = x.user_id AND h.seminar_id = x.seminar_id
+        ORDER BY (x.kind = 'volunteer') DESC LIMIT 1`,
       [digits]
     );
     return result.rows[0] ? mapRow(result.rows[0]) : null;
