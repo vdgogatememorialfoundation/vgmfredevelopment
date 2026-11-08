@@ -184,6 +184,7 @@ export const adminNavigation: AdminNavGroup[] = [
     items: [
       { label: "Support portal", href: "/support" },
       { label: "Staff portal", href: "/staff" },
+      { label: "Picker & packer scanner app", href: "/scanner" },
       { label: "Doctor portal", href: "/doctor" },
       { label: "Public website", href: "/" },
     ],
