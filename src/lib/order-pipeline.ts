@@ -71,9 +71,21 @@ export function isCourierInfoLine(text: string) {
   return /\b(expected|estimated|promised|tentative|scheduled)\b[\w ]{0,20}\bdeliver|\bedd\b|\b(pickup|booking|ship|shipment|delivery|dispatch) date\b|\bdate of (delivery|pickup|booking|dispatch)\b/.test(value);
 }
 
+const FAILED_ATTEMPT =
+  /\b(undeliver(ed|able)?|not delivered|delivery failed|failed delivery|failed attempt|delivery attempt(ed)?|attempt(ed)? (failed|unsuccessful)|unsuccessful|(consignee|customer|receiver) (not available|unavailable|not reachable|not responding)|door locked|premises closed|address (incomplete|not found|issue)|re ?attempt|ndr|reschedul(e|ed))\b/;
+const FINAL_FAILURE = /\b(rto|return to origin|returned to (origin|seller|shipper)|lost|destroyed|damaged in transit)\b/;
+
+/** A missed delivery the courier will try again (NDR), as opposed to a return to origin. */
+export function isFailedAttempt(text: string) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return FAILED_ATTEMPT.test(value) && !FINAL_FAILURE.test(value);
+}
+
 export function classifyCourierScan(text: string): CourierStage | null {
   const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   if (!value || isCourierInfoLine(value)) return null;
+  // A failed attempt keeps the order out for delivery; only RTO / lost ends it as failed.
+  if (FAILED_ATTEMPT.test(value) && !FINAL_FAILURE.test(value)) return "out";
   if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|failed|declined|incomplete)\b/.test(value)) {
     return "failed";
   }
@@ -373,7 +385,7 @@ export function buildTrackingStages(
     if (!mapped || mapped === "failed" || mapped === "cancelled") continue;
     if (STAGE_RANK[mapped] > STAGE_RANK[progress]) progress = mapped;
   }
-  const failedReached = scanStage === "failed" || orderStage === "failed";
+  const failedReached = (scanStage === "failed" || orderStage === "failed") && scanStage !== "delivered" && scanStage !== "out" && order.status !== "Delivered";
   const packedReached = STAGE_RANK[progress] >= STAGE_RANK.packed || failedReached;
   const collected = liveScans.some((scan) =>
     /\b(picked up|pickup done|pickup complete|collected|handed to|handover|dispatched)\b/i.test(scan.status)
@@ -444,7 +456,14 @@ export function buildTrackingStages(
   const outEvents = liveScans
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
     .filter((item) => item.mapped === "out" || (hyperlocal && item.mapped === "shipped"))
-    .map((item) => scanEvent(item.scan, item.index, outReached));
+    .map((item) =>
+      isFailedAttempt(item.scan.status)
+        ? {
+            ...scanEvent(item.scan, item.index, outReached, "Delivery attempt unsuccessful"),
+            detail: `${cleanScanText(item.scan.status)} · the courier will reattempt delivery.`,
+          }
+        : scanEvent(item.scan, item.index, outReached)
+    );
 
   if (hyperlocal && outReached && outEvents.length === 0) {
     outEvents.push({
