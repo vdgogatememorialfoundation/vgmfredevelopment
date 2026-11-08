@@ -201,6 +201,14 @@ function AccountIcon({ name }: { name: string }) {
           <path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" />
         </svg>
       );
+    case "wallet":
+      return (
+        <svg {...common}>
+          <path d="M3 7a2 2 0 0 1 2-2h13v4" />
+          <path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2Z" />
+          <circle cx="16" cy="14.5" r="1.2" />
+        </svg>
+      );
     case "loyalty":
       return (
         <svg {...common}>

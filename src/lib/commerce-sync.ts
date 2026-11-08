@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { orderActivityAt, shipmentActivityAt } from "@/lib/commerce-stamp";
-import { getSettings, getShipments } from "@/lib/admin-store";
+import { getSettings, getShipments, getStoreCreditLedger, pushStoreCredit, rememberWallet, type StoreCreditEntry } from "@/lib/admin-store";
 import { getSession, isPortalRole } from "@/lib/auth";
 import { getCart, getOrders, getWishlist, withAccountEmail } from "@/lib/store";
 import { publishCartChange } from "@/lib/cart-store";
@@ -171,6 +171,21 @@ async function syncWishlist() {
   window.dispatchEvent(new Event("vgmf-wishlist"));
 }
 
+/** Staff browsers upload the store-credit lines they hold; customers read their wallet from the server. */
+export async function syncWallet() {
+  if (typeof window === "undefined") return;
+  const user = getSession();
+  if (!user?.email) return;
+  if (isPortalRole(user.role)) {
+    await pushStoreCredit(getStoreCreditLedger());
+    return;
+  }
+  const response = await fetch("/api/shop/wallet", { cache: "no-store", credentials: "same-origin" }).catch(() => undefined);
+  if (!response?.ok) return;
+  const data = (await response.json()) as { balance?: number; entries?: StoreCreditEntry[] };
+  rememberWallet(user.email, Number(data.balance) || 0, Array.isArray(data.entries) ? data.entries : []);
+}
+
 /** Keep the signed-in customer's cart the same on every device: the newest edit wins. */
 export async function syncCart() {
   if (typeof window === "undefined") return;
@@ -203,6 +218,7 @@ export async function syncCommerce() {
   await pullCommerce();
   await syncWishlist();
   await syncCart();
+  await syncWallet();
 }
 
 /** Load the signed-in account's orders onto this phone, then re-render when they arrive. */

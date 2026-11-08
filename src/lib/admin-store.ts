@@ -420,20 +420,58 @@ export function getStoreCreditLedger(email?: string) {
   return email ? all.filter((entry) => entry.email.toLowerCase() === email.toLowerCase()) : all;
 }
 
+const walletKey = (email: string) => `vgmf_wallet_${email.trim().toLowerCase()}`;
+
+/** The server balance when this browser has fetched it, otherwise the locally known one. */
 export function getStoreCredit(email?: string) {
+  if (!email) return 0;
+  const cached = typeof window === "undefined" ? null : window.localStorage.getItem(walletKey(email));
+  if (cached != null && Number.isFinite(Number(cached))) return Math.max(0, Number(cached));
   return Math.max(0, getAccountByEmail(email)?.storeCredit ?? 0);
+}
+
+/** Records the server's wallet for this customer on this device. */
+export function rememberWallet(email: string, balance: number, entries: StoreCreditEntry[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(walletKey(email), String(balance));
+  const value = email.toLowerCase();
+  const others = getStoreCreditLedger().filter((entry) => entry.email.toLowerCase() !== value);
+  writeJSON(CREDIT_KEY, [...entries, ...others]);
+  if (getAccountByEmail(email)) updateAccount(email, { storeCredit: balance });
+  notifyCms();
+}
+
+export function pushStoreCredit(entries: StoreCreditEntry[]) {
+  if (typeof window === "undefined" || !entries.length) return Promise.resolve();
+  return fetch("/api/shop/wallet", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entries }),
+  })
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
 /** Positive amount adds credit, negative spends it. Returns the new balance. */
 export function adjustStoreCredit(email: string, amount: number, note: string, orderId?: string) {
-  const account = getAccountByEmail(email);
-  if (!account) throw new Error("Store credit needs a customer account with this email.");
-  const balance = Math.max(0, Math.round(((account.storeCredit ?? 0) + amount) * 100) / 100);
-  updateAccount(account.email, { storeCredit: balance });
-  writeJSON(CREDIT_KEY, [
-    { id: `SC${Date.now()}${Math.floor(Math.random() * 90 + 10)}`, email: account.email, amount, at: new Date().toISOString(), note, orderId, by: currentActor() },
-    ...getStoreCreditLedger(),
-  ]);
+  const value = email.trim().toLowerCase();
+  if (!value) throw new Error("Store credit needs a customer email.");
+  const account = getAccountByEmail(value);
+  const balance = Math.max(0, Math.round((getStoreCredit(value) + amount) * 100) / 100);
+  if (account) updateAccount(account.email, { storeCredit: balance });
+  if (typeof window !== "undefined") window.localStorage.setItem(walletKey(value), String(balance));
+  const entry: StoreCreditEntry = {
+    id: `SC${Date.now()}${Math.floor(Math.random() * 90 + 10)}`,
+    email: account?.email ?? value,
+    amount,
+    at: new Date().toISOString(),
+    note,
+    orderId,
+    by: currentActor(),
+  };
+  writeJSON(CREDIT_KEY, [entry, ...getStoreCreditLedger()]);
+  void pushStoreCredit([entry]);
   notifyCms();
   return balance;
 }
