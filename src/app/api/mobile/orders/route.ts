@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
+import { appOrdersFor } from "@/lib/server/mobile-shop";
 import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
 
 export const runtime = "nodejs";
@@ -42,7 +43,10 @@ function catalogItems(raw: unknown) {
 export async function GET(request: NextRequest) {
   const session = sessionOf(request);
   if (!session) return json({ ok: false, error: "Sign in to view orders." }, 401);
-  return json({ ok: true, store: "mobile-api", orders: listOrders(session.email) });
+  const shop = appOrdersFor(session.email);
+  const ids = new Set(shop.map((order) => order.id));
+  const legacy = listOrders(session.email).filter((order) => !ids.has(order.id));
+  return json({ ok: true, store: "shop", orders: shop, legacy });
 }
 
 export async function POST(request: NextRequest) {

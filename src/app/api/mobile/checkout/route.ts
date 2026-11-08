@@ -4,6 +4,7 @@ import { addOrder, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, s
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
+import { appPickupAllowed, markAppOrderPaid, recordAppOrder } from "@/lib/server/mobile-shop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,14 +63,17 @@ export async function POST(request: NextRequest) {
       razorpayOrderId,
       method: "Razorpay",
     });
-    return json({ ok: true, order: paid, configured: Boolean(creds) });
+    const shopOrder = markAppOrderPaid(order.id, { paymentId, razorpayOrderId });
+    return json({ ok: true, order: shopOrder ?? paid, configured: Boolean(creds) });
   }
 
   const catalog = catalogItems(body?.items);
   if ("error" in catalog) return json({ ok: false, error: catalog.error }, 400);
   const countryCode = String(body?.countryCode ?? body?.country ?? "IN").trim().slice(0, 8);
+  const pickup = body?.pickup === true && appPickupAllowed();
   const address = {
     line1: String(body?.line1 ?? "").trim().slice(0, 160),
+    landmark: String(body?.landmark ?? "").trim().slice(0, 120),
     city: String(body?.city ?? "").trim().slice(0, 80),
     state: String(body?.state ?? "").trim().slice(0, 80),
     pincode: String(body?.pincode ?? "").trim().slice(0, 12),
@@ -78,7 +82,7 @@ export async function POST(request: NextRequest) {
   };
   const countryBlocked = countryRejection(countryCode, address.country);
   if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
-  if (!address.line1 || !address.city || !address.state || !isValidPostal(countryCode, address.pincode)) {
+  if (!pickup && (!address.line1 || !address.city || !address.state || !isValidPostal(countryCode, address.pincode))) {
     return json({ ok: false, error: "Enter your full delivery address and a valid postal code." }, 400);
   }
   const phone = String(body?.phone ?? "").trim();
@@ -94,20 +98,22 @@ export async function POST(request: NextRequest) {
     address,
   });
 
+  const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup });
+
   const creds = razorpayCreds({});
   if (!creds) {
     return json({ ok: false, configured: false, error: "Razorpay is not configured on this server." }, 503);
   }
 
   try {
-    const created = await razorpayOrder(creds, draft.total, draft.id);
-    const order = attachRazorpayOrder(draft.id, created.orderId) ?? { ...draft, razorpayOrderId: created.orderId };
+    const created = await razorpayOrder(creds, shopOrder.total, draft.id);
+    attachRazorpayOrder(draft.id, created.orderId);
     return json({
       ok: true,
       configured: true,
       partner: "razorpay",
-      order,
-      amount: order.total,
+      order: { ...shopOrder, razorpayOrderId: created.orderId },
+      amount: shopOrder.total,
       keyId: created.keyId,
       razorpayOrderId: created.orderId,
     });

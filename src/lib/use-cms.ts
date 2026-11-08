@@ -206,6 +206,7 @@ export function useSiteSettings(): SiteSettings | null {
         queryButton: hasLocal ? local.queryButton : published?.queryButton ?? local.queryButton,
         queryNumber: hasLocal ? local.queryNumber : published?.queryNumber ?? local.queryNumber,
         queryMessage: hasLocal ? local.queryMessage : published?.queryMessage ?? local.queryMessage,
+        chrome: hasLocal ? local.chrome : published?.chrome ?? local.chrome,
       };
       return settingsValue;
     },
@@ -222,6 +223,7 @@ export function useSiteSettings(): SiteSettings | null {
         queryButton: published.queryButton,
         queryNumber: published.queryNumber,
         queryMessage: published.queryMessage,
+        chrome: published.chrome,
         logoUrl: published.logoUrl || "",
         logoText: published.logoText || local.logoText,
         faviconUrl: published.faviconUrl || "",

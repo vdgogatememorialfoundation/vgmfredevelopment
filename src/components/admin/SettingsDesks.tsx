@@ -31,7 +31,8 @@ import { ImageField } from "@/components/admin/ImageField";
 import { fileToDataUrl } from "@/lib/images";
 import { subscribeCms } from "@/lib/cms";
 import { publishLiveSite } from "@/lib/mobile-publish";
-import type { SiteSettings } from "@/types";
+import type { SiteChrome, SiteChromeLink, SiteSettings } from "@/types";
+import { FOOTER_STYLES, HEADER_STYLES } from "@/lib/site-chrome";
 import { SOCIAL_NETWORKS, emptySocial } from "@/lib/social";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
@@ -159,6 +160,8 @@ export function GeneralSettingsDesk() {
   const [settings, setSettings] = useState<SiteSettings>(() => getSettings());
   const [note, setNote] = useState("");
   const set = (patch: Partial<SiteSettings>) => setSettings((current) => ({ ...current, ...patch }));
+  const setChrome = (patch: Partial<SiteChrome>) => setSettings((current) => ({ ...current, chrome: { ...current.chrome, ...patch } }));
+  const chrome = settings.chrome ?? {};
 
   const save = () => {
     try {
@@ -260,6 +263,55 @@ export function GeneralSettingsDesk() {
         </label>
       </Card>
 
+      <Card title="Header & footer" text="Text, shape and extra navigation links for the public header and footer. Saving publishes it with the rest of the site.">
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="block text-sm text-slate-700">
+            Header text (a slim line above the header; blank hides it)
+            <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.headerText ?? ""} onChange={(event) => setChrome({ headerText: event.target.value })} placeholder="Admissions open for Manas Rog 4" />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Header text link (optional)
+            <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.headerTextHref ?? ""} onChange={(event) => setChrome({ headerTextHref: event.target.value })} placeholder="/events or https://…" />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Header style
+            <select className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.headerStyle ?? "classic"} onChange={(event) => setChrome({ headerStyle: event.target.value })}>
+              {HEADER_STYLES.map((style) => (
+                <option key={style.id} value={style.id}>
+                  {style.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
+            <input type="checkbox" checked={Boolean(chrome.headerSticky)} onChange={(event) => setChrome({ headerSticky: event.target.checked })} />
+            Keep the header visible while scrolling
+          </label>
+          <LinksField label="Extra header menu links" links={chrome.navLinks} onChange={(navLinks) => setChrome({ navLinks })} />
+          <LinksField label="Extra footer links" links={chrome.footerLinks} onChange={(footerLinks) => setChrome({ footerLinks })} />
+          <label className="block text-sm text-slate-700">
+            Footer text (replaces the line under the footer logo; blank keeps the default)
+            <textarea rows={3} className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.footerText ?? ""} onChange={(event) => setChrome({ footerText: event.target.value })} />
+          </label>
+          <div className="space-y-3">
+            <label className="block text-sm text-slate-700">
+              Footer note (small line under the copyright)
+              <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.footerNote ?? ""} onChange={(event) => setChrome({ footerNote: event.target.value })} />
+            </label>
+            <label className="block text-sm text-slate-700">
+              Footer style
+              <select className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.footerStyle ?? "classic"} onChange={(event) => setChrome({ footerStyle: event.target.value })}>
+                {FOOTER_STYLES.map((style) => (
+                  <option key={style.id} value={style.id}>
+                    {style.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      </Card>
+
       <Card title="Announcement ticker" text="How fast the bar under the header moves. A lower number is faster. Saving publishes it with the rest of the site.">
         <label className="block text-sm text-slate-700">
           Speed · {Math.min(90, Math.max(12, settings.tickerSeconds || 36))} seconds for one pass
@@ -338,8 +390,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage, chrome } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage, chrome };
 }
 
 /* ---------------- Payments ---------------- */
@@ -1801,5 +1853,30 @@ function FragmentRow({ item, open, onToggle }: { item: NotificationRecord; open:
         </tr>
       )}
     </>
+  );
+}
+
+function LinksField({ label, links, onChange }: { label: string; links?: SiteChromeLink[]; onChange: (links: SiteChromeLink[]) => void }) {
+  const [text, setText] = useState(() => (links ?? []).map((link) => `${link.label} | ${link.href}${link.newTab ? " | new tab" : ""}`).join("\n"));
+  return (
+    <label className="block text-sm text-slate-700">
+      {label} — one per line: Label | /path or https://… | new tab (optional)
+      <textarea
+        rows={4}
+        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+        value={text}
+        placeholder={"Autism programme | /autism\nSeminar site | https://seminar.vaidyagogate.org | new tab"}
+        onChange={(event) => {
+          setText(event.target.value);
+          onChange(
+            event.target.value
+              .split("\n")
+              .map((row) => row.split("|").map((part) => part.trim()))
+              .filter(([name, href]) => name && href)
+              .map(([name, href, tab]) => ({ label: name, href, newTab: /new/i.test(tab ?? "") }))
+          );
+        }}
+      />
+    </label>
   );
 }

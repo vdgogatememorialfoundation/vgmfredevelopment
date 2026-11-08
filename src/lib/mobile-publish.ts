@@ -1,3 +1,4 @@
+import { cleanChrome } from "@/lib/site-chrome";
 import { getAbout } from "@/lib/about";
 import { defaultAppearance, getPublishedAppearance } from "@/lib/mobile-appearance";
 import { getFaqs, getSettings } from "@/lib/admin-store";
@@ -47,6 +48,7 @@ export function collectMobileSnapshot(): MobileFeed {
       queryButton: Boolean(settings.queryButton),
       queryNumber: (settings.queryNumber ?? "").replace(/[^\d]/g, ""),
       queryMessage: (settings.queryMessage ?? "").trim(),
+      chrome: cleanChrome(settings.chrome),
     },
     flags: getSiteFlags(),
     visibility: getSiteVisibility().public,

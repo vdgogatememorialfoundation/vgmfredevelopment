@@ -116,6 +116,7 @@ function applyFeed(feed: MobileFeed) {
       queryButton: feed.site.queryButton ?? current.queryButton,
       queryNumber: feed.site.queryNumber ?? current.queryNumber,
       queryMessage: feed.site.queryMessage ?? current.queryMessage,
+      chrome: feed.site.chrome ?? current.chrome,
     });
   });
 

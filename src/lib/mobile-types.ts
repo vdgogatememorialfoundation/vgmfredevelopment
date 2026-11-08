@@ -3,7 +3,7 @@ import type { MobileAppearance } from "@/lib/mobile-appearance";
 import type { MobileAppConfig } from "@/lib/mobile-config";
 import type { PlatformCountries } from "@/lib/platform-countries";
 import type { SiteText } from "@/lib/site-text";
-import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, PrizeAward, Review, SeminarReview, SiteBanner, SocialLinks, ThanksCredit, Video } from "@/types";
+import type { Announcement, Article, Book, Clinic, Event, FAQItem, Flyer, Notice, PrizeAward, Review, SeminarReview, SiteBanner, SocialLinks, ThanksCredit, Video, SiteChrome } from "@/types";
 
 export type MobileFeed = {
   publishedAt: string;
@@ -25,6 +25,7 @@ export type MobileFeed = {
     queryButton?: boolean;
     queryNumber?: string;
     queryMessage?: string;
+    chrome?: SiteChrome;
   };
   flags: {
     supportUs: boolean;

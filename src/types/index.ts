@@ -818,6 +818,26 @@ export interface SiteSettings {
   queryButton?: boolean;
   queryNumber?: string;
   queryMessage?: string;
+  /** Header and footer text, shape and extra navigation links. */
+  chrome?: SiteChrome;
+}
+
+export interface SiteChromeLink {
+  label: string;
+  href: string;
+  newTab?: boolean;
+}
+
+export interface SiteChrome {
+  headerText?: string;
+  headerTextHref?: string;
+  headerStyle?: string;
+  headerSticky?: boolean;
+  footerText?: string;
+  footerNote?: string;
+  footerStyle?: string;
+  navLinks?: SiteChromeLink[];
+  footerLinks?: SiteChromeLink[];
 }
 
 export interface AdminCategory {
