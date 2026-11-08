@@ -190,9 +190,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       : failed
         ? "The line stays on Failed until a reattempt is booked."
         : order.status === "Delivered"
-          ? order.deliveryMode === "store_pickup"
-            ? ""
-            : "Delivered — confirmation received from the courier."
+          ? ""
           : order.status === "Out for Delivery"
             ? ""
             : order.deliveryMode === "store_pickup"
