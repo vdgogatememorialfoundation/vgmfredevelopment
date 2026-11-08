@@ -251,13 +251,13 @@ export function PickupCounter() {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     value={otp}
-                    placeholder={otpReady ? "6-digit code" : "Unlocks after the order is processed"}
+                    placeholder={selected.status === "Delivered" ? "OTP verified" : otpReady ? "6-digit code" : "Unlocks after the order is processed"}
                     disabled={!otpReady || selected.status === "Delivered"}
                     onChange={(event) => setOtp(event.target.value)}
                   />
                 </label>
                 <Button variant="success" onClick={verify} disabled={selected.status === "Delivered" || !otpReady}>
-                  {selected.status === "Delivered" ? "Picked up" : "Verify OTP"}
+                  {selected.status === "Delivered" ? "OTP verified · Picked up" : "Verify OTP"}
                 </Button>
               </div>
             </div>

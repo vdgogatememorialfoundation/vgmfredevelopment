@@ -133,7 +133,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
     if (stage.id === "delivered" && !alreadyDelivered) {
       next.expected = shipment?.expectedBy ? `Expected by ${deliveryDatePhrase(shipment.expectedBy)}` : "Expected delivery date is pending from the courier";
     }
-    if (stage.id === "ready" && stage.reached) next.caption = `Pickup OTP: ${pickupOtp(order.id)}`;
+    if (stage.id === "ready" && stage.reached) next.caption = order.status === "Delivered" ? "OTP verified" : `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
   });
 
@@ -167,7 +167,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       case "delivered":
         return stage.reached && deliveredAt ? statusDay(deliveredAt, order.deliveryAddress?.country) : "";
       case "ready":
-        return stage.reached ? `OTP ${pickupOtp(order.id)}` : "";
+        return stage.reached ? (order.status === "Delivered" ? "OTP verified" : `OTP ${pickupOtp(order.id)}`) : "";
       case "picked":
         return stage.reached && deliveredAt ? statusDay(deliveredAt, order.deliveryAddress?.country) : "";
       case "cancel-review":
