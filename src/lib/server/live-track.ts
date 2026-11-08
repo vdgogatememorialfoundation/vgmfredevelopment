@@ -1,5 +1,5 @@
 import { customerCourierLabel } from "@/lib/courier-label";
-import { classifyCourierScan, isCourierInfoLine, isHyperlocalProvider } from "@/lib/order-pipeline";
+import { classifyCourierScan, cleanScanText, isCourierInfoLine, isHyperlocalProvider, usableScan } from "@/lib/order-pipeline";
 import {
   ithinkTrack,
   nimbusTrack,
@@ -37,7 +37,9 @@ type TrackHit = {
 
 function dedupe(events: { at: string; status: string; location?: string }[]) {
   const out: { at: string; status: string; location?: string }[] = [];
-  for (const event of events) {
+  for (const raw of events) {
+    if (!usableScan(raw)) continue;
+    const event = { ...raw, status: cleanScanText(raw.status) };
     const prev = out[out.length - 1];
     if (prev && prev.status === event.status && (prev.location ?? "") === (event.location ?? "")) continue;
     out.push(event);
@@ -106,7 +108,7 @@ export async function refreshStoredShipment(orderId: string) {
   const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
   const latestStatus =
-    [hit.status, ...[...events].reverse().map((event) => event.status)].find((text) => text && classifyCourierScan(text)) || hit.status || "";
+    [cleanScanText(hit.status ?? ""), ...[...events].reverse().map((event) => event.status)].find((text) => text && classifyCourierScan(text)) || cleanScanText(hit.status ?? "");
   const stage = classifyCourierScan(latestStatus);
   const orderForLeg = findShopOrder(orderId);
   const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile, hit.courierName || shipment.courier || orderForLeg?.courierName);
@@ -154,7 +156,7 @@ export async function refreshStoredShipment(orderId: string) {
     ok: true as const,
     live: true as const,
     shipment: next,
-    status: hit.status ?? "",
+    status: cleanScanText(hit.status ?? ""),
     order: findShopOrder(orderId) ?? order,
   };
 }

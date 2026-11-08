@@ -539,10 +539,23 @@ function tally(stages: TrackingStage[], order?: Order) {
   return { stages, reachedEvents, totalEvents };
 }
 
+const RAW_STAMP = /\s*[-–,]?\s*(?:\d{4}-)?\d{1,2}[- ]\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\s*$/;
+
+export function cleanScanText(text: string) {
+  return text.replace(RAW_STAMP, "").trim();
+}
+
+export function usableScan(scan: { at?: string; status?: string }) {
+  const ms = Date.parse(scan.at || "");
+  return Number.isFinite(ms) && new Date(ms).getUTCFullYear() >= 2000 && Boolean(cleanScanText(scan.status || ""));
+}
+
 export function shipmentScans(shipment?: Pick<ShipmentRecord, "tracking"> | null, extra: CourierScan[] = []): CourierScan[] {
   const seen = new Set<string>();
   const list: CourierScan[] = [];
-  for (const scan of [...(shipment?.tracking ?? []), ...extra]) {
+  for (const raw of [...(shipment?.tracking ?? []), ...extra]) {
+    if (!usableScan(raw)) continue;
+    const scan = { ...raw, status: cleanScanText(raw.status) };
     const key = `${scan.at}|${scan.status}|${scan.location ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);

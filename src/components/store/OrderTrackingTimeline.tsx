@@ -10,7 +10,7 @@ import { pickupOtp, pickupOtpReady } from "@/lib/store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { customerCourierLabel } from "@/lib/courier-label";
 import { getIntegrations } from "@/lib/integrations";
-import { buildTrackingStages, isHyperlocalProvider, shipmentScans, type CourierScan } from "@/lib/order-pipeline";
+import { buildTrackingStages, cleanScanText, isHyperlocalProvider, shipmentScans, type CourierScan } from "@/lib/order-pipeline";
 import { pingLiveAgent } from "@/lib/shipping-client";
 import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
 import LiveTracking from "@/components/store/LiveTracking";
@@ -206,7 +206,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   const paceUntil = promisedAt && promisedAt > paceFrom + 60_000 ? promisedAt : paceFrom + (hyperlocal ? 8 : 72) * 60 * 60 * 1000;
   const latestTitle = rawStages[nodeCurrentIdx]?.events.at(-1)?.title ?? "";
   const facilityStatus = /^(Pickup scheduled|Shipment arrived at courier facility|Shipment left courier facility)/.test(latestTitle);
-  const currentStatus = facilityStatus ? latestTitle : rawStages[nodeCurrentIdx]?.label || order.status;
+  const currentStatus = facilityStatus ? cleanScanText(latestTitle) : rawStages[nodeCurrentIdx]?.label || order.status;
 
   const pipe = (
     <VerticalPipeline
