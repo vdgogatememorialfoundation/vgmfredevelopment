@@ -15,12 +15,12 @@ import { markAllInboxRead } from "@/lib/inbox";
 function StaffHome() {
   const { user, signOut } = useAuth();
   const router = useRouter();
-  if (!user || (user.role !== "staff" && user.role !== "coadmin")) {
+  if (!user || (user.role !== "staff" && user.role !== "coadmin" && user.role !== "admin")) {
     return <PortalLogin portal="staff" />;
   }
 
   const allowed = modulesFor(user);
-  const isCoadmin = user.role === "coadmin";
+  const isCoadmin = user.role === "coadmin" || user.role === "admin";
   const role = user.role === "staff" ? getRole(user.staffRoleId) : null;
   const cards = adminNavigation
     .flatMap((group) => group.items.map((item) => ({ ...item, group: group.label })))
