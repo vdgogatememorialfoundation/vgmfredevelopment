@@ -682,13 +682,15 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
   const email = order.deliveryAddress?.email;
   if (!email) throw new Error("This order has no customer email to credit.");
   const cap = maxRefundable(order);
-  const refundAmount = Math.min(amount ?? cap, cap);
+  if (amount != null && !(Number.isFinite(amount) && amount > 0)) throw new Error("Enter a refund amount above ₹0.");
+  if (amount != null && amount > cap + 0.001) throw new Error(`At most ₹${cap.toLocaleString("en-IN")} can still be refunded on this order.`);
+  const refundAmount = Math.round(Math.min(amount ?? cap, cap) * 100) / 100;
   if (refundAmount <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
   const balance = adjustStoreCredit(email, refundAmount, note ?? `Refund for order ${order.id}`, order.id);
   const next: Order = withHistory(
     {
       ...order,
-      paymentStatus: refundAmount >= order.total ? "Refunded" : "Partially Refunded",
+      paymentStatus: (order.refundAmount ?? 0) + refundAmount >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
       refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", note, by: currentActor() }],
     },

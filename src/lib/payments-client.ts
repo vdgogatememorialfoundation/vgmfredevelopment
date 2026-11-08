@@ -317,7 +317,9 @@ export async function refundThroughGateway(orderId: string, amount?: number) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   const cap = maxRefundable(order);
-  const value = Math.min(amount ?? cap, cap);
+  if (amount != null && !(Number.isFinite(amount) && amount > 0)) throw new Error("Enter a refund amount above ₹0.");
+  if (amount != null && amount > cap + 0.001) throw new Error(`At most ₹${cap.toLocaleString("en-IN")} can still be refunded on this order.`);
+  const value = Math.round(Math.min(amount ?? cap, cap) * 100) / 100;
   if (value <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
   if (order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") && paymentMode() !== "demo") {
     const result = await api<RefundView>({ action: "refund", paymentId: order.razorpayPaymentId, amount: value });
