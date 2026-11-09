@@ -2,6 +2,7 @@
 
 import { LiveSeminarBlock } from "@/components/site/LiveSeminarBlock";
 import Link from "next/link";
+import { isPublishedNow } from "@/lib/schedule";
 import Badge from "@/components/common/Badge";
 import PageHeader from "@/components/common/PageHeader";
 import ClinicCard from "@/components/clinics/ClinicCard";
@@ -35,7 +36,7 @@ function clockLabel(value?: string) {
 
 export function AnnouncementsIndex() {
   const { t } = useI18n();
-  const items = [...useLiveAnnouncements()].sort((a, b) => b.date.localeCompare(a.date));
+  const items = useLiveAnnouncements().filter((item) => isPublishedNow(item)).sort((a, b) => b.date.localeCompare(a.date));
   return (
     <main>
       <PageHeader

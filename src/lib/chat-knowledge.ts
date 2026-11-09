@@ -96,7 +96,7 @@ function summariseGallery() {
 
 function summariseNotices() {
   const notices = getLiveNotices().filter((notice) => isPublishedNow(notice));
-  const announcements = getLiveAnnouncements();
+  const announcements = getLiveAnnouncements().filter((item) => isPublishedNow(item));
   if (notices.length) {
     const latest = notices[0];
     return `Latest notice: “${latest.title}”. Open the Notice board for deadlines, lists and circulars from the Foundation office.`;
