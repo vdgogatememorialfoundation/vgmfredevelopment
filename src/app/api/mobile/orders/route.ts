@@ -3,6 +3,7 @@ import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { appOrdersFor } from "@/lib/server/mobile-shop";
+import { listShopShipments } from "@/lib/server/shop-shipments";
 import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
 
 export const runtime = "nodejs";
@@ -43,7 +44,8 @@ function catalogItems(raw: unknown) {
 export async function GET(request: NextRequest) {
   const session = sessionOf(request);
   if (!session) return json({ ok: false, error: "Sign in to view orders." }, 401);
-  const shop = appOrdersFor(session.email);
+  const shipments = listShopShipments().filter((item) => item.note !== "Cancelled");
+  const shop = appOrdersFor(session.email).map((order) => ({ ...order, shipments: shipments.filter((item) => item.orderId === order.id) }));
   const ids = new Set(shop.map((order) => order.id));
   const legacy = listOrders(session.email).filter((order) => !ids.has(order.id));
   return json({ ok: true, store: "shop", orders: shop, legacy });

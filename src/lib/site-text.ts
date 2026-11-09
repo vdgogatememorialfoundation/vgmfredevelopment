@@ -20,18 +20,18 @@ const KEY = "vgmf_site_text";
 export const homeSections = [
   { id: "hero", label: "Hero slideshow" },
   { id: "directory", label: "Events / Articles / Clinics shortcuts" },
+  { id: "books", label: "Shop & publications" },
+  { id: "events", label: "Events & programmes" },
+  { id: "articles", label: "Articles" },
+  { id: "notices", label: "Notice board" },
+  { id: "clinics", label: "Clinics" },
   { id: "about", label: "About the Foundation" },
   { id: "reviews", label: "Seminar voices" },
   { id: "support", label: "Support Us" },
-  { id: "events", label: "Events & programmes" },
   { id: "speakers", label: "Speakers" },
   { id: "awards", label: "Awards" },
   { id: "legacy", label: "Legacy" },
-  { id: "books", label: "Shop & publications" },
-  { id: "articles", label: "Articles" },
-  { id: "notices", label: "Notice board" },
   { id: "reels", label: "Instagram reels" },
-  { id: "clinics", label: "Clinics" },
 ] as const;
 
 export type HomeSectionId = (typeof homeSections)[number]["id"];

@@ -85,7 +85,7 @@ export default function CheckoutClient() {
     fullName: user ? `${user.firstName} ${user.lastName}`.trim() : "",
     email: user?.email ?? "",
   });
-  const [courierId, setCourierId] = useState("");
+  const [courierId] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
   const [holdingNote, setHoldingNote] = useState("");
@@ -292,7 +292,6 @@ export default function CheckoutClient() {
       : [];
   const selectedCourier =
     courierOptions.find((option) => option.key === courierId) ?? courierOptions[0];
-  const activeCourierId = selectedCourier?.key ?? "";
   const selectedOffer = selectedCourier
     ? { name: selectedCourier.courierName, deliverBy: selectedCourier.dayLabel ? `${selectedCourier.dayLabel}, ${selectedCourier.deliverBy}` : selectedCourier.deliverBy }
     : undefined;
@@ -686,60 +685,10 @@ export default function CheckoutClient() {
                   </p>
                 ) : null}
 
-                {domestic && orderSettings.showCourierChoice && courierOptions.length > 0 && (
-                  <fieldset className="mt-5">
-                    <legend className="mb-2 text-sm font-semibold text-text-primary">
-                      Choose your delivery partner {loadingRates && <span className="text-xs font-normal text-text-muted">· checking live rates…</span>}
-                    </legend>
-                    <div className="grid gap-2">
-                      {courierOptions.map((offer) => (
-                        <label
-                          key={offer.key}
-                          className={`flex cursor-pointer items-start justify-between gap-3 rounded-xl border px-3 py-3 text-sm ${
-                            activeCourierId === offer.key
-                              ? "border-burgundy bg-burgundy/5"
-                              : "border-border"
-                          }`}
-                        >
-                          <span className="flex items-start gap-2">
-                            <input
-                              type="radio"
-                              name="courier"
-                              className="mt-1 accent-burgundy"
-                              checked={activeCourierId === offer.key}
-                              onChange={() => setCourierId(offer.key)}
-                            />
-                            <span>
-                              <span className="flex flex-wrap items-center gap-1.5 font-semibold text-text-primary">
-                                {offer.courierName}
-                                {offer.express && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                                    <Glyph name="truck" className="h-3 w-3" />
-                                    {offer.dayLabel === "Today" ? "Same day" : "Express"}
-                                  </span>
-                                )}
-                              </span>
-                              <span className="mt-0.5 block text-xs text-text-muted">
-                                {offer.provider === "tookan" || offer.provider === "shipday" || offer.courierName === "Gogate Products"
-                                  ? ""
-                                  : offer.lastMile || offer.provider === "tookan-parcel"
-                                    ? "Live rider, phone and location from the courier, on our map, after delivery starts"
-                                    : offer.etaDays === 0
-                                      ? "Same day after dispatch"
-                                      : `${offer.etaDays} business day transit`}
-                              </span>
-                            </span>
-                          </span>
-                          <span className="text-right text-xs">
-                            <span className="block font-semibold text-emerald-700">{offer.dayLabel ? `Delivery by ${offer.dayLabel}` : `by ${offer.deliverBy}`}</span>
-                            {orderSettings.shippingFeeMode === "courier_rate" && (
-                              <span className="block font-semibold text-text-primary">{formatPrice(Math.round(offer.rate))}</span>
-                            )}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
+                {domestic && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
+                  <p className="mt-5 rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary">
+                    <b>Expected delivery by</b> {selectedOffer ? selectedOffer.deliverBy : <span className="text-text-muted">checking…</span>}
+                  </p>
                 )}
                 {domestic && quote && !quote.serviceable && pincodeValid && (
                   <p className="mt-3 text-sm text-red-700">{quote.note}</p>

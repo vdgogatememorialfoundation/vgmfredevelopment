@@ -457,8 +457,9 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
   const pickupReadyBy = formatDate(dispatchBy);
   const pickupHoldUntil = formatDate(addCalendarDays(dispatchBy, policy.pickupHoldingDays));
   const location = profile?.stockingLocation || "Pune Fulfillment Hub";
+  const preorderable = Boolean(book?.preorder?.enabled);
   const pickupAvailable = Boolean(
-    policy.storePickupEnabled && (profile ? profile.pickupEnabled : true) && stock >= quantity
+    policy.storePickupEnabled && (profile ? profile.pickupEnabled : true) && (stock >= quantity || preorderable)
   );
 
   const emptyOffers: DeliveryQuote = {
@@ -488,10 +489,9 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
     return { ...emptyOffers, note: "Enter a valid 6-digit pincode to check delivery." };
   }
 
-  if (book && stock < quantity) {
+  if (book && stock < quantity && !preorderable) {
     return {
       ...emptyOffers,
-      pickupAvailable: false,
       note: stock <= 0 ? "This product is out of stock." : "That quantity is not available.",
     };
   }
