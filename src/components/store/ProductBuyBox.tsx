@@ -21,7 +21,6 @@ import type { Book, CourierRate } from "@/types";
 import { customerCourierRates } from "@/lib/checkout-couriers";
 import { saveDeliverTo, useDeliverTo } from "@/lib/deliver-to";
 
-const AGGREGATOR = /shiprocket|nimbus|ithink|shipyaari/i;
 
 type CourierPromise = CourierRate & { deliverBy: string; dayLabel?: string; express: boolean };
 
@@ -53,7 +52,6 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const pickup = getPickupLocation();
   // Checkout pre-selects the first courier in this same order, so the headline date matches it.
   const fastest = couriers[0];
-  const courierShown = orderSettings.showCourierChoice && estimate?.courier && !AGGREGATOR.test(estimate.courier) ? estimate.courier : "";
   const nextUrl = `/shop/${book.slug}`;
 
   const requireAccount = (then: () => void) => {
@@ -244,51 +242,15 @@ export default function ProductBuyBox({ book }: { book: Book }) {
 
         {checked && estimate?.serviceable && (
           <div className="mt-3 rounded-lg bg-white p-3 text-xs">
-            {fastest ? (
-              <p className="font-semibold text-text-primary">
-                Deliverable to {estimate.pincode} by {fastest.dayLabel ? `${fastest.dayLabel}, ${fastest.deliverBy}` : fastest.deliverBy} via {fastest.courierName}
-              </p>
-            ) : courierShown && estimate.deliverBy ? (
-              <p className="font-semibold text-text-primary">
-                Deliverable to {estimate.pincode} by {estimate.deliverBy} via {courierShown}
-              </p>
-            ) : (
-              <p className="font-semibold text-text-primary">
-                Deliverable to {estimate.pincode}{estimate.deliverBy ? ` by ${estimate.deliverBy}` : ""}.
-              </p>
-            )}
-            {ratesBusy && <p className="mt-2 text-text-muted">Checking delivery options…</p>}
-            {couriers.length > 0 && (
-              <ul className="mt-2 space-y-1.5 border-t border-border pt-2">
-                {couriers.map((offer) => (
-                  <li key={`${offer.provider}:${offer.courierId}`} className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="flex flex-wrap items-center gap-1.5 font-medium text-text-primary">
-                      {offer.courierName}
-                      {offer.express && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                            <path d="M3 7h11v10H3zM14 10h4l3 3v4h-7" />
-                            <circle cx="7" cy="18" r="1.6" />
-                            <circle cx="17" cy="18" r="1.6" />
-                          </svg>
-                          {offer.dayLabel === "Today" ? "Same day" : "Express"}
-                        </span>
-                      )}
-                    </span>
-                    <span className="font-semibold text-emerald-700">{offer.dayLabel ? `Delivery by ${offer.dayLabel}` : `by ${offer.deliverBy}`}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {orderSettings.showCourierChoice && !couriers.length && estimate.offers.length > 0 && (
-              <ul className="mt-2 space-y-1 border-t border-border pt-2 text-text-muted">
-                {estimate.offers.filter((offer) => !AGGREGATOR.test(offer.name)).slice(0, 4).map((offer) => (
-                  <li key={offer.id}>
-                    {offer.name}: {offer.deliverBy}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <p className="font-semibold text-text-primary">
+              Deliverable to {estimate.pincode}
+              {fastest
+                ? ` by ${fastest.dayLabel ? `${fastest.dayLabel}, ${fastest.deliverBy}` : fastest.deliverBy}`
+                : estimate.deliverBy
+                  ? ` by ${estimate.deliverBy}`
+                  : ""}
+            </p>
+            {ratesBusy && <p className="mt-2 text-text-muted">Checking delivery date…</p>}
             {estimate.note && <p className="mt-2 text-text-muted">{estimate.note}</p>}
           </div>
         )}
