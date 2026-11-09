@@ -23,7 +23,7 @@ import { sameShipmentSlot } from "@/lib/shipment-slot";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
-import { commerceCharges, getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { commerceCharges, getIntegrations, getOrderSettings, shippingFeeFor } from "@/lib/integrations";
 import { barcodeSvg } from "@/lib/barcode";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
@@ -1183,9 +1183,10 @@ function logoImg(cls = "logo") {
   return `<img class="${cls}" src="${esc(logoSrc())}" alt="" onerror="this.style.display='none'"/>`;
 }
 
-export type LabelSize = "4x6" | "a4" | "a5" | "roll";
+export type LabelSize = "printer" | "4x6" | "a4" | "a5" | "roll";
 const LABEL_SIZE_KEY = "vgmf-label-size";
 export const LABEL_SIZES: { id: LabelSize; label: string }[] = [
+  { id: "printer", label: "Choose paper in print dialog" },
   { id: "4x6", label: "4×6 in tag (thermal)" },
   { id: "roll", label: "Paper roll 80 mm" },
   { id: "a5", label: "A5 sheet" },
@@ -1193,9 +1194,10 @@ export const LABEL_SIZES: { id: LabelSize; label: string }[] = [
 ];
 
 export function getLabelSize(): LabelSize {
-  if (typeof window === "undefined") return "4x6";
+  const fallback = (getIntegrations().shipping.labelSize || "4x6") as LabelSize;
+  if (typeof window === "undefined") return fallback;
   const saved = window.localStorage.getItem(LABEL_SIZE_KEY) as LabelSize | null;
-  return LABEL_SIZES.some((item) => item.id === saved) ? (saved as LabelSize) : "4x6";
+  return LABEL_SIZES.some((item) => item.id === saved) ? (saved as LabelSize) : fallback;
 }
 
 export function setLabelSize(size: LabelSize) {
@@ -1224,10 +1226,11 @@ function printHtml(title: string, html: string, page = "A4") {
   if (typeof window === "undefined") return;
   const win = window.open("", "_blank");
   if (!win) return;
-  const margin = page === "A4" || page === "A5" ? "10mm" : "3mm";
+  const margin = page === "A4" || page === "A5" || page === "auto" ? "10mm" : "3mm";
+  const pageRule = page === "auto" ? `@page { margin: ${margin}; }` : `@page { size: ${page}; margin: ${margin}; }`;
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
   <style>
-    @page { size: ${page}; margin: ${margin}; }
+    ${pageRule}
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", Arial, sans-serif; color: #1c1917; margin: 0; }
     .head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #8F2D2D; padding-bottom: 12px; }
@@ -1237,6 +1240,7 @@ function printHtml(title: string, html: string, page = "A4") {
     .label-brand { display: flex; gap: 8px; align-items: center; }
     .size-a4 .label-sheet { width: 150mm; margin: 0 auto; }
     .size-a5 .label-sheet { width: 128mm; margin: 0 auto; }
+    .size-printer .label-sheet { max-width: 150mm; margin: 0 auto; }
     .size-roll { font-size: 11px; }
     .size-roll .grid { display: block; }
     .size-roll .box { margin-top: 8px; min-width: 0; }
@@ -1374,7 +1378,7 @@ export function printShippingLabel(
       <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
     </div>
   </div></div>`;
-  const page = size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
+  const page = size === "printer" ? "auto" : size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
   printHtml(`Label ${awb}`, html, page);
 }
 

@@ -28,6 +28,8 @@ interface VerticalPipelineProps {
   country?: string;
   /** Milliseconds. The line creeps from the current step toward the next one until `until`. */
   pace?: { from: number; until: number } | null;
+  /** 0–1 share of the gap to the next step already covered by the courier's hubs (seller hub → city hubs → buyer hub). */
+  hubShare?: number;
 }
 
 function pipeState(stage: PipelineStageShape, isCurrent: boolean): "done" | "active" | "upcoming" {
@@ -45,6 +47,7 @@ export default function VerticalPipeline({
   note,
   country,
   pace,
+  hubShare = 0,
 }: VerticalPipelineProps) {
   const lastReachedIdx = stages.map((stage) => stage.reached).lastIndexOf(true);
   const partialIdx = stages.map((stage) => stage.partial).lastIndexOf(true);
@@ -71,9 +74,13 @@ export default function VerticalPipeline({
     nodeCurrentIdx >= stages.length - 1 ||
     stages[nodeCurrentIdx + 1]?.reached
       ? 0
-      : !pace || pace.until <= pace.from
-        ? 0.15
-        : Math.max(0.15, Math.min(0.8, (now - pace.from) / (pace.until - pace.from)));
+      : Math.min(
+          0.9,
+          Math.max(
+            hubShare,
+            !pace || pace.until <= pace.from ? 0.15 : Math.max(0.15, Math.min(0.8, (now - pace.from) / (pace.until - pace.from)))
+          )
+        );
   const creepRef = useRef(creep);
   creepRef.current = creep;
 

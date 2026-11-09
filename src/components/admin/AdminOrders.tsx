@@ -63,7 +63,8 @@ import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { listPickupLocations } from "@/lib/shipping-client";
-import { LABEL_SIZES, getLabelSize, getOrder as getStoredOrder, patchOrder as patchStoredOrder, setLabelSize, type LabelSize } from "@/lib/admin-store";
+import { getOrder as getStoredOrder, patchOrder as patchStoredOrder } from "@/lib/admin-store";
+import LabelSizePicker from "@/components/admin/LabelSizePicker";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
@@ -1197,6 +1198,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </div>
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
+                    <LabelSizePicker />
                     <Button variant="outline" onClick={() => run("label", () => downloadLabel(shipment.id))}>Download AWB label</Button>
                     {shipment.provider === "shiprocket" && shipment.live && (
                       <>
@@ -1484,26 +1486,6 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </div>
       )}
     </Panel>
-  );
-}
-
-function LabelSizePicker() {
-  const [size, setSize] = useState<LabelSize>(() => getLabelSize());
-  return (
-    <select
-      aria-label="Label size"
-      className="rounded-lg border border-border bg-white px-2 py-1.5 text-sm"
-      value={size}
-      onChange={(event) => {
-        const next = event.target.value as LabelSize;
-        setSize(next);
-        setLabelSize(next);
-      }}
-    >
-      {LABEL_SIZES.map((item) => (
-        <option key={item.id} value={item.id}>{item.label}</option>
-      ))}
-    </select>
   );
 }
 

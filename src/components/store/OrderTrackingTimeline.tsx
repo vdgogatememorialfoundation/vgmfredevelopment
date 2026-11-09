@@ -25,6 +25,35 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+const sameCity = (place: string, city: string) => {
+  const a = place.toLowerCase().replace(/[^a-z]/g, "");
+  const b = city.toLowerCase().replace(/[^a-z]/g, "");
+  return Boolean(a && b && (a.includes(b) || b.includes(a)));
+};
+
+/**
+ * Couriers usually move a parcel: seller area hub → seller city hub → buyer city hub → buyer local hub → delivery.
+ * Returns how far along that route the latest scan is, so the line between Shipped and Out for delivery moves forward.
+ */
+function courierHubShare(events: { title?: string; location?: string }[], fromCity: string, toCity: string) {
+  let share = 0;
+  const local = sameCity(fromCity, toCity);
+  for (const event of events) {
+    const text = `${event.title ?? ""} ${event.location ?? ""}`.toLowerCase();
+    const where = `${event.location ?? ""} ${event.title ?? ""}`;
+    const atBuyer = toCity && sameCity(where, toCity);
+    const atSeller = fromCity && sameCity(where, fromCity);
+    let step = 0;
+    if (/picked up|pickup done|pickup complete|manifested|shipment picked/.test(text)) step = 0.12;
+    if (/arrived|received|reached|inward|bag(ged)?|hub|facility|sort/.test(text)) step = Math.max(step, local ? 0.35 : atSeller ? 0.25 : 0.45);
+    if (/left|depart|dispatch|in transit|forwarded|connected|en route|outscan/.test(text)) step = Math.max(step, local ? 0.5 : atBuyer ? 0.72 : 0.45);
+    if (atBuyer && !local && /arrived|received|reached|inward|hub|facility/.test(text)) step = Math.max(step, 0.65);
+    if (/delivery (centre|center|hub)|\bdc\b|last mile|local hub|destination (hub|city)|reached at destination|at destination/.test(text)) step = Math.max(step, 0.82);
+    share = Math.max(share, step);
+  }
+  return share;
+}
+
 function Tile({ label, value }: { label: string; value: string }) {
   return (
     <div className="vgmf-trk-tile">
@@ -218,6 +247,12 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   const facilityStatus = /^(Pickup scheduled|Shipment arrived at courier facility|Shipment left courier facility)/.test(latestTitle);
   const currentStatus = facilityStatus ? cleanScanText(latestTitle) : rawStages[nodeCurrentIdx]?.label || order.status;
 
+  const hubShare = courierHubShare(
+    rawStages.find((stage) => stage.id === "shipped" && stage.reached && !rawStages.some((later) => later.id === "out" && later.reached))?.events ?? [],
+    getIntegrations().shipping.pickup?.city || "",
+    order.deliveryAddress?.city || ""
+  );
+
   const pipe = (
     <VerticalPipeline
       stages={stages}
@@ -228,6 +263,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       note={lineNote}
       country={order.deliveryAddress?.country}
       pace={failed || order.status === "Delivered" ? null : { from: paceFrom, until: paceUntil }}
+      hubShare={hyperlocal ? 0 : hubShare}
     />
   );
 

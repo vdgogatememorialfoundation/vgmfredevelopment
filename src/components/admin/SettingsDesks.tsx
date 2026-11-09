@@ -1371,6 +1371,27 @@ export function ShippingApisDesk() {
           <Check label="Schedule pickup automatically" hint="Shiprocket gets a pickup request right after the AWB." checked={value.autoSchedulePickup} onChange={(autoSchedulePickup) => set({ autoSchedulePickup })} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Shipping label</span>
+            <select className={input} value={value.labelSource ?? "aggregator"} onChange={(event) => set({ labelSource: event.target.value === "foundation" ? "foundation" : "aggregator" })}>
+              <option value="aggregator">Aggregator label (Shiprocket, Nimbuspost, iThink, Shipyaari) when available</option>
+              <option value="foundation">Foundation label for every courier</option>
+            </select>
+            <span className="mt-1 block text-xs text-slate-500">Aggregator labels print in the paper size set in that aggregator&apos;s panel (for Shiprocket: Settings → Label). Otherwise the Foundation label is printed.</span>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Foundation label paper</span>
+            <select className={input} value={value.labelSize ?? "4x6"} onChange={(event) => set({ labelSize: event.target.value as typeof value.labelSize })}>
+              <option value="printer">Choose paper in print dialog</option>
+              <option value="4x6">4×6 in tag (thermal)</option>
+              <option value="roll">Paper roll 80 mm</option>
+              <option value="a5">A5 sheet</option>
+              <option value="a4">A4 sheet</option>
+            </select>
+            <span className="mt-1 block text-xs text-slate-500">Default for every device. Each device can still pick a size next to the Print label button.</span>
+          </label>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
           <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.min(15, Math.max(8, Number(seconds) || 8)) })} hint="How often the live map asks Tookan or Shipday for the rider. 8 to 15 seconds." />
         </div>

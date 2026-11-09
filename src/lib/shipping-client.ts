@@ -590,6 +590,13 @@ export async function downloadLabel(shipmentId: string) {
     }
   }
   const latest = getShipments().find((item) => item.id === shipmentId) ?? shipment;
+  if (getIntegrations().shipping.labelSource !== "foundation" && /^https?:\/\//.test(details.labelUrl ?? "")) {
+    const opened = typeof window !== "undefined" ? window.open(details.labelUrl, "_blank") : null;
+    if (opened) {
+      opened.opener = null;
+      return `Opened the ${label(provider ?? "courier")} label. Its paper size follows the label setting in the ${label(provider ?? "courier")} panel.`;
+    }
+  }
   printShippingLabel(latest, details);
   const fromPortal = fetched.has(provider ?? "") && shipment.live ? ` using the ${label(provider ?? "courier")} shipment` : "";
   return `Printed the shipping label${fromPortal}.`;

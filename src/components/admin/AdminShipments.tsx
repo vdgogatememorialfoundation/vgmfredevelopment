@@ -8,6 +8,7 @@ import {
   updateShipmentStatus,
 } from "@/lib/admin-store";
 import { downloadLabel } from "@/lib/shipping-client";
+import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { getOrder } from "@/lib/admin-store";
 import type { ShipmentRecord } from "@/types";
 import {
@@ -81,6 +82,7 @@ export function ShipmentsSection() {
                         <option key={s}>{s}</option>
                       ))}
                     </SelectInput>
+                    <LabelSizePicker />
                     <Button variant="ghost" onClick={() => void downloadLabel(shipment.id).catch(() => undefined)}>
                       Shipping label
                     </Button>

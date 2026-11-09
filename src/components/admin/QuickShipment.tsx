@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button, Field, Panel, TextInput } from "@/components/admin/AdminUI";
 import { RatesTable } from "@/components/admin/SettingsDesks";
+import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { addPickupLocation, bookShipment, downloadLabel, downloadManifest, fetchCourierRates, listPickupLocations, type RateQuote } from "@/lib/shipping-client";
 import { getIntegrations, hasShippingCredentials, saveIntegrations, type PickupAddress } from "@/lib/integrations";
 import { generateOrderId, saveOrder } from "@/lib/store";
@@ -237,6 +238,7 @@ export function QuickShipment() {
         )}
         {shipmentId && (
           <div className="mt-3 flex flex-wrap gap-2">
+            <LabelSizePicker />
             <Button variant="outline" onClick={() => void downloadLabel(shipmentId).then(setNote).catch((problem) => setError(problem instanceof Error ? problem.message : "No label yet."))}>Download waybill / label</Button>
             <Button variant="outline" onClick={() => void downloadManifest(shipmentId).then(setNote).catch((problem) => setError(problem instanceof Error ? problem.message : "No manifest yet."))}>Download manifest</Button>
           </div>

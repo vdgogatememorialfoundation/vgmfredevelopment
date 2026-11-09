@@ -175,6 +175,10 @@ export interface IntegrationSettings {
     autoBookOnPack: boolean;
     autoSchedulePickup: boolean;
     rateChoice: "customer" | "cheapest" | "fastest";
+    /** "aggregator" opens the courier's own label PDF (paper size set in its panel) when it has one. */
+    labelSource: "aggregator" | "foundation";
+    /** Default paper for the Foundation label; "printer" lets the print dialog choose. */
+    labelSize: "printer" | "4x6" | "a4" | "a5" | "roll";
   };
 }
 
@@ -356,6 +360,8 @@ export const defaultIntegrations: IntegrationSettings = {
     autoBookOnPack: true,
     autoSchedulePickup: true,
     rateChoice: "customer",
+    labelSource: "aggregator",
+    labelSize: "4x6",
   },
 };
 
