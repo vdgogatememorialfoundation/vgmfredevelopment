@@ -1,5 +1,6 @@
 import { isCourierInfoLine } from "@/lib/order-pipeline";
 import { courierTrackingCode, courierTrackingLink, directCourier } from "@/lib/couriers";
+import { riderFrom } from "@/lib/server/providers";
 
 /**
  * Reads tracking scans for couriers sent without an API account: first from the
@@ -17,6 +18,10 @@ export type CourierWebHit = {
   awb: string;
   expectedBy?: string;
   source: string;
+  /** Delivery agent and doorstep PIN when the courier's page lists them (usually only while out for delivery). */
+  agentName?: string;
+  agentPhone?: string;
+  otp?: string;
 };
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36";
@@ -270,7 +275,9 @@ async function delhivery(awb: string) {
     const text = flatText(last?.scanNslRemark) || flatText(row.hqStatus) || flatText(current.instructions);
     if (text) events.push({ at: latestAt, status: text.slice(0, 200), location: place(last) });
   }
-  return hit("delhivery", awb, events, "delhivery.com", flatText(row.hqStatus), flatText(row.promiseDeliveryDate));
+  const found = hit("delhivery", awb, events, "delhivery.com", flatText(row.hqStatus), flatText(row.promiseDeliveryDate));
+  const rider = riderFrom(row);
+  return found && (rider.name || rider.phone || rider.otp) ? { ...found, agentName: rider.name, agentPhone: rider.phone, otp: rider.otp } : found;
 }
 
 async function ekart(awb: string) {

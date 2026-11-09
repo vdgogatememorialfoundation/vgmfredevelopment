@@ -956,7 +956,7 @@ function promisedFrom(payload: unknown, ...first: unknown[]) {
 }
 
 /** Agent name, phone, OTP and GPS when the courier portal sends them (Shiprocket hyperlocal, Porter, and the others). */
-function riderFrom(payload: unknown) {
+export function riderFrom(payload: unknown) {
   const found = { name: "", phone: "", otp: "", lat: undefined as number | undefined, lng: undefined as number | undefined };
   const walk = (value: unknown, depth: number) => {
     if (depth > 6 || value == null || typeof value !== "object") return;
@@ -969,9 +969,9 @@ function riderFrom(payload: unknown) {
       if (typeof child === "string" || typeof child === "number") {
         const text = String(child).trim();
         if (!text || text === "null" || text === "undefined") continue;
-        if (!found.name && /(rider|agent|driver|delivery_boy|fe)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
-        if (!found.phone && /(rider|agent|driver|delivery_boy|fe)_?(phone|mobile|contact)$/.test(k)) found.phone = text;
-        if (!found.otp && /(delivery_otp|^otp$|door_code|verification_code)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
+        if (!found.name && /(rider|agent|driver|delivery_?boy|fe|executive|courier_?boy|associate|dispatcher)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
+        if (!found.phone && /(rider|agent|driver|delivery_?boy|fe|executive|courier_?boy|associate|dispatcher)_?(phone|mobile|contact|number|no)$/.test(k) && /\d{6,}/.test(text.replace(/\D/g, ""))) found.phone = text;
+        if (!found.otp && /(delivery_?otp|delivery_?pin|^otp$|^pin$|door_code|verification_code|secure_?pin)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
         if (found.lat == null && /(rider|agent|driver|fe)_?lat(itude)?$/.test(k)) {
           const n = Number(text);
           if (Math.abs(n) > 0.01) found.lat = n;

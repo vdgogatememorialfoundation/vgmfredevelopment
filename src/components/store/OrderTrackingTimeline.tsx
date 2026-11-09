@@ -169,6 +169,12 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
         detail: [viaNote, trackingId ? `Tracking ID ${trackingId}` : ""].filter(Boolean).join(" · "),
       };
     }
+    if (stage.id === "out" && stage.reached && order.status !== "Delivered" && (shipment?.agentPhone || shipment?.agentName || shipment?.deliveryOtp)) {
+      next.courierNote = {
+        title: shipment.agentName ? `Delivery agent: ${shipment.agentName}` : "Delivery agent",
+        detail: [shipment.agentPhone ? `Phone ${shipment.agentPhone}` : "", shipment.deliveryOtp ? `Delivery PIN ${shipment.deliveryOtp}` : ""].filter(Boolean).join(" · ") || "Contact shared by the courier",
+      };
+    }
     if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
     const alreadyDelivered = order.status === "Delivered" || shipment?.status === "Delivered" || stage.reached;
     if (stage.id === "delivered" && !alreadyDelivered) {

@@ -59,6 +59,7 @@ export default function VerticalPipeline({
   const shownIdx = useRef(-1);
   const readRef = useRef<(() => { left: number; top: number; reached: number; height: number } | null) | null>(null);
   const [line, setLine] = useState({ left: 14.5, top: 34, height: 0, transition: "none" });
+  const [litIdx, setLitIdx] = useState(-1);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 10000);
@@ -100,6 +101,23 @@ export default function VerticalPipeline({
     let cancelled = false;
     let growTimer = 0;
     let creepTimer = 0;
+    let litTimers: number[] = [];
+    const lightAlong = (seconds: number) => {
+      litTimers.forEach((id) => window.clearTimeout(id));
+      litTimers = [];
+      const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
+      const frameTop = frame.getBoundingClientRect().top;
+      const centers = items.slice(0, nodeCurrentIdx + 1).map((item) => {
+        const box = item.querySelector(".dot")?.getBoundingClientRect();
+        return box ? box.top + box.height / 2 - frameTop : 0;
+      });
+      const start = centers[0] ?? 0;
+      const span = Math.max(1, (centers[centers.length - 1] ?? start) - start);
+      centers.forEach((center, index) => {
+        const delay = seconds <= 0 ? 0 : ((center - start) / span) * seconds * 1000;
+        litTimers.push(window.setTimeout(() => !cancelled && setLitIdx((was) => Math.max(was, index)), delay));
+      });
+    };
     const read = () => {
       const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
       const step = items[nodeCurrentIdx];
@@ -158,10 +176,12 @@ export default function VerticalPipeline({
       if (motion("height 1s linear") === "none") {
         phase.current = "at-step";
         paint(next, "none");
+        lightAlong(0);
         return;
       }
       if (phase.current === "start") {
         paint({ ...next, height: 0 }, "none");
+        setLitIdx(-1);
         window.clearTimeout(growTimer);
         window.clearTimeout(creepTimer);
         growTimer = window.setTimeout(() => {
@@ -170,6 +190,7 @@ export default function VerticalPipeline({
           if (!latest) return;
           phase.current = "to-step";
           paint({ ...latest, height: latest.reached }, `height ${statusSeconds}s linear`);
+          lightAlong(statusSeconds);
           settleCreep();
         }, 70);
         return;
@@ -177,6 +198,7 @@ export default function VerticalPipeline({
       window.clearTimeout(creepTimer);
       phase.current = "to-step";
       paint({ ...next, height: next.reached }, `height ${statusSeconds}s linear`);
+      lightAlong(statusSeconds);
       settleCreep();
     };
     const timer = window.setTimeout(apply, 40);
@@ -195,6 +217,7 @@ export default function VerticalPipeline({
       window.clearTimeout(timer);
       window.clearTimeout(growTimer);
       window.clearTimeout(creepTimer);
+      litTimers.forEach((id) => window.clearTimeout(id));
       observer.disconnect();
       window.removeEventListener("resize", follow);
     };
@@ -233,7 +256,7 @@ export default function VerticalPipeline({
           return (
             <li
               key={stage.id}
-              className={`${state}${failedStep ? " is-failed" : ""}`}
+              className={`${state}${failedStep ? " is-failed" : ""}${index <= litIdx ? " lit" : ""}`}
               style={{ "--i": index } as CSSProperties}
             >
               <span className="dot" aria-hidden="true" />

@@ -87,6 +87,13 @@
   border-color: var(--tl-green);
   color: #fff;
 }
+.vgmf-ship-pipe > li.done:not(.lit) > .dot,
+.vgmf-ship-pipe > li.active:not(.lit) > .dot {
+  background: #fff;
+  border-color: var(--tl-line);
+  animation: none;
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
 .vgmf-ship-pipe > li.is-failed > .dot {
   background: var(--tl-failed);
   border-color: var(--tl-failed);

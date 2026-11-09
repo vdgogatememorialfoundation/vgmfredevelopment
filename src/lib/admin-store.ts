@@ -1287,6 +1287,20 @@ function printHtml(title: string, html: string, page = "A4") {
     .size-4x6 td, .size-4x6 th { padding: 3px 5px; font-size: 10px; }
     .size-4x6 .foot { margin-top: 6px; padding-top: 4px; font-size: 9px; line-height: 1.35; }
     .size-4x6 svg { max-width: 100%; height: 44px; }
+    .label-sheet, .label-sheet * { color: #000 !important; }
+    .label-sheet { border: 2px solid #fff; background: #fff; }
+    .label-sheet .label-band { background: #fff; border-bottom: 1.5px solid #000; }
+    .label-sheet .label-band span { opacity: 1; }
+    .label-sheet .label-logo { filter: grayscale(1) contrast(1.4); background: #fff; }
+    .label-sheet .route { border: 1px solid #fff; border-top: 1px solid #000; border-bottom: 1px solid #000; border-radius: 0; }
+    .label-sheet .box { border: 1px solid #fff; border-radius: 0; padding-left: 0; }
+    .label-sheet th { background: #fff; border-bottom: 1px solid #000; }
+    .label-sheet td { border-bottom: 1px solid #fff; }
+    .label-sheet .foot { border-top: 1px solid #000; }
+    .label-sheet .label { color: #000; font-weight: 700; }
+    .label-sheet .pay { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 0; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; }
+    .label-sheet .pay b { font-size: 18px; letter-spacing: 0.08em; }
+    .label-sheet .pay span { font-size: 13px; font-weight: 700; text-align: right; }
   </style></head><body>${html}<script>
     (function () {
       var printed = false;
@@ -1340,6 +1354,10 @@ export function printShippingLabel(
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";
   const hub = details?.destination || shipment.destinationHub || "";
+  const order = getOrder(shipment.orderId);
+  const cod = Boolean(order && order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid");
+  const collect = cod && order ? Math.max(0, order.total - (order.storeCreditUsed ?? 0)) : 0;
+  const payBlock = `<div class="pay"><b>${cod ? "COD" : "PREPAID"}</b><span>${cod ? `Collect ${esc(rupees(collect))} cash` : "Collect ₹0 · do not collect cash"}</span></div>`;
   const html = `<div class="size-${size}"><div class="label-sheet">
     <div class="label-band">
       <div class="label-brand">
@@ -1353,6 +1371,7 @@ export function printShippingLabel(
       <p class="awb">${esc(awb)}</p>
       ${barcodeSvg(awb, { height: 56, module: 1.6 })}
       <p class="meta">Order ${esc(shipment.orderId)} · ${esc(formatDate(shipment.generatedAt))}</p>
+      ${payBlock}
       ${
         routing || hub
           ? `<div class="route"><div><p class="label">Routing</p><b>${esc(routing || "—")}</b></div><div><p class="label">Hub</p><b>${esc(hub || "—")}</b></div></div>`
