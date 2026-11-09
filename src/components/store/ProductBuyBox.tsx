@@ -10,7 +10,7 @@ import {
   isInWishlist,
   toggleWishlist,
 } from "@/lib/store";
-import { addStockAlert, canOrder, canPreorder, isPurchasable } from "@/lib/product-data";
+import { addStockAlert, canOrder, canPreorder, isPurchasable, preorderDeliveryDate } from "@/lib/product-data";
 import { checkPincode, getOriginPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
 import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
@@ -240,7 +240,12 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </button>
         </div>
 
-        {checked && estimate?.serviceable && (
+        {preorder && (
+          <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
+            Delivery by {preorderDeliveryDate(book)}
+          </p>
+        )}
+        {!preorder && checked && estimate?.serviceable && (
           <div className="mt-3 rounded-lg bg-white p-3 text-xs">
             <p className="font-semibold text-text-primary">
               Deliverable to {estimate.pincode}
@@ -254,7 +259,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             {estimate.note && <p className="mt-2 text-text-muted">{estimate.note}</p>}
           </div>
         )}
-        {checked && estimate && !estimate.serviceable && (
+        {!preorder && checked && estimate && !estimate.serviceable && (
           <p className={`mt-2 text-xs ${estimate.pickupAvailable ? "text-text-muted" : "text-red-700"}`}>{estimate.note}</p>
         )}
 

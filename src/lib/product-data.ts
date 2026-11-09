@@ -62,6 +62,14 @@ export function canPreorder(book: Pick<Book, "stock" | "stockStatus" | "preorder
   return !isPurchasable(book) && Boolean(book.preorder?.enabled);
 }
 
+/** Pre-orders: expected release (or today, if none or already past) plus 10 days for packing and delivery. */
+export function preorderDeliveryDate(book: Pick<Book, "preorder">, now = new Date()) {
+  const release = book.preorder?.releaseDate ? new Date(`${book.preorder.releaseDate}T00:00:00+05:30`) : null;
+  const start = release && !Number.isNaN(release.getTime()) && release > now ? release : now;
+  const date = new Date(start.getTime() + 10 * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
 export function canOrder(book: Pick<Book, "stock" | "stockStatus" | "preorder">) {
   return isPurchasable(book) || canPreorder(book);
 }

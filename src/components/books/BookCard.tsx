@@ -7,9 +7,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Book } from "@/types";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
-import { storeConfig } from "@/lib/constants";
-import { availabilityText, canOrder } from "@/lib/product-data";
-import { addToCart, getEstimatedDeliveryDate } from "@/lib/store";
+import { availabilityText, canOrder, canPreorder, preorderDeliveryDate } from "@/lib/product-data";
+import { addToCart } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
 
 export default function BookCard({ book }: { book: Book }) {
@@ -22,7 +21,10 @@ export default function BookCard({ book }: { book: Book }) {
     return () => window.cancelAnimationFrame(frame);
   }, []);
   // Same courier date the product page found for the shopper's pincode; no guessed date otherwise.
-  const delivery = book.expectedDelivery?.trim() || (checked ? `${deliveryCheckText(checked)} to ${checked.pincode}` : "");
+  const preorder = canPreorder(book);
+  const delivery = preorder
+    ? preorderDeliveryDate(book)
+    : book.expectedDelivery?.trim() || (checked ? `${deliveryCheckText(checked)} to ${checked.pincode}` : "");
 
   const add = () => {
     if (!orderable) return;
