@@ -274,7 +274,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       {tiles}
       {order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
         <p className="vgmf-trk-note">
-          <b>Tentative delivery:</b> {expectedText ? deliveryDatePhrase(expectedText) : "shown once the courier confirms the booking"}
+          <b>Expected delivery by</b> {expectedText ? deliveryDatePhrase(expectedText) : "— shown once the courier confirms the booking"}
         </p>
       ) : null}
       {order.preorderPayment ? (

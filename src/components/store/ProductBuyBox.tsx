@@ -33,9 +33,11 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const [pincode, setPincode] = useState("");
   const [estimate, setEstimate] = useState<DeliveryQuote | null>(null);
   const [checked, setChecked] = useState(false);
-  const [couriers, setCouriers] = useState<CourierPromise[]>([]);
+  const [courierList, setCouriers] = useState<CourierPromise[]>([]);
   const [ratesBusy, setRatesBusy] = useState(false);
   const orderSettings = useOrderSettings();
+  // Couriers appear beside the product only when customers choose the courier (Settings → Orders).
+  const couriers = orderSettings.showCourierChoice ? courierList : [];
   const saved = useSavedAddresses(user?.email);
   const [addressId, setAddressId] = useState("");
   const autoChecked = useRef(false);
@@ -49,7 +51,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const pickup = getPickupLocation();
   // Checkout pre-selects the first courier in this same order, so the headline date matches it.
   const fastest = couriers[0];
-  const courierShown = estimate?.courier && !AGGREGATOR.test(estimate.courier) ? estimate.courier : "";
+  const courierShown = orderSettings.showCourierChoice && estimate?.courier && !AGGREGATOR.test(estimate.courier) ? estimate.courier : "";
   const nextUrl = `/shop/${book.slug}`;
 
   const requireAccount = (then: () => void) => {
@@ -248,22 +250,9 @@ export default function ProductBuyBox({ book }: { book: Book }) {
               </p>
             ) : (
               <p className="font-semibold text-text-primary">
-                Deliverable to {estimate.pincode}.
+                Deliverable to {estimate.pincode}{estimate.deliverBy ? ` by ${estimate.deliverBy}` : ""}.
               </p>
             )}
-            <ul className="mt-2 space-y-1 text-text-muted">
-              <li>Order date: {estimate.orderDate}</li>
-              <li>
-                Processing and packing: {estimate.processingDays} business day
-                {estimate.processingDays === 1 ? "" : "s"} · dispatch {estimate.dispatchBy}
-              </li>
-              {courierShown ? (
-                <li>
-                  {courierShown} transit: {estimate.transitDays} business day
-                  {estimate.transitDays === 1 ? "" : "s"}
-                </li>
-              ) : null}
-            </ul>
             {ratesBusy && <p className="mt-2 text-text-muted">Checking delivery options…</p>}
             {couriers.length > 0 && (
               <ul className="mt-2 space-y-1.5 border-t border-border pt-2">
@@ -287,7 +276,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
                 ))}
               </ul>
             )}
-            {!couriers.length && estimate.offers.length > 0 && (
+            {orderSettings.showCourierChoice && !couriers.length && estimate.offers.length > 0 && (
               <ul className="mt-2 space-y-1 border-t border-border pt-2 text-text-muted">
                 {estimate.offers.filter((offer) => !AGGREGATOR.test(offer.name)).slice(0, 4).map((offer) => (
                   <li key={offer.id}>
