@@ -10,6 +10,7 @@ import { LoginStamp } from "@/components/layout/LoginStamp";
 import { visibleAccountNav } from "@/lib/site-visibility";
 import { InboxBell } from "@/components/notifications/InboxBell";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import { ScrollRow } from "@/components/layout/ScrollRow";
 
 export default function AccountLayout({
   children,
@@ -70,14 +71,14 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                 <InboxBell href="/account/notifications" />
               </div>
 
-              <nav aria-label="Account sections" className="-mx-2 mt-4 flex gap-2 overflow-x-auto px-2 pb-1 lg:hidden">
+              <ScrollRow label="Account sections" className="mt-4 lg:hidden">
                 {items.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
                     aria-current={pathname === item.href ? "page" : undefined}
                     className={classNames(
-                      "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
+                      "flex shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold",
                       pathname === item.href ? "border-burgundy bg-burgundy/5 text-burgundy" : "border-border text-text-primary"
                     )}
                   >
@@ -85,7 +86,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                     {item.name}
                   </Link>
                 ))}
-              </nav>
+              </ScrollRow>
 
               <nav aria-label="Account sidebar" className="mt-4 hidden space-y-1 lg:block">
                 {items.map((item) => {

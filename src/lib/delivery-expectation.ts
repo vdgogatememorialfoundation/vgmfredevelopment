@@ -115,7 +115,7 @@ export function statusStamp(at?: string, country?: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
-  return `${text} ${zoneSuffix(zone)}`;
+  return zone === "UTC" ? `${text} UTC` : text;
 }
 
 /** Weekday and date only, for delivery steps. Customers see the day, not the clock. */

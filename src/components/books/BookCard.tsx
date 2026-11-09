@@ -57,9 +57,13 @@ export default function BookCard({ book }: { book: Book }) {
         </h3>
         <p className="mt-0.5 truncate text-xs text-text-muted">{book.author}</p>
         <p className="mt-2 text-sm font-bold text-burgundy">{formatCurrency(book.price, book.currency)}</p>
-        <p className="text-[11px] text-text-muted">{availabilityText(book)}</p>
-        <p className="mt-1 text-[11px] font-medium text-ink">{delivery ? `Delivery by ${delivery}` : "Check delivery date for your pincode"}</p>
-        {book.storePickupAvailable !== false ? <p className="text-[11px] text-text-muted">Store pickup available</p> : null}
+        <AvailabilityBadge text={availabilityText(book)} />
+        <p className="mt-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-sm font-bold leading-snug text-emerald-800">
+          {delivery ? `Delivery by ${delivery}` : "Check delivery date for your pincode"}
+        </p>
+        {book.storePickupAvailable !== false ? (
+          <p className="mt-1 rounded-lg bg-sky-50 px-2 py-1 text-sm font-bold text-sky-800">Store pickup available</p>
+        ) : null}
 
         <div className="mt-3 flex flex-wrap gap-1.5">
           <Link href={`/shop/${book.slug}`} className="btn-outline px-2.5 py-1.5 text-[11px]">
@@ -75,4 +79,14 @@ export default function BookCard({ book }: { book: Book }) {
       </div>
     </article>
   );
+}
+
+function AvailabilityBadge({ text }: { text: string }) {
+  const tone =
+    text === "Pre-order"
+      ? "bg-amber-100 text-amber-900 ring-amber-300"
+      : text === "In Stock"
+        ? "bg-emerald-100 text-emerald-900 ring-emerald-300"
+        : "bg-red-50 text-red-800 ring-red-200";
+  return <p className={`mt-1.5 inline-flex w-fit rounded-full px-2.5 py-0.5 text-sm font-bold ring-1 ${tone}`}>{text}</p>;
 }

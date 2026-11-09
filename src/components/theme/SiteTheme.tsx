@@ -3,7 +3,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { activeFestival, festivalPresets, indiaToday } from "@/lib/festival-themes";
-import { applySiteTheme } from "@/lib/site-text";
+import { applySiteTheme, applySiteTypography, normalizeTypography } from "@/lib/site-text";
 import { useSiteText } from "@/lib/use-site-text";
 
 const PORTALS = ["/admin", "/staff", "/support", "/doctor", "/delivery"];
@@ -29,6 +29,11 @@ export function SiteTheme() {
     if (preset) root.dataset.festival = preset.id;
     else delete root.dataset.festival;
   }, [siteText.theme, festivalId]);
+
+  const typography = JSON.stringify(normalizeTypography(siteText.typography));
+  useEffect(() => {
+    applySiteTypography(portal ? null : JSON.parse(typography));
+  }, [typography, portal]);
 
   if (!festival) return null;
   return (

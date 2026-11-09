@@ -638,21 +638,22 @@ export default function Header() {
                     Signed in as <b className="text-text-primary">{user.firstName} {user.lastName}</b> · {user.accountId}
                   </p>
                 )}
-                <nav aria-label="Account menu" className="grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto">
+                <nav aria-label="Account menu" className="grid max-h-[65vh] grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
                   {accountItems.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileAccountOpen(false)}
                       className={classNames(
-                        "flex flex-col items-center gap-1 rounded-xl border px-1 py-2.5 text-center text-[11px] font-medium leading-tight",
+                        "flex items-center gap-2.5 rounded-xl border px-3 py-3 text-left text-sm font-semibold leading-tight",
                         pathname === item.href ? "border-burgundy bg-burgundy/5 text-burgundy" : "border-border text-text-primary"
                       )}
                     >
                       <span className="text-burgundy">
                         <AccountIcon name={item.icon} />
                       </span>
-                      {item.name}
+                      <span className="min-w-0 flex-1">{item.name}</span>
+                      <span aria-hidden className="text-lg text-text-muted">›</span>
                     </Link>
                   ))}
                   <button
@@ -662,7 +663,7 @@ export default function Header() {
                       signOut();
                       leaveAfterSignOut("/login");
                     }}
-                    className="flex flex-col items-center gap-1 rounded-xl border border-border px-1 py-2.5 text-[11px] font-medium text-text-primary"
+                    className="flex items-center gap-2.5 rounded-xl border border-border px-3 py-3 text-left text-sm font-semibold text-text-primary"
                   >
                     <span className="text-burgundy">
                       <AccountIcon name="logout" />
