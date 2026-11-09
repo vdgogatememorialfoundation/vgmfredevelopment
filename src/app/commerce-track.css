@@ -67,10 +67,10 @@
 }
 .vgmf-ship-pipe > li > .dot {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 32px;
-  height: 32px;
+  left: 9px;
+  top: 9px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid var(--tl-line);
   background: #fff;
