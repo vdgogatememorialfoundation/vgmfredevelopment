@@ -106,7 +106,15 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
 
   // Courier tracking pages show only the latest scans, so keep earlier ones; drop anything dated in the future.
   const latestOk = Date.now() + 10 * 60_000;
-  const merged = direct ? [...(shipment.tracking ?? []), ...(hit.events ?? [])] : hit.events?.length ? hit.events : shipment.tracking ?? [];
+  const fresh = hit.events ?? [];
+  const sameScan = (x: { status: string; location?: string }, y: { status: string; location?: string }) =>
+    x.status.trim().toLowerCase() === y.status.trim().toLowerCase() && (x.location ?? "") === (y.location ?? "");
+  // A re-read scan replaces the stored copy, so an earlier wrong timestamp is corrected rather than duplicated.
+  const merged = direct
+    ? [...(shipment.tracking ?? []).filter((old) => !fresh.some((event) => sameScan(event, old))), ...fresh]
+    : fresh.length
+      ? fresh
+      : shipment.tracking ?? [];
   const events = dedupe(
     merged
       .filter((event) => (Date.parse(event.at) || 0) <= latestOk)
