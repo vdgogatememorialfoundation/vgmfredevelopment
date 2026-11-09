@@ -34,6 +34,7 @@ import type { SiteChromeLink } from "@/types";
 import { subscribeCms } from "@/lib/cms";
 import { useSiteSettings } from "@/lib/use-cms";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import { DeliverTo } from "@/components/layout/DeliverTo";
 import { navDropdown, navHasMenu } from "@/lib/nav-menus";
 
 function canHover() {
@@ -166,6 +167,7 @@ function CloseIcon() {
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
   const [desktopMenu, setDesktopMenu] = useState("");
   const [mobileOpen, setMobileOpen] = useState("");
   const closeTimer = useRef<number>(0);
@@ -593,13 +595,24 @@ export default function Header() {
                   )}
                 </Link>
 
-                <Link
-                  href={isAuthenticated ? "/account" : "/login"}
-                  className="flex h-10 w-10 items-center justify-center text-ink"
-                  aria-label={isAuthenticated ? "My account" : "Account"}
-                >
-                  <UserIcon />
-                </Link>
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setMobileAccountOpen((open) => !open);
+                    }}
+                    className="flex h-10 w-10 items-center justify-center text-ink"
+                    aria-label="My account"
+                    aria-expanded={mobileAccountOpen}
+                  >
+                    <UserIcon />
+                  </button>
+                ) : (
+                  <Link href="/login" className="flex h-10 w-10 items-center justify-center text-ink" aria-label="Account">
+                    <UserIcon />
+                  </Link>
+                )}
 
                 <button
                   type="button"
@@ -612,7 +625,54 @@ export default function Header() {
                 </button>
               </div>
             </div>
+            <div className="-mt-3 flex min-w-0 pb-1.5">
+              <DeliverTo />
+            </div>
           </div>
+
+          {mobileAccountOpen && isAuthenticated && (
+            <div className="border-t border-border bg-white shadow-lg lg:hidden" data-account-menu>
+              <div className="container py-3">
+                {user && (
+                  <p className="mb-2 truncate text-xs text-text-muted">
+                    Signed in as <b className="text-text-primary">{user.firstName} {user.lastName}</b> · {user.accountId}
+                  </p>
+                )}
+                <nav aria-label="Account menu" className="grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto">
+                  {accountItems.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileAccountOpen(false)}
+                      className={classNames(
+                        "flex flex-col items-center gap-1 rounded-xl border px-1 py-2.5 text-center text-[11px] font-medium leading-tight",
+                        pathname === item.href ? "border-burgundy bg-burgundy/5 text-burgundy" : "border-border text-text-primary"
+                      )}
+                    >
+                      <span className="text-burgundy">
+                        <AccountIcon name={item.icon} />
+                      </span>
+                      {item.name}
+                    </Link>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileAccountOpen(false);
+                      signOut();
+                      leaveAfterSignOut("/login");
+                    }}
+                    className="flex flex-col items-center gap-1 rounded-xl border border-border px-1 py-2.5 text-[11px] font-medium text-text-primary"
+                  >
+                    <span className="text-burgundy">
+                      <AccountIcon name="logout" />
+                    </span>
+                    Sign out
+                  </button>
+                </nav>
+              </div>
+            </div>
+          )}
 
           {mobileMenuOpen && typeof document !== "undefined"
             ? createPortal(

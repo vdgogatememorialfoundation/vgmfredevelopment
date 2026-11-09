@@ -19,6 +19,7 @@ import { useSavedAddresses } from "@/lib/account-wallet";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { Book, CourierRate } from "@/types";
 import { customerCourierRates } from "@/lib/checkout-couriers";
+import { saveDeliverTo, useDeliverTo } from "@/lib/deliver-to";
 
 const AGGREGATOR = /shiprocket|nimbus|ithink|shipyaari/i;
 
@@ -40,7 +41,8 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const couriers = orderSettings.showCourierChoice ? courierList : [];
   const saved = useSavedAddresses(user?.email);
   const [addressId, setAddressId] = useState("");
-  const autoChecked = useRef(false);
+  const autoChecked = useRef("");
+  const deliverTo = useDeliverTo();
   const [notifyEmail, setNotifyEmail] = useState("");
   const [notifyNote, setNotifyNote] = useState("");
 
@@ -81,6 +83,8 @@ export default function ProductBuyBox({ book }: { book: Book }) {
     setEstimate(checkPincode(code, book.id, quantity));
     setCouriers([]);
     if (/^\d{6}$/.test(code)) {
+      autoChecked.current = code;
+      saveDeliverTo({ pincode: code });
       setRatesBusy(true);
       const same = code === getOriginPincode();
       fetchCourierRates({
@@ -106,19 +110,19 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   };
 
   useEffect(() => {
-    if (autoChecked.current || !saved.length) return;
-    const chosen = saved.find((item) => item.isDefault) ?? saved[0];
-    const code = chosen.pincode.replace(/\D/g, "").slice(0, 6);
-    if (code.length !== 6) return;
+    const fallback = saved.find((item) => item.isDefault) ?? saved[0];
+    const chosen = deliverTo ? saved.find((item) => item.id === deliverTo.addressId) : fallback;
+    const code = (deliverTo?.pincode || fallback?.pincode || "").replace(/\D/g, "").slice(0, 6);
+    if (code.length !== 6 || code === autoChecked.current) return;
     const timer = window.setTimeout(() => {
-      autoChecked.current = true;
-      setAddressId(chosen.id);
+      autoChecked.current = code;
+      setAddressId(chosen?.id ?? "");
       setPincode(code);
       checkDelivery(code);
     }, 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved]);
+  }, [saved, deliverTo?.pincode]);
 
   return (
     <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">

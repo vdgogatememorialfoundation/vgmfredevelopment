@@ -70,7 +70,24 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                 <InboxBell href="/account/notifications" />
               </div>
 
-              <nav aria-label="Account sidebar" className="mt-4 space-y-1">
+              <nav aria-label="Account sections" className="-mx-2 mt-4 flex gap-2 overflow-x-auto px-2 pb-1 lg:hidden">
+                {items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={pathname === item.href ? "page" : undefined}
+                    className={classNames(
+                      "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
+                      pathname === item.href ? "border-burgundy bg-burgundy/5 text-burgundy" : "border-border text-text-primary"
+                    )}
+                  >
+                    <AccountIcon name={item.icon} />
+                    {item.name}
+                  </Link>
+                ))}
+              </nav>
+
+              <nav aria-label="Account sidebar" className="mt-4 hidden space-y-1 lg:block">
                 {items.map((item) => {
                   const active = pathname === item.href;
                   return (
