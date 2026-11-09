@@ -17,6 +17,7 @@ import {
   sendEmail,
 } from "@/lib/admin-store";
 import { getLiveBooks } from "@/lib/product-data";
+import { logAudit } from "@/lib/audit";
 
 type ShippingCreds = Record<string, Record<string, unknown>>;
 
@@ -276,6 +277,21 @@ function splitOrder(order: Order, split: ShipmentSplit): Order {
 }
 
 export async function bookShipment(
+  orderId: string,
+  override?: CourierRate,
+  pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>,
+  split?: ShipmentSplit
+): Promise<BookingResult> {
+  const result = await bookShipmentOnce(orderId, override, pickupOverride, split);
+  logAudit(
+    "Shipment created",
+    orderId,
+    `${result.shipment.courier} · AWB ${result.shipment.awb}${split ? ` · shipment ${split.part}` : ""}`
+  );
+  return result;
+}
+
+async function bookShipmentOnce(
   orderId: string,
   override?: CourierRate,
   pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>,

@@ -1,5 +1,6 @@
 import { books } from "@/data/books";
 import type { AdminCategory, Book, Order, ProductOverride } from "@/types";
+import { logAudit } from "@/lib/audit";
 import { queueNotification } from "@/lib/notify";
 import { pushInbox } from "@/lib/inbox";
 import { stockLabelCode, stripUnitSuffix } from "@/lib/barcode";
@@ -131,6 +132,7 @@ export function getProductByCode(code: string): Book | undefined {
 
 /** Saves a full product record. Sends back-in-stock emails when it becomes orderable from stock again. */
 export function saveProduct(book: Book) {
+  logAudit("Product saved", book.sku || book.id, book.title);
   const before = getLiveBook(book.id);
   const record = normalize({
     ...book,
@@ -158,6 +160,7 @@ export function saveProduct(book: Book) {
 }
 
 export function deleteProduct(id: string) {
+  logAudit("Product deleted", id);
   writeJSON(CUSTOM_KEY, getCustomBooks().filter((book) => book.id !== id));
   writeJSON(OVERRIDES_KEY, getOverrides().filter((o) => o.bookId !== id));
   writeJSON(DELETED_KEY, Array.from(new Set([...getDeletedIds(), id])));

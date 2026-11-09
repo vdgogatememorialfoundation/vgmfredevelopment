@@ -27,6 +27,7 @@ import { commerceCharges, getOrderSettings, shippingFeeFor } from "@/lib/integra
 import { barcodeSvg } from "@/lib/barcode";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
+import { logAudit } from "@/lib/audit";
 import { emptySocial } from "@/lib/social";
 import { staffReplyTo } from "@/lib/account-mail";
 import { pushTicket } from "@/lib/ticket-sync";
@@ -846,6 +847,7 @@ export function recordPickScan(orderId: string, code: string): string {
 }
 
 export function setOrderStatus(orderId: string, status: OrderStatus) {
+  logAudit("Order status changed", orderId, status);
   const order = getOrder(orderId);
   if (!order) return;
   const next: Order = withHistory({ ...order, status }, status);

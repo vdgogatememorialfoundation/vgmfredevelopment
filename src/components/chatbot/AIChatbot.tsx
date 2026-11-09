@@ -223,6 +223,12 @@ export function AIChatbot() {
                     If nobody replies within {Math.round(CHAT_UNANSWERED_MS / 1000)} seconds, we open a 12-digit ticket and send a short form.
                   </p>
                 )}
+                {thread?.ref ? (
+                  <p className="rounded-lg bg-white px-3 py-1.5 text-[11px] text-text-muted">
+                    Chat reference <b className="font-mono text-burgundy">{thread.ref}</b>
+                    {thread.firstJoinedAt ? " · an agent has joined" : " · an agent will join shortly"}
+                  </p>
+                ) : null}
                 {(thread?.messages ?? []).map((message) => (
                   <div
                     key={message.id}
