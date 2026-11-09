@@ -1268,10 +1268,62 @@ function printHtml(title: string, html: string, page = "A4") {
     .route b { font-size: 18px; letter-spacing: 0.04em; }
     .meta { font-size: 11px; color: #44403c; margin: 6px 0 0; }
     .check { font-size: 16px; }
-  </style></head><body>${html}</body></html>`);
+    .label-sheet { page-break-inside: avoid; break-inside: avoid; }
+    .size-4x6 { font-size: 10px; line-height: 1.3; }
+    .size-4x6 .label-band { padding: 6px 8px; }
+    .size-4x6 .label-logo { height: 30px; }
+    .size-4x6 .label-body { padding: 6px 8px; }
+    .size-4x6 .awb { font-size: 17px; }
+    .size-4x6 .grid { gap: 6px; margin-top: 6px; }
+    .size-4x6 .box { padding: 5px 7px; min-width: 0; flex: 1 1 0; }
+    .size-4x6 .box.to { flex: 1.35 1 0; font-size: 11px; }
+    .size-4x6 .route { margin-top: 5px; padding: 4px 8px; }
+    .size-4x6 .route b { font-size: 15px; }
+    .size-4x6 table { margin-top: 6px; }
+    .size-4x6 td, .size-4x6 th { padding: 3px 5px; font-size: 10px; }
+    .size-4x6 .foot { margin-top: 6px; padding-top: 4px; font-size: 9px; line-height: 1.35; }
+    .size-4x6 svg { max-width: 100%; height: 44px; }
+  </style></head><body>${html}<script>
+    (function () {
+      var printed = false;
+      function fit() {
+        var sheet = document.querySelector(".label-sheet");
+        var pageMm = ${JSON.stringify(labelPageMm(page))};
+        if (!sheet || !pageMm) return;
+        var px = 96 / 25.4;
+        var room = pageMm[1] * px - 2;
+        var width = pageMm[0] * px;
+        sheet.style.width = width + "px";
+        var height = sheet.getBoundingClientRect().height;
+        if (height > room) sheet.style.zoom = String(Math.floor((room / height) * 1000) / 1000);
+      }
+      function go() {
+        if (printed) return;
+        printed = true;
+        fit();
+        window.focus();
+        window.print();
+      }
+      var images = Array.prototype.slice.call(document.images);
+      var pending = images.filter(function (img) { return !img.complete; });
+      if (!pending.length) return setTimeout(go, 50);
+      var left = pending.length;
+      pending.forEach(function (img) {
+        var done = function () { left -= 1; if (left <= 0) go(); };
+        img.addEventListener("load", done);
+        img.addEventListener("error", done);
+      });
+      setTimeout(go, 3000);
+    })();
+  </script></body></html>`);
   win.document.close();
-  win.focus();
-  win.print();
+}
+
+function labelPageMm(page: string): [number, number] | null {
+  const margin = page === "A4" || page === "A5" ? 10 : 3;
+  const sizes: Record<string, [number, number]> = { "100mm 150mm": [100, 150], "80mm 240mm": [80, 240] };
+  const size = sizes[page];
+  return size ? [size[0] - margin * 2, size[1] - margin * 2] : null;
 }
 
 export function printShippingLabel(
@@ -1309,7 +1361,7 @@ export function printShippingLabel(
           ${esc(siteConfig.address)}<br/>
           ${esc(siteConfig.phone)}
         </div>
-        <div class="box">
+        <div class="box to">
           <p class="label">Deliver to</p>
           <strong>${esc(to.fullName)}</strong><br/>
           ${esc([to.line1, to.landmark, to.city, to.state, to.pincode].filter(Boolean).join(", "))}<br/>

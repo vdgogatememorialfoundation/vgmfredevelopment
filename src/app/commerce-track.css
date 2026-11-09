@@ -42,9 +42,9 @@
 .vgmf-ship-pipe > li::before {
   content: "";
   position: absolute;
-  left: 15px;
-  top: 34px;
-  bottom: 0;
+  left: 14.5px;
+  top: 16px;
+  bottom: -16px;
   width: 3px;
   background: var(--tl-line);
   border-radius: 2px;
