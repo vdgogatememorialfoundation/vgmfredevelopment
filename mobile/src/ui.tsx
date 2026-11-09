@@ -187,8 +187,8 @@ export function Button({
         {
           marginTop: 10,
           backgroundColor: palette.bg,
-          borderRadius: 12,
-          paddingVertical: 13,
+          borderRadius: 14,
+          paddingVertical: 14,
           paddingHorizontal: 16,
           alignItems: "center",
           justifyContent: "center",
@@ -202,7 +202,7 @@ export function Button({
       ]}
     >
       {icon ? <Ionicons name={icon} size={16} color={palette.text} /> : null}
-      <Text style={{ color: palette.text, fontWeight: "700", fontSize: 13, letterSpacing: 0.2 }}>{label}</Text>
+      <Text style={{ color: palette.text, fontWeight: "800", fontSize: 14, letterSpacing: 0.2 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -387,7 +387,8 @@ export function SectionHeader({ title, subtitle, actionLabel, onAction }: { titl
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12, marginTop: 8 }}>
       <View style={{ flex: 1, paddingRight: 12 }}>
-        {title ? <Text style={{ fontSize: 20, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily }}>{title}</Text> : null}
+        {title ? <Text style={{ fontSize: 21, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily, letterSpacing: -0.3 }}>{title}</Text> : null}
+        {title ? <View style={{ width: 32, height: 3, borderRadius: 2, backgroundColor: theme.colors.accent, marginTop: 4 }} /> : null}
         {subtitle ? <Text style={{ color: theme.colors.muted, marginTop: 3, fontSize: 12 }}>{subtitle}</Text> : null}
       </View>
       {actionLabel && onAction ? (
@@ -430,8 +431,8 @@ export function IconTile({ label, icon, onPress }: { label: string; icon: keyof 
       accessibilityLabel={label}
       style={({ pressed }) => [{ width: "23%", minWidth: 70, alignItems: "center", paddingVertical: 10, opacity: pressed ? 0.88 : 1 }]}
     >
-      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-        <Ionicons name={icon} size={18} color={theme.colors.primary} />
+      <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", marginBottom: 8, shadowColor: "#3B2A14", shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 }}>
+        <Ionicons name={icon} size={21} color={theme.colors.primary} />
       </View>
       <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 11, textAlign: "center" }} numberOfLines={1}>
         {label}

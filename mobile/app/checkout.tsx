@@ -1,3 +1,4 @@
+import { razorpayPage } from "../src/razorpay";
 import { useEffect, useMemo, useState } from "react";
 import { Modal, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
@@ -53,7 +54,8 @@ export default function CheckoutScreen() {
     [cart.items, feed?.books]
   );
   const subtotal = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
+  const preorder = priced.some((item) => preorderable(findRow(feed?.books, item.id)));
+  const shipping = preorder ? 0 : subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
   const total = subtotal + shipping;
 
   const submit = async () => {
@@ -180,7 +182,11 @@ export default function CheckoutScreen() {
                 {item.title} × {item.quantity} · {money(item.price * item.quantity)}
               </Muted>
             ))}
-            <Muted>Shipping {shipping ? money(shipping) : "Free"}</Muted>
+            {preorder ? (
+              <Muted>{pickup ? "Store pickup · no charge" : "Shipping · added when you pay the balance"}</Muted>
+            ) : (
+              <Muted>Shipping {shipping ? money(shipping) : "Free"}</Muted>
+            )}
             <Heading>Total {money(total)}</Heading>
           </Card>
           <Field label="Full name" value={name} onChange={setName} autoCapitalize="words" />
@@ -225,6 +231,9 @@ export default function CheckoutScreen() {
           />
           </>
           ) : null}
+          {preorder ? (
+            <Muted>Pre-order: you pay for the items now. When your order is ready, the courier charge is added and you pay the balance from the order page.</Muted>
+          ) : null}
           <Muted>Pay securely with UPI, card or net banking through Razorpay. Damaged items can be replaced after delivery if you share photos.</Muted>
           <Button label={busy ? "Please wait…" : `Pay ${money(total)}`} disabled={busy} onPress={() => void submit()} />
           <Button kind="ghost" label="Back to cart" onPress={() => router.replace("/cart")} />
@@ -234,30 +243,9 @@ export default function CheckoutScreen() {
   );
 }
 
-function razorpayPage(input: { key: string; orderId: string; amount: number; name: string; email: string; phone: string; description: string }) {
-  const options = JSON.stringify({
-    key: input.key,
-    order_id: input.orderId,
-    amount: input.amount,
-    currency: "INR",
-    name: "Vaidya Gogate Memorial Foundation",
-    description: input.description,
-    prefill: { name: input.name, email: input.email, contact: input.phone },
-    theme: { color: "#8F2D2D" },
-  });
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="background:#FFFDF8;font-family:sans-serif;color:#5b4636;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-<p>Opening secure payment…</p>
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<script>
-function send(m){window.ReactNativeWebView.postMessage(JSON.stringify(m));}
-try{
-var o=${options};
-o.handler=function(r){send({type:"success",paymentId:r.razorpay_payment_id,razorpayOrderId:r.razorpay_order_id,signature:r.razorpay_signature});};
-o.modal={ondismiss:function(){send({type:"dismiss"});}};
-var rp=new Razorpay(o);
-rp.on("payment.failed",function(r){send({type:"error",error:(r&&r.error&&r.error.description)||"Payment failed."});});
-rp.open();
-}catch(e){send({type:"error",error:"Could not open Razorpay."});}
-</script></body></html>`;
+function preorderable(book?: Record<string, unknown> | null) {
+  if (!book) return false;
+  const plan = book.preorder as { enabled?: boolean } | boolean | undefined;
+  const enabled = typeof plan === "object" ? Boolean(plan?.enabled) : Boolean(plan);
+  return enabled && (str(book.stockStatus) === "out_of_stock" || Number(book.stock ?? 0) <= 0);
 }

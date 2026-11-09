@@ -585,3 +585,15 @@ export async function submitRegistration(input: { portal: string; seminarId: num
   if (!response.ok) throw new Error(data?.error || "Could not register.");
   return data?.applicationNo ? `${data.message || "Registered."} Application ${data.applicationNo}.` : data?.message || "Registered.";
 }
+
+export async function startBalancePayment(orderId: string) {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/checkout`, { method: "POST", headers: headers(), body: JSON.stringify({ action: "balance", orderId }) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not start the payment."));
+  return data as { ok: true; order?: Row; amount?: number; keyId?: string; razorpayOrderId?: string };
+}
+
+export async function verifyBalancePayment(input: { orderId: string; paymentId?: string; razorpayOrderId?: string; signature?: string }) {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/checkout`, { method: "POST", headers: headers(), body: JSON.stringify({ action: "balance_verify", ...input }) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not confirm payment."));
+  return data as { ok: true; order?: Row };
+}

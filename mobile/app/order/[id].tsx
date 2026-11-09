@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { Modal, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { formatDate, listOrders, money, str, type Row } from "../../src/api";
+import { formatDate, listOrders, money, startBalancePayment, str, verifyBalancePayment, type Row } from "../../src/api";
+import { razorpayPage } from "../../src/razorpay";
+import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { useAuth } from "../../src/auth";
-import { Body, Button, Card, Divider, Empty, Heading, Loading, Muted, PageHeader, Screen } from "../../src/ui";
+import { Banner, Body, Button, Card, Divider, Empty, Heading, Loading, Muted, PageHeader, Screen } from "../../src/ui";
 import { InfoTiles, Pipeline, type TrackStage } from "../../src/tracker";
 
 type Item = { bookId?: string; title?: string; quantity?: number; price?: number };
@@ -25,6 +27,10 @@ export default function OrderScreen() {
   const [order, setOrder] = useState<Row | null>(null);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
+  const [payment, setPayment] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [payNote, setPayNote] = useState("");
+  const [payTone, setPayTone] = useState<"error" | "success">("error");
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +65,56 @@ export default function OrderScreen() {
   const history = (Array.isArray(order.history) ? order.history : []) as Step[];
   const trackers = (Array.isArray(order.tracking) ? order.tracking : []) as Tracker[];
   const preorder = (order.preorderPayment ?? null) as { balance?: number; balancePaidAt?: string; shippingDue?: boolean } | null;
+  const waiting = ["Pending", "Paid", "Awaiting Confirmation", "Ordered"].includes(str(order.status));
+  const proceed = async () => {
+    setPaying(true);
+    setPayNote("");
+    try {
+      const started = await startBalancePayment(str(order.id));
+      if (!started.keyId || !started.razorpayOrderId) throw new Error("Online payment is not available right now. Please try again later.");
+      const address = (order.deliveryAddress ?? {}) as Row;
+      setPayment(
+        razorpayPage({
+          key: started.keyId,
+          orderId: started.razorpayOrderId,
+          amount: Math.round(Number(started.amount ?? 0) * 100),
+          name: str(address.fullName, session?.name ?? ""),
+          email: session?.email ?? "",
+          phone: str(address.phone),
+          description: `Pre-order balance · ${str(order.id)}`,
+        })
+      );
+      void load();
+    } catch (error) {
+      setPayTone("error");
+      setPayNote((error as Error).message);
+    } finally {
+      setPaying(false);
+    }
+  };
+  const onPayment = async (event: WebViewMessageEvent) => {
+    setPayment("");
+    let message: { type?: string; paymentId?: string; razorpayOrderId?: string; signature?: string; error?: string } = {};
+    try {
+      message = JSON.parse(event.nativeEvent.data);
+    } catch {
+      message = { type: "error" };
+    }
+    if (message.type !== "success") {
+      setPayTone("error");
+      setPayNote(message.type === "dismiss" ? "Payment was cancelled." : message.error || "The payment did not go through.");
+      return;
+    }
+    try {
+      await verifyBalancePayment({ orderId: str(order.id), paymentId: message.paymentId, razorpayOrderId: message.razorpayOrderId, signature: message.signature });
+      setPayTone("success");
+      setPayNote("Balance paid. Your order will be dispatched.");
+      void load();
+    } catch (error) {
+      setPayTone("error");
+      setPayNote((error as Error).message);
+    }
+  };
   const address = (order.deliveryAddress ?? {}) as Row;
   const pickup = str(order.deliveryMode) === "store_pickup";
 
@@ -124,10 +180,15 @@ export default function OrderScreen() {
           {!history.length ? <Muted>Recorded {when(order.date)}</Muted> : null}
         </Card>
       )}
-      {preorder && !preorder.balancePaidAt && Number(preorder.balance) > 0 ? (
-        <Card>
-          <Heading>Pre-order balance · {money(preorder.balance)}{preorder.shippingDue ? " + courier charge" : ""}</Heading>
-          <Muted>{/Awaiting|^Ordered$/.test(str(order.status)) ? "You can pay this once your order is processed." : "Your order is processed. Pay the remaining amount to get it dispatched."}</Muted>
+      <Modal visible={Boolean(payment)} animationType="slide" onRequestClose={() => void onPayment({ nativeEvent: { data: JSON.stringify({ type: "dismiss" }) } } as WebViewMessageEvent)}>
+        {payment ? <WebView originWhitelist={["*"]} source={{ html: payment, baseUrl: "https://api.razorpay.com" }} onMessage={(event) => void onPayment(event)} javaScriptEnabled /> : null}
+      </Modal>
+      {preorder && !preorder.balancePaidAt && (Number(preorder.balance) > 0 || preorder.shippingDue) && str(order.status) !== "Cancelled" ? (
+        <Card featured>
+          <Heading>Pre-order balance{Number(preorder.balance) > 0 ? ` · ${money(preorder.balance)}` : ""}{preorder.shippingDue ? " + courier charge" : ""}</Heading>
+          <Muted>{waiting ? "You can pay this once your order is processed." : "Your order is processed. Pay the remaining amount to get it dispatched."}</Muted>
+          <Banner text={payNote} tone={payTone} />
+          {waiting ? null : <Button icon="card-outline" label={paying ? "Working out the courier charge…" : "Proceed to pay"} disabled={paying} onPress={() => void proceed()} />}
         </Card>
       ) : null}
       <Button kind="ghost" icon="refresh-outline" label="Refresh tracking" onPress={() => void load()} />

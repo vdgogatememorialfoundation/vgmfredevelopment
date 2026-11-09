@@ -4,7 +4,7 @@ import { addOrder, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, s
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
-import { appPickupAllowed, markAppOrderPaid, recordAppOrder } from "@/lib/server/mobile-shop";
+import { appPickupAllowed, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +45,32 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const session = sessionOf(request, body);
   if (!session) return json({ ok: false, error: "Sign in to checkout." }, 401);
+
+  if (String(body?.action ?? "") === "balance") {
+    const orderId = String(body?.orderId ?? "");
+    const ready = await preparePreorderBalance(orderId, session.email);
+    if ("error" in ready) return json({ ok: false, error: ready.error }, 400);
+    const creds = razorpayCreds({});
+    if (!creds) return json({ ok: false, configured: false, error: "Razorpay is not configured on this server." }, 503);
+    try {
+      const created = await razorpayOrder(creds, ready.balance, `${orderId}-bal`.slice(0, 40));
+      return json({ ok: true, configured: true, order: ready.order, amount: ready.balance, keyId: created.keyId, razorpayOrderId: created.orderId });
+    } catch (error) {
+      return json({ ok: false, error: (error as Error).message || "Razorpay could not start the payment." }, 502);
+    }
+  }
+
+  if (String(body?.action ?? "") === "balance_verify") {
+    const creds = razorpayCreds({});
+    const paymentId = String(body?.paymentId ?? "");
+    const razorpayOrderId = String(body?.razorpayOrderId ?? "");
+    const signature = String(body?.signature ?? "");
+    if (!creds || !paymentId || !razorpayOrderId || !signature) return json({ ok: false, error: "Payment details are incomplete." }, 400);
+    if (!razorpayVerify(creds.keySecret, razorpayOrderId, paymentId, signature)) return json({ ok: false, error: "The payment could not be verified." }, 400);
+    const order = markPreorderBalancePaid(String(body?.orderId ?? ""), { paymentId, razorpayOrderId });
+    if (!order) return json({ ok: false, error: "This order was not found." }, 404);
+    return json({ ok: true, order });
+  }
 
   if (String(body?.action ?? "create") === "verify") {
     const order = findOrder(String(body?.orderId ?? ""), session.email);
