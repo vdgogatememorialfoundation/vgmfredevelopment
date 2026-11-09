@@ -19,8 +19,8 @@ const KEY = "vgmf_site_text";
 
 export const homeSections = [
   { id: "hero", label: "Hero slideshow" },
-  { id: "directory", label: "Events / Articles / Clinics shortcuts" },
   { id: "books", label: "Shop & publications" },
+  { id: "directory", label: "Events / Articles / Clinics shortcuts" },
   { id: "events", label: "Events & programmes" },
   { id: "articles", label: "Articles" },
   { id: "notices", label: "Notice board" },
