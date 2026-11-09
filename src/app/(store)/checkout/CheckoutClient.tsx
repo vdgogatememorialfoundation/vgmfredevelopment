@@ -22,7 +22,7 @@ import {
   clearCart,
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
-import { preorderDeliveryDate } from "@/lib/product-data";
+import { canPreorder, preorderDeliveryDate } from "@/lib/product-data";
 import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
 import { preorderAdvance, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
 import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
@@ -248,7 +248,7 @@ export default function CheckoutClient() {
   const cartKey = rows.map(({ item }) => `${item.bookId}x${item.quantity}`).join(",");
   const cartValue = rows.reduce((sum, { item, book }) => sum + book.price * item.quantity, 0);
   const cartUnits = rows.reduce((sum, { item }) => sum + item.quantity, 0);
-  const preorderBook = rows.find(({ book }) => book.stock <= 0 && Boolean(book.preorder?.enabled))?.book;
+  const preorderBook = rows.find(({ book }) => canPreorder(book))?.book;
   const hasPreorder = Boolean(preorderBook);
 
   useEffect(() => {

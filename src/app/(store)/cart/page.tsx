@@ -17,7 +17,7 @@ import {
   formatPrice,
   getEstimatedDeliveryDate,
 } from "@/lib/store";
-import { isPurchasable } from "@/lib/product-data";
+import { canPreorder, isPurchasable, preorderDeliveryDate } from "@/lib/product-data";
 import QtyControl from "@/components/store/QtyControl";
 import RestockAlert from "@/components/store/RestockAlert";
 import { moveSavedToCart, removeSavedLater, saveForLater, useSavedLater } from "@/lib/saved-later";
@@ -51,6 +51,8 @@ export default function CartPage() {
   );
 
   const orderSettings = useOrderSettings();
+  const hasPreorder = rows.some(({ book }) => canPreorder(book));
+  const shownTotal = hasPreorder ? totals.total - totals.shipping : totals.total;
   const shippingFree = orderSettings.shippingFeeMode !== "free_above" || totals.subtotal >= orderSettings.freeAbove;
 
   return (
@@ -114,14 +116,24 @@ export default function CartPage() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
-                      <Glyph name="truck" className="h-3.5 w-3.5" />
-                      {deliveryCheck ? `Delivery by ${deliveryCheckText(deliveryCheck)} to ${deliveryCheck.pincode}` : "Delivery date for your pincode is shown at checkout"}
-                      {book.expectedDelivery ? ` · ${book.expectedDelivery}` : ""}
-                    </p>
+                    {canPreorder(book) ? (
+                      <>
+                        <p className="mt-2 inline-block rounded-lg bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-900">Pre-order</p>
+                        <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-800">
+                          <Glyph name="truck" className="h-3.5 w-3.5" />
+                          Tentative delivery by {preorderDeliveryDate(book)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
+                        <Glyph name="truck" className="h-3.5 w-3.5" />
+                        {deliveryCheck ? `Delivery by ${deliveryCheckText(deliveryCheck)} to ${deliveryCheck.pincode}` : "Delivery date for your pincode is shown at checkout"}
+                        {book.expectedDelivery ? ` · ${book.expectedDelivery}` : ""}
+                      </p>
+                    )}
 
-                    {!isPurchasable(book) && <p className="mt-2 text-xs font-semibold text-burgundy">Out of stock</p>}
-                    {!isPurchasable(book) && <RestockAlert bookId={book.id} />}
+                    {!isPurchasable(book) && !canPreorder(book) && <p className="mt-2 text-xs font-semibold text-burgundy">Out of stock</p>}
+                    {!isPurchasable(book) && !canPreorder(book) && <RestockAlert bookId={book.id} />}
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <QtyControl value={item.quantity} max={quantityCap(book.id)} onChange={(quantity) => setCartQuantity(item.bookId, quantity)} />
                       <button
@@ -232,22 +244,24 @@ export default function CartPage() {
                     <dd className="font-medium text-text-primary">{formatPrice(totals.platformFee)}</dd>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <dt className="text-text-muted">Shipping</dt>
-                  <dd className="font-medium text-text-primary">
-                    {totals.shipping > 0
-                      ? formatPrice(totals.shipping)
-                      : shippingIsFree(totals.subtotal, orderSettings)
-                        ? "FREE"
-                        : "Calculated at checkout"}
-                  </dd>
-                </div>
+                {hasPreorder ? null : (
+                  <div className="flex justify-between">
+                    <dt className="text-text-muted">Shipping</dt>
+                    <dd className="font-medium text-text-primary">
+                      {totals.shipping > 0
+                        ? formatPrice(totals.shipping)
+                        : shippingIsFree(totals.subtotal, orderSettings)
+                          ? "FREE"
+                          : "Calculated at checkout"}
+                    </dd>
+                  </div>
+                )}
                 <div className="flex justify-between border-t border-border pt-3">
                   <dt className="font-semibold text-text-primary">
                     Total Amount
                   </dt>
                   <dd className="font-bold text-burgundy">
-                    {formatPrice(totals.total)}
+                    {formatPrice(shownTotal)}
                   </dd>
                 </div>
               </dl>
