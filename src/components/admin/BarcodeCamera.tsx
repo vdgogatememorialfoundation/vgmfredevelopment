@@ -3,7 +3,44 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/admin/AdminUI";
 
-type Detector = { detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>> };
+type Detector = { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> };
+
+/** Camera barcode reading for browsers without the built-in BarcodeDetector (iPhone, Firefox, desktop). */
+async function zxingDetector(): Promise<Detector> {
+  const zx = await import("@zxing/library");
+  const hints = new Map();
+  hints.set(zx.DecodeHintType.POSSIBLE_FORMATS, [
+    zx.BarcodeFormat.EAN_13,
+    zx.BarcodeFormat.EAN_8,
+    zx.BarcodeFormat.CODE_128,
+    zx.BarcodeFormat.CODE_39,
+    zx.BarcodeFormat.UPC_A,
+    zx.BarcodeFormat.UPC_E,
+    zx.BarcodeFormat.QR_CODE,
+  ]);
+  hints.set(zx.DecodeHintType.TRY_HARDER, true);
+  const reader = new zx.MultiFormatReader();
+  reader.setHints(hints);
+  const canvas = document.createElement("canvas");
+  return {
+    detect: async (video) => {
+      if (!video.videoWidth) return [];
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) return [];
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      try {
+        const bitmap = new zx.BinaryBitmap(new zx.HybridBinarizer(new zx.HTMLCanvasElementLuminanceSource(canvas)));
+        return [{ rawValue: reader.decodeWithState(bitmap).getText() }];
+      } catch {
+        return [];
+      } finally {
+        reader.reset();
+      }
+    },
+  };
+}
 
 export function BarcodeCamera({
   onScan,
@@ -36,13 +73,10 @@ export function BarcodeCamera({
         video.srcObject = stream;
         await video.play();
         const Detector = (window as Window & { BarcodeDetector?: new (opts: { formats: string[] }) => Detector }).BarcodeDetector;
-        const detector = Detector
+        const native = Detector
           ? new Detector({ formats: ["ean_13", "ean_8", "code_128", "code_39", "upc_a", "upc_e", "qr_code"] })
           : null;
-        if (!detector) {
-          setError("This browser cannot read barcodes from the live camera. Type the code or use a USB scanner.");
-          return;
-        }
+        const detector: Detector = native ?? (await zxingDetector());
         const tick = async () => {
           if (stopped || !videoRef.current) return;
           try {
