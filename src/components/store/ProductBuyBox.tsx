@@ -242,7 +242,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
 
         {preorder && (
           <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
-            Delivery by {preorderDeliveryDate(book)}
+            Tentative delivery by {preorderDeliveryDate(book)}
           </p>
         )}
         {!preorder && checked && estimate?.serviceable && (

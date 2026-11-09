@@ -22,6 +22,7 @@ import {
   clearCart,
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
+import { preorderDeliveryDate } from "@/lib/product-data";
 import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
 import { preorderAdvance, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
 import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
@@ -247,9 +248,11 @@ export default function CheckoutClient() {
   const cartKey = rows.map(({ item }) => `${item.bookId}x${item.quantity}`).join(",");
   const cartValue = rows.reduce((sum, { item, book }) => sum + book.price * item.quantity, 0);
   const cartUnits = rows.reduce((sum, { item }) => sum + item.quantity, 0);
+  const preorderBook = rows.find(({ book }) => book.stock <= 0 && Boolean(book.preorder?.enabled))?.book;
+  const hasPreorder = Boolean(preorderBook);
 
   useEffect(() => {
-    if (deliveryMode !== "delivery" || !pincodeValid || !domestic || !orderSettings.showCourierChoice) return;
+    if (deliveryMode !== "delivery" || !pincodeValid || !domestic || !orderSettings.showCourierChoice || hasPreorder) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setLoadingRates(true);
@@ -273,7 +276,7 @@ export default function CheckoutClient() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, cartKey, cartValue, cartUnits]);
+  }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, hasPreorder, cartKey, cartValue, cartUnits]);
 
   const courierOptions: CourierOption[] =
     liveRates && liveRates.pincode === address.pincode
@@ -313,7 +316,7 @@ export default function CheckoutClient() {
   const hostedSelected = payMethod === "payu" || payMethod === "easebuzz" || payMethod === "cashfree" || payMethod === "phonepe" ? payMethod : "";
   const codFee = codSelected && !cashAtStoreSelected ? orderSettings.codFee : 0;
   const shipping =
-    deliveryMode === "store_pickup" || orderItems.length === 0
+    deliveryMode === "store_pickup" || orderItems.length === 0 || hasPreorder
       ? 0
       : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
   const storeCredit = user?.email ? getStoreCredit(user.email) : 0;
@@ -352,6 +355,7 @@ export default function CheckoutClient() {
 
   const preorderBalanceLater = orderItems.some((item) => item.preorder) && orderSettings.preorderPayment.mode === "advance" && payMethod === "online";
   const payNow = preorderBalanceLater ? preorderAdvance(totals.total, orderSettings) : totals.total;
+  const preorderShippingLater = hasPreorder && deliveryMode === "delivery";
 
   const placeOrder = async () => {
     const over = rows.find(({ item, book }) => item.quantity > quantityCap(book.id) || (book.stock <= 0 && !book.preorder?.enabled));
@@ -433,7 +437,7 @@ export default function CheckoutClient() {
       shipping: totals.shipping,
       total: totals.total,
       currency: "INR",
-      paymentStatus: payment.paid ? (payNow < totals.total ? "Partially Paid" : "Paid") : "Pending",
+      paymentStatus: payment.paid ? (payNow < totals.total || preorderShippingLater ? "Partially Paid" : "Paid") : "Pending",
       paymentMethod: payment.method,
       paidAt: payment.paid ? now : undefined,
       razorpayPaymentId: payment.paymentId,
@@ -442,12 +446,13 @@ export default function CheckoutClient() {
       channel: "online",
       storeCreditUsed: creditApplied || undefined,
       preorderPayment:
-        payNow < totals.total
+        payNow < totals.total || preorderShippingLater
           ? {
               advance: payNow,
               balance: Math.round((totals.total - payNow) * 100) / 100,
               balanceWhen: orderSettings.preorderPayment.balanceWhen,
               advancePaidAt: payment.paid ? now : undefined,
+              shippingDue: preorderShippingLater || undefined,
             }
           : undefined,
       stockCommitted: false,
@@ -596,7 +601,7 @@ export default function CheckoutClient() {
                   Home delivery
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
-                  {shippingFeeSummary(orderSettings)}
+                  {hasPreorder ? "Courier charge is added when you pay the balance" : shippingFeeSummary(orderSettings)}
                 </p>
               </button>
               )}
@@ -685,7 +690,12 @@ export default function CheckoutClient() {
                   </p>
                 ) : null}
 
-                {domestic && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
+                {domestic && preorderBook && (
+                  <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <b>Tentative delivery by</b> {preorderDeliveryDate(preorderBook)}
+                  </p>
+                )}
+                {domestic && !hasPreorder && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
                   <p className="mt-5 rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary">
                     <b>Expected delivery by</b> {selectedOffer ? selectedOffer.deliverBy : <span className="text-text-muted">checking…</span>}
                   </p>
@@ -925,6 +935,11 @@ export default function CheckoutClient() {
                     {orderSettings.preorderPayment.balanceWhen === "on_ready" ? "when the item is ready" : "before dispatch"}. We send you a payment link.
                   </p>
                 ) : null}
+                {preorderShippingLater ? (
+                  <p className="mt-1 text-xs text-text-muted">
+                    Pre-order: the courier charge is worked out when your order is ready and added to the balance you pay then.
+                  </p>
+                ) : null}
               </div>
               <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-text-muted">
                 INR
@@ -1110,7 +1125,9 @@ export default function CheckoutClient() {
                 <dd className="font-medium text-text-primary">
                   {deliveryMode === "store_pickup"
                     ? "Store pickup · no charge"
-                    : shipping > 0
+                    : hasPreorder
+                      ? "Added when you pay the balance"
+                      : shipping > 0
                       ? formatPrice(shipping)
                       : shippingIsFree(priced.subtotal, orderSettings)
                         ? "FREE"

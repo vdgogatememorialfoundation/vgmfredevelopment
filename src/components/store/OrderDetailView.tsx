@@ -47,6 +47,27 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
           <p className="mt-1 text-sm text-text-muted">
             Placed {formatDate(order.date)} · {orderStatusText(order.status)}
           </p>
+          {order.preorderPayment && !order.preorderPayment.balancePaidAt && order.status !== "Cancelled" ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm text-amber-900">
+                <p className="font-bold">
+                  Pre-order balance
+                  {order.preorderPayment.balance > 0 ? ` · ${formatPrice(order.preorderPayment.balance)}` : ""}
+                  {order.preorderPayment.shippingDue ? " + courier charge" : ""}
+                </p>
+                <p className="mt-0.5 text-xs">
+                  {order.status === "Awaiting Confirmation" || order.status === "Ordered"
+                    ? "You can pay this once your order is processed."
+                    : "Your order is processed. Pay the remaining amount to get it dispatched."}
+                </p>
+              </div>
+              {order.status === "Awaiting Confirmation" || order.status === "Ordered" ? null : (
+                <Link href={`/pay/${order.id}?part=balance`} className="btn-primary px-4 py-2 text-sm">
+                  Proceed to pay
+                </Link>
+              )}
+            </div>
+          ) : null}
           <div className="mt-5">
       <div className="border-t border-border bg-warm-cream/40 p-5 sm:p-6">
         <div className="rounded-2xl border border-border bg-white p-5 shadow-sm">

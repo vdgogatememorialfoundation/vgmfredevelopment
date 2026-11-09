@@ -61,7 +61,7 @@ export default function BookCard({ book }: { book: Book }) {
         <p className="mt-2 text-sm font-bold text-burgundy">{formatCurrency(book.price, book.currency)}</p>
         <AvailabilityBadge text={availabilityText(book)} />
         <p className="mt-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-sm font-bold leading-snug text-emerald-800">
-          {delivery ? `Delivery by ${delivery}` : "Check delivery date for your pincode"}
+          {delivery ? `${preorder ? "Tentative delivery by" : "Delivery by"} ${delivery}` : "Check delivery date for your pincode"}
         </p>
         {book.storePickupAvailable !== false ? (
           <p className="mt-1 rounded-lg bg-sky-50 px-2 py-1 text-sm font-bold text-sky-800">Store pickup available</p>

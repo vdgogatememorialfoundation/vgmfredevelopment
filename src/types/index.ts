@@ -623,6 +623,10 @@ export interface Order {
     advancePaidAt?: string;
     balancePaidAt?: string;
     balanceRef?: string;
+    /** Courier charge still to be worked out and added to the balance (pre-orders sent by courier). */
+    shippingDue?: boolean;
+    /** Courier charge added to the balance. */
+    shipping?: number;
     link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
   };
   /** Warehouse pick & pack: who picks, and what has been scanned. */
