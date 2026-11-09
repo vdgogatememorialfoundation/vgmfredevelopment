@@ -5,6 +5,10 @@ import { countryRejection } from "@/lib/server/platform-countries";
 import { appOrdersFor } from "@/lib/server/mobile-shop";
 import { listShopShipments } from "@/lib/server/shop-shipments";
 import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
+import { buildTrackingStages, shipmentScans } from "@/lib/order-pipeline";
+import { agreedDelivery, deliveryDatePhrase, statusDay, statusStamp } from "@/lib/delivery-expectation";
+import { customerCourierLabel } from "@/lib/courier-label";
+import type { Order, ShipmentRecord } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,11 +45,54 @@ function catalogItems(raw: unknown) {
   return { items };
 }
 
+/** The website's order tracker (same stages, scans and expected date), ready for the app to draw. */
+function trackingFor(order: Order, shipment?: ShipmentRecord) {
+  try {
+    const { stages } = buildTrackingStages(order, shipmentScans(shipment), shipment);
+    const country = order.deliveryAddress?.country;
+    const partial = stages.map((stage) => stage.partial).lastIndexOf(true);
+    const current = partial !== -1 ? partial : stages.map((stage) => stage.reached).lastIndexOf(true);
+    const expected = agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date) || Date.now());
+    return {
+      shipmentId: shipment?.id ?? "",
+      part: shipment?.part ?? 0,
+      courier: customerCourierLabel({ provider: shipment?.provider ?? order.courierChoice?.provider, courier: shipment?.courier || order.courierName }),
+      trackingId: shipment?.awb || order.trackingId || "",
+      expected: expected ? deliveryDatePhrase(expected) : "",
+      current: Math.max(0, current),
+      stages: stages.map((stage) => ({
+        id: stage.id,
+        label: stage.label,
+        caption: stage.caption ?? "",
+        reached: stage.reached,
+        partial: stage.partial,
+        events: stage.events.map((event) => ({
+          title: event.title,
+          when: event.at ? (stage.id === "delivered" || stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)) : "",
+          location: event.location ?? "",
+          detail: event.detail ?? "",
+        })),
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function trackersFor(order: Order, shipments: ShipmentRecord[]) {
+  const parts = shipments.filter((item) => item.part).sort((a, b) => (a.part ?? 0) - (b.part ?? 0));
+  const list = parts.length >= 2 ? parts : [shipments[0]];
+  return list.map((shipment) => trackingFor(order, shipment)).filter(Boolean);
+}
+
 export async function GET(request: NextRequest) {
   const session = sessionOf(request);
   if (!session) return json({ ok: false, error: "Sign in to view orders." }, 401);
   const shipments = listShopShipments().filter((item) => item.note !== "Cancelled");
-  const shop = appOrdersFor(session.email).map((order) => ({ ...order, shipments: shipments.filter((item) => item.orderId === order.id) }));
+  const shop = appOrdersFor(session.email).map((order) => {
+    const own = shipments.filter((item) => item.orderId === order.id);
+    return { ...order, shipments: own, tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
+  });
   const ids = new Set(shop.map((order) => order.id));
   const legacy = listOrders(session.email).filter((order) => !ids.has(order.id));
   return json({ ok: true, store: "shop", orders: shop, legacy });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Linking } from "react-native";
+import { Pipeline } from "../../src/tracker";
+import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { findRow, formatDate, getApiBase, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
 import { ACCOUNT_SECTIONS, accountSection } from "../../src/account-nav";
@@ -229,6 +230,12 @@ function portalLabel(value: unknown) {
   return str(value, "Foundation programme");
 }
 
+function pipelineOf(item: Row) {
+  const value = item.pipeline as { steps?: string[]; current?: number; rejected?: boolean } | null | undefined;
+  if (!value || !Array.isArray(value.steps) || !value.steps.length) return null;
+  return { steps: value.steps.map(String), current: Number(value.current) || 0, rejected: Boolean(value.rejected) };
+}
+
 function PartnerSection({
   title,
   subtitle,
@@ -286,6 +293,20 @@ function PartnerSection({
                 .filter(Boolean)
                 .join(" · ")}
             </Muted>
+            {kind === "tickets" && pipelineOf(item) ? (
+              <View style={{ marginTop: 12 }}>
+                <Pipeline
+                  stages={pipelineOf(item)!.steps.map((label, index) => ({
+                    id: label,
+                    label,
+                    reached: index <= pipelineOf(item)!.current,
+                    events: index === 0 && (item.issuedAt || item.at) ? [{ title: "Application received", when: formatDate(item.issuedAt || item.at) }] : [],
+                  }))}
+                  current={pipelineOf(item)!.current}
+                  failed={pipelineOf(item)!.rejected}
+                />
+              </View>
+            ) : null}
             {href ? <Button kind="ghost" label="Open on portal" onPress={() => void Linking.openURL(href)} /> : null}
           </Card>
         );

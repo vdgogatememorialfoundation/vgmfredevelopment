@@ -62,7 +62,12 @@ export function Card({
         borderWidth: 1,
         borderRadius: 18,
         padding: pad,
-        marginBottom: 12,
+        marginBottom: 14,
+        shadowColor: "#3B2A14",
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 2,
       }}
     >
       {children}
@@ -133,11 +138,13 @@ export function PageHeader({
   subtitle?: string;
   trailing?: ReactNode;
 }) {
+  const theme = useTheme();
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16, marginTop: 8 }}>
       <View style={{ flex: 1, minWidth: 0 }}>
         {kicker ? <Kicker>{kicker}</Kicker> : null}
         <Title>{title}</Title>
+        <View style={{ width: 44, height: 3, borderRadius: 2, backgroundColor: theme.colors.accent, marginTop: 2, marginBottom: 4 }} />
         {subtitle ? <Muted>{subtitle}</Muted> : null}
       </View>
       {trailing}

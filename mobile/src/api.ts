@@ -563,3 +563,25 @@ export function moduleOn(feed: Feed | null, id: string) {
   if (feed.mobile?.modules?.[id] === false) return false;
   return true;
 }
+
+export type RegistrationField = { key?: string; type?: string; label?: string; required?: boolean; enabled?: boolean; options?: ({ value?: string; label?: string } | string)[] };
+
+export async function fetchRegistrationForm(portal: string, seminarId: number, phase: "pre" | "main") {
+  const response = await fetch(`${getApiBase()}/api/partners/registrations?portal=${encodeURIComponent(portal)}&seminarId=${seminarId}&phase=${phase}`, { headers: headers(false) });
+  const data = (await response.json().catch(() => null)) as { error?: string; form?: { fields?: RegistrationField[] } } | null;
+  if (!response.ok) throw new Error(data?.error || "The registration form is not available.");
+  return (data?.form?.fields ?? []).filter((field) => field.enabled !== false && field.key);
+}
+
+export async function submitRegistration(input: { portal: string; seminarId: number; phase: "pre" | "main"; values: Record<string, string> }) {
+  const body = new FormData();
+  body.append("portal", input.portal);
+  body.append("seminarId", String(input.seminarId));
+  body.append("phase", input.phase);
+  body.append("formData", JSON.stringify(input.values));
+  const auth = headers(false);
+  const response = await fetch(`${getApiBase()}/api/partners/registrations`, { method: "POST", headers: { accept: "application/json", ...(auth.authorization ? { authorization: auth.authorization } : {}) }, body });
+  const data = (await response.json().catch(() => null)) as { error?: string; message?: string; applicationNo?: string } | null;
+  if (!response.ok) throw new Error(data?.error || "Could not register.");
+  return data?.applicationNo ? `${data.message || "Registered."} Application ${data.applicationNo}.` : data?.message || "Registered.";
+}

@@ -3,12 +3,12 @@ import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { formatDate, listOrders, money, str, type Row } from "../../src/api";
 import { useAuth } from "../../src/auth";
-import { Body, Button, Card, Divider, Empty, Heading, Loading, Muted, PageHeader, Screen, StatusChip } from "../../src/ui";
+import { Body, Button, Card, Divider, Empty, Heading, Loading, Muted, PageHeader, Screen } from "../../src/ui";
+import { InfoTiles, Pipeline, type TrackStage } from "../../src/tracker";
 
 type Item = { bookId?: string; title?: string; quantity?: number; price?: number };
 type Step = { at?: string; status?: string; note?: string; custom?: string };
-type Scan = { at?: string; status?: string; location?: string };
-type Shipment = { id?: string; courier?: string; awb?: string; status?: string; expectedBy?: string; tracking?: Scan[]; part?: number };
+type Tracker = { shipmentId?: string; part?: number; courier?: string; trackingId?: string; expected?: string; current?: number; stages?: TrackStage[] };
 
 function when(value: unknown) {
   const text = str(value);
@@ -57,7 +57,8 @@ export default function OrderScreen() {
 
   const items = (Array.isArray(order.items) ? order.items : []) as Item[];
   const history = (Array.isArray(order.history) ? order.history : []) as Step[];
-  const shipments = (Array.isArray(order.shipments) ? order.shipments : []) as Shipment[];
+  const trackers = (Array.isArray(order.tracking) ? order.tracking : []) as Tracker[];
+  const preorder = (order.preorderPayment ?? null) as { balance?: number; balancePaidAt?: string; shippingDue?: boolean } | null;
   const address = (order.deliveryAddress ?? {}) as Row;
   const pickup = str(order.deliveryMode) === "store_pickup";
 
@@ -89,43 +90,46 @@ export default function OrderScreen() {
         )}
       </Card>
 
-      {shipments.map((shipment, index) => {
-        const scans = [...(shipment.tracking ?? [])].sort((a, b) => Date.parse(str(b.at)) - Date.parse(str(a.at)));
-        return (
-          <Card key={shipment.id ?? index} featured>
-            <Heading>{shipments.length > 1 ? `Shipment ${shipment.part ?? index + 1}` : "Shipment"}</Heading>
-            <StatusChip label={str(shipment.status, "Booked")} />
-            <Muted>
-              {[str(shipment.courier), shipment.awb ? `Tracking ID ${shipment.awb}` : ""].filter(Boolean).join(" · ")}
-            </Muted>
-            {shipment.expectedBy && shipment.status !== "Delivered" ? <Body>Expected delivery by {str(shipment.expectedBy)}</Body> : null}
-            {scans.map((scan, scanIndex) => (
-              <View key={`${scan.at ?? ""}-${scanIndex}`} style={{ marginTop: 8 }}>
-                <Body>{str(scan.status)}</Body>
-                <Muted>{[when(scan.at), str(scan.location)].filter(Boolean).join(" · ")}</Muted>
-              </View>
-            ))}
+      {trackers.length ? (
+        trackers.map((tracker, index) => (
+          <Card key={tracker.shipmentId || index} featured>
+            <Heading>{trackers.length > 1 ? `Shipment ${tracker.part || index + 1} of ${trackers.length}` : "Tracking"}</Heading>
+            <View style={{ height: 10 }} />
+            <InfoTiles
+              tiles={[
+                { label: "Order", value: str(order.id) },
+                { label: "Date", value: formatDate(order.date) },
+                { label: "Status", value: str(order.status, "Ordered") },
+                { label: "Courier", value: str(tracker.courier) },
+              ]}
+            />
+            <Pipeline
+              stages={tracker.stages ?? []}
+              current={Number(tracker.current) || 0}
+              failed={/cancel|fail|rto/i.test(str(order.status))}
+              expected={str(order.status) === "Delivered" ? "" : str(tracker.expected)}
+              footer={tracker.trackingId ? `Courier: ${[str(tracker.courier), `Tracking id: ${str(tracker.trackingId)}`].filter(Boolean).join(" · ")}` : undefined}
+            />
           </Card>
-        );
-      })}
-      {!shipments.length && str(order.trackingId) ? (
-        <Card featured>
-          <Heading>Shipment</Heading>
-          <Muted>{[str(order.courierName), `Tracking ID ${str(order.trackingId)}`].filter(Boolean).join(" · ")}</Muted>
-          {order.eta ? <Body>Expected delivery by {str(order.eta)}</Body> : null}
+        ))
+      ) : (
+        <Card>
+          <Heading>Order progress</Heading>
+          {[...history].reverse().map((step, index) => (
+            <View key={`${step.at ?? ""}-${index}`} style={{ marginTop: 8 }}>
+              <Body>{str(step.custom) || str(step.status)}</Body>
+              <Muted>{[when(step.at), str(step.note)].filter(Boolean).join(" · ")}</Muted>
+            </View>
+          ))}
+          {!history.length ? <Muted>Recorded {when(order.date)}</Muted> : null}
+        </Card>
+      )}
+      {preorder && !preorder.balancePaidAt && Number(preorder.balance) > 0 ? (
+        <Card>
+          <Heading>Pre-order balance · {money(preorder.balance)}{preorder.shippingDue ? " + courier charge" : ""}</Heading>
+          <Muted>{/Awaiting|^Ordered$/.test(str(order.status)) ? "You can pay this once your order is processed." : "Your order is processed. Pay the remaining amount to get it dispatched."}</Muted>
         </Card>
       ) : null}
-
-      <Card>
-        <Heading>Order progress</Heading>
-        {[...history].reverse().map((step, index) => (
-          <View key={`${step.at ?? ""}-${index}`} style={{ marginTop: 8 }}>
-            <Body>{str(step.custom) || str(step.status)}</Body>
-            <Muted>{[when(step.at), str(step.note)].filter(Boolean).join(" · ")}</Muted>
-          </View>
-        ))}
-        {!history.length ? <Muted>Recorded {when(order.date)}</Muted> : null}
-      </Card>
       <Button kind="ghost" icon="refresh-outline" label="Refresh tracking" onPress={() => void load()} />
       <Button kind="ghost" icon="help-buoy-outline" label="Need help with this order?" onPress={() => router.push("/support")} />
     </Screen>

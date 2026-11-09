@@ -1,7 +1,8 @@
 import { useLocalSearchParams } from "expo-router";
-import { findRow, mediaUrl, str } from "../../src/api";
+import { Share } from "react-native";
+import { findRow, getApiBase, mediaUrl, str } from "../../src/api";
 import { useFeed } from "../../src/feed";
-import { Body, Cover, Empty, Loading, Muted, PageHeader, Screen } from "../../src/ui";
+import { Body, Button, Cover, Empty, Loading, Muted, PageHeader, Screen } from "../../src/ui";
 
 export default function ArticleDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -22,6 +23,15 @@ export default function ArticleDetail() {
         kicker="Article"
         title={str(item.title)}
         subtitle={[str(item.author), str(item.date).slice(0, 10), str(item.readingTime)].filter(Boolean).join(" · ")}
+      />
+      <Button
+        kind="soft"
+        icon="share-social-outline"
+        label="Share article"
+        onPress={() => {
+          const link = `${getApiBase()}/articles/${str(item.slug, str(item.id))}`;
+          void Share.share({ title: str(item.title), message: `${str(item.title)}\n${str(item.excerpt)}\n\nRead on Vaidya Gogate Memorial Foundation: ${link}` });
+        }}
       />
       <Muted>{str(item.excerpt)}</Muted>
       <Body>{str(item.content, str(item.excerpt))}</Body>
