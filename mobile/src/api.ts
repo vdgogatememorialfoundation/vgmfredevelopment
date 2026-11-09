@@ -367,6 +367,18 @@ export async function createTicket(input: { name: string; email: string; phone?:
   return data.ticket as Row;
 }
 
+export async function replyTicket(id: string, body: string) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/tickets`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "reply", id, body }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not send the reply."));
+  return data.ticket as Row;
+}
+
 export async function listOrders() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/orders`, { headers: headers(false) }));
   if (!data.ok) throw new Error(String(data.error || "Could not load orders."));
@@ -434,6 +446,8 @@ export async function createCheckout(input: {
   pincode: string;
   country?: string;
   countryCode?: string;
+  landmark?: string;
+  pickup?: boolean;
   items: { id: string; quantity: number }[];
 }) {
   const data = await parse(

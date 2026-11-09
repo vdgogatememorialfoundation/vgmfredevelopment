@@ -1,6 +1,6 @@
-import { str } from "../src/api";
-import { CatalogList } from "../src/catalog";
-import { useFeed } from "../src/feed";
+import { str } from "../../src/api";
+import { CatalogList } from "../../src/catalog";
+import { useFeed } from "../../src/feed";
 
 export default function ArticlesScreen() {
   const { feed } = useFeed();

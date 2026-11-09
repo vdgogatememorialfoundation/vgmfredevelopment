@@ -107,17 +107,13 @@ function OrdersSection({ title, subtitle }: { title: string; subtitle: string })
       {orders.map((item) => {
         const replacement = item.replacementRequest as { status?: string; replacementOrderId?: string } | undefined;
         return (
-          <Card key={str(item.id)}>
+          <Card key={str(item.id)} onPress={() => router.push(`/order/${str(item.id)}`)}>
             <Heading>Order {str(item.id)}</Heading>
             <Muted>
               {[str(item.paymentStatus, "Unpaid"), str(item.status, "Recorded"), money(item.total)].filter(Boolean).join(" · ")}
             </Muted>
             {replacement?.status ? <Muted>Replacement {replacement.status}{replacement.replacementOrderId ? ` · ${replacement.replacementOrderId}` : ""}</Muted> : null}
-            <Button
-              kind="ghost"
-              label="Request replacement with photos"
-              onPress={() => void Linking.openURL(`${getApiBase()}/account/orders`)}
-            />
+            <Button kind="ghost" icon="navigate-outline" label="Order details & tracking" onPress={() => router.push(`/order/${str(item.id)}`)} />
           </Card>
         );
       })}
@@ -159,11 +155,12 @@ function TicketsSection({ title, subtitle }: { title: string; subtitle: string }
       <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
       <Banner text={note} tone="error" />
       {tickets.map((item) => (
-        <Card key={str(item.id)}>
+        <Card key={str(item.id)} onPress={() => router.push(`/ticket/${str(item.id)}`)}>
           <Heading>{str(item.subject)}</Heading>
           <Muted>
-            {str(item.status)} · {str(item.id)}
+            {str(item.status)} · {str(item.id)} · {Array.isArray(item.responses) ? item.responses.length : 0} replies
           </Muted>
+          <Muted>Tap to open the conversation and reply</Muted>
         </Card>
       ))}
       {!tickets.length ? <Empty icon="help-buoy-outline" label="No support tickets on this account yet." /> : null}

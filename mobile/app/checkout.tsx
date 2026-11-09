@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { Modal, View } from "react-native";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { router } from "expo-router";
-import { findRow, money, placeOrder, str } from "../src/api";
+import { createCheckout, findRow, money, str, verifyCheckout } from "../src/api";
 import { useAuth } from "../src/auth";
 import { useCart } from "../src/cart";
 import { CountryField } from "../src/country-field";
@@ -28,6 +29,9 @@ export default function CheckoutScreen() {
   const [note, setNote] = useState("");
   const [tone, setTone] = useState<"note" | "error" | "success">("note");
   const [orderId, setOrderId] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [pickup, setPickup] = useState(false);
+  const [payment, setPayment] = useState<{ html: string; orderId: string } | null>(null);
 
   useEffect(() => {
     if (!countries.length) return;
@@ -64,7 +68,7 @@ export default function CheckoutScreen() {
       setNote("Enter your name and a valid international mobile number.");
       return;
     }
-    if (!line1.trim() || !city.trim() || !state.trim() || !isValidPostal(country.code, pincode)) {
+    if (!pickup && (!line1.trim() || !city.trim() || !state.trim() || !isValidPostal(country.code, pincode))) {
       setTone("error");
       setNote(isIndia(country.code) ? "Enter the full delivery address and a 6-digit pincode." : "Enter the full delivery address and a valid postal code.");
       return;
@@ -72,21 +76,63 @@ export default function CheckoutScreen() {
     setBusy(true);
     setNote("");
     try {
-      const order = await placeOrder({
+      const started = await createCheckout({
         name: name.trim(),
         phone: mobile.replace(/\s/g, ""),
         line1: line1.trim(),
+        landmark: landmark.trim(),
         city: city.trim(),
         state: state.trim(),
         pincode: pincode.trim(),
         country: country.name,
         countryCode: country.code,
+        pickup,
         items: priced.map((item) => ({ id: item.id, quantity: item.quantity })),
       });
+      const id = str(started.order?.id);
+      if (!started.keyId || !started.razorpayOrderId || !id) throw new Error("Online payment is not available right now. Please try again later.");
+      setPayment({
+        orderId: id,
+        html: razorpayPage({
+          key: started.keyId,
+          orderId: started.razorpayOrderId,
+          amount: Math.round(Number(started.amount ?? total) * 100),
+          name: name.trim(),
+          email: session?.email ?? "",
+          phone: mobile.replace(/\s/g, ""),
+          description: `Order ${id}`,
+        }),
+      });
+    } catch (error) {
+      setTone("error");
+      setNote((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onPayment = async (event: WebViewMessageEvent) => {
+    const current = payment;
+    setPayment(null);
+    if (!current) return;
+    let message: { type?: string; paymentId?: string; razorpayOrderId?: string; signature?: string; error?: string } = {};
+    try {
+      message = JSON.parse(event.nativeEvent.data);
+    } catch {
+      message = { type: "error" };
+    }
+    if (message.type !== "success") {
+      setTone("error");
+      setNote(message.type === "dismiss" ? "Payment was cancelled. Your cart is still here." : message.error || "The payment did not go through.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await verifyCheckout({ orderId: current.orderId, paymentId: message.paymentId, razorpayOrderId: message.razorpayOrderId, signature: message.signature });
       cart.clear();
-      setOrderId(str(order.id));
+      setOrderId(current.orderId);
       setTone("success");
-      setNote(`Order ${str(order.id)} is placed. Total ${money(order.total ?? total)}.`);
+      setNote(`Payment received. Order ${current.orderId} is confirmed.`);
     } catch (error) {
       setTone("error");
       setNote((error as Error).message);
@@ -106,13 +152,24 @@ export default function CheckoutScreen() {
 
   return (
     <Screen>
-      <PageHeader kicker="Shop" title="Checkout" subtitle="Confirm the delivery address and place the order." />
+      <PageHeader kicker="Shop" title="Checkout" subtitle="Confirm delivery or store pickup, then pay." />
+      <Modal visible={Boolean(payment)} animationType="slide" onRequestClose={() => onPayment({ nativeEvent: { data: JSON.stringify({ type: "dismiss" }) } } as WebViewMessageEvent)}>
+        {payment ? (
+          <WebView
+            originWhitelist={["*"]}
+            source={{ html: payment.html, baseUrl: "https://api.razorpay.com" }}
+            onMessage={(event) => void onPayment(event)}
+            javaScriptEnabled
+            setSupportMultipleWindows={false}
+          />
+        ) : null}
+      </Modal>
       <Banner text={note} tone={tone} />
       {orderId ? (
         <Card featured>
-          <Heading>Order placed</Heading>
-          <Muted>The Foundation desk will confirm this order. You can follow it from My Orders.</Muted>
-          <Button label="View my orders" onPress={() => router.replace("/account/orders")} />
+          <Heading>Order confirmed</Heading>
+          <Muted>You can follow packing, shipping and delivery from the order page.</Muted>
+          <Button label="Track this order" onPress={() => router.replace(`/order/${orderId}`)} />
           <Button kind="ghost" label="Continue shopping" onPress={() => router.replace("/shop")} />
         </Card>
       ) : (
@@ -137,7 +194,15 @@ export default function CheckoutScreen() {
             }}
           />
           <Field label="Mobile number" value={phone} onChange={setPhone} keyboard="phone-pad" placeholder={`${country.dial} 98765 43210`} />
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+            <Chip label="Home delivery" selected={!pickup} onPress={() => setPickup(false)} />
+            <Chip label="Pick up from store" selected={pickup} onPress={() => setPickup(true)} />
+          </View>
+          {pickup ? <Muted>We will message you when the order is ready. Show your pickup OTP at the counter.</Muted> : null}
+          {!pickup ? (
+          <>
           <Field label="Address" value={line1} onChange={setLine1} autoCapitalize="words" />
+          <Field label="Landmark (optional)" value={landmark} onChange={setLandmark} autoCapitalize="words" />
           <Field label="City" value={city} onChange={setCity} autoCapitalize="words" />
           {states.length ? (
             <View style={{ marginBottom: 12 }}>
@@ -158,13 +223,41 @@ export default function CheckoutScreen() {
             keyboard={isIndia(country.code) ? "numeric" : "default"}
             placeholder={isIndia(country.code) ? "6-digit PIN" : "Postal code"}
           />
-          <Muted>
-            Delivery partners are Shiprocket, Nimbuspost and iThink Logistics. Same-city orders can use their Porter, Shadowfax Flash or Flash last-mile. Orders cannot be cancelled or returned from the app. Damaged items can be replaced after delivery if you share photos.
-          </Muted>
-          <Button label={busy ? "Placing order…" : `Place order · ${money(total)}`} disabled={busy} onPress={() => void submit()} />
+          </>
+          ) : null}
+          <Muted>Pay securely with UPI, card or net banking through Razorpay. Damaged items can be replaced after delivery if you share photos.</Muted>
+          <Button label={busy ? "Please wait…" : `Pay ${money(total)}`} disabled={busy} onPress={() => void submit()} />
           <Button kind="ghost" label="Back to cart" onPress={() => router.replace("/cart")} />
         </>
       )}
     </Screen>
   );
+}
+
+function razorpayPage(input: { key: string; orderId: string; amount: number; name: string; email: string; phone: string; description: string }) {
+  const options = JSON.stringify({
+    key: input.key,
+    order_id: input.orderId,
+    amount: input.amount,
+    currency: "INR",
+    name: "Vaidya Gogate Memorial Foundation",
+    description: input.description,
+    prefill: { name: input.name, email: input.email, contact: input.phone },
+    theme: { color: "#8F2D2D" },
+  });
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="background:#FFFDF8;font-family:sans-serif;color:#5b4636;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<p>Opening secure payment…</p>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+function send(m){window.ReactNativeWebView.postMessage(JSON.stringify(m));}
+try{
+var o=${options};
+o.handler=function(r){send({type:"success",paymentId:r.razorpay_payment_id,razorpayOrderId:r.razorpay_order_id,signature:r.razorpay_signature});};
+o.modal={ondismiss:function(){send({type:"dismiss"});}};
+var rp=new Razorpay(o);
+rp.on("payment.failed",function(r){send({type:"error",error:(r&&r.error&&r.error.description)||"Payment failed."});});
+rp.open();
+}catch(e){send({type:"error",error:"Could not open Razorpay."});}
+</script></body></html>`;
 }

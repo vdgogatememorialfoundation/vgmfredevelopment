@@ -57,7 +57,7 @@ function tabFile(id: string) {
 }
 
 function hiddenFiles(visible: string[]) {
-  const all = ["index", "events", "shop", "clinics", "account", "support", "certificates"];
+  const all = ["index", "articles", "events", "shop", "clinics", "account", "support", "certificates"];
   const shown = visible.map(tabFile);
   return all.filter((name) => !shown.includes(name));
 }
