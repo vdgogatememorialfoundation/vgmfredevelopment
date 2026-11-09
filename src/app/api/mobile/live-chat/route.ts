@@ -3,7 +3,10 @@ import { corsHeaders } from "@/lib/server/mobile-feed";
 import { addTicket, bearerToken, sessionFromToken } from "@/lib/server/mobile-store";
 import { portalSessionFrom } from "@/lib/server/portal-auth";
 import {
-  CHAT_DEPARTMENTS,
+  inviteChatAgent,
+  listDepartments,
+  saveDepartments,
+  type SupportDepartment,
   closeChatThread,
   getChatThread,
   listChatThreads,
@@ -41,12 +44,12 @@ export async function GET(request: NextRequest) {
   const threadId = request.nextUrl.searchParams.get("threadId") || "";
   const portal = portalSessionFrom(request);
   if (!portal && !who?.email && !threadId) {
-    return json({ ok: true, threads: [], departments: CHAT_DEPARTMENTS });
+    return json({ ok: true, threads: [], departments: listDepartments().map((row) => row.name), departmentRows: listDepartments() });
   }
   const threads = portal
     ? listChatThreads({ staff: true })
     : listChatThreads({ email: who?.email, id: threadId || undefined });
-  return json({ ok: true, threads, departments: CHAT_DEPARTMENTS });
+  return json({ ok: true, threads, departments: listDepartments().map((row) => row.name), departmentRows: listDepartments() });
 }
 
 export async function POST(request: NextRequest) {
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
 
   if (action === "list") {
     const threads = portal ? listChatThreads({ staff: true }) : listChatThreads({ email: who?.email, id: String(body?.threadId ?? "") || undefined });
-    return json({ ok: true, threads, departments: CHAT_DEPARTMENTS });
+    return json({ ok: true, threads, departments: listDepartments().map((row) => row.name), departmentRows: listDepartments() });
   }
 
   if (action === "post") {
@@ -81,8 +84,17 @@ export async function POST(request: NextRequest) {
     return json({ ok: false, error: "Staff sign-in is required for this action." }, 401);
   }
 
+  if (action === "departments") {
+    const rows = Array.isArray(body?.departments) ? (body?.departments as SupportDepartment[]) : [];
+    return json({ ok: true, departmentRows: saveDepartments(rows) });
+  }
+
   const threadId = String(body?.threadId ?? "");
   if (!threadId) return json({ ok: false, error: "Choose a chat." }, 400);
+
+  if (action === "invite") {
+    return json({ ok: true, thread: inviteChatAgent(threadId, String(body?.inviteEmail ?? ""), String(body?.inviteName ?? ""), agentName) });
+  }
 
   if (action === "take") {
     return json({ ok: true, thread: takeChatThread(threadId, agentEmail, agentName) });

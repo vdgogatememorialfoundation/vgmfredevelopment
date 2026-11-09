@@ -37,7 +37,45 @@ export type LiveChatThread = {
   status?: "open" | "closed";
   department?: string;
   closedAt?: string;
+  ref?: string;
+  participants?: { email: string; name: string; joinedAt: string }[];
+  firstJoinedAt?: string;
 };
+
+export type SupportDepartment = { name: string; agents: string[] };
+
+export async function fetchDepartments(): Promise<SupportDepartment[]> {
+  try {
+    const response = await fetch("/api/mobile/live-chat", { credentials: "same-origin", cache: "no-store" });
+    const data = (await response.json()) as { departmentRows?: SupportDepartment[] };
+    return data.departmentRows ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveDepartments(departments: SupportDepartment[]): Promise<SupportDepartment[]> {
+  const response = await fetch("/api/mobile/live-chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "departments", departments }),
+  });
+  const data = (await response.json()) as { ok?: boolean; error?: string; departmentRows?: SupportDepartment[] };
+  if (!data.ok) throw new Error(data.error || "Could not save departments.");
+  return data.departmentRows ?? [];
+}
+
+/** Adds another agent to the chat; the current agent stays on it. */
+export async function inviteAgent(threadId: string, inviteEmail: string, inviteName: string, agentName: string) {
+  await fetch("/api/mobile/live-chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "invite", threadId, inviteEmail, inviteName, agentName }),
+  }).catch(() => undefined);
+  await pullServerChats();
+}
 
 const SETTINGS_KEY = "vgmf_live_chat_settings";
 const THREADS_KEY = "vgmf_live_chat_threads";
