@@ -157,7 +157,11 @@ export function OrdersDashboard() {
           setOrderStatus(id, "Packed");
           counter += 1;
         } else {
-          setOrderStatus(id, "Ready to Ship");
+          setOrderStatus(id, isPreorderOrder(order) ? "Packed" : "Ready to Ship");
+          if (isPreorderOrder(order)) {
+            failed.push(`${id}: pre-order packed; create its shipment from the order`);
+            continue;
+          }
           await bookShipment(id);
           booked += 1;
         }
@@ -235,12 +239,12 @@ export function OrdersDashboard() {
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
             setOrderStatus(id, "Packed");
             const order = getOrderByAdmin(id);
-            if (order?.deliveryMode === "delivery" && getIntegrations().shipping.autoBookOnPack) await bookShipment(id);
+            if (order?.deliveryMode === "delivery" && !isPreorderOrder(order) && getIntegrations().shipping.autoBookOnPack) await bookShipment(id);
           })}>Pack</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("To Ship", async (id) => {
             setOrderStatus(id, "To Ship");
             const order = getOrderByAdmin(id);
-            if (order?.deliveryMode === "delivery") await bookShipment(id);
+            if (order?.deliveryMode === "delivery" && !isPreorderOrder(order)) await bookShipment(id);
           })}>To Ship</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => void readyForPickup()}>Ready to pickup</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Out for Delivery", (id) => setOrderStatus(id, "Out for Delivery"))}>Out for Delivery</Button>
@@ -729,6 +733,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         return "Order cancelled. The shipment was removed from the desk.";
       }
       setOrderStatus(order.id, status);
+      if ((status === "Packed" || status === "Ready to Ship") && order.deliveryMode === "delivery" && !shipment && isPreorderOrder(order)) {
+        return `Status set to ${status}. This is a pre-order: create the shipment below once it is packed.`;
+      }
       if (status === "Packed" && order.deliveryMode === "delivery" && !shipment && integrations.shipping.autoBookOnPack) {
         const booking = await bookShipment(order.id);
         return `Status set to Packed. ${booking.message}`;
@@ -1130,6 +1137,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pack & book courier"}
                   </Button>
                 </div>
+                <SplitShipments
+                  order={order}
+                  rate={picked !== undefined ? quote?.rates[picked] : undefined}
+                  pickup={pickupOverride(pickupChoices.find((row) => row.nickname === pickupNick))}
+                  onDone={(text) => { setMessage(text); onChanged(); }}
+                />
                 <p className="mt-2 text-xs text-text-muted">
                   Pack & book sends the order to the courier account the customer chose. Tookan, Shipday, Shiprocket, Nimbuspost, iThink and Shipyaari are booked for real when their API key is saved.
                 </p>
@@ -1549,6 +1562,93 @@ function ParcelEditor({ order, onSaved }: { order: Order; onSaved: () => void })
       <p className="mt-1 text-xs text-text-muted">For several boxes, enter the total packed weight and the size of the largest box. Aggregators charge on the higher of actual and volumetric weight (L×B×H ÷ 5000).</p>
       {error ? <p className="mt-1 text-xs text-red-700">{error}</p> : null}
       <Button variant="outline" onClick={save}>Save package</Button>
+    </div>
+  );
+}
+
+/** Pre-orders are never booked automatically: the desk creates the shipment after packing. */
+function isPreorderOrder(order?: Order | null) {
+  return Boolean(order && (order.preorderPayment || order.items.some((item) => item.preorder)));
+}
+
+function SplitShipments({
+  order,
+  rate,
+  pickup,
+  onDone,
+}: {
+  order: Order;
+  rate?: CourierRate;
+  pickup?: ReturnType<typeof pickupOverride>;
+  onDone: (message: string) => void;
+}) {
+  const parts = getShipments().filter((item) => item.orderId === order.id && item.part && item.note !== "Cancelled");
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const [open, setOpen] = useState(parts.length > 0);
+  const [second, setSecond] = useState<Record<string, number>>(() =>
+    Object.fromEntries(order.items.map((item, index) => [item.bookId, order.items.length > 1 ? (index % 2 ? item.quantity : 0) : Math.floor(item.quantity / 2)]))
+  );
+  const [busy, setBusy] = useState(0);
+  const [error, setError] = useState("");
+  if (units < 2) return null;
+  const itemsFor = (part: 1 | 2) =>
+    order.items
+      .map((item) => ({ bookId: item.bookId, quantity: part === 2 ? second[item.bookId] ?? 0 : item.quantity - (second[item.bookId] ?? 0) }))
+      .filter((row) => row.quantity > 0);
+  const book = async (part: 1 | 2) => {
+    setBusy(part);
+    setError("");
+    try {
+      const result = await bookShipment(order.id, rate, pickup, { part, items: itemsFor(part) });
+      onDone(`Shipment ${part}: ${result.message}`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not book this shipment.");
+    } finally {
+      setBusy(0);
+    }
+  };
+  return (
+    <div className="mt-4 rounded-xl border border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-text-primary">Split into 2 shipments</p>
+        <Button variant="ghost" onClick={() => setOpen(!open)}>{open ? "Hide" : "Split order"}</Button>
+      </div>
+      {open && (
+        <div className="mt-2 space-y-2 text-sm">
+          <p className="text-xs text-text-muted">Set how many of each item go in shipment 2; the rest go in shipment 1. Each shipment gets its own courier booking, AWB, label and tracking. The courier picked above (or the default rule) is used.</p>
+          {order.items.map((item) => (
+            <div key={item.bookId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warm-cream/40 px-3 py-2">
+              <span className="font-medium">{item.title} × {item.quantity}</span>
+              <span className="flex items-center gap-2 text-xs">
+                Shipment 1: <b>{item.quantity - (second[item.bookId] ?? 0)}</b> · Shipment 2:
+                <input
+                  type="number"
+                  min={0}
+                  max={item.quantity}
+                  className="w-16 rounded-lg border border-border px-2 py-1"
+                  value={second[item.bookId] ?? 0}
+                  disabled={parts.length > 0}
+                  onChange={(event) => setSecond((current) => ({ ...current, [item.bookId]: Math.max(0, Math.min(item.quantity, Math.floor(Number(event.target.value) || 0))) }))}
+                  aria-label={`Units of ${item.title} in shipment 2`}
+                />
+              </span>
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            {([1, 2] as const).map((part) => {
+              const done = parts.find((item) => item.part === part);
+              return done ? (
+                <span key={part} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">Shipment {part}: {done.courier} · {done.awb}</span>
+              ) : (
+                <Button key={part} disabled={Boolean(busy) || !itemsFor(part).length} onClick={() => void book(part)}>
+                  {busy === part ? "Booking…" : `Book shipment ${part}`}
+                </Button>
+              );
+            })}
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
     </div>
   );
 }

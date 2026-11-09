@@ -63,7 +63,21 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
             ) : null}
           </div>
 
-          <OrderTrackingTimeline order={order} />
+          {(() => {
+            const parts = getShipments()
+              .filter((item) => item.orderId === order.id && item.part && item.note !== "Cancelled")
+              .sort((a, b) => (a.part ?? 0) - (b.part ?? 0));
+            if (parts.length < 2) return <OrderTrackingTimeline order={order} />;
+            return parts.map((part) => (
+              <div key={part.id} className="mb-6 border-b border-border pb-4 last:mb-0 last:border-0">
+                <p className="text-sm font-semibold text-text-primary">
+                  Shipment {part.part} of {parts.length} · {part.courier} {part.awb}
+                </p>
+                <p className="mb-2 text-xs text-text-muted">{part.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")}</p>
+                <OrderTrackingTimeline order={{ ...order, trackingId: part.awb, courierName: part.courier }} shipmentId={part.id} />
+              </div>
+            ));
+          })()}
         </div>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-2">

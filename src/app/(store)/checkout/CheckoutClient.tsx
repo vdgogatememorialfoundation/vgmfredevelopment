@@ -41,6 +41,7 @@ import { SavedCardTiles } from "@/components/account/SavedCards";
 import { saveAddress, useSavedAddresses, useSavedCards, brandLabel } from "@/lib/account-wallet";
 import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
 import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
+import { customerCourierRates } from "@/lib/checkout-couriers";
 
 type CourierOption = CourierRate & { key: string; deliverBy: string; dayLabel?: string; express: boolean };
 
@@ -276,13 +277,7 @@ export default function CheckoutClient() {
 
   const courierOptions: CourierOption[] =
     liveRates && liveRates.pincode === address.pincode
-      ? liveRates.rates
-        .filter((rate) => {
-          const id = `${rate.provider} ${rate.courierName}`.toLowerCase();
-          if (orderSettings.hideTookanAtCheckout && id.includes("tookan")) return false;
-          if (orderSettings.hideShipdayAtCheckout && id.includes("shipday")) return false;
-          return true;
-        })
+      ? customerCourierRates(liveRates.rates, orderSettings)
         .map((rate) => {
           const samePincode = address.pincode.replace(/\D/g, "") === getOriginPincode();
           const promise = promiseFor(rate, rate.deliverBy ? Date.parse(rate.deliverBy) : NaN, samePincode, orderSettings.processingHours, orderSettings.dispatchCutoff);

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { shipmentActivityAt } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
 import type { ShipmentRecord } from "@/types";
+import { sameShipmentSlot } from "@/lib/shipment-slot";
 
 function file() {
   return dataFile("shop-shipments.json");
@@ -45,16 +46,20 @@ export function listShopShipments() {
   return readAll();
 }
 
-export function findShopShipment(orderId: string) {
+export function findShopShipment(orderId: string, shipmentId = "") {
+  if (shipmentId) {
+    const exact = readAll().find((item) => item.id === shipmentId && item.orderId === orderId);
+    if (exact) return exact;
+  }
   return readAll().find((item) => item.orderId === orderId && item.note !== "Cancelled") ?? readAll().find((item) => item.orderId === orderId);
 }
 
 export function upsertShopShipment(shipment: ShipmentRecord) {
   if (!shipment?.id || !shipment.orderId || isDeleted(shipment)) return;
   const all = readAll();
-  const prev = all.find((item) => item.id === shipment.id || item.orderId === shipment.orderId);
+  const prev = all.find((item) => item.id === shipment.id || sameShipmentSlot(item, shipment));
   if (prev && shipmentActivityAt(prev) > shipmentActivityAt(shipment)) return prev;
-  const next = all.filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
+  const next = all.filter((item) => item.id !== shipment.id && !sameShipmentSlot(item, shipment));
   next.unshift(prev ? { ...prev, ...shipment } : shipment);
   writeAll(next);
   return next[0];
@@ -76,7 +81,7 @@ export function deleteShopShipments(orderId: string) {
 
 export function replaceShopShipment(shipment: ShipmentRecord) {
   if (!shipment?.id || !shipment.orderId) return;
-  const next = readAll().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
+  const next = readAll().filter((item) => item.id !== shipment.id && !sameShipmentSlot(item, shipment));
   next.unshift(shipment);
   writeAll(next);
   return shipment;

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as
-    | { shipment?: ShipmentRecord; action?: string; orderId?: string; phone?: string }
+    | { shipment?: ShipmentRecord; action?: string; orderId?: string; shipmentId?: string; phone?: string }
     | null;
   if (body?.action === "delete") {
     const viewer = commerceViewer(request);
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     if (!allowed(request, order, shipment, body.phone ?? "")) {
       return NextResponse.json({ ok: false, error: "Sign in, or enter the mobile number on the order." }, { status: 403 });
     }
-    const result = await refreshStoredShipment(orderId);
+    const result = await refreshStoredShipment(orderId, typeof body.shipmentId === "string" ? body.shipmentId : "");
     return NextResponse.json(result, { headers: { "cache-control": "no-store" } });
   }
   const shipment = body?.shipment;

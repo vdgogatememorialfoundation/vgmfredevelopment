@@ -12,6 +12,7 @@ import {
   generateSku,
   getCategories,
   isProductCodeTaken,
+  issueStockLabels,
   isSkuTaken,
   pendingStockAlerts,
   restockProduct,
@@ -20,7 +21,7 @@ import {
   stockLevel,
   updateStock,
 } from "@/lib/product-data";
-import { barcodeSvg, printBarcodeSheet } from "@/lib/barcode";
+import { barcodeSvg, printBarcodeSheet, printStockLabels } from "@/lib/barcode";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
 import { useAllProducts } from "@/lib/use-cms";
 import { fileToStoredUrl } from "@/lib/images";
@@ -283,6 +284,19 @@ export function ProductsSection() {
                         {book.active !== false && level === "out" && !book.preorder?.enabled && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-600">Out</span>}
                       </td>
                       <td className="px-3 text-right">
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            const answer = window.prompt(`How many stock labels for ${book.title}? Each label gets its own number.`, String(Math.max(1, book.stock || 1)));
+                            const count = Math.floor(Number(answer));
+                            if (!answer || !Number.isFinite(count) || count < 1) return;
+                            const codes = issueStockLabels(book.id, count);
+                            void printStockLabels(codes.map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) })));
+                            setStockNote(`${book.title}: ${codes.length} labels, ${codes[0]} to ${codes[codes.length - 1]}.`);
+                          }}
+                        >
+                          Labels
+                        </Button>
                         <Button variant="ghost" onClick={() => { setCreating(false); setEditedId(editedId === book.id ? null : book.id); }}>
                           {editedId === book.id ? "Close" : "Edit"}
                         </Button>

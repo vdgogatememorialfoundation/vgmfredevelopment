@@ -18,6 +18,7 @@ import { useOrderSettings } from "@/lib/use-cms";
 import { useSavedAddresses } from "@/lib/account-wallet";
 import { useAuth } from "@/components/auth/AuthContext";
 import type { Book, CourierRate } from "@/types";
+import { customerCourierRates } from "@/lib/checkout-couriers";
 
 const AGGREGATOR = /shiprocket|nimbus|ithink|shipyaari/i;
 
@@ -87,11 +88,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         bookIds: [book.id],
       })
         .then((quote) => {
-          const list = quote.rates
-            .filter((rate) => {
-              const id = `${rate.provider} ${rate.courierName}`.toLowerCase();
-              return !(orderSettings.hideTookanAtCheckout && id.includes("tookan")) && !(orderSettings.hideShipdayAtCheckout && id.includes("shipday"));
-            })
+          const list = customerCourierRates(quote.rates, orderSettings)
             .map((rate) => ({
               ...rate,
               ...promiseFor(rate, rate.deliverBy ? Date.parse(rate.deliverBy) : NaN, same, orderSettings.processingHours, orderSettings.dispatchCutoff),

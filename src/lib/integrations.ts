@@ -195,6 +195,10 @@ export interface OrderSettings {
   /** Keep our own Tookan / Shipday fleet off the checkout courier list. */
   hideTookanAtCheckout: boolean;
   hideShipdayAtCheckout: boolean;
+  /** Courier names (or parts of names) never offered to customers, e.g. "Ekart". */
+  hiddenCouriers: string[];
+  /** Buffer added to aggregator rates shown on the site, in case a courier does not pick up and a costlier one is used. */
+  courierMarkup: { percent: number; rupees: number; minimum: number };
   /** Hours the desk needs to pack an order before the courier can collect it. */
   processingHours: number;
   /** Orders packed after this India time (HH:MM) are dispatched the next day. */
@@ -369,6 +373,8 @@ export const defaultOrderSettings: OrderSettings = {
   showCourierChoice: true,
   hideTookanAtCheckout: false,
   hideShipdayAtCheckout: false,
+  hiddenCouriers: [],
+  courierMarkup: { percent: 0, rupees: 0, minimum: 0 },
   processingHours: 4,
   dispatchCutoff: "17:00",
   workingDays: { saturday: false, sunday: false, holidays: [] },
@@ -552,6 +558,12 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     showCourierChoice: Boolean(merged.showCourierChoice),
     hideTookanAtCheckout: Boolean(merged.hideTookanAtCheckout),
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
+    hiddenCouriers: Array.isArray(merged.hiddenCouriers) ? merged.hiddenCouriers.map((name) => String(name).trim()).filter(Boolean).slice(0, 50) : [],
+    courierMarkup: {
+      percent: Math.max(0, Number(merged.courierMarkup?.percent) || 0),
+      rupees: Math.max(0, Number(merged.courierMarkup?.rupees) || 0),
+      minimum: Math.max(0, Number(merged.courierMarkup?.minimum) || 0),
+    },
     processingHours: Math.max(0, finiteNumber(merged.processingHours, defaultOrderSettings.processingHours)),
     dispatchCutoff: /^\d{1,2}:\d{2}$/.test(String(merged.dispatchCutoff ?? "")) ? String(merged.dispatchCutoff) : defaultOrderSettings.dispatchCutoff,
     pickSchedule: {

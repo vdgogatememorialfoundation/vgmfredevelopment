@@ -34,7 +34,7 @@ function Tile({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function OrderTrackingTimeline({ order, phone = "" }: { order: Order; phone?: string }) {
+export default function OrderTrackingTimeline({ order, phone = "", shipmentId = "" }: { order: Order; phone?: string; shipmentId?: string }) {
   useEffect(() => {
     if (order.status !== "Delivered") return;
     const key = `vgmf_delivered_beep_${order.id}`;
@@ -44,7 +44,8 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   }, [order.id, order.status]);
   const [pickupAt] = useState(() => getPickupLocation());
   const [now] = useState(() => Date.now());
-  const localShipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled") ?? null;
+  const ownShipment = (item: ShipmentRecord) => item.orderId === order.id && (shipmentId ? item.id === shipmentId : item.note !== "Cancelled");
+  const localShipment = getShipments().find(ownShipment) ?? null;
   const [remote, setRemote] = useState<ShipmentRecord | null>(null);
   const shipment = remote ?? localShipment;
   const provider = shipment?.provider ?? order.courierChoice?.provider;
@@ -60,7 +61,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
           method: "POST",
           credentials: "same-origin",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "refresh", orderId: order.id, phone }),
+          body: JSON.stringify({ action: "refresh", orderId: order.id, shipmentId, phone }),
         });
         const data = (await response.json()) as {
           ok?: boolean;
@@ -79,7 +80,7 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       } catch {
         /* try the courier keys saved on this browser */
       }
-      const local = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
+      const local = getShipments().find(ownShipment);
       if (!local?.id || cancelled) return;
       try {
         const result = await pingLiveAgent(local.id);
@@ -100,7 +101,8 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [order.id, order.status, phone, hyperlocal]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.id, order.status, phone, hyperlocal, shipmentId]);
 
   const delivered = order.status === "Delivered";
   const shownScans = scans.map((scan, index, list) =>
@@ -270,6 +272,11 @@ export default function OrderTrackingTimeline({ order, phone = "" }: { order: Or
   return (
     <div className="vgmf-trk">
       {tiles}
+      {order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
+        <p className="vgmf-trk-note">
+          <b>Tentative delivery:</b> {expectedText ? deliveryDatePhrase(expectedText) : "shown once the courier confirms the booking"}
+        </p>
+      ) : null}
       {order.preorderPayment ? (
         <p className="vgmf-trk-note">
           Pre-order · advance ₹{order.preorderPayment.advance.toLocaleString("en-IN")} {order.preorderPayment.advancePaidAt ? "paid" : "pending"} · balance ₹

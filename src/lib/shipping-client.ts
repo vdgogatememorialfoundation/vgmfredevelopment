@@ -254,12 +254,42 @@ function statusAfterBooking(status: Order["status"]): Order["status"] {
  * aggregator charges its wallet for the AWB; the ledger keeps what the
  * customer paid next to what the courier cost.
  */
-export async function bookShipment(orderId: string, override?: CourierRate, pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>): Promise<BookingResult> {
+export type ShipmentSplit = { part: number; items: { bookId: string; quantity: number }[] };
+
+/** The part of an order that goes in one shipment of a split order. */
+function splitOrder(order: Order, split: ShipmentSplit): Order {
+  const items = order.items
+    .map((item) => ({ ...item, quantity: Math.min(item.quantity, split.items.find((row) => row.bookId === item.bookId)?.quantity ?? 0) }))
+    .filter((item) => item.quantity > 0);
+  const value = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const share = order.subtotal > 0 ? value / order.subtotal : 1;
+  return {
+    ...order,
+    id: `${order.id}-S${split.part}`,
+    items,
+    subtotal: value,
+    total: Math.round(order.total * share * 100) / 100,
+    shipping: split.part === 1 ? order.shipping : 0,
+    weightKg: undefined,
+    parcel: undefined,
+  };
+}
+
+export async function bookShipment(
+  orderId: string,
+  override?: CourierRate,
+  pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>,
+  split?: ShipmentSplit
+): Promise<BookingResult> {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not need a courier.");
-  const existing = getShipments().find((shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled");
+  const existing = getShipments().find(
+    (shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled" && (!split || shipment.part === split.part)
+  );
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
+  const shipOrder = split ? splitOrder(order, split) : order;
+  if (!shipOrder.items.length) throw new Error(`Shipment ${split?.part ?? ""} has no items. Set the quantities first.`);
 
   const settings = getIntegrations();
   const pickup = { ...settings.shipping.pickup, ...pickupOverride };
@@ -267,10 +297,10 @@ export async function bookShipment(orderId: string, override?: CourierRate, pick
   if (!choice) {
     const quote = await fetchCourierRates({
       deliveryPincode: order.deliveryAddress?.pincode ?? "",
-      weightKg: orderWeightKg(order, settings),
-      declaredValue: order.total,
-      bookIds: order.items.map((item) => item.bookId),
-      dims: order.parcel,
+      weightKg: orderWeightKg(shipOrder, settings),
+      declaredValue: shipOrder.total,
+      bookIds: shipOrder.items.map((item) => item.bookId),
+      dims: shipOrder.parcel,
     });
     choice = pickRate(quote.rates);
   }
@@ -286,12 +316,13 @@ export async function bookShipment(orderId: string, override?: CourierRate, pick
     awb: "",
     charges: choice.rate,
     toAddress: { ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "" }) },
-    items: order.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
+    items: shipOrder.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
     status: "Booked",
     generatedAt: new Date().toISOString(),
+    part: split?.part,
     provider: choice.provider,
     courierCost: choice.rate,
-    customerPaid: order.shipping,
+    customerPaid: shipOrder.shipping,
     tracking: [{ at: new Date().toISOString(), status: "Shipment booked" }],
   };
 
@@ -318,7 +349,7 @@ export async function bookShipment(orderId: string, override?: CourierRate, pick
     action: "book",
     provider: choice.provider,
     creds: credsFrom(settings),
-    order: bookingPayload(order, choice, settings, pickup),
+    order: bookingPayload(shipOrder, choice, settings, pickup),
     schedulePickup: settings.shipping.autoSchedulePickup,
     // Courier pickup goes on the next day the store is working (weekly offs and holidays skipped).
     pickupDate: new Date(nextStoreWorkingDay(Date.now()) + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10),
@@ -352,13 +383,13 @@ export async function bookShipment(orderId: string, override?: CourierRate, pick
   patchOrder(
     order.id,
     {
-      shipmentId: shipment.id,
-      trackingId: shipment.awb,
-      courierName: shipment.courier,
-      courierChoice: choice,
+      shipmentId: split && order.shipmentId ? order.shipmentId : shipment.id,
+      trackingId: split && order.trackingId ? order.trackingId : shipment.awb,
+      courierName: split && order.courierName ? order.courierName : shipment.courier,
+      courierChoice: split && order.courierChoice ? order.courierChoice : choice,
       status: statusAfterBooking(order.status),
     },
-    `Courier booked · ${shipment.courier} ${shipment.awb}`
+    `${split ? `Shipment ${split.part} booked` : "Courier booked"} · ${shipment.courier} ${shipment.awb}`
   );
   sendEmail({
     to: order.deliveryAddress?.email ?? "",

@@ -1486,6 +1486,10 @@ export function OrderSettingsDesk() {
           <Check label="Customer chooses the delivery partner" hint="Shows couriers and rates at checkout." checked={value.showCourierChoice} onChange={(showCourierChoice) => set({ showCourierChoice })} />
           <Check label="Hide Gogate Products-Tookan at checkout" checked={value.hideTookanAtCheckout} onChange={(hideTookanAtCheckout) => set({ hideTookanAtCheckout })} />
           <Check label="Hide Gogate Products-Shipday at checkout" checked={value.hideShipdayAtCheckout} onChange={(hideShipdayAtCheckout) => set({ hideShipdayAtCheckout })} />
+          <Text label="Hide these couriers on the site (comma separated, e.g. Ekart, Xpressbees)" value={value.hiddenCouriers.join(",")} onChange={(text) => set({ hiddenCouriers: String(text).split(",") })} />
+          <Text label="Courier charge buffer shown to customers (%)" type="number" value={value.courierMarkup.percent} onChange={(percent) => set({ courierMarkup: { ...value.courierMarkup, percent: Math.max(0, Number(percent) || 0) } })} />
+          <Text label="Courier charge buffer shown to customers (₹ added)" type="number" value={value.courierMarkup.rupees} onChange={(rupees) => set({ courierMarkup: { ...value.courierMarkup, rupees: Math.max(0, Number(rupees) || 0) } })} />
+          <Text label="Minimum courier charge shown (₹)" type="number" value={value.courierMarkup.minimum} onChange={(minimum) => set({ courierMarkup: { ...value.courierMarkup, minimum: Math.max(0, Number(minimum) || 0) } })} />
           <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
           <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />

@@ -19,6 +19,7 @@ import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-id
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { matchesBarcode } from "@/lib/barcode";
+import { sameShipmentSlot } from "@/lib/shipment-slot";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
@@ -1086,7 +1087,7 @@ export function createShipment(input: {
 }
 
 export function saveShipmentRecord(shipment: ShipmentRecord) {
-  const list = getShipments().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
+  const list = getShipments().filter((item) => item.id !== shipment.id && !sameShipmentSlot(item, shipment));
   list.push(shipment);
   writeJSON(SHIPMENTS_KEY, list);
   publishShipment(shipment);

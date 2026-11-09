@@ -2,6 +2,7 @@ import { books } from "@/data/books";
 import type { AdminCategory, Book, Order, ProductOverride } from "@/types";
 import { queueNotification } from "@/lib/notify";
 import { pushInbox } from "@/lib/inbox";
+import { stockLabelCode, stripUnitSuffix } from "@/lib/barcode";
 
 const OVERRIDES_KEY = "vgmf_admin_products";
 const CUSTOM_KEY = "vgmf_custom_books";
@@ -118,7 +119,7 @@ export function getLiveBookBySlug(slug: string): Book | undefined {
 }
 
 export function getProductByCode(code: string): Book | undefined {
-  const value = code.trim().toLowerCase();
+  const value = stripUnitSuffix(code).toLowerCase();
   if (!value) return undefined;
   return getAllProducts().find((book) =>
     [book.productCode, book.sku, book.barcode, book.isbn?.replace(/-/g, ""), book.id]
@@ -177,6 +178,18 @@ export function saveProductOverride(override: ProductOverride) {
   const book = getLiveBook(override.bookId);
   if (!book) return;
   saveProduct(applyOverride(book, override));
+}
+
+/** Reserves `count` new numbered stock labels for a product and returns their codes. */
+export function issueStockLabels(bookId: string, count: number) {
+  const book = getLiveBook(bookId);
+  if (!book) return [];
+  const total = Math.max(1, Math.min(500, Math.floor(count) || 1));
+  const base = book.productCode || book.barcode || book.sku || book.id;
+  const start = Math.max(1, book.stockLabelNext ?? 1);
+  const codes = Array.from({ length: total }, (_, index) => stockLabelCode(base, start + index));
+  saveProduct({ ...book, stockLabelNext: start + total });
+  return codes;
 }
 
 export function updateStock(bookId: string, stock: number) {

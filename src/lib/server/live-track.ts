@@ -85,8 +85,8 @@ function orderStatusFor(stage: string, hyperlocal: boolean): Order["status"] | u
   return undefined;
 }
 
-export async function refreshStoredShipment(orderId: string) {
-  const shipment = findShopShipment(orderId);
+export async function refreshStoredShipment(orderId: string, shipmentId = "") {
+  const shipment = findShopShipment(orderId, shipmentId);
   if (!shipment) return { ok: false as const, error: "Shipment not on the server yet." };
   const provider = shipment.provider;
   const direct = !shipment.live && shipment.directCourier ? shipment.directCourier : "";
@@ -104,7 +104,14 @@ export async function refreshStoredShipment(orderId: string) {
   }
   if (!hit) return { ok: true as const, live: false as const, shipment };
 
-  const events = dedupe(hit.events?.length ? hit.events : shipment.tracking ?? []);
+  // Courier tracking pages show only the latest scans, so keep earlier ones; drop anything dated in the future.
+  const latestOk = Date.now() + 10 * 60_000;
+  const merged = direct ? [...(shipment.tracking ?? []), ...(hit.events ?? [])] : hit.events?.length ? hit.events : shipment.tracking ?? [];
+  const events = dedupe(
+    merged
+      .filter((event) => (Date.parse(event.at) || 0) <= latestOk)
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  );
   const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
   const latestStatus =

@@ -5,6 +5,7 @@ import { getSession, isPortalRole } from "@/lib/auth";
 import { getCart, getOrders, getWishlist, withAccountEmail } from "@/lib/store";
 import { publishCartChange } from "@/lib/cart-store";
 import type { CartItem, Order, ShipmentRecord } from "@/types";
+import { sameShipmentSlot } from "@/lib/shipment-slot";
 
 function writeOrders(orders: Order[]) {
   window.localStorage.setItem("vgmf_orders", JSON.stringify(orders));
@@ -16,7 +17,7 @@ function writeShipments(shipments: ShipmentRecord[]) {
 
 export function rememberShipment(shipment: ShipmentRecord) {
   if (typeof window === "undefined" || !shipment?.id) return;
-  const list = getShipments().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
+  const list = getShipments().filter((item) => item.id !== shipment.id && !sameShipmentSlot(item, shipment));
   list.unshift(shipment);
   writeShipments(list);
   window.dispatchEvent(new Event("vgmf-cms"));

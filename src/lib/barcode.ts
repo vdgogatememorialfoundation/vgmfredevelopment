@@ -65,8 +65,17 @@ function renderBars(bits: string, label: string, height: number, module: number,
   </svg>`;
 }
 
+/** Numbered stock labels read as `<product code>-U00001`; the unit part is dropped when matching the product. */
+export function stripUnitSuffix(code: string) {
+  return code.trim().replace(/[\s-]?u\d{5}$/i, "");
+}
+
+export function stockLabelCode(base: string, serial: number) {
+  return `${base}-U${String(serial).padStart(5, "0")}`;
+}
+
 export function matchesBarcode(book: { productCode?: string; sku?: string; barcode?: string; isbn?: string; id?: string }, scanned: string) {
-  const value = scanned.trim().toLowerCase().replace(/[\s-]/g, "");
+  const value = stripUnitSuffix(scanned).toLowerCase().replace(/[\s-]/g, "");
   if (!value) return false;
   return [book.productCode, book.sku, book.barcode, book.isbn, book.id]
     .filter(Boolean)
@@ -105,4 +114,38 @@ export function printBarcodeSheet(rows: { title: string; sku?: string; barcode: 
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] ?? char));
+}
+
+/** Prints one Code 128 label per stock unit, each with its own number. */
+export async function printStockLabels(rows: { title: string; code: string; sku?: string; price?: string }[]) {
+  if (typeof window === "undefined" || !rows.length) return;
+  const win = window.open("", "_blank");
+  if (!win) return;
+  const { default: JsBarcode } = await import("jsbarcode");
+  const svgFor = (code: string) => {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    JsBarcode(node, code, { format: "CODE128", height: 46, width: 1.4, fontSize: 11, margin: 2, lineColor: "#1b1410" });
+    return new XMLSerializer().serializeToString(node);
+  };
+  const cards = rows
+    .map(
+      (row) => `<article class="label">
+        <p class="title">${escapeHtml(row.title)}</p>
+        ${row.sku || row.price ? `<p class="meta">${escapeHtml([row.sku, row.price].filter(Boolean).join(" · "))}</p>` : ""}
+        <div class="bars">${svgFor(row.code)}</div>
+      </article>`
+    )
+    .join("");
+  win.document.write(`<!doctype html><html><head><title>Stock labels</title>
+    <style>
+      @page{margin:8mm}
+      body{font-family:Arial,sans-serif;color:#1b1410;margin:0;background:#fff}
+      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(50mm,1fr));gap:3mm}
+      .label{border:1px dashed #cbbfae;border-radius:2mm;padding:2mm;text-align:center;break-inside:avoid}
+      .title{font-size:10px;font-weight:700;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .meta{font-size:9px;color:#5b4b3f;margin:1mm 0}
+      .bars svg{max-width:100%;height:auto}
+    </style></head><body><div class="grid">${cards}</div></body></html>`);
+  win.document.close();
+  win.setTimeout(() => win.print(), 300);
 }

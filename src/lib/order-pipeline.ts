@@ -97,7 +97,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "packed";
   }
   if (
-    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (the )?(hub|facility|warehouse)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
+    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)
@@ -151,7 +151,7 @@ export function courierEventTitle(status: string, location?: string) {
   if (/arrived at|reached at|received at|inward|bag received|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
     return `Shipment arrived at courier facility${place}`;
   }
-  if (/left (the )?(hub|facility|warehouse)|departed|\bdispatched\b|outscan|forwarded|in transit|shipment shipped|connected to/.test(value) && !/out for delivery/.test(value)) {
+  if (/left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|departed|\bdispatched\b|outscan|forwarded|in transit|shipment shipped|connected to/.test(value) && !/out for delivery/.test(value)) {
     return `Shipment left courier facility${place}`;
   }
   return status;

@@ -21,7 +21,7 @@ export async function syncOpenShipments() {
     );
     for (const shipment of open) {
       try {
-        await refreshStoredShipment(shipment.orderId);
+        await refreshStoredShipment(shipment.orderId, shipment.id);
       } catch {
         /* one courier failing must not stop the rest */
       }

@@ -144,7 +144,7 @@ export default function VerticalPipeline({
       const top = start.top + start.height / 2 - frameBox.top;
       // The line follows the courier scans inside the current step, down to the latest one.
       // At a final step (Delivered, Picked Up…) the line ends on its dot, not on the scans listed under it.
-      const finalStep = terminal.has(stages[nodeCurrentIdx]?.id ?? "");
+      const finalStep = terminal.has(stages[nodeCurrentIdx]?.id ?? "") || nodeCurrentIdx >= stages.length - 1;
       const latestScan = finalStep ? undefined : [...(step?.querySelectorAll<HTMLElement>(".vgmf-ship-kids > li") ?? [])].pop();
       const scanBox = latestScan?.getBoundingClientRect();
       const bottom = Math.max(
