@@ -116,6 +116,8 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const [coverImage, setCoverImage] = useState(existing?.coverImage ?? "");
   const [images, setImages] = useState<CaptionedImage[]>(existing?.images ?? []);
   const [featured, setFeatured] = useState(Boolean(existing?.featured));
+  const [articlePublishAt, setArticlePublishAt] = useState(toDatetimeLocal(existing?.publishAt));
+  const [articleUnpublishAt, setArticleUnpublishAt] = useState(toDatetimeLocal(existing?.unpublishAt));
   const [assignedTo, setAssignedTo] = useState(existing?.assignedTo ?? assignment?.assignedTo ?? session?.email ?? "");
   const [translations, setTranslations] = useState<Record<string, ArticleLocaleCopy>>(existing?.translations ?? {});
   const [localeEdit, setLocaleEdit] = useState<Locale>("en");
@@ -168,6 +170,8 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       reviewNote: nextStatus === "published" ? undefined : reviewNote || existing?.reviewNote,
       translations,
       style: articleStyle,
+      publishAt: fromDatetimeLocal(articlePublishAt),
+      unpublishAt: fromDatetimeLocal(articleUnpublishAt),
     };
     if (!article.tags?.length) article.tags = [article.category];
     try {
@@ -261,6 +265,16 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
             <input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />
             Feature on the homepage and at the top of Articles
           </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm text-slate-700">
+              Go live at (optional)
+              <input className="input-field mt-1" type="datetime-local" value={articlePublishAt} onChange={(event) => setArticlePublishAt(event.target.value)} />
+            </label>
+            <label className="text-sm text-slate-700">
+              Hide after (optional)
+              <input className="input-field mt-1" type="datetime-local" value={articleUnpublishAt} onChange={(event) => setArticleUnpublishAt(event.target.value)} />
+            </label>
+          </div>
           {isAdmin && (
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={emailReaders} onChange={(event) => setEmailReaders(event.target.checked)} />

@@ -19,7 +19,7 @@ import { siteConfig } from "@/lib/constants";
 import { getGallery } from "@/lib/gallery";
 import { defaultMobileAppConfig, getMobileAppConfig, type MobileAppConfig } from "@/lib/mobile-config";
 import { getPolicies } from "@/lib/policies";
-import { getLiveBooks } from "@/lib/product-data";
+import { getAllProducts } from "@/lib/product-data";
 import { getSiteVisibility } from "@/lib/site-visibility";
 import { getPlatformCountries } from "@/lib/platform-countries";
 import { getProductReviews, getSeminarReviews } from "@/lib/reviews";
@@ -55,7 +55,7 @@ export function collectMobileSnapshot(): MobileFeed {
     mobile: getMobileAppConfig(),
     events: getLiveEvents(),
     articles: getPublishedArticles(),
-    books: getLiveBooks().filter((book) => book.active !== false),
+    books: getAllProducts().filter((book) => book.active !== false),
     clinics: getLiveClinics(),
     videos: getLiveVideos(),
     notices: getLiveNotices(),

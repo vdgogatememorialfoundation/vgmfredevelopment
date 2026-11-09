@@ -24,6 +24,7 @@ import {
 import { barcodeSvg, printBarcodeSheet, printStockLabels } from "@/lib/barcode";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
 import { useAllProducts } from "@/lib/use-cms";
+import { fromDatetimeLocal, isPublishedNow, toDatetimeLocal } from "@/lib/schedule";
 import { fileToStoredUrl } from "@/lib/images";
 import type { AdminCategory, Book, ProductMedia, PublisherInfo } from "@/types";
 import {
@@ -278,6 +279,7 @@ export function ProductsSection() {
                       <td className="px-3 text-text-muted">{book.category}</td>
                       <td className="px-3">
                         {book.active === false && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">Hidden</span>}
+                        {book.active !== false && !isPublishedNow(book) && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700">Scheduled</span>}
                         {book.active !== false && level === "in" && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">In stock</span>}
                         {book.active !== false && level === "low" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">Low</span>}
                         {book.active !== false && level === "out" && book.preorder?.enabled && <span className="rounded-full bg-burgundy/10 px-2 py-0.5 text-[11px] font-bold text-burgundy">Pre-order</span>}
@@ -546,6 +548,10 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             <input type="checkbox" checked={form.active !== false} onChange={(event) => set({ active: event.target.checked })} />
             Visible in the shop
           </label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Field label="Show in shop from (optional)"><TextInput type="datetime-local" value={toDatetimeLocal(form.publishAt)} onChange={(event) => set({ publishAt: fromDatetimeLocal(event.target.value) })} /></Field>
+            <Field label="Hide from shop after (optional)"><TextInput type="datetime-local" value={toDatetimeLocal(form.unpublishAt)} onChange={(event) => set({ unpublishAt: fromDatetimeLocal(event.target.value) })} /></Field>
+          </div>
         </div>
       </div>
 

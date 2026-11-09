@@ -3,6 +3,7 @@ import type { AdminCategory, Book, Order, ProductOverride } from "@/types";
 import { queueNotification } from "@/lib/notify";
 import { pushInbox } from "@/lib/inbox";
 import { stockLabelCode, stripUnitSuffix } from "@/lib/barcode";
+import { isPublishedNow } from "@/lib/schedule";
 
 const OVERRIDES_KEY = "vgmf_admin_products";
 const CUSTOM_KEY = "vgmf_custom_books";
@@ -107,7 +108,7 @@ export function getAllProducts(): Book[] {
 
 /** Products visible in the shop. */
 export function getLiveBooks(): Book[] {
-  return getAllProducts().filter((book) => book.active !== false);
+  return getAllProducts().filter((book) => book.active !== false && isPublishedNow(book));
 }
 
 export function getLiveBook(id: string): Book | undefined {

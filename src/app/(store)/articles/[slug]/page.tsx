@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { articles } from "@/data/articles";
 import { ArticleView } from "@/components/articles/LiveArticles";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { isPublishedNow } from "@/lib/schedule";
 
 interface ArticleDetailPageProps {
   params: Promise<{ slug: string }>;
@@ -22,6 +23,6 @@ export async function generateMetadata({
 
 export default async function ArticleDetailPage({ params }: ArticleDetailPageProps) {
   const { slug } = await params;
-  const initial = (readMobileFeed().articles ?? []).find((item) => item.slug === slug) ?? null;
+  const initial = (readMobileFeed().articles ?? []).find((item) => item.slug === slug && isPublishedNow(item)) ?? null;
   return <ArticleView slug={slug} initial={initial} />;
 }

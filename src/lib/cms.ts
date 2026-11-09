@@ -5,6 +5,7 @@ import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
 import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, PrizeAward, RegistrationStatus, SiteBanner, ThanksCredit, User, Video } from "@/types";
 import { isArticlePublished } from "@/lib/article-display";
+import { isPublishedNow } from "@/lib/schedule";
 import { isPublicFellowshipEvent, withResolvedRegistration } from "@/lib/event-status";
 import { modulesFor, type StaffModuleId } from "@/lib/roles";
 
@@ -108,7 +109,7 @@ export function getPublishedArticles() {
 }
 
 export function getLiveArticles(): Article[] {
-  return getPublishedArticles();
+  return getPublishedArticles().filter((article) => isPublishedNow(article));
 }
 
 export function getArticle(idOrSlug: string) {

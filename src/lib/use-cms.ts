@@ -1,5 +1,6 @@
 "use client";
 
+import { isPublishedNow } from "@/lib/schedule";
 import { useSyncExternalStore } from "react";
 import { defaultOrderSettings, getOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { articles as seededArticles } from "@/data/articles";
@@ -59,7 +60,7 @@ export function useLiveArticles() {
       articleRaw = raw;
       const hasLocal = Boolean(window.localStorage.getItem("vgmf_article_edits") || window.localStorage.getItem("vgmf_custom_articles"));
       const published = getPublishedFeed()?.articles;
-      articleList = !hasLocal && published?.length ? published : getPublishedArticles();
+      articleList = (!hasLocal && published?.length ? published : getPublishedArticles()).filter((article) => isPublishedNow(article));
       return articleList;
     },
     () => seededArticles
@@ -246,11 +247,11 @@ function readProducts() {
     const published = getPublishedFeed()?.books;
     if (!hasLocal && published?.length) {
       productAll = published;
-      productLive = published.filter((book) => book.active !== false);
+      productLive = published.filter((book) => book.active !== false && isPublishedNow(book));
       return;
     }
     productAll = getAllProducts();
-    productLive = productAll.filter((book) => book.active !== false);
+    productLive = productAll.filter((book) => book.active !== false && isPublishedNow(book));
   }
 }
 

@@ -196,6 +196,10 @@ export interface Article {
   reviewNote?: string;
   translations?: Record<string, ArticleLocaleCopy>;
   style?: ArticleStyle;
+  /** ISO datetime — hidden on the public site until this time. */
+  publishAt?: string;
+  /** ISO datetime — hidden on the public site after this time. */
+  unpublishAt?: string;
 }
 
 export interface ArticleStyle {
@@ -292,6 +296,10 @@ export interface Book {
   licenses?: { label: string; value: string }[];
   weightKg?: number;
   active?: boolean;
+  /** ISO datetime — hidden on the public site until this time. */
+  publishAt?: string;
+  /** ISO datetime — hidden on the public site after this time. */
+  unpublishAt?: string;
   createdAt?: string;
   openBoxDelivery?: boolean;
   rating?: number;
