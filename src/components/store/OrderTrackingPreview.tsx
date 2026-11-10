@@ -160,33 +160,70 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
     }`;
   }
 
+  const refunds = order.refunds ?? [];
+  const refundView =
+    !returnRequest && refunds.length > 0 && (order.status === "Cancelled" || order.paymentStatus === "Refunded")
+      ? (() => {
+          const amount = refunds.reduce((sum, refund) => sum + refund.amount, 0);
+          const lastRefund = refunds[refunds.length - 1];
+          const processed = refunds.every((refund) => refund.status !== "pending" && refund.status !== "failed");
+          const failed = refunds.some((refund) => refund.status === "failed");
+          const creditDue = Date.parse(lastRefund.processedAt || "") + 7 * 24 * 60 * 60 * 1000;
+          const credited = processed && (lastRefund.destination === "store_credit" || (Number.isFinite(creditDue) && now >= creditDue));
+          const bankRef = lastRefund.arn || lastRefund.rrn || lastRefund.utr;
+          const rupee = `₹${amount.toLocaleString("en-IN")}`;
+          return {
+            steps: [order.status === "Cancelled" ? "Cancelled" : "Ordered", "Refund initiated", "Processed", "Credited"],
+            index: credited ? 3 : processed ? 2 : 1,
+            failed,
+            headline: failed
+              ? `Refund of ${rupee} needs attention · the Foundation desk will contact you`
+              : credited
+                ? `${rupee} refunded${lastRefund.destination === "store_credit" ? " to store credit" : " to your account"}`
+                : processed
+                  ? `Refund of ${rupee} processed · credit within 5–7 working days`
+                  : `Refund of ${rupee} initiated`,
+            detail: [
+              shortStamp(lastRefund.processedAt || lastRefund.at, country),
+              bankRef ? `Bank ref ${bankRef}` : "",
+              lastRefund.gatewayRefundId ? `Refund ID ${lastRefund.gatewayRefundId}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          };
+        })()
+      : undefined;
+  const shownSteps = refundView ? refundView.steps : steps;
+  const shownIdx = refundView ? refundView.index : stepIdx;
+  const shownTerminal = refundView ? refundView.index === 3 || refundView.failed : terminal;
+  const shownFill = refundView ? (refundView.failed ? "bg-red-600" : "bg-emerald-600") : fill;
+  const shownTone = refundView ? (refundView.failed ? "text-red-700" : "text-emerald-700") : tone;
+  if (refundView) headline = refundView.headline;
+  const shownDetail = refundView ? refundView.detail : [detail, stamp].filter(Boolean).join(" · ");
+
   return (
     <span className="mt-1 block" data-order-preview={order.id}>
-      <span className={`block text-sm font-semibold ${tone}`}>{headline}</span>
-      {(detail || stamp) && (
-        <span className="mt-0.5 block truncate text-xs text-text-muted">
-          {[detail, stamp].filter(Boolean).join(" · ")}
-        </span>
-      )}
-      <span className="mt-2.5 flex items-center" aria-label={`Progress: ${steps[stepIdx] ?? status}`}>
-        {steps.map((label, index) => (
+      <span className={`block text-sm font-semibold ${shownTone}`}>{headline}</span>
+      {shownDetail && <span className="mt-0.5 block truncate text-xs text-text-muted">{shownDetail}</span>}
+      <span className="mt-2.5 flex items-center" aria-label={`Progress: ${shownSteps[shownIdx] ?? status}`}>
+        {shownSteps.map((label, index) => (
           <Fragment key={label}>
             {index > 0 ? (
               <span className="relative h-0.5 flex-1 overflow-hidden rounded-full bg-border">
                 <span
-                  className={`absolute inset-y-0 left-0 ${fill} transition-[width] ease-linear`}
+                  className={`absolute inset-y-0 left-0 ${shownFill} transition-[width] ease-linear`}
                   style={{
-                    width: !shown ? "0%" : index <= stepIdx ? "100%" : index === stepIdx + 1 && !terminal ? `${creep}%` : "0%",
-                    transitionDuration: index <= stepIdx ? "450ms" : "60s",
-                    transitionDelay: `${index <= stepIdx ? (index - 1) * 450 : stepIdx * 450}ms`,
+                    width: !shown ? "0%" : index <= shownIdx ? "100%" : index === shownIdx + 1 && !shownTerminal ? `${creep}%` : "0%",
+                    transitionDuration: index <= shownIdx ? "450ms" : "60s",
+                    transitionDelay: `${index <= shownIdx ? (index - 1) * 450 : shownIdx * 450}ms`,
                   }}
                 />
               </span>
             ) : null}
             <span
               title={label}
-              className={`h-2.5 w-2.5 shrink-0 rounded-full transition-colors ${index <= stepIdx && (shown || index === 0) ? fill : "bg-border"} ${
-                index === stepIdx && !terminal ? "vgmf-dot-pulse" : ""
+              className={`h-2.5 w-2.5 shrink-0 rounded-full transition-colors ${index <= shownIdx && (shown || index === 0) ? shownFill : "bg-border"} ${
+                index === shownIdx && !shownTerminal ? "vgmf-dot-pulse" : ""
               }`}
               style={{ transitionDelay: `${Math.max(0, index) * 450}ms` }}
             />
@@ -194,10 +231,10 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
         ))}
       </span>
       <span className="mt-1 flex justify-between gap-1 text-[10px] font-medium leading-tight text-text-muted">
-        {steps.map((label, index) => (
+        {shownSteps.map((label, index) => (
           <span
             key={label}
-            className={`${index === 0 ? "text-left" : index === steps.length - 1 ? "text-right" : "text-center"} ${index === stepIdx ? tone : ""}`}
+            className={`${index === 0 ? "text-left" : index === shownSteps.length - 1 ? "text-right" : "text-center"} ${index === shownIdx ? shownTone : ""}`}
           >
             {label}
           </span>
