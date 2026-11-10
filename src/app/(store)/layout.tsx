@@ -15,6 +15,7 @@ import { SiteVisibilityGate } from "@/components/layout/SiteVisibilityGate";
 import { HydratePublishedSite } from "@/components/common/HydratePublishedSite";
 import { PartnerDrawerProvider } from "@/components/account/PartnerPortalDrawer";
 import AbandonedCartNotice from "@/components/store/AbandonedCartNotice";
+import CookieConsent from "@/components/common/CookieConsent";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 
 export const revalidate = 60;
@@ -75,6 +76,7 @@ export default function StoreLayout({
             <VisitorBeacon />
             <GoogleAnalytics />
             <SiteChat />
+            <CookieConsent />
             </PartnerDrawerProvider>
           </HydratePublishedSite>
         </MaintenanceGate>

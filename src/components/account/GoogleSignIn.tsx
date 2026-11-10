@@ -90,6 +90,10 @@ export default function GoogleSignIn({ next }: { next?: string }) {
           <input className="input-field" required placeholder="Last name" value={details.lastName} onChange={(event) => setDetails({ ...details, lastName: event.target.value })} />
         </div>
         <input className="input-field" required inputMode="tel" placeholder="Mobile number with country code, e.g. +919876543210" value={phone} onChange={(event) => setPhone(event.target.value)} />
+        <p className="text-xs leading-5 text-text-muted">
+          By creating an account you accept our <a className="text-burgundy underline" href="/terms" target="_blank">Terms</a>,{" "}
+          <a className="text-burgundy underline" href="/privacy" target="_blank">Privacy Policy</a> (including cookies) and store policies. A signed acknowledgement with a Form ID is kept on record.
+        </p>
         {error && <p className="text-sm text-red-700">{error}</p>}
         <button type="submit" disabled={busy} className="btn-primary w-full">
           {busy ? "Creating your account…" : "Create account"}

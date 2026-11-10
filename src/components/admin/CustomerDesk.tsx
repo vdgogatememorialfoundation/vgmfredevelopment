@@ -19,6 +19,7 @@ import type { AccountStatus, User } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import { SignupFormsPanel } from "@/components/admin/SignupFormsPanel";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, statesFor } from "@/lib/geo";
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 
@@ -131,6 +132,8 @@ export function CustomerDesk() {
           </div>
         </AdminModal>
       )}
+
+      <SignupFormsPanel />
 
       {selected ? (
         <AdminModal title={`${displayName(selected, true)} · ${selected.accountId}`} wide onClose={() => setSelectedEmail(null)}>

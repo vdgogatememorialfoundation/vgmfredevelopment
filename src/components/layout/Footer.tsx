@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
 import SocialLinks from "@/components/layout/SocialLinks";
 import SiteDisclaimers from "@/components/layout/SiteDisclaimers";
+import { openCookieSettings } from "@/components/common/CookieConsent";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { navMessageKey, type MessageKey } from "@/lib/i18n/messages";
 import { siteConfig } from "@/lib/constants";
@@ -221,6 +222,9 @@ export default function Footer() {
                   {t(link.key)}
                 </Link>
               ))}
+              <button type="button" onClick={openCookieSettings} className="text-text-muted transition hover:text-burgundy">
+                Cookie settings
+              </button>
               {chrome.footerLinks?.map((link) =>
                 isExternal(link.href) ||
                 link.newTab ||

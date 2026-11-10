@@ -25,6 +25,7 @@ import {
   verifyMobileOtp,
 } from "@/lib/server/mobile-store";
 import { consumeGoogleTicket, readGoogleTicket } from "@/lib/server/google-auth";
+import { recordSignupForm } from "@/lib/server/signup-forms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -157,6 +158,7 @@ export async function POST(request: NextRequest) {
         extraFields: cleanExtra(body?.extraFields),
         password: String(body?.password ?? "") || undefined,
       });
+      recordSignupForm(account, request, "email", String(body?.country ?? ""));
       const name = [account.firstName, account.lastName].filter(Boolean).join(" ");
       return json({ ...sessionPayload(account.email, name, account.accountId), message: `Your Account ID is ${account.accountId}.` });
     } catch (error) {
@@ -217,6 +219,7 @@ export async function POST(request: NextRequest) {
     }
     try {
       const account = createAccount({ salutation: String(body?.salutation ?? "Dr."), firstName, lastName, email: identity.email, phone });
+      recordSignupForm(account, request, "google", String(body?.country ?? ""));
       consumeGoogleTicket(ticket);
       return json({ ...sessionPayload(account.email, publicAccount(account).name, account.accountId), message: `Your Account ID is ${account.accountId}.` });
     } catch (error) {

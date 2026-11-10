@@ -295,7 +295,7 @@ export default function DetailsForm({
           className="mt-1 h-4 w-4 rounded border-border"
         />
         <span>
-          {signup?.terms || "I agree to the Foundation\u2019s terms and privacy policy."}
+          {signup?.terms || "I agree to the Foundation\u2019s Terms, Privacy Policy (including cookies) and store policies. An acknowledgement with a Form ID is kept on record."}
         </span>
       </label>
 
