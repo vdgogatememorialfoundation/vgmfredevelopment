@@ -878,10 +878,8 @@ function AccountIcon({ name }: { name: string }) {
     case "addresses":
       return (
         <svg {...common}>
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <path d="M12 22V10" />
-          <path d="m12 10 5 3" />
-          <path d="m12 10-5 3" />
+          <path d="M12 22s-8-6.6-8-12.5a8 8 0 0 1 16 0C20 15.4 12 22 12 22z" />
+          <path d="M8.5 11 12 8l3.5 3v3.5h-7z" />
         </svg>
       );
     case "profile":

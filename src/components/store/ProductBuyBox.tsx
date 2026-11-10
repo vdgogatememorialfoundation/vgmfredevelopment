@@ -212,7 +212,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             }}
             className="input-field mt-3 py-2.5 text-xs"
           >
-            <option value="">Deliver to a saved address…</option>
+            <option value="">Saved address — choose to fill pincode…</option>
             {saved.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.fullName} · {[item.line1, item.city].filter(Boolean).join(", ")} · {item.pincode}
