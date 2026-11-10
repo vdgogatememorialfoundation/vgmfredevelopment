@@ -1,6 +1,8 @@
 "use client";
 
 import BulkOrderNote from "@/components/store/BulkOrderNote";
+import CartStepper from "@/components/store/CartStepper";
+import { useCart } from "@/lib/use-cart";
 import { BULK_ORDER_LIMIT } from "@/lib/store";
 import { saveDeliveryCheck } from "@/lib/delivery-check";
 import Link from "next/link";
@@ -31,6 +33,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
   const { isAuthenticated, user } = useAuth();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const inCart = useCart().items.some((item) => item.bookId === book.id);
   const [wishlisted, setWishlisted] = useState(() => isInWishlist(book.id));
   const [pincode, setPincode] = useState("");
   const [estimate, setEstimate] = useState<DeliveryQuote | null>(null);
@@ -310,6 +313,11 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         <BulkOrderNote quantity={quantity} />
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {inCart ? (
+            <div className="flex items-center justify-center">
+              <CartStepper bookId={book.id} size="lg" />
+            </div>
+          ) : (
           <button
             type="button"
             disabled={!orderable}
@@ -326,6 +334,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
               "Add to Cart"
             )}
           </button>
+          )}
           <button
             type="button"
             disabled={!orderable}

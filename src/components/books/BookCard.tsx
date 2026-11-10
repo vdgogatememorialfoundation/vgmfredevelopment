@@ -9,12 +9,14 @@ import type { Book } from "@/types";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { availabilityText, canOrder, canPreorder, preorderDeliveryDate } from "@/lib/product-data";
 import { addToCart } from "@/lib/store";
+import { useCart } from "@/lib/use-cart";
+import CartStepper from "@/components/store/CartStepper";
 import { useOrderSettings } from "@/lib/use-cms";
 import { formatCurrency } from "@/lib/utils";
 
 export default function BookCard({ book }: { book: Book }) {
   const router = useRouter();
-  const [note, setNote] = useState("");
+  const inCart = useCart().items.some((item) => item.bookId === book.id);
   const orderable = canOrder(book);
   const [checked, setChecked] = useState<DeliveryCheck | null>(null);
   useEffect(() => {
@@ -32,7 +34,6 @@ export default function BookCard({ book }: { book: Book }) {
   const add = () => {
     if (!orderable) return;
     addToCart(book.id, 1);
-    setNote("Added");
   };
 
   const buyNow = () => {
@@ -79,9 +80,13 @@ export default function BookCard({ book }: { book: Book }) {
           <Link href={`/shop/${book.slug}`} className="btn-outline px-2.5 py-1.5 text-[11px]">
             View
           </Link>
-          <button type="button" className="btn-outline px-2.5 py-1.5 text-[11px] disabled:opacity-50" disabled={!orderable} onClick={add}>
-            {note || "Add to cart"}
-          </button>
+          {inCart ? (
+            <CartStepper bookId={book.id} />
+          ) : (
+            <button type="button" className="btn-outline px-2.5 py-1.5 text-[11px] disabled:opacity-50" disabled={!orderable} onClick={add}>
+              Add to cart
+            </button>
+          )}
           <button type="button" className="btn-primary px-2.5 py-1.5 text-[11px] disabled:opacity-50" disabled={!orderable} onClick={buyNow}>
             Buy now
           </button>
