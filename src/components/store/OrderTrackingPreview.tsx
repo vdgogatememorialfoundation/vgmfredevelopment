@@ -6,6 +6,7 @@ import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { buildTrackingStages, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
 import { agreedDelivery, clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
 import type { Order, ShipmentRecord } from "@/types";
+import { refundExpectedCredit, refundExpectedCreditLabel } from "@/components/store/RefundDetails";
 
 const STAGE_STATUS: Partial<Record<TrackingStageId, Order["status"]>> = {
   packed: "Packed",
@@ -168,8 +169,8 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
           const lastRefund = refunds[refunds.length - 1];
           const processed = refunds.every((refund) => refund.status !== "pending" && refund.status !== "failed");
           const failed = refunds.some((refund) => refund.status === "failed");
-          const creditDue = Date.parse(lastRefund.processedAt || "") + 7 * 24 * 60 * 60 * 1000;
-          const credited = processed && (lastRefund.destination === "store_credit" || (Number.isFinite(creditDue) && now >= creditDue));
+          const expected = refundExpectedCredit(lastRefund);
+          const credited = processed && (lastRefund.destination === "store_credit" || Boolean(lastRefund.processedAt && expected && now >= expected.date.getTime()));
           const bankRef = lastRefund.arn || lastRefund.rrn || lastRefund.utr;
           const rupee = `₹${amount.toLocaleString("en-IN")}`;
           return {
@@ -185,6 +186,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
                   : `Refund of ${rupee} initiated`,
             detail: [
               shortStamp(lastRefund.processedAt || lastRefund.at, country),
+              !failed && !credited ? refundExpectedCreditLabel(lastRefund) : "",
               bankRef ? `Bank ref ${bankRef}` : "",
               lastRefund.gatewayRefundId ? `Refund ID ${lastRefund.gatewayRefundId}` : "",
             ]

@@ -713,7 +713,7 @@ export function deleteOrder(orderId: string) {
 
 export function resaveOrder(
   orderId: string,
-  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"] }
+  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"]; shipping?: number }
 ) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
@@ -730,7 +730,11 @@ export function resaveOrder(
   const charges = commerceCharges(subtotal);
   const gst = charges.gst;
   const platformFee = charges.platformFee;
-  const total = subtotal + gst + platformFee + order.shipping - (order.storeCreditUsed ?? 0);
+  const shipping =
+    update.shipping !== undefined && Number.isFinite(update.shipping)
+      ? Math.max(0, Math.round(update.shipping * 100) / 100)
+      : order.shipping;
+  const total = subtotal + gst + platformFee + shipping - (order.storeCreditUsed ?? 0);
   const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
   const paidSoFar =
     order.paymentStatus === "Paid"
@@ -758,6 +762,7 @@ export function resaveOrder(
       discount,
       gst,
       platformFee,
+      shipping,
       total,
       stockCommitted: order.stockCommitted,
     },

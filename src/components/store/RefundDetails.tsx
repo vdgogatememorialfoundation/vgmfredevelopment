@@ -4,6 +4,39 @@ import type { Order, RefundRecord } from "@/types";
 const stamp = (value?: string) =>
   value ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(value)) : "";
 
+function addWorkingDays(from: number, days: number) {
+  const date = new Date(from);
+  let left = days;
+  while (left > 0) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) left -= 1;
+  }
+  return date;
+}
+
+/** Razorpay: 5–7 working days after processing to reach the bank (about 3–5 to process first). */
+export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: boolean } | null {
+  if (refund.status === "failed") return null;
+  if (refund.destination === "store_credit") {
+    const at = Date.parse(refund.at);
+    return Number.isFinite(at) ? { date: new Date(at), done: true } : null;
+  }
+  const processed = Date.parse(refund.processedAt || "");
+  const base = Number.isFinite(processed) ? processed : Date.parse(refund.at);
+  if (!Number.isFinite(base)) return null;
+  const date = addWorkingDays(base, Number.isFinite(processed) ? 7 : refund.speed === "optimum" ? 1 : 12);
+  return { date, done: Date.now() >= date.getTime() };
+}
+
+export function refundExpectedCreditLabel(refund: RefundRecord) {
+  const expected = refundExpectedCredit(refund);
+  if (!expected) return "";
+  const day = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(expected.date);
+  if (refund.destination === "store_credit") return `Credited ${day}`;
+  return expected.done ? `Should have been credited by ${day}` : `Expected credit by ${day}`;
+}
+
 export function refundStateLabel(refund: RefundRecord) {
   if (refund.destination === "store_credit") return "Added to store credit";
   if (!refund.gatewayRefundId) return "Recorded by the Foundation";
@@ -38,7 +71,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
       ? { id: "refunded", label: "Added to store credit", caption: "Use it on your next order.", reached: true, partial: false, events: [] }
       : manual
         ? { id: "recorded", label: "Recorded by the Foundation", caption: "Paid back through the original payment method.", reached: true, partial: false, events: [] }
-        : { id: "bank", label: "Refund processing", caption: "Takes 3–5 working days.", reached: true, partial: false, events: [] },
+        : { id: "bank", label: "Refund processing", caption: ["Takes 3–5 working days.", !done && !failed ? refundExpectedCreditLabel(refund) : ""].filter(Boolean).join(" · "), reached: true, partial: false, events: [] },
     ...(credit
       ? []
       : [
@@ -47,7 +80,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
             label: failed ? "Refund failed" : "Refund processed",
             caption: failed
               ? stamp(refund.checkedAt)
-              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`, "Credited to your bank account within 5–7 working days after processing."].filter(Boolean).join(" · "),
+              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`, refundExpectedCreditLabel(refund) || "Credited to your bank account within 5–7 working days after processing."].filter(Boolean).join(" · "),
             reached: done || failed || manual,
             partial: false,
             events: [],
@@ -92,6 +125,7 @@ export default function RefundDetails({
             <dl className="mt-2 grid gap-2 sm:grid-cols-3">
               <Fact label="Initiated" value={stamp(refund.at)} />
               <Fact label="Processed" value={stamp(refund.processedAt)} />
+              <Fact label="Expected credit" value={refundExpectedCreditLabel(refund).replace(/^(Expected credit by|Should have been credited by|Credited) /, "")} />
               <Fact label="Refund to" value={refund.destination === "store_credit" ? "Store credit" : refund.method || order.paymentMethod || "Original payment method"} />
               <Fact label="Refund ID" value={refund.gatewayRefundId || refund.reference} />
               <Fact label="Bank RRN" value={refund.rrn} />

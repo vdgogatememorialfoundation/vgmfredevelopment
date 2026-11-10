@@ -820,6 +820,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [editItems, setEditItems] = useState(order.items.map((item) => ({ ...item })));
   const [addBookId, setAddBookId] = useState("");
   const [addQty, setAddQty] = useState(1);
+  const [editShipping, setEditShipping] = useState(String(order.shipping ?? 0));
   const catalogue = editing ? getLiveBooks().filter((book) => book.active !== false) : [];
   const addProduct = () => {
     const book = catalogue.find((row) => row.id === addBookId);
@@ -848,7 +849,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     run("save", () => {
       const items = editItems.filter((item) => item.quantity > 0);
       if (!items.length) throw new Error("Keep at least one product in the order.");
-      const next = resaveOrder(order.id, { items, deliveryAddress: editAddress });
+      const shipping = Number(editShipping);
+      if (!Number.isFinite(shipping) || shipping < 0) throw new Error("Enter a shipping charge of ₹0 or more.");
+      const next = resaveOrder(order.id, { items, deliveryAddress: editAddress, shipping });
       setEditing(false);
       const due = remainingDue(next);
       return next.paymentStatus === "Partially Paid" && due > 0
@@ -942,7 +945,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 setEditing(false);
                 setEditAddress(order.deliveryAddress ?? editAddress);
                 setEditItems(order.items.map((item) => ({ ...item })));
-              } else setEditing(true);
+              } else {
+                setEditShipping(String(order.shipping ?? 0));
+                setEditing(true);
+              }
             }}
             >
               {editing ? "Cancel edit" : "Edit order"}
@@ -1017,6 +1023,13 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   Add
                 </Button>
               </div>
+              <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-text-primary">
+                Shipping charge ₹
+                <span className="w-28">
+                  <TextInput type="number" min={0} step="0.01" value={editShipping} onChange={(event) => setEditShipping(event.target.value)} />
+                </span>
+                <span className="font-normal text-text-muted">was {order.shipping === 0 ? "Free" : rupees(order.shipping)}. Raise it if the courier costs more.</span>
+              </label>
               <p className="text-xs text-text-muted">
                 New items subtotal {rupees(editSubtotal)} (was {rupees(order.subtotal)}). GST and fees are worked out again when you save. If the new total is more than the customer paid, the difference shows as Remaining for a payment link.
               </p>
