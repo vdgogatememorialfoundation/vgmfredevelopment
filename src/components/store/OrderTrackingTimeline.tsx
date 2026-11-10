@@ -339,9 +339,9 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
                     pay now
                   </a>
                 )
-              : order.preorderPayment.balanceWhen === "on_ready"
-                ? "due when the item is ready — we will send a payment link"
-                : "due before dispatch — we will send a payment link"}
+              : `${order.preorderPayment.shippingDue ? "+ courier charge (added when the courier is booked) " : ""}${
+                  order.preorderPayment.balanceWhen === "on_ready" ? "due when the item is ready" : "due before dispatch"
+                } — we will send a payment link`}
         </p>
       ) : null}
       <RefundDetails order={order} />

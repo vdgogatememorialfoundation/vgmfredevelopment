@@ -393,7 +393,7 @@ export const defaultOrderSettings: OrderSettings = {
   pickSchedule: { pickMinutes: 30, packMinutes: 30 },
   statusLabels: {},
   customStatuses: [],
-  preorderPayment: { mode: "full", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
+  preorderPayment: { mode: "advance", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
   returns: {
     enabled: false,
     windowDays: 7,
