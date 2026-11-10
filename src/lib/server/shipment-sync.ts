@@ -1,8 +1,8 @@
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { listShopShipments } from "@/lib/server/shop-shipments";
 import { listShopOrders, patchShopOrder } from "@/lib/server/shop-orders";
-import { razorpayCreds, razorpayRefundStatus } from "@/lib/server/providers";
-import type { RefundRecord } from "@/types";
+import { razorpayCreds, razorpayLinkStatus, razorpayRefundStatus } from "@/lib/server/providers";
+import type { Order, RefundRecord } from "@/types";
 
 const EVERY_MS = 3 * 60 * 1000;
 const DONE = new Set(["Delivered", "Failed", "Cancelled", "RTO Delivered"]);
@@ -74,12 +74,64 @@ export async function syncOpenRefunds() {
   }
 }
 
+const LINK_WINDOW_MS = 48 * 60 * 60 * 1000;
+const recent = (createdAt?: string) => Date.now() - (Date.parse(createdAt || "") || 0) < LINK_WINDOW_MS;
+
+/** Marks orders paid when the customer pays a Razorpay link (order link or pre-order balance link), even if no one opens the order. */
+export async function syncOpenPaymentLinks() {
+  const creds = razorpayCreds({});
+  if (!creds) return;
+  for (const order of listShopOrders()) {
+    if (order.status === "Cancelled") continue;
+    const plan = order.preorderPayment;
+    try {
+      if (plan?.link?.provider === "razorpay" && plan.link.id && !plan.balancePaidAt && recent(plan.link.createdAt)) {
+        const result = await razorpayLinkStatus(creds, plan.link.id);
+        if (result.status === "paid") {
+          const at = new Date().toISOString();
+          patchShopOrder(order.id, {
+            paymentStatus: "Paid",
+            paidAt: order.paidAt ?? at,
+            preorderPayment: { ...plan, balancePaidAt: at, balanceRef: result.paymentId },
+            history: [...(order.history ?? []), paidNote(order, at, `Pre-order balance ₹${plan.balance} · Razorpay payment link${result.paymentId ? ` · ${result.paymentId}` : ""}`)],
+          });
+        }
+        continue;
+      }
+      const link = order.paymentLink;
+      if (link?.provider === "razorpay" && link.id && order.paymentStatus !== "Paid" && recent(link.createdAt)) {
+        const result = await razorpayLinkStatus(creds, link.id);
+        if (result.status === "paid") {
+          const at = new Date().toISOString();
+          patchShopOrder(order.id, {
+            paymentStatus: "Paid",
+            paymentMethod: "Razorpay payment link",
+            paymentRef: result.paymentId,
+            razorpayPaymentId: order.razorpayPaymentId || result.paymentId,
+            paidAt: at,
+            status: order.status === "Pending" ? "Ordered" : order.status,
+            preorderPayment: plan && !plan.balancePaidAt ? { ...plan, balancePaidAt: at, balanceRef: result.paymentId } : plan,
+            history: [...(order.history ?? []), paidNote(order, at, `Razorpay payment link${link.amount ? ` · ₹${link.amount}` : ""}${result.paymentId ? ` · ${result.paymentId}` : ""}`)],
+          });
+        }
+      }
+    } catch {
+      /* one link lookup failing must not stop the rest */
+    }
+  }
+}
+
+function paidNote(order: Order, at: string, note: string) {
+  return { at, status: order.preorderPayment ? "Balance paid" : "Payment received", note };
+}
+
 export function startShipmentSync() {
   if (started) return;
   started = true;
   const tick = () => {
     void syncOpenShipments();
     void syncOpenRefunds();
+    void syncOpenPaymentLinks();
   };
   setTimeout(tick, 20_000).unref?.();
   setInterval(tick, EVERY_MS).unref?.();
