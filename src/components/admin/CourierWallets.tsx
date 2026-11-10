@@ -91,10 +91,10 @@ export default function CourierWallets() {
           </Button>
         }
       >
+          {rechargeNote && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{rechargeNote}</p>}
         {!wallets ? (
           <EmptyState text="Reading wallets…" />
         ) : (
-          {rechargeNote && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{rechargeNote}</p>}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {wallets.map((wallet) => {
               const low = wallet.balance !== undefined && wallet.balance < floor;
