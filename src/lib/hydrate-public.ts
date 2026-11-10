@@ -67,6 +67,8 @@ export async function hydratePublishedSite() {
         if (url.includes("/brand")) continue;
         return;
       }
+      // Products follow the live copy on every device (deleted ones go, stock updates), even while this browser has unpublished edits.
+      installPublishedProducts(merged);
       if (dirty) return;
       installPublishedOrderSettings(merged);
       const feedAt = merged.publishedAt || "";
@@ -189,40 +191,43 @@ function browserEdited(keys: string[], stamped: string | null) {
   return !stamped && keys.some((key) => window.localStorage.getItem(key));
 }
 
+/** The published product list, merged per product: a local save newer than the live copy is kept, everything else follows the server. */
+function installPublishedProducts(feed: MobileFeed) {
+  if (typeof window === "undefined") return;
+  const books = feed.books ?? [];
+  if (!books.length) return;
+
+  const present = new Set(books.map((book) => book.id));
+  const feedAt = feed.publishedAt || "";
+  let local: Book[] = [];
+  try {
+    local = JSON.parse(window.localStorage.getItem("vgmf_custom_books") || "[]") as Book[];
+  } catch {
+    local = [];
+  }
+  const localById = new Map(local.map((book) => [book.id, book]));
+  // A product saved here after the live copy (stock, price…) is kept until this browser publishes it.
+  const newer = (book?: Book) => Boolean(book?.updatedAt && book.updatedAt > feedAt);
+  const merged = books.map((book) => {
+    const mine = localById.get(book.id);
+    return mine && newer(mine) && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
+  });
+  const unpublished = local.filter((book) => !present.has(book.id) && newer(book));
+  tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify([...unpublished, ...merged])));
+  tryWrite(() =>
+    window.localStorage.setItem(
+      "vgmf_deleted_books",
+      JSON.stringify(seededBooks.map((book) => book.id).filter((id) => !present.has(id)))
+    )
+  );
+  tryWrite(() => window.localStorage.setItem("vgmf_admin_products", "[]"));
+}
+
 /** Phones and other browsers have no admin localStorage, so the published feed is the catalogue they see. */
 function installPublishedCatalogue(feed: MobileFeed) {
   if (typeof window === "undefined") return;
   const fromFeed = window.localStorage.getItem(CATALOGUE_STAMP);
-  // Sister-site events land in local storage on every device. That must not block the shop.
-  const authoredProducts = browserEdited(["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"], fromFeed);
-
-  const books = feed.books ?? [];
-  if (books.length && !authoredProducts) {
-    const present = new Set(books.map((book) => book.id));
-    const feedAt = feed.publishedAt || "";
-    let local: Book[] = [];
-    try {
-      local = JSON.parse(window.localStorage.getItem("vgmf_custom_books") || "[]") as Book[];
-    } catch {
-      local = [];
-    }
-    const localById = new Map(local.map((book) => [book.id, book]));
-    // A product saved here after the live copy (stock, price…) is kept until this browser publishes it.
-    const newer = (book?: Book) => Boolean(book?.updatedAt && book.updatedAt > feedAt);
-    const merged = books.map((book) => {
-      const mine = localById.get(book.id);
-      return mine && newer(mine) && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
-    });
-    const unpublished = local.filter((book) => !present.has(book.id) && newer(book));
-    tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify([...unpublished, ...merged])));
-    tryWrite(() =>
-      window.localStorage.setItem(
-        "vgmf_deleted_books",
-        JSON.stringify(seededBooks.map((book) => book.id).filter((id) => !present.has(id)))
-      )
-    );
-    tryWrite(() => window.localStorage.setItem("vgmf_admin_products", "[]"));
-  }
+  installPublishedProducts(feed);
 
   const writeSplit = <T extends { id: string }>(seed: T[], incoming: T[] | undefined, editsKey: string, customKey: string) => {
     if (!incoming?.length || browserEdited([editsKey, customKey], fromFeed)) return;

@@ -49,6 +49,7 @@ export function HydratePublishedSite({
     const refresh = () => {
       if (document.visibilityState !== "visible") return;
       void hydratePartnerFeed();
+      void hydratePublishedSite();
       // Orders, payments and refunds the server updated (Razorpay links, refund ARN, courier scans) appear without a reload.
       void syncCommerce();
     };

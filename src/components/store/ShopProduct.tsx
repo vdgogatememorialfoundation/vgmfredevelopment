@@ -96,7 +96,7 @@ export default function ShopProduct({
                 {" · "}Published by <span className="font-medium text-text-primary">{publisher}</span>
                 {book.language ? (
                   <>
-                    {" · "}Language: <span className="font-medium text-text-primary">{book.language}</span>
+                    {" · "}Language: <span className="rounded bg-burgundy/10 px-1.5 py-0.5 font-bold text-burgundy">{book.language}</span>
                   </>
                 ) : null}
               </p>
