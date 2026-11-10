@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import type { NextRequest } from "next/server";
 import { listAccounts, type FoundationAccount } from "@/lib/server/accounts";
 import { dataFile } from "@/lib/server/paths";
@@ -138,6 +138,18 @@ function istTime(iso: string) {
   return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "long", timeStyle: "medium" }) + " IST";
 }
 
+let logoData = "";
+function logoSrc(site: string) {
+  if (!logoData) {
+    try {
+      logoData = `data:image/png;base64,${readFileSync(join(process.cwd(), "public", "icon.png")).toString("base64")}`;
+    } catch {
+      return `${site}/icon.png`;
+    }
+  }
+  return logoData;
+}
+
 function renderOne(form: SignupForm, site: string) {
   const name = [form.salutation, form.firstName, form.middleName, form.lastName].filter(Boolean).join(" ");
   const rows: [string, string][] = [
@@ -156,7 +168,7 @@ function renderOne(form: SignupForm, site: string) {
     ["Device / browser", form.userAgent],
   ];
   return `<section class="form">
-  <header><div><h1>Vaidya Gogate Memorial Foundation</h1><p>Customer Registration &amp; Acknowledgement Form</p></div>
+  <header><div class="brand"><img src="${logoSrc(site)}" alt="Vaidya Gogate Memorial Foundation logo"><div><h1>Vaidya Gogate Memorial Foundation</h1><p>Customer Registration &amp; Acknowledgement Form</p></div></div>
   <table class="ids"><tr><th>Form ID</th><td>${escape(form.formId)}</td></tr><tr><th>Acknowledgement ID</th><td>${escape(form.acknowledgementId)}</td></tr></table></header>
   <h2>1. Customer details</h2>
   <table class="details">${rows.map(([label, value]) => `<tr><th>${escape(label)}</th><td>${escape(value)}</td></tr>`).join("")}</table>
@@ -179,7 +191,7 @@ export function renderSignupForms(forms: SignupForm[], site: string) {
 body{font-family:Georgia,serif;color:#1f1a17;margin:0;background:#f4f1ec}
 .form{background:#fff;max-width:800px;margin:24px auto;padding:36px 44px;box-shadow:0 1px 4px #0002;page-break-after:always}
 header{display:flex;justify-content:space-between;gap:16px;border-bottom:3px solid #7a1f2b;padding-bottom:12px}
-h1{color:#7a1f2b;font-size:22px;margin:0}header p{margin:4px 0 0;font-weight:bold}
+.brand{display:flex;align-items:center;gap:12px}.brand img{height:64px;width:auto;max-width:120px;object-fit:contain}h1{color:#7a1f2b;font-size:22px;margin:0}header p{margin:4px 0 0;font-weight:bold}
 h2{font-size:15px;color:#7a1f2b;margin:22px 0 8px;text-transform:uppercase;letter-spacing:.05em}
 table{border-collapse:collapse;font-size:13px}.details{width:100%}
 th,td{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}th{background:#faf6f0;width:34%}
