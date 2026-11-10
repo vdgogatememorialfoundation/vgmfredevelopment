@@ -175,7 +175,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
           const rupee = `₹${amount.toLocaleString("en-IN")}`;
           const startAt =
             order.status === "Cancelled"
-              ? [...(order.history ?? [])].reverse().find((entry) => entry.status === "Cancelled")?.at ?? order.date
+              ? (order.history ?? []).find((entry) => entry.status === "Cancelled")?.at ?? order.date
               : order.date;
           const creditDay = expected && !failed ? dayLabel(expected.date.toISOString(), country) : "";
           return {

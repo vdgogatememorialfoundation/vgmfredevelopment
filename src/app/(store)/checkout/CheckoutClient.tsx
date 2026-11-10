@@ -401,7 +401,7 @@ export default function CheckoutClient() {
     return "";
   };
 
-  const preorderBalanceLater = orderItems.some((item) => item.preorder) && orderSettings.preorderPayment.mode === "advance" && payMethod === "online";
+  const preorderBalanceLater = orderItems.some((item) => item.preorder) && orderSettings.preorderPayment.mode === "advance" && !codSelected && !cashAtStoreSelected;
   const payNow = preorderBalanceLater ? preorderAdvance(totals.total, orderSettings) : totals.total;
   const preorderShippingLater = hasPreorder && deliveryMode === "delivery";
 
@@ -542,7 +542,7 @@ export default function CheckoutClient() {
           action: "hold",
           gateway: hosted || "razorpay",
           orderId: id,
-          amount: totals.total,
+          amount: payNow,
           kind: "order",
           reference: payment.razorpayOrderId || "",
         }),
@@ -558,7 +558,7 @@ export default function CheckoutClient() {
       try {
         await openHostedCheckout({
           gateway: hosted,
-          amount: totals.total,
+          amount: payNow,
           orderId: id,
           name: deliveryAddress.fullName,
           email: deliveryAddress.email,
@@ -1080,7 +1080,7 @@ export default function CheckoutClient() {
             >
               {processing
                 ? codSelected ? "Placing order…" : "Processing payment…"
-                : codSelected ? `Place order · pay ${formatPrice(totals.total)} ${cashAtStoreSelected ? "at the store" : "on delivery"}` : `Pay ${formatPrice(totals.total)}`}
+                : codSelected ? `Place order · pay ${formatPrice(totals.total)} ${cashAtStoreSelected ? "at the store" : "on delivery"}` : `Pay ${formatPrice(payNow)}`}
             </button>
 
             {paymentNotice() && !codSelected && (
