@@ -650,6 +650,8 @@ export interface Order {
   createdBy?: string;
   cancelReason?: string;
   refundAmount?: number;
+  /** What the customer had already paid when the desk last edited the order; the rest is due by payment link. */
+  amountPaid?: number;
   /** `custom` is the tracking step id an admin-added status shows under. */
   history?: { at: string; status: string; note?: string; by?: string; custom?: string }[];
 }

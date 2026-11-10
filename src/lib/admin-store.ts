@@ -730,9 +730,27 @@ export function resaveOrder(
   const charges = commerceCharges(subtotal);
   const gst = charges.gst;
   const platformFee = charges.platformFee;
+  const total = subtotal + gst + platformFee + order.shipping - (order.storeCreditUsed ?? 0);
+  const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
+  const paidSoFar =
+    order.paymentStatus === "Paid"
+      ? order.total
+      : order.paymentStatus === "Partially Paid"
+        ? order.amountPaid ?? advance
+        : 0;
+  const owesMore = paidSoFar > 0 && total > paidSoFar + 0.005;
+  const paymentStatus: Order["paymentStatus"] =
+    paidSoFar <= 0 ? order.paymentStatus : owesMore ? "Partially Paid" : order.preorderPayment && !order.preorderPayment.balancePaidAt && order.paymentStatus === "Partially Paid" ? "Partially Paid" : "Paid";
+  const preorderPayment =
+    order.preorderPayment && !order.preorderPayment.balancePaidAt
+      ? { ...order.preorderPayment, balance: Math.max(0, Math.round((total - order.preorderPayment.advance) * 100) / 100) }
+      : order.preorderPayment;
   const next = withHistory(
     {
       ...order,
+      paymentStatus,
+      amountPaid: paidSoFar > 0 ? paidSoFar : order.amountPaid,
+      preorderPayment,
       items,
       deliveryAddress: update.deliveryAddress ?? order.deliveryAddress,
       deliveryMode: update.deliveryMode ?? order.deliveryMode,
@@ -740,10 +758,13 @@ export function resaveOrder(
       discount,
       gst,
       platformFee,
-      total: subtotal + gst + platformFee + order.shipping - (order.storeCreditUsed ?? 0),
+      total,
       stockCommitted: order.stockCommitted,
     },
-    "Order edited"
+    "Order edited",
+    owesMore
+      ? `New total ₹${total.toLocaleString("en-IN")} · ₹${(Math.round((total - paidSoFar) * 100) / 100).toLocaleString("en-IN")} due from the customer`
+      : undefined
   );
   updateOrderInStore(next);
   return next;

@@ -207,8 +207,10 @@ const linkExpiry = () => new Date(Date.now() + linkMinutes() * 60_000).toISOStri
 
 /** Amount still to collect on an order: the total less any advance already paid. */
 export function remainingDue(order: Order) {
+  if (order.paymentStatus === "Paid") return 0;
   const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
-  return Math.max(0, Math.round((order.total - advance) * 100) / 100);
+  const paid = order.paymentStatus === "Partially Paid" && order.amountPaid !== undefined ? order.amountPaid : advance;
+  return Math.max(0, Math.round((order.total - paid) * 100) / 100);
 }
 
 /** Cancels every open Razorpay link on an order (used when the order is deleted). */

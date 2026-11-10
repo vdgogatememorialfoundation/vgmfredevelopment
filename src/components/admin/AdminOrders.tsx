@@ -818,6 +818,44 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [editing, setEditing] = useState(false);
   const [editAddress, setEditAddress] = useState<DeliveryAddress>(order.deliveryAddress ?? { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "", country: "India", countryCode: "IN" });
   const [editItems, setEditItems] = useState(order.items.map((item) => ({ ...item })));
+  const [addBookId, setAddBookId] = useState("");
+  const [addQty, setAddQty] = useState(1);
+  const catalogue = editing ? getLiveBooks().filter((book) => book.active !== false) : [];
+  const addProduct = () => {
+    const book = catalogue.find((row) => row.id === addBookId);
+    if (!book || addQty < 1) return;
+    setEditItems((list) =>
+      list.some((row) => row.bookId === book.id)
+        ? list.map((row) => (row.bookId === book.id ? { ...row, quantity: row.quantity + addQty } : row))
+        : [
+            ...list,
+            {
+              bookId: book.id,
+              title: book.title,
+              quantity: addQty,
+              price: book.price,
+              originalPrice: book.originalPrice,
+              currency: book.currency,
+              sku: book.sku,
+              preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
+            },
+          ]
+    );
+    setAddBookId("");
+    setAddQty(1);
+  };
+  const saveEdit = () =>
+    run("save", () => {
+      const items = editItems.filter((item) => item.quantity > 0);
+      if (!items.length) throw new Error("Keep at least one product in the order.");
+      const next = resaveOrder(order.id, { items, deliveryAddress: editAddress });
+      setEditing(false);
+      const due = remainingDue(next);
+      return next.paymentStatus === "Partially Paid" && due > 0
+        ? `Order saved. New total ${rupees(next.total)}. ${rupees(due)} is due from the customer: send a payment link for "Remaining" below.`
+        : `Order saved. New total ${rupees(next.total)}.`;
+    });
+  const editSubtotal = editItems.reduce((sum, item) => sum + item.price * Math.max(0, item.quantity), 0);
 
   const run = async (label: string, task: () => Promise<string | void> | string | void) => {
     setBusy(label);
@@ -916,14 +954,39 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <li key={item.bookId} className="flex items-center justify-between gap-3 text-sm">
                 <span className="min-w-0 flex-1 truncate">{item.title}</span>
                 {editing ? (
-                  <div className="w-16">
-                    <TextInput
-                      type="number"
-                      min={1}
-                      value={item.quantity}
-                      onChange={(event) => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: Number(event.target.value) } : row)))}
-                    />
-                  </div>
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Less"
+                      className="h-8 w-8 rounded-lg border border-border font-bold"
+                      onClick={() => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: Math.max(0, row.quantity - 1) } : row)))}
+                    >
+                      −
+                    </button>
+                    <span className="w-16">
+                      <TextInput
+                        type="number"
+                        min={0}
+                        value={item.quantity}
+                        onChange={(event) => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: Math.max(0, Math.floor(Number(event.target.value) || 0)) } : row)))}
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="More"
+                      className="h-8 w-8 rounded-lg border border-border font-bold"
+                      onClick={() => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: row.quantity + 1 } : row)))}
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="ml-1 text-xs font-semibold text-red-600"
+                      onClick={() => setEditItems((list) => list.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </button>
+                  </span>
                 ) : (
                   <span className="text-text-muted">× {item.quantity}</span>
                 )}
@@ -931,6 +994,37 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               </li>
             ))}
           </ul>
+          {editing && (
+            <div className="mt-3 space-y-2 rounded-lg border border-dashed border-border p-3">
+              <p className="text-xs font-semibold text-text-primary">Add a product</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 flex-1">
+                  <SelectInput value={addBookId} onChange={(event) => setAddBookId(event.target.value)}>
+                    <option value="">Choose a product…</option>
+                    {catalogue.map((book) => (
+                      <option key={book.id} value={book.id}>
+                        {book.title}
+                        {book.language ? ` · ${book.language}` : ""} · {rupees(book.price)}
+                        {book.stock <= 0 ? (book.preorder?.enabled ? " · pre-order" : " · out of stock") : ` · ${book.stock} in stock`}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </span>
+                <span className="w-20">
+                  <TextInput type="number" min={1} value={addQty} onChange={(event) => setAddQty(Math.max(1, Math.floor(Number(event.target.value) || 1)))} />
+                </span>
+                <Button variant="ghost" onClick={addProduct} disabled={!addBookId}>
+                  Add
+                </Button>
+              </div>
+              <p className="text-xs text-text-muted">
+                New items subtotal {rupees(editSubtotal)} (was {rupees(order.subtotal)}). GST and fees are worked out again when you save. If the new total is more than the customer paid, the difference shows as Remaining for a payment link.
+              </p>
+              <Button onClick={saveEdit} disabled={busy === "save"}>
+                {busy === "save" ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          )}
           <dl className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
             <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(order.subtotal)}</dd></div>
             <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div>
@@ -978,11 +1072,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           )}
           {editing && (
             <div className="mt-3">
-              <Button onClick={() => run("save", () => {
-                resaveOrder(order.id, { items: editItems.filter((item) => item.quantity > 0), deliveryAddress: editAddress });
-                setEditing(false);
-                return "Order saved.";
-              })}>
+              <Button onClick={saveEdit} disabled={busy === "save"}>
                 Save changes
               </Button>
             </div>
