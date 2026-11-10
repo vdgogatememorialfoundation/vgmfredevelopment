@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Badge from "@/components/common/Badge";
 import BookCard from "@/components/books/BookCard";
 import ProductBuyBox from "@/components/store/ProductBuyBox";
+import ProductShare from "@/components/store/ProductShare";
 import MediaGallery from "@/components/store/MediaGallery";
 import ProductReviews from "@/components/store/ProductReviews";
 import BookDetails from "@/components/store/BookDetails";
@@ -94,6 +95,7 @@ export default function ShopProduct({
                 By <span className="font-medium text-burgundy">{book.author}</span>
                 {" · "}Published by <span className="font-medium text-text-primary">{publisher}</span>
               </p>
+              <ProductShare slug={book.slug} title={book.title} price={book.price} />
               {reviewCount > 0 && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Stars rating={rating} />
