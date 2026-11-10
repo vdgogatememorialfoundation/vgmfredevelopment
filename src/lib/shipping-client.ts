@@ -4,7 +4,7 @@ import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
-import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type PickupAddress, type ShippingProviderId, nextStoreWorkingDay } from "@/lib/integrations";
+import { getIntegrations, getOrderSettings, hasShippingCredentials, shippingFeeFor, recordShippingConnection, type IntegrationSettings, type PickupAddress, type ShippingProviderId, nextStoreWorkingDay } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import {
   getOrder,
@@ -407,6 +407,7 @@ async function bookShipmentOnce(
     },
     `${split ? `Shipment ${split.part} booked` : "Courier booked"} · ${shipment.courier} ${shipment.awb}`
   );
+  await chargePreorderCourier(order.id, choice);
   sendEmail({
     to: order.deliveryAddress?.email ?? "",
     phone: order.deliveryAddress?.phone,
@@ -417,6 +418,31 @@ async function bookShipmentOnce(
     body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is packed. Courier: ${shipment.courier}. Tracking number: ${shipment.awb}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return { shipment, live: Boolean(shipment.live), message };
+}
+
+/** Pre-order courier charge: added to the balance once a courier is booked, then the customer gets a link for the rest. */
+async function chargePreorderCourier(orderId: string, choice: CourierRate) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan?.shippingDue || plan.balancePaidAt) return;
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const fee = shippingFeeFor(order.subtotal, units, choice.rate, getOrderSettings());
+  patchOrder(
+    order.id,
+    {
+      shipping: (order.shipping || 0) + fee,
+      total: Math.round((order.total + fee) * 100) / 100,
+      preorderPayment: { ...plan, balance: Math.round((plan.balance + fee) * 100) / 100, shipping: fee, shippingDue: false },
+    },
+    `Courier charge ₹${fee} (${choice.courierName}) added to the pre-order balance`
+  );
+  if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return;
+  try {
+    const { createBalancePaymentLink } = await import("@/lib/payments-client");
+    await createBalancePaymentLink(order.id);
+  } catch {
+    /* the desk can still send the balance link from the order */
+  }
 }
 
 export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "tookan-parcel">; label: string }[] = [

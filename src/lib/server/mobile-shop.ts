@@ -1,5 +1,6 @@
 import type { Order } from "@/types";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import type { MobileOrder } from "@/lib/server/mobile-store";
 import { ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
@@ -36,6 +37,18 @@ export function appShipping(subtotal: number, quantity: number, pickup: boolean)
 
 export function appPickupAllowed() {
   return ((readMobileFeed().orderSettings ?? {}) as Fees).pickupEnabled !== false;
+}
+
+/** The pre-order advance from Order settings (full amount or a part); the rest and the courier charge are paid later. */
+function preorderPlan(subtotal: number) {
+  const settings = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined);
+  const advance = preorderAdvance(subtotal, settings);
+  return {
+    advance,
+    balance: Math.round((subtotal - advance) * 100) / 100,
+    balanceWhen: settings.preorderPayment.balanceWhen,
+    shippingDue: true,
+  };
 }
 
 /** Writes an app order into the main shop order list, so admin Orders, picking, couriers and tracking all see it. */
@@ -80,7 +93,7 @@ export function recordAppOrder(
       countryCode: input.address.countryCode || "IN",
     },
     paymentMethod: "Razorpay",
-    preorderPayment: preorder && !input.pickup ? { advance: draft.subtotal, balance: 0, balanceWhen: "on_ready", shippingDue: true } : undefined,
+    preorderPayment: preorder && !input.pickup ? preorderPlan(draft.subtotal) : undefined,
     createdBy: "Android app",
     history: [{ at: now, status: "Pending", note: "Placed in the Android app; awaiting payment." }],
   };

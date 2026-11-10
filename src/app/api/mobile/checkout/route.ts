@@ -132,14 +132,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const created = await razorpayOrder(creds, shopOrder.total, draft.id);
+    const payNow = shopOrder.preorderPayment?.advance ?? shopOrder.total;
+    const created = await razorpayOrder(creds, payNow, draft.id);
     attachRazorpayOrder(draft.id, created.orderId);
     return json({
       ok: true,
       configured: true,
       partner: "razorpay",
       order: { ...shopOrder, razorpayOrderId: created.orderId },
-      amount: shopOrder.total,
+      amount: payNow,
       keyId: created.keyId,
       razorpayOrderId: created.orderId,
     });
