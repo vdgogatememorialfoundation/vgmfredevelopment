@@ -9,7 +9,7 @@ type SignupForm = {
   acknowledgementId: string;
   accountId: string;
   createdAt: string;
-  method: "email" | "google";
+  method: "email" | "google" | "existing";
   salutation: string;
   firstName: string;
   middleName?: string;
@@ -30,6 +30,24 @@ export function SignupFormsPanel() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [limit, setLimit] = useState(50);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+
+  const backfill = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await fetch("/api/admin/signup-forms", { method: "POST" }).then((response) => response.json());
+      if (!data.ok) throw new Error(data.error || "Could not create forms.");
+      if (Array.isArray(data.forms)) setForms(data.forms);
+      setNote(data.added ? `Created ${data.added} form${data.added === 1 ? "" : "s"} for existing customers.` : "Every existing customer already has a form.");
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not create forms.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -38,7 +56,7 @@ export function SignupFormsPanel() {
         .then((response) => response.json())
         .then((data) => {
           if (!alive) return;
-          if (data.ok) setForms(data.forms);
+          if (data.ok) setForms(Array.isArray(data.forms) ? data.forms : []);
           else setError(data.error || "Could not load signup forms.");
         })
         .catch(() => alive && setError("Could not load signup forms."));
@@ -54,7 +72,7 @@ export function SignupFormsPanel() {
     const q = query.trim().toLowerCase();
     if (!q) return forms;
     return forms.filter((form) =>
-      [nameOf(form), form.email, form.phone, form.accountId, form.formId, form.acknowledgementId].some((value) => value.toLowerCase().includes(q))
+      [nameOf(form), form.email, form.phone, form.accountId, form.formId, form.acknowledgementId].some((value) => String(value ?? "").toLowerCase().includes(q))
     );
   }, [forms, query]);
 
@@ -81,7 +99,7 @@ export function SignupFormsPanel() {
         form.email,
         form.phone,
         form.country || "",
-        form.method === "google" ? "Google" : "Email",
+        form.method === "google" ? "Google" : form.method === "existing" ? "Existing account" : "Email",
         when(form.createdAt),
         form.ip,
         form.userAgent,
@@ -95,8 +113,11 @@ export function SignupFormsPanel() {
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="min-w-[220px] flex-1">
-          <TextInput placeholder="Search name, email, phone, Account / Form / Acknowledgement ID" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <TextInput placeholder="Search name, email, phone, Account / Form / Acknowledgement ID" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(50); }} />
         </div>
+        <Button variant="outline" disabled={busy} onClick={() => void backfill()}>
+          {busy ? "Creating…" : "Create forms for existing customers"}
+        </Button>
         <Button variant="outline" disabled={!picked.size} onClick={() => open(`ids=${[...picked].join(",")}`)}>
           Download selected ({picked.size})
         </Button>
@@ -108,6 +129,7 @@ export function SignupFormsPanel() {
         </Button>
       </div>
       {error && <p className="mb-2 text-sm text-red-700">{error}</p>}
+      {note && <p className="mb-2 text-sm text-emerald-700">{note}</p>}
       {shown.length === 0 ? (
         <EmptyState text="No signup forms yet. A form is recorded when a customer creates an account." />
       ) : (
@@ -131,7 +153,7 @@ export function SignupFormsPanel() {
               </tr>
             </thead>
             <tbody>
-              {shown.map((form) => (
+              {shown.slice(0, limit).map((form) => (
                 <tr key={form.formId} className="border-b border-border/60">
                   <td className="py-2 pr-2">
                     <input type="checkbox" checked={picked.has(form.formId)} onChange={() => toggle(form.formId)} aria-label={`Select ${form.formId}`} />
@@ -142,7 +164,7 @@ export function SignupFormsPanel() {
                   </td>
                   <td className="px-3 font-mono text-xs">{form.formId}</td>
                   <td className="px-3 font-mono text-xs">{form.acknowledgementId}</td>
-                  <td className="px-3 text-xs text-text-muted">{when(form.createdAt)} · {form.method === "google" ? "Google" : "Email"}</td>
+                  <td className="px-3 text-xs text-text-muted">{when(form.createdAt)} · {form.method === "google" ? "Google" : form.method === "existing" ? "Existing account" : "Email"}</td>
                   <td className="px-3 text-right">
                     <Button variant="outline" onClick={() => open(`ids=${form.formId}`)}>Download</Button>
                   </td>
@@ -150,6 +172,12 @@ export function SignupFormsPanel() {
               ))}
             </tbody>
           </table>
+          {shown.length > limit && (
+            <div className="mt-3 flex items-center justify-between gap-2 text-xs text-text-muted">
+              <span>Showing {limit} of {shown.length}. Search to find a form quickly.</span>
+              <Button variant="outline" onClick={() => setLimit((value) => value + 50)}>Show more</Button>
+            </div>
+          )}
         </div>
       )}
     </Panel>

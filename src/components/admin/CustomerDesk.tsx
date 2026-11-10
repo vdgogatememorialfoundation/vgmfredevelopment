@@ -22,6 +22,8 @@ import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import { SignupFormsPanel } from "@/components/admin/SignupFormsPanel";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, statesFor } from "@/lib/geo";
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
+import { downloadCsv, downloadExcel } from "@/lib/export-file";
+import { col, readSheetFile } from "@/lib/import-file";
 
 ensureBootstrapped();
 
@@ -42,11 +44,29 @@ const emptyForm = {
   countryCode: "IN",
 };
 
+const PAGE = 100;
+const CUSTOMER_COLUMNS = ["Salutation", "First name", "Middle name", "Last name", "Email", "Phone", "Alternate phone", "Address", "Landmark", "City", "State", "Pincode", "Country", "Country code"];
+
+function customerRow(account: User): string[] {
+  const address = account.address;
+  return ([
+    account.salutation ?? "", account.firstName, account.middleName ?? "", account.lastName, account.email, account.phone, account.alternatePhone ?? "",
+    address?.line1 ?? "", address?.landmark ?? "", address?.city ?? "", address?.state ?? "", address?.pincode ?? "", address?.country ?? "", address?.countryCode ?? "",
+  ] as (string | undefined)[]).map((value) => value ?? "");
+}
+
 export function CustomerDesk() {
-  const accounts = useAccounts().filter((account) => {
-    if (account.role === "admin" || account.role === "coadmin" || account.role === "staff") return false;
-    return !account.role || account.role === "customer" || account.role === "doctor" || Boolean(account.partnerPortals?.length);
-  });
+  const allAccounts = useAccounts();
+  const accounts = useMemo(
+    () =>
+      allAccounts.filter((account) => {
+        if (account.role === "admin" || account.role === "coadmin" || account.role === "staff") return false;
+        return !account.role || account.role === "customer" || account.role === "doctor" || Boolean(account.partnerPortals?.length);
+      }),
+    [allAccounts]
+  );
+  const [limit, setLimit] = useState(PAGE);
+  const [importing, setImporting] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -98,6 +118,62 @@ export function CustomerDesk() {
 
   const selectedEmails = Object.entries(picked).filter(([, on]) => on).map(([email]) => email);
 
+  const exportCustomers = () => {
+    const list = selectedEmails.length ? shown.filter((account) => picked[account.email]) : shown;
+    downloadExcel(`customers-${new Date().toISOString().slice(0, 10)}`, "Customers", ["Account ID", ...CUSTOMER_COLUMNS, "Status", "Created"], list.map((account) => [account.accountId ?? "", ...customerRow(account), account.status ?? "active", account.createdAt ?? ""]));
+  };
+
+  const importCustomers = async (file: File) => {
+    setImporting(true);
+    setError("");
+    setNote("");
+    try {
+      const rows = await readSheetFile(file);
+      let created = 0;
+      const problems: string[] = [];
+      rows.forEach((row, index) => {
+        const email = col(row, "Email");
+        const phone = col(row, "Phone", "Mobile");
+        if (!email || !phone || !col(row, "First name")) {
+          problems.push(`Row ${index + 2}: first name, email and phone are required`);
+          return;
+        }
+        try {
+          createCustomerAccount(
+            {
+              salutation: col(row, "Salutation") || "Dr.",
+              firstName: col(row, "First name"),
+              middleName: col(row, "Middle name"),
+              lastName: col(row, "Last name"),
+              email,
+              phone,
+              alternatePhone: col(row, "Alternate phone") || phone,
+              address: {
+                line1: col(row, "Address", "Address line 1"),
+                landmark: col(row, "Landmark"),
+                city: col(row, "City"),
+                state: col(row, "State"),
+                pincode: col(row, "Pincode", "Postal code"),
+                country: col(row, "Country") || "India",
+                countryCode: col(row, "Country code") || "IN",
+              },
+            },
+            { sendDetails: false }
+          );
+          created += 1;
+        } catch (problem) {
+          problems.push(`Row ${index + 2} (${email}): ${problem instanceof Error ? problem.message : "could not create"}`);
+        }
+      });
+      setNote(`Imported ${created} of ${rows.length} customer${rows.length === 1 ? "" : "s"}.`);
+      if (problems.length) setError(`${problems.length} skipped — ${problems.slice(0, 5).join("; ")}${problems.length > 5 ? "; …" : ""}`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not read the file.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -109,6 +185,23 @@ export function CustomerDesk() {
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setCreating(true)}>+ Create customer</Button>
+          <Button variant="outline" onClick={() => downloadCsv("customer-import-template", CUSTOMER_COLUMNS, [["Dr.", "Asha", "", "Patil", "asha@example.com", "+91 98765 43210", "", "12 MG Road", "Near temple", "Pune", "Maharashtra", "411001", "India", "IN"]])}>
+            Customer template
+          </Button>
+          <label className={`inline-flex cursor-pointer items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-text-primary hover:bg-surface ${importing ? "pointer-events-none opacity-60" : ""}`}>
+            {importing ? "Importing…" : "Import customers"}
+            <input
+              type="file"
+              accept=".csv,.xls,text/csv,application/vnd.ms-excel"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void importCustomers(file);
+              }}
+            />
+          </label>
+          <Button variant="outline" onClick={exportCustomers}>Export customers</Button>
           <Button
             variant="outline"
             disabled={!selectedEmails.length}
@@ -144,12 +237,12 @@ export function CustomerDesk() {
       <div className="grid gap-5">
         <div>
           <Panel title={`Accounts (${shown.length})`}>
-            <TextInput placeholder="Search name, email, phone or 12-digit ID" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <TextInput placeholder="Search name, email, phone or 12-digit ID" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(PAGE); }} />
             {shown.length === 0 ? (
               <EmptyState text="No customers match." />
             ) : (
               <ul className="mt-3 max-h-[70vh] divide-y divide-border overflow-y-auto">
-                {shown.map((account) => (
+                {shown.slice(0, limit).map((account) => (
                   <li key={account.email} className="flex items-start gap-2 py-3">
                     <input
                       type="checkbox"
@@ -169,6 +262,12 @@ export function CustomerDesk() {
                   </li>
                 ))}
               </ul>
+            )}
+            {shown.length > limit && (
+              <div className="mt-3 flex items-center justify-between gap-2 text-xs text-text-muted">
+                <span>Showing {limit} of {shown.length}. Search to find a customer quickly.</span>
+                <Button variant="outline" onClick={() => setLimit((value) => value + PAGE)}>Show {Math.min(PAGE, shown.length - limit)} more</Button>
+              </div>
             )}
           </Panel>
         </div>

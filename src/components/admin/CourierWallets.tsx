@@ -12,6 +12,13 @@ const rupees = (value: number) => `₹${value.toLocaleString("en-IN", { maximumF
 const stamp = (value?: string) =>
   value ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).format(new Date(value)) : "—";
 
+const RECHARGE_URLS: Record<string, string> = {
+  shiprocket: "https://app.shiprocket.in/",
+  nimbuspost: "https://ship.nimbuspost.com/",
+  ithink: "https://my.ithinklogistics.com/",
+  shipyaari: "https://seller.shipyaari.com/",
+};
+
 export default function CourierWallets() {
   useCommerceMirror();
   const [wallets, setWallets] = useState<CourierWallet[] | null>(null);
@@ -74,7 +81,18 @@ export default function CourierWallets() {
                       <p className={`mt-1 text-2xl font-bold ${low ? "text-red-700" : "text-emerald-700"}`}>{rupees(wallet.balance)}</p>
                       <p className="mt-1 text-xs text-text-muted">{low ? `Below ₹${floor}: top up in the ${wallet.label} dashboard before booking.` : "Ready for bookings."}</p>
                     </>
-                  ) : wallet.connected ? (
+                  ) : null}
+                  {wallet.connected && RECHARGE_URLS[wallet.provider] ? (
+                    <a
+                      href={RECHARGE_URLS[wallet.provider]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 inline-flex rounded-lg bg-burgundy px-3 py-1.5 text-xs font-semibold text-white hover:bg-burgundy/90"
+                    >
+                      Recharge {wallet.label} wallet
+                    </a>
+                  ) : null}
+                  {wallet.balance !== undefined ? null : wallet.connected ? (
                     <p className="mt-1 text-xs text-red-700">{wallet.error}</p>
                   ) : (
                     <p className="mt-1 text-xs text-text-muted">

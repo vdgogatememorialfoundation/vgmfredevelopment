@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { denyUnlessPortal } from "@/lib/server/portal-auth";
-import { listSignupForms, renderSignupForms } from "@/lib/server/signup-forms";
+import { backfillSignupForms, listSignupForms, renderSignupForms } from "@/lib/server/signup-forms";
 import { siteOrigin } from "@/lib/server/google-auth";
 
 export const runtime = "nodejs";
@@ -20,4 +20,12 @@ export function GET(request: NextRequest) {
   return new NextResponse(renderSignupForms(chosen, siteOrigin(request)), {
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
   });
+}
+
+/** Admin: create forms for customers who signed up before forms were recorded. */
+export function POST(request: NextRequest) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
+  const added = backfillSignupForms();
+  return NextResponse.json({ ok: true, added, forms: listSignupForms() }, { headers: { "cache-control": "no-store" } });
 }

@@ -107,6 +107,10 @@ export function publicAccount(account: FoundationAccount) {
   };
 }
 
+export function listAccounts() {
+  return load();
+}
+
 export function findAccount(identifier: string) {
   const value = identifier.trim().toLowerCase();
   return (

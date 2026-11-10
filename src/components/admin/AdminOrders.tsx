@@ -65,6 +65,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { listPickupLocations } from "@/lib/shipping-client";
 import { getOrder as getStoredOrder, patchOrder as patchStoredOrder } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
+import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { beep } from "@/lib/scan-beep";
 
 const ALL_STATUSES: Order["status"][] = [
@@ -111,6 +112,7 @@ export function OrdersDashboard() {
   const [version, refresh] = useOrdersVersion();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showBulk, setShowBulk] = useState<"grid" | "import" | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -237,6 +239,8 @@ export function OrdersDashboard() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setShowCreate(true)}>+ Create order</Button>
+          <Button variant="outline" onClick={() => setShowBulk("grid")}>+ Bulk order</Button>
+          <Button variant="outline" onClick={() => setShowBulk("import")}>Import orders</Button>
           <Button variant="outline" onClick={() => exportOrdersCsv(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>Excel</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>PDF</Button>
           <Button variant="outline" onClick={refresh}>Refresh</Button>
@@ -303,6 +307,22 @@ export function OrdersDashboard() {
             });
           }}>Delete</Button>
         </div>
+      )}
+
+      {showBulk && (
+        <AdminModal title={showBulk === "grid" ? "Bulk order" : "Import orders from a template"} wide onClose={() => setShowBulk(null)}>
+          {showBulk === "grid" ? (
+            <BulkOrderForm
+              onDone={(id) => {
+                refresh();
+                setShowBulk(null);
+                if (id) setSelectedId(id);
+              }}
+            />
+          ) : (
+            <OrderImport onDone={refresh} />
+          )}
+        </AdminModal>
       )}
 
       {showCreate && (
