@@ -771,7 +771,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     });
 
   const paid = order.paymentStatus === "Paid";
-  const refundable = paid && (order.refundAmount ?? 0) < order.total;
+  const collected = paid || order.paymentStatus === "Partially Paid" || order.paymentStatus === "Partially Refunded";
+  const refundable = collected && refundCap > 0;
   const margin = shipment ? (shipment.customerPaid ?? order.shipping) - (shipment.courierCost ?? shipment.charges) : 0;
 
   return (

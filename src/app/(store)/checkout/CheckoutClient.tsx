@@ -507,7 +507,9 @@ export default function CheckoutClient() {
       eta:
         deliveryMode === "store_pickup"
           ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
-          : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
+          : hasPreorder && preorderBook
+            ? preorderDeliveryDate(preorderBook)
+            : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
       pickupHoldUntil: deliveryMode === "store_pickup" ? quote?.pickupHoldUntil : undefined,
       courierName: deliveryMode === "delivery" ? courierName : undefined,
               courierChoice:
@@ -1136,7 +1138,9 @@ export default function CheckoutClient() {
               </div>
             ) : (
               <p className="mt-3 text-xs text-text-muted">
-                {placedEta ? `Estimated delivery: ${placedEta} · ` : ""}
+                {placedEta && !orderSettings.hideDeliveryDates
+                  ? `${placedOrder?.items.some((item) => item.preorder) ? "Tentative delivery by" : "Estimated delivery:"} ${placedEta} · `
+                  : ""}
                 Live courier tracking on My Orders
               </p>
             )}
