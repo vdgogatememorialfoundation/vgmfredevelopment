@@ -47,9 +47,12 @@ export function HydratePublishedSite({
 
   useEffect(() => {
     const refresh = () => {
-      if (document.visibilityState === "visible") void hydratePartnerFeed();
+      if (document.visibilityState !== "visible") return;
+      void hydratePartnerFeed();
+      // Orders, payments and refunds the server updated (Razorpay links, refund ARN, courier scans) appear without a reload.
+      void syncCommerce();
     };
-    const timer = window.setInterval(refresh, 60 * 1000);
+    const timer = window.setInterval(refresh, 30 * 1000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       window.clearInterval(timer);
