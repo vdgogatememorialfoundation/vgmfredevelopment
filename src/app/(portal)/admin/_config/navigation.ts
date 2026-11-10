@@ -27,6 +27,7 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/commerce/orders" },
+      { label: "Customer purchases", href: "/admin/commerce/customer-purchases" },
       { label: "In-store POS", href: "/admin/commerce/pos" },
       { label: "Store pickup orders", href: "/admin/commerce/pickup" },
       { label: "Shipment Management", href: "/admin/commerce/shipments" },

@@ -377,10 +377,7 @@ export function OrdersDashboard() {
                           {order.deliveryAddress?.fullName || order.items[0]?.title} · {formatDate(order.date)}
                           {order.channel === "pos" ? " · POS" : ""}
                         </span>
-                        <span className="block truncate text-xs text-text-primary">
-                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} item{order.items.reduce((sum, item) => sum + item.quantity, 0) === 1 ? "" : "s"} ·{" "}
-                          {order.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")}
-                        </span>
+                        <OrderRowPreview order={order} />
                       </span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
                         <span className="flex gap-1">
@@ -398,6 +395,39 @@ export function OrdersDashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number] }) {
+  const address = order.deliveryAddress;
+  const quantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const place =
+    order.deliveryMode === "store_pickup"
+      ? "Store pickup"
+      : address
+        ? [address.line1, address.landmark, address.city, address.state, address.pincode].filter(Boolean).join(", ")
+        : "";
+  const contact = [address?.phone, address?.email || order.accountEmail].filter(Boolean).join(" · ");
+  const payment = [
+    order.paymentMethod,
+    order.razorpayPaymentId || order.paymentRef,
+    order.preorderPayment ? `Pre-order · advance ${rupees(order.preorderPayment.advance)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span className="mt-1 block space-y-0.5 text-xs">
+      {contact && <span className="block break-words text-text-muted">{contact}</span>}
+      {place && <span className="block break-words text-text-muted">{place}</span>}
+      <span className="block break-words font-medium text-text-primary">
+        {quantity} item{quantity === 1 ? "" : "s"} · {order.items.map((item) => `${item.title} × ${item.quantity} (${rupees(item.price * item.quantity)})`).join(", ")}
+      </span>
+      <span className="block break-words text-text-muted">
+        Payment: {order.paymentStatus}
+        {payment ? ` · ${payment}` : ""}
+        {order.trackingId ? ` · AWB ${order.trackingId}` : ""}
+      </span>
+    </span>
   );
 }
 
