@@ -13,6 +13,7 @@ import { LoginStamp } from "@/components/layout/LoginStamp"
 import { isStaffModuleEnabled } from "@/lib/site-visibility"
 import { hydratePartnerFeed } from "@/lib/partner-hydrate"
 import { LivePublishBridge } from "@/components/admin/LivePublishBridge"
+import { syncAdminIntegrations } from "@/lib/integrations"
 
 export default function AdminLayout({
   children,
@@ -35,6 +36,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
 
   useEffect(() => {
     if (user) void hydratePartnerFeed()
+    if (user?.role === "admin" || user?.role === "coadmin") void syncAdminIntegrations()
   }, [user])
 
   if (!user || (user.role !== "admin" && user.role !== "coadmin" && user.role !== "staff" && user.role !== "doctor")) {

@@ -1,5 +1,6 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { shipdayActivity, shipdayLookupIds, shipdayOrderRow, shipdayOrderState } from "@/lib/shipday-status";
 
 /**
@@ -47,9 +48,20 @@ async function call(url: string, init: RequestInit & { json?: unknown } = {}) {
 
 /* ---------------- Razorpay ---------------- */
 
+/** Keys saved from an admin browser, so a device without them (a phone) still uses the configured gateway. */
+function savedRazorpay() {
+  const saved = (savedAdminIntegrations().razorpay ?? {}) as Json;
+  const text = (key: string) => (typeof saved[key] === "string" ? String(saved[key]).trim() : "");
+  if (saved.mode === "live") return { keyId: text("liveKeyId"), keySecret: text("liveKeySecret") };
+  if (saved.mode === "test") return { keyId: text("testKeyId"), keySecret: text("testKeySecret") };
+  return { keyId: "", keySecret: "" };
+}
+
 export function razorpayCreds(input: Json) {
-  const keyId = pick(input.keyId, "RAZORPAY_KEY_ID");
-  const keySecret = pick(input.keySecret, "RAZORPAY_KEY_SECRET");
+  const sent = typeof input.keyId === "string" && input.keyId.trim() && typeof input.keySecret === "string" && input.keySecret.trim();
+  const saved = sent ? { keyId: "", keySecret: "" } : savedRazorpay();
+  const keyId = pick(sent ? input.keyId : saved.keyId, "RAZORPAY_KEY_ID");
+  const keySecret = pick(sent ? input.keySecret : saved.keySecret, "RAZORPAY_KEY_SECRET");
   return keyId && keySecret ? { keyId, keySecret } : null;
 }
 
@@ -241,9 +253,10 @@ export async function razorpayOrderPayments(
 /* ---------------- Paytm EDC ---------------- */
 
 export function paytmCreds(input: Json) {
-  const mid = pick(input.mid, "PAYTM_MID");
-  const merchantKey = pick(input.merchantKey, "PAYTM_MERCHANT_KEY");
-  const tid = pick(input.tid, "PAYTM_TID");
+  const saved = (savedAdminIntegrations().paytm ?? {}) as Json;
+  const mid = pick(input.mid, "PAYTM_MID") || pick(saved.mid, "PAYTM_MID");
+  const merchantKey = pick(input.merchantKey, "PAYTM_MERCHANT_KEY") || pick(saved.merchantKey, "PAYTM_MERCHANT_KEY");
+  const tid = pick(input.tid, "PAYTM_TID") || pick(saved.tid, "PAYTM_TID");
   const channelId = pick(input.channelId, "PAYTM_CHANNEL_ID") || "WEB";
   const mode = pick(input.mode, "PAYTM_MODE") || "staging";
   return mid && merchantKey && tid ? { mid, merchantKey, tid, channelId, mode } : null;

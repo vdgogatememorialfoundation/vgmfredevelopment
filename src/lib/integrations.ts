@@ -543,6 +543,62 @@ export function saveIntegrations(settings: IntegrationSettings) {
   next.shipping.connection = connection;
   writeJSON(INTEGRATIONS_KEY, next);
   persistMailStatus(next);
+  pushAdminIntegrations(next);
+}
+
+const INTEGRATIONS_AT = "vgmf_integrations_at";
+
+function pushAdminIntegrations(settings: IntegrationSettings, at = new Date().toISOString()) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(INTEGRATIONS_AT, at);
+  void fetch("/api/admin/integrations", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ settings, at }),
+  }).catch(() => undefined);
+}
+
+function withoutBlanks(value: unknown): unknown {
+  if (Array.isArray(value) || !value || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry === "string" && !entry.trim()) continue;
+    out[key] = withoutBlanks(entry);
+  }
+  return out;
+}
+
+/** Secret paths saved on the server (they stay off other devices). */
+export function serverSavedSecrets(): string[] {
+  return readJSON<string[]>("vgmf_integrations_saved", []);
+}
+
+/**
+ * Admin settings live on the server, so a phone or new browser opens with the same configuration
+ * and never sends its empty defaults over it. Secret values stay on the server and are filled in there.
+ */
+export async function syncAdminIntegrations() {
+  if (typeof window === "undefined") return;
+  const response = await fetch("/api/admin/integrations", { cache: "no-store", credentials: "same-origin" }).catch(() => undefined);
+  if (!response?.ok) return;
+  const data = (await response.json().catch(() => null)) as { settings?: Partial<IntegrationSettings>; saved?: string[]; updatedAt?: string } | null;
+  if (!data) return;
+  writeJSON("vgmf_integrations_saved", data.saved ?? []);
+  const hasLocal = Boolean(window.localStorage.getItem(INTEGRATIONS_KEY));
+  const localAt = window.localStorage.getItem(INTEGRATIONS_AT) || "";
+  const serverAt = data.updatedAt || "";
+  const serverHas = Boolean(data.settings && Object.keys(data.settings).length);
+  if (serverHas && (!hasLocal || serverAt > localAt)) {
+    const local = getIntegrations();
+    const next = merge(local, withoutBlanks(data.settings) as Partial<IntegrationSettings>);
+    next.shipping.connection = local.shipping.connection;
+    writeJSON(INTEGRATIONS_KEY, next);
+    window.localStorage.setItem(INTEGRATIONS_AT, serverAt);
+    window.dispatchEvent(new Event("vgmf-cms"));
+    return;
+  }
+  if (hasLocal && (!serverHas || localAt > serverAt)) pushAdminIntegrations(getIntegrations(), localAt || new Date().toISOString());
 }
 
 function finiteNumber(value: unknown, fallback: number) {

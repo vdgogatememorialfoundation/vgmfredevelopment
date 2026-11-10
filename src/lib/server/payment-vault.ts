@@ -13,7 +13,7 @@ function emptyGateway(): VaultGateway {
   return { enabled: false, mode: "test", key: "", salt: "", merchantId: "", saltIndex: "1" };
 }
 
-function readVault(): PaymentVault {
+export function readVault(): PaymentVault {
   try {
     const parsed = JSON.parse(readFileSync(FILE(), "utf8")) as PaymentVault;
     return parsed && typeof parsed === "object" ? parsed : {};

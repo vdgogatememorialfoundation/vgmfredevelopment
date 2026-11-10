@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { HostedGatewayId, HostedGatewaySettings } from "@/lib/integrations";
 import { PaymentError, pollHostedPayment, startHostedPayment } from "@/lib/server/hosted-payments";
 import { readHold, saveHold, type PaymentHold } from "@/lib/server/payment-holds";
-import { listReadyGateways, writePaymentVault, type PaymentVault } from "@/lib/server/payment-vault";
+import { listReadyGateways, readVault, writePaymentVault, type PaymentVault } from "@/lib/server/payment-vault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,10 +92,19 @@ export async function POST(request: NextRequest) {
   if (body.action === "save") {
     if (!adminCookie(request)) return NextResponse.json({ ok: false, error: "Sign in to the admin desk to save payment keys." }, { status: 401 });
     const incoming = (body.payments && typeof body.payments === "object" ? body.payments : {}) as Record<string, unknown>;
-    const next: PaymentVault = {};
+    // A device that never had the keys (a phone) sends blanks; those keep the saved keys.
+    const saved = readVault();
+    const next: PaymentVault = { ...saved };
     for (const id of IDS) {
       const cleaned = cleanGateway(incoming[id]);
-      if (cleaned) next[id] = cleaned;
+      if (!cleaned) continue;
+      const before = saved[id];
+      next[id] = {
+        ...cleaned,
+        key: cleaned.key || before?.key || "",
+        salt: cleaned.salt || before?.salt || "",
+        merchantId: cleaned.merchantId || before?.merchantId || "",
+      };
     }
     writePaymentVault(next);
     return NextResponse.json({ ok: true, gateways: listReadyGateways() });
