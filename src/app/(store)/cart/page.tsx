@@ -111,8 +111,8 @@ export default function CartPage() {
                       </span>
                       <span className="text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</span>
                       {book.originalPrice && book.originalPrice > book.price && (
-                        <span className="text-sm text-text-muted line-through">
-                          {formatPrice(book.originalPrice * item.quantity)}
+                        <span className="text-xs text-text-muted">
+                          MRP <span className="line-through">{formatPrice(book.originalPrice * item.quantity)}</span>
                         </span>
                       )}
                     </div>

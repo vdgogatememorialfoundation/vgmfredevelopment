@@ -584,30 +584,32 @@ export default function CheckoutClient() {
     <div className="container grid max-w-6xl gap-10 py-10 sm:py-14 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         {/* Step indicator */}
-        <ol className="flex items-center gap-2 text-xs font-semibold">
+        <ol className="relative grid grid-cols-3 text-xs font-semibold sm:text-sm" aria-label="Checkout steps">
+          <span className="absolute left-[16.66%] right-[16.66%] top-4 h-1 rounded-full bg-border" aria-hidden="true" />
+          <span
+            className="absolute left-[16.66%] top-4 h-1 rounded-full bg-emerald-600 transition-[width] duration-700 ease-out"
+            style={{ width: `${(Math.min(step === "success" ? 2 : stepIndex(step), 2) / 2) * 66.68}%` }}
+            aria-hidden="true"
+          />
           {(["address", "review", "payment"] as Step[]).map((s, index) => {
             const current = step === s;
             const done = step === "success" || index < stepIndex(step);
             return (
-              <li key={s} className="flex items-center gap-2">
+              <li key={s} className="relative flex flex-col items-center gap-1.5 text-center" aria-current={current ? "step" : undefined}>
                 <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] ${
-                    current
-                      ? "bg-burgundy text-white"
-                      : done
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-warm-cream text-text-muted"
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors ${
+                    done
+                      ? "border-emerald-600 bg-emerald-600 text-white"
+                      : current
+                        ? "border-emerald-600 bg-white text-emerald-700 ring-4 ring-emerald-100"
+                        : "border-border bg-white text-text-muted"
                   }`}
                 >
                   {done ? "✓" : index + 1}
                 </span>
-                <span className={`inline-flex items-center gap-1 ${current ? "text-text-primary" : "text-text-muted"}`}>
-                  <Glyph name={s === "address" ? "pin" : s === "review" ? "package" : "card"} className="h-3.5 w-3.5" />
+                <span className={done || current ? "text-text-primary" : "text-text-muted"}>
                   {s === "address" ? "Address" : s === "review" ? "Review" : "Payment"}
                 </span>
-                {index < 2 && (
-                  <span className="mx-1 h-px w-6 bg-border" aria-hidden="true" />
-                )}
               </li>
             );
           })}
@@ -832,14 +834,15 @@ export default function CheckoutClient() {
                         Published by {book.publisher?.name ?? storeConfig.publisherName}
                       </p>
                       <p className="mt-2 text-sm">
-                        <span className="font-bold text-text-primary">
+                        <span className="text-base font-bold text-text-primary">
                           {formatPrice(book.price * item.quantity)}
                         </span>
-                        {book.originalPrice && book.originalPrice > book.price && (
-                          <span className="ml-2 text-text-muted line-through">
-                            {formatPrice(book.originalPrice * item.quantity)}
+                        {book.originalPrice && book.originalPrice > book.price ? (
+                          <span className="ml-2 text-xs text-text-muted">
+                            MRP <span className="line-through">{formatPrice(book.originalPrice * item.quantity)}</span>{" "}
+                            <b className="text-emerald-700">{Math.round((1 - book.price / book.originalPrice) * 100)}% off</b>
                           </span>
-                        )}
+                        ) : null}
                       </p>
                       <p className="mt-1 text-xs text-emerald-700">
                         Expected delivery{" "}
