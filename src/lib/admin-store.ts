@@ -955,6 +955,19 @@ export function recordCourierPayment(orderId: string, input: { method: string; r
   return next;
 }
 
+export function recordReturnChargePayment(orderId: string, input: { method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  const back = order?.returnShipment;
+  if (!order || !back || back.chargePaidAt) return;
+  const next = withHistory(
+    { ...order, returnShipment: { ...back, chargePaidAt: new Date().toISOString(), chargeRef: input.reference } },
+    "Return courier charge paid",
+    `₹${back.charge ?? 0} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
+}
+
 export function recordBalancePayment(orderId: string, input: { method: string; reference?: string }) {
   const order = getOrder(orderId);
   const plan = order?.preorderPayment;

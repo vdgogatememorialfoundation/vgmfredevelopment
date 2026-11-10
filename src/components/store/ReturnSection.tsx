@@ -216,6 +216,17 @@ function ReplacementStatus({ request, order }: { request: ReturnRequest; order: 
           ) : (
             <p className="mt-1 text-xs">The desk will share the label shortly.</p>
           )}
+          {back.chargePaidBy === "customer" && back.charge ? (
+            back.chargePaidAt ? (
+              <p className="mt-2 font-semibold text-emerald-700">Return courier charge ₹{back.charge} paid.</p>
+            ) : back.chargeLink ? (
+              <a href={back.chargeLink.url} className="mt-2 ml-2 inline-block rounded-full border border-burgundy px-4 py-1.5 text-xs font-semibold text-burgundy">
+                Pay return courier charge ₹{back.charge}
+              </a>
+            ) : null
+          ) : back.chargePaidBy === "foundation" ? (
+            <p className="mt-2">The Foundation pays the return courier charge.</p>
+          ) : null}
         </div>
       ) : null}
 

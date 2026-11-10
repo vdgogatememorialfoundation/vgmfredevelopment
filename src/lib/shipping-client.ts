@@ -804,6 +804,7 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
     providerOrderId: result.providerOrderId,
     providerShipmentId: result.providerShipmentId,
     labelUrl: result.labelUrl || undefined,
+    courierCost: result.courierCost,
     note: `Return booked on ${label(provider)}. AWB ${result.awb}.`,
   };
 }

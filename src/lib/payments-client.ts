@@ -313,6 +313,67 @@ export async function createCourierPaymentLink(orderId: string, rate: CourierRat
   return link;
 }
 
+/** Link for the customer to pay the courier charge of a return pickup. */
+export async function createReturnChargeLink(orderId: string, amount: number) {
+  const order = getOrder(orderId);
+  const back = order?.returnShipment;
+  if (!order || !back) throw new Error("Create the return shipment first.");
+  const value = Math.round(amount * 100) / 100;
+  if (!(value > 0)) throw new Error("Enter the return courier charge above ₹0.");
+  const address = order.deliveryAddress;
+  const settings = getIntegrations();
+  const expiresAt = linkExpiry();
+  let link: NonNullable<NonNullable<Order["returnShipment"]>["chargeLink"]>;
+  if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
+    link = { url: `${window.location.origin}/pay/${order.id}?part=return&d=${encodeSummary(order, value, ["Return courier charge"])}&x=${Date.parse(expiresAt)}`, provider: "demo", createdAt: new Date().toISOString(), amount: value, expiresAt };
+  } else {
+    const result = await api<{ id: string; url: string }>({
+      action: "link",
+      amount: value,
+      orderId: `${order.id}-R`,
+      name: address?.fullName || "Customer",
+      email: address?.email,
+      phone: address?.phone,
+      description: `Return courier charge for Vaidya Gogate Memorial Foundation order ${order.id}`,
+      callbackUrl: `${window.location.origin}/pay/${order.id}?part=return&done=1`,
+      expiryMinutes: linkMinutes(),
+    });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), amount: value, expiresAt };
+  }
+  patchOrder(order.id, { returnShipment: { ...back, charge: value, chargePaidBy: "customer", chargeLink: link } }, `Return courier charge link · ₹${value}`);
+  sendEmail({
+    to: address?.email ?? "",
+    phone: address?.phone,
+    name: address?.fullName,
+    params: [address?.fullName || "Customer", order.id, `₹${value}`, link.url],
+    subject: `Return courier charge for order ${order.id}`,
+    template: "payment-link",
+    body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease pay the return courier charge of ₹${value.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid for ${linkMinutes()} minutes.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  return link;
+}
+
+/** Emails the customer the return AWB and label to paste on the parcel. */
+export function emailReturnLabel(orderId: string) {
+  const order = getOrder(orderId);
+  const back = order?.returnShipment;
+  if (!order || !back?.awb) throw new Error("Create the return shipment first.");
+  const address = order.deliveryAddress;
+  const page = `${window.location.origin}/account/orders/${encodeURIComponent(order.id)}`;
+  const pay = back.chargePaidBy === "customer" && !back.chargePaidAt && back.chargeLink ? `\n\nReturn courier charge ₹${back.charge}: ${back.chargeLink.url}` : "";
+  sendEmail({
+    to: address?.email ?? "",
+    phone: address?.phone,
+    name: address?.fullName,
+    params: [address?.fullName || "Customer", order.id, back.awb, back.labelUrl || page],
+    subject: `Return label for order ${order.id} · AWB ${back.awb}`,
+    template: "return-label",
+    body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour return pickup is booked with ${back.courierName || "the courier"}. AWB ${back.awb}.\n\nDownload the label, paste it on the parcel and hand it to the courier:\n${back.labelUrl || page}${pay}\n\nYou can also download it any time from My Orders: ${page}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  patchOrder(order.id, { returnShipment: { ...back, labelEmailedAt: new Date().toISOString() } }, "Return label emailed to the customer");
+}
+
 /** Pre-orders sent by courier: works out the courier charge and adds it to the balance before the customer pays. */
 export async function addPreorderShipping(orderId: string) {
   const order = getOrder(orderId);

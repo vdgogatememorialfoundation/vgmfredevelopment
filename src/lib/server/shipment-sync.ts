@@ -85,6 +85,17 @@ export async function syncOpenPaymentLinks() {
     if (order.status === "Cancelled") continue;
     const plan = order.preorderPayment;
     try {
+      const back = order.returnShipment;
+      if (back?.chargeLink?.provider === "razorpay" && back.chargeLink.id && !back.chargePaidAt && recent(back.chargeLink.createdAt)) {
+        const result = await razorpayLinkStatus(creds, back.chargeLink.id);
+        if (result.status === "paid") {
+          const at = new Date().toISOString();
+          patchShopOrder(order.id, {
+            returnShipment: { ...back, chargePaidAt: at, chargeRef: result.paymentId },
+            history: [...(order.history ?? []), { at, status: "Return courier charge paid", note: `₹${back.charge ?? 0} · Razorpay payment link${result.paymentId ? ` · ${result.paymentId}` : ""}` }],
+          });
+        }
+      }
       if (plan?.link?.provider === "razorpay" && plan.link.id && !plan.balancePaidAt && recent(plan.link.createdAt)) {
         const result = await razorpayLinkStatus(creds, plan.link.id);
         if (result.status === "paid") {

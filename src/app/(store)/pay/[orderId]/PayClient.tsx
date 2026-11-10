@@ -3,15 +3,26 @@
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
-import { getOrder, recordBalancePayment, recordCourierPayment, recordPayment } from "@/lib/admin-store";
+import { getOrder, recordBalancePayment, recordCourierPayment, recordPayment, recordReturnChargePayment } from "@/lib/admin-store";
 import { subscribeCms } from "@/lib/cms";
 import { addPreorderShipping, decodeSummary, payWithRazorpay, paymentNotice, waitForRazorpay } from "@/lib/payments-client";
 import { formatPrice } from "@/lib/store";
 
 type Summary = { id: string; amount: number; name: string; email: string; phone: string; items: string[]; paid: boolean };
 
-function readSummary(orderId: string, encoded: string | null, courier: boolean, balance = false): Summary | null {
+function readSummary(orderId: string, encoded: string | null, courier: boolean, balance = false, returnCharge = false): Summary | null {
   const order = getOrder(orderId);
+  if (order && returnCharge && order.returnShipment?.charge) {
+    return {
+      id: order.id,
+      amount: order.returnShipment.charge,
+      name: order.deliveryAddress?.fullName ?? "",
+      email: order.deliveryAddress?.email ?? "",
+      phone: order.deliveryAddress?.phone ?? "",
+      items: [`Return courier charge · AWB ${order.returnShipment.awb ?? "pending"}`],
+      paid: Boolean(order.returnShipment.chargePaidAt),
+    };
+  }
   if (order && balance && order.preorderPayment) {
     return {
       id: order.id,
@@ -34,7 +45,7 @@ function readSummary(orderId: string, encoded: string | null, courier: boolean, 
       paid: Boolean(order.courierUpgrade.paidAt),
     };
   }
-  if (order && !courier && !balance) {
+  if (order && !courier && !balance && !returnCharge) {
     return {
       id: order.id,
       amount: order.total,
@@ -56,9 +67,11 @@ export default function PayClient({ orderId }: { orderId: string }) {
   const encoded = expiresAt && Date.now() > expiresAt ? null : params.get("d");
   const courier = params.get("part") === "courier";
   const balance = params.get("part") === "balance";
+  const returnCharge = params.get("part") === "return";
   const settle = (input: { method: string; reference?: string; razorpayPaymentId?: string }) => {
     if (!getOrder(orderId)) return;
-    if (balance) recordBalancePayment(orderId, input);
+    if (returnCharge) recordReturnChargePayment(orderId, input);
+    else if (balance) recordBalancePayment(orderId, input);
     else if (courier) recordCourierPayment(orderId, input);
     else recordPayment(orderId, input);
   };
@@ -85,7 +98,7 @@ export default function PayClient({ orderId }: { orderId: string }) {
 
   if (shippingDue) return <main className="container py-20 text-center text-text-muted">Working out the courier charge…</main>;
 
-  const summary = readSummary(orderId, encoded, courier, balance);
+  const summary = readSummary(orderId, encoded, courier, balance, returnCharge);
 
   if (returned || result || summary?.paid) {
     return (
@@ -93,7 +106,7 @@ export default function PayClient({ orderId }: { orderId: string }) {
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
           <h1 className="heading-2">Payment received</h1>
           <p className="mt-3 text-sm text-text-muted">
-            Thank you. Order <span className="font-mono font-semibold text-burgundy">{orderId}</span> {courier ? "will be sent by courier." : "is confirmed."}
+            Thank you. Order <span className="font-mono font-semibold text-burgundy">{orderId}</span> {returnCharge ? "return courier charge is paid." : courier ? "will be sent by courier." : "is confirmed."}
             {result?.demo && " (Demo mode: no money was charged.)"}
           </p>
           {result && <p className="mt-2 font-mono text-xs text-text-muted">{result.paymentId}</p>}
@@ -119,11 +132,11 @@ export default function PayClient({ orderId }: { orderId: string }) {
     try {
       const outcome = await payWithRazorpay({
         amount: summary.amount,
-        receipt: courier ? `${summary.id}-C` : summary.id,
+        receipt: returnCharge ? `${summary.id}-R` : courier ? `${summary.id}-C` : summary.id,
         name: summary.name,
         email: summary.email,
         phone: summary.phone,
-        description: courier ? `Courier charge for Vaidya Gogate Memorial Foundation order ${summary.id}` : `Vaidya Gogate Memorial Foundation order ${summary.id}`,
+        description: returnCharge ? `Return courier charge for Vaidya Gogate Memorial Foundation order ${summary.id}` : courier ? `Courier charge for Vaidya Gogate Memorial Foundation order ${summary.id}` : `Vaidya Gogate Memorial Foundation order ${summary.id}`,
       });
       if (outcome.kind === "holding") {
         setError("The payment is on hold until Razorpay confirms it. It is not marked paid, and this order is not packed before that.");
@@ -150,7 +163,7 @@ export default function PayClient({ orderId }: { orderId: string }) {
     <main className="container max-w-xl py-16">
       <div className="rounded-2xl border border-border bg-white p-8 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold">Vaidya Gogate Memorial Foundation</p>
-        <h1 className="heading-2 mt-2">{courier ? "Pay the courier charge" : "Complete your payment"}</h1>
+        <h1 className="heading-2 mt-2">{returnCharge ? "Pay the return courier charge" : courier ? "Pay the courier charge" : "Complete your payment"}</h1>
         <p className="mt-2 text-sm text-text-muted">
           Order <span className="font-mono font-semibold text-text-primary">{summary.id}</span>
           {summary.name ? ` for ${summary.name}` : ""}

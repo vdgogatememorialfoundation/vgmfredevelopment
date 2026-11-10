@@ -48,7 +48,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink } from "@/lib/payments-client";
+import { createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -665,6 +665,47 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
         <Button variant="outline" onClick={() => onDone()}>Cancel</Button>
       </div>
     </Panel>
+  );
+}
+
+/** Who pays the return courier, the payment link for the customer, and the label email. */
+function ReturnChargeBox({ order, run }: { order: Order; run: (label: string, task: () => Promise<string | void> | string | void) => void }) {
+  const back = order.returnShipment!;
+  const [amount, setAmount] = useState(String(back.charge ?? ""));
+  const value = Number(amount) || 0;
+  return (
+    <div className="mb-3 space-y-2 rounded-xl border border-border bg-white p-3 text-xs">
+      <p className="font-semibold text-text-primary">Return courier charge</p>
+      <p className="text-text-muted">
+        {back.chargePaidBy === "foundation"
+          ? `Paid by the Foundation${back.charge ? ` · ₹${back.charge}` : ""}.`
+          : back.chargePaidBy === "customer"
+            ? back.chargePaidAt
+              ? `Customer paid ₹${back.charge}${back.chargeRef ? ` · ${back.chargeRef}` : ""}.`
+              : `Customer to pay ₹${back.charge} · link sent ${formatDateTime(back.chargeLink?.createdAt ?? "")}. Updates on its own once paid.`
+            : "Choose who pays for the return courier."}
+      </p>
+      {!back.chargePaidAt ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <TextInput type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Charge ₹" className="w-28" />
+          <Button variant="outline" onClick={() => run("return-charge", () => {
+            patchOrder(order.id, { returnShipment: { ...back, charge: value || back.charge, chargePaidBy: "foundation", chargeLink: undefined } }, "Return courier charge borne by the Foundation");
+            return "The Foundation pays the return courier.";
+          })}>Foundation pays</Button>
+          <Button onClick={() => run("return-charge", async () => {
+            const link = await createReturnChargeLink(order.id, value);
+            return `Payment link for ₹${link.amount} sent to the customer.`;
+          })}>Customer pays · send link</Button>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {back.labelUrl ? <a href={back.labelUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-burgundy underline">Open return label</a> : <span className="text-text-muted">No label link from the courier yet.</span>}
+        <Button variant="ghost" onClick={() => run("return-label", () => {
+          emailReturnLabel(order.id);
+          return "Return label emailed to the customer. It is also on their My Orders page.";
+        })}>{back.labelEmailedAt ? "Email label again" : "Email label to customer"}</Button>
+      </div>
+    </div>
   );
 }
 
@@ -1333,6 +1374,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 Return AWB {order.returnShipment.awb || "pending"} · {order.returnShipment.courierName} · {order.returnShipment.live ? "live" : "demo"}
               </p>
             )}
+            {order.returnShipment?.awb ? <ReturnChargeBox order={order} run={run} /> : null}
             {returnRequest ? (
               <div className="space-y-2 text-sm">
                 <p><b>{returnRequest.kind === "replacement" ? "Replacement" : "Return"}</b> · {returnRequest.status}{returnRequest.source ? ` · ${returnRequest.source}` : ""}</p>
@@ -1379,8 +1421,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                           createdAt: new Date().toISOString(),
                           note: created.note,
                           labelUrl: created.labelUrl,
+                          charge: created.courierCost,
                         },
                       }, "Return pickup booked");
+                      try {
+                        emailReturnLabel(order.id);
+                      } catch {
+                        /* the label can be emailed from the return box */
+                      }
                       if (returnRequest.kind === "replacement") {
                         advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${created.awb} · ${created.courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
                       } else {
@@ -1453,8 +1501,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                         courierName: created.courierName,
                         createdAt: new Date().toISOString(),
                         note: created.note,
+                        labelUrl: created.labelUrl,
+                        charge: created.courierCost,
                       },
                     }, "Return opened");
+                    try {
+                      emailReturnLabel(order.id);
+                    } catch {
+                      /* the label can be emailed from the return box */
+                    }
                     return created.note ?? "Return opened and reverse pickup requested.";
                   })}>Create return (reverse pickup)</Button>
                   )}

@@ -686,6 +686,13 @@ export interface ReturnShipment {
   note?: string;
   /** Label the customer prints and pastes on the parcel going back. */
   labelUrl?: string;
+  /** Courier charge for the return, and who bears it. */
+  charge?: number;
+  chargePaidBy?: "foundation" | "customer";
+  chargeLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string };
+  chargePaidAt?: string;
+  chargeRef?: string;
+  labelEmailedAt?: string;
 }
 
 export interface CourierRate {
