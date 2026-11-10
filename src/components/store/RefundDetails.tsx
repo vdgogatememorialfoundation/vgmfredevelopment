@@ -7,9 +7,9 @@ const stamp = (value?: string) =>
 export function refundStateLabel(refund: RefundRecord) {
   if (refund.destination === "store_credit") return "Added to store credit";
   if (!refund.gatewayRefundId) return "Recorded by the Foundation";
-  if (refund.status === "processed") return "Processed by the bank";
+  if (refund.status === "processed") return "Refund processed";
   if (refund.status === "failed") return "Failed";
-  return "Initiated · with the bank";
+  return "Refund processing";
 }
 
 const tone = (refund: RefundRecord) =>
@@ -25,7 +25,7 @@ function Fact({ label, value }: { label: string; value?: string }) {
   );
 }
 
-/** Initiated → With the bank → Credited, drawn with the same dots-and-line pipeline as order tracking. */
+/** Initiated → Processing → Processed, drawn with the same dots-and-line pipeline as order tracking. */
 function RefundSteps({ refund }: { refund: RefundRecord }) {
   const failed = refund.status === "failed";
   const credit = refund.destination === "store_credit";
@@ -38,14 +38,16 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
       ? { id: "refunded", label: "Added to store credit", caption: "Use it on your next order.", reached: true, partial: false, events: [] }
       : manual
         ? { id: "recorded", label: "Recorded by the Foundation", caption: "Paid back through the original payment method.", reached: true, partial: false, events: [] }
-        : { id: "bank", label: "With the bank", caption: bankRef ? `Bank reference ${bankRef}` : "The bank usually takes 5–7 working days.", reached: true, partial: false, events: [] },
+        : { id: "bank", label: "Refund processing", caption: "Takes 3–5 working days.", reached: true, partial: false, events: [] },
     ...(credit
       ? []
       : [
           {
             id: failed ? "failed" : "refunded",
-            label: failed ? "Refund failed" : "Credited to your account",
-            caption: stamp(refund.processedAt),
+            label: failed ? "Refund failed" : "Refund processed",
+            caption: failed
+              ? stamp(refund.checkedAt)
+              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`, "Credited to your bank account within 5–7 working days after processing."].filter(Boolean).join(" · "),
             reached: done || failed || manual,
             partial: false,
             events: [],
@@ -99,7 +101,7 @@ export default function RefundDetails({
               <Fact label="Last checked" value={stamp(refund.checkedAt)} />
             </dl>
             {refund.gatewayRefundId && refund.status !== "processed" && refund.status !== "failed" && !refund.rrn && !refund.arn ? (
-              <p className="mt-2 text-xs text-slate-600">The bank reference (RRN/ARN) shows here once the bank processes the refund, usually within 5–7 working days.</p>
+              <p className="mt-2 text-xs text-slate-600">The bank reference (RRN/ARN) shows here once the refund is processed, usually within 3–5 working days. This page updates on its own.</p>
             ) : null}
             {onCheck && refund.gatewayRefundId ? (
               <button type="button" disabled={busyId === refund.id} onClick={() => onCheck(refund)} className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
