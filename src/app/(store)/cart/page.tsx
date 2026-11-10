@@ -24,6 +24,7 @@ import { moveSavedToCart, removeSavedLater, saveForLater, useSavedLater } from "
 import { storeConfig } from "@/lib/constants";
 import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
 import Glyph from "@/components/store/Glyph";
+import BulkOrderNote from "@/components/store/BulkOrderNote";
 
 export default function CartPage() {
   const [deliveryCheck, setDeliveryCheck] = useState<DeliveryCheck | null>(null);
@@ -150,6 +151,7 @@ export default function CartPage() {
 
                     {!isPurchasable(book) && !canPreorder(book) && <p className="mt-2 text-xs font-semibold text-burgundy">Out of stock</p>}
                     {!isPurchasable(book) && !canPreorder(book) && <RestockAlert bookId={book.id} />}
+                    <BulkOrderNote quantity={item.quantity} />
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <QtyControl value={item.quantity} max={quantityCap(book.id)} onChange={(quantity) => setCartQuantity(item.bookId, quantity)} />
                       <button

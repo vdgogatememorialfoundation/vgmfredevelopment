@@ -60,7 +60,7 @@ export default function BookCard({ book }: { book: Book }) {
             {book.title}
           </Link>
         </h3>
-        <p className="mt-0.5 truncate text-xs text-text-muted">{book.author}</p>
+        <p className="mt-0.5 truncate text-xs text-text-muted">{book.author}{book.language ? ` · ${book.language}` : ""}</p>
         <p className="mt-2 text-sm font-bold text-burgundy">{formatCurrency(book.price, book.currency)}</p>
         <AvailabilityBadge text={availabilityText(book)} />
         {hideDates ? null : (

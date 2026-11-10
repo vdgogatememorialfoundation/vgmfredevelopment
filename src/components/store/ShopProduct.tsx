@@ -94,6 +94,11 @@ export default function ShopProduct({
               <p className="mt-3 text-sm text-text-muted">
                 By <span className="font-medium text-burgundy">{book.author}</span>
                 {" · "}Published by <span className="font-medium text-text-primary">{publisher}</span>
+                {book.language ? (
+                  <>
+                    {" · "}Language: <span className="font-medium text-text-primary">{book.language}</span>
+                  </>
+                ) : null}
               </p>
               <ProductShare slug={book.slug} title={book.title} price={book.price} />
               {reviewCount > 0 && (

@@ -71,10 +71,13 @@ export function addToCart(bookId: string, quantity = 1) {
   persistCart(cart);
 }
 
+/** Orders above this many copies of a title are taken by the Foundation desk, which contacts the customer. */
+export const BULK_ORDER_LIMIT = 100;
+
 export function quantityCap(bookId: string) {
   const book = getBookById(bookId);
   if (!book) return 20;
-  if (isPurchasable(book)) return Math.max(1, book.stock);
+  if (isPurchasable(book)) return Math.min(BULK_ORDER_LIMIT, Math.max(1, book.stock));
   if (canPreorder(book)) return 20;
   return 1;
 }

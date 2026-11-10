@@ -1,5 +1,6 @@
 "use client";
 
+import BulkOrderNote from "@/components/store/BulkOrderNote";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -871,6 +872,7 @@ export default function CheckoutClient() {
                       )}
 
                       <p className="mt-1 text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</p>
+                      <BulkOrderNote quantity={item.quantity} />
                       <div className="mt-3 flex flex-wrap items-center gap-3">
                         <QtyControl value={item.quantity} max={quantityCap(book.id)} onChange={(quantity) => setCartQuantity(item.bookId, quantity)} />
                         <button type="button" onClick={() => saveForLater(item.bookId)} className="text-xs font-semibold text-text-muted hover:text-burgundy">
