@@ -48,8 +48,8 @@ function slugify(value: string) {
 
 const blankPublisher = (): PublisherInfo => ({
   name: "Vaidya Gogate Memorial Foundation Publications",
-  address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra",
-  phone: "+91 20 1234 5678",
+  address: "102, Ramprasad Chamber, 368/1, Jawaharlal Nehru Road, Nana Peth, Pune 411002, Maharashtra",
+  phone: "093737 92952",
   email: "publications@vaidyagogate.org",
 });
 

@@ -422,7 +422,9 @@ export function pickupInstructions() {
 
 export function getPickupLocation() {
   const settings = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
-  const active = settings?.fulfillmentLocations?.find((location) => location.active);
+  const active = settings?.fulfillmentLocations?.find(
+    (location) => location.active && !/FC Road, Shivaji Nagar/i.test(location.address || "")
+  );
   const hours = "Monday to Thursday, 6:00 PM – 10:00 PM";
   const mapFor = (address: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
   if (!active) {
