@@ -106,11 +106,24 @@ export default function CheckoutClient() {
     if (Number(window.sessionStorage.getItem(key) || 0) <= Date.now()) fresh();
     const tick = () => {
       const left = Math.round((Number(window.sessionStorage.getItem(key) || 0) - Date.now()) / 1000);
-      if (left <= 0 && !processingRef.current) {
-        fresh();
-        setStep("address");
-        setError(`Your ${CHECKOUT_MINUTES}-minute checkout time ran out, so the timer has restarted. Check your address and delivery, then continue.`);
-        setSecondsLeft(CHECKOUT_MINUTES * 60);
+      if (left <= 0 && !processingRef.current && !new URLSearchParams(window.location.search).get("orderId")) {
+        window.clearInterval(timer);
+        window.sessionStorage.removeItem(key);
+        let pendingId = "";
+        try {
+          pendingId = (JSON.parse(window.sessionStorage.getItem(PENDING_CHECKOUT) || "null") as Order | null)?.id || "";
+        } catch {}
+        window.sessionStorage.removeItem(PENDING_CHECKOUT);
+        if (pendingId) {
+          void fetch("/api/payments/hosted", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "expire", orderId: pendingId }),
+            keepalive: true,
+          }).catch(() => {});
+        }
+        window.sessionStorage.setItem("vgmf_checkout_expired", "1");
+        window.location.assign("/cart");
         return;
       }
       setSecondsLeft(Math.max(0, left));
@@ -495,6 +508,7 @@ export default function CheckoutClient() {
         deliveryMode === "store_pickup"
           ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
           : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
+      pickupHoldUntil: deliveryMode === "store_pickup" ? quote?.pickupHoldUntil : undefined,
       courierName: deliveryMode === "delivery" ? courierName : undefined,
               courierChoice:
         deliveryMode === "delivery" && selectedCourier
@@ -1078,7 +1092,9 @@ export default function CheckoutClient() {
         )}
 
         {/* 4. Success */}
-        {step === "success" && (
+        {step === "success" && (() => {
+          const placedOrder = getOrders().find((order) => order.id === orderId);
+          return (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-white">
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1098,10 +1114,32 @@ export default function CheckoutClient() {
                 {orderId}
               </p>
             </div>
-            <p className="mt-3 text-xs text-text-muted">
-              {placedEta ? `Estimated delivery: ${placedEta} · ` : ""}
-              Live courier tracking on My Orders
-            </p>
+            {placedOrder?.deliveryMode === "store_pickup" ? (
+              <div className="mx-auto mt-6 max-w-xl rounded-xl border border-gold/40 bg-warm-cream p-5 text-left text-sm">
+                <p className="font-semibold text-text-primary">Pickup from store</p>
+                <p className="mt-1 text-text-primary">{pickupLocation.name}</p>
+                <p className="mt-1 text-text-muted">{pickupLocation.address}</p>
+                {pickupLocation.contactName || pickupLocation.contactPhone ? (
+                  <p className="mt-1 text-text-muted">
+                    Point of contact: {[pickupLocation.contactName, pickupLocation.contactPhone].filter(Boolean).join(" · ")}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-text-muted">Pickup timings: {pickupLocation.hours}</p>
+                <a href={pickupLocation.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 font-semibold text-burgundy underline">
+                  <Glyph name="pin" className="h-3.5 w-3.5" /> Open in Google Maps
+                </a>
+                {placedOrder.eta ? (
+                  <p className="mt-2 font-medium text-emerald-700">
+                    Ready {placedOrder.eta}{placedOrder.pickupHoldUntil ? ` · held until ${placedOrder.pickupHoldUntil}` : ""}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-text-muted">
+                {placedEta ? `Estimated delivery: ${placedEta} · ` : ""}
+                Live courier tracking on My Orders
+              </p>
+            )}
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
               {orderSettings.gst.invoiceEnabled && (
                 <button
@@ -1123,7 +1161,8 @@ export default function CheckoutClient() {
               </Link>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Order summary */}

@@ -81,6 +81,14 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true, status: "holding" });
   }
+  if (body.action === "expire") {
+    const id = String(body.orderId || "");
+    const existing = id ? readHold(id) : null;
+    if (existing && existing.status === "holding") {
+      saveHold({ ...existing, status: "failed", updatedAt: new Date().toISOString() });
+    }
+    return NextResponse.json({ ok: true });
+  }
   if (body.action === "save") {
     if (!adminCookie(request)) return NextResponse.json({ ok: false, error: "Sign in to the admin desk to save payment keys." }, { status: 401 });
     const incoming = (body.payments && typeof body.payments === "object" ? body.payments : {}) as Record<string, unknown>;

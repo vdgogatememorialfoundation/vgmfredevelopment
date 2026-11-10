@@ -439,7 +439,7 @@ export function getPickupLocation() {
     address,
     phone: active.phone,
     contactName: active.contactName?.trim() ?? "",
-    contactPhone: active.contactPhone?.trim() || active.phone,
+    contactPhone: active.contactPhone?.trim() || active.phone?.trim() || "093737 92952",
     mapUrl: active.mapUrl?.trim() || mapFor(`${active.name}, ${address}`),
     hours: active.pickupHours?.trim() || hours,
   };

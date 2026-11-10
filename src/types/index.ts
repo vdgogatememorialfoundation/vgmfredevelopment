@@ -592,6 +592,8 @@ export interface Order {
   pickupArrivedAt?: string;
   deliveryAddress?: DeliveryAddress;
   eta?: string;
+  /** Last day a store-pickup order is held at the counter. */
+  pickupHoldUntil?: string;
   trackingId?: string;
   /** Secret shared with the customer as /track/{trackToken}. */
   trackToken?: string;

@@ -289,6 +289,12 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
           <Tile label="Pickup at" value={`${pickupAt.name}, ${pickupAt.address}`} />
           <Tile label="Point of contact" value={[pickupAt.contactName, pickupAt.contactPhone].filter(Boolean).join(" · ")} />
           <Tile label="Pickup timings" value={pickupAt.hours} />
+          {order.eta ? (
+            <Tile
+              label={pickupOtpReady(order) ? "Ready for pickup" : "Ready by"}
+              value={`${order.eta}${order.pickupHoldUntil ? ` · held until ${order.pickupHoldUntil}` : ""}`}
+            />
+          ) : null}
           <div className="vgmf-trk-tile">
             <b>Location</b>
             <a href={pickupAt.mapUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-burgundy underline">Open in Google Maps</a>

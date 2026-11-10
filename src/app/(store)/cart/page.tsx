@@ -27,8 +27,15 @@ import Glyph from "@/components/store/Glyph";
 
 export default function CartPage() {
   const [deliveryCheck, setDeliveryCheck] = useState<DeliveryCheck | null>(null);
+  const [checkoutExpired, setCheckoutExpired] = useState(false);
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setDeliveryCheck(readDeliveryCheck()));
+    const frame = window.requestAnimationFrame(() => {
+      setDeliveryCheck(readDeliveryCheck());
+      if (window.sessionStorage.getItem("vgmf_checkout_expired")) {
+        window.sessionStorage.removeItem("vgmf_checkout_expired");
+        setCheckoutExpired(true);
+      }
+    });
     return () => window.cancelAnimationFrame(frame);
   }, []);
   const { items, count } = useCart();
@@ -63,6 +70,13 @@ export default function CartPage() {
       />
 
       <section className="section bg-background">
+        {checkoutExpired ? (
+          <div className="container mb-6 max-w-6xl">
+            <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+              Your checkout time expired, so that order was cancelled and no payment was taken. Your items are still in the bag. Start checkout again.
+            </p>
+          </div>
+        ) : null}
         <div className="container grid max-w-6xl gap-10 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
             {rows.length === 0 ? (
