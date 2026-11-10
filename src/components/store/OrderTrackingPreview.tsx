@@ -6,7 +6,7 @@ import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { buildTrackingStages, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
 import { agreedDelivery, clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
 import type { Order, ShipmentRecord } from "@/types";
-import { refundExpectedCredit, refundExpectedCreditLabel } from "@/components/store/RefundDetails";
+import { refundExpectedCredit, refundExpectedCreditLabel, refundProcessingDue } from "@/components/store/RefundDetails";
 
 const STAGE_STATUS: Partial<Record<TrackingStageId, Order["status"]>> = {
   packed: "Packed",
@@ -178,7 +178,16 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
               ? [...(order.history ?? [])].reverse().find((entry) => entry.status === "Cancelled")?.at ?? order.date
               : order.date;
           const creditDay = expected && !failed ? dayLabel(expected.date.toISOString(), country) : "";
+          const share = (from: number, until: number) =>
+            Number.isFinite(from) && Number.isFinite(until) && until > from ? Math.min(0.9, Math.max(0.08, (now - from) / (until - from))) : 0.08;
+          const processedMs = Date.parse(lastRefund.processedAt || "");
+          const gaps = [
+            1,
+            processed ? 1 : failed ? 0 : share(Date.parse(lastRefund.at), refundProcessingDue(lastRefund)),
+            credited ? 1 : processed && expected ? share(processedMs, expected.date.getTime()) : 0,
+          ];
           return {
+            gaps,
             stamps: [
               shortStamp(startAt, country),
               shortStamp(lastRefund.at, country),
@@ -213,6 +222,45 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   const shownTone = refundView ? (refundView.failed ? "text-red-700" : "text-emerald-700") : tone;
   if (refundView) headline = refundView.headline;
   const shownDetail = refundView ? refundView.detail : [detail, stamp].filter(Boolean).join(" · ");
+
+  if (refundView) {
+    const dot = refundView.failed ? "bg-red-600" : "bg-emerald-600";
+    return (
+      <span className="mt-1 block" data-order-preview={order.id}>
+        <span className={`block text-sm font-semibold ${shownTone}`}>{headline}</span>
+        {shownDetail && <span className="mt-0.5 block text-xs text-text-muted">{shownDetail}</span>}
+        <span className="mt-2 block" aria-label={`Refund progress: ${shownSteps[shownIdx] ?? status}`}>
+          {shownSteps.map((label, index) => {
+            const reached = index <= shownIdx;
+            const gap = refundView.gaps[index] ?? 0;
+            const last = index === shownSteps.length - 1;
+            return (
+              <span key={label} className="relative flex gap-2.5 pb-2 last:pb-0">
+                {!last ? (
+                  <span className="absolute left-[4.5px] top-3 bottom-0 w-0.5 overflow-hidden rounded-full bg-border">
+                    <span
+                      className={`absolute inset-x-0 top-0 ${dot} transition-[height] ease-linear`}
+                      style={{ height: shown ? `${gap * 100}%` : "0%", transitionDuration: gap >= 1 ? "600ms" : "2s", transitionDelay: `${index * 600}ms` }}
+                    />
+                  </span>
+                ) : null}
+                <span
+                  className={`relative mt-1 h-2.5 w-2.5 shrink-0 rounded-full transition-colors ${reached && (shown || index === 0) ? dot : "bg-border"} ${
+                    index === shownIdx && !shownTerminal ? "vgmf-dot-pulse" : ""
+                  }`}
+                  style={{ transitionDelay: `${index * 600}ms` }}
+                />
+                <span className="min-w-0 text-xs leading-snug">
+                  <span className={`block font-semibold ${reached ? shownTone : "text-text-muted"}`}>{label}</span>
+                  {refundView.stamps[index] ? <span className="block text-text-muted">{refundView.stamps[index]}</span> : null}
+                </span>
+              </span>
+            );
+          })}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <span className="mt-1 block" data-order-preview={order.id}>
@@ -250,7 +298,6 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
             className={`${index === 0 ? "text-left" : index === shownSteps.length - 1 ? "text-right" : "text-center"} ${index === shownIdx ? shownTone : ""}`}
           >
             {label}
-            {refundView?.stamps[index] ? <span className="block font-normal text-text-muted">{refundView.stamps[index]}</span> : null}
           </span>
         ))}
       </span>

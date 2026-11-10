@@ -29,6 +29,12 @@ export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: 
   return { date, done: Date.now() >= date.getTime() };
 }
 
+/** When Razorpay usually finishes processing a refund (3–5 working days after it is initiated). */
+export function refundProcessingDue(refund: RefundRecord) {
+  const at = Date.parse(refund.at);
+  return Number.isFinite(at) ? addWorkingDays(at, 5).getTime() : NaN;
+}
+
 export function refundExpectedCreditLabel(refund: RefundRecord) {
   const expected = refundExpectedCredit(refund);
   if (!expected) return "";
@@ -58,6 +64,19 @@ function Fact({ label, value }: { label: string; value?: string }) {
   );
 }
 
+/** The line creeps by the clock: initiated → processing estimate, then processed → expected credit date. */
+function refundPace(refund: RefundRecord) {
+  if (refund.status === "failed" || refund.destination === "store_credit" || !refund.gatewayRefundId) return null;
+  const processed = Date.parse(refund.processedAt || "");
+  if (refund.status === "processed" && Number.isFinite(processed)) {
+    const expected = refundExpectedCredit(refund);
+    return expected && !expected.done ? { from: processed, until: expected.date.getTime() } : null;
+  }
+  const from = Date.parse(refund.at);
+  const until = refundProcessingDue(refund);
+  return Number.isFinite(from) && Number.isFinite(until) ? { from, until } : null;
+}
+
 /** Initiated → Processing → Processed, drawn with the same dots-and-line pipeline as order tracking. */
 function RefundSteps({ refund }: { refund: RefundRecord }) {
   const failed = refund.status === "failed";
@@ -76,7 +95,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
       ? []
       : [
           {
-            id: failed ? "failed" : "refunded",
+            id: failed ? "failed" : "processed",
             label: failed ? "Refund failed" : "Refund processed",
             caption: failed
               ? stamp(refund.checkedAt)
@@ -102,7 +121,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
   const current = stages.map((stage) => stage.reached).lastIndexOf(true);
   return (
     <div className="mt-2">
-      <VerticalPipeline stages={stages} currentIndex={current} failed={failed} />
+      <VerticalPipeline stages={stages} currentIndex={current} failed={failed} pace={refundPace(refund)} />
     </div>
   );
 }
