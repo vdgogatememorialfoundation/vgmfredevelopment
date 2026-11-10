@@ -20,6 +20,7 @@ export type MobileFeed = {
     address: string;
     social?: SocialLinks;
     tickerSeconds?: number;
+    productText?: import("@/types").ProductTextSizes;
     shlokaBar?: boolean;
     shlokas?: string[];
     queryButton?: boolean;

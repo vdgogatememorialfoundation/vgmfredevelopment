@@ -359,8 +359,8 @@ export default function CheckoutClient() {
 
   const priced = computeTotals(orderItems);
   const itemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
-  const cashAtStoreSelected = payMethod === "store" && orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup";
-  const codSelected = (payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery") || cashAtStoreSelected;
+  const cashAtStoreSelected = payMethod === "store" && orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup" && !hasPreorder;
+  const codSelected = (payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery" && !hasPreorder) || cashAtStoreSelected;
   const hostedSelected = payMethod === "payu" || payMethod === "easebuzz" || payMethod === "cashfree" || payMethod === "phonepe" ? payMethod : "";
   const codFee = codSelected && !cashAtStoreSelected ? orderSettings.codFee : 0;
   const shipping =
@@ -401,7 +401,7 @@ export default function CheckoutClient() {
     return "";
   };
 
-  const preorderBalanceLater = orderItems.some((item) => item.preorder) && orderSettings.preorderPayment.mode === "advance" && !codSelected && !cashAtStoreSelected;
+  const preorderBalanceLater = orderItems.some((item) => item.preorder) && !codSelected && !cashAtStoreSelected;
   const payNow = preorderBalanceLater ? preorderAdvance(totals.total, orderSettings) : totals.total;
   const preorderShippingLater = hasPreorder && deliveryMode === "delivery";
 
@@ -1043,7 +1043,7 @@ export default function CheckoutClient() {
                   </span>
                 </label>
               ))}
-              {orderSettings.codEnabled && deliveryMode === "delivery" && (
+              {orderSettings.codEnabled && deliveryMode === "delivery" && !hasPreorder && (
                 <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
                   <input type="radio" name="payment-method" checked={codSelected} onChange={() => setPayMethod("cod")} className="mt-1 accent-burgundy" />
                   <span>
@@ -1052,7 +1052,7 @@ export default function CheckoutClient() {
                   </span>
                 </label>
               )}
-              {orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup" && (
+              {orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup" && !hasPreorder && (
                 <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${cashAtStoreSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
                   <input type="radio" name="payment-method" checked={cashAtStoreSelected} onChange={() => setPayMethod("store")} className="mt-1 accent-burgundy" />
                   <span>
@@ -1251,6 +1251,18 @@ export default function CheckoutClient() {
                   {formatPrice(totals.total)}
                 </dd>
               </div>
+              {preorderBalanceLater && (
+                <>
+                  <div className="flex justify-between rounded-lg bg-burgundy/5 px-2 py-1.5">
+                    <dt className="font-semibold text-burgundy">Pay now (pre-order advance)</dt>
+                    <dd className="font-bold text-burgundy">{formatPrice(payNow)}</dd>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <dt className="text-text-muted">Balance later + courier charge</dt>
+                    <dd className="font-medium text-text-primary">{formatPrice(Math.max(0, totals.total - payNow))}</dd>
+                  </div>
+                </>
+              )}
             </dl>
 
             {deliveryMode === "delivery" && step === "review" && orderSettings.shippingFeeMode === "free_above" && totals.subtotal < orderSettings.freeAbove && totals.shipping > 0 && (

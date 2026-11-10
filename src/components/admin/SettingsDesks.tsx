@@ -327,6 +327,31 @@ export function GeneralSettingsDesk() {
         </label>
       </Card>
 
+      <Card title="Product text sizes" text="Font sizes on shop product cards and the product page. Saving publishes them to the site and app.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm text-slate-700">
+            Product card · title · {settings.productText?.cardTitle || 14}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardTitle || 14} onChange={(event) => set({ productText: { ...settings.productText, cardTitle: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · author / publisher · {settings.productText?.cardMeta || 12}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardMeta || 12} onChange={(event) => set({ productText: { ...settings.productText, cardMeta: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · language · {settings.productText?.cardLanguage || 15}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardLanguage || 15} onChange={(event) => set({ productText: { ...settings.productText, cardLanguage: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · price · {settings.productText?.cardPrice || 14}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardPrice || 14} onChange={(event) => set({ productText: { ...settings.productText, cardPrice: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product page · language · {settings.productText?.pageLanguage || 18}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.pageLanguage || 18} onChange={(event) => set({ productText: { ...settings.productText, pageLanguage: Number(event.target.value) } })} />
+          </label>
+        </div>
+      </Card>
+
       <Card title="Google Maps" text="Used on clinics, events, live tracking and the analytics live map. Paste a Maps URL if you leave this blank.">
         <Secret
           label="Google Maps JavaScript API key"
@@ -1535,27 +1560,15 @@ export function OrderSettingsDesk() {
           {value.codEnabled && <Text label="COD fee (₹)" type="number" value={value.codFee} onChange={(fee) => set({ codFee: Number(fee) || 0 })} />}
         </div>
       </Card>
-      <Card title="Store pickup returns & pre-order payments" text="Pickup orders have no return or replacement unless switched on here. Pre-orders can be paid in full, or as an advance now and the balance by payment link later.">
+      <Card title="Store pickup returns & pre-order payments" text="Pickup orders have no return or replacement unless switched on here. Pre-orders take an advance now (default 50%); the balance and courier charge are paid by payment link later.">
         <div className="grid gap-4 md:grid-cols-3">
           <Check label="Allow returns on store-pickup orders" checked={value.returns.pickupReturns} onChange={(pickupReturns) => set({ returns: { ...value.returns, pickupReturns } })} />
           <Check label="Allow replacements on store-pickup orders" checked={value.returns.pickupReplacement} onChange={(pickupReplacement) => set({ returns: { ...value.returns, pickupReplacement } })} />
-          <label className="block">
+          <div className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Pre-order payment</span>
-            <select className={input} value={value.preorderPayment.mode} onChange={(event) => set({ preorderPayment: { ...value.preorderPayment, mode: event.target.value === "advance" ? "advance" : "full" } })}>
-              <option value="full">Full payment when ordering</option>
-              <option value="advance">Advance now, balance later</option>
-            </select>
-          </label>
-          {value.preorderPayment.mode === "advance" && (
-            <>
-              <label className="block">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Advance is</span>
-                <select className={input} value={value.preorderPayment.advanceType} onChange={(event) => set({ preorderPayment: { ...value.preorderPayment, advanceType: event.target.value === "amount" ? "amount" : "percent" } })}>
-                  <option value="percent">A percentage of the order</option>
-                  <option value="amount">A fixed amount (₹)</option>
-                </select>
-              </label>
-              <Text label={value.preorderPayment.advanceType === "amount" ? "Advance (₹)" : "Advance (%)"} type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, advanceValue: Math.max(0, Number(amount) || 0) } })} />
+            <p className="text-sm text-slate-700">Advance at checkout; the rest plus the courier charge is paid by payment link. Full payment and cash on delivery are not offered for pre-orders.</p>
+          </div>
+          <Text label="Advance (%) — 1 to 99" type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: "percent", advanceValue: Math.min(99, Math.max(1, Math.round(Number(amount) || 50))) } })} />
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Balance due</span>
                 <select className={input} value={value.preorderPayment.balanceWhen} onChange={(event) => set({ preorderPayment: { ...value.preorderPayment, balanceWhen: event.target.value === "on_ready" ? "on_ready" : "before_dispatch" } })}>
@@ -1563,8 +1576,6 @@ export function OrderSettingsDesk() {
                   <option value="on_ready">When the item is ready</option>
                 </select>
               </label>
-            </>
-          )}
         </div>
       </Card>
       <Card title="Order status names & extra tracking statuses" text="Rename any status or tracking step the customer sees (leave blank to keep the built-in name). Extra statuses are added by the desk from an order's Status box and show inside the chosen tracking step.">

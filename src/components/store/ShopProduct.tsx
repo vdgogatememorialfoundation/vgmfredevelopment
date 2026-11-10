@@ -11,7 +11,7 @@ import ProductReviews from "@/components/store/ProductReviews";
 import BookDetails from "@/components/store/BookDetails";
 import Stars from "@/components/store/Stars";
 import { averageRating, useProductReviews } from "@/lib/reviews";
-import { useLiveBooks } from "@/lib/use-cms";
+import { useLiveBooks, useSiteSettings } from "@/lib/use-cms";
 import { storeConfig } from "@/lib/constants";
 import { getDiscountPercent } from "@/lib/store";
 import { browserHasProductEdits } from "@/components/store/ShopCatalogue";
@@ -34,6 +34,7 @@ export default function ShopProduct({
   const catalogue = useLocal && live.length ? live : initialBooks;
   const book = catalogue.find((item) => item.slug === slug) ?? (useLocal ? null : initialBook);
   const purchaseReviews = useProductReviews(book?.id ?? "");
+  const languageSize = useSiteSettings()?.productText?.pageLanguage || 18;
 
   if (!book) {
     return (
@@ -96,7 +97,7 @@ export default function ShopProduct({
                 {" · "}Published by <span className="font-medium text-text-primary">{publisher}</span>
                 {book.language ? (
                   <>
-                    {" · "}Language: <span className="rounded bg-burgundy/10 px-1.5 py-0.5 font-bold text-burgundy">{book.language}</span>
+                    {" · "}Language: <span className="rounded bg-burgundy/10 px-2 py-0.5 align-middle font-extrabold text-burgundy" style={{ fontSize: languageSize }}>{book.language}</span>
                   </>
                 ) : null}
               </p>

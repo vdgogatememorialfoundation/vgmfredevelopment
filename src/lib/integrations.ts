@@ -658,9 +658,10 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
           .map((row, index) => ({ id: String(row.id || index + 1), label: String(row.label ?? ""), stage: String(row.stage || "shipped") }))
       : [],
     preorderPayment: {
-      mode: merged.preorderPayment?.mode === "advance" ? "advance" : "full",
-      advanceType: merged.preorderPayment?.advanceType === "amount" ? "amount" : "percent",
-      advanceValue: Math.max(0, finiteNumber(merged.preorderPayment?.advanceValue, defaultOrderSettings.preorderPayment.advanceValue)),
+      // Pre-orders are always part-paid (1–99%, default 50%); the rest plus the courier charge is paid later by link.
+      mode: "advance",
+      advanceType: "percent",
+      advanceValue: Math.min(99, Math.max(1, Math.round(finiteNumber(merged.preorderPayment?.advanceValue, defaultOrderSettings.preorderPayment.advanceValue)))),
       balanceWhen: merged.preorderPayment?.balanceWhen === "on_ready" ? "on_ready" : "before_dispatch",
     },
     returns: {
@@ -821,11 +822,12 @@ export function canCustomerRequestReplacement(order: Order, settings = getOrderS
 }
 
 /** What a pre-order customer pays when ordering: the full total, or the advance set in Order settings. */
+/** Pre-orders always take a part now (the admin's %, never the full amount); the balance and courier charge follow by payment link. */
 export function preorderAdvance(total: number, settings = getOrderSettings()) {
-  const rule = settings.preorderPayment;
-  if (rule.mode !== "advance" || total <= 0) return total;
-  const raw = rule.advanceType === "amount" ? rule.advanceValue : (total * rule.advanceValue) / 100;
-  return Math.min(total, Math.max(1, Math.round(raw)));
+  if (total <= 0) return total;
+  const raw = Number(settings.preorderPayment?.advanceValue);
+  const percent = Number.isFinite(raw) ? Math.min(99, Math.max(1, raw)) : 50;
+  return Math.min(total, Math.max(1, Math.round((total * percent) / 100)));
 }
 
 export function customerOrderPolicyCopy() {

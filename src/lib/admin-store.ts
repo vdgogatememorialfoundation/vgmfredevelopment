@@ -81,6 +81,7 @@ function defaultSettings(): SiteSettings {
     liveChatEnabled: false,
     liveChatOnline: false,
     tickerSeconds: 36,
+    productText: { cardTitle: 14, cardMeta: 12, cardLanguage: 15, cardPrice: 14, pageLanguage: 18 },
     processing: {
       daysToPack: 1,
       daysToPickup: 1,
@@ -144,6 +145,7 @@ export function getSettings(): SiteSettings {
     liveChatEnabled: current.liveChatEnabled ?? defaults.liveChatEnabled,
     liveChatOnline: current.liveChatOnline ?? defaults.liveChatOnline,
     tickerSeconds: current.tickerSeconds || defaults.tickerSeconds,
+    productText: { ...defaults.productText, ...current.productText },
     pickupTimeslots: current.pickupTimeslots?.length ? current.pickupTimeslots : defaults.pickupTimeslots,
   };
 }

@@ -10,6 +10,7 @@ import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { availabilityText, canOrder, canPreorder, preorderDeliveryDate } from "@/lib/product-data";
 import { addToCart } from "@/lib/store";
 import { useCart } from "@/lib/use-cart";
+import { useSiteSettings } from "@/lib/use-cms";
 import CartStepper from "@/components/store/CartStepper";
 import { useOrderSettings } from "@/lib/use-cms";
 import { formatCurrency } from "@/lib/utils";
@@ -17,6 +18,7 @@ import { formatCurrency } from "@/lib/utils";
 export default function BookCard({ book }: { book: Book }) {
   const router = useRouter();
   const inCart = useCart().items.some((item) => item.bookId === book.id);
+  const sizes = useSiteSettings()?.productText;
   const orderable = canOrder(book);
   const [checked, setChecked] = useState<DeliveryCheck | null>(null);
   useEffect(() => {
@@ -56,16 +58,20 @@ export default function BookCard({ book }: { book: Book }) {
 
       <div className="flex flex-1 flex-col p-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted">{book.category}</p>
-        <h3 className="mt-1 text-sm font-semibold leading-snug text-text-primary">
+        <h3 className="mt-1 text-sm font-semibold leading-snug text-text-primary" style={sizes?.cardTitle ? { fontSize: sizes.cardTitle } : undefined}>
           <Link href={`/shop/${book.slug}`} className="line-clamp-2 transition hover:text-burgundy">
             {book.title}
           </Link>
         </h3>
-        <p className="mt-0.5 truncate text-xs text-text-muted">
+        <p className="mt-0.5 truncate text-xs text-text-muted" style={sizes?.cardMeta ? { fontSize: sizes.cardMeta } : undefined}>
           {book.author}
-          {book.language ? <> · <span className="font-bold text-burgundy">{book.language}</span></> : null}
         </p>
-        <p className="mt-2 text-sm font-bold text-burgundy">{formatCurrency(book.price, book.currency)}</p>
+        {book.language ? (
+          <p className="mt-1 font-extrabold leading-tight text-burgundy" style={{ fontSize: sizes?.cardLanguage || 15 }}>
+            {book.language}
+          </p>
+        ) : null}
+        <p className="mt-2 text-sm font-bold text-burgundy" style={sizes?.cardPrice ? { fontSize: sizes.cardPrice } : undefined}>{formatCurrency(book.price, book.currency)}</p>
         <AvailabilityBadge text={availabilityText(book)} />
         {hideDates ? null : (
           <p className="mt-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-sm font-bold leading-snug text-emerald-800">

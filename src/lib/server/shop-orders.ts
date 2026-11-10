@@ -50,6 +50,8 @@ export function orderPhoneMatches(order: Order, phone: string) {
 
 export function upsertShopOrder(order: Order) {
   if (!order?.id) return;
+  // A browser with an old cached copy must not bring back an order the desk deleted.
+  if (deletedShopOrderIds().includes(order.id)) return;
   const all = readAll();
   const prev = all.find((item) => item.id === order.id);
   if (prev && orderActivityAt(prev) > orderActivityAt(order)) return prev;

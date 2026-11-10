@@ -133,11 +133,15 @@ export function OrdersDashboard() {
       return;
     }
     const seen = seenOrders.current;
-    const fresh = ids.filter((id) => !seen.has(id));
-    fresh.forEach((id) => seen.add(id));
+    const placed = new Map(orders.map((order) => [order.id, Date.parse(order.date)]));
+    const unseen = ids.filter((id) => !seen.has(id));
+    unseen.forEach((id) => seen.add(id));
+    // Only orders placed in the last 30 minutes count as new; older ones are synced copies.
+    const fresh = unseen.filter((id) => Date.now() - (placed.get(id) ?? 0) < 30 * 60 * 1000);
     if (!fresh.length) return;
     beep("delivered");
     setTimeout(() => setNewOrders((current) => [...fresh, ...current].slice(0, 10)), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderIds]);
   const filtered = orders
     .filter((order) => statusFilter === "All" || order.status === statusFilter)

@@ -816,6 +816,14 @@ export interface SocialLinks {
   whatsapp?: string;
 }
 
+export interface ProductTextSizes {
+  cardTitle?: number;
+  cardMeta?: number;
+  cardLanguage?: number;
+  cardPrice?: number;
+  pageLanguage?: number;
+}
+
 export interface SiteSettings {
   siteName: string;
   tagline: string;
@@ -840,6 +848,8 @@ export interface SiteSettings {
   liveChatOnline?: boolean;
   /** Seconds for one pass of the announcement ticker. */
   tickerSeconds?: number;
+  /** Font sizes (px) for product cards and the product page. */
+  productText?: ProductTextSizes;
   /** Slim strip above the header for shlokas, quotes or a line of welcome. */
   shlokaBar?: boolean;
   shlokas?: string[];
