@@ -40,7 +40,7 @@ export function refundExpectedCreditLabel(refund: RefundRecord) {
 export function refundStateLabel(refund: RefundRecord) {
   if (refund.destination === "store_credit") return "Added to store credit";
   if (!refund.gatewayRefundId) return "Recorded by the Foundation";
-  if (refund.status === "processed") return "Refund processed";
+  if (refund.status === "processed") return refundExpectedCredit(refund)?.done ? "Credited" : "Refund processed";
   if (refund.status === "failed") return "Failed";
   return "Refund processing";
 }
@@ -85,6 +85,18 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
             partial: false,
             events: [],
           },
+          ...(failed || manual
+            ? []
+            : [
+                {
+                  id: "credited",
+                  label: "Credited to your account",
+                  caption: refundExpectedCreditLabel(refund) || "Expected within 5–7 working days after processing.",
+                  reached: Boolean(done && refundExpectedCredit(refund)?.done),
+                  partial: false,
+                  events: [],
+                },
+              ]),
         ]),
   ];
   const current = stages.map((stage) => stage.reached).lastIndexOf(true);

@@ -124,6 +124,7 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Shipping & couriers",
     items: [
       { label: "Shipment orders", href: "/admin/shipments/orders" },
+      { label: "Courier wallets", href: "/admin/shipments/wallet" },
     ],
   },
 

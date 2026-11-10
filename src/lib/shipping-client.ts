@@ -115,6 +115,22 @@ export async function checkCourierWallet(provider: string, needed = 0) {
   return { ok: true as const, balance };
 }
 
+export type CourierWallet = { provider: string; label: string; connected: boolean; balance?: number; error?: string };
+
+/** Live wallet balance for every aggregator that has one (Shiprocket, Nimbuspost, iThink, Shipyaari). */
+export async function readCourierWallets(): Promise<CourierWallet[]> {
+  const creds = credsFrom(getIntegrations());
+  return Promise.all(
+    WALLET_PROVIDERS.map(async (provider) => {
+      const name = provider === "ithink" ? "iThink Logistics" : provider === "nimbuspost" ? "NimbusPost" : label(provider);
+      const result = await post<{ balance?: number }>({ action: "wallet", provider, creds }).catch((error: Error) => ({ ok: false, configured: true, error: error.message, balance: undefined }));
+      if (!result.ok) return { provider, label: name, connected: result.configured !== false, error: result.configured === false ? undefined : result.error ?? "Could not read the wallet." };
+      const balance = Number(result.balance ?? 0);
+      return { provider, label: name, connected: true, balance: Number.isFinite(balance) ? balance : 0 };
+    })
+  );
+}
+
 async function post<T>(body: Record<string, unknown>): Promise<T & { ok: boolean; configured?: boolean; error?: string }> {
   const response = await fetch("/api/shipping", {
     method: "POST",

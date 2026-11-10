@@ -173,7 +173,18 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
           const credited = processed && (lastRefund.destination === "store_credit" || Boolean(lastRefund.processedAt && expected && now >= expected.date.getTime()));
           const bankRef = lastRefund.arn || lastRefund.rrn || lastRefund.utr;
           const rupee = `₹${amount.toLocaleString("en-IN")}`;
+          const startAt =
+            order.status === "Cancelled"
+              ? [...(order.history ?? [])].reverse().find((entry) => entry.status === "Cancelled")?.at ?? order.date
+              : order.date;
+          const creditDay = expected && !failed ? dayLabel(expected.date.toISOString(), country) : "";
           return {
+            stamps: [
+              shortStamp(startAt, country),
+              shortStamp(lastRefund.at, country),
+              failed ? "Failed" : shortStamp(lastRefund.processedAt, country),
+              credited ? shortStamp(expected?.date.toISOString(), country) : creditDay ? `by ${creditDay}` : "",
+            ],
             steps: [order.status === "Cancelled" ? "Cancelled" : "Ordered", "Refund initiated", "Processed", "Credited"],
             index: credited ? 3 : processed ? 2 : 1,
             failed,
@@ -182,7 +193,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
               : credited
                 ? `${rupee} refunded${lastRefund.destination === "store_credit" ? " to store credit" : " to your account"}`
                 : processed
-                  ? `Refund of ${rupee} processed · credit within 5–7 working days`
+                  ? `Refund of ${rupee} processed · ${refundExpectedCreditLabel(lastRefund).toLowerCase() || "credit within 5–7 working days"}`
                   : `Refund of ${rupee} initiated`,
             detail: [
               shortStamp(lastRefund.processedAt || lastRefund.at, country),
@@ -239,6 +250,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
             className={`${index === 0 ? "text-left" : index === shownSteps.length - 1 ? "text-right" : "text-center"} ${index === shownIdx ? shownTone : ""}`}
           >
             {label}
+            {refundView?.stamps[index] ? <span className="block font-normal text-text-muted">{refundView.stamps[index]}</span> : null}
           </span>
         ))}
       </span>
