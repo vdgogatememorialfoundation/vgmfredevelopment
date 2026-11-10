@@ -212,6 +212,7 @@ export default function CartPage() {
                 Price Details
               </h2>
               <dl className="mt-5 space-y-3 text-sm">
+                {totals.discount > 0 ? (<>
                 <div className="flex justify-between">
                   <dt className="text-text-muted">MRP</dt>
                   <dd className="font-medium text-text-primary">
@@ -224,6 +225,7 @@ export default function CartPage() {
                     − {formatPrice(totals.discount)}
                   </dd>
                 </div>
+                </>) : null}
                 <div className="flex justify-between">
                   <dt className="text-text-muted">Books</dt>
                   <dd className="font-medium text-text-primary">{count}</dd>

@@ -844,12 +844,15 @@ export default function CheckoutClient() {
                           </span>
                         ) : null}
                       </p>
-                      <p className="mt-1 text-xs text-emerald-700">
-                        Expected delivery{" "}
+                      {orderSettings.hideDeliveryDates ? null : (
+                      <p className="mt-1 text-xs font-semibold text-emerald-700">
                         {deliveryMode === "store_pickup"
-                          ? `ready for pickup ${quote?.pickupReadyBy || ""}`.trim()
-                          : selectedOffer?.deliverBy || quote?.deliverBy || "shown once you enter the delivery pincode"}
+                          ? `Ready for pickup ${quote?.pickupReadyBy || ""}`.trim()
+                          : canPreorder(book)
+                            ? `Tentative delivery by ${preorderDeliveryDate(book)}`
+                            : `Expected delivery ${selectedOffer?.deliverBy || quote?.deliverBy || "shown once you enter the delivery pincode"}`}
                       </p>
+                      )}
 
                       <p className="mt-1 text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</p>
                       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -897,7 +900,12 @@ export default function CheckoutClient() {
                       {formatAddressLine(address)}
                     </dd>
                   </div>
-                  {selectedOffer?.deliverBy || quote?.deliverBy ? (
+                  {orderSettings.hideDeliveryDates ? null : deliveryMode === "delivery" && preorderBook ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-text-muted">Tentative delivery by</dt>
+                      <dd className="text-right font-medium text-emerald-700">{preorderDeliveryDate(preorderBook)}</dd>
+                    </div>
+                  ) : selectedOffer?.deliverBy || quote?.deliverBy ? (
                     <div className="flex justify-between gap-4">
                       <dt className="text-text-muted">Expected delivery</dt>
                       <dd className="text-right font-medium text-emerald-700">
@@ -1130,6 +1138,7 @@ export default function CheckoutClient() {
                 <dt className="text-text-muted">Books</dt>
                 <dd className="font-medium text-text-primary">{itemCount}</dd>
               </div>
+              {totals.discount > 0 ? (<>
               <div className="flex justify-between">
                 <dt className="text-text-muted">MRP</dt>
                 <dd className="font-medium text-text-primary">
@@ -1142,6 +1151,7 @@ export default function CheckoutClient() {
                   − {formatPrice(totals.discount)}
                 </dd>
               </div>
+              </>) : null}
               <div className="flex justify-between">
                 <dt className="text-text-muted">Subtotal</dt>
                 <dd className="font-medium text-text-primary">
