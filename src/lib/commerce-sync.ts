@@ -27,12 +27,39 @@ export function rememberOrder(order: Order) {
   rememberOrders([order]);
 }
 
+export const ORDER_ALERTS_KEY = "vgmf_order_alerts";
+
+/** Browser notification when a customer's order moves to a new stage (site open in any tab). */
+function alertOrderChange(prev: Order, next: Order) {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if (window.localStorage.getItem(ORDER_ALERTS_KEY) === "off") return;
+  if (/^\/(admin|staff|support|picker|packer|scan|portal)/.test(window.location.pathname)) return;
+  const refundsBefore = (prev.refunds ?? []).map((refund) => `${refund.id}:${refund.status}`).join(",");
+  const refundsNow = (next.refunds ?? []).map((refund) => `${refund.id}:${refund.status}`).join(",");
+  let body = "";
+  if (prev.status !== next.status) body = `Order ${next.id} is now ${next.status}.`;
+  else if (refundsBefore !== refundsNow) body = `Refund update on order ${next.id}.`;
+  else if (prev.paymentStatus !== next.paymentStatus) body = `Payment for order ${next.id}: ${next.paymentStatus}.`;
+  else if (!prev.preorderPayment?.link && next.preorderPayment?.link) body = `Balance payment link ready for pre-order ${next.id}.`;
+  if (!body) return;
+  try {
+    const note = new Notification("Vaidya Gogate Memorial Foundation", { body, tag: `order-${next.id}`, icon: "/favicon.ico" });
+    note.onclick = () => {
+      window.focus();
+      window.location.href = `/account/orders/${encodeURIComponent(next.id)}`;
+    };
+  } catch {
+    /* some mobile browsers only allow notifications from a service worker */
+  }
+}
+
 function rememberOrders(remote: Order[]) {
   if (!remote.length) return;
   const byId = new Map(getOrders().map((order) => [order.id, order]));
   let changed = false;
   for (const order of remote) {
     const prev = byId.get(order.id);
+    if (prev) alertOrderChange(prev, order);
     if (!prev || orderActivityAt(order) >= orderActivityAt(prev)) {
       byId.set(order.id, prev ? { ...prev, ...order } : order);
       changed = true;

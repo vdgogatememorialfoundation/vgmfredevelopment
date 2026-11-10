@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
+import { notifyOrderStage } from "@/lib/server/order-stage-mail";
 import type { Order } from "@/types";
 
 function file() {
@@ -59,6 +60,7 @@ export function upsertShopOrder(order: Order) {
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
   orders.unshift(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken });
   writeAll(orders);
+  void notifyOrderStage(prev, orders[0]).catch(() => undefined);
   return orders[0];
 }
 
@@ -88,8 +90,10 @@ export function patchShopOrder(id: string, update: Partial<Order>) {
   const all = readAll();
   const index = all.findIndex((order) => order.id === id);
   if (index === -1) return;
-  all[index] = { ...all[index], ...update };
+  const prev = all[index];
+  all[index] = { ...prev, ...update };
   writeAll(all);
+  void notifyOrderStage(prev, all[index]).catch(() => undefined);
   return all[index];
 }
 

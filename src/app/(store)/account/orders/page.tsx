@@ -7,6 +7,7 @@ import SectionHeader from "@/components/account/SectionHeader";
 import EmptyState from "@/components/account/EmptyState";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingPreview from "@/components/store/OrderTrackingPreview";
+import OrderAlertsToggle from "@/components/store/OrderAlertsToggle";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount, purgeSampleOrders } from "@/lib/store";
@@ -37,6 +38,7 @@ export default function OrdersPage() {
         title="My Orders"
         description="Tap an order to open its page with live tracking, delivery details and, if an item arrived damaged, a replacement request."
       />
+      <OrderAlertsToggle />
 
       {mounted && !ready ? (
         <p className="text-sm text-text-muted">Loading your orders…</p>

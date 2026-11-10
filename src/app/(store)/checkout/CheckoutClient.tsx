@@ -580,7 +580,7 @@ export default function CheckoutClient() {
           ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}.`
           : pickupInstructions();
       sendEmail({
-        to: deliveryAddress.email || "",
+        to: "",
         phone: deliveryAddress.phone,
         name: deliveryAddress.fullName,
         params: [deliveryAddress.fullName, id, `₹${totals.total}`],

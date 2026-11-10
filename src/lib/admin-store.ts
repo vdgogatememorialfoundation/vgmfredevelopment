@@ -637,7 +637,7 @@ export function createAdminOrder(input: {
   if (commitStockForOrder(order)) order.stockCommitted = true;
   saveOrder(order);
   sendEmail({
-    to: order.deliveryAddress?.email || input.userEmail || "",
+    to: "",
     phone: order.deliveryAddress?.phone,
     name: order.deliveryAddress?.fullName,
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`],
@@ -1742,8 +1742,9 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
   const phone = order.deliveryAddress?.phone;
   if (!to && !phone) return;
   const name = order.deliveryAddress?.fullName ?? "Customer";
+  // The server emails each stage with full order and payment details (order-stage-mail).
   sendEmail({
-    to,
+    to: "",
     phone,
     name,
     params: [name, order.id, status],
