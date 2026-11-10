@@ -67,7 +67,7 @@ export default function BookCard({ book }: { book: Book }) {
           {book.author}
         </p>
         {book.language ? (
-          <p className="mt-1 font-extrabold leading-tight text-burgundy" style={{ fontSize: sizes?.cardLanguage || 15 }}>
+          <p className="mt-1 font-extrabold leading-tight text-burgundy" style={{ fontSize: sizes?.cardLanguage || 20 }}>
             {book.language}
           </p>
         ) : null}

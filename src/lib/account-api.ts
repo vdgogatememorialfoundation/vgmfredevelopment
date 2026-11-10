@@ -69,6 +69,10 @@ export async function remoteVerifyLogin(email: string, code: string) {
   return post("verify-login", { email, code }) as Promise<Record<string, unknown> & { account: RemoteAccount }>;
 }
 
+export async function remoteGoogle(input: Record<string, string>) {
+  return post("google", input);
+}
+
 export async function remoteForgot(identifier: string) {
   return post("forgot", { identifier });
 }

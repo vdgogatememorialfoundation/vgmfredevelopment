@@ -24,6 +24,7 @@ import {
   sessionFromToken,
   verifyMobileOtp,
 } from "@/lib/server/mobile-store";
+import { consumeGoogleTicket, readGoogleTicket } from "@/lib/server/google-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -189,6 +190,38 @@ export async function POST(request: NextRequest) {
       return json({ ok: false, error: mailed.error }, mailed.status);
     }
     return json({ ok: true, otpRequired: true, email: account.email, name: publicAccount(account).name, message: `A code was sent to ${account.email}.` });
+  }
+
+  if (action === "google") {
+    const ticket = String(body?.ticket ?? "");
+    const identity = readGoogleTicket(ticket);
+    if (!identity) return json({ ok: false, error: "Google sign-in expired. Please try Continue with Google again." }, 400);
+    const existing = await resolveAccount(identity.email);
+    if (existing) {
+      consumeGoogleTicket(ticket);
+      return json(sessionPayload(existing.email, publicAccount(existing).name, existing.accountId));
+    }
+    const phone = String(body?.phone ?? "").trim();
+    const firstName = String(body?.firstName ?? identity.firstName).trim();
+    const lastName = String(body?.lastName ?? identity.lastName).trim();
+    if (!phone) {
+      return json({ ok: true, needsDetails: true, email: identity.email, firstName: identity.firstName, lastName: identity.lastName });
+    }
+    const countryBlocked = countryRejection(String(body?.countryCode ?? ""), String(body?.country ?? ""));
+    if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
+    if (!firstName || !lastName || !isValidPhone(phone)) {
+      return json({ ok: false, error: "Enter your first name, last name and a valid international phone number, including the country code." }, 400);
+    }
+    if (findAccount(phone) || (await resolveAccount(phone))) {
+      return json({ ok: false, error: "This phone number is already used by another account. Sign in with that account instead." }, 409);
+    }
+    try {
+      const account = createAccount({ salutation: String(body?.salutation ?? "Dr."), firstName, lastName, email: identity.email, phone });
+      consumeGoogleTicket(ticket);
+      return json({ ...sessionPayload(account.email, publicAccount(account).name, account.accountId), message: `Your Account ID is ${account.accountId}.` });
+    } catch (error) {
+      return json({ ok: false, error: (error as Error).message }, 409);
+    }
   }
 
   if (action === "verify-login") {

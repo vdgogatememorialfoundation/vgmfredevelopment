@@ -81,7 +81,7 @@ function defaultSettings(): SiteSettings {
     liveChatEnabled: false,
     liveChatOnline: false,
     tickerSeconds: 36,
-    productText: { cardTitle: 14, cardMeta: 12, cardLanguage: 15, cardPrice: 14, pageLanguage: 18 },
+    productText: { cardTitle: 14, cardMeta: 12, cardLanguage: 20, cardPrice: 14, pageLanguage: 24 },
     processing: {
       daysToPack: 1,
       daysToPickup: 1,

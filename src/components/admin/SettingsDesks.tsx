@@ -338,16 +338,16 @@ export function GeneralSettingsDesk() {
             <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardMeta || 12} onChange={(event) => set({ productText: { ...settings.productText, cardMeta: Number(event.target.value) } })} />
           </label>
           <label className="block text-sm text-slate-700">
-            Product card · language · {settings.productText?.cardLanguage || 15}px
-            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardLanguage || 15} onChange={(event) => set({ productText: { ...settings.productText, cardLanguage: Number(event.target.value) } })} />
+            Product card · language · {settings.productText?.cardLanguage || 20}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardLanguage || 20} onChange={(event) => set({ productText: { ...settings.productText, cardLanguage: Number(event.target.value) } })} />
           </label>
           <label className="block text-sm text-slate-700">
             Product card · price · {settings.productText?.cardPrice || 14}px
             <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardPrice || 14} onChange={(event) => set({ productText: { ...settings.productText, cardPrice: Number(event.target.value) } })} />
           </label>
           <label className="block text-sm text-slate-700">
-            Product page · language · {settings.productText?.pageLanguage || 18}px
-            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.pageLanguage || 18} onChange={(event) => set({ productText: { ...settings.productText, pageLanguage: Number(event.target.value) } })} />
+            Product page · language · {settings.productText?.pageLanguage || 24}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.pageLanguage || 24} onChange={(event) => set({ productText: { ...settings.productText, pageLanguage: Number(event.target.value) } })} />
           </label>
         </div>
       </Card>

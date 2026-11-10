@@ -34,7 +34,7 @@ export default function ShopProduct({
   const catalogue = useLocal && live.length ? live : initialBooks;
   const book = catalogue.find((item) => item.slug === slug) ?? (useLocal ? null : initialBook);
   const purchaseReviews = useProductReviews(book?.id ?? "");
-  const languageSize = useSiteSettings()?.productText?.pageLanguage || 18;
+  const languageSize = useSiteSettings()?.productText?.pageLanguage || 24;
 
   if (!book) {
     return (

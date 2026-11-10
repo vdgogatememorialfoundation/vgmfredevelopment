@@ -5,6 +5,7 @@ import SiteLogo from "@/components/common/SiteLogo";
 import Link from "next/link";
 import SignupFlow from "@/components/account/SignupFlow";
 import SignInFlow from "@/components/account/SignInFlow";
+import GoogleSignIn from "@/components/account/GoogleSignIn";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { siteConfig } from "@/lib/constants";
 import { authClosedMessage, getAuthAccess } from "@/lib/auth-access";
@@ -81,6 +82,9 @@ export default function LoginView({
                 {t("login.signIn")}
               </Link>
             </div>
+            <Suspense fallback={null}>
+              <GoogleSignIn next={next} />
+            </Suspense>
             {effectiveSignIn ? (
               <SignInFlow />
             ) : (
