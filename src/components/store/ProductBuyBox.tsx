@@ -129,7 +129,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         <p className="text-2xl font-semibold text-text-primary">
           ₹{(book.price * quantity).toLocaleString("en-IN")}
         </p>
-        {book.originalPrice && book.originalPrice > book.price && (
+        {(book.originalPrice ?? 0) > book.price && (
           <>
             <p className="text-lg text-text-muted line-through">
               ₹{book.originalPrice.toLocaleString("en-IN")}
@@ -141,7 +141,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         )}
       </div>
 
-      {book.originalPrice && book.originalPrice > book.price && (
+      {(book.originalPrice ?? 0) > book.price && (
         <p className="mt-1.5 text-xs text-emerald-700">
           You save ₹
           {((book.originalPrice - book.price) * quantity).toLocaleString("en-IN")}
