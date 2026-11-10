@@ -5,6 +5,7 @@ import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "
 import type { MobileOrder } from "@/lib/server/mobile-store";
 import { ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
+import { sendMobileEmail } from "@/lib/server/mobile-mail";
 
 type FeedBook = { id?: string; sku?: string; stock?: number; stockStatus?: string; preorder?: boolean | { enabled?: boolean } };
 
@@ -105,6 +106,7 @@ export function markAppOrderPaid(id: string, payment: { paymentId: string; razor
   if (!order) return null;
   const at = new Date().toISOString();
   const plan = order.preorderPayment;
+  if (order.paymentStatus === "Pending") void mailDeskNewOrder(order, payment.paymentId);
   return patchShopOrder(id, {
     paymentStatus: plan && (plan.shippingDue || plan.balance > 0) ? "Partially Paid" : "Paid",
     preorderPayment: plan ? { ...plan, advancePaidAt: at } : undefined,
@@ -115,6 +117,36 @@ export function markAppOrderPaid(id: string, payment: { paymentId: string; razor
     razorpayOrderId: payment.razorpayOrderId,
     history: [...(order.history ?? []), { at, status: "Paid", note: "Paid through Razorpay in the Android app." }],
   });
+}
+
+const DESK_EMAILS = ["care@vaidyagogate.org", "vd.gogatememorialfoundation@gmail.com"];
+
+/** App orders reach the desk inbox with the full details, like site orders. */
+async function mailDeskNewOrder(order: Order, paymentId: string) {
+  const address = order.deliveryAddress;
+  const body = [
+    `New order ${order.id} from the Android app`,
+    "",
+    `Customer: ${address?.fullName || "—"}`,
+    `Phone: ${address?.phone || "—"}`,
+    `Email: ${address?.email || order.accountEmail || "—"}`,
+    order.deliveryMode === "store_pickup" ? "Delivery: Pickup from store" : `Deliver to: ${[address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ")}`,
+    "",
+    "Items:",
+    ...order.items.map((item) => `- ${item.title}${item.sku ? ` (SKU ${item.sku})` : ""} × ${item.quantity} @ ₹${item.price} = ₹${item.price * item.quantity}`),
+    "",
+    `Subtotal: ₹${order.subtotal}`,
+    `Shipping: ${order.shipping ? `₹${order.shipping}` : "Free / later"}`,
+    `Total: ₹${order.total}`,
+    `Payment: Razorpay · ${paymentId}`,
+  ].join("\n");
+  for (const to of DESK_EMAILS) {
+    try {
+      await sendMobileEmail(to, `New order ${order.id} · ₹${order.total} · ${address?.fullName || "Customer"}`, body);
+    } catch {
+      /* the order still stands if the alert mail fails */
+    }
+  }
 }
 
 export function appOrdersFor(email: string) {
