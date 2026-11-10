@@ -151,7 +151,8 @@ export default function VerticalPipeline({
         height += Math.max(0, nextCenter - bottom) * portion;
       }
       return {
-        left: start.left + start.width / 2 - frameBox.left - 1.5,
+        // Sit exactly on the grey rail (li::before at 14.5px, 3px wide), so the green never drifts off it.
+        left: items[0].getBoundingClientRect().left + 14.5 - frameBox.left,
         top,
         reached,
         height,

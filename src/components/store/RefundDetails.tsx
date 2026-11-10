@@ -1,3 +1,4 @@
+import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
 import type { Order, RefundRecord } from "@/types";
 
 const stamp = (value?: string) =>
@@ -24,36 +25,38 @@ function Fact({ label, value }: { label: string; value?: string }) {
   );
 }
 
-/** Initiated → With the bank → Credited, like order tracking; a step fills only when the gateway reports it. */
+/** Initiated → With the bank → Credited, drawn with the same dots-and-line pipeline as order tracking. */
 function RefundSteps({ refund }: { refund: RefundRecord }) {
-  if (refund.destination === "store_credit" || !refund.gatewayRefundId) return null;
   const failed = refund.status === "failed";
-  const done = refund.status === "processed";
-  const steps = [
-    { label: "Refund initiated", at: stamp(refund.at), reached: true },
-    { label: "With the bank", at: refund.rrn || refund.arn || refund.utr ? `Ref ${refund.rrn || refund.arn || refund.utr}` : "", reached: true },
-    { label: failed ? "Refund failed" : "Credited to your account", at: stamp(refund.processedAt), reached: done || failed },
+  const credit = refund.destination === "store_credit";
+  const manual = !credit && !refund.gatewayRefundId;
+  const done = credit || refund.status === "processed";
+  const bankRef = refund.rrn || refund.arn || refund.utr;
+  const stages: PipelineStageShape[] = [
+    { id: "initiated", label: "Refund initiated", caption: `₹${refund.amount.toLocaleString("en-IN")} · ${stamp(refund.at)}`, reached: true, partial: false, events: [] },
+    credit
+      ? { id: "refunded", label: "Added to store credit", caption: "Use it on your next order.", reached: true, partial: false, events: [] }
+      : manual
+        ? { id: "recorded", label: "Recorded by the Foundation", caption: "Paid back through the original payment method.", reached: true, partial: false, events: [] }
+        : { id: "bank", label: "With the bank", caption: bankRef ? `Bank reference ${bankRef}` : "The bank usually takes 5–7 working days.", reached: true, partial: false, events: [] },
+    ...(credit
+      ? []
+      : [
+          {
+            id: failed ? "failed" : "refunded",
+            label: failed ? "Refund failed" : "Credited to your account",
+            caption: stamp(refund.processedAt),
+            reached: done || failed || manual,
+            partial: false,
+            events: [],
+          },
+        ]),
   ];
-  const current = done || failed ? 2 : 1;
+  const current = stages.map((stage) => stage.reached).lastIndexOf(true);
   return (
-    <ol className="mt-3 flex items-start">
-      {steps.map((step, index) => (
-        <li key={step.label} className="relative flex flex-1 flex-col items-center text-center">
-          {index > 0 ? (
-            <span className="absolute right-1/2 top-[5px] h-0.5 w-full overflow-hidden rounded-full bg-slate-200">
-              <span className={`absolute inset-y-0 left-0 ${failed && index === 2 ? "bg-red-500" : "bg-emerald-600"} transition-[width] duration-700`} style={{ width: index <= current ? "100%" : "0%" }} />
-            </span>
-          ) : null}
-          <span
-            className={`relative z-10 h-3 w-3 rounded-full ${step.reached ? (failed && index === 2 ? "bg-red-500" : "bg-emerald-600") : "bg-slate-200"} ${
-              index === current && !done && !failed ? "vgmf-dot-pulse" : ""
-            }`}
-          />
-          <span className="mt-1.5 text-[11px] font-semibold text-slate-800">{step.label}</span>
-          {step.at ? <span className="break-all text-[10px] text-slate-500">{step.at}</span> : null}
-        </li>
-      ))}
-    </ol>
+    <div className="mt-2">
+      <VerticalPipeline stages={stages} currentIndex={current} failed={failed} />
+    </div>
   );
 }
 

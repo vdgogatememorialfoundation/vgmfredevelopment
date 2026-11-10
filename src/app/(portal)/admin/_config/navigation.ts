@@ -47,6 +47,8 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Packer app (admin)", href: "/admin/commerce/packer" },
       { label: "Ready to ship · create shipments", href: "/admin/commerce/ready-to-ship" },
       { label: "Staff scanner app", href: "/scanner" },
+      { label: "Picker app", href: "/picker" },
+      { label: "Packer app", href: "/packer" },
     ],
   },
 
