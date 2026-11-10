@@ -279,6 +279,8 @@ export interface Book {
   stockLabelNext?: number;
   pages?: number;
   language?: string;
+  /** Last saved in admin; newer copies win when two browsers publish the catalogue. */
+  updatedAt?: string;
   binding?: string;
   price: number;
   originalPrice?: number;
@@ -605,7 +607,7 @@ export interface Order {
   paidAt?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
-  paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
+  paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string };
   courierChoice?: CourierRate;
   /** A store-pickup order switched to courier delivery once the customer pays only the courier charge. */
   courierUpgrade?: {

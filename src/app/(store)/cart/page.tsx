@@ -119,12 +119,14 @@ export default function CartPage() {
                     {canPreorder(book) ? (
                       <>
                         <p className="mt-2 inline-block rounded-lg bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-900">Pre-order</p>
-                        <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-800">
-                          <Glyph name="truck" className="h-3.5 w-3.5" />
-                          Tentative delivery by {preorderDeliveryDate(book)}
-                        </p>
+                        {orderSettings.hideDeliveryDates ? null : (
+                          <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-800">
+                            <Glyph name="truck" className="h-3.5 w-3.5" />
+                            Tentative delivery by {preorderDeliveryDate(book)}
+                          </p>
+                        )}
                       </>
-                    ) : (
+                    ) : orderSettings.hideDeliveryDates ? null : (
                       <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
                         <Glyph name="truck" className="h-3.5 w-3.5" />
                         {deliveryCheck ? `Delivery by ${deliveryCheckText(deliveryCheck)} to ${deliveryCheck.pincode}` : "Delivery date for your pincode is shown at checkout"}

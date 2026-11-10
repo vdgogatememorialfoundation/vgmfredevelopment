@@ -4,7 +4,7 @@ import { addOrder, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, s
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
-import { appPickupAllowed, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
+import { appPickupAllowed, feedPreorderable, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ function catalogItems(raw: unknown) {
     const id = String(row.id ?? "").trim();
     const book = books.find((item) => String(item.id) === id || String(item.slug) === id);
     if (!book || book.active === false) return { error: "A publication in your bag is not in the published catalogue." as const };
-    if (book.stockStatus === "out_of_stock") return { error: `${book.title} is currently out of stock.` as const };
+    if (book.stockStatus === "out_of_stock" && !feedPreorderable(book as never)) return { error: `${book.title} is currently out of stock.` as const };
     items.push({
       id: String(book.id),
       title: String(book.title),

@@ -84,6 +84,8 @@ export interface IntegrationSettings {
     liveKeySecret: string;
     webhookSecret: string;
     linkExpiryHours: number;
+    /** Minutes a payment link stays valid (Razorpay needs at least 15). */
+    linkExpiryMinutes: number;
     posDeviceId: string;
     posDeviceMode: "wired" | "wireless";
   };
@@ -201,6 +203,8 @@ export interface OrderSettings {
   hideShipdayAtCheckout: boolean;
   /** Courier names (or parts of names) never offered to customers, e.g. "Ekart". */
   hiddenCouriers: string[];
+  /** Hides every delivery date on the site: product cards, product page, bag, checkout and tracking. */
+  hideDeliveryDates: boolean;
   /** Buffer added to aggregator rates shown on the site, in case a courier does not pick up and a costlier one is used. */
   courierMarkup: { percent: number; rupees: number; minimum: number };
   /** Hours the desk needs to pack an order before the courier can collect it. */
@@ -272,6 +276,7 @@ export const defaultIntegrations: IntegrationSettings = {
     liveKeySecret: "",
     webhookSecret: "",
     linkExpiryHours: 72,
+    linkExpiryMinutes: 30,
     posDeviceId: "",
     posDeviceMode: "wireless",
   },
@@ -380,6 +385,7 @@ export const defaultOrderSettings: OrderSettings = {
   hideTookanAtCheckout: false,
   hideShipdayAtCheckout: false,
   hiddenCouriers: [],
+  hideDeliveryDates: false,
   courierMarkup: { percent: 0, rupees: 0, minimum: 0 },
   processingHours: 4,
   dispatchCutoff: "17:00",
@@ -467,7 +473,8 @@ export function getShippingConnection(provider: ShippingProviderId): ShippingCon
 export function getIntegrations(): IntegrationSettings {
   const merged = merge(defaultIntegrations, readJSON<Partial<IntegrationSettings> | null>(INTEGRATIONS_KEY, null));
   const tookan = merged.shipping.tookan as typeof merged.shipping.tookan & { enabled?: boolean };
-  if ((tookan.enabled || tookan.apiKey) && !tookan.hyperlocal && !tookan.parcel) {
+  // Old saves had only `enabled`. Both modes switched off by the admin now stay off.
+  if (tookan.enabled === true && tookan.hyperlocal === undefined && tookan.parcel === undefined) {
     tookan.hyperlocal = true;
     tookan.parcel = true;
   }
@@ -564,6 +571,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     showCourierChoice: Boolean(merged.showCourierChoice),
     hideTookanAtCheckout: Boolean(merged.hideTookanAtCheckout),
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
+    hideDeliveryDates: Boolean(merged.hideDeliveryDates),
     hiddenCouriers: Array.isArray(merged.hiddenCouriers) ? merged.hiddenCouriers.map((name) => String(name).trim()).filter(Boolean).slice(0, 50) : [],
     courierMarkup: {
       percent: Math.max(0, Number(merged.courierMarkup?.percent) || 0),

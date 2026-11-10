@@ -10,6 +10,7 @@ import { pickupOtp, pickupOtpReady } from "@/lib/store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { customerCourierLabel } from "@/lib/courier-label";
 import { getIntegrations } from "@/lib/integrations";
+import { useOrderSettings } from "@/lib/use-cms";
 import { buildTrackingStages, cleanScanText, isHyperlocalProvider, shipmentScans, type CourierScan } from "@/lib/order-pipeline";
 import { pingLiveAgent } from "@/lib/shipping-client";
 import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
@@ -64,6 +65,7 @@ function Tile({ label, value }: { label: string; value: string }) {
 }
 
 export default function OrderTrackingTimeline({ order, phone = "", shipmentId = "" }: { order: Order; phone?: string; shipmentId?: string }) {
+  const hideDates = useOrderSettings().hideDeliveryDates;
   useEffect(() => {
     if (order.status !== "Delivered") return;
     const key = `vgmf_delivered_beep_${order.id}`;
@@ -314,7 +316,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   return (
     <div className="vgmf-trk">
       {tiles}
-      {order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
+      {!hideDates && order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
         <p className="vgmf-trk-note">
           <b>Expected delivery by</b> {expectedText ? deliveryDatePhrase(expectedText) : "— shown once the courier confirms the booking"}
         </p>

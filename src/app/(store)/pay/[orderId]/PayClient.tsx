@@ -52,7 +52,8 @@ function readSummary(orderId: string, encoded: string | null, courier: boolean, 
 
 export default function PayClient({ orderId }: { orderId: string }) {
   const params = useSearchParams();
-  const encoded = params.get("d");
+  const expiresAt = Number(params.get("x") || 0);
+  const encoded = expiresAt && Date.now() > expiresAt ? null : params.get("d");
   const courier = params.get("part") === "courier";
   const balance = params.get("part") === "balance";
   const settle = (input: { method: string; reference?: string; razorpayPaymentId?: string }) => {

@@ -82,9 +82,10 @@ export function razorpayVerify(keySecret: string, orderId: string, paymentId: st
 
 export async function razorpayLink(
   creds: { keyId: string; keySecret: string },
-  input: { amount: number; orderId: string; name: string; email?: string; phone?: string; description: string; callbackUrl?: string; expiryHours?: number }
+  input: { amount: number; orderId: string; name: string; email?: string; phone?: string; description: string; callbackUrl?: string; expiryHours?: number; expiryMinutes?: number }
 ) {
-  const expireBy = Math.floor(Date.now() / 1000) + Math.max(1, input.expiryHours ?? 72) * 3600;
+  const minutes = input.expiryMinutes ?? (input.expiryHours ?? 0.5) * 60;
+  const expireBy = Math.floor(Date.now() / 1000) + Math.max(16, Math.round(minutes)) * 60;
   const data = await call("https://api.razorpay.com/v1/payment_links", {
     method: "POST",
     headers: { authorization: razorpayAuth(creds) },
@@ -102,6 +103,15 @@ export async function razorpayLink(
     },
   });
   return { id: String(data.id), url: String(data.short_url), status: String(data.status) };
+}
+
+export async function razorpayLinkCancel(creds: { keyId: string; keySecret: string }, linkId: string) {
+  const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}/cancel`, {
+    method: "POST",
+    headers: { authorization: razorpayAuth(creds) },
+    json: {},
+  });
+  return { status: String(data.status) };
 }
 
 export async function razorpayLinkStatus(creds: { keyId: string; keySecret: string }, linkId: string) {

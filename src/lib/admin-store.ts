@@ -19,6 +19,7 @@ import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-id
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { matchesBarcode } from "@/lib/barcode";
+import QRCode from "qrcode";
 import { sameShipmentSlot } from "@/lib/shipment-slot";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
@@ -1224,11 +1225,12 @@ function addressBlock(address?: { fullName?: string; phone?: string; line1?: str
 
 function printHtml(title: string, html: string, page = "A4") {
   if (typeof window === "undefined") return;
-  const win = window.open("", "_blank");
+  // A real page of this site, so the browser's print header shows the site address instead of "about:blank".
+  const win = window.open("/print.html", "_blank");
   if (!win) return;
   const margin = page === "A4" || page === "A5" || page === "auto" ? "10mm" : "3mm";
   const pageRule = page === "auto" ? `@page { margin: ${margin}; }` : `@page { size: ${page}; margin: ${margin}; }`;
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
+  const doc = `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
   <style>
     ${pageRule}
     * { box-sizing: border-box; }
@@ -1287,17 +1289,20 @@ function printHtml(title: string, html: string, page = "A4") {
     .size-4x6 td, .size-4x6 th { padding: 3px 5px; font-size: 10px; }
     .size-4x6 .foot { margin-top: 6px; padding-top: 4px; font-size: 9px; line-height: 1.35; }
     .size-4x6 svg { max-width: 100%; height: 44px; }
-    .label-sheet, .label-sheet * { color: #000 !important; }
-    .label-sheet { border: 2px solid #fff; background: #fff; }
-    .label-sheet .label-band { background: #fff; border-bottom: 1.5px solid #000; }
-    .label-sheet .label-band span { opacity: 1; }
-    .label-sheet .label-logo { filter: grayscale(1) contrast(1.4); background: #fff; }
-    .label-sheet .route { border: 1px solid #fff; border-top: 1px solid #000; border-bottom: 1px solid #000; border-radius: 0; }
-    .label-sheet .box { border: 1px solid #fff; border-radius: 0; padding-left: 0; }
-    .label-sheet th { background: #fff; border-bottom: 1px solid #000; }
-    .label-sheet td { border-bottom: 1px solid #fff; }
-    .label-sheet .foot { border-top: 1px solid #000; }
-    .label-sheet .label { color: #000; font-weight: 700; }
+    .mono .label-sheet, .mono .label-sheet * { color: #000 !important; }
+    .mono .label-sheet { border: 2px solid #fff; background: #fff; }
+    .mono .label-sheet .label-band { background: #fff; border-bottom: 1.5px solid #000; }
+    .mono .label-sheet .label-band span { opacity: 1; }
+    .mono .label-sheet .label-logo { filter: grayscale(1) contrast(1.4); background: #fff; }
+    .mono .label-sheet .route { border: 1px solid #fff; border-top: 1px solid #000; border-bottom: 1px solid #000; border-radius: 0; }
+    .mono .label-sheet .box { border: 1px solid #fff; border-radius: 0; padding-left: 0; }
+    .mono .label-sheet th { background: #fff; border-bottom: 1px solid #000; }
+    .mono .label-sheet td { border-bottom: 1px solid #fff; }
+    .mono .label-sheet .foot { border-top: 1px solid #000; }
+    .mono .label-sheet .label { color: #000; font-weight: 700; }
+    .label-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .label-head > div { flex: 1; min-width: 0; }
+    .label-sheet svg.qr { width: 64px !important; height: 64px !important; flex: none; }
     .label-sheet .pay { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 0; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; }
     .label-sheet .pay b { font-size: 18px; letter-spacing: 0.08em; }
     .label-sheet .pay span { font-size: 13px; font-weight: 700; text-align: right; }
@@ -1333,8 +1338,61 @@ function printHtml(title: string, html: string, page = "A4") {
       });
       setTimeout(go, 3000);
     })();
-  </script></body></html>`);
-  win.document.close();
+  </script></body></html>`;
+  writeWhenReady(win, doc, title);
+}
+
+/** Waits for /print.html to load in the new window, then puts the printable page into it. */
+function writeWhenReady(win: Window, doc: string, title: string) {
+  const started = Date.now();
+  const write = () => {
+    let ready = false;
+    try {
+      ready = win.location.pathname === "/print.html" && win.document.readyState === "complete";
+    } catch {
+      ready = false;
+    }
+    if (!ready && Date.now() - started < 6000) {
+      window.setTimeout(write, 60);
+      return;
+    }
+    const parsed = new DOMParser().parseFromString(doc, "text/html");
+    win.document.title = title;
+    win.document.head.innerHTML = parsed.head.innerHTML;
+    win.document.body.innerHTML = parsed.body.innerHTML;
+    parsed.body.querySelectorAll("script").forEach((source) => {
+      const script = win.document.createElement("script");
+      script.textContent = source.textContent;
+      win.document.body.appendChild(script);
+    });
+  };
+  write();
+}
+
+export type LabelColour = "bw" | "colour";
+const LABEL_COLOUR_KEY = "vgmf_label_colour";
+
+export function getLabelColour(): LabelColour {
+  if (typeof window === "undefined") return "bw";
+  return window.localStorage.getItem(LABEL_COLOUR_KEY) === "colour" ? "colour" : "bw";
+}
+
+export function setLabelColour(value: LabelColour) {
+  if (typeof window !== "undefined") window.localStorage.setItem(LABEL_COLOUR_KEY, value);
+}
+
+function qrSvg(text: string, px = 68) {
+  try {
+    const qr = QRCode.create(text, { errorCorrectionLevel: "M" });
+    const size = qr.modules.size;
+    let path = "";
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) if (qr.modules.get(y, x)) path += `M${x + 2} ${y + 2}h1v1h-1z`;
+    }
+    return `<svg class="qr" xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${size + 4} ${size + 4}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+  } catch {
+    return "";
+  }
 }
 
 function labelPageMm(page: string): [number, number] | null {
@@ -1347,9 +1405,16 @@ function labelPageMm(page: string): [number, number] | null {
 export function printShippingLabel(
   shipment: ShipmentRecord,
   details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string },
-  size: LabelSize = getLabelSize()
+  size: LabelSize = getLabelSize(),
+  colour: LabelColour = getLabelColour()
 ) {
   const to = shipment.toAddress;
+  // Booked through an aggregator: the pickup address registered with it is the sender and return address.
+  const pickup = getIntegrations().shipping.pickup;
+  const viaAggregator = Boolean(shipment.provider && !["manual", "self"].includes(String(shipment.provider)) && pickup?.line1);
+  const fromName = viaAggregator ? pickup.contactName || pickup.nickname || siteConfig.name : siteConfig.name;
+  const fromAddress = viaAggregator ? [pickup.line1, pickup.line2, pickup.city, pickup.state, pickup.pincode].filter(Boolean).join(", ") : siteConfig.address;
+  const fromPhone = viaAggregator ? pickup.phone || siteConfig.phone : siteConfig.phone;
   const awb = details?.awb || shipment.awb;
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";
@@ -1358,7 +1423,7 @@ export function printShippingLabel(
   const cod = Boolean(order && order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid");
   const collect = cod && order ? Math.max(0, order.total - (order.storeCreditUsed ?? 0)) : 0;
   const payBlock = `<div class="pay"><b>${cod ? "COD" : "PREPAID"}</b><span>${cod ? `Collect ${esc(rupees(collect))} cash` : "Collect ₹0 · do not collect cash"}</span></div>`;
-  const html = `<div class="size-${size}"><div class="label-sheet">
+  const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet">
     <div class="label-band">
       <div class="label-brand">
         ${logoImg("label-logo")}
@@ -1367,10 +1432,12 @@ export function printShippingLabel(
       <span>Shipping label</span>
     </div>
     <div class="label-body">
+      <div class="label-head"><div>
       <p class="label">${esc(courier)}</p>
       <p class="awb">${esc(awb)}</p>
       ${barcodeSvg(awb, { height: 56, module: 1.6 })}
       <p class="meta">Order ${esc(shipment.orderId)} · ${esc(formatDate(shipment.generatedAt))}</p>
+      </div>${qrSvg(shipment.orderId)}</div>
       ${payBlock}
       ${
         routing || hub
@@ -1380,9 +1447,9 @@ export function printShippingLabel(
       <div class="grid">
         <div class="box">
           <p class="label">From</p>
-          <strong>${esc(siteConfig.name)}</strong><br/>
-          ${esc(siteConfig.address)}<br/>
-          ${esc(siteConfig.phone)}
+          <strong>${esc(fromName)}</strong><br/>
+          ${esc(fromAddress)}<br/>
+          ${esc(fromPhone)}
         </div>
         <div class="box to">
           <p class="label">Deliver to</p>
@@ -1394,7 +1461,7 @@ export function printShippingLabel(
       <table><tr><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
       ${shipment.items.map((item) => `<tr><td>${esc(item.sku)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`).join("")}
       </table>
-      <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
+      <p class="foot">If undelivered, return to the sender address above. Handle books with care. Do not bend.</p>
     </div>
   </div></div>`;
   const page = size === "printer" ? "auto" : size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";

@@ -44,6 +44,8 @@ import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/g
 import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
 import { customerCourierRates } from "@/lib/checkout-couriers";
 
+const CHECKOUT_MINUTES = 10;
+
 type CourierOption = CourierRate & { key: string; deliverBy: string; dayLabel?: string; express: boolean };
 
 /** The courier's own delivery date, shown like our estimates (e.g. 8 Nov 2026). */
@@ -89,6 +91,37 @@ export default function CheckoutClient() {
   const [courierId] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const processingRef = useRef(false);
+  useEffect(() => {
+    processingRef.current = processing;
+  }, [processing]);
+  useEffect(() => {
+    const key = "vgmf_checkout_deadline";
+    if (step === "success") {
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+    const fresh = () => window.sessionStorage.setItem(key, String(Date.now() + CHECKOUT_MINUTES * 60_000));
+    if (Number(window.sessionStorage.getItem(key) || 0) <= Date.now()) fresh();
+    const tick = () => {
+      const left = Math.round((Number(window.sessionStorage.getItem(key) || 0) - Date.now()) / 1000);
+      if (left <= 0 && !processingRef.current) {
+        fresh();
+        setStep("address");
+        setError(`Your ${CHECKOUT_MINUTES}-minute checkout time ran out, so the timer has restarted. Check your address and delivery, then continue.`);
+        setSecondsLeft(CHECKOUT_MINUTES * 60);
+        return;
+      }
+      setSecondsLeft(Math.max(0, left));
+    };
+    const first = window.setTimeout(tick, 0);
+    const timer = window.setInterval(tick, 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
+  }, [step]);
   const [holdingNote, setHoldingNote] = useState("");
   const [razorpayHold, setRazorpayHold] = useState("");
   const [orderId, setOrderId] = useState("");
@@ -525,7 +558,7 @@ export default function CheckoutClient() {
     if (deliveryAddress.email || deliveryAddress.phone) {
       const pickupNote =
         deliveryMode === "delivery"
-          ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.`
+          ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}.`
           : pickupInstructions();
       sendEmail({
         to: deliveryAddress.email || "",
@@ -581,6 +614,14 @@ export default function CheckoutClient() {
         </ol>
 
         {/* 1. Address */}
+        {secondsLeft !== null && step !== "success" ? (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900" role="timer">
+            <span>Complete your order within {CHECKOUT_MINUTES} minutes</span>
+            <b className="text-base tabular-nums">
+              {String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:{String(secondsLeft % 60).padStart(2, "0")}
+            </b>
+          </div>
+        ) : null}
         {step === "address" && (
           <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
             <h2 className="heading-3 mb-5">Delivery Details</h2>
@@ -649,7 +690,7 @@ export default function CheckoutClient() {
                         </span>
                         <span>
                           <span className="block text-sm font-semibold text-ink">{item.place === "office" ? "Office" : "Home"}{item.isDefault ? " · default" : ""}</span>
-                          <span className="block text-xs text-text-muted">{item.line1}, {formatAddressLine(item)}</span>
+                          <span className="block text-xs text-text-muted">{formatAddressLine(item)}</span>
                         </span>
                       </button>
                     ))}
@@ -674,7 +715,7 @@ export default function CheckoutClient() {
                       <Glyph name="pin" className="h-4 w-4 text-burgundy" />
                       {address.fullName} · {address.phone}
                     </p>
-                    <p className="mt-1 text-text-muted">{address.line1}{address.landmark ? `, ${address.landmark}` : ""}, {formatAddressLine(address)}</p>
+                    <p className="mt-1 text-text-muted">{formatAddressLine(address)}</p>
                   </div>
                 )}
                 {user && (
@@ -690,12 +731,12 @@ export default function CheckoutClient() {
                   </p>
                 ) : null}
 
-                {domestic && preorderBook && (
+                {domestic && preorderBook && !orderSettings.hideDeliveryDates && (
                   <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <b>Tentative delivery by</b> {preorderDeliveryDate(preorderBook)}
                   </p>
                 )}
-                {domestic && !hasPreorder && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
+                {domestic && !hasPreorder && !orderSettings.hideDeliveryDates && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
                   <p className="mt-5 rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary">
                     <b>Expected delivery by</b> {selectedOffer ? selectedOffer.deliverBy : <span className="text-text-muted">checking…</span>}
                   </p>
@@ -850,8 +891,6 @@ export default function CheckoutClient() {
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-muted">Address</dt>
                     <dd className="text-right font-medium text-text-primary">
-                      {address.line1}
-                      {address.landmark ? `, ${address.landmark}` : ""},{" "}
                       {formatAddressLine(address)}
                     </dd>
                   </div>
@@ -859,7 +898,7 @@ export default function CheckoutClient() {
                     <div className="flex justify-between gap-4">
                       <dt className="text-text-muted">Expected delivery</dt>
                       <dd className="text-right font-medium text-emerald-700">
-                        {`${selectedOffer?.deliverBy ?? quote?.deliverBy}${selectedOffer?.name || quote?.courier ? ` via ${selectedOffer?.name ?? quote?.courier}` : ""}`}
+                        {selectedOffer?.deliverBy ?? quote?.deliverBy}
                       </dd>
                     </div>
                   ) : null}

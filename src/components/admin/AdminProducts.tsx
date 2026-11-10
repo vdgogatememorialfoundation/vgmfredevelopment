@@ -40,6 +40,8 @@ import {
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
 import type { CaptionedImage } from "@/types";
 
+const BOOK_LANGUAGES = ["English", "Marathi", "Hindi", "Sanskrit", "Gujarati", "Kannada", "Tamil", "Telugu", "Malayalam", "Bengali", "English & Marathi", "English & Hindi", "Sanskrit & Marathi", "Sanskrit & Hindi", "Multilingual"];
+
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `item-${Date.now()}`;
 }
@@ -421,7 +423,13 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             <Field label="Published year"><TextInput type="number" value={form.publishedYear ?? ""} onChange={(event) => set({ publishedYear: Number(event.target.value) || undefined })} /></Field>
             <Field label="Pages"><TextInput type="number" value={form.pages || ""} onChange={(event) => set({ pages: Number(event.target.value) || undefined })} /></Field>
             <Field label="Binding"><TextInput value={form.binding ?? ""} onChange={(event) => set({ binding: event.target.value })} /></Field>
-            <Field label="Language"><TextInput value={form.language ?? ""} onChange={(event) => set({ language: event.target.value })} /></Field>
+            <Field label="Book language">
+              <SelectInput value={form.language || "English"} onChange={(event) => set({ language: event.target.value })}>
+                {Array.from(new Set([...BOOK_LANGUAGES, form.language || "English"])).map((language) => (
+                  <option key={language} value={language}>{language}</option>
+                ))}
+              </SelectInput>
+            </Field>
             <Field label="Weight (kg)"><TextInput type="number" step="0.1" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
           </div>
           <BookSpecFields form={form} set={set} />

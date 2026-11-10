@@ -101,22 +101,26 @@ export default function VerticalPipeline({
     let cancelled = false;
     let growTimer = 0;
     let creepTimer = 0;
-    let litTimers: number[] = [];
+    let litFrame = 0;
+    // Each dot turns green on the very frame the moving line reaches it.
     const lightAlong = (seconds: number) => {
-      litTimers.forEach((id) => window.clearTimeout(id));
-      litTimers = [];
-      const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
-      const frameTop = frame.getBoundingClientRect().top;
-      const centers = items.slice(0, nodeCurrentIdx + 1).map((item) => {
-        const box = item.querySelector(".dot")?.getBoundingClientRect();
-        return box ? box.top + box.height / 2 - frameTop : 0;
-      });
-      const start = centers[0] ?? 0;
-      const span = Math.max(1, (centers[centers.length - 1] ?? start) - start);
-      centers.forEach((center, index) => {
-        const delay = seconds <= 0 ? 0 : ((center - start) / span) * seconds * 1000;
-        litTimers.push(window.setTimeout(() => !cancelled && setLitIdx((was) => Math.max(was, index)), delay));
-      });
+      window.cancelAnimationFrame(litFrame);
+      const items = [...list.querySelectorAll<HTMLElement>(":scope > li")].slice(0, nodeCurrentIdx + 1);
+      const fill = frame.querySelector<HTMLElement>(".vgmf-ship-fill");
+      const until = performance.now() + seconds * 1000 + 300;
+      const tick = () => {
+        if (cancelled) return;
+        const end = fill ? fill.getBoundingClientRect().bottom : 0;
+        let reached = -1;
+        items.forEach((item, index) => {
+          const box = item.querySelector(".dot")?.getBoundingClientRect();
+          if (box && end >= box.top + 1) reached = index;
+        });
+        if (seconds <= 0 || performance.now() >= until) reached = nodeCurrentIdx;
+        if (reached >= 0) setLitIdx((was) => Math.max(was, reached));
+        if (reached < nodeCurrentIdx) litFrame = window.requestAnimationFrame(tick);
+      };
+      litFrame = window.requestAnimationFrame(tick);
     };
     const read = () => {
       const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
@@ -217,7 +221,7 @@ export default function VerticalPipeline({
       window.clearTimeout(timer);
       window.clearTimeout(growTimer);
       window.clearTimeout(creepTimer);
-      litTimers.forEach((id) => window.clearTimeout(id));
+      window.cancelAnimationFrame(litFrame);
       observer.disconnect();
       window.removeEventListener("resize", follow);
     };

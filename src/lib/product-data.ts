@@ -146,6 +146,7 @@ export function saveProduct(book: Book) {
     ...book,
     barcode: book.barcode?.trim() || generateBarcode(),
     createdAt: book.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
   const list = getCustomBooks().filter((item) => item.id !== book.id);
   list.unshift(record);

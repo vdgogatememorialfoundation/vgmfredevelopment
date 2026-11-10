@@ -483,7 +483,7 @@ export function PaymentSettingsDesk() {
       </div>
       <Card title="Payment links & webhooks">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Text label="Payment link expiry (hours)" type="number" value={value.linkExpiryHours} onChange={(hours) => set({ linkExpiryHours: Number(hours) || 72 })} />
+          <Text label="Payment link valid for (minutes, 15 or more)" type="number" value={value.linkExpiryMinutes ?? 30} onChange={(minutes) => set({ linkExpiryMinutes: Math.max(15, Number(minutes) || 30) })} />
           <Secret label="Webhook secret" value={value.webhookSecret} onChange={(webhookSecret) => set({ webhookSecret })} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1513,6 +1513,7 @@ export function OrderSettingsDesk() {
           <Text label="Minimum courier charge shown (₹)" type="number" value={value.courierMarkup.minimum} onChange={(minimum) => set({ courierMarkup: { ...value.courierMarkup, minimum: Math.max(0, Number(minimum) || 0) } })} />
           <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
+          <Check label="Hide delivery dates on the site (product cards, product page, bag, checkout and tracking)" checked={value.hideDeliveryDates} onChange={(hideDeliveryDates) => set({ hideDeliveryDates })} />
           <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
           <Text label="Packing / processing time (hours)" type="number" value={value.processingHours} onChange={(hours) => set({ processingHours: Math.max(0, Number(hours) || 0) })} />
           <Text label="Dispatch cut-off (India time, HH:MM)" value={value.dispatchCutoff} onChange={(dispatchCutoff) => set({ dispatchCutoff })} />

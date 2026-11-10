@@ -19,6 +19,19 @@ export async function GET() {
   );
 }
 
+type FeedBooks = NonNullable<MobileFeed["books"]>;
+
+function mergeBooks(current: FeedBooks, incoming: FeedBooks, basedOn: string): FeedBooks {
+  const mine = new Map(incoming.map((book) => [book.id, book]));
+  const kept = current.map((book) => {
+    const edit = mine.get(book.id);
+    return edit && (edit.updatedAt ?? "") > (book.updatedAt ?? "") ? edit : book;
+  });
+  const known = new Set(current.map((book) => book.id));
+  const added = incoming.filter((book) => !known.has(book.id) && (book.updatedAt ?? "") > basedOn);
+  return [...added, ...kept];
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as PublishBody | null;
   if (body?.partial && body.sections && typeof body.sections === "object") {
@@ -32,7 +45,10 @@ export async function POST(request: NextRequest) {
     for (const [key, value] of Object.entries(incoming)) {
       // A section changed on another device after this browser loaded the live site is kept, not overwritten.
       const changedAt = current.sectionAt?.[key] || current.publishedAt || "";
-      if (key !== "site" && (!basedOn || (changedAt && changedAt > basedOn))) rejected.push(key);
+      const stale = key !== "site" && (!basedOn || Boolean(changedAt && changedAt > basedOn));
+      // Products merge one by one, so a stock edit is never lost to (or rolled back by) another tab.
+      if (stale && key === "books" && Array.isArray(value) && Array.isArray(current.books)) sections[key] = mergeBooks(current.books, value as FeedBooks, basedOn);
+      else if (stale) rejected.push(key);
       else sections[key] = value;
     }
     if (body.email) saveMobileEmailCreds(body.email);

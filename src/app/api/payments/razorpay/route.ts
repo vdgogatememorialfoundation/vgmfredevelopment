@@ -6,6 +6,7 @@ import {
   razorpayDeviceActivityStatus,
   razorpayLink,
   razorpayLinkStatus,
+  razorpayLinkCancel,
   razorpayOrder,
   razorpayOrderPayments,
   razorpayRefund,
@@ -59,9 +60,11 @@ export async function POST(request: NextRequest) {
             phone: body.phone ? String(body.phone) : undefined,
             description: String(body.description ?? `Order ${body.orderId}`),
             callbackUrl: body.callbackUrl ? String(body.callbackUrl) : undefined,
-            expiryHours: Number(body.expiryHours ?? 72),
+            expiryMinutes: Number(body.expiryMinutes ?? 30),
           })),
         });
+      case "link-cancel":
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkCancel(creds, String(body.linkId))) });
       case "link-status":
         return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkStatus(creds, String(body.linkId))) });
       case "refund":

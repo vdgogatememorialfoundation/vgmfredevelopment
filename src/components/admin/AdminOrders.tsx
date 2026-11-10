@@ -48,7 +48,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink } from "@/lib/payments-client";
+import { createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -264,6 +264,7 @@ export function OrdersDashboard() {
             if (!window.confirm(`Delete ${selectedIds.length} order(s)? This cannot be undone.`)) return;
             bulk("Deleted", async (id) => {
               await dropOrderShipments(id);
+              await cancelOrderPaymentLinks(id);
               deleteOrder(id);
             });
           }}>Delete</Button>
@@ -693,6 +694,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [pickupNick, setPickupNick] = useState("");
   const extraStatuses = getOrderSettings().customStatuses.filter((row) => row.label.trim());
   const [method, setMethod] = useState("UPI");
+  const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
+  const [linkAmount, setLinkAmount] = useState("");
   const [reference, setReference] = useState("");
   const refundCap = maxRefundable(order);
   const [refundAmount, setRefundAmount] = useState(String(refundCap));
@@ -979,7 +982,19 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           {!paid && order.status !== "Cancelled" && (
             <div className="mt-3 space-y-3">
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" disabled={busy === "link"} onClick={() => run("link", async () => { const link = await createPaymentLink(order.id); return `Payment link sent: ${link.url}`; })}>
+                <SelectInput aria-label="Link amount" value={linkMode} onChange={(event) => setLinkMode(event.target.value as typeof linkMode)}>
+                  <option value="remaining">Remaining {rupees(remainingDue(order))}</option>
+                  <option value="full">Full amount {rupees(order.total)}</option>
+                  <option value="custom">Custom amount</option>
+                </SelectInput>
+                {linkMode === "custom" && (
+                  <TextInput className="w-28" type="number" min={1} placeholder="₹ amount" value={linkAmount} onChange={(event) => setLinkAmount(event.target.value)} />
+                )}
+                <Button variant="outline" disabled={busy === "link"} onClick={() => run("link", async () => {
+                  const amount = linkMode === "full" ? order.total : linkMode === "custom" ? Number(linkAmount) : remainingDue(order);
+                  const link = await createPaymentLink(order.id, amount);
+                  return `Payment link for ${rupees(link.amount ?? amount)} sent, valid until ${formatDateTime(link.expiresAt ?? "")}: ${link.url}`;
+                })}>
                   {order.paymentLink ? "Resend payment link" : "Send payment link"}
                 </Button>
                 {order.paymentLink && (
@@ -1465,6 +1480,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
           run("delete", async () => {
             await dropOrderShipments(order.id);
+            await cancelOrderPaymentLinks(order.id);
             deleteOrder(order.id);
             return "Order deleted. The shipment was removed from the desk.";
           });

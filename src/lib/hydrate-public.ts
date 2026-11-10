@@ -10,7 +10,7 @@ import { books as seededBooks } from "@/data/books";
 import { getOrderSettings, publicOrderSettings, saveOrderSettings } from "@/lib/integrations";
 import { appliedFeedAt, emptyFeedFallback, hasFeedBaseline, recordFeedBaseline, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
-import type { Flyer } from "@/types";
+import type { Book, Flyer } from "@/types";
 
 const DIRTY_KEY = "vgmf_live_dirty";
 
@@ -199,7 +199,22 @@ function installPublishedCatalogue(feed: MobileFeed) {
   const books = feed.books ?? [];
   if (books.length && !authoredProducts) {
     const present = new Set(books.map((book) => book.id));
-    tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify(books)));
+    const feedAt = feed.publishedAt || "";
+    let local: Book[] = [];
+    try {
+      local = JSON.parse(window.localStorage.getItem("vgmf_custom_books") || "[]") as Book[];
+    } catch {
+      local = [];
+    }
+    const localById = new Map(local.map((book) => [book.id, book]));
+    // A product saved here after the live copy (stock, price…) is kept until this browser publishes it.
+    const newer = (book?: Book) => Boolean(book?.updatedAt && book.updatedAt > feedAt);
+    const merged = books.map((book) => {
+      const mine = localById.get(book.id);
+      return mine && newer(mine) && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
+    });
+    const unpublished = local.filter((book) => !present.has(book.id) && newer(book));
+    tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify([...unpublished, ...merged])));
     tryWrite(() =>
       window.localStorage.setItem(
         "vgmf_deleted_books",

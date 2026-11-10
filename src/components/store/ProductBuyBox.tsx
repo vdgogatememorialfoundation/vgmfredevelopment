@@ -165,6 +165,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
       </p>
 
       <div className="mt-4 rounded-xl border border-gold/40 bg-warm-cream p-4 text-sm">
+        {orderSettings.hideDeliveryDates ? null : (
         <div className="flex items-center gap-2 font-medium text-text-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 17h14V7H5z" />
@@ -190,6 +191,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
                   : "Check your pincode"}
           </span>
         </div>
+        )}
 
         {saved.length > 0 && (
           <select
@@ -240,12 +242,12 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </button>
         </div>
 
-        {preorder && (
+        {preorder && !orderSettings.hideDeliveryDates && (
           <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
             Tentative delivery by {preorderDeliveryDate(book)}
           </p>
         )}
-        {!preorder && checked && estimate?.serviceable && (
+        {!preorder && !orderSettings.hideDeliveryDates && checked && estimate?.serviceable && (
           <div className="mt-3 rounded-lg bg-white p-3 text-xs">
             <p className="font-semibold text-text-primary">
               Deliverable to {estimate.pincode}

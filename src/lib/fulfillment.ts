@@ -1,5 +1,5 @@
 import { books } from "@/data/books";
-import { getIntegrations, hasShippingCredentials, isStoreWorkingDay, shippingProviderId } from "@/lib/integrations";
+import { getIntegrations, getOrderSettings, hasShippingCredentials, isStoreWorkingDay, shippingProviderId } from "@/lib/integrations";
 import type { Book, ProcessingTimeline, ProductOverride, SiteSettings } from "@/types";
 import { formatDate } from "@/lib/utils";
 
@@ -251,6 +251,9 @@ export function carrierIsBookable(carrier: CarrierAccount) {
   const provider = shippingProviderId(carrier.id);
   if (!provider || !hasShippingCredentials(provider)) return false;
   const shipping = getIntegrations().shipping;
+  const show = getOrderSettings();
+  if ((carrier.id === "tookan" || carrier.id === "tookan-parcel") && show.hideTookanAtCheckout) return false;
+  if (carrier.id === "shipday" && show.hideShipdayAtCheckout) return false;
   if (carrier.id === "tookan") return Boolean(shipping.tookan.hyperlocal);
   if (carrier.id === "tookan-parcel") return Boolean(shipping.tookan.parcel);
   if (carrier.id === "shipday") return shipping.shipday.enabled !== false;

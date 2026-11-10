@@ -202,42 +202,71 @@ export function decodeSummary(value: string) {
   }
 }
 
-/** Razorpay Payment Link in test/live mode, otherwise a /pay link on this site. */
-export async function createPaymentLink(orderId: string) {
+const linkMinutes = () => Math.max(15, Number(getIntegrations().razorpay.linkExpiryMinutes) || 30);
+const linkExpiry = () => new Date(Date.now() + linkMinutes() * 60_000).toISOString();
+
+/** Amount still to collect on an order: the total less any advance already paid. */
+export function remainingDue(order: Order) {
+  const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
+  return Math.max(0, Math.round((order.total - advance) * 100) / 100);
+}
+
+/** Cancels every open Razorpay link on an order (used when the order is deleted). */
+export async function cancelOrderPaymentLinks(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  const links = [order.paymentLink, order.courierUpgrade?.link, order.preorderPayment?.link];
+  for (const link of links) {
+    if (link?.provider !== "razorpay" || !link.id) continue;
+    try {
+      await api({ action: "link-cancel", linkId: link.id });
+    } catch {
+      /* already paid or expired */
+    }
+  }
+}
+
+/** Razorpay Payment Link in test/live mode, otherwise a /pay link on this site. `amount` defaults to the order total. */
+export async function createPaymentLink(orderId: string, amountOverride?: number) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   const settings = getIntegrations();
+  const amount = Math.round((amountOverride && amountOverride > 0 ? amountOverride : order.total) * 100) / 100;
+  if (!(amount > 0)) throw new Error("Enter an amount above ₹0.");
+  const expiresAt = linkExpiry();
   let link: NonNullable<Order["paymentLink"]>;
   if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
     link = {
-      url: `${window.location.origin}/pay/${order.id}?d=${encodeSummary(order)}`,
+      url: `${window.location.origin}/pay/${order.id}?d=${amount === order.total ? encodeSummary(order) : encodeSummary(order, amount, ["Payment"])}&x=${Date.parse(expiresAt)}`,
       provider: "demo",
       createdAt: new Date().toISOString(),
+      amount,
+      expiresAt,
     };
   } else {
     const result = await api<{ id: string; url: string }>({
       action: "link",
-      amount: order.total,
+      amount,
       orderId: order.id,
       name: order.deliveryAddress?.fullName ?? "Customer",
       email: order.deliveryAddress?.email,
       phone: order.deliveryAddress?.phone,
       description: `VGMF order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?done=1`,
-      expiryHours: settings.razorpay.linkExpiryHours,
+      expiryMinutes: linkMinutes(),
     });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
-    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), amount, expiresAt };
   }
   patchOrder(order.id, { paymentLink: link, paymentStatus: order.paymentStatus === "Paid" ? "Paid" : "Pending" }, "Payment link created");
   sendEmail({
     to: order.deliveryAddress?.email ?? "",
     phone: order.deliveryAddress?.phone,
     name: order.deliveryAddress?.fullName,
-    params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`, link.url],
+    params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${amount}`, link.url],
     subject: `Pay for your VGMF order ${order.id}`,
     template: "payment-link",
-    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${order.total.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${amount.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid for ${linkMinutes()} minutes.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
 }
@@ -266,7 +295,7 @@ export async function createCourierPaymentLink(orderId: string, rate: CourierRat
       phone: address.phone,
       description: `Courier charge for VGMF order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?part=courier&done=1`,
-      expiryHours: settings.razorpay.linkExpiryHours,
+      expiryMinutes: linkMinutes(),
     });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
     link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
@@ -332,7 +361,7 @@ export async function createBalancePaymentLink(orderId: string) {
       phone: address?.phone,
       description: `Balance for VGMF pre-order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?part=balance&done=1`,
-      expiryHours: settings.razorpay.linkExpiryHours,
+      expiryMinutes: linkMinutes(),
     });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
     link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
