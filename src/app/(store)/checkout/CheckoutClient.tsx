@@ -837,7 +837,7 @@ export default function CheckoutClient() {
                         <span className="text-base font-bold text-text-primary">
                           {formatPrice(book.price * item.quantity)}
                         </span>
-                        {(book.originalPrice ?? 0) > book.price ? (
+                        {book.originalPrice != null && book.originalPrice > book.price ? (
                           <span className="ml-2 text-xs text-text-muted">
                             MRP <span className="line-through">{formatPrice(book.originalPrice * item.quantity)}</span>{" "}
                             <b className="text-emerald-700">{Math.round((1 - book.price / book.originalPrice) * 100)}% off</b>
