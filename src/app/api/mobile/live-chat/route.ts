@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
       name: String(body?.customerName ?? thread.name),
       email: customerEmail,
       phone: String(body?.customerPhone ?? thread.phone ?? ""),
-      subject: String(body?.subject ?? `Chat ${thread.id}`),
-      body: visitorTranscript(thread),
+      subject: String(body?.subject || `Chat ${thread.id}`),
+      body: body?.description ? `${String(body.description)}\n\nChat transcript:\n${visitorTranscript(thread)}` : visitorTranscript(thread),
     });
     markThreadTicket(threadId, ticket.id);
     postLiveMessage({

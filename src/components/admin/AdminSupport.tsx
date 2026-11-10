@@ -18,7 +18,11 @@ import {
   triggerOutOfStockEmails,
   updateTicketStatus,
   saveFaq,
+  maxRefundable,
 } from "@/lib/admin-store";
+import { getOrdersForAccount } from "@/lib/store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
+import { refundThroughGateway } from "@/lib/payments-client";
 import { useAuth } from "@/components/auth/AuthContext";
 import {
   closeChat,
@@ -64,6 +68,7 @@ export function SupportSection() {
   const [messages, setMessages] = useState(() => getSupportMessages());
   const [tickets, setTickets] = useState(() => ticketsVisibleTo(user));
   const [createForm, setCreateForm] = useState({ name: "", email: "", phone: "", subject: "", body: "", assignedTo: "" });
+  const [createError, setCreateError] = useState("");
   const [faqs, setFaqs] = useState(() => getFaqs());
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [reply, setReply] = useState("");
@@ -164,11 +169,16 @@ export function SupportSection() {
             <TextInput value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} placeholder="Name" />
             <TextInput value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="Email" />
             <TextInput value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} placeholder="Phone" />
-            <TextInput value={createForm.subject} onChange={(e) => setCreateForm({ ...createForm, subject: e.target.value })} placeholder="Subject" />
-            <TextArea className="sm:col-span-2" rows={2} value={createForm.body} onChange={(e) => setCreateForm({ ...createForm, body: e.target.value })} placeholder="Details" />
+            <TextInput value={createForm.subject} onChange={(e) => setCreateForm({ ...createForm, subject: e.target.value })} placeholder="Subject *" />
+            <TextArea className="sm:col-span-2" rows={2} value={createForm.body} onChange={(e) => setCreateForm({ ...createForm, body: e.target.value })} placeholder="Description (what the team needs to do) *" />
+            {createError ? <p className="text-xs font-semibold text-red-700 sm:col-span-2">{createError}</p> : null}
             <Button
               onClick={() => {
-                if (!createForm.name.trim() || !createForm.email.trim() || !createForm.subject.trim() || !createForm.body.trim()) return;
+                if (!createForm.name.trim() || !createForm.email.trim() || !createForm.subject.trim() || !createForm.body.trim()) {
+                  setCreateError("Enter the name, email, a subject and a description so the right team can act on it.");
+                  return;
+                }
+                setCreateError("");
                 addTicket({
                   ...createForm,
                   portal: user?.role === "admin" ? "admin" : "staff",
@@ -206,6 +216,64 @@ export function SupportSection() {
   );
 }
 
+/** The customer's orders with live status, payment and a refund action, beside the chat or ticket. */
+function CustomerOrders({ email, phone }: { email?: string; phone?: string }) {
+  useCommerceMirror();
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const orders = email || phone ? getOrdersForAccount({ email, phone }) : [];
+  if (!orders.length) return <p className="mt-3 rounded-lg bg-warm-cream p-2.5 text-xs text-text-muted">No orders found for this customer.</p>;
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Customer orders ({orders.length})</p>
+      <ul className="mt-2 space-y-2">
+        {orders.slice(0, 10).map((order) => {
+          const cap = maxRefundable(order);
+          return (
+            <li key={order.id} className="rounded-lg border border-border p-2.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Link href={`/admin/orders?order=${encodeURIComponent(order.id)}`} className="font-mono font-semibold text-burgundy underline">{order.id}</Link>
+                <span className="font-semibold text-text-primary">{order.status} · {order.paymentStatus} · ₹{order.total}</span>
+              </div>
+              <p className="mt-1 text-text-muted">
+                {formatDateTime(order.date)} · {order.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")}
+                {order.trackingId ? ` · AWB ${order.trackingId}${order.courierName ? ` (${order.courierName})` : ""}` : ""}
+              </p>
+              {cap > 0 ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <TextInput type="number" min={0} className="w-28" placeholder={`Up to ₹${cap}`} value={amounts[order.id] ?? ""} onChange={(event) => setAmounts({ ...amounts, [order.id]: event.target.value })} />
+                  <Button
+                    variant="outline"
+                    disabled={busy === order.id}
+                    onClick={async () => {
+                      const value = Number(amounts[order.id] || cap);
+                      if (!window.confirm(`Refund ₹${value} on order ${order.id}?`)) return;
+                      setBusy(order.id);
+                      setNote("");
+                      try {
+                        await refundThroughGateway(order.id, value);
+                        setNote(`Refund of ₹${value} started on ${order.id}.`);
+                      } catch (problem) {
+                        setNote(problem instanceof Error ? problem.message : "Refund failed.");
+                      } finally {
+                        setBusy("");
+                      }
+                    }}
+                  >
+                    {busy === order.id ? "Refunding…" : "Initiate refund"}
+                  </Button>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {note ? <p className="mt-2 text-xs font-semibold text-burgundy">{note}</p> : null}
+    </div>
+  );
+}
+
 function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: () => void }) {
   const [response, setResponse] = useState("");
   const agents = listSupportAgents();
@@ -231,7 +299,8 @@ function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: (
           </SelectInput>
         </div>
       </div>
-      <p className="mt-2 text-sm text-text-primary">{ticket.body}</p>
+      <p className="mt-2 whitespace-pre-line text-sm text-text-primary">{ticket.body}</p>
+      <CustomerOrders email={ticket.email} phone={ticket.phone} />
       {ticket.responses.length > 0 && (
         <div className="mt-3 space-y-2">
           {ticket.responses.map((r, index) => (
@@ -262,6 +331,7 @@ export function LiveChatDesk() {
   const [activeId, setActiveId] = useState(threads[0]?.id ?? "");
   const [reply, setReply] = useState("");
   const active = threads.find((thread) => thread.id === activeId) ?? threads[0];
+  const [ticketDraft, setTicketDraft] = useState<{ subject: string; description: string; error: string } | null>(null);
   const agentName = user
     ? user.role === "admin" || user.role === "coadmin"
       ? FOUNDATION_NAME
@@ -358,10 +428,38 @@ export function LiveChatDesk() {
               {active.ticketId ? ` · ticket ${active.ticketId}` : ""}
               {active.status === "closed" ? " · closed" : ""}
             </p>
+            <CustomerOrders email={active.email} phone={active.phone} />
+            {ticketDraft ? (
+              <div className="mt-3 space-y-2 rounded-xl border border-dashed border-border p-3">
+                <p className="text-xs font-semibold text-text-primary">Ticket for the relevant team</p>
+                <TextInput placeholder="Subject *" value={ticketDraft.subject} onChange={(event) => setTicketDraft({ ...ticketDraft, subject: event.target.value })} />
+                <TextArea rows={3} placeholder="Description: what happened and what the team needs to do *" value={ticketDraft.description} onChange={(event) => setTicketDraft({ ...ticketDraft, description: event.target.value })} />
+                {ticketDraft.error ? <p className="text-xs font-semibold text-red-700">{ticketDraft.error}</p> : null}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      if (!ticketDraft.subject.trim() || !ticketDraft.description.trim()) {
+                        setTicketDraft({ ...ticketDraft, error: "Enter a subject and a description." });
+                        return;
+                      }
+                      if (!active.email) {
+                        setTicketDraft({ ...ticketDraft, error: "This chat has no customer email yet. Ask the customer for it first." });
+                        return;
+                      }
+                      raiseTicketOnBehalf(active.id, agentName, { subject: ticketDraft.subject, description: ticketDraft.description });
+                      setTicketDraft(null);
+                    }}
+                  >
+                    Create ticket
+                  </Button>
+                  <Button variant="ghost" onClick={() => setTicketDraft(null)}>Cancel</Button>
+                </div>
+              </div>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-2">
               <Button onClick={() => takeChat(active.id, agentEmail, agentName)}>Take chat</Button>
               <Button variant="outline" onClick={() => closeChat(active.id, agentName)}>Close chat</Button>
-              <Button variant="outline" onClick={() => raiseTicketOnBehalf(active.id, agentName)}>Raise ticket on behalf</Button>
+              <Button variant="outline" onClick={() => setTicketDraft(ticketDraft ? null : { subject: "", description: "", error: "" })}>Raise ticket on behalf</Button>
               <SelectInput
                 className="w-56"
                 value={active.assignedTo ?? ""}

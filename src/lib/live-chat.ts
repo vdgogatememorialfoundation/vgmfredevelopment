@@ -311,7 +311,7 @@ export function closeChat(threadId: string, rawAgentName: string) {
   return thread;
 }
 
-export function raiseTicketOnBehalf(threadId: string, agentName: string) {
+export function raiseTicketOnBehalf(threadId: string, agentName: string, details?: { subject: string; description: string }) {
   const threads = getChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (!thread || !thread.email) return null;
@@ -319,8 +319,8 @@ export function raiseTicketOnBehalf(threadId: string, agentName: string) {
     name: thread.name,
     email: thread.email,
     phone: thread.phone,
-    subject: `Chat with ${thread.name}`,
-    body: visitorTranscript(thread),
+    subject: details?.subject.trim() || `Chat with ${thread.name}`,
+    body: details?.description.trim() ? `${details.description.trim()}\n\nChat transcript:\n${visitorTranscript(thread)}` : visitorTranscript(thread),
     portal: "public",
     chatThreadId: thread.id,
   });
@@ -336,7 +336,7 @@ export function raiseTicketOnBehalf(threadId: string, agentName: string) {
     kind: "text",
   });
   saveThreads(threads);
-  syncServer("ticket", { threadId, agentName, customerName: thread.name, customerEmail: thread.email, customerPhone: thread.phone });
+  syncServer("ticket", { threadId, agentName, customerName: thread.name, customerEmail: thread.email, customerPhone: thread.phone, subject: details?.subject, description: details?.description });
   return ticket;
 }
 

@@ -30,7 +30,7 @@ import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
 import { printGstInvoice } from "@/lib/gst-invoice";
-import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, sendEmail } from "@/lib/admin-store";
+import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, notifyStaffOfOrder, sendEmail } from "@/lib/admin-store";
 import { commitStockForOrder } from "@/lib/product-data";
 import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
@@ -572,6 +572,7 @@ export default function CheckoutClient() {
     }
     if (commitStockForOrder(order)) order.stockCommitted = true;
     saveOrder(order);
+    notifyStaffOfOrder(order);
     if (deliveryAddress.email || deliveryAddress.phone) {
       const pickupNote =
         deliveryMode === "delivery"

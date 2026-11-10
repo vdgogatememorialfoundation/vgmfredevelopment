@@ -14,7 +14,7 @@ import type {
 import { pickupInstructions } from "@/lib/fulfillment";
 import { siteConfig, storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
@@ -650,6 +650,43 @@ export function createAdminOrder(input: {
   return order;
 }
 
+export const ORDER_ALERT_EMAILS = ["care@vaidyagogate.org", "vd.gogatememorialfoundation@gmail.com"];
+
+/** Every new order is mailed to the Foundation desk with the full details. */
+export function notifyStaffOfOrder(order: Order) {
+  const address = order.deliveryAddress;
+  const lines = order.items.map((item) => `- ${item.title}${item.sku ? ` (SKU ${item.sku})` : ""} × ${item.quantity} @ ₹${item.price} = ₹${item.price * item.quantity}`).join("\n");
+  const where = address ? [address.line1, address.landmark, address.city, address.state, address.pincode, address.country].filter(Boolean).join(", ") : "";
+  const body = [
+    `New order ${order.id} · ${formatDateTime(order.date)}`,
+    "",
+    `Customer: ${address?.fullName || "—"}`,
+    `Phone: ${address?.phone || "—"}`,
+    `Email: ${address?.email || order.accountEmail || "—"}`,
+    order.deliveryMode === "store_pickup" ? "Delivery: Pickup from store" : `Deliver to: ${where || "—"}`,
+    "",
+    "Items:",
+    lines,
+    "",
+    `Subtotal: ₹${order.subtotal}`,
+    order.discount ? `Discount: − ₹${order.discount}` : "",
+    order.gst ? `GST: ₹${order.gst}` : "",
+    order.platformFee ? `Platform fee: ₹${order.platformFee}` : "",
+    `Shipping: ${order.shipping ? `₹${order.shipping}` : "Free / later"}`,
+    `Total: ₹${order.total}`,
+    `Payment: ${order.paymentStatus}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}${order.razorpayPaymentId ? ` · ${order.razorpayPaymentId}` : ""}`,
+    order.preorderPayment ? `Pre-order: advance ₹${order.preorderPayment.advance ?? ""} · balance ₹${order.preorderPayment.balance ?? ""}` : "",
+    order.courierName ? `Courier: ${order.courierName}` : "",
+    "",
+    `Open in admin: ${typeof window === "undefined" ? "" : window.location.origin}/admin/orders`,
+  ]
+    .filter((line, index, all) => line !== "" || all[index - 1] !== "")
+    .join("\n");
+  for (const to of ORDER_ALERT_EMAILS) {
+    sendEmail({ to, subject: `New order ${order.id} · ₹${order.total} · ${address?.fullName || "Customer"}`, template: "staff-new-order", body });
+  }
+}
+
 export function updateOrderInStore(order: Order) {
   const orders = getOrders();
   const idx = orders.findIndex((o) => o.id === order.id);
@@ -755,21 +792,63 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
 }
 
 export function exportOrdersCsv(orders: Order[]) {
-  const header = ["Order ID", "Date", "Customer", "Phone", "Email", "Status", "Payment", "Items", "Total", "Courier", "AWB"];
-  const rows = orders.map((order) => [
-    order.id,
-    order.date,
-    order.deliveryAddress?.fullName ?? "",
-    order.deliveryAddress?.phone ?? "",
-    order.deliveryAddress?.email ?? "",
-    order.status,
-    order.paymentStatus,
-    order.items.map((item) => `${item.quantity} x ${item.title}`).join("; "),
-    String(order.total),
-    order.courierName ?? "",
-    order.trackingId ?? "",
-  ]);
-  const csv = [header, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const header = [
+    "Order ID", "Date", "Channel", "Customer", "Phone", "Email", "Account email",
+    "Delivery mode", "Address", "Landmark", "City", "State", "Pincode", "Country",
+    "Items", "Item count", "Total quantity", "SKUs",
+    "Subtotal", "Discount", "GST", "Platform fee", "Shipping", "Store credit used", "Total",
+    "Order status", "Payment status", "Payment method", "Payment ref", "Razorpay payment ID", "Razorpay order ID", "Paid at",
+    "Pre-order advance", "Pre-order balance", "Refunded",
+    "Courier", "AWB", "Expected delivery", "Return AWB", "Return charge", "Return charge paid by",
+  ];
+  const rows = orders.map((order) => {
+    const address = order.deliveryAddress;
+    const refunded = (order.refunds ?? []).reduce((sum, refund) => sum + (Number(refund.amount) || 0), 0);
+    return [
+      order.id,
+      formatDateTime(order.date),
+      order.channel ?? "online",
+      address?.fullName ?? "",
+      address?.phone ?? "",
+      address?.email ?? "",
+      order.accountEmail ?? "",
+      order.deliveryMode === "store_pickup" ? "Store pickup" : "Delivery",
+      address?.line1 ?? "",
+      address?.landmark ?? "",
+      address?.city ?? "",
+      address?.state ?? "",
+      address?.pincode ?? "",
+      address?.country ?? "India",
+      order.items.map((item) => `${item.title} x ${item.quantity} @ ${item.price}`).join("; "),
+      order.items.length,
+      order.items.reduce((sum, item) => sum + item.quantity, 0),
+      order.items.map((item) => item.sku || item.bookId).join("; "),
+      order.subtotal,
+      order.discount,
+      order.gst,
+      order.platformFee ?? 0,
+      order.shipping,
+      order.storeCreditUsed ?? 0,
+      order.total,
+      order.status,
+      order.paymentStatus,
+      order.paymentMethod ?? "",
+      order.paymentRef ?? "",
+      order.razorpayPaymentId ?? "",
+      order.razorpayOrderId ?? "",
+      order.paidAt ? formatDateTime(order.paidAt) : "",
+      order.preorderPayment?.advance ?? "",
+      order.preorderPayment?.balance ?? "",
+      refunded || "",
+      order.courierName ?? "",
+      order.trackingId ?? "",
+      order.plan?.deliveredBy ? formatDate(order.plan.deliveredBy) : order.eta ?? "",
+      order.returnShipment?.awb ?? "",
+      order.returnShipment?.charge ?? "",
+      order.returnShipment?.chargePaidBy ?? "",
+    ];
+  });
+  const csv = "\ufeff" + [header, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

@@ -65,6 +65,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { listPickupLocations } from "@/lib/shipping-client";
 import { getOrder as getStoredOrder, patchOrder as patchStoredOrder } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
+import { beep } from "@/lib/scan-beep";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
@@ -120,6 +121,24 @@ export function OrdersDashboard() {
   const orders = getOrders();
   void version;
   void remoteVersion;
+  const seenOrders = useRef<Set<string> | null>(null);
+  const [newOrders, setNewOrders] = useState<string[]>([]);
+  const orderIds = orders.map((order) => order.id).join(",");
+  useEffect(() => {
+    const ids = orderIds ? orderIds.split(",") : [];
+    if (!seenOrders.current) {
+      seenOrders.current = new Set(ids);
+      const wanted = new URLSearchParams(window.location.search).get("order");
+      if (wanted) setTimeout(() => setSelectedId(wanted), 0);
+      return;
+    }
+    const seen = seenOrders.current;
+    const fresh = ids.filter((id) => !seen.has(id));
+    fresh.forEach((id) => seen.add(id));
+    if (!fresh.length) return;
+    beep("delivered");
+    setTimeout(() => setNewOrders((current) => [...fresh, ...current].slice(0, 10)), 0);
+  }, [orderIds]);
   const filtered = orders
     .filter((order) => statusFilter === "All" || order.status === statusFilter)
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
@@ -196,6 +215,17 @@ export function OrdersDashboard() {
 
   return (
     <div className="space-y-5">
+      {newOrders.length ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <span>
+            <b>New order{newOrders.length > 1 ? "s" : ""}:</b>{" "}
+            {newOrders.map((id) => (
+              <button key={id} type="button" className="mr-2 font-mono font-semibold underline" onClick={() => setSelectedId(id)}>{id}</button>
+            ))}
+          </span>
+          <Button variant="ghost" onClick={() => setNewOrders([])}>Dismiss</Button>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Orders</h1>
@@ -346,6 +376,10 @@ export function OrdersDashboard() {
                         <span className="block truncate text-xs text-text-muted">
                           {order.deliveryAddress?.fullName || order.items[0]?.title} · {formatDate(order.date)}
                           {order.channel === "pos" ? " · POS" : ""}
+                        </span>
+                        <span className="block truncate text-xs text-text-primary">
+                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} item{order.items.reduce((sum, item) => sum + item.quantity, 0) === 1 ? "" : "s"} ·{" "}
+                          {order.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")}
                         </span>
                       </span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
