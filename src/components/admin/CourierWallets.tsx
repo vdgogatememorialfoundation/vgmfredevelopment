@@ -24,6 +24,9 @@ export default function CourierWallets() {
   const [wallets, setWallets] = useState<CourierWallet[] | null>(null);
   const [checkedAt, setCheckedAt] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [watchUntil, setWatchUntil] = useState(0);
+  const [rechargeNote, setRechargeNote] = useState("");
   const floor = getIntegrations().shipping.minWalletRupees || 0;
 
   const refresh = useCallback(async () => {
@@ -44,6 +47,27 @@ export default function CourierWallets() {
       window.clearInterval(timer);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    if (!watchUntil) return;
+    const timer = window.setInterval(() => {
+      if (Date.now() > watchUntil) {
+        setWatchUntil(0);
+        return;
+      }
+      void refresh();
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [watchUntil, refresh]);
+
+  const recharge = (wallet: CourierWallet) => {
+    const amount = Math.max(0, Math.round(Number(amounts[wallet.provider] || 0)));
+    if (amount < 1) return setRechargeNote(`Enter the amount to add to ${wallet.label}.`);
+    void navigator.clipboard?.writeText(String(amount)).catch(() => undefined);
+    window.open(RECHARGE_URLS[wallet.provider], "_blank", "noopener,noreferrer");
+    setWatchUntil(Date.now() + 10 * 60 * 1000);
+    setRechargeNote(`₹${amount} copied. Finish the payment in ${wallet.label} (Wallet → Recharge). This page checks the new balance every 30 seconds for 10 minutes.`);
+  };
 
   const spends = getShipments()
         .filter((shipment) => shipment.live && shipment.provider && shipment.provider !== "local")
@@ -70,6 +94,7 @@ export default function CourierWallets() {
         {!wallets ? (
           <EmptyState text="Reading wallets…" />
         ) : (
+          {rechargeNote && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{rechargeNote}</p>}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {wallets.map((wallet) => {
               const low = wallet.balance !== undefined && wallet.balance < floor;
@@ -83,14 +108,39 @@ export default function CourierWallets() {
                     </>
                   ) : null}
                   {wallet.connected && RECHARGE_URLS[wallet.provider] ? (
-                    <a
-                      href={RECHARGE_URLS[wallet.provider]}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 inline-flex rounded-lg bg-burgundy px-3 py-1.5 text-xs font-semibold text-white hover:bg-burgundy/90"
-                    >
-                      Recharge {wallet.label} wallet
-                    </a>
+                    <div className="mt-3 space-y-2">
+                      <div className="flex flex-wrap gap-1">
+                        {[500, 1000, 2500, 5000].map((value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setAmounts((current) => ({ ...current, [wallet.provider]: String(value) }))}
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${amounts[wallet.provider] === String(value) ? "border-burgundy bg-burgundy/10 text-burgundy" : "border-border text-text-muted hover:bg-surface"}`}
+                          >
+                            ₹{value.toLocaleString("en-IN")}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          inputMode="numeric"
+                          aria-label={`Recharge amount for ${wallet.label}`}
+                          placeholder="Amount ₹"
+                          value={amounts[wallet.provider] ?? ""}
+                          onChange={(event) => setAmounts((current) => ({ ...current, [wallet.provider]: event.target.value }))}
+                          className="w-28 rounded-lg border border-border px-2 py-1.5 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => recharge(wallet)}
+                          className="flex-1 rounded-lg bg-burgundy px-3 py-1.5 text-xs font-semibold text-white hover:bg-burgundy/90"
+                        >
+                          Recharge{amounts[wallet.provider] ? ` ₹${Number(amounts[wallet.provider]).toLocaleString("en-IN")}` : ""} on {wallet.label}
+                        </button>
+                      </div>
+                    </div>
                   ) : null}
                   {wallet.balance !== undefined ? null : wallet.connected ? (
                     <p className="mt-1 text-xs text-red-700">{wallet.error}</p>
