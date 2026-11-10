@@ -225,7 +225,7 @@ export function PosDesk() {
         line1: pickup.address,
         city: "Pune",
         state: "Maharashtra",
-        pincode: "411005",
+        pincode: "411002",
         country: "India",
         countryCode: "IN",
       };

@@ -287,7 +287,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "test": {
-        const parcel = { pickupPincode: "411005", deliveryPincode: "110001", weightKg: 0.5, cod: false, declaredValue: 500, length: 20, breadth: 15, height: 5 };
+        const parcel = { pickupPincode: "411002", deliveryPincode: "110001", weightKg: 0.5, cod: false, declaredValue: 500, length: 20, breadth: 15, height: 5 };
         if (provider === "tookan" || provider === "tookan-parcel") {
           const result = await tookanTest(creds.tookan ?? own);
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Tookan API key is not configured." });

@@ -314,7 +314,7 @@ function CarrierCard({
 
 export function TimelineDesk() {
   const [policy, setPolicy] = useState<FulfillmentPolicy>(() => getPolicy());
-  const [pincode, setPincode] = useState("411005");
+  const [pincode, setPincode] = useState("411002");
   const [saved, setSaved] = useState(false);
   const preview = checkPincode(pincode, books[0]?.id);
 
@@ -599,7 +599,7 @@ export function ProductServiceabilityDesk() {
   );
   const [prefixes, setPrefixes] = useState(profile.serviceablePrefixes.join(", "));
   const [blocked, setBlocked] = useState(profile.blockedPincodes.join(", "));
-  const [pincode, setPincode] = useState("411005");
+  const [pincode, setPincode] = useState("411002");
   const [notice, setNotice] = useState("");
   const quote = checkPincode(pincode, bookId);
 

@@ -109,7 +109,7 @@ function defaultSettings(): SiteSettings {
     fulfillmentLocations: [
       {
         id: "fl-001",
-        name: "Pune Fulfillment Hub",
+        name: "Vaidya Gogate Memorial Foundation Clinic",
         code: "PUN",
         address: "Vaidya Gogate Memorial Foundation, 102, Ramprasad Chamber, 368/1, Nanapeth, Near Kirad Hospital, Above Shraddha Medicals, Jawaharlal Nehru Road, Nana Peth",
         city: "Pune",

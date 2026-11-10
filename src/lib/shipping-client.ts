@@ -58,7 +58,7 @@ export function checkoutCourierRates(rates: CourierRate[]) {
 
 function connectedCourierRates(deliveryPincode: string): CourierRate[] {
   const settings = getIntegrations();
-  const origin = (settings.shipping.pickup.pincode || "411005").replace(/\D/g, "").slice(0, 3);
+  const origin = (settings.shipping.pickup.pincode || "411002").replace(/\D/g, "").slice(0, 3);
   const pin = deliveryPincode.replace(/\D/g, "");
   const sameCity = pin.length === 6 && origin.length === 3 && pin.startsWith(origin);
   const rates: CourierRate[] = [];

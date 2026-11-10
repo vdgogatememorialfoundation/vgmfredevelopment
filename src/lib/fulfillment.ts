@@ -363,7 +363,7 @@ export function defaultProductFulfillment(book: Book): ProductFulfillment {
     bookId: book.id,
     deliveryEnabled: book.deliveryAvailable !== false,
     pickupEnabled: book.storePickupAvailable !== false,
-    stockingLocation: "Pune Fulfillment Hub",
+    stockingLocation: "Vaidya Gogate Memorial Foundation Clinic",
     reorderLevel: 5,
     processingDays: null,
     serviceablePrefixes: [],
@@ -378,7 +378,7 @@ export function getProductFulfillment(bookId: string): ProductFulfillment {
     bookId,
     deliveryEnabled: true,
     pickupEnabled: true,
-    stockingLocation: "Pune Fulfillment Hub",
+    stockingLocation: "Vaidya Gogate Memorial Foundation Clinic",
     reorderLevel: 5,
     processingDays: null,
     serviceablePrefixes: [],
@@ -409,8 +409,8 @@ export function getOriginPincode() {
     if (pickup.length === 6) return pickup;
   }
   const settings = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
-  const active = settings?.fulfillmentLocations?.find((location) => location.active && location.pincode);
-  return (active?.pincode || "411005").replace(/\D/g, "").slice(0, 6);
+  const active = settings?.fulfillmentLocations?.find((location) => location.active && location.pincode && location.pincode !== "411002");
+  return (active?.pincode || "411002").replace(/\D/g, "").slice(0, 6);
 }
 
 /** Plain-text pickup instructions for emails and order notes. */
@@ -423,7 +423,7 @@ export function pickupInstructions() {
 export function getPickupLocation() {
   const settings = readJSON<SiteSettings | null>(SETTINGS_KEY, null);
   const active = settings?.fulfillmentLocations?.find(
-    (location) => location.active && !/FC Road, Shivaji Nagar/i.test(location.address || "")
+    (location) => location.active && !/FC Road|Shivaji ?Nagar|411005/i.test(`${location.address || ""} ${location.pincode || ""}`)
   );
   const hours = "Monday to Thursday, 6:00 PM – 10:00 PM";
   const mapFor = (address: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
@@ -437,7 +437,7 @@ export function getPickupLocation() {
     ? own
     : [own, active.city, [active.state, active.pincode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
   return {
-    name: active.name,
+    name: /^Pune Fulfillment Hub$/i.test(active.name.trim()) ? "Vaidya Gogate Memorial Foundation Clinic" : active.name,
     address,
     phone: active.phone,
     contactName: active.contactName?.trim() ?? "",
@@ -461,7 +461,7 @@ export function checkPincode(pincode: string, bookId?: string, quantity = 1): De
   const handoffBy = addBusinessDays(dispatchBy, policy.daysToHandoff);
   const pickupReadyBy = formatDate(dispatchBy);
   const pickupHoldUntil = formatDate(addCalendarDays(dispatchBy, policy.pickupHoldingDays));
-  const location = profile?.stockingLocation || "Pune Fulfillment Hub";
+  const location = profile?.stockingLocation || "Vaidya Gogate Memorial Foundation Clinic";
   const preorderable = Boolean(book?.preorder?.enabled);
   const pickupAvailable = Boolean(
     policy.storePickupEnabled && (profile ? profile.pickupEnabled : true) && (stock >= quantity || preorderable)
