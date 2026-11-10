@@ -354,6 +354,7 @@ export default function CheckoutClient() {
     price: book.price,
     originalPrice: book.originalPrice,
     currency: "INR",
+    preorder: canPreorder(book),
   }));
 
   const priced = computeTotals(orderItems);
