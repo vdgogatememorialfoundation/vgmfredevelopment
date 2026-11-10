@@ -111,6 +111,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
                   id: "credited",
                   label: "Credited to your account",
                   caption: refundExpectedCreditLabel(refund) || "Expected within 5–7 working days after processing.",
+                  expected: refundExpectedCreditLabel(refund) || "Expected within 5–7 working days after processing.",
                   reached: Boolean(done && refundExpectedCredit(refund)?.done),
                   partial: false,
                   events: [],
