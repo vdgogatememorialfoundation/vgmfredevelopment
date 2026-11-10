@@ -251,7 +251,7 @@ export async function createPaymentLink(orderId: string, amountOverride?: number
       name: order.deliveryAddress?.fullName ?? "Customer",
       email: order.deliveryAddress?.email,
       phone: order.deliveryAddress?.phone,
-      description: `VGMF order ${order.id}`,
+      description: `Vaidya Gogate Memorial Foundation order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?done=1`,
       expiryMinutes: linkMinutes(),
     });
@@ -264,7 +264,7 @@ export async function createPaymentLink(orderId: string, amountOverride?: number
     phone: order.deliveryAddress?.phone,
     name: order.deliveryAddress?.fullName,
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${amount}`, link.url],
-    subject: `Pay for your VGMF order ${order.id}`,
+    subject: `Pay for your Vaidya Gogate Memorial Foundation order ${order.id}`,
     template: "payment-link",
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${amount.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid for ${linkMinutes()} minutes.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
@@ -293,7 +293,7 @@ export async function createCourierPaymentLink(orderId: string, rate: CourierRat
       name: address.fullName || "Customer",
       email: address.email,
       phone: address.phone,
-      description: `Courier charge for VGMF order ${order.id}`,
+      description: `Courier charge for Vaidya Gogate Memorial Foundation order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?part=courier&done=1`,
       expiryMinutes: linkMinutes(),
     });
@@ -306,7 +306,7 @@ export async function createCourierPaymentLink(orderId: string, rate: CourierRat
     phone: address.phone,
     name: address.fullName,
     params: [address.fullName || "Customer", order.id, `₹${amount}`, link.url],
-    subject: `Courier delivery for your VGMF order ${order.id}`,
+    subject: `Courier delivery for your Vaidya Gogate Memorial Foundation order ${order.id}`,
     template: "payment-link",
     body: `Dear ${address.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nAs requested, we can send order ${order.id} by courier (${rate.courierName}) instead of store pickup. Please pay only the courier charge of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nThe courier is booked once the payment is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
@@ -359,7 +359,7 @@ export async function createBalancePaymentLink(orderId: string) {
       name: address?.fullName || "Customer",
       email: address?.email,
       phone: address?.phone,
-      description: `Balance for VGMF pre-order ${order.id}`,
+      description: `Balance for Vaidya Gogate Memorial Foundation pre-order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?part=balance&done=1`,
       expiryMinutes: linkMinutes(),
     });
@@ -372,7 +372,7 @@ export async function createBalancePaymentLink(orderId: string) {
     phone: address?.phone,
     name: address?.fullName,
     params: [address?.fullName || "Customer", order.id, `₹${amount}`, link.url],
-    subject: `Your VGMF pre-order ${order.id} is ready — balance due`,
+    subject: `Your Vaidya Gogate Memorial Foundation pre-order ${order.id} is ready — balance due`,
     template: "payment-link",
     body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour pre-order ${order.id} is ready. Please pay the remaining balance of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nWe dispatch the order once the balance is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
@@ -662,7 +662,7 @@ export async function openHostedCheckout(input: { gateway: ReadyGateway["id"]; a
   const response = await fetch("/api/payments/hosted", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "start", ...input, product: `VGMF order ${input.orderId}` }),
+    body: JSON.stringify({ action: "start", ...input, product: `Vaidya Gogate Memorial Foundation order ${input.orderId}` }),
   });
   const data = (await response.json().catch(() => ({}))) as {
     ok?: boolean;

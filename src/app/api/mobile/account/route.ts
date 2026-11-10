@@ -78,7 +78,7 @@ async function sendCode(email: string, name: string, subject: string) {
     const sent = await sendMobileEmail(
       email,
       subject,
-      `Hi ${name},\n\nYour VGMF verification code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
+      `Hi ${name},\n\nYour Vaidya Gogate Memorial Foundation verification code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
     );
     if (!sent) {
       clearMobileOtp(email);
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     if (accountExists(email, phone) || (await resolveAccount(email)) || (await resolveAccount(phone))) {
       return json({ ok: false, error: "An account with this email or phone is already created. Please login." }, 409);
     }
-    const mailed = await sendCode(email, firstName, "VGMF account verification");
+    const mailed = await sendCode(email, firstName, "Vaidya Gogate Memorial Foundation account verification");
     if ("error" in mailed) {
       return json({ ok: false, error: mailed.error === "offline" ? "Email is not configured. Ask Admin to connect ZeptoMail, then try again." : mailed.error }, mailed.status);
     }
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
         return json({ ok: false, error: "Incorrect password. Use Forgot password if you need a reset." }, 401);
       }
     }
-    const mailed = await sendCode(account.email, account.firstName, "VGMF sign-in code");
+    const mailed = await sendCode(account.email, account.firstName, "Vaidya Gogate Memorial Foundation sign-in code");
     if ("error" in mailed) {
       if (mailed.error === "offline") {
         return json({ ...sessionPayload(account.email, publicAccount(account).name, account.accountId), message: "Signed in." });
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
     const identifier = String(body?.identifier ?? "").trim();
     const account = await resolveAccount(identifier);
     if (!account) return json({ ok: false, error: "No account found with these details." }, 404);
-    const mailed = await sendCode(account.email, account.firstName, "VGMF password reset");
+    const mailed = await sendCode(account.email, account.firstName, "Vaidya Gogate Memorial Foundation password reset");
     if ("error" in mailed) return json({ ok: false, error: mailed.error === "offline" ? "Email is not configured. Ask Admin to connect ZeptoMail, then try again." : mailed.error }, mailed.status);
     return json({ ok: true, email: account.email, message: `A reset code was sent to ${account.email}.` });
   }

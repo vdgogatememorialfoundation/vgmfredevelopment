@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
     try {
       const sent = await sendMobileEmail(
         email,
-        "VGMF sign-in code",
-        `Hi ${name},\n\nYour VGMF app sign-in code is ${issued.code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the message.\n\n– Vaidya Gogate Memorial Foundation`
+        "Vaidya Gogate Memorial Foundation sign-in code",
+        `Hi ${name},\n\nYour Vaidya Gogate Memorial Foundation app sign-in code is ${issued.code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the message.\n\n– Vaidya Gogate Memorial Foundation`
       );
       if (!sent) {
         clearMobileOtp(email);

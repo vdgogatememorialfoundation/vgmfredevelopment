@@ -1,5 +1,6 @@
 "use client";
 
+import { FOUNDATION_NAME, publicStaffName } from "@/lib/public-name";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
@@ -261,7 +262,11 @@ export function LiveChatDesk() {
   const [activeId, setActiveId] = useState(threads[0]?.id ?? "");
   const [reply, setReply] = useState("");
   const active = threads.find((thread) => thread.id === activeId) ?? threads[0];
-  const agentName = user ? `${user.firstName} ${user.lastName}`.trim() || user.email : "Foundation Support";
+  const agentName = user
+    ? user.role === "admin" || user.role === "coadmin"
+      ? FOUNDATION_NAME
+      : publicStaffName(`${user.firstName} ${user.lastName}`.trim() || user.email)
+    : FOUNDATION_NAME;
   const agentEmail = user?.email || "";
   const agents = listSupportAgents();
   const [departments, setDepartments] = useState<SupportDepartment[]>([]);

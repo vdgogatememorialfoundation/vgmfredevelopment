@@ -1,3 +1,4 @@
+import { publicStaffName } from "@/lib/public-name";
 import { addTicket, ensureCustomerAccount } from "@/lib/admin-store";
 
 export const CHAT_UNANSWERED_MS = 45_000;
@@ -263,7 +264,8 @@ export async function pullServerChats() {
   }
 }
 
-export function takeChat(threadId: string, agentEmail: string, agentName: string) {
+export function takeChat(threadId: string, agentEmail: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const threads = getChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (!thread) return;
@@ -286,7 +288,8 @@ export function takeChat(threadId: string, agentEmail: string, agentName: string
   return thread;
 }
 
-export function closeChat(threadId: string, agentName: string) {
+export function closeChat(threadId: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const threads = getChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (!thread) return;

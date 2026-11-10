@@ -350,7 +350,7 @@ export const defaultIntegrations: IntegrationSettings = {
     connection: {},
     pickup: {
       nickname: "VGMF-PUNE",
-      contactName: "VGMF Dispatch",
+      contactName: "Vaidya Gogate Memorial Foundation Dispatch",
       phone: "9000000001",
       email: "dispatch@vaidyagogate.org",
       line1: "Vaidya Gogate Memorial Foundation, 102, Ramprasad Chamber, 368/1",

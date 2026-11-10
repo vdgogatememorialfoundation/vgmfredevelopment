@@ -1,5 +1,6 @@
 "use client";
 
+import { publicStaffName, publicStaffText } from "@/lib/public-name";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -234,8 +235,8 @@ export function AIChatbot() {
                     key={message.id}
                     className={`rounded-xl px-3 py-2 ${message.from === "visitor" ? "ml-6 bg-gold/20" : "mr-6 bg-white"}`}
                   >
-                    <p className="text-[11px] font-semibold text-ink/60">{message.name}</p>
-                    <p className="text-ink">{message.text}</p>
+                    <p className="text-[11px] font-semibold text-ink/60">{message.from === "visitor" ? message.name : publicStaffName(message.name)}</p>
+                    <p className="text-ink">{message.from === "visitor" ? message.text : publicStaffText(message.text)}</p>
                   </div>
                 ))}
                 {thread?.formRequested && !thread.ticketId ? (

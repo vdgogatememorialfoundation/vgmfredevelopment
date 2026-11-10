@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { publicStaffName } from "@/lib/public-name";
 import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 
@@ -42,7 +43,7 @@ export type SupportDepartment = { name: string; agents: string[] };
 
 export function chatRef(thread: Pick<StoredChatThread, "id" | "createdAt">) {
   const day = (thread.createdAt || "").slice(2, 10).replace(/-/g, "");
-  return `CH-${day}-${thread.id.replace(/^chat/, "").toUpperCase()}`;
+  return `${day}-${thread.id.replace(/^chat/, "").toUpperCase()}`;
 }
 
 const DEPT_FILE = dataFile("support-departments.json");
@@ -159,7 +160,8 @@ export function postLiveMessage(input: {
   return thread;
 }
 
-export function takeChatThread(threadId: string, agentEmail: string, agentName: string) {
+export function takeChatThread(threadId: string, agentEmail: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const store = read();
   const thread = store.threads.find((item) => item.id === threadId);
   if (!thread) return null;
@@ -183,7 +185,8 @@ export function takeChatThread(threadId: string, agentEmail: string, agentName: 
   return thread;
 }
 
-export function closeChatThread(threadId: string, agentName: string) {
+export function closeChatThread(threadId: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const store = read();
   const thread = store.threads.find((item) => item.id === threadId);
   if (!thread) return null;

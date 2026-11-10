@@ -123,7 +123,7 @@ export default function PayClient({ orderId }: { orderId: string }) {
         name: summary.name,
         email: summary.email,
         phone: summary.phone,
-        description: courier ? `Courier charge for VGMF order ${summary.id}` : `VGMF order ${summary.id}`,
+        description: courier ? `Courier charge for Vaidya Gogate Memorial Foundation order ${summary.id}` : `Vaidya Gogate Memorial Foundation order ${summary.id}`,
       });
       if (outcome.kind === "holding") {
         setError("The payment is on hold until Razorpay confirms it. It is not marked paid, and this order is not packed before that.");

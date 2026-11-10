@@ -148,7 +148,7 @@ export function PosDesk() {
             name,
             email: account?.email || walkIn.email,
             phone,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
             method: "upi",
             skipDemo: true,
           });
@@ -178,7 +178,7 @@ export function PosDesk() {
             name,
             email: account?.email || walkIn.email,
             phone,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
           });
           paymentMethod = outcome.method;
           paymentRef = outcome.reference ?? outcome.paymentId;
@@ -189,7 +189,7 @@ export function PosDesk() {
           const outcome = await payOnPaytmEdc({
             amount: total,
             receipt: saleId,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
           });
           paymentMethod = outcome.method;
           paymentRef = outcome.reference ?? outcome.paymentId;

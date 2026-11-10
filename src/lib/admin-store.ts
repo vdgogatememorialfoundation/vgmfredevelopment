@@ -226,8 +226,8 @@ export function ensureAdminCredentials() {
 export function seedAccounts() {
   const admin: User = {
     id: "usr-admin-001",
-    firstName: "Admin",
-    lastName: "VGMF",
+    firstName: "Vaidya Gogate Memorial",
+    lastName: "Foundation",
     email: "admin@vaidyagogate.org",
     phone: "+91 90000 00001",
     whatsapp: "+91 90000 00001",

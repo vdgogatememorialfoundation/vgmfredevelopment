@@ -37,7 +37,7 @@ const DEFAULT_SLIDES: ImageSlide[] = [
   },
   {
     id: "slide-shop",
-    title: "Books and study materials from VGMF",
+    title: "Books and study materials from Vaidya Gogate Memorial Foundation",
     image: "/slides/shop.svg",
     href: "/shop",
   },

@@ -430,7 +430,7 @@ export default function CheckoutClient() {
           name: address.fullName || (user ? `${user.firstName} ${user.lastName}` : "Customer"),
           email: address.email || user?.email,
           phone: address.phone,
-          description: `VGMF order ${id}`,
+          description: `Vaidya Gogate Memorial Foundation order ${id}`,
         });
         if (outcome.kind === "holding") {
           awaitingGateway = true;
