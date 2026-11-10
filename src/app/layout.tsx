@@ -8,6 +8,7 @@ import {
   Noto_Sans_Tamil,
   Outfit,
 } from "next/font/google";
+import Script from "next/script";
 import JsonLd from "@/components/seo/JsonLd";
 import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
 import { SiteTheme } from "@/components/theme/SiteTheme";
@@ -137,6 +138,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const GA_ID = (process.env.NEXT_PUBLIC_GA_ID || "").trim();
+
+/** Google Analytics 4 runs on the public site only, never on staging or demo. */
+function GoogleAnalytics() {
+  if (!/^G-[A-Z0-9]{4,16}$/.test(GA_ID) || platformEnv() !== "production") return null;
+  return (
+    <>
+      <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} strategy="afterInteractive" />
+      <Script id="ga4" strategy="afterInteractive">
+        {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`}
+      </Script>
+    </>
+  );
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -153,6 +169,7 @@ export default function RootLayout({
         <EnvironmentBanner />
         <JsonLd />
         {children}
+        <GoogleAnalytics />
       </body>
     </html>
   );

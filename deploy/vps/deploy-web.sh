@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Build a branch of vgmfredevelopment on the VPS and deploy it to staging and/or demo.
 #   curl -fsSL https://raw.githubusercontent.com/vdgogatememorialfoundation/vgmfredevelopment/<branch>/deploy/vps/deploy-web.sh | bash -s -- <branch> [staging] [demo]
+# The public site (vaidyagogate.org) is only built when asked for explicitly:
+#   ... | CONFIRM_PRODUCTION=yes bash -s -- main production
 # The running app dir is kept as apps/<env>.prev-<stamp> and the data dir is archived under backups/; a failed health check rolls back.
 set -euo pipefail
 
@@ -17,7 +19,14 @@ mkdir -p "$BK" "$ROOT/src" "$ROOT/apps"
 exec > >(tee -a "$BK/deploy.log") 2>&1
 
 say() { printf '\n==> %s\n' "$*"; }
-port_of() { case "$1" in staging) echo 3005 ;; demo) echo 3012 ;; *) echo "Unknown env $1" >&2; exit 1 ;; esac; }
+port_of() { case "$1" in staging) echo 3005 ;; demo) echo 3012 ;; production) echo 3007 ;; *) echo "Unknown env $1" >&2; exit 1 ;; esac; }
+site_of() { case "$1" in production) echo "https://vaidyagogate.org" ;; *) echo "https://$1.vaidyagogate.org" ;; esac; }
+for ENV in "${ENVS[@]}"; do
+  port_of "$ENV" >/dev/null
+  if [ "$ENV" = production ] && [ "${CONFIRM_PRODUCTION:-}" != yes ]; then
+    echo "Refusing to deploy production without CONFIRM_PRODUCTION=yes."; exit 1
+  fi
+done
 
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
 [ "$NODE_MAJOR" -ge 20 ] || { echo "Node 20+ is required (found $(node -v 2>/dev/null || echo none))."; exit 1; }
@@ -57,7 +66,7 @@ for ENV in "${ENVS[@]}"; do
 
   say "[$ENV] Building"
   (
-    export VGMF_ENV="$ENV" NEXT_PUBLIC_VGMF_ENV="$ENV" NEXT_PUBLIC_SITE_URL="https://$ENV.vaidyagogate.org"
+    export VGMF_ENV="$ENV" NEXT_PUBLIC_VGMF_ENV="$ENV" NEXT_PUBLIC_SITE_URL="$(site_of "$ENV")"
     if [ -f "$ENVFILE" ]; then
       while IFS= read -r line; do
         case "$line" in NEXT_PUBLIC_*=*|VGMF_ENV=*) export "${line%%=*}=${line#*=}" ;; esac

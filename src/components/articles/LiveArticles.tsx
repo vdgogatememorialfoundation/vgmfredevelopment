@@ -12,6 +12,7 @@ import { useI18n } from "@/components/i18n/LanguageProvider";
 import { articlePublicUrl, articleShareText, localizedArticle } from "@/lib/article-display";
 import { ShareBar } from "@/components/common/ShareBar";
 import { ArticleRichText } from "@/components/articles/ArticleRichText";
+import { ArticleAd, ArticleAdScript } from "@/components/articles/ArticleAd";
 
 function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
   return (
@@ -119,6 +120,7 @@ export function ArticleView({ slug, initial }: { slug: string; initial?: Article
 
   return (
     <main>
+      <ArticleAdScript />
       <section className="border-b border-border bg-warm-cream">
         <div className="container py-10 sm:py-14">
           <nav aria-label="Breadcrumb" className="mb-5 text-sm text-text-muted">
@@ -143,13 +145,18 @@ export function ArticleView({ slug, initial }: { slug: string; initial?: Article
             {article.coverImage && (
               <NaturalImage src={article.coverImage} alt={article.title} fit="hero" className="mb-8 rounded-2xl border border-border" />
             )}
+            <ArticleAd placement="top" className="mb-8" />
             <ArticleBody article={article} />
+            <ArticleAd placement="inline" className="mt-10" />
           </article>
           <aside className="space-y-6">
             <h2 className="heading-3">{t("article.related")}</h2>
             {related.map((item) => (
               <ArticleCard key={item.id} article={item} />
             ))}
+            <div className="lg:sticky lg:top-24">
+              <ArticleAd placement="sidebar" />
+            </div>
           </aside>
         </div>
       </section>
