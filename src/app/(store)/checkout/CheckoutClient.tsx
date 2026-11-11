@@ -1182,7 +1182,7 @@ export default function CheckoutClient() {
             </h2>
             <dl className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between">
-                <dt className="text-text-muted">Books</dt>
+                <dt className="text-text-muted">Items</dt>
                 <dd className="font-medium text-text-primary">{itemCount}</dd>
               </div>
               {totals.discount > 0 ? (<>

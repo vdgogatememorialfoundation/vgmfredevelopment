@@ -243,7 +243,7 @@ export default function CartPage() {
                 </div>
                 </>) : null}
                 <div className="flex justify-between">
-                  <dt className="text-text-muted">Books</dt>
+                  <dt className="text-text-muted">Items</dt>
                   <dd className="font-medium text-text-primary">{count}</dd>
                 </div>
                 <div className="flex justify-between">

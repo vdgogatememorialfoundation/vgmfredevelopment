@@ -214,14 +214,21 @@ function installPublishedProducts(feed: MobileFeed) {
     return mine && newer(mine) && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
   });
   const unpublished = local.filter((book) => !present.has(book.id) && newer(book));
-  tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify([...unpublished, ...merged])));
-  tryWrite(() =>
-    window.localStorage.setItem(
-      "vgmf_deleted_books",
-      JSON.stringify(seededBooks.map((book) => book.id).filter((id) => !present.has(id)))
-    )
-  );
-  tryWrite(() => window.localStorage.setItem("vgmf_admin_products", "[]"));
+  const stored =
+    tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify([...unpublished, ...merged]))) &&
+    tryWrite(() =>
+      window.localStorage.setItem(
+        "vgmf_deleted_books",
+        JSON.stringify(seededBooks.map((book) => book.id).filter((id) => !present.has(id)))
+      )
+    ) &&
+    tryWrite(() => window.localStorage.setItem("vgmf_admin_products", "[]"));
+  // Phone storage full: drop the stale local copy so the shop reads the live list held in memory.
+  if (!stored) {
+    for (const key of ["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"]) {
+      tryWrite(() => window.localStorage.removeItem(key));
+    }
+  }
 }
 
 /** Phones and other browsers have no admin localStorage, so the published feed is the catalogue they see. */

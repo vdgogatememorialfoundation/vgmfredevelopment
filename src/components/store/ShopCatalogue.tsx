@@ -15,6 +15,21 @@ export function browserHasProductEdits() {
   return PRODUCT_KEYS.some((key) => window.localStorage.getItem(key));
 }
 
+/** Server list first (always current on every device); a local copy wins only when it was saved later. */
+export function freshCatalogue(server: Book[], local: Book[]) {
+  if (!local.length) return server;
+  if (!server.length) return local;
+  const localById = new Map(local.map((book) => [book.id, book]));
+  const serverIds = new Set(server.map((book) => book.id));
+  const newestServer = server.reduce((max, book) => ((book.updatedAt ?? "") > max ? book.updatedAt ?? "" : max), "");
+  const merged = server.map((book) => {
+    const mine = localById.get(book.id);
+    return mine && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
+  });
+  const unpublished = local.filter((book) => !serverIds.has(book.id) && (book.updatedAt ?? "") > newestServer);
+  return [...unpublished, ...merged];
+}
+
 export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }) {
   const live = useLiveBooks();
   const { t } = useI18n();
@@ -29,7 +44,7 @@ export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }
     if (browserHasProductEdits()) setUseLocal(true);
   }, [live]);
 
-  const books = useLocal ? live : initialBooks;
+  const books = useMemo(() => (useLocal ? freshCatalogue(initialBooks, live) : initialBooks), [useLocal, initialBooks, live]);
 
   const categories = useMemo(
     () => [...new Set(books.map((book) => book.category).filter(Boolean))].sort(),

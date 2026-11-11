@@ -14,7 +14,7 @@ import { averageRating, useProductReviews } from "@/lib/reviews";
 import { useLiveBooks, useSiteSettings } from "@/lib/use-cms";
 import { storeConfig } from "@/lib/constants";
 import { getDiscountPercent } from "@/lib/store";
-import { browserHasProductEdits } from "@/components/store/ShopCatalogue";
+import { browserHasProductEdits, freshCatalogue } from "@/components/store/ShopCatalogue";
 import type { Book } from "@/types";
 
 export default function ShopProduct({
@@ -31,8 +31,8 @@ export default function ShopProduct({
   useEffect(() => {
     if (browserHasProductEdits()) setUseLocal(true);
   }, [live]);
-  const catalogue = useLocal && live.length ? live : initialBooks;
-  const book = catalogue.find((item) => item.slug === slug) ?? (useLocal ? null : initialBook);
+  const catalogue = useLocal && live.length ? freshCatalogue(initialBooks, live) : initialBooks;
+  const book = catalogue.find((item) => item.slug === slug) ?? initialBook;
   const purchaseReviews = useProductReviews(book?.id ?? "");
   const languageSize = useSiteSettings()?.productText?.pageLanguage || 24;
 
