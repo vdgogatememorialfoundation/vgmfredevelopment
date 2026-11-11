@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import {
   defaultAppearance,
@@ -36,7 +36,7 @@ function tokensFor(appearance: MobileAppearance): ThemeTokens {
     radius: radiusValues[appearance.radiusPreset],
     space: spacingValues[appearance.spacingPreset],
     type: appearance.typeScale,
-    fontFamily: appearance.fontFamily === "serif" ? "Georgia" : undefined,
+    fontFamily: appearance.fontFamily === "serif" ? (Platform.OS === "android" ? "serif" : "Georgia") : undefined,
     columns: appearance.productColumns,
     labels: appearance.labels,
     section: (id) => appearance.homeSections.find((item) => item.id === id),

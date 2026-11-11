@@ -1,11 +1,11 @@
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { mediaUrl } from "./api";
+import { chatOn, mediaUrl } from "./api";
 import { useAuth } from "./auth";
 import { useCart } from "./cart";
 import { useDrawer } from "./drawer";
-import { useBrand } from "./feed";
+import { useBrand, useFeed } from "./feed";
 import { SITE } from "./site-content";
 import { useTheme } from "./theme";
 import { BrandMark, IconButton } from "./ui";
@@ -17,6 +17,8 @@ export function MenuButton() {
 
 export function ChatFab() {
   const theme = useTheme();
+  const { feed } = useFeed();
+  if (!chatOn(feed)) return null;
   return (
     <Pressable
       onPress={() => router.push("/chat")}
@@ -47,16 +49,24 @@ export function TopBar({ bag = false }: { bag?: boolean }) {
   const brand = useBrand();
   const { session } = useAuth();
   const cart = useCart();
+  const { feed } = useFeed();
   return (
     <View style={{ paddingBottom: 4 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <MenuButton />
         <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={34} />
-        <Text style={{ flex: 1, fontSize: 15, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }} numberOfLines={2}>
-          {SITE.name}
-        </Text>
+        <View style={{ flex: 1, minWidth: 0, borderLeftWidth: 1, borderLeftColor: theme.colors.accent, paddingLeft: 8 }}>
+          <Text style={{ fontSize: 14, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily }} numberOfLines={2}>
+            {SITE.name}
+          </Text>
+          {brand.tagline ? (
+            <Text style={{ fontSize: 9, fontWeight: "600", color: theme.colors.accent, letterSpacing: 1.4, textTransform: "uppercase", marginTop: 1 }} numberOfLines={1}>
+              {brand.tagline}
+            </Text>
+          ) : null}
+        </View>
         <IconButton icon="notifications-outline" label="Notifications" onPress={() => router.push("/account/notifications")} />
-        <IconButton icon="chatbubbles-outline" label="Chat" onPress={() => router.push("/chat")} />
+        {chatOn(feed) ? <IconButton icon="chatbubbles-outline" label="Chat" onPress={() => router.push("/chat")} /> : null}
         {bag ? <IconButton icon="bag-handle-outline" label="Cart" badge={cart.count} onPress={() => router.push("/cart")} /> : null}
         <IconButton icon={session ? "person-circle" : "person-outline"} label="Account" onPress={() => router.push("/account")} />
       </View>

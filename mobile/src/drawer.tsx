@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { mediaUrl } from "./api";
+import { hrefOn, mediaUrl } from "./api";
 import { useAuth } from "./auth";
 import { useBrand, useFeed } from "./feed";
 import { SITE } from "./site-content";
@@ -90,9 +90,10 @@ export function AppDrawer() {
   const { open, closeDrawer } = useDrawer();
   const { feed } = useFeed();
   const customPages = (feed?.pages ?? []).filter((page) => page.enabled !== false && String(page.slug ?? ""));
+  const base = MENU.map((section) => ({ ...section, items: section.items.filter((item) => hrefOn(feed, item.href)) })).filter((section) => section.items.length);
   const menu = customPages.length
-    ? [...MENU, { title: "Pages", items: customPages.map((page): DrawerItem => ({ href: `/page/${String(page.slug)}`, label: String(page.title ?? page.slug), icon: "document-text-outline" })) }]
-    : MENU;
+    ? [...base, { title: "Pages", items: customPages.map((page): DrawerItem => ({ href: `/page/${String(page.slug)}`, label: String(page.title ?? page.slug), icon: "document-text-outline" })) }]
+    : base;
 
   const go = (href: string) => {
     closeDrawer();

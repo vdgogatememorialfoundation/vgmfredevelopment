@@ -2,6 +2,7 @@ import { cleanChrome } from "@/lib/site-chrome";
 import { getAbout } from "@/lib/about";
 import { defaultAppearance, getPublishedAppearance } from "@/lib/mobile-appearance";
 import { getFaqs, getSettings } from "@/lib/admin-store";
+import { getLiveChatSettings } from "@/lib/live-chat";
 import {
   getLiveAnnouncements,
   getLiveClinics,
@@ -51,6 +52,7 @@ export function collectMobileSnapshot(): MobileFeed {
       queryNumber: (settings.queryNumber ?? "").replace(/[^\d]/g, ""),
       queryMessage: (settings.queryMessage ?? "").trim(),
       chrome: cleanChrome(settings.chrome),
+      liveChat: { enabled: Boolean(getLiveChatSettings().enabled), online: Boolean(getLiveChatSettings().online) },
     },
     flags: getSiteFlags(),
     visibility: getSiteVisibility().public,

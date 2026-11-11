@@ -1,5 +1,6 @@
 "use client";
 
+import { publishLiveSite } from "@/lib/mobile-publish";
 import { FOUNDATION_NAME, publicStaffName } from "@/lib/public-name";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -323,6 +324,11 @@ function chatSnapshot() {
   return `${window.localStorage.getItem("vgmf_live_chat_settings") ?? ""}|${window.localStorage.getItem("vgmf_live_chat_threads") ?? ""}`;
 }
 
+function saveChatAndPublish(next: Parameters<typeof saveLiveChatSettings>[0]) {
+  saveLiveChatSettings(next);
+  void publishLiveSite();
+}
+
 export function LiveChatDesk() {
   useSyncExternalStore(subscribeLiveChat, chatSnapshot, () => "");
   const { user } = useAuth();
@@ -374,7 +380,7 @@ export function LiveChatDesk() {
             <input
               type="checkbox"
               checked={settings.enabled}
-              onChange={(event) => saveLiveChatSettings({ ...settings, enabled: event.target.checked })}
+              onChange={(event) => saveChatAndPublish({ ...settings, enabled: event.target.checked })}
             />
             Enable live chat
           </label>
@@ -382,7 +388,7 @@ export function LiveChatDesk() {
             <input
               type="checkbox"
               checked={settings.online}
-              onChange={(event) => saveLiveChatSettings({ ...settings, enabled: true, online: event.target.checked })}
+              onChange={(event) => saveChatAndPublish({ ...settings, enabled: true, online: event.target.checked })}
             />
             Staff are online
           </label>

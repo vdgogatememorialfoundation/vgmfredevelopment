@@ -14,6 +14,7 @@ export type Feed = {
     phone: string;
     address: string;
     social?: Record<string, string>;
+    liveChat?: { enabled?: boolean; online?: boolean };
   };
   flags: { supportUs?: boolean; supportUsTitle?: string; supportUsText?: string; supportUsHref?: string };
   visibility: Record<string, boolean>;
@@ -561,6 +562,29 @@ export function isRegistrationClosed(item: Row | null | undefined) {
   if (!item) return true;
   if (str(item.registrationStatus).toLowerCase() === "closed") return true;
   return isPastDate(item.endDate || item.startDate || item.registrationEnd);
+}
+
+export function chatOn(feed: Feed | null) {
+  return moduleOn(feed, "chat") && feed?.site?.liveChat?.enabled !== false;
+}
+
+const HREF_MODULE: Record<string, string> = {
+  "/events": "events",
+  "/gallery": "gallery",
+  "/videos": "videos",
+  "/articles": "articles",
+  "/notices": "notices",
+  "/announcements": "notices",
+  "/shop": "shop",
+  "/clinics": "clinics",
+  "/certificates": "certificates",
+  "/about": "about",
+};
+
+export function hrefOn(feed: Feed | null, href: string) {
+  if (href === "/chat") return chatOn(feed);
+  const id = HREF_MODULE[href];
+  return id ? moduleOn(feed, id) : true;
 }
 
 export function moduleOn(feed: Feed | null, id: string) {

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { isPastDate, mediaUrl, moduleOn, str } from "../../src/api";
+import { isPastDate, mediaUrl, moduleOn, str, chatOn } from "../../src/api";
 import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
 import { EXPLORE, SITE, resolvedAbout } from "../../src/site-content";
@@ -78,7 +78,7 @@ export default function HomeScreen() {
       ) : null}
 
       <View style={{ backgroundColor: theme.colors.paper, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 8, paddingHorizontal: 6, marginBottom: 20, flexDirection: "row", flexWrap: "wrap" }}>
-        {EXPLORE.filter((item) => enabled(item.id) || ["certificates", "chat", "contact", "notices"].includes(item.id)).map((item) => (
+        {EXPLORE.filter((item) => (item.id === "chat" ? chatOn(feed) : enabled(item.id) || ["certificates", "contact", "notices"].includes(item.id))).map((item) => (
           <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
         ))}
       </View>
