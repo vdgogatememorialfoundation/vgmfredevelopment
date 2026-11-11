@@ -275,7 +275,9 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           {(estimate ? estimate.pickupAvailable : book.storePickupAvailable !== false) ? (
             <p className="mt-1 text-text-muted">
               Collect from {pickup.name}, {pickup.address}
-              {estimate ? ` · ready ${estimate.pickupReadyBy}, held until ${estimate.pickupHoldUntil}` : ""}.
+              {estimate && (preorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock)
+                ? ` · ready ${estimate.pickupReadyBy}, held until ${estimate.pickupHoldUntil}`
+                : " · we'll tell you when it's ready to collect"}.
             </p>
           ) : (
             <p className="mt-1 text-text-muted">Store pickup is not offered for this product.</p>

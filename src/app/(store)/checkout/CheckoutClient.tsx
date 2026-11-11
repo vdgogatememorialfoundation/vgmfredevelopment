@@ -811,7 +811,7 @@ export default function CheckoutClient() {
                 <a href={pickupLocation.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 font-semibold text-burgundy underline">
                   <Glyph name="pin" className="h-3.5 w-3.5" /> Open in Google Maps
                 </a>
-                {quote?.pickupAvailable && (
+                {quote?.pickupAvailable && (hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock) && (
                   <p className="mt-2 font-medium text-emerald-700">
                     Ready {quote.pickupReadyBy} · held until {quote.pickupHoldUntil}
                   </p>
@@ -900,7 +900,9 @@ export default function CheckoutClient() {
                       {orderSettings.hideDeliveryDates ? null : (
                       <p className="mt-1 text-xs font-semibold text-emerald-700">
                         {deliveryMode === "store_pickup"
-                          ? `Ready for pickup ${quote?.pickupReadyBy || ""}`.trim()
+                          ? (hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock)
+                            ? `Ready for pickup ${quote?.pickupReadyBy || ""}`.trim()
+                            : "We'll tell you when it's ready to collect"
                           : canPreorder(book)
                             ? `Tentative delivery by ${preorderDeliveryDate(book)}`
                             : `Expected delivery ${selectedOffer?.deliverBy || quote?.deliverBy || "shown once you enter the delivery pincode"}`}
@@ -970,7 +972,8 @@ export default function CheckoutClient() {
                 </dl>
               ) : (
                 <p className="text-sm text-text-muted">
-                  Pickup from store at {pickupLocation.name}. Ready {quote?.pickupReadyBy}. We will
+                  Pickup from store at {pickupLocation.name}.
+                  {(hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock) && quote?.pickupReadyBy ? ` Ready ${quote.pickupReadyBy}.` : ""} We will
                   notify you when the order can be collected.
                 </p>
               )}
@@ -1203,7 +1206,7 @@ export default function CheckoutClient() {
                 <a href={pickupLocation.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 font-semibold text-burgundy underline">
                   <Glyph name="pin" className="h-3.5 w-3.5" /> Open in Google Maps
                 </a>
-                {placedOrder.eta ? (
+                {placedOrder.eta && (placedOrder.preorderPayment ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock) ? (
                   <p className="mt-2 font-medium text-emerald-700">
                     Ready {placedOrder.eta}{placedOrder.pickupHoldUntil ? ` · held until ${placedOrder.pickupHoldUntil}` : ""}
                   </p>
