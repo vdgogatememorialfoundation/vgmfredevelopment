@@ -10,6 +10,7 @@ import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store
 import { useOrderSettings } from "@/lib/use-cms";
 import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
+import { currentProductTitle } from "@/lib/product-data";
 import { orderStatusText, shippingIsFree } from "@/lib/integrations";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import { agreedDelivery, customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
@@ -94,7 +95,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                 <p className="text-sm font-semibold text-text-primary">
                   Shipment {part.part} of {parts.length} · {part.courier} {part.awb}
                 </p>
-                <p className="mb-2 text-xs text-text-muted">{part.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")}</p>
+                <p className="mb-2 text-xs text-text-muted">{part.items.map((item) => `${currentProductTitle(item)} × ${item.quantity}`).join(", ")}</p>
                 <OrderTrackingTimeline order={{ ...order, trackingId: part.awb, courierName: part.courier }} shipmentId={part.id} />
               </div>
             ));
@@ -113,7 +114,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                   className="flex items-center gap-3 text-sm"
                 >
                   <span className="min-w-0 flex-1 truncate text-text-primary">
-                    {item.title}
+                    {currentProductTitle(item)}
                   </span>
                   <span className="text-text-muted">
                     × {item.quantity}

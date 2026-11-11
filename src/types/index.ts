@@ -268,6 +268,8 @@ export interface Book {
   id: string;
   title: string;
   slug: string;
+  /** Old slugs kept after a rename so earlier product links redirect to the new URL. */
+  previousSlugs?: string[];
   author: string;
   description: string;
   isbn?: string;

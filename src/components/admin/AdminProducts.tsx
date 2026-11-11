@@ -362,10 +362,12 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     const inStock = form.stockStatus === "in_stock";
     const stock = inStock ? Math.max(0, Math.floor(form.stock)) : 0;
     if (inStock && stock < 1) return setError("In-stock products need a quantity of at least 1.");
+    const nextSlug = !isNew && form.title.trim() !== book.title ? slugify(form.title) : form.slug || slugify(form.title);
     const record: Book = {
       ...form,
       title: form.title.trim(),
-      slug: form.slug || slugify(form.title),
+      slug: nextSlug,
+      previousSlugs: book.slug && book.slug !== nextSlug ? Array.from(new Set([...(form.previousSlugs ?? []), book.slug])).filter((old) => old !== nextSlug) : form.previousSlugs,
       sku,
       productCode,
       barcode: form.barcode || generateBarcode(),
@@ -413,7 +415,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Field label="Title">
-            <TextInput value={form.title} onChange={(event) => set({ title: event.target.value, slug: isNew ? slugify(event.target.value) : form.slug })} />
+            <TextInput value={form.title} onChange={(event) => set({ title: event.target.value, slug: slugify(event.target.value) })} />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Product type">

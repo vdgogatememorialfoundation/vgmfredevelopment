@@ -116,6 +116,15 @@ export function getAllProducts(): Book[] {
 }
 
 /** Products visible in the shop. */
+let titleCache: { at: number; titles: Map<string, string> } | null = null;
+
+/** The product's current name for an order line, so renamed products show their new name on orders. */
+export function currentProductTitle(item: { bookId?: string; sku?: string; title: string }) {
+  if (typeof window === "undefined") return item.title;
+  if (!titleCache || Date.now() - titleCache.at > 5000) titleCache = { at: Date.now(), titles: new Map(getAllProducts().flatMap((book) => [[book.id, book.title], ...(book.sku ? [[`sku:${book.sku}`, book.title]] : [])] as [string, string][])) };
+  return (item.bookId && titleCache.titles.get(item.bookId)) || (item.sku && titleCache.titles.get(`sku:${item.sku}`)) || item.title;
+}
+
 export function getLiveBooks(): Book[] {
   return getAllProducts().filter((book) => book.active !== false && isPublishedNow(book));
 }

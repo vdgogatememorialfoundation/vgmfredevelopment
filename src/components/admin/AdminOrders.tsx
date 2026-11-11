@@ -27,7 +27,7 @@ import {
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
-import { getLiveBooks } from "@/lib/product-data";
+import { currentProductTitle, getLiveBooks } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, orderStatusText, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
@@ -397,9 +397,14 @@ export function OrdersDashboard() {
                       )}
                     >
                       <span className="min-w-0">
-                        <span className="block font-mono text-xs font-semibold text-text-primary">#{order.id}</span>
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-xs font-semibold text-text-primary">#{order.id}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isPreorderOrder(order) ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
+                            {isPreorderOrder(order) ? "Pre-order" : "Normal"}
+                          </span>
+                        </span>
                         <span className="block truncate text-xs text-text-muted">
-                          {order.deliveryAddress?.fullName || order.items[0]?.title} · {formatDate(order.date)}
+                          {order.deliveryAddress?.fullName || (order.items[0] ? currentProductTitle(order.items[0]) : "")} · {formatDate(order.date)}
                           {order.channel === "pos" ? " · POS" : ""}
                         </span>
                         <OrderRowPreview order={order} />
@@ -445,7 +450,7 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
       {contact && <span className="block break-words text-text-muted">{contact}</span>}
       {place && <span className="block break-words text-text-muted">{place}</span>}
       <span className="block break-words font-medium text-text-primary">
-        {quantity} item{quantity === 1 ? "" : "s"} · {order.items.map((item) => `${item.title} × ${item.quantity} (${rupees(item.price * item.quantity)})`).join(", ")}
+        {quantity} item{quantity === 1 ? "" : "s"} · {order.items.map((item) => `${currentProductTitle(item)} × ${item.quantity} (${rupees(item.price * item.quantity)})`).join(", ")}
       </span>
       <span className="block break-words text-text-muted">
         Payment: {order.paymentStatus}
@@ -983,7 +988,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <ul className="space-y-2">
             {(editing ? editItems : order.items).map((item, index) => (
               <li key={item.bookId} className="flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                <span className="min-w-0 flex-1 truncate">{currentProductTitle(item)}</span>
                 {editing ? (
                   <span className="flex items-center gap-1">
                     <button
@@ -1880,7 +1885,7 @@ function SplitShipments({
           <p className="text-xs text-text-muted">Set how many of each item go in shipment 2; the rest go in shipment 1. Each shipment gets its own courier booking, AWB, label and tracking. The courier picked above (or the default rule) is used.</p>
           {order.items.map((item) => (
             <div key={item.bookId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warm-cream/40 px-3 py-2">
-              <span className="font-medium">{item.title} × {item.quantity}</span>
+              <span className="font-medium">{currentProductTitle(item)} × {item.quantity}</span>
               <span className="flex items-center gap-2 text-xs">
                 Shipment 1: <b>{item.quantity - (second[item.bookId] ?? 0)}</b> · Shipment 2:
                 <input

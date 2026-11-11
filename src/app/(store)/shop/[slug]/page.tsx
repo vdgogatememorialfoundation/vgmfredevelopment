@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { permanentRedirect } from "next/navigation";
 import ShopProduct from "@/components/store/ShopProduct";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { isPublishedNow } from "@/lib/schedule";
@@ -33,6 +34,10 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   const { slug } = await params;
   const books = (readMobileFeed().books ?? []).filter((book) => book.active !== false && isPublishedNow(book));
   const book = books.find((item) => item.slug === slug) ?? null;
+  if (!book) {
+    const renamed = books.find((item) => Array.isArray(item.previousSlugs) && (item.previousSlugs as string[]).includes(slug));
+    if (renamed?.slug) permanentRedirect(`/shop/${renamed.slug}`);
+  }
   return (
     <>
       {book && (
