@@ -207,6 +207,8 @@ export interface OrderSettings {
   hideDeliveryDates: boolean;
   /** Pre-order tracking shows expected packing / delivery dates and On time labels (off: hidden until a courier is booked). */
   showPreorderStepDates: boolean;
+  /** Store pickup shows a ready date (off: the desk tells the customer when it is ready). */
+  pickupDates: { inStock: boolean; preorder: boolean };
   /** Buffer added to aggregator rates shown on the site, in case a courier does not pick up and a costlier one is used. */
   courierMarkup: { percent: number; rupees: number; minimum: number };
   /** Hours the desk needs to pack an order before the courier can collect it. */
@@ -389,6 +391,7 @@ export const defaultOrderSettings: OrderSettings = {
   hiddenCouriers: [],
   hideDeliveryDates: false,
   showPreorderStepDates: false,
+  pickupDates: { inStock: false, preorder: false },
   courierMarkup: { percent: 0, rupees: 0, minimum: 0 },
   processingHours: 4,
   dispatchCutoff: "17:00",
@@ -632,6 +635,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
     hideDeliveryDates: Boolean(merged.hideDeliveryDates),
     showPreorderStepDates: Boolean(merged.showPreorderStepDates),
+    pickupDates: { inStock: Boolean(merged.pickupDates?.inStock), preorder: Boolean(merged.pickupDates?.preorder) },
     hiddenCouriers: Array.isArray(merged.hiddenCouriers) ? merged.hiddenCouriers.map((name) => String(name).trim()).filter(Boolean).slice(0, 50) : [],
     courierMarkup: {
       percent: Math.max(0, Number(merged.courierMarkup?.percent) || 0),

@@ -11,7 +11,7 @@ import ProductReviews from "@/components/store/ProductReviews";
 import BookDetails from "@/components/store/BookDetails";
 import Stars from "@/components/store/Stars";
 import { averageRating, useProductReviews } from "@/lib/reviews";
-import { useLiveBooks, useSiteSettings } from "@/lib/use-cms";
+import { useLiveBooks, useOrderSettings, useSiteSettings } from "@/lib/use-cms";
 import { storeConfig } from "@/lib/constants";
 import { getDiscountPercent } from "@/lib/store";
 import { browserHasProductEdits, freshCatalogue } from "@/components/store/ShopCatalogue";
@@ -34,6 +34,7 @@ export default function ShopProduct({
   const catalogue = useLocal && live.length ? freshCatalogue(initialBooks, live) : initialBooks;
   const book = catalogue.find((item) => item.slug === slug) ?? initialBook;
   const purchaseReviews = useProductReviews(book?.id ?? "");
+  const shopRules = useOrderSettings();
   const languageSize = useSiteSettings()?.productText?.pageLanguage || 24;
 
   if (!book) {
@@ -52,6 +53,18 @@ export default function ShopProduct({
   const discount = getDiscountPercent(book);
   const rating = purchaseReviews.length ? averageRating(purchaseReviews) : book.rating ?? 0;
   const reviewCount = purchaseReviews.length || book.reviewCount || 0;
+  const writtenReviews = purchaseReviews.length
+    ? purchaseReviews.filter((review) => String((review as { comment?: string; text?: string; body?: string }).comment ?? (review as { text?: string }).text ?? (review as { body?: string }).body ?? "").trim()).length
+    : book.reviews?.length ?? 0;
+  const canReturn = book.policy?.returns ?? shopRules.returns.enabled;
+  const canReplace = book.policy?.replacement ?? (shopRules.returns.enabled && shopRules.returns.replacementAllowed);
+  const canCancel = book.policy?.cancellation ?? shopRules.cancellation.enabled;
+  const until = shopRules.cancellation.allowedUntil === "Ordered" ? "packing" : shopRules.cancellation.allowedUntil === "Packed" ? "dispatch" : "delivery";
+  const policyLines = [
+    { label: "Return", ok: canReturn, text: canReturn ? `${shopRules.returns.windowDays}-day return after delivery` : "Not returnable" },
+    { label: "Replacement", ok: canReplace, text: canReplace ? "Replacement for damaged or wrong items" : "No replacement" },
+    { label: "Cancellation", ok: canCancel, text: canCancel ? `Can be cancelled before ${until}` : "Cannot be cancelled once ordered" },
+  ];
   const publisher = book.publisher?.name ?? storeConfig.publisherName;
 
   return (
@@ -102,14 +115,28 @@ export default function ShopProduct({
                 ) : null}
               </p>
               <ProductShare slug={book.slug} title={book.title} price={book.price} />
-              {reviewCount > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Stars rating={rating} />
-                  <a href="#reviews" className="text-sm font-medium text-burgundy hover:underline">{rating.toFixed(1)}</a>
-                  <span className="text-sm text-text-muted">({reviewCount} ratings)</span>
-                </div>
-              )}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {reviewCount > 0 ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-0.5 text-sm font-bold text-white">{rating.toFixed(1)} ★</span>
+                    <Stars rating={rating} />
+                    <a href="#reviews" className="text-sm font-medium text-burgundy hover:underline">
+                      {reviewCount} rating{reviewCount === 1 ? "" : "s"} & {writtenReviews} review{writtenReviews === 1 ? "" : "s"}
+                    </a>
+                  </>
+                ) : (
+                  <a href="#reviews" className="text-sm text-text-muted hover:underline">No ratings yet · be the first to review</a>
+                )}
+              </div>
               <ProductBuyBox book={book} />
+              <ul className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                {policyLines.map((line) => (
+                  <li key={line.label} className={`rounded-lg border px-3 py-2 ${line.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-border bg-slate-50 text-text-muted"}`}>
+                    <b className="block">{line.label}</b>
+                    {line.text}
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>

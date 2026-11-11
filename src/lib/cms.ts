@@ -295,6 +295,8 @@ export function canEdit(moduleId: ContentModuleId, email: string) {
   if (editorsFor(moduleId).some((item) => item.toLowerCase() === value)) return true;
   const account = readJSON<User[]>("vgmf_accounts", []).find((item) => item.email.toLowerCase() === value);
   if (!account) return false;
+  // Any staff member may write articles (they go for approval); assignment is optional.
+  if (moduleId === "articles" && String(account.role) === "staff") return true;
   const allowed = modulesFor(account);
   return allowed === "all" || allowed.includes(roleModuleFor[moduleId]);
 }

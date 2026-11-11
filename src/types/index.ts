@@ -291,6 +291,10 @@ export interface Book {
   stockStatus?: "in_stock" | "out_of_stock";
   preorder?: { enabled: boolean; releaseDate?: string; limit?: number; note?: string };
   category: string;
+  /** "other" = any non-book product: no ISBN, author, pages or publisher needed. */
+  productType?: "book" | "other";
+  /** Per-product override of the shop rules shown on the product page. */
+  policy?: { returns?: boolean; replacement?: boolean; cancellation?: boolean };
   edition?: string;
   publishedYear?: number;
   publisher?: PublisherInfo;

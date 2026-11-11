@@ -1528,7 +1528,9 @@ export function OrderSettingsDesk() {
       <Card title="Fulfilment options at checkout">
         <div className="grid gap-4 md:grid-cols-3">
           <Check label="Home delivery" checked={value.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} />
-          <Check label="Pickup from store" checked={value.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} />
+          <Check label="Pickup from store (off: customers can't choose store pickup)" checked={value.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} />
+          <Check label="Store pickup: show a ready date for in-stock items (off: no date; the desk marks it ready)" checked={value.pickupDates.inStock} onChange={(inStock) => set({ pickupDates: { ...value.pickupDates, inStock } })} />
+          <Check label="Store pickup: show a ready date for pre-orders (off: no date; the desk marks it ready)" checked={value.pickupDates.preorder} onChange={(preorder) => set({ pickupDates: { ...value.pickupDates, preorder } })} />
           <Check label="Customer chooses the delivery partner" hint="Shows couriers and rates at checkout." checked={value.showCourierChoice} onChange={(showCourierChoice) => set({ showCourierChoice })} />
           <Check label="Hide Gogate Products-Tookan at checkout" checked={value.hideTookanAtCheckout} onChange={(hideTookanAtCheckout) => set({ hideTookanAtCheckout })} />
           <Check label="Hide Gogate Products-Shipday at checkout" checked={value.hideShipdayAtCheckout} onChange={(hideShipdayAtCheckout) => set({ hideShipdayAtCheckout })} />

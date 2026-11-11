@@ -707,7 +707,9 @@ export default function CheckoutClient() {
                 <p className="mt-1 text-xs text-text-muted">
                   Free
                   {quote?.pickupAvailable
-                    ? ` · ready ${quote.pickupReadyBy}`
+                    ? (hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock)
+                      ? ` · ready ${quote.pickupReadyBy}`
+                      : " · we'll tell you when it's ready to collect"
                     : " · unavailable for this cart"}
                 </p>
               </button>

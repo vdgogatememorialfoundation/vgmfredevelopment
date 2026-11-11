@@ -403,7 +403,12 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     <Panel
       title={isNew ? "Create product" : `Edit — ${book.title}`}
       description="Images and videos, licences, publisher, generated SKU, then stock."
-      action={saved ? <span className="text-sm font-semibold text-emerald-700">Saved ✓</span> : undefined}
+      action={
+        <div className="flex items-center gap-3">
+          {saved ? <span className="text-sm font-semibold text-emerald-700">Saved ✓</span> : null}
+          <Button variant="outline" onClick={onDone}>← Back to products</Button>
+        </div>
+      }
     >
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
@@ -411,7 +416,12 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             <TextInput value={form.title} onChange={(event) => set({ title: event.target.value, slug: isNew ? slugify(event.target.value) : form.slug })} />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Author"><TextInput value={form.author} onChange={(event) => set({ author: event.target.value })} /></Field>
+            <Field label="Product type">
+              <SelectInput value={form.productType ?? "book"} onChange={(event) => set({ productType: event.target.value === "other" ? "other" : "book" })}>
+                <option value="book">Book</option>
+                <option value="other">Other product (no ISBN, author or publisher)</option>
+              </SelectInput>
+            </Field>
             <Field label="Category">
               <SelectInput value={form.category} onChange={(event) => set({ category: event.target.value })}>
                 {categories.map((category) => (
@@ -419,6 +429,9 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
                 ))}
               </SelectInput>
             </Field>
+          </div>
+          <div className={form.productType === "other" ? "hidden" : "grid gap-3 sm:grid-cols-2"}>
+            <Field label="Author"><TextInput value={form.author} onChange={(event) => set({ author: event.target.value })} /></Field>
             <Field label="Edition"><TextInput value={form.edition ?? ""} onChange={(event) => set({ edition: event.target.value })} /></Field>
             <Field label="Published year"><TextInput type="number" value={form.publishedYear ?? ""} onChange={(event) => set({ publishedYear: Number(event.target.value) || undefined })} /></Field>
             <Field label="Pages"><TextInput type="number" value={form.pages || ""} onChange={(event) => set({ pages: Number(event.target.value) || undefined })} /></Field>
@@ -431,13 +444,27 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
                 ))}
               </SelectInput>
             </Field>
-            <Field label="Weight (kg)"><TextInput type="number" step="0.1" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
           </div>
-          <BookSpecFields form={form} set={set} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Weight (kg)"><TextInput type="number" step="0.1" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
+            {(["returns", "replacement", "cancellation"] as const).map((key) => (
+              <Field key={key} label={key === "returns" ? "Return" : key === "replacement" ? "Replacement" : "Cancellation"}>
+                <SelectInput
+                  value={form.policy?.[key] === undefined ? "" : form.policy[key] ? "yes" : "no"}
+                  onChange={(event) => set({ policy: { ...form.policy, [key]: event.target.value === "" ? undefined : event.target.value === "yes" } })}
+                >
+                  <option value="">As in shop settings</option>
+                  <option value="yes">Allowed for this product</option>
+                  <option value="no">Not allowed for this product</option>
+                </SelectInput>
+              </Field>
+            ))}
+          </div>
+          {form.productType !== "other" && <BookSpecFields form={form} set={set} />}
           <Field label="Description">
             <TextArea rows={5} value={form.description} onChange={(event) => set({ description: event.target.value })} />
           </Field>
-          <BookContentFields form={form} set={set} />
+          {form.productType !== "other" && <BookContentFields form={form} set={set} />}
 
           <div>
             <p className="mb-2 text-sm font-semibold text-text-primary">Licences & identifiers</p>
@@ -453,7 +480,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             </div>
           </div>
 
-          <div>
+          <div className={form.productType === "other" ? "hidden" : undefined}>
             <p className="mb-2 text-sm font-semibold text-text-primary">Publisher</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Name"><TextInput value={form.publisher?.name ?? ""} onChange={(event) => set({ publisher: { name: event.target.value, address: form.publisher?.address, phone: form.publisher?.phone, email: form.publisher?.email, website: form.publisher?.website } })} /></Field>

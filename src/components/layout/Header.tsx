@@ -447,6 +447,18 @@ export default function Header() {
 
               {/* Actions */}
               <div className="hidden items-center gap-3 lg:flex">
+                <form action="/search" role="search" className="relative">
+                  <input
+                    type="search"
+                    name="q"
+                    placeholder="Search"
+                    aria-label="Search the site"
+                    className="h-9 w-32 rounded-full border border-border bg-white pl-3 pr-8 text-sm focus:w-48 focus:outline-none focus:ring-2 focus:ring-burgundy/30 xl:w-40"
+                  />
+                  <button type="submit" aria-label="Search" className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-burgundy">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                  </button>
+                </form>
                 <Link
                   href="/cart"
                   aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
@@ -581,6 +593,9 @@ export default function Header() {
 
               {/* Mobile */}
               <div className="flex shrink-0 items-center gap-2 lg:hidden">
+                <Link href="/search" aria-label="Search" className="flex h-10 w-10 items-center justify-center text-ink">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                </Link>
                 <Link
                   href="/cart"
                   aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}

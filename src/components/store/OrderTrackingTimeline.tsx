@@ -300,7 +300,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
           <Tile label="Pickup at" value={`${pickupAt.name}, ${pickupAt.address}`} />
           <Tile label="Point of contact" value={[pickupAt.contactName, pickupAt.contactPhone].filter(Boolean).join(" · ")} />
           <Tile label="Pickup timings" value={pickupAt.hours} />
-          {order.eta ? (
+          {order.eta && (pickupOtpReady(order) || (preorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock)) ? (
             <Tile
               label={pickupOtpReady(order) ? "Ready for pickup" : "Ready by"}
               value={`${order.eta}${order.pickupHoldUntil ? ` · held until ${order.pickupHoldUntil}` : ""}`}
