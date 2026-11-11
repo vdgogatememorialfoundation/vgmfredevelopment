@@ -170,7 +170,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
           const processed = refunds.every((refund) => refund.status !== "pending" && refund.status !== "failed");
           const failed = refunds.some((refund) => refund.status === "failed");
           const expected = refundExpectedCredit(lastRefund);
-          const credited = processed && (lastRefund.destination === "store_credit" || Boolean(lastRefund.processedAt && expected && now >= expected.date.getTime()));
+          const credited = processed && (lastRefund.destination === "store_credit" || Boolean(expected?.done));
           const bankRef = lastRefund.arn || lastRefund.rrn || lastRefund.utr;
           const rupee = `₹${amount.toLocaleString("en-IN")}`;
           const startAt =

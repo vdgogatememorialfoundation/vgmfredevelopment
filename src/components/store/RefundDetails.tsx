@@ -15,7 +15,7 @@ function addWorkingDays(from: number, days: number) {
   return date;
 }
 
-/** Razorpay: 5–7 working days after processing to reach the bank (about 3–5 to process first). */
+/** Credited once Razorpay reports the refund processed; until then an estimate for the progress line. */
 export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: boolean } | null {
   if (refund.status === "failed") return null;
   if (refund.destination === "store_credit") {
@@ -23,7 +23,8 @@ export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: 
     return Number.isFinite(at) ? { date: new Date(at), done: true } : null;
   }
   const processed = Date.parse(refund.processedAt || "");
-  if (refund.status === "processed" && (refund.rrn || refund.arn || refund.utr)) {
+  // Razorpay's "processed" is its final confirmation that the money went back, so that is when we show it as credited.
+  if (refund.status === "processed") {
     const at = Number.isFinite(processed) ? processed : Date.parse(refund.at);
     if (Number.isFinite(at)) return { date: new Date(at), done: true };
   }
