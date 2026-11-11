@@ -23,6 +23,7 @@ import {
   setOrderStatus,
   recordBalancePayment,
   recordCourierPayment,
+  convertToStorePickup,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
@@ -1351,6 +1352,22 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               </div>
             )}
           </Section>
+        </div>
+      )}
+
+      {order.deliveryMode === "delivery" && !shipment && !["Shipped", "Out for Delivery", "Delivered", "Cancelled"].includes(order.status) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-warm-cream/50 p-3 text-sm">
+          <span>Customer will collect from the clinic instead?</span>
+          <Button
+            variant="outline"
+            disabled={busy === "to-pickup"}
+            onClick={() => {
+              if (!window.confirm("Change this order to store pickup? The courier charge comes off the total.")) return;
+              run("to-pickup", () => convertToStorePickup(order.id));
+            }}
+          >
+            Change to store pickup
+          </Button>
         </div>
       )}
 

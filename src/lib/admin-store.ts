@@ -1119,6 +1119,35 @@ export function recordPayment(orderId: string, input: { method: string; referenc
   return next;
 }
 
+/** Desk switches a courier order (not yet booked) to collection at the clinic: courier charge comes off the total. */
+export function convertToStorePickup(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order || order.deliveryMode !== "delivery") return "This order is already a store pickup.";
+  if (["Shipped", "Out for Delivery", "Delivered", "Cancelled"].includes(order.status)) return "This order has already left or is closed.";
+  const shipping = order.shipping || 0;
+  const total = Math.round((order.total - shipping) * 100) / 100;
+  const next = withHistory(
+    {
+      ...order,
+      deliveryMode: "store_pickup",
+      shipping: 0,
+      total,
+      courierName: undefined,
+      courierChoice: undefined,
+      preorderPayment: order.preorderPayment
+        ? { ...order.preorderPayment, shippingDue: undefined, balance: Math.max(0, Math.round((total - order.preorderPayment.advance) * 100) / 100) }
+        : undefined,
+    },
+    order.status,
+    `Changed to store pickup by the desk${shipping ? `; courier charge ₹${shipping} removed` : ""}.`
+  );
+  updateOrderInStore(next);
+  const paidFull = order.paymentStatus === "Paid" && shipping > 0;
+  return paidFull
+    ? `Changed to store pickup. The customer paid ₹${shipping} courier charge; refund it from Refunds if needed.`
+    : "Changed to store pickup.";
+}
+
 export function patchOrder(orderId: string, update: Partial<Order>, note?: string) {
   const order = getOrder(orderId);
   if (!order) return;
