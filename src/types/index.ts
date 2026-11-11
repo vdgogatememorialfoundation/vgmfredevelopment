@@ -618,6 +618,8 @@ export interface Order {
   returnableDays?: number;
   replacementOf?: string;
   returnRequest?: ReturnRequest;
+  /** Latest request sent to a senior reviewer, with their decision. */
+  approval?: ApprovalRequest;
   plan?: OrderPlan;
   shipmentId?: string;
   paymentMethod?: string;
@@ -731,6 +733,21 @@ export interface CourierRate {
 }
 
 export type ReturnKind = "return" | "replacement";
+
+/** A cancellation, refund, return or replacement the desk sent to a senior reviewer. */
+export interface ApprovalRequest {
+  id: string;
+  kind: "cancellation" | "refund" | "return" | "replacement";
+  status: "Pending" | "Approved" | "Rejected";
+  requestedAt: string;
+  requestedBy: string;
+  note?: string;
+  amount?: number;
+  destination?: "original" | "store_credit";
+  decidedAt?: string;
+  decidedBy?: string;
+  decisionNote?: string;
+}
 
 export interface ReturnRequest {
   id: string;

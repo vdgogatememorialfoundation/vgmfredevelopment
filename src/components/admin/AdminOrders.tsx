@@ -68,6 +68,8 @@ import { getOrder as getStoredOrder, patchOrder as patchStoredOrder } from "@/li
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { beep } from "@/lib/scan-beep";
+import { APPROVAL_LABELS, requestApproval } from "@/lib/approvals";
+import type { ApprovalRequest } from "@/types";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
@@ -835,6 +837,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const refundCap = maxRefundable(order);
   const [refundAmount, setRefundAmount] = useState(String(refundCap));
   const [cancelReason, setCancelReason] = useState("");
+  const [approvalKind, setApprovalKind] = useState<ApprovalRequest["kind"]>("cancellation");
+  const [approvalNote, setApprovalNote] = useState("");
   const [quote, setQuote] = useState<RateQuote | null>(null);
   const [picked, setPicked] = useState<number | undefined>();
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
@@ -1582,6 +1586,31 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
       {(order.status === "Delivered" || returnRequest || order.returnShipment || getOrderSettings().adminActions.processAfterDelivery) && order.status !== "Cancelled" && (
         <div className="mt-4">
+          <Section title="Senior approval">
+            {order.approval ? (
+              <p className={`mb-2 rounded-lg p-2 text-xs ${order.approval.status === "Pending" ? "bg-amber-50 text-amber-900" : order.approval.status === "Approved" ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}>
+                {APPROVAL_LABELS[order.approval.kind]}{order.approval.amount ? ` ${rupees(order.approval.amount)}` : ""} · {order.approval.status === "Pending" ? `waiting for approval (sent by ${order.approval.requestedBy}, ${formatDateTime(order.approval.requestedAt)})` : `${order.approval.status} by ${order.approval.decidedBy ?? "reviewer"}${order.approval.decisionNote ? ` · ${order.approval.decisionNote}` : ""}`}
+              </p>
+            ) : null}
+            {order.approval?.status === "Pending" ? null : (
+              <div className="flex flex-wrap gap-2">
+                <SelectInput value={approvalKind} onChange={(event) => setApprovalKind(event.target.value as ApprovalRequest["kind"])}>
+                  {Object.entries(APPROVAL_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                </SelectInput>
+                <div className="min-w-48 flex-1"><TextInput placeholder="Why it needs approval" value={approvalNote} onChange={(event) => setApprovalNote(event.target.value)} /></div>
+                <Button variant="outline" disabled={busy === "approval"} onClick={() => run("approval", () => {
+                  requestApproval(order.id, {
+                    kind: approvalKind,
+                    note: approvalNote.trim() || undefined,
+                    ...(approvalKind === "refund" ? { amount: Number(refundAmount) || refundCap, destination: refundDest } : {}),
+                  });
+                  setApprovalNote("");
+                  return "Sent for approval. It waits in Commerce → Approvals.";
+                })}>Send for approval</Button>
+              </div>
+            )}
+            {approvalKind === "refund" && order.approval?.status !== "Pending" ? <p className="mt-1 text-xs text-text-muted">The refund amount and destination are taken from the refund box below.</p> : null}
+          </Section>
           <Section title="Returns, refunds & replacements">
             {getOrderSettings().adminActions.processAfterDelivery ? (
               <p className="mb-2 text-xs text-text-muted">Customers cannot cancel or return. The desk can cancel, modify, refund, open a return, or place a free replacement. Damaged-item requests from the customer wait here for accept or reject.</p>

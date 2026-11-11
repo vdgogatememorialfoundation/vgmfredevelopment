@@ -248,8 +248,6 @@ export function buildTrackingStages(
       fromScans.at ||
       order.history?.find((item) => /cancel/i.test(`${item.status} ${item.note ?? ""}`))?.at ||
       order.date;
-    const reviewedAt =
-      order.history?.find((item) => /cancel/i.test(`${item.status} ${item.note ?? ""}`))?.at || cancelledAt;
     const refunded = (order.refundAmount ?? 0) > 0 || order.paymentStatus === "Refunded" || order.paymentStatus === "Partially Refunded";
     const refundAt = order.history?.find((item) => /refund/i.test(`${item.status} ${item.note ?? ""}`))?.at || (refunded ? cancelledAt : "");
     const stages = [
@@ -258,22 +256,6 @@ export function buildTrackingStages(
         "Ordered",
         "Order placed",
         [{ id: "placed", title: "Your order has been placed", at: order.date, location: origin, reached: true }],
-        true
-      ),
-      makeStage(
-        "cancel-review",
-        "Cancellation reviewed",
-        "Reviewed by the Foundation desk",
-        [
-          {
-            id: "cancel-review",
-            title: "Cancellation reviewed by admin",
-            at: reviewedAt,
-            location: origin,
-            reached: true,
-            detail: "Customers cannot cancel orders. The Foundation desk cancelled this order.",
-          },
-        ],
         true
       ),
       makeStage(
@@ -287,7 +269,8 @@ export function buildTrackingStages(
             at: cancelledAt,
             location: origin,
             reached: true,
-            detail: order.cancelReason || "Cancelled by the Foundation desk.",
+            // Desk notes such as "nil" or "-" are not meant for the customer.
+            detail: order.cancelReason && !/^(nil|null|none|na|n\/a|-+|\.+)$/i.test(order.cancelReason.trim()) ? order.cancelReason : "",
           },
         ],
         true
@@ -307,7 +290,7 @@ export function buildTrackingStages(
                 : "Refund will be initiated to your original payment method within 3–5 business days.",
               at: refundAt || cancelledAt,
               reached: refunded,
-              detail: refunded ? "Processed from the admin desk." : "The Foundation desk will complete the refund next.",
+              detail: refunded ? "" : "We will start the refund shortly.",
             },
           ],
           refunded,
