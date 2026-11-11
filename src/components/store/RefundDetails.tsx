@@ -15,7 +15,7 @@ function addWorkingDays(from: number, days: number) {
   return date;
 }
 
-export const REFUND_CREDIT_NOTE = "Amount will be credited to customer's bank account within 5-7 working days after the refund has processed";
+export const REFUND_CREDIT_NOTE = "The amount will be credited to your bank account within 5–7 working days after the refund is processed. If it has not arrived by then, please contact your bank.";
 
 /** Credited 7 working days after Razorpay processes the refund (about 3–5 to process first). */
 export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: boolean } | null {
@@ -92,7 +92,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
       ? { id: "refunded", label: "Added to store credit", caption: "Use it on your next order.", reached: true, partial: false, events: [] }
       : manual
         ? { id: "recorded", label: "Recorded by the Foundation", caption: "Paid back through the original payment method.", reached: true, partial: false, events: [] }
-        : { id: "bank", label: "Refund processing", caption: ["Takes 3–5 working days.", !done && !failed ? refundExpectedCreditLabel(refund) : ""].filter(Boolean).join(" · "), reached: true, partial: false, events: [] },
+        : { id: "bank", label: "Refund processing", caption: "Takes 3–5 working days.", reached: true, partial: false, events: [] },
     ...(credit
       ? []
       : [
@@ -101,7 +101,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
             label: failed ? "Refund failed" : "Refund processed",
             caption: failed
               ? stamp(refund.checkedAt)
-              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`, refundExpectedCreditLabel(refund), REFUND_CREDIT_NOTE].filter(Boolean).join(" · "),
+              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`].filter(Boolean).join(" · "),
             reached: done || failed || manual,
             partial: false,
             events: [],
@@ -112,8 +112,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
                 {
                   id: "credited",
                   label: "Credited to your account",
-                  caption: refundExpectedCreditLabel(refund) || REFUND_CREDIT_NOTE,
-                  expected: refundExpectedCreditLabel(refund) || REFUND_CREDIT_NOTE,
+                  caption: REFUND_CREDIT_NOTE,
                   reached: Boolean(done && refundExpectedCredit(refund)?.done),
                   partial: false,
                   events: [],

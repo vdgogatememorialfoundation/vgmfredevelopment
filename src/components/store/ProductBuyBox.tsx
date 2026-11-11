@@ -171,7 +171,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
       </p>
 
       <div className="mt-4 rounded-xl border border-gold/40 bg-warm-cream p-4 text-sm">
-        {orderSettings.hideDeliveryDates ? null : (
+        {(preorder ? preorderDatesHidden(orderSettings) : orderSettings.hideDeliveryDates) ? null : (
         <div className="flex items-center gap-2 font-medium text-text-primary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 17h14V7H5z" />

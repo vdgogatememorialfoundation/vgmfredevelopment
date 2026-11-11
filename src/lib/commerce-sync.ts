@@ -63,6 +63,10 @@ function rememberOrders(remote: Order[]) {
     if (!prev || orderActivityAt(order) >= orderActivityAt(prev)) {
       byId.set(order.id, prev ? { ...prev, ...order } : order);
       changed = true;
+    } else if (order.refunds?.length && JSON.stringify(order.refunds) !== JSON.stringify(prev.refunds ?? [])) {
+      // Refund status comes from the gateway on the server, so the server copy wins.
+      byId.set(order.id, { ...prev, refunds: order.refunds, refundAmount: order.refundAmount, paymentStatus: order.paymentStatus, status: order.status });
+      changed = true;
     }
   }
   if (!changed) return;

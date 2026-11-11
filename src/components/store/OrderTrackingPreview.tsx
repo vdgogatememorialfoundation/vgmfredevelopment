@@ -193,11 +193,10 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
               : credited
                 ? `${rupee} refunded${lastRefund.destination === "store_credit" ? " to store credit" : " to your account"}`
                 : processed
-                  ? `Refund of ${rupee} processed · ${refundExpectedCreditLabel(lastRefund).toLowerCase() || "credit within 5–7 working days"}`
+                  ? `Refund of ${rupee} processed`
                   : `Refund of ${rupee} initiated`,
             detail: [
               shortStamp(lastRefund.processedAt || lastRefund.at, country),
-              !failed && !credited ? refundExpectedCreditLabel(lastRefund) : "",
               processed && !failed && !credited && lastRefund.destination !== "store_credit" ? REFUND_CREDIT_NOTE : "",
               bankRef ? `Bank ref ${bankRef}` : "",
               lastRefund.gatewayRefundId ? `Refund ID ${lastRefund.gatewayRefundId}` : "",

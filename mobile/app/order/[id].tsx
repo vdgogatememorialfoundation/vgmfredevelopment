@@ -7,7 +7,7 @@ import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { useAuth } from "../../src/auth";
 import { Banner, Body, Button, Card, Divider, Empty, Heading, Loading, Muted, PageHeader, Screen } from "../../src/ui";
 
-const REFUND_CREDIT_NOTE = "Amount will be credited to customer's bank account within 5-7 working days after the refund has processed";
+const REFUND_CREDIT_NOTE = "The amount will be credited to your bank account within 5–7 working days after the refund is processed. If it has not arrived by then, please contact your bank.";
 
 /** Same rule as the website: credited 7 working days after Razorpay processes the refund. */
 function refundCredited(refund: Row) {
