@@ -300,7 +300,7 @@ export interface Book {
   /** Set on the shop copy while an offer runs. */
   offerLabel?: string;
   /** Per-product override of the shop rules shown on the product page. */
-  policy?: { returns?: boolean; replacement?: boolean; cancellation?: boolean };
+  policy?: { returns?: boolean; replacement?: boolean; cancellation?: boolean; note?: string };
   edition?: string;
   publishedYear?: number;
   publisher?: PublisherInfo;

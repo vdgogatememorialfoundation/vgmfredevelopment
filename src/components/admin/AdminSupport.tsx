@@ -233,7 +233,7 @@ function CustomerOrders({ email, phone }: { email?: string; phone?: string }) {
           return (
             <li key={order.id} className="rounded-lg border border-border p-2.5 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Link href={`/admin/orders?order=${encodeURIComponent(order.id)}`} className="font-mono font-semibold text-burgundy underline">{order.id}</Link>
+                <Link href={`/admin/commerce/orders?order=${encodeURIComponent(order.id)}`} className="font-mono font-semibold text-burgundy underline">{order.id}</Link>
                 <span className="font-semibold text-text-primary">{order.status} · {order.paymentStatus} · ₹{order.total}</span>
               </div>
               <p className="mt-1 text-text-muted">

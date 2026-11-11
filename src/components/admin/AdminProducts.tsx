@@ -449,18 +449,31 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Weight (kg)"><TextInput type="number" step="0.1" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
-            {(["returns", "replacement", "cancellation"] as const).map((key) => (
-              <Field key={key} label={key === "returns" ? "Return" : key === "replacement" ? "Replacement" : "Cancellation"}>
-                <SelectInput
-                  value={form.policy?.[key] === undefined ? "" : form.policy[key] ? "yes" : "no"}
-                  onChange={(event) => set({ policy: { ...form.policy, [key]: event.target.value === "" ? undefined : event.target.value === "yes" } })}
-                >
-                  <option value="">As in shop settings</option>
-                  <option value="yes">Allowed for this product</option>
-                  <option value="no">Not allowed for this product</option>
-                </SelectInput>
-              </Field>
-            ))}
+          </div>
+          <div className="rounded-xl border border-border bg-warm-cream/30 p-3">
+            <p className="text-sm font-semibold text-text-primary">Return, replacement and cancellation</p>
+            <p className="mb-2 text-xs text-text-muted">Shown on the product page on the website and in the app.</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(["returns", "replacement", "cancellation"] as const).map((key) => (
+                <Field key={key} label={key === "returns" ? "Can it be returned?" : key === "replacement" ? "Can it be replaced?" : "Can the order be cancelled?"}>
+                  <SelectInput
+                    value={form.policy?.[key] === undefined ? "" : form.policy[key] ? "yes" : "no"}
+                    onChange={(event) => set({ policy: { ...form.policy, [key]: event.target.value === "" ? undefined : event.target.value === "yes" } })}
+                  >
+                    <option value="">Use shop setting</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </SelectInput>
+                </Field>
+              ))}
+            </div>
+            <Field label="Policy note (optional)">
+              <TextInput
+                value={form.policy?.note ?? ""}
+                placeholder="e.g. Damaged items can be replaced after photos are reviewed"
+                onChange={(event) => set({ policy: { ...form.policy, note: event.target.value || undefined } })}
+              />
+            </Field>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
             <p className="mb-2 text-sm font-semibold text-text-primary">Offer (optional)</p>

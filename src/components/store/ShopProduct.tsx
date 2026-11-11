@@ -62,7 +62,7 @@ export default function ShopProduct({
   const until = shopRules.cancellation.allowedUntil === "Ordered" ? "packing" : shopRules.cancellation.allowedUntil === "Packed" ? "dispatch" : "delivery";
   const policyLines = [
     { label: "Return", ok: canReturn, text: canReturn ? `${shopRules.returns.windowDays}-day return after delivery` : "Not returnable" },
-    { label: "Replacement", ok: canReplace, text: canReplace ? "Replacement for damaged or wrong items" : "No replacement" },
+    { label: "Replacement", ok: canReplace, text: canReplace ? "Damaged or wrong items can be replaced after photos are reviewed" : "No replacement" },
     { label: "Cancellation", ok: canCancel, text: canCancel ? `Can be cancelled before ${until}` : "Cannot be cancelled once ordered" },
   ];
   const publisher = book.publisher?.name ?? storeConfig.publisherName;
@@ -142,6 +142,7 @@ export default function ShopProduct({
                   </li>
                 ))}
               </ul>
+              {book.policy?.note ? <p className="mt-2 text-xs text-text-muted">{book.policy.note}</p> : null}
             </div>
           </div>
         </div>

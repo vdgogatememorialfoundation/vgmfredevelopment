@@ -20,6 +20,8 @@ function when(value: unknown) {
   return date.toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+const RETURN_STEPS = ["Pending Review", "Accepted", "Return Approved", "Pickup Scheduled", "Picked Up", "Refunded"];
+
 export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = String(id ?? "");
@@ -51,6 +53,8 @@ export default function OrderScreen() {
       return;
     }
     void load();
+    const timer = setInterval(() => void load(), 30000);
+    return () => clearInterval(timer);
   }, [session, load]);
 
   if (loading) return <Loading label="Opening the order…" />;
@@ -128,6 +132,9 @@ export default function OrderScreen() {
   pushLink("Courier charge", upgrade?.link, upgrade?.amount, upgrade?.paidAt);
   const returned = (order.returnShipment ?? null) as Row | null;
   pushLink("Return courier charge", returned?.chargeLink, returned?.charge, returned?.chargePaidAt || str(returned?.chargePaidBy) === "foundation");
+  const returnRequest = (order.returnRequest ?? null) as Row | null;
+  const returnShipment = (order.returnShipment ?? null) as Row | null;
+  const refunds = (Array.isArray(order.refunds) ? order.refunds : []) as Row[];
   const address = (order.deliveryAddress ?? {}) as Row;
   const pickup = str(order.deliveryMode) === "store_pickup";
 
@@ -202,6 +209,39 @@ export default function OrderScreen() {
           <Muted>{waiting ? "You can pay this once your order is processed." : "Your order is processed. Pay the remaining amount to get it dispatched."}</Muted>
           <Banner text={payNote} tone={payTone} />
           {waiting ? null : <Button icon="card-outline" label={paying ? "Working out the courier charge…" : "Proceed to pay"} disabled={paying} onPress={() => void proceed()} />}
+        </Card>
+      ) : null}
+      {returnRequest ? (
+        <Card featured>
+          <Heading>{str(returnRequest.kind) === "replacement" ? "Replacement" : "Return"} · {str(returnRequest.status, "Pending Review")}</Heading>
+          <Muted>Requested {formatDate(returnRequest.requestedAt)}{str(returnRequest.reason) ? ` · ${str(returnRequest.reason)}` : ""}</Muted>
+          {RETURN_STEPS.map((step, index) => {
+            const current = RETURN_STEPS.indexOf(str(returnRequest.status));
+            const done = str(returnRequest.status) === "Rejected" ? index === 0 : current >= index;
+            return <Muted key={step}>{done ? "●" : "○"} {step}</Muted>;
+          })}
+          {str(returnRequest.status) === "Rejected" ? <Muted>✕ Rejected{str(returnRequest.note) ? ` · ${str(returnRequest.note)}` : ""}</Muted> : null}
+          {returnShipment && str(returnShipment.awb) ? <Muted>Return pickup · AWB {str(returnShipment.awb)}{str(returnShipment.courierName) ? ` · ${str(returnShipment.courierName)}` : ""}</Muted> : null}
+          {Number(returnRequest.refundAmount) > 0 ? <Muted>Refund amount {money(returnRequest.refundAmount)}</Muted> : null}
+          {str(returnRequest.replacementOrderId) ? <Button kind="ghost" icon="swap-horizontal-outline" label={`Replacement order ${str(returnRequest.replacementOrderId)}`} onPress={() => router.push(`/order/${str(returnRequest.replacementOrderId)}` as never)} /> : null}
+        </Card>
+      ) : null}
+      {refunds.length ? (
+        <Card featured>
+          <Heading>Refunds</Heading>
+          {refunds.map((refund, index) => (
+            <View key={str(refund.id, String(index))} style={{ marginTop: 8 }}>
+              <Body>{money(refund.amount)} · {str(refund.status) === "processed" || str(refund.processedAt) ? "Refunded" : str(refund.status) === "failed" ? "Refund failed — the Foundation will contact you" : "Refund in progress"}</Body>
+              <Muted>
+                {[
+                  str(refund.destination) === "store_credit" ? "To your wallet" : "To the original payment method",
+                  `Started ${formatDate(refund.at)}`,
+                  str(refund.processedAt) ? `Completed ${formatDate(refund.processedAt)}` : str(refund.destination) === "store_credit" ? "" : "Usually 5–7 working days",
+                  str(refund.utr || refund.arn || refund.rrn) ? `Bank ref ${str(refund.utr || refund.arn || refund.rrn)}` : "",
+                ].filter(Boolean).join(" · ")}
+              </Muted>
+            </View>
+          ))}
         </Card>
       ) : null}
       {links.map((item) => (

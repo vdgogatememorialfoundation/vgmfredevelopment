@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Share, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { findRow, mediaUrl, money, offerLabel, offerPrice, orderable, preorderable, preorderDeliveryDate, productPolicy, productRating, str } from "../../src/api";
+import { findRow, getApiBase, mediaUrl, money, offerLabel, offerPrice, orderable, preorderable, preorderDeliveryDate, productPolicy, productRating, str } from "../../src/api";
 import { useCart } from "../../src/cart";
 import { useFeed } from "../../src/feed";
 import { useTheme } from "../../src/theme";
@@ -84,6 +84,17 @@ export default function BookDetail() {
         <View style={{ marginTop: 10 }}>
           <Tag {...productBadge(item)} />
         </View>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+          <Button
+            kind="ghost"
+            icon="share-social-outline"
+            label="Share"
+            onPress={() => {
+              const url = `${getApiBase()}/shop/${encodeURIComponent(str(item.slug, str(item.id)))}`;
+              void Share.share({ title: str(item.title), message: `${str(item.title)} · ${money(price)}\n${url}`, url }).catch(() => undefined);
+            }}
+          />
+        </View>
         <Banner text={note} tone="success" />
 
         <View style={{ height: 14 }} />
@@ -105,8 +116,9 @@ export default function BookDetail() {
 
         <Panel title="Returns & cancellation">
           <InfoRow icon={policy.returns ? "checkmark-circle-outline" : "close-circle-outline"} label="Return" value={policy.returns ? `${policy.windowDays}-day return after delivery` : "Not returnable"} />
-          <InfoRow icon={policy.replacement ? "checkmark-circle-outline" : "close-circle-outline"} label="Replacement" value={policy.replacement ? "Replacement for damaged or wrong items" : "No replacement"} />
-          <InfoRow icon={policy.cancellation ? "checkmark-circle-outline" : "close-circle-outline"} label="Cancellation" value={policy.cancellation ? "Can be cancelled before dispatch" : "Cannot be cancelled once placed"} />
+          <InfoRow icon={policy.replacement ? "checkmark-circle-outline" : "close-circle-outline"} label="Replacement" value={policy.replacement ? "Damaged or wrong items can be replaced after photos are reviewed" : "No replacement"} />
+          <InfoRow icon={policy.cancellation ? "checkmark-circle-outline" : "close-circle-outline"} label="Cancellation" value={policy.cancellation ? "Can be cancelled before dispatch" : "Cannot be cancelled once ordered"} />
+          {str((item.policy as { note?: string } | undefined)?.note) ? <InfoRow icon="information-circle-outline" label="Note" value={str((item.policy as { note?: string } | undefined)?.note)} /> : null}
         </Panel>
 
         <Panel title="Details">
