@@ -603,3 +603,123 @@ export function SiteFooter() {
     </View>
   );
 }
+
+export function CoverArt({ uri, title, icon = "book-outline", ratio = 1, radius = 14 }: { uri?: string; title: string; icon?: keyof typeof Ionicons.glyphMap; ratio?: number; radius?: number }) {
+  const theme = useTheme();
+  return (
+    <View style={{ width: "100%", aspectRatio: ratio, borderRadius: radius, overflow: "hidden", backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border }}>
+      {uri ? (
+        <Image source={{ uri }} accessibilityLabel={title} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+      ) : (
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 12, backgroundColor: theme.colors.primary }}>
+          <View style={{ position: "absolute", top: 10, left: 10, right: 10, bottom: 10, borderWidth: 1, borderColor: theme.colors.accent, borderRadius: Math.max(6, radius - 6) }} />
+          <Ionicons name={icon} size={26} color={theme.colors.accent} />
+          <Text numberOfLines={3} style={{ color: theme.colors.onPrimary, fontFamily: theme.fontFamily, fontWeight: "700", fontSize: 15, textAlign: "center", marginTop: 8 }}>
+            {title}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+export function Tag({ label, tone = "gold" }: { label: string; tone?: "gold" | "green" | "red" | "ink" }) {
+  if (!label) return null;
+  const palette = {
+    gold: { bg: "#FBF3DF", fg: "#7A5A12", border: "#E9D3A0" },
+    green: { bg: "#E8F5EC", fg: "#1F6B3A", border: "#BFE0CA" },
+    red: { bg: "#FBEAEA", fg: "#8F2D2D", border: "#EBC4C4" },
+    ink: { bg: "#E9EEF6", fg: "#0B1F3A", border: "#C9D4E6" },
+  }[tone];
+  return (
+    <View style={{ alignSelf: "flex-start", backgroundColor: palette.bg, borderColor: palette.border, borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+      <Text style={{ color: palette.fg, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 }}>{label}</Text>
+    </View>
+  );
+}
+
+export function InfoRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
+  const theme = useTheme();
+  if (!value) return null;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+      <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name={icon} size={17} color={theme.colors.primary} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ color: theme.colors.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" }}>{label}</Text>
+        <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: "600", marginTop: 2, lineHeight: 20 }}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+export function Panel({ title, children }: { title?: string; children: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={{ backgroundColor: theme.colors.paper, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 14 }}>
+      {title ? <Text style={{ color: theme.colors.text, fontWeight: "800", fontSize: 15, paddingTop: 12, paddingBottom: 4, fontFamily: theme.fontFamily }}>{title}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
+export function Hero({ kicker, title, subtitle, children }: { kicker?: string; title: string; subtitle?: string; children?: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={{ backgroundColor: theme.colors.primary, borderRadius: 22, padding: 20, marginBottom: 18, overflow: "hidden" }}>
+      <View style={{ position: "absolute", right: -40, top: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.07)" }} />
+      <View style={{ position: "absolute", right: 30, bottom: -60, width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(184,149,58,0.22)" }} />
+      {kicker ? <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>{kicker}</Text> : null}
+      <Text style={{ color: theme.colors.onPrimary, fontSize: 26, lineHeight: 32, fontWeight: "700", fontFamily: theme.fontFamily, letterSpacing: -0.4 }}>{title}</Text>
+      {subtitle ? <Text style={{ color: "rgba(255,255,255,0.86)", fontSize: 13, lineHeight: 20, marginTop: 8 }}>{subtitle}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
+export function ProductTile({ title, author, price, original, uri, badge, line, onPress }: { title: string; author?: string; price: string; original?: string; uri?: string; badge?: { label: string; tone: "gold" | "green" | "red" | "ink" }; line?: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      style={({ pressed }) => [
+        {
+          width: "48%",
+          backgroundColor: theme.colors.paper,
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: 10,
+          marginBottom: 14,
+          shadowColor: "#3B2A14",
+          shadowOpacity: 0.07,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 2,
+          opacity: pressed ? 0.92 : 1,
+        },
+      ]}
+    >
+      <CoverArt uri={uri} title={title} ratio={0.78} />
+      <View style={{ marginTop: 10, gap: 4 }}>
+        {badge ? <Tag label={badge.label} tone={badge.tone} /> : null}
+        <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "800", fontSize: 15, fontFamily: theme.fontFamily, marginTop: 2 }}>{title}</Text>
+        {author ? <Text numberOfLines={1} style={{ color: theme.colors.muted, fontSize: 12 }}>{author}</Text> : null}
+        <Price value={price} original={original} />
+        {line ? <Text style={{ color: "#1F6B3A", fontSize: 12, fontWeight: "800", marginTop: 2 }}>{line}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+export function StickyBar({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: theme.colors.paper, borderTopWidth: 1, borderTopColor: theme.colors.border, elevation: 8, shadowColor: "#3B2A14", shadowOpacity: 0.08, shadowRadius: 10 }}>
+      {children}
+    </View>
+  );
+}

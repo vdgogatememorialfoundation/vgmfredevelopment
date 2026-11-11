@@ -1,5 +1,6 @@
 import type { Order } from "@/types";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { redeemPromo } from "@/lib/server/promotions";
 import { preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import type { MobileOrder } from "@/lib/server/mobile-store";
@@ -55,7 +56,7 @@ function preorderPlan(subtotal: number) {
 /** Writes an app order into the main shop order list, so admin Orders, picking, couriers and tracking all see it. */
 export function recordAppOrder(
   draft: MobileOrder,
-  input: { name: string; phone: string; address: { line1: string; landmark?: string; city: string; state: string; pincode: string; country?: string; countryCode?: string }; pickup: boolean }
+  input: { name: string; phone: string; address: { line1: string; landmark?: string; city: string; state: string; pincode: string; country?: string; countryCode?: string }; pickup: boolean; promo?: { code: string; kind: "coupon" | "gift"; amount: number; label: string } }
 ) {
   const books = (readMobileFeed().books ?? []) as FeedBook[];
   const quantity = draft.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -72,10 +73,11 @@ export function recordAppOrder(
       return { bookId: item.id, title: item.title, quantity: item.quantity, price: item.price, currency: "INR", sku: book?.sku, preorder: feedPreorderable(book) || undefined };
     }),
     subtotal: draft.subtotal,
-    discount: 0,
+    discount: input.promo?.amount ?? 0,
+    promo: input.promo,
     gst: 0,
     shipping,
-    total: draft.subtotal + shipping,
+    total: Math.max(0, draft.subtotal - (input.promo?.amount ?? 0)) + shipping,
     currency: "INR",
     paymentStatus: "Pending",
     status: "Pending",
@@ -94,7 +96,7 @@ export function recordAppOrder(
       countryCode: input.address.countryCode || "IN",
     },
     paymentMethod: "Razorpay",
-    preorderPayment: preorder && !input.pickup ? preorderPlan(draft.subtotal) : undefined,
+    preorderPayment: preorder && !input.pickup ? preorderPlan(Math.max(0, draft.subtotal - (input.promo?.amount ?? 0))) : undefined,
     createdBy: "Android app",
     history: [{ at: now, status: "Pending", note: "Placed in the Android app; awaiting payment." }],
   };
@@ -107,6 +109,7 @@ export function markAppOrderPaid(id: string, payment: { paymentId: string; razor
   const at = new Date().toISOString();
   const plan = order.preorderPayment;
   if (order.paymentStatus === "Pending") void mailDeskNewOrder(order, payment.paymentId);
+  redeemPromo(order);
   return patchShopOrder(id, {
     paymentStatus: plan && (plan.shippingDue || plan.balance > 0) ? "Partially Paid" : "Paid",
     preorderPayment: plan ? { ...plan, advancePaidAt: at } : undefined,

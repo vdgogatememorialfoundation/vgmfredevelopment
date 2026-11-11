@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { router } from "expo-router";
-import { createCheckout, findRow, money, str, verifyCheckout } from "../src/api";
+import { checkPromo, createCheckout, findRow, money, offerPrice, preorderable, promoAmount, str, verifyCheckout, type PromoRule } from "../src/api";
 import { useAuth } from "../src/auth";
 import { useCart } from "../src/cart";
 import { CountryField } from "../src/country-field";
@@ -48,7 +48,7 @@ export default function CheckoutScreen() {
           id: item.id,
           title: str(book?.title, item.title),
           quantity: item.quantity,
-          price: Number(book?.price ?? item.price) || 0,
+          price: book ? offerPrice(book) : Number(item.price) || 0,
         };
       }),
     [cart.items, feed?.books]
@@ -56,7 +56,23 @@ export default function CheckoutScreen() {
   const subtotal = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const preorder = priced.some((item) => preorderable(findRow(feed?.books, item.id)));
   const shipping = preorder ? 0 : subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
-  const total = subtotal + shipping;
+  const [promo, setPromo] = useState<PromoRule | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const [promoNote, setPromoNote] = useState("");
+  const promoOff = promoAmount(promo, subtotal);
+  const total = Math.max(0, subtotal - promoOff) + shipping;
+  const applyPromo = async () => {
+    setPromoNote("");
+    try {
+      const rule = await checkPromo(promoInput.trim(), preorder);
+      if (!promoAmount(rule, subtotal)) throw new Error("This code doesn't apply to your bag.");
+      setPromo(rule);
+      setPromoNote(`${rule.label} applied.`);
+    } catch (error) {
+      setPromo(null);
+      setPromoNote(error instanceof Error ? error.message : "That code isn't valid.");
+    }
+  };
 
   const submit = async () => {
     if (!priced.length) {
@@ -89,6 +105,7 @@ export default function CheckoutScreen() {
         country: country.name,
         countryCode: country.code,
         pickup,
+        promoCode: promo?.code,
         items: priced.map((item) => ({ id: item.id, quantity: item.quantity })),
       });
       const id = str(started.order?.id);
@@ -187,8 +204,12 @@ export default function CheckoutScreen() {
             ) : (
               <Muted>Shipping {shipping ? money(shipping) : "Free"}</Muted>
             )}
+            {promoOff ? <Muted>{promo?.label} · −{money(promoOff)}</Muted> : null}
             <Heading>Total {money(total)}</Heading>
           </Card>
+          <Field label="Coupon or gift card code" value={promoInput} onChange={(next) => { setPromoInput(next.toUpperCase()); if (promo) setPromo(null); }} autoCapitalize="none" />
+          <Button kind="ghost" label={promo ? "Code applied" : "Apply code"} disabled={!promoInput.trim() || Boolean(promo)} onPress={() => void applyPromo()} />
+          {promoNote ? <Muted>{promoNote}</Muted> : null}
           <Field label="Full name" value={name} onChange={setName} autoCapitalize="words" />
           <CountryField
             value={country.code}
@@ -243,9 +264,3 @@ export default function CheckoutScreen() {
   );
 }
 
-function preorderable(book?: Record<string, unknown> | null) {
-  if (!book) return false;
-  const plan = book.preorder as { enabled?: boolean } | boolean | undefined;
-  const enabled = typeof plan === "object" ? Boolean(plan?.enabled) : Boolean(plan);
-  return enabled && (str(book.stockStatus) === "out_of_stock" || Number(book.stock ?? 0) <= 0);
-}

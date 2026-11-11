@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { useLocalSearchParams } from "expo-router";
-import { Linking, View } from "react-native";
-import { findRow, formatDate, isRegistrationClosed, mediaUrl, money, str } from "../../src/api";
+import { Linking, Share, Text, View } from "react-native";
+import { findRow, formatDate, getApiBase, isRegistrationClosed, mediaUrl, money, str } from "../../src/api";
+import { dateParts } from "../../src/event-card";
 import { useFeed } from "../../src/feed";
 import { PartnerRegister } from "../../src/partner-register";
-import { Button, Cover, DateBadge, Empty, Heading, Loading, Muted, PageHeader, Screen, StatusChip } from "../../src/ui";
+import { useTheme } from "../../src/theme";
+import { Body, Button, Cover, Empty, InfoRow, Loading, Panel, Portrait, Screen, Tag } from "../../src/ui";
 
 type Window = { label?: string; start?: string; end?: string } | null | undefined;
+type Speaker = { id?: string; name?: string; designation?: string; title?: string; topic?: string; photo?: string; image?: string };
+type Slot = { id?: string; time?: string; title?: string; topic?: string; label?: string; speaker?: string };
 
 function windowOpen(window: Window, now = Date.now()) {
   if (!window?.label) return false;
@@ -22,9 +27,17 @@ function openPhase(item: Record<string, unknown>): "pre" | "main" | null {
   return null;
 }
 
+function timeOf(value: unknown) {
+  const date = new Date(str(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+}
+
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { feed, loading, refresh } = useFeed();
+  const theme = useTheme();
+  const [terms, setTerms] = useState(false);
   const item = findRow(feed?.events, String(id ?? ""));
   if (loading && !feed) return <Loading />;
   if (!item) {
@@ -35,32 +48,123 @@ export default function EventDetail() {
     );
   }
   const register = str(item.registrationUrl);
-  const maps = str(item.mapsUrl);
+  const maps = str(item.mapsUrl).replace("/maps/embed/v1/place?", "/maps/search/?api=1&").replace(/key=[^&]+&?/, "");
   const closed = isRegistrationClosed(item);
   const source = str(item.source);
   const portalId = source === "seminar" || source === "autism" ? Number(str(item.id).split("-").pop()) : 0;
   const phase = openPhase(item);
+  const when = dateParts(item.startDate);
+  const speakers = (Array.isArray(item.speakers) ? item.speakers : []) as Speaker[];
+  const schedule = (Array.isArray(item.schedule) ? item.schedule : []) as Slot[];
+  const sameDay = formatDate(item.startDate) === formatDate(item.endDate) || !str(item.endDate);
+  const dates = sameDay ? formatDate(item.startDate) : `${formatDate(item.startDate)} – ${formatDate(item.endDate)}`;
+  const times = [timeOf(item.startDate), timeOf(item.endDate)].filter(Boolean).join(" – ");
+  const regWindow = [formatDate(item.registrationStart), formatDate(item.registrationEnd)].filter(Boolean).join(" – ");
+  const termsText = str(item.termsConditions);
+
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
-      <Cover uri={mediaUrl(item.bannerUrl) || undefined} height={210} />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-        <DateBadge label={formatDate(item.startDate)} />
-        <StatusChip label={closed ? "Closed" : str(item.registrationStatus)} />
+      {mediaUrl(item.bannerUrl) ? (
+        <Cover uri={mediaUrl(item.bannerUrl)} height={210} />
+      ) : (
+        <View style={{ backgroundColor: theme.colors.primary, borderRadius: 20, padding: 18, marginBottom: 14, flexDirection: "row", alignItems: "center", gap: 16, overflow: "hidden" }}>
+          <View style={{ position: "absolute", right: -30, top: -30, width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.07)" }} />
+          <View style={{ width: 70, borderRadius: 14, backgroundColor: theme.colors.paper, alignItems: "center", paddingVertical: 10 }}>
+            <Text style={{ color: theme.colors.primary, fontSize: 11, fontWeight: "800", letterSpacing: 1 }}>{when.month}</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 28, fontWeight: "800", lineHeight: 32 }}>{when.day}</Text>
+            <Text style={{ color: theme.colors.muted, fontSize: 10, fontWeight: "700" }}>{when.year}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: "800", letterSpacing: 1.4, textTransform: "uppercase" }}>{str(item.eventType, "Event")}</Text>
+            <Text style={{ color: theme.colors.onPrimary, fontSize: 15, fontWeight: "700", marginTop: 4 }}>{str(item.mode, "Foundation programme")}</Text>
+          </View>
+        </View>
+      )}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        <Tag label={str(item.eventType, "Event")} tone="ink" />
+        <Tag label={closed ? "Registration closed" : "Registration open"} tone={closed ? "red" : "green"} />
       </View>
-      <PageHeader kicker={str(item.eventType, "Event")} title={str(item.name)} subtitle={[str(item.city), str(item.venue)].filter(Boolean).join(" · ")} />
-      <Muted>{[str(item.mode), str(item.eventType)].filter(Boolean).join(" · ")}</Muted>
-      {Number(item.fee) ? <Heading>{money(item.fee)}</Heading> : null}
-      <Muted>{str(item.description, str(item.shortDescription))}</Muted>
+      <Text style={{ fontSize: 28, lineHeight: 34, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }}>{str(item.name)}</Text>
+      <View style={{ width: 44, height: 3, borderRadius: 2, backgroundColor: theme.colors.accent, marginVertical: 12 }} />
+      {str(item.description, str(item.shortDescription)) ? <Body>{str(item.description, str(item.shortDescription))}</Body> : null}
+      <View style={{ height: 14 }} />
+
+      <Panel title="Event details">
+        <InfoRow icon="calendar-outline" label="Date" value={dates} />
+        <InfoRow icon="time-outline" label="Time" value={times} />
+        <InfoRow icon="location-outline" label="Venue" value={[str(item.venue), str(item.city)].filter(Boolean).join(", ")} />
+        <InfoRow icon="desktop-outline" label="Mode" value={str(item.mode)} />
+        <InfoRow icon="wallet-outline" label="Delegation fee" value={Number(item.fee) ? money(item.fee) : ""} />
+        <InfoRow icon="people-outline" label="Seats" value={Number(item.capacity) ? String(item.capacity) : ""} />
+        <InfoRow icon="hourglass-outline" label="Registration" value={regWindow} />
+      </Panel>
+
       {portalId > 0 && phase ? (
         <PartnerRegister portal={source} seminarId={portalId} phase={phase} portalUrl={register || undefined} />
       ) : closed ? (
         <Button kind="ghost" icon="close-circle-outline" label="Registration closed" disabled onPress={() => undefined} />
       ) : register ? (
         <Button icon="ticket-outline" label="Register" onPress={() => void Linking.openURL(register)} />
-      ) : (
-        <Muted>Registration opens when a link is published.</Muted>
-      )}
-      {maps ? <Button kind="ghost" icon="map-outline" label="Open map" onPress={() => void Linking.openURL(maps)} /> : null}
+      ) : null}
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        {maps ? (
+          <View style={{ flex: 1 }}>
+            <Button kind="ghost" icon="navigate-outline" label="Directions" onPress={() => void Linking.openURL(maps)} />
+          </View>
+        ) : null}
+        <View style={{ flex: 1 }}>
+          <Button
+            kind="ghost"
+            icon="share-social-outline"
+            label="Share"
+            onPress={() => void Share.share({ message: `${str(item.name)} · ${dates}\n${register || `${getApiBase()}/events`}` })}
+          />
+        </View>
+      </View>
+      <View style={{ height: 14 }} />
+
+      {speakers.length ? (
+        <Panel title="Speakers">
+          {speakers.map((speaker, index) => (
+            <View key={str(speaker.id, String(index))} style={{ flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 10, borderBottomWidth: index === speakers.length - 1 ? 0 : 1, borderBottomColor: theme.colors.border }}>
+              <Portrait uri={mediaUrl(speaker.photo || speaker.image) || undefined} label={str(speaker.name)} size={48} fallback={require("../../assets/icon.png")} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.text, fontWeight: "800" }}>{str(speaker.name)}</Text>
+                <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 2 }}>{[str(speaker.designation, str(speaker.title)), str(speaker.topic)].filter(Boolean).join(" · ")}</Text>
+              </View>
+            </View>
+          ))}
+        </Panel>
+      ) : null}
+
+      {schedule.length ? (
+        <Panel title="Schedule">
+          {schedule.map((slot, index) => (
+            <View key={str(slot.id, String(index))} style={{ flexDirection: "row", gap: 12, paddingVertical: 10 }}>
+              <View style={{ alignItems: "center", width: 14 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primary, marginTop: 4 }} />
+                {index < schedule.length - 1 ? <View style={{ flex: 1, width: 2, backgroundColor: theme.colors.border, marginTop: 4 }} /> : null}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.primary, fontWeight: "800", fontSize: 12 }}>{[formatDate(slot.time), timeOf(slot.time)].filter(Boolean).join(" · ")}</Text>
+                <Text style={{ color: theme.colors.text, fontWeight: "700", marginTop: 2 }}>{str(slot.title, str(slot.topic, str(slot.label)))}</Text>
+                {str(slot.speaker) ? <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 2 }}>{str(slot.speaker)}</Text> : null}
+              </View>
+            </View>
+          ))}
+        </Panel>
+      ) : null}
+
+      {termsText ? (
+        <Panel title="Terms & conditions">
+          <Text numberOfLines={terms ? undefined : 4} style={{ color: theme.colors.muted, fontSize: 13, lineHeight: 20, paddingVertical: 6 }}>
+            {termsText}
+          </Text>
+          <Text onPress={() => setTerms(!terms)} style={{ color: theme.colors.primary, fontWeight: "800", fontSize: 13, paddingBottom: 12 }}>
+            {terms ? "Show less" : "Read all terms"}
+          </Text>
+        </Panel>
+      ) : null}
     </Screen>
   );
 }

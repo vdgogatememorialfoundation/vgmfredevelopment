@@ -4,6 +4,8 @@ import { addOrder, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, s
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
+import { checkPromo } from "@/lib/server/promotions";
+import { offerActive, promoDiscount } from "@/lib/promotions";
 import { appPickupAllowed, feedPreorderable, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
 
 export const runtime = "nodejs";
@@ -35,7 +37,7 @@ function catalogItems(raw: unknown) {
       id: String(book.id),
       title: String(book.title),
       quantity: Math.max(1, Math.min(100, Math.floor(Number(row.quantity) || 1))),
-      price: Math.max(0, Number(book.price) || 0),
+      price: Math.max(0, offerActive(book as never) ? Number((book as { offer?: { price?: number } }).offer?.price) || 0 : Number(book.price) || 0),
     });
   }
   return { items };
@@ -124,7 +126,19 @@ export async function POST(request: NextRequest) {
     address,
   });
 
-  const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup });
+  let promo: { code: string; kind: "coupon" | "gift"; amount: number; label: string } | undefined;
+  const promoCode = String(body?.promoCode ?? "").trim();
+  if (promoCode) {
+    const books = readMobileFeed().books ?? [];
+    const preorder = draft.items.some((item) => feedPreorderable(books.find((row) => String(row.id) === item.id) as never));
+    const checked = checkPromo(promoCode, preorder);
+    if (!checked.ok) return json({ ok: false, error: checked.error }, 400);
+    const amount = promoDiscount(checked.rule, draft.subtotal);
+    if (amount <= 0) return json({ ok: false, error: "This code doesn't apply to your bag." }, 400);
+    promo = { code: checked.rule.code, kind: checked.rule.kind, amount, label: checked.rule.label };
+  }
+
+  const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup, promo });
 
   const creds = razorpayCreds({});
   if (!creds) {
