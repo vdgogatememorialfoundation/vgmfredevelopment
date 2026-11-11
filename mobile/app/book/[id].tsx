@@ -118,9 +118,9 @@ export default function BookDetail() {
         </Panel>
 
         <Panel title="Returns & cancellation">
-          <InfoRow icon={policy.returns ? "checkmark-circle-outline" : "close-circle-outline"} label="Return" value={policy.returns ? `${policy.windowDays}-day return after delivery` : "Not returnable"} />
-          <InfoRow icon={policy.replacement ? "checkmark-circle-outline" : "close-circle-outline"} label="Replacement" value={policy.replacement ? "Damaged or wrong items can be replaced after photos are reviewed" : "No replacement"} />
-          <InfoRow icon={policy.cancellation ? "checkmark-circle-outline" : "close-circle-outline"} label="Cancellation" value={policy.cancellation ? "Can be cancelled before dispatch" : "Cannot be cancelled once ordered"} />
+          <InfoRow icon="return-down-back-outline" label="Return" value={policy.returns ? `${policy.windowDays}-day return after delivery` : "Not returnable"} />
+          <InfoRow icon="swap-horizontal-outline" label="Replacement" value={policy.replacement ? "Damaged or wrong items can be replaced after photos are reviewed" : "No replacement"} />
+          <InfoRow icon="close-circle-outline" label="Cancellation" value={policy.cancellation ? "Can be cancelled before dispatch" : "Cannot be cancelled once ordered"} />
           {str((item.policy as { note?: string } | undefined)?.note) ? <InfoRow icon="information-circle-outline" label="Note" value={str((item.policy as { note?: string } | undefined)?.note)} /> : null}
         </Panel>
 
