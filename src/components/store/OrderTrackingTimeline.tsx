@@ -16,7 +16,7 @@ import { pingLiveAgent } from "@/lib/shipping-client";
 import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
 import LiveTracking from "@/components/store/LiveTracking";
 import HyperlocalStatus from "@/components/store/HyperlocalStatus";
-import RefundDetails from "@/components/store/RefundDetails";
+import RefundDetails, { REFUND_CREDIT_NOTE } from "@/components/store/RefundDetails";
 import { beep } from "@/lib/scan-beep";
 import type { Order, ShipmentRecord } from "@/types";
 
@@ -245,7 +245,9 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
 
   const lineNote =
     order.status === "Cancelled"
-      ? "This order was cancelled by the Foundation desk. Follow the cancellation steps below — customers cannot cancel from their account."
+      ? (order.refunds ?? []).some((refund) => refund.destination !== "store_credit" && refund.status !== "failed")
+        ? REFUND_CREDIT_NOTE
+        : ""
       : failed
         ? "The line stays on Failed until a reattempt is booked."
         : order.status === "Delivered"
