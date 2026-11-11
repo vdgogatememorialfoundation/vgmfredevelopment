@@ -6,7 +6,7 @@ import PageHeader from "@/components/common/PageHeader";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { useCart } from "@/lib/use-cart";
 import { deliveryCheckText, readDeliveryCheck, type DeliveryCheck } from "@/lib/delivery-check";
-import { shippingIsFree } from "@/lib/integrations";
+import { preorderDatesHidden, shippingIsFree } from "@/lib/integrations";
 import {
   getBookById,
   setCartQuantity,
@@ -134,7 +134,7 @@ export default function CartPage() {
                     {canPreorder(book) ? (
                       <>
                         <p className="mt-2 inline-block rounded-lg bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-900">Pre-order</p>
-                        {orderSettings.hideDeliveryDates ? null : (
+                        {preorderDatesHidden(orderSettings) ? null : (
                           <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-800">
                             <Glyph name="truck" className="h-3.5 w-3.5" />
                             Tentative delivery by {preorderDeliveryDate(book)}

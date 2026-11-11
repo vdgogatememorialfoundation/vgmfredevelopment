@@ -26,7 +26,7 @@ import {
 import { storeConfig } from "@/lib/constants";
 import { canPreorder, preorderDeliveryDate } from "@/lib/product-data";
 import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
-import { preorderAdvance, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
+import { preorderAdvance, preorderDatesHidden, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
 import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
@@ -783,7 +783,7 @@ export default function CheckoutClient() {
                   </p>
                 ) : null}
 
-                {domestic && preorderBook && !orderSettings.hideDeliveryDates && (
+                {domestic && preorderBook && !preorderDatesHidden(orderSettings) && (
                   <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <b>Tentative delivery by</b> {preorderDeliveryDate(preorderBook)}
                   </p>
@@ -904,7 +904,9 @@ export default function CheckoutClient() {
                             ? `Ready for pickup ${quote?.pickupReadyBy || ""}`.trim()
                             : "We'll tell you when it's ready to collect"
                           : canPreorder(book)
-                            ? `Tentative delivery by ${preorderDeliveryDate(book)}`
+                            ? preorderDatesHidden(orderSettings)
+                              ? "We'll share the delivery date once it is dispatched"
+                              : `Tentative delivery by ${preorderDeliveryDate(book)}`
                             : `Expected delivery ${selectedOffer?.deliverBy || quote?.deliverBy || "shown once you enter the delivery pincode"}`}
                       </p>
                       )}
@@ -956,7 +958,7 @@ export default function CheckoutClient() {
                       {formatAddressLine(address)}
                     </dd>
                   </div>
-                  {orderSettings.hideDeliveryDates ? null : deliveryMode === "delivery" && preorderBook ? (
+                  {orderSettings.hideDeliveryDates || (preorderBook && preorderDatesHidden(orderSettings)) ? null : deliveryMode === "delivery" && preorderBook ? (
                     <div className="flex justify-between gap-4">
                       <dt className="text-text-muted">Tentative delivery by</dt>
                       <dd className="text-right font-medium text-emerald-700">{preorderDeliveryDate(preorderBook)}</dd>
@@ -1214,7 +1216,7 @@ export default function CheckoutClient() {
               </div>
             ) : (
               <p className="mt-3 text-xs text-text-muted">
-                {placedEta && !orderSettings.hideDeliveryDates
+                {placedEta && !orderSettings.hideDeliveryDates && !(placedOrder?.items.some((item) => item.preorder) && preorderDatesHidden(orderSettings))
                   ? `${placedOrder?.items.some((item) => item.preorder) ? "Tentative delivery by" : "Estimated delivery:"} ${placedEta} · `
                   : ""}
                 Live courier tracking on My Orders

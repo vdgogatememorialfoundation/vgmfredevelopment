@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Share, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { findRow, getApiBase, mediaUrl, money, offerLabel, offerPrice, orderable, preorderable, preorderDeliveryDate, productPolicy, productRating, str } from "../../src/api";
+import { datesHidden, findRow, getApiBase, mediaUrl, money, offerLabel, offerPrice, orderable, preorderable, preorderDeliveryDate, productPolicy, productRating, str } from "../../src/api";
 import { useCart } from "../../src/cart";
 import { useFeed } from "../../src/feed";
 import { useTheme } from "../../src/theme";
@@ -101,7 +101,11 @@ export default function BookDetail() {
         <Panel title="Delivery">
           {preorder ? (
             <>
-              <InfoRow icon="time-outline" label="Tentative delivery by" value={preorderDeliveryDate(item)} />
+              {datesHidden(feed, true) ? (
+                <InfoRow icon="time-outline" label="Delivery date" value="Shared once your order is dispatched" />
+              ) : (
+                <InfoRow icon="time-outline" label="Tentative delivery by" value={preorderDeliveryDate(item)} />
+              )}
               <InfoRow icon="information-circle-outline" label="How pre-orders work" value="Pay for the item now. When it is packed you pay the balance with the courier charge." />
               {plan.note ? <InfoRow icon="chatbox-ellipses-outline" label="Note" value={plan.note} /> : null}
             </>
@@ -111,7 +115,6 @@ export default function BookDetail() {
             <InfoRow icon="alert-circle-outline" label="Availability" value="Out of stock right now" />
           )}
           {item.storePickupAvailable !== false && canBuy ? <InfoRow icon="storefront-outline" label="Store pickup" value={(preorder ? pickupDates.preorder : pickupDates.inStock) ? "Available at the Foundation, Pune" : "Available at the Foundation, Pune · we'll tell you when it's ready to collect"} /> : null}
-          {item.openBoxDelivery ? <InfoRow icon="shield-checkmark-outline" label="Open-box delivery" value="Check the book before you accept it" /> : null}
         </Panel>
 
         <Panel title="Returns & cancellation">

@@ -422,7 +422,16 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           <Field label="Title">
             <TextInput value={form.title} onChange={(event) => set({ title: event.target.value, slug: slugify(event.target.value) })} />
           </Field>
-          {linkSlug ? <p className="-mt-2 break-all text-xs text-slate-500">Product link{!isNew && linkSlug !== book.slug ? " after saving" : ""}: {origin}/shop/{linkSlug}</p> : null}
+          {linkSlug ? (
+            <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="break-all">Product link{!isNew && linkSlug !== book.slug ? " after saving" : ""}: {origin}/shop/{linkSlug}</span>
+              {!isNew && linkSlug === book.slug && slugify(form.title) !== book.slug ? (
+                <button type="button" className="font-semibold text-burgundy underline" onClick={() => set({ slug: slugify(form.title) })}>
+                  Use the product name for the link
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Product type">
               <SelectInput value={form.productType ?? "book"} onChange={(event) => set({ productType: event.target.value === "other" ? "other" : "book" })}>

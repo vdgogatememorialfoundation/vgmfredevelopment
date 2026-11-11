@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { mediaUrl, money, orderable, preorderable, preorderDeliveryDate, str, type Row, offerPrice } from "../../src/api";
+import { datesHidden, mediaUrl, money, orderable, preorderable, preorderDeliveryDate, str, type Row, offerPrice } from "../../src/api";
 import { TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
 import { Chip, Empty, Loading, PageHeader, ProductTile, Screen, SearchBar, SiteFooter } from "../../src/ui";
@@ -12,13 +12,15 @@ export function productBadge(item: Row) {
   return { label: "In stock", tone: "green" as const };
 }
 
-export function productLine(item: Row) {
-  if (preorderable(item)) return `Tentative delivery by ${preorderDeliveryDate(item)}`;
+export function productLine(item: Row, hidePreorderDate = false) {
+  if (preorderable(item)) return hidePreorderDate ? "" : `Tentative delivery by ${preorderDeliveryDate(item)}`;
   if (!orderable(item)) return "";
   return item.storePickupAvailable === false ? "Home delivery" : "Store pickup available";
 }
 
 export function ProductGrid({ items }: { items: Row[] }) {
+  const { feed } = useFeed();
+  const hidePreorderDate = datesHidden(feed, true);
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
       {items.map((item) => {
@@ -33,7 +35,7 @@ export function ProductGrid({ items }: { items: Row[] }) {
             price={money(price)}
             original={original > price ? money(original) : undefined}
             badge={productBadge(item)}
-            line={productLine(item)}
+            line={productLine(item, hidePreorderDate)}
             onPress={() => router.push(`/book/${str(item.id)}`)}
           />
         );

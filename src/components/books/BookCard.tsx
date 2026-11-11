@@ -1,5 +1,6 @@
 "use client";
 
+import { preorderDatesHidden } from "@/lib/integrations";
 import { deliveryCheckText, readDeliveryCheck, type DeliveryCheck } from "@/lib/delivery-check";
 
 import Link from "next/link";
@@ -31,7 +32,8 @@ export default function BookCard({ book }: { book: Book }) {
     ? preorderDeliveryDate(book)
     : book.expectedDelivery?.trim() || (checked ? `${deliveryCheckText(checked)} to ${checked.pincode}` : "");
 
-  const hideDates = useOrderSettings().hideDeliveryDates;
+  const orderRules = useOrderSettings();
+  const hideDates = preorder ? preorderDatesHidden(orderRules) : orderRules.hideDeliveryDates;
 
   const add = () => {
     if (!orderable) return;

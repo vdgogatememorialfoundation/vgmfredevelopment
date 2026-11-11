@@ -67,7 +67,7 @@ export function Card({
         shadowOpacity: 0.03,
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 4 },
-        elevation: 2,
+        elevation: 0,
       }}
     >
       {children}
@@ -387,7 +387,7 @@ export function SectionHeader({ title, subtitle, actionLabel, onAction }: { titl
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12, marginTop: 8 }}>
       <View style={{ flex: 1, paddingRight: 12 }}>
-        {title ? <Text style={{ fontSize: 21, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily, letterSpacing: -0.3 }}>{title}</Text> : null}
+        {title ? <Text style={{ fontSize: 21, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily, letterSpacing: -0.3 }}>{title}</Text> : null}
         {title ? <View style={{ width: 32, height: 3, borderRadius: 2, backgroundColor: theme.colors.accent, marginTop: 4 }} /> : null}
         {subtitle ? <Text style={{ color: theme.colors.muted, marginTop: 3, fontSize: 12 }}>{subtitle}</Text> : null}
       </View>
@@ -408,12 +408,12 @@ export function Chip({ label, onPress, selected }: { label: string; onPress?: ()
       disabled={!onPress}
       accessibilityRole={onPress ? "button" : undefined}
       style={{
-        backgroundColor: selected ? theme.colors.primary : theme.colors.paper,
+        backgroundColor: selected ? theme.colors.secondary : theme.colors.paper,
         borderRadius: 999,
         paddingVertical: 8,
         paddingHorizontal: 14,
         borderWidth: 1,
-        borderColor: selected ? theme.colors.primary : theme.colors.border,
+        borderColor: selected ? theme.colors.secondary : theme.colors.border,
         minHeight: 36,
       }}
     >
@@ -431,7 +431,7 @@ export function IconTile({ label, icon, onPress }: { label: string; icon: keyof 
       accessibilityLabel={label}
       style={({ pressed }) => [{ width: "23%", minWidth: 70, alignItems: "center", paddingVertical: 10, opacity: pressed ? 0.88 : 1 }]}
     >
-      <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", marginBottom: 8, shadowColor: "#3B2A14", shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 }}>
+      <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
         <Ionicons name={icon} size={21} color={theme.colors.primary} />
       </View>
       <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 11, textAlign: "center" }} numberOfLines={1}>
@@ -658,7 +658,7 @@ export function Panel({ title, children }: { title?: string; children: ReactNode
   const theme = useTheme();
   return (
     <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 14 }}>
-      {title ? <Text style={{ color: theme.colors.text, fontWeight: "800", fontSize: 15, paddingTop: 12, paddingBottom: 4, fontFamily: theme.fontFamily }}>{title}</Text> : null}
+      {title ? <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 16, paddingTop: 12, paddingBottom: 4, fontFamily: theme.fontFamily }}>{title}</Text> : null}
       {children}
     </View>
   );
@@ -671,7 +671,8 @@ export function Hero({ kicker, title, subtitle, children }: { kicker?: string; t
       <View style={{ position: "absolute", right: -40, top: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.07)" }} />
       <View style={{ position: "absolute", right: 30, bottom: -60, width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(184,149,58,0.22)" }} />
       {kicker ? <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>{kicker}</Text> : null}
-      <Text style={{ color: theme.colors.onPrimary, fontSize: 26, lineHeight: 32, fontWeight: "700", fontFamily: theme.fontFamily, letterSpacing: -0.4 }}>{title}</Text>
+      <Text style={{ color: theme.colors.onPrimary, fontSize: 26, lineHeight: 32, fontWeight: "600", fontFamily: theme.fontFamily, letterSpacing: -0.4 }}>{title}</Text>
+      <View style={{ width: 44, height: 2, backgroundColor: theme.colors.accent, marginTop: 10 }} />
       {subtitle ? <Text style={{ color: "rgba(255,255,255,0.86)", fontSize: 13, lineHeight: 20, marginTop: 8 }}>{subtitle}</Text> : null}
       {children}
     </View>
@@ -698,7 +699,7 @@ export function ProductTile({ title, author, price, original, uri, badge, line, 
           shadowOpacity: 0.03,
           shadowRadius: 10,
           shadowOffset: { width: 0, height: 4 },
-          elevation: 2,
+          elevation: 0,
           opacity: pressed ? 0.92 : 1,
         },
       ]}
@@ -706,7 +707,7 @@ export function ProductTile({ title, author, price, original, uri, badge, line, 
       <CoverArt uri={uri} title={title} ratio={0.78} />
       <View style={{ marginTop: 10, gap: 4 }}>
         {badge ? <Tag label={badge.label} tone={badge.tone} /> : null}
-        <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "800", fontSize: 15, fontFamily: theme.fontFamily, marginTop: 2 }}>{title}</Text>
+        <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "600", fontSize: 15, fontFamily: theme.fontFamily, marginTop: 2 }}>{title}</Text>
         {author ? <Text numberOfLines={1} style={{ color: theme.colors.muted, fontSize: 12 }}>{author}</Text> : null}
         <Price value={price} original={original} />
         {line ? <Text style={{ color: "#1F6B3A", fontSize: 12, fontWeight: "800", marginTop: 2 }}>{line}</Text> : null}

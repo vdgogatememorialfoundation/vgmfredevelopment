@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
-import { findRow, mediaUrl, money, orderable, preorderable, preorderDeliveryDate, str, offerPrice } from "../src/api";
+import { datesHidden, findRow, mediaUrl, money, orderable, preorderable, preorderDeliveryDate, str, offerPrice } from "../src/api";
 import { useCart } from "../src/cart";
 import { useFeed } from "../src/feed";
 import { STORE } from "../src/site-content";
@@ -61,7 +61,7 @@ export default function CartScreen() {
               {item.preorder ? (
                 <>
                   <Tag label="Pre-order" tone="gold" />
-                  <Text style={{ color: "#1F6B3A", fontSize: 12, fontWeight: "800" }}>Tentative delivery by {preorderDeliveryDate(item.book)}</Text>
+                  {datesHidden(feed, true) ? null : <Text style={{ color: "#1F6B3A", fontSize: 12, fontWeight: "800" }}>Tentative delivery by {preorderDeliveryDate(item.book)}</Text>}
                 </>
               ) : !item.inCatalogue ? (
                 <Tag label="No longer in the shop" tone="red" />

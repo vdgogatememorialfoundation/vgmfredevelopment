@@ -731,6 +731,11 @@ export function commerceCharges(subtotal: number, settings = getOrderSettings())
   return { gst, platformFee };
 }
 
+/** Pre-order dates show only when delivery dates are on and "show pre-order dates" is switched on. */
+export function preorderDatesHidden(settings: Pick<OrderSettings, "hideDeliveryDates" | "showPreorderStepDates">) {
+  return settings.hideDeliveryDates || !settings.showPreorderStepDates;
+}
+
 export function getOrderSettings(): OrderSettings {
   return publicOrderSettings(readJSON<Partial<OrderSettings> | null>(ORDER_SETTINGS_KEY, null));
 }

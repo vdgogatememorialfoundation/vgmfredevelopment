@@ -62,7 +62,7 @@ export default function HomeScreen() {
                   accessibilityLabel={str(item.title, "Foundation flyer")}
                   source={{ uri: mediaUrl(item.image) }}
                   resizeMode="cover"
-                  style={{ width, height: Math.round(width * 0.52), borderRadius: 18, backgroundColor: theme.colors.paper }}
+                  style={{ width, height: Math.round(width * 0.52), borderRadius: 10, backgroundColor: theme.colors.paper }}
                 />
               </Pressable>
             ))}
@@ -77,7 +77,7 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      <View style={{ backgroundColor: theme.colors.paper, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 8, paddingHorizontal: 6, marginBottom: 20, flexDirection: "row", flexWrap: "wrap" }}>
+      <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 8, paddingHorizontal: 6, marginBottom: 20, flexDirection: "row", flexWrap: "wrap" }}>
         {EXPLORE.filter((item) => (item.id === "chat" ? chatOn(feed) : enabled(item.id) || ["certificates", "contact", "notices"].includes(item.id))).map((item) => (
           <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
         ))}
@@ -137,11 +137,11 @@ export default function HomeScreen() {
             placeholder="e.g. VGMF-2025-PN-034"
             placeholderTextColor={theme.colors.muted}
             accessibilityLabel="Certificate number"
-            style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, paddingHorizontal: 12, minHeight: 48, backgroundColor: theme.colors.background, color: theme.colors.text }}
+            style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, paddingHorizontal: 12, minHeight: 48, backgroundColor: theme.colors.background, color: theme.colors.text }}
           />
           <Pressable
             onPress={() => router.push({ pathname: "/certificates", params: { q: cert } })}
-            style={{ backgroundColor: theme.colors.primary, borderRadius: 12, paddingHorizontal: 16, minHeight: 48, justifyContent: "center" }}
+            style={{ backgroundColor: theme.colors.secondary, borderRadius: 8, paddingHorizontal: 16, minHeight: 48, justifyContent: "center" }}
           >
             <Text style={{ color: theme.colors.onPrimary, fontWeight: "800", fontSize: 12 }}>Verify</Text>
           </Pressable>

@@ -564,6 +564,11 @@ export function isRegistrationClosed(item: Row | null | undefined) {
   return isPastDate(item.endDate || item.startDate || item.registrationEnd);
 }
 
+export function datesHidden(feed: Feed | null, preorder = false) {
+  const rules = (feed?.orderSettings ?? {}) as { hideDeliveryDates?: boolean; showPreorderStepDates?: boolean };
+  return Boolean(rules.hideDeliveryDates) || (preorder && !rules.showPreorderStepDates);
+}
+
 export function chatOn(feed: Feed | null) {
   return moduleOn(feed, "chat") && feed?.site?.liveChat?.enabled !== false;
 }

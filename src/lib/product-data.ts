@@ -148,11 +148,23 @@ export function getProductByCode(code: string): Book | undefined {
 }
 
 /** Saves a full product record. Sends back-in-stock emails when it becomes orderable from stock again. */
+function uniqueSlug(base: string, id: string) {
+  const taken = new Set(getLiveBooks().filter((item) => item.id !== id).map((item) => item.slug));
+  let next = base;
+  for (let index = 2; taken.has(next); index += 1) next = `${base}-${index}`;
+  return next;
+}
+
 export function saveProduct(book: Book) {
   logAudit("Product saved", book.sku || book.id, book.title);
   const before = getLiveBook(book.id);
+  const renamed = Boolean(before && before.title.trim() !== book.title.trim() && book.slug === before.slug);
+  const nextSlug = renamed ? uniqueSlug(slug(book.title) || book.slug, book.id) : book.slug;
+  const previousSlugs = renamed && before?.slug && before.slug !== nextSlug ? Array.from(new Set([...(book.previousSlugs ?? []), before.slug])).filter((old) => old !== nextSlug) : book.previousSlugs;
   const record = normalize({
     ...book,
+    slug: nextSlug,
+    previousSlugs,
     barcode: book.barcode?.trim() || generateBarcode(),
     createdAt: book.createdAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(),

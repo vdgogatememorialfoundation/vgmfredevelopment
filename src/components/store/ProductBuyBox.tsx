@@ -1,5 +1,6 @@
 "use client";
 
+import { preorderDatesHidden } from "@/lib/integrations";
 import BulkOrderNote from "@/components/store/BulkOrderNote";
 import CartStepper from "@/components/store/CartStepper";
 import { useCart } from "@/lib/use-cart";
@@ -247,7 +248,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
           </button>
         </div>
 
-        {preorder && !orderSettings.hideDeliveryDates && (
+        {preorder && !preorderDatesHidden(orderSettings) && (
           <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
             Tentative delivery by {preorderDeliveryDate(book)}
           </p>
