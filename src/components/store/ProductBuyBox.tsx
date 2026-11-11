@@ -300,7 +300,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             <button
               type="button"
               aria-label="Increase quantity"
-              onClick={() => setQuantity((q) => Math.min(purchasable ? Math.min(BULK_ORDER_LIMIT, stock) : 20, q + 1))}
+              onClick={() => setQuantity((q) => Math.min(purchasable ? Math.min(BULK_ORDER_LIMIT, stock) : BULK_ORDER_LIMIT, q + 1))}
               className="flex h-11 w-11 items-center justify-center text-text-primary transition hover:text-burgundy"
             >
               +

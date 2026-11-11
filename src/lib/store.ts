@@ -76,9 +76,9 @@ export const BULK_ORDER_LIMIT = 100;
 
 export function quantityCap(bookId: string) {
   const book = getBookById(bookId);
-  if (!book) return 20;
+  if (!book) return BULK_ORDER_LIMIT;
   if (isPurchasable(book)) return Math.min(BULK_ORDER_LIMIT, Math.max(1, book.stock));
-  if (canPreorder(book)) return 20;
+  if (canPreorder(book)) return BULK_ORDER_LIMIT;
   return 1;
 }
 

@@ -34,7 +34,7 @@ function catalogItems(raw: unknown) {
     items.push({
       id: String(book.id),
       title: String(book.title),
-      quantity: Math.max(1, Math.min(20, Math.floor(Number(row.quantity) || 1))),
+      quantity: Math.max(1, Math.min(100, Math.floor(Number(row.quantity) || 1))),
       price: Math.max(0, Number(book.price) || 0),
     });
   }

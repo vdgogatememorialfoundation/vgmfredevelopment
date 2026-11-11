@@ -263,7 +263,7 @@ export function addOrder(input: {
   const items = input.items.map((item) => ({
     id: String(item.id),
     title: String(item.title).slice(0, 200),
-    quantity: Math.max(1, Math.min(20, Math.floor(Number(item.quantity) || 1))),
+    quantity: Math.max(1, Math.min(100, Math.floor(Number(item.quantity) || 1))),
     price: Math.max(0, Number(item.price) || 0),
   }));
   const key = orderKey(email, items);
