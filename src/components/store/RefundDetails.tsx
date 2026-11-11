@@ -23,6 +23,10 @@ export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: 
     return Number.isFinite(at) ? { date: new Date(at), done: true } : null;
   }
   const processed = Date.parse(refund.processedAt || "");
+  if (refund.status === "processed" && (refund.rrn || refund.arn || refund.utr)) {
+    const at = Number.isFinite(processed) ? processed : Date.parse(refund.at);
+    if (Number.isFinite(at)) return { date: new Date(at), done: true };
+  }
   const base = Number.isFinite(processed) ? processed : Date.parse(refund.at);
   if (!Number.isFinite(base)) return null;
   const date = addWorkingDays(base, Number.isFinite(processed) ? 7 : refund.speed === "optimum" ? 1 : 12);
