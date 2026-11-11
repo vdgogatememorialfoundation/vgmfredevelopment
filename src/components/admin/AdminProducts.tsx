@@ -337,7 +337,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     setForm((current) => ({ ...current, ...patch }));
   };
   const origin = typeof window === "undefined" ? "" : window.location.origin;
-  const linkSlug = !isNew && form.title.trim() !== book.title ? slugify(form.title) : form.slug || slugify(form.title);
+  const linkSlug = slugify(form.title);
 
   const gallery: CaptionedImage[] = useMemo(
     () => (form.media ?? []).filter((item) => item.type === "image").map((item) => ({ src: item.src ?? "", caption: item.label })),
@@ -367,7 +367,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     const inStock = form.stockStatus === "in_stock";
     const stock = inStock ? Math.max(0, Math.floor(form.stock)) : 0;
     if (inStock && stock < 1) return setError("In-stock products need a quantity of at least 1.");
-    const nextSlug = !isNew && form.title.trim() !== book.title ? slugify(form.title) : form.slug || slugify(form.title);
+    const nextSlug = slugify(form.title);
     const record: Book = {
       ...form,
       title: form.title.trim(),
@@ -425,11 +425,6 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           {linkSlug ? (
             <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="break-all">Product link{!isNew && linkSlug !== book.slug ? " after saving" : ""}: {origin}/shop/{linkSlug}</span>
-              {!isNew && linkSlug === book.slug && slugify(form.title) !== book.slug ? (
-                <button type="button" className="font-semibold text-burgundy underline" onClick={() => set({ slug: slugify(form.title) })}>
-                  Use the product name for the link
-                </button>
-              ) : null}
             </div>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2">

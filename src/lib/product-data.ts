@@ -158,9 +158,12 @@ function uniqueSlug(base: string, id: string) {
 export function saveProduct(book: Book) {
   logAudit("Product saved", book.sku || book.id, book.title);
   const before = getLiveBook(book.id);
-  const renamed = Boolean(before && before.title.trim() !== book.title.trim() && book.slug === before.slug);
-  const nextSlug = renamed ? uniqueSlug(slug(book.title) || book.slug, book.id) : book.slug;
-  const previousSlugs = renamed && before?.slug && before.slug !== nextSlug ? Array.from(new Set([...(book.previousSlugs ?? []), before.slug])).filter((old) => old !== nextSlug) : book.previousSlugs;
+  // The link always follows the product name; old links are kept so they redirect.
+  const wanted = slug(book.title);
+  const follows = !wanted || book.slug === wanted || new RegExp(`^${wanted}-\\d+$`).test(book.slug);
+  const nextSlug = follows ? book.slug : uniqueSlug(wanted, book.id);
+  const oldSlugs = [before?.slug, book.slug].filter((old): old is string => Boolean(old) && old !== nextSlug);
+  const previousSlugs = oldSlugs.length ? Array.from(new Set([...(book.previousSlugs ?? []), ...oldSlugs])).filter((old) => old !== nextSlug) : book.previousSlugs;
   const record = normalize({
     ...book,
     slug: nextSlug,
