@@ -332,7 +332,12 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
-  const set = (patch: Partial<Book>) => setForm((current) => ({ ...current, ...patch }));
+  const set = (patch: Partial<Book>) => {
+    setSaved("");
+    setForm((current) => ({ ...current, ...patch }));
+  };
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const linkSlug = !isNew && form.title.trim() !== book.title ? slugify(form.title) : form.slug || slugify(form.title);
 
   const gallery: CaptionedImage[] = useMemo(
     () => (form.media ?? []).filter((item) => item.type === "image").map((item) => ({ src: item.src ?? "", caption: item.label })),
@@ -417,6 +422,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           <Field label="Title">
             <TextInput value={form.title} onChange={(event) => set({ title: event.target.value, slug: slugify(event.target.value) })} />
           </Field>
+          {linkSlug ? <p className="-mt-2 break-all text-xs text-slate-500">Product link{!isNew && linkSlug !== book.slug ? " after saving" : ""}: {origin}/shop/{linkSlug}</p> : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Product type">
               <SelectInput value={form.productType ?? "book"} onChange={(event) => set({ productType: event.target.value === "other" ? "other" : "book" })}>
@@ -617,7 +623,14 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
       </div>
 
       {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      {saved && <p className="mt-4 text-sm text-emerald-700">Published on the shop as /shop/{saved}.</p>}
+      {saved && (
+        <p className="mt-4 break-all text-sm text-emerald-700">
+          Published on the shop at{" "}
+          <a href={`/shop/${saved}`} target="_blank" rel="noreferrer" className="font-semibold underline">
+            {origin}/shop/{saved}
+          </a>
+        </p>
+      )}
       <div className="mt-5 flex flex-wrap gap-2">
         <Button onClick={save}>{isNew ? "Create product" : "Save product"}</Button>
         <Button variant="outline" onClick={onDone}>Close</Button>

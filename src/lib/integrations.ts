@@ -156,6 +156,11 @@ export interface IntegrationSettings {
     msg91TemplateId: string;
     mapping: Partial<Record<NotificationEventId, string>>;
   };
+  firebase: {
+    serviceAccountSecret: string;
+    androidConfig: string;
+    iosConfig: string;
+  };
   shipping: {
     shiprocket: { email: string; password: string; channelId: string; enabled: boolean };
     nimbuspost: { email: string; password: string; enabled: boolean };
@@ -337,6 +342,11 @@ export const defaultIntegrations: IntegrationSettings = {
     msg91SenderId: "VGMFIN",
     msg91TemplateId: "",
     mapping: {},
+  },
+  firebase: {
+    serviceAccountSecret: "",
+    androidConfig: "",
+    iosConfig: "",
   },
   messages: {},
   customTemplates: [],

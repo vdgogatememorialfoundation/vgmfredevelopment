@@ -21,7 +21,7 @@ import {
   type CustomMessageTemplate,
   type OrderSettings,
   type ShippingProviderId,
-  type WhatsAppTemplate, nextStoreWorkingDay } from "@/lib/integrations";
+  type WhatsAppTemplate, nextStoreWorkingDay, serverSavedSecrets } from "@/lib/integrations";
 import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
@@ -765,6 +765,91 @@ export function SmsSettingsDesk() {
             >
               {busy ? "Sending…" : "Send test OTP SMS"}
             </button>
+          </div>
+        </Card>
+      </SettingsSave>
+    </div>
+  );
+}
+
+/* ---------------- Firebase (push notifications) ---------------- */
+
+function parseJson(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function FileField({ label, hint, accept, value, saved, onChange }: { label: string; hint: string; accept: string; value: string; saved?: boolean; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
+      <input
+        type="file"
+        accept={accept}
+        className="mb-2 block text-sm"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          if (file) onChange(await file.text());
+        }}
+      />
+      <textarea
+        className={`${input} h-28 font-mono text-xs`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={saved ? "Saved on the server. Upload or paste a new file to replace it." : "Upload the file or paste its contents"}
+      />
+      <span className="mt-1 block text-xs text-slate-500">{hint}</span>
+    </label>
+  );
+}
+
+export function FirebaseSettingsDesk() {
+  const { value, setValue, note, setNote, save } = useIntegrationSlice("firebase");
+  const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
+  const keySaved = serverSavedSecrets().includes("firebase.serviceAccountSecret");
+  const check = () => {
+    if (value.serviceAccountSecret.trim()) {
+      const key = parseJson(value.serviceAccountSecret);
+      if (!key?.project_id || !key.client_email || !key.private_key) return "The service account key must be the JSON file from Firebase → Project settings → Service accounts → Generate new private key.";
+    }
+    if (value.androidConfig.trim() && !parseJson(value.androidConfig)?.project_info) return "google-services.json does not look right. Download it again from Firebase → Project settings → Your apps → Android.";
+    if (value.iosConfig.trim() && !value.iosConfig.includes("GOOGLE_APP_ID")) return "GoogleService-Info.plist does not look right. Download it again from Firebase → Project settings → Your apps → iOS.";
+    return "";
+  };
+  const submit = () => {
+    const problem = check();
+    if (problem) return setNote(problem);
+    save();
+  };
+  const project = String(parseJson(value.serviceAccountSecret)?.project_id ?? "");
+
+  return (
+    <div className="space-y-5">
+      <Header
+        title="Firebase: app push notifications"
+        text="Order-stage and other notifications are sent to the customer app through Firebase Cloud Messaging. The key is kept on the server and never shown again after saving."
+        action={<button type="button" className={primary} onClick={submit}>Save</button>}
+      />
+      <Saved text={note} />
+      <SettingsSave save={submit}>
+        <Card title="Server key (sending)" text={keySaved || project ? `Status: ${project ? `key for project ${project} ready to save` : "key saved on the server"}. Push sending is on.` : "Status: no key yet. Push notifications are off until a key is saved."}>
+          <FileField
+            label="Service account key (.json)"
+            accept=".json,application/json"
+            hint="Firebase console → Project settings → Service accounts → Generate new private key."
+            value={value.serviceAccountSecret}
+            saved={keySaved}
+            onChange={(serviceAccountSecret) => set({ serviceAccountSecret })}
+          />
+        </Card>
+        <Card title="App files (used when the app is built)" text="Android package org.vaidyagogate.customer. For iPhone push, upload your APNs .p8 key in Firebase → Project settings → Cloud Messaging → Apple app configuration.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FileField label="Android: google-services.json" accept=".json,application/json" hint="Firebase → Project settings → Your apps → Android app." value={value.androidConfig} onChange={(androidConfig) => set({ androidConfig })} />
+            <FileField label="iOS: GoogleService-Info.plist" accept=".plist" hint="Firebase → Project settings → Your apps → iOS app." value={value.iosConfig} onChange={(iosConfig) => set({ iosConfig })} />
           </div>
         </Card>
       </SettingsSave>

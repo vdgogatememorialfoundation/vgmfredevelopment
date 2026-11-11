@@ -1,14 +1,16 @@
 import { createSign } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { dataFile } from "@/lib/server/paths";
 import { devicesFor, dropPushTokens } from "@/lib/server/push-devices";
 
 type ServiceAccount = { project_id: string; client_email: string; private_key: string };
 
-/** Firebase service account: FCM_SERVICE_ACCOUNT_JSON env, or data/secrets/fcm-service-account.json on the server. */
+/** Firebase service account: Admin → Settings → Firebase, FCM_SERVICE_ACCOUNT_JSON env, or data/secrets/fcm-service-account.json. */
 function serviceAccount(): ServiceAccount | null {
   try {
-    const raw = process.env.FCM_SERVICE_ACCOUNT_JSON || (existsSync(dataFile("secrets/fcm-service-account.json")) ? readFileSync(dataFile("secrets/fcm-service-account.json"), "utf8") : "");
+    const saved = (savedAdminIntegrations().firebase as { serviceAccountSecret?: unknown } | undefined)?.serviceAccountSecret;
+    const raw = (typeof saved === "string" && saved.trim()) || process.env.FCM_SERVICE_ACCOUNT_JSON || (existsSync(dataFile("secrets/fcm-service-account.json")) ? readFileSync(dataFile("secrets/fcm-service-account.json"), "utf8") : "");
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ServiceAccount;
     return parsed.project_id && parsed.client_email && parsed.private_key ? parsed : null;
@@ -17,10 +19,10 @@ function serviceAccount(): ServiceAccount | null {
   }
 }
 
-let cached: { token: string; expires: number } | null = null;
+let cached: { token: string; expires: number; email: string } | null = null;
 
 async function accessToken(account: ServiceAccount) {
-  if (cached && cached.expires > Date.now() + 60_000) return cached.token;
+  if (cached && cached.email === account.client_email && cached.expires > Date.now() + 60_000) return cached.token;
   const now = Math.floor(Date.now() / 1000);
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const unsigned = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({
@@ -38,7 +40,7 @@ async function accessToken(account: ServiceAccount) {
   });
   const data = (await response.json()) as { access_token?: string; expires_in?: number };
   if (!data.access_token) throw new Error("FCM auth failed");
-  cached = { token: data.access_token, expires: Date.now() + (data.expires_in ?? 3600) * 1000 };
+  cached = { token: data.access_token, expires: Date.now() + (data.expires_in ?? 3600) * 1000, email: account.client_email };
   return cached.token;
 }
 

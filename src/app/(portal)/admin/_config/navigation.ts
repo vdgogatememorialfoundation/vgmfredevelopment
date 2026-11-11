@@ -176,6 +176,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Email: Zoho CPaaS & ZeptoMail", href: "/admin/settings/email" },
       { label: "WhatsApp: Meta & Zoho CPaaS", href: "/admin/settings/whatsapp" },
       { label: "SMS: MSG91", href: "/admin/settings/sms" },
+      { label: "Firebase: app push", href: "/admin/settings/firebase" },
       { label: "Email, SMS & WhatsApp templates", href: "/admin/settings/templates" },
       { label: "Shipping APIs", href: "/admin/settings/shipping-apis" },
       { label: "Orders, returns & refunds", href: "/admin/settings/orders" },
