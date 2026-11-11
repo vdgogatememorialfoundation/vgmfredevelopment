@@ -1,0 +1,24 @@
+{
+  "name": "vgmf-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Vaidya Gogate Memorial Foundation app for Android and iOS (Capacitor shell around the live site, Firebase Cloud Messaging push).",
+  "scripts": {
+    "sync": "cap sync",
+    "android": "cap sync android && cd android && ./gradlew assembleRelease bundleRelease",
+    "ios": "cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.0",
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/core": "^7.4.0",
+    "@capacitor/ios": "^7.4.0",
+    "@capacitor/push-notifications": "^7.0.1",
+    "@capacitor/splash-screen": "^7.0.1",
+    "@capacitor/status-bar": "^7.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.0",
+    "typescript": "^5"
+  }
+}

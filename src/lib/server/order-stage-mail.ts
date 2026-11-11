@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { siteConfig } from "@/lib/constants";
 import { dataFile } from "@/lib/server/paths";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
+import { pushToCustomer } from "@/lib/server/fcm";
 import type { Order, RefundRecord } from "@/types";
 
 type Stage = { key: string; subject: string; intro: string; next: string[] };
@@ -202,7 +203,6 @@ function details(order: Order) {
 /** Emails the customer at each main stage of an order, once per stage. */
 export async function notifyOrderStage(prev: Order | undefined, next: Order) {
   const to = next.deliveryAddress?.email || next.accountEmail || "";
-  if (!to) return;
   const sent = new Set(readSent()[next.id] ?? []);
   for (const stage of stagesFor(prev, next)) {
     if (sent.has(stage.key)) continue;
@@ -226,6 +226,10 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order) {
       "With warm regards,",
       SIGN,
     ].join("\n");
-    await sendMobileEmail(to, stage.subject, body).catch(() => undefined);
+    void pushToCustomer(
+      { email: to || undefined, phone: next.deliveryAddress?.phone, accountId: next.userId },
+      { title: stage.subject, body: stage.intro, url: `/account/orders/${encodeURIComponent(next.id)}` }
+    ).catch(() => undefined);
+    if (to) await sendMobileEmail(to, stage.subject, body).catch(() => undefined);
   }
 }
