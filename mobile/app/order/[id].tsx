@@ -6,6 +6,20 @@ import { razorpayPage } from "../../src/razorpay";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { useAuth } from "../../src/auth";
 import { Banner, Body, Button, Card, Divider, Empty, Heading, Loading, Muted, PageHeader, Screen } from "../../src/ui";
+
+const REFUND_CREDIT_NOTE = "Amount will be credited to customer's bank account within 5-7 working days after the refund has processed";
+
+/** Same rule as the website: credited 7 working days after Razorpay processes the refund. */
+function refundCredited(refund: Row) {
+  const processed = Date.parse(str(refund.processedAt));
+  if (!Number.isFinite(processed)) return false;
+  const date = new Date(processed);
+  for (let left = 7; left > 0; ) {
+    date.setDate(date.getDate() + 1);
+    if (date.getDay() !== 0 && date.getDay() !== 6) left -= 1;
+  }
+  return Date.now() >= date.getTime();
+}
 import { InfoTiles, Pipeline, type TrackStage } from "../../src/tracker";
 
 type Item = { bookId?: string; title?: string; quantity?: number; price?: number };
@@ -231,15 +245,16 @@ export default function OrderScreen() {
           <Heading>Refunds</Heading>
           {refunds.map((refund, index) => (
             <View key={str(refund.id, String(index))} style={{ marginTop: 8 }}>
-              <Body>{money(refund.amount)} · {str(refund.status) === "processed" || str(refund.processedAt) ? "Refunded" : str(refund.status) === "failed" ? "Refund failed — the Foundation will contact you" : "Refund in progress"}</Body>
+              <Body>{money(refund.amount)} · {str(refund.status) === "processed" || str(refund.processedAt) ? (refundCredited(refund) ? "Credited to your account" : "Refund processed") : str(refund.status) === "failed" ? "Refund failed — the Foundation will contact you" : "Refund in progress"}</Body>
               <Muted>
                 {[
                   str(refund.destination) === "store_credit" ? "To your wallet" : "To the original payment method",
                   `Started ${formatDate(refund.at)}`,
-                  str(refund.processedAt) ? `Completed ${formatDate(refund.processedAt)}` : str(refund.destination) === "store_credit" ? "" : "Usually 5–7 working days",
+                  str(refund.processedAt) ? `Processed ${formatDate(refund.processedAt)}` : "",
                   str(refund.utr || refund.arn || refund.rrn) ? `Bank ref ${str(refund.utr || refund.arn || refund.rrn)}` : "",
                 ].filter(Boolean).join(" · ")}
               </Muted>
+              {str(refund.destination) !== "store_credit" && str(refund.status) !== "failed" && !refundCredited(refund) ? <Muted>{REFUND_CREDIT_NOTE}</Muted> : null}
             </View>
           ))}
         </Card>

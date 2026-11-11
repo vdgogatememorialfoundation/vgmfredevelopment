@@ -6,7 +6,7 @@ import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { buildTrackingStages, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
 import { agreedDelivery, clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
 import type { Order, ShipmentRecord } from "@/types";
-import { refundExpectedCredit, refundExpectedCreditLabel } from "@/components/store/RefundDetails";
+import { REFUND_CREDIT_NOTE, refundExpectedCredit, refundExpectedCreditLabel } from "@/components/store/RefundDetails";
 
 const STAGE_STATUS: Partial<Record<TrackingStageId, Order["status"]>> = {
   packed: "Packed",
@@ -198,6 +198,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
             detail: [
               shortStamp(lastRefund.processedAt || lastRefund.at, country),
               !failed && !credited ? refundExpectedCreditLabel(lastRefund) : "",
+              processed && !failed && !credited && lastRefund.destination !== "store_credit" ? REFUND_CREDIT_NOTE : "",
               bankRef ? `Bank ref ${bankRef}` : "",
               lastRefund.gatewayRefundId ? `Refund ID ${lastRefund.gatewayRefundId}` : "",
             ]

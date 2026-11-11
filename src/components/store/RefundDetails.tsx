@@ -15,7 +15,9 @@ function addWorkingDays(from: number, days: number) {
   return date;
 }
 
-/** Credited once Razorpay reports the refund processed; until then an estimate for the progress line. */
+export const REFUND_CREDIT_NOTE = "Amount will be credited to customer's bank account within 5-7 working days after the refund has processed";
+
+/** Credited 7 working days after Razorpay processes the refund (about 3–5 to process first). */
 export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: boolean } | null {
   if (refund.status === "failed") return null;
   if (refund.destination === "store_credit") {
@@ -23,11 +25,6 @@ export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: 
     return Number.isFinite(at) ? { date: new Date(at), done: true } : null;
   }
   const processed = Date.parse(refund.processedAt || "");
-  // Razorpay's "processed" is its final confirmation that the money went back, so that is when we show it as credited.
-  if (refund.status === "processed") {
-    const at = Number.isFinite(processed) ? processed : Date.parse(refund.at);
-    if (Number.isFinite(at)) return { date: new Date(at), done: true };
-  }
   const base = Number.isFinite(processed) ? processed : Date.parse(refund.at);
   if (!Number.isFinite(base)) return null;
   const date = addWorkingDays(base, Number.isFinite(processed) ? 7 : refund.speed === "optimum" ? 1 : 12);
@@ -104,7 +101,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
             label: failed ? "Refund failed" : "Refund processed",
             caption: failed
               ? stamp(refund.checkedAt)
-              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`, refundExpectedCreditLabel(refund) || "Credited to your bank account within 5–7 working days after processing."].filter(Boolean).join(" · "),
+              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`, refundExpectedCreditLabel(refund), REFUND_CREDIT_NOTE].filter(Boolean).join(" · "),
             reached: done || failed || manual,
             partial: false,
             events: [],
@@ -115,8 +112,8 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
                 {
                   id: "credited",
                   label: "Credited to your account",
-                  caption: refundExpectedCreditLabel(refund) || "Expected within 5–7 working days after processing.",
-                  expected: refundExpectedCreditLabel(refund) || "Expected within 5–7 working days after processing.",
+                  caption: refundExpectedCreditLabel(refund) || REFUND_CREDIT_NOTE,
+                  expected: refundExpectedCreditLabel(refund) || REFUND_CREDIT_NOTE,
                   reached: Boolean(done && refundExpectedCredit(refund)?.done),
                   partial: false,
                   events: [],
