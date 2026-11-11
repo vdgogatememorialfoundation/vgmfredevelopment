@@ -128,6 +128,11 @@ export default function ShopProduct({
                   <a href="#reviews" className="text-sm text-text-muted hover:underline">No ratings yet · be the first to review</a>
                 )}
               </div>
+              {book.offerLabel ? (
+                <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800">
+                  {book.offerLabel}{book.offer?.endsAt ? ` · ends ${new Date(book.offer.endsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}
+                </p>
+              ) : null}
               <ProductBuyBox book={book} />
               <ul className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
                 {policyLines.map((line) => (

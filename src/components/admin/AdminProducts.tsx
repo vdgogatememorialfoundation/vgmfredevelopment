@@ -460,6 +460,16 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
               </Field>
             ))}
           </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+            <p className="mb-2 text-sm font-semibold text-text-primary">Offer (optional)</p>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Field label="Offer price (₹)"><TextInput type="number" min={0} value={form.offer?.price ?? ""} onChange={(event) => set({ offer: event.target.value ? { ...form.offer, price: Number(event.target.value) } : undefined })} /></Field>
+              <Field label="Offer label"><TextInput value={form.offer?.label ?? ""} placeholder="Diwali offer" onChange={(event) => form.offer && set({ offer: { ...form.offer, label: event.target.value } })} /></Field>
+              <Field label="Starts"><TextInput type="datetime-local" value={toDatetimeLocal(form.offer?.startsAt)} onChange={(event) => form.offer && set({ offer: { ...form.offer, startsAt: fromDatetimeLocal(event.target.value) } })} /></Field>
+              <Field label="Ends"><TextInput type="datetime-local" value={toDatetimeLocal(form.offer?.endsAt)} onChange={(event) => form.offer && set({ offer: { ...form.offer, endsAt: fromDatetimeLocal(event.target.value) } })} /></Field>
+            </div>
+            <p className="mt-1 text-xs text-text-muted">Must be lower than the selling price. The selling price shows struck through while the offer runs.</p>
+          </div>
           {form.productType !== "other" && <BookSpecFields form={form} set={set} />}
           <Field label="Description">
             <TextArea rows={5} value={form.description} onChange={(event) => set({ description: event.target.value })} />

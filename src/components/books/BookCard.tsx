@@ -72,6 +72,7 @@ export default function BookCard({ book }: { book: Book }) {
           </p>
         ) : null}
         <p className="mt-2 text-sm font-bold text-burgundy" style={sizes?.cardPrice ? { fontSize: sizes.cardPrice } : undefined}>{formatCurrency(book.price, book.currency)}</p>
+        {book.offerLabel ? <span className="mt-1 inline-block rounded bg-emerald-600 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">{book.offerLabel}</span> : null}
         <AvailabilityBadge text={availabilityText(book)} />
         {hideDates ? null : (
           <p className="mt-1.5 rounded-lg bg-emerald-50 px-2 py-1 text-sm font-bold leading-snug text-emerald-800">

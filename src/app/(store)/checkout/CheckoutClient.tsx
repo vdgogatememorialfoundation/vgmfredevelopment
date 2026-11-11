@@ -1,5 +1,6 @@
 "use client";
 
+import { checkPromoCode, promoDiscount, type PromoRule } from "@/lib/promotions";
 import BulkOrderNote from "@/components/store/BulkOrderNote";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -143,6 +144,10 @@ export default function CheckoutClient() {
   const [orderId, setOrderId] = useState("");
   const [placedEta, setPlacedEta] = useState("");
   const [useCredit, setUseCredit] = useState(false);
+  const [promo, setPromo] = useState<PromoRule | null>(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoNote, setPromoNote] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
   const seededRef = useRef(false);
   const addressSeeded = useRef(false);
   const paymentReturn = useRef("");
@@ -370,12 +375,13 @@ export default function CheckoutClient() {
       ? 0
       : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
   const storeCredit = user?.email ? getStoreCredit(user.email) : 0;
-  const creditApplied = useCredit ? Math.min(storeCredit, Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee)) : 0;
+  const promoAmount = promo ? promoDiscount(promo, priced.subtotal) : 0;
+  const creditApplied = useCredit ? Math.min(storeCredit, Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee - promoAmount)) : 0;
   const totals = {
     ...priced,
     shipping: shipping + codFee,
     storeCredit: creditApplied,
-    total: Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee - creditApplied),
+    total: Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee - creditApplied - promoAmount),
   };
 
   const validateAddress = () => {
@@ -455,6 +461,7 @@ export default function CheckoutClient() {
         status: firstStatus,
         channel: "online",
         storeCreditUsed: creditApplied || undefined,
+        promo: promo && promoAmount ? { code: promo.code, kind: promo.kind, amount: promoAmount, label: promo.label } : undefined,
         preorderPayment:
           payNow < totals.total || preorderShippingLater
             ? {
@@ -1043,6 +1050,36 @@ export default function CheckoutClient() {
               </span>
             </div>
 
+            <div className="mt-5 rounded-xl border border-border px-4 py-3 text-sm">
+              <p className="font-semibold text-text-primary">Coupon or gift card</p>
+              {promo ? (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-emerald-700">
+                    {promo.kind === "gift" ? "Gift card" : promo.label} <b>{promo.code}</b>{" "}
+                    {promoAmount ? `· − ${formatPrice(promoAmount)}` : promo.kind === "coupon" && promo.minOrder ? `· needs items worth ${formatPrice(promo.minOrder)}` : ""}
+                  </span>
+                  <button type="button" className="text-xs font-semibold text-burgundy underline" onClick={() => { setPromo(null); setPromoNote(""); }}>Remove</button>
+                </div>
+              ) : (
+                <form
+                  className="mt-2 flex gap-2"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    if (!promoCode.trim()) return;
+                    setPromoBusy(true);
+                    const result = await checkPromoCode(promoCode, hasPreorder);
+                    setPromoBusy(false);
+                    if (result.ok) { setPromo(result.rule); setPromoNote(""); setPromoCode(""); }
+                    else setPromoNote(result.error);
+                  }}
+                >
+                  <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="Enter code" aria-label="Coupon or gift card code" className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2 uppercase" />
+                  <button type="submit" disabled={promoBusy} className="rounded-lg bg-burgundy px-4 py-2 font-semibold text-white disabled:opacity-60">{promoBusy ? "Checking…" : "Apply"}</button>
+                </form>
+              )}
+              {promoNote ? <p className="mt-2 text-xs text-red-700">{promoNote}</p> : null}
+            </div>
+
             {storeCredit > 0 && (
               <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-border px-4 py-3 text-sm">
                 <input type="checkbox" checked={useCredit} onChange={(event) => setUseCredit(event.target.checked)} className="mt-1 accent-burgundy" />
@@ -1269,6 +1306,12 @@ export default function CheckoutClient() {
                 <div className="flex justify-between">
                   <dt className="text-text-muted">Cash on delivery</dt>
                   <dd className="font-medium text-text-primary">{formatPrice(codFee)}</dd>
+                </div>
+              )}
+              {promoAmount > 0 && promo && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">{promo.kind === "gift" ? "Gift card" : "Coupon"} {promo.code}</dt>
+                  <dd className="font-medium text-emerald-700">− {formatPrice(promoAmount)}</dd>
                 </div>
               )}
               {creditApplied > 0 && (

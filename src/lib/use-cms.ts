@@ -1,5 +1,6 @@
 "use client";
 
+import { withOffer } from "@/lib/promotions";
 import { isPublishedNow } from "@/lib/schedule";
 import { useSyncExternalStore } from "react";
 import { defaultOrderSettings, getOrderSettings, type OrderSettings } from "@/lib/integrations";
@@ -247,11 +248,11 @@ function readProducts() {
     const published = getPublishedFeed()?.books;
     if (!hasLocal && published?.length) {
       productAll = published;
-      productLive = published.filter((book) => book.active !== false && isPublishedNow(book));
+      productLive = published.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
       return;
     }
     productAll = getAllProducts();
-    productLive = productAll.filter((book) => book.active !== false && isPublishedNow(book));
+    productLive = productAll.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
   }
 }
 

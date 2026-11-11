@@ -10,7 +10,7 @@ export const staffModules = [
   { id: "picking", label: "Pick & pack scanner", paths: ["/admin/commerce/picking", "/admin/commerce/picker", "/admin/commerce/packer", "/scanner", "/picker", "/packer"] },
   { id: "shipments", label: "Create shipments (packed orders)", paths: ["/admin/commerce/ready-to-ship"] },
   { id: "quick-shipment", label: "Quick shipment", paths: ["/admin/commerce/quick-shipment"] },
-  { id: "catalog", label: "Products & inventory", paths: ["/admin/commerce/products", "/admin/commerce/inventory", "/admin/commerce/serviceability"] },
+  { id: "catalog", label: "Products & inventory", paths: ["/admin/commerce/products", "/admin/commerce/promotions", "/admin/commerce/inventory", "/admin/commerce/serviceability"] },
   { id: "payments", label: "Payments", paths: ["/admin/payments", "/admin/commerce/payments"] },
   { id: "customers", label: "Customers", paths: ["/admin/accounts/customers"] },
   { id: "website", label: "Website & homepage", paths: ["/admin/website", "/admin/website/pages", "/admin/website/visibility", "/admin/website/reviews", "/admin/website/text"] },

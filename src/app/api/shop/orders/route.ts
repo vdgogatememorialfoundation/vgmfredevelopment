@@ -3,6 +3,7 @@ import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
 import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
+import { redeemPromo } from "@/lib/server/promotions";
 import type { Order } from "@/types";
 
 export const runtime = "nodejs";
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Send the order." }, { status: 400 });
   }
   upsertShopOrder(order);
+  if (order.promo?.code && order.paymentStatus !== "Pending") redeemPromo(order);
   if (order.status === "Delivered") void issueDeliveryInvoice(order.id);
   return NextResponse.json({ ok: true });
 }

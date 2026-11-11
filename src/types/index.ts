@@ -293,6 +293,10 @@ export interface Book {
   category: string;
   /** "other" = any non-book product: no ISBN, author, pages or publisher needed. */
   productType?: "book" | "other";
+  /** Time-limited offer price; the regular price shows struck through while it runs. */
+  offer?: { price: number; label?: string; startsAt?: string; endsAt?: string };
+  /** Set on the shop copy while an offer runs. */
+  offerLabel?: string;
   /** Per-product override of the shop rules shown on the product page. */
   policy?: { returns?: boolean; replacement?: boolean; cancellation?: boolean };
   edition?: string;
@@ -589,6 +593,8 @@ export interface Order {
   channel?: "online" | "admin" | "pos" | "shipment";
   stockCommitted?: boolean;
   storeCreditUsed?: number;
+  /** Coupon or gift card applied at checkout. */
+  promo?: { code: string; kind: "coupon" | "gift"; amount: number; label?: string };
   refunds?: RefundRecord[];
   returnShipment?: ReturnShipment;
   deliveryMode: "delivery" | "store_pickup";
