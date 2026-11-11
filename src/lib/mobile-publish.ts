@@ -20,6 +20,7 @@ import { getGallery } from "@/lib/gallery";
 import { defaultMobileAppConfig, getMobileAppConfig, type MobileAppConfig } from "@/lib/mobile-config";
 import { getPolicies } from "@/lib/policies";
 import { getAllProducts } from "@/lib/product-data";
+import { getLiveCmsPages } from "@/lib/cms-pages";
 import { getSiteVisibility } from "@/lib/site-visibility";
 import { getPlatformCountries } from "@/lib/platform-countries";
 import { getProductReviews, getSeminarReviews } from "@/lib/reviews";
@@ -75,6 +76,7 @@ export function collectMobileSnapshot(): MobileFeed {
     productReviews: getProductReviews(),
     siteText: getSiteText(),
     orderSettings: getOrderSettings(),
+    pages: getLiveCmsPages(),
   };
 }
 

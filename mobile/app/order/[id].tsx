@@ -28,6 +28,7 @@ export default function OrderScreen() {
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
   const [payment, setPayment] = useState("");
+  const [link, setLink] = useState("");
   const [paying, setPaying] = useState(false);
   const [payNote, setPayNote] = useState("");
   const [payTone, setPayTone] = useState<"error" | "success">("error");
@@ -115,6 +116,18 @@ export default function OrderScreen() {
       setPayNote((error as Error).message);
     }
   };
+  const links: { label: string; url: string; amount?: number }[] = [];
+  const pushLink = (label: string, value: unknown, amount?: unknown, done?: unknown) => {
+    const url = str((value as Row | null | undefined)?.url);
+    const expires = str((value as Row | null | undefined)?.expiresAt);
+    if (url && !done && !(expires && Date.parse(expires) < Date.now())) links.push({ label, url, amount: Number(amount) || undefined });
+  };
+  const paymentLink = (order.paymentLink ?? null) as Row | null;
+  pushLink("Complete your payment", paymentLink, paymentLink?.amount ?? order.total, str(order.paymentStatus) === "Paid");
+  const upgrade = (order.courierUpgrade ?? null) as Row | null;
+  pushLink("Courier charge", upgrade?.link, upgrade?.amount, upgrade?.paidAt);
+  const returned = (order.returnShipment ?? null) as Row | null;
+  pushLink("Return courier charge", returned?.chargeLink, returned?.charge, returned?.chargePaidAt || str(returned?.chargePaidBy) === "foundation");
   const address = (order.deliveryAddress ?? {}) as Row;
   const pickup = str(order.deliveryMode) === "store_pickup";
 
@@ -191,6 +204,21 @@ export default function OrderScreen() {
           {waiting ? null : <Button icon="card-outline" label={paying ? "Working out the courier charge…" : "Proceed to pay"} disabled={paying} onPress={() => void proceed()} />}
         </Card>
       ) : null}
+      {links.map((item) => (
+        <Card key={item.url} featured>
+          <Heading>{item.label}{item.amount ? ` · ${money(item.amount)}` : ""}</Heading>
+          <Muted>The Foundation sent a payment request for this order. Pay it here in the app.</Muted>
+          <Button icon="card-outline" label={item.amount ? `Pay ${money(item.amount)}` : "Pay now"} onPress={() => setLink(item.url)} />
+        </Card>
+      ))}
+      <Modal visible={Boolean(link)} animationType="slide" onRequestClose={() => { setLink(""); void load(); }}>
+        {link ? (
+          <View style={{ flex: 1, paddingTop: 36 }}>
+            <Button kind="ghost" icon="close-outline" label="Close and refresh the order" onPress={() => { setLink(""); void load(); }} />
+            <WebView source={{ uri: link }} javaScriptEnabled style={{ flex: 1 }} />
+          </View>
+        ) : null}
+      </Modal>
       <Button kind="ghost" icon="refresh-outline" label="Refresh tracking" onPress={() => void load()} />
       <Button kind="ghost" icon="help-buoy-outline" label="Need help with this order?" onPress={() => router.push("/support")} />
     </Screen>

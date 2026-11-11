@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pipeline } from "../../src/tracker";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { findRow, formatDate, getApiBase, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
+import { fetchWallet, findRow, formatDate, getApiBase, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
 import { ACCOUNT_SECTIONS, accountSection } from "../../src/account-nav";
 import { useAuth } from "../../src/auth";
 import { useFeed } from "../../src/feed";
@@ -28,6 +28,7 @@ function SectionBody({ id, title, subtitle }: { id: string; title: string; subti
   if (id === "wishlist") return <WishlistSection title={title} subtitle={subtitle} />;
   if (id === "profile") return <ProfileSection title={title} subtitle={subtitle} />;
   if (id === "loyalty") return <LoyaltySection title={title} subtitle={subtitle} />;
+  if (id === "wallet") return <WalletSection title={title} subtitle={subtitle} />;
   if (id === "registrations" || id === "applications") return <PartnerSection title={title} subtitle={subtitle} kind="tickets" empty={emptyCopy(id)} />;
   if (id === "payments" || id === "receipts") return <PartnerSection title={title} subtitle={subtitle} kind="payments" empty={emptyCopy(id)} />;
   if (id === "notifications") return <InboxSection title={title} subtitle={subtitle} />;
@@ -205,6 +206,49 @@ function ProfileSection({ title, subtitle }: { title: string; subtitle: string }
         <Muted>Email · {session?.email || "—"}</Muted>
         <Muted>Account ID · {session?.accountId || "Issued after the first verified sign-in"}</Muted>
       </Card>
+    </Screen>
+  );
+}
+
+function WalletSection({ title, subtitle }: { title: string; subtitle: string }) {
+  const [wallet, setWallet] = useState<{ balance: number; entries: Row[] } | null>(null);
+  const [error, setError] = useState("");
+  const load = () => {
+    fetchWallet()
+      .then((value) => {
+        setWallet(value);
+        setError("");
+      })
+      .catch((problem: Error) => setError(problem.message));
+  };
+  useEffect(load, []);
+  if (!wallet && !error) return <Loading label="Opening your wallet…" />;
+  const entries = [...(wallet?.entries ?? [])].sort((a, b) => str(b.at).localeCompare(str(a.at)));
+  return (
+    <Screen onRefresh={load}>
+      <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
+      <Banner text={error} tone="error" />
+      <Card featured>
+        <Muted>Available balance</Muted>
+        <Heading>{money(wallet?.balance ?? 0)}</Heading>
+        <Muted>Use it at checkout on the website. Refunds sent to store credit appear here.</Muted>
+      </Card>
+      {entries.length ? (
+        <Card>
+          <Heading>Activity</Heading>
+          {entries.map((entry) => (
+            <View key={str(entry.id)} style={{ marginTop: 8 }}>
+              <Muted>
+                {Number(entry.amount) > 0 ? "+" : "−"}
+                {money(Math.abs(Number(entry.amount) || 0))} · {str(entry.note, "Wallet")} · {formatDate(entry.at)}
+                {str(entry.orderId) ? ` · Order ${str(entry.orderId)}` : ""}
+              </Muted>
+            </View>
+          ))}
+        </Card>
+      ) : (
+        <Empty icon="wallet-outline" label="No wallet activity yet." />
+      )}
     </Screen>
   );
 }

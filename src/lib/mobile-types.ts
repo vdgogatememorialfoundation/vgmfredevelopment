@@ -1,3 +1,4 @@
+import type { CmsPage } from "@/lib/cms-pages";
 import type { OrderSettings } from "@/lib/integrations";
 import type { MobileAppearance } from "@/lib/mobile-appearance";
 import type { MobileAppConfig } from "@/lib/mobile-config";
@@ -62,4 +63,6 @@ export type MobileFeed = {
   siteText?: SiteText;
   /** Public checkout rules (cash on delivery, shipping fee, pickup). No secrets. */
   orderSettings?: OrderSettings;
+  /** Custom pages created in Admin → Pages that are switched on (/p/<slug>). */
+  pages?: CmsPage[];
 };

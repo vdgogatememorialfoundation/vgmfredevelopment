@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { mediaUrl } from "./api";
 import { useAuth } from "./auth";
-import { useBrand } from "./feed";
+import { useBrand, useFeed } from "./feed";
 import { SITE } from "./site-content";
 import { useTheme } from "./theme";
 import { BrandMark } from "./ui";
@@ -88,6 +88,11 @@ export function AppDrawer() {
   const brand = useBrand();
   const { session, signOut } = useAuth();
   const { open, closeDrawer } = useDrawer();
+  const { feed } = useFeed();
+  const customPages = (feed?.pages ?? []).filter((page) => page.enabled !== false && String(page.slug ?? ""));
+  const menu = customPages.length
+    ? [...MENU, { title: "Pages", items: customPages.map((page): DrawerItem => ({ href: `/page/${String(page.slug)}`, label: String(page.title ?? page.slug), icon: "document-text-outline" })) }]
+    : MENU;
 
   const go = (href: string) => {
     closeDrawer();
@@ -112,7 +117,7 @@ export function AppDrawer() {
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-            {MENU.map((section) => (
+            {menu.map((section) => (
               <View key={section.title} style={{ marginBottom: 18 }}>
                 <Text style={{ color: theme.colors.primary, fontSize: 10, fontWeight: "800", letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 8 }}>{section.title}</Text>
                 {section.items.map((item) => (

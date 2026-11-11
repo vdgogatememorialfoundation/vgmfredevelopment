@@ -173,6 +173,17 @@ function applyFeed(feed: MobileFeed) {
     tryWrite(() => replaceProductReviews(feed.productReviews as ProductReview[]));
   }
 
+  if (Array.isArray(feed.pages)) {
+    tryWrite(() => {
+      const live = feed.pages ?? [];
+      const liveIds = new Set(live.map((page) => page.id));
+      const local = JSON.parse(window.localStorage.getItem("vgmf_cms_pages") || "[]") as typeof live;
+      const drafts = local.filter((page) => !page.enabled && !liveIds.has(page.id));
+      window.localStorage.setItem("vgmf_cms_pages", JSON.stringify([...live, ...drafts]));
+      window.dispatchEvent(new Event("vgmf-cms"));
+    });
+  }
+
   installPublishedCatalogue(feed);
 }
 

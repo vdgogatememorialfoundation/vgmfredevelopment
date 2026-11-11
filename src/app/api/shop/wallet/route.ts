@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { addWalletEntries, walletFor, type WalletEntry } from "@/lib/server/shop-wallet";
+import { bearerToken, sessionFromToken } from "@/lib/server/mobile-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,7 +9,8 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const viewer = commerceViewer(request);
   const asked = request.nextUrl.searchParams.get("email")?.toLowerCase() || "";
-  const email = viewer.portal && asked ? asked : viewer.email;
+  const app = viewer.email ? null : sessionFromToken(bearerToken(request.headers.get("authorization")));
+  const email = viewer.portal && asked ? asked : viewer.email || app?.email?.toLowerCase() || "";
   if (!email) return NextResponse.json({ ok: true, balance: 0, entries: [] }, { headers: { "cache-control": "no-store" } });
   return NextResponse.json({ ok: true, ...walletFor(email) }, { headers: { "cache-control": "no-store" } });
 }
