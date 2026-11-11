@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders } from "@/lib/server/mobile-feed";
-import { sendMobileEmail } from "@/lib/server/mobile-mail";
+import { sendMobileEmail, sendMobileSmsOtp } from "@/lib/server/mobile-mail";
 import {
   bearerToken,
   clearMobileOtp,
@@ -46,12 +46,14 @@ export async function POST(request: NextRequest) {
     const issued = issueMobileOtp(email);
     if (issued.error) return json({ ok: false, error: issued.error }, 429);
     const name = String(body?.name ?? "there").slice(0, 80);
+    const texted = await sendMobileSmsOtp(String(body?.phone ?? ""), issued.code);
     try {
       const sent = await sendMobileEmail(
         email,
         "Vaidya Gogate Memorial Foundation sign-in code",
         `Hi ${name},\n\nYour Vaidya Gogate Memorial Foundation app sign-in code is ${issued.code}. It expires in 10 minutes.\n\nIf you did not request this, ignore the message.\n\n– Vaidya Gogate Memorial Foundation`
       );
+      if (!sent && texted) return json({ ok: true, message: "A 6-digit code was sent by SMS." });
       if (!sent) {
         clearMobileOtp(email);
         return json({
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
       clearMobileOtp(email);
       return json({ ok: false, error: (error as Error).message || "Could not send the email code." });
     }
-    return json({ ok: true, message: "A 6-digit code was sent to your email." });
+    return json({ ok: true, message: texted ? "A 6-digit code was sent to your email and by SMS." : "A 6-digit code was sent to your email." });
   }
 
   if (action === "verify") {
