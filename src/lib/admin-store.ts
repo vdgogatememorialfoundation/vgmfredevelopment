@@ -578,6 +578,7 @@ export function createAdminOrder(input: {
         originalPrice: book.originalPrice,
         currency: book.currency,
         sku: book.sku,
+        batchNo: book.batchNo,
         preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
       };
     })

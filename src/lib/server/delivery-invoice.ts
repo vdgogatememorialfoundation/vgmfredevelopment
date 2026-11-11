@@ -50,7 +50,7 @@ export function deliveryInvoiceHtml(order: Order, invoice: IssuedInvoice) {
   const rows = order.items
     .map(
       (item, index) =>
-        `<tr><td>${index + 1}</td><td>${esc(item.title)}</td><td class="r">${item.quantity}</td><td class="r">${rupees(item.price)}</td><td class="r">${rupees(item.price * item.quantity)}</td></tr>`
+        `<tr><td>${index + 1}</td><td>${esc(item.title)}${item.batchNo ? `<br><small>Batch ${esc(item.batchNo)}</small>` : ""}</td><td class="r">${item.quantity}</td><td class="r">${rupees(item.price)}</td><td class="r">${rupees(item.price * item.quantity)}</td></tr>`
     )
     .join("");
   const line = (label: string, value: number, bold = false) =>

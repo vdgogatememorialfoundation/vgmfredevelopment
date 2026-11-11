@@ -304,6 +304,25 @@ export function generateSku(_category?: string, ignoreId?: string) {
   return sku;
 }
 
+/** Numeric batch number: date (YYMMDD) and a 3-digit serial. */
+export function generateBatchNo() {
+  const day = new Intl.DateTimeFormat("en-GB", { year: "2-digit", month: "2-digit", day: "2-digit", timeZone: "Asia/Kolkata" })
+    .format(new Date())
+    .split("/")
+    .reverse()
+    .join("");
+  const used = new Set(getAllProducts().map((book) => book.batchNo));
+  let batch = "";
+  do batch = `${day}${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
+  while (used.has(batch));
+  return batch;
+}
+
+/** Batch number for an order line: the one saved on the order, else the product's current batch. */
+export function orderItemBatch(item: { bookId?: string; batchNo?: string }) {
+  return item.batchNo || (item.bookId ? getAllProducts().find((book) => book.id === item.bookId)?.batchNo : "") || "";
+}
+
 /** Unique 10-digit numeric product code. */
 export function generateProductCode(ignoreId?: string) {
   const used = new Set(getAllProducts().filter((book) => book.id !== ignoreId).map((book) => book.productCode));

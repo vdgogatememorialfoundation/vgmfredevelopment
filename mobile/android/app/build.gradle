@@ -92,8 +92,8 @@ android {
         applicationId 'org.vaidyagogate.customer'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 24
-        versionName "2.4.3"
+        versionCode 25
+        versionName "2.4.4"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

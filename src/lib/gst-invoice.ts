@@ -28,7 +28,7 @@ export function printGstInvoice(order: Order, settings: OrderSettings = getOrder
   const rows = order.items
     .map(
       (item) =>
-        `<tr><td>${esc(item.title)}</td><td>${item.quantity}</td><td>${rupees(item.price)}</td><td>${rupees(item.price * item.quantity)}</td></tr>`
+        `<tr><td>${esc(item.title)}${item.batchNo ? `<br><small>Batch ${esc(item.batchNo)}</small>` : ""}</td><td>${item.quantity}</td><td>${rupees(item.price)}</td><td>${rupees(item.price * item.quantity)}</td></tr>`
     )
     .join("");
   const html = `<!DOCTYPE html><html><head><title>GST invoice ${esc(order.id)}</title>

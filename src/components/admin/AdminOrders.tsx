@@ -27,7 +27,7 @@ import {
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
-import { currentProductTitle, getLiveBooks } from "@/lib/product-data";
+import { currentProductTitle, getLiveBooks, orderItemBatch } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, orderStatusText, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
@@ -868,6 +868,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               originalPrice: book.originalPrice,
               currency: book.currency,
               sku: book.sku,
+              batchNo: book.batchNo,
               preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
             },
           ]
@@ -988,7 +989,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <ul className="space-y-2">
             {(editing ? editItems : order.items).map((item, index) => (
               <li key={item.bookId} className="flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 flex-1 truncate">{currentProductTitle(item)}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {currentProductTitle(item)}
+                  {orderItemBatch(item) ? <span className="ml-1 text-xs text-text-muted">· Batch {orderItemBatch(item)}</span> : null}
+                </span>
                 {editing ? (
                   <span className="flex items-center gap-1">
                     <button

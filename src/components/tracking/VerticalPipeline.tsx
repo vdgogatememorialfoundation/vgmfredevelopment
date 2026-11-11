@@ -247,6 +247,13 @@ export default function VerticalPipeline({
           style={{ left: line.left, top: line.top, height: line.height, transition: line.transition }}
           aria-hidden="true"
         />
+        {creep > 0 && !failed && line.height > 0 ? (
+          <span
+            className="vgmf-ship-beep"
+            style={{ left: line.left + 1.5, top: line.top + line.height, transition: line.transition.replace(/height/g, "top") }}
+            aria-hidden="true"
+          />
+        ) : null}
         <ol ref={listRef} className="vgmf-ship-pipe" role="list">
         {stages.map((stage, index) => {
           const state = pipeState(stage, index === nodeCurrentIdx);

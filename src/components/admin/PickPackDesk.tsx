@@ -1,5 +1,6 @@
 "use client";
 
+import { orderItemBatch } from "@/lib/product-data";
 import { useEffect, useRef, useState } from "react";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
@@ -126,7 +127,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                 </div>
                 <ul className="mt-1 text-sm text-slate-700">
                   {order.items.map((item) => (
-                    <li key={item.bookId}>{item.quantity} × {item.title}{item.sku ? ` · ${item.sku}` : ""}</li>
+                    <li key={item.bookId}>{item.quantity} × {item.title}{item.sku ? ` · ${item.sku}` : ""}{orderItemBatch(item) ? ` · Batch ${orderItemBatch(item)}` : ""}</li>
                   ))}
                 </ul>
                 <div className="mt-2 flex flex-wrap gap-2">

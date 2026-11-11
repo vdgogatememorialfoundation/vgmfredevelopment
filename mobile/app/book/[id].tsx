@@ -126,6 +126,7 @@ export default function BookDetail() {
 
         <Panel title="Details">
           <InfoRow icon="barcode-outline" label="SKU" value={str(item.sku)} />
+          <InfoRow icon="layers-outline" label="Batch no." value={str(item.batchNo)} />
           <InfoRow icon="library-outline" label="Binding" value={isBook ? str(item.binding) : ""} />
           <InfoRow icon="language-outline" label="Language" value={str(item.language)} />
           <InfoRow icon="document-outline" label="Pages" value={isBook && pages ? String(pages) : ""} />

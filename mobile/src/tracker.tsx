@@ -1,4 +1,5 @@
-import { Text, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Animated, Easing, Text, View } from "react-native";
 import { useTheme } from "./theme";
 
 export type TrackEvent = { title?: string; when?: string; location?: string; detail?: string };
@@ -7,6 +8,30 @@ export type TrackStage = { id?: string; label?: string; caption?: string; reache
 const DONE = "#0F7B5F";
 const FAILED = "#B42318";
 const IDLE = "#D9CDB8";
+
+/** Live "beep": a ring that keeps pulsing out of the current step's dot. */
+function Beep({ color }: { color: string }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1400, easing: Easing.out(Easing.ease), useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: color,
+        opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0] }),
+        transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] }) }],
+      }}
+    />
+  );
+}
 
 /** Native copy of the website's vertical tracker: dots, a filled line up to the current step, and each step's scans. */
 export function Pipeline({ stages, current, failed, expected, footer }: { stages: TrackStage[]; current: number; failed?: boolean; expected?: string; footer?: string }) {
@@ -37,6 +62,7 @@ export function Pipeline({ stages, current, failed, expected, footer }: { stages
                   justifyContent: "center",
                 }}
               >
+                {active && !failed && index < last ? <Beep color={DONE} /> : null}
                 {reached && !active ? <Text style={{ color: "#fff", fontSize: 10, fontWeight: "900" }}>✓</Text> : null}
               </View>
               {index < last ? <View style={{ flex: 1, width: 3, minHeight: 26, marginVertical: 2, borderRadius: 2, backgroundColor: lineFilled ? DONE : IDLE }} /> : null}

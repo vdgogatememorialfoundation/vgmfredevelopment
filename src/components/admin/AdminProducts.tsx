@@ -9,7 +9,7 @@ import {
   ensureProductBarcodes,
   generateBarcode,
   generateProductCode,
-  generateSku,
+  generateBatchNo, generateSku,
   getCategories,
   isProductCodeTaken,
   issueStockLabels,
@@ -62,6 +62,7 @@ function blankProduct(): Book {
     description: "",
     isbn: "",
     sku: "",
+    batchNo: "",
     productCode: "",
     barcode: "",
     pages: 0,
@@ -360,6 +361,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     if (!form.price || form.price < 0) return setError("Add a selling price.");
     const sku = (form.sku ?? "").trim() || generateSku(form.category, form.id);
     const productCode = (form.productCode ?? "").trim() || generateProductCode(form.id);
+    const batchNo = (form.batchNo ?? "").trim() || generateBatchNo();
     if (isSkuTaken(sku, form.id)) return setError(`SKU ${sku} is already used.`);
     if (isProductCodeTaken(productCode, form.id)) return setError(`Product code ${productCode} is already used.`);
     const isbn = ((form.licenses ?? []).find((item) => item.label.toLowerCase() === "isbn")?.value || form.isbn || "").trim();
@@ -374,6 +376,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
       slug: nextSlug,
       previousSlugs: book.slug && book.slug !== nextSlug ? Array.from(new Set([...(form.previousSlugs ?? []), book.slug])).filter((old) => old !== nextSlug) : form.previousSlugs,
       sku,
+      batchNo,
       productCode,
       barcode: form.barcode || generateBarcode(),
       isbn: isbn || undefined,
@@ -385,6 +388,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
       coverImage: form.coverImage || (form.media ?? []).find((item) => item.type === "image")?.src,
       specifications: [
         { label: "SKU", value: sku },
+        { label: "Batch no.", value: batchNo },
         { label: "Product code", value: productCode },
         ...(isbn ? [{ label: "ISBN", value: isbn }] : []),
         ...(form.edition ? [{ label: "Edition", value: form.edition }] : []),
@@ -542,6 +546,15 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
                 <Button variant="outline" onClick={() => set({ sku: generateSku(form.category, form.id) })}>Generate</Button>
               </div>
             </Field>
+            <div className="mt-2">
+              <Field label="Batch no.">
+                <div className="flex gap-2">
+                  <TextInput value={form.batchNo ?? ""} onChange={(event) => set({ batchNo: event.target.value.trim() })} />
+                  <Button variant="outline" onClick={() => set({ batchNo: generateBatchNo() })}>Generate</Button>
+                </div>
+                <span className="mt-1 block text-xs text-text-muted">Filled in automatically on save. Change it when stock from a new batch comes in.</span>
+              </Field>
+            </div>
             <div className="mt-2">
               <Field label="Unique product code (10 digits)">
                 <div className="flex gap-2">

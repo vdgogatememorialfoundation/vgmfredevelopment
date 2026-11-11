@@ -8,7 +8,7 @@ import { ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib
 import { readShippingCreds } from "@/lib/server/shipping-vault";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 
-type FeedBook = { id?: string; sku?: string; stock?: number; stockStatus?: string; preorder?: boolean | { enabled?: boolean } };
+type FeedBook = { id?: string; sku?: string; batchNo?: string; stock?: number; stockStatus?: string; preorder?: boolean | { enabled?: boolean } };
 
 /** Out of stock with pre-booking switched on, the same test the website uses. */
 export function feedPreorderable(book?: FeedBook) {
@@ -70,7 +70,7 @@ export function recordAppOrder(
     date: now,
     items: draft.items.map((item) => {
       const book = books.find((row) => String(row.id) === item.id);
-      return { bookId: item.id, title: item.title, quantity: item.quantity, price: item.price, currency: "INR", sku: book?.sku, preorder: feedPreorderable(book) || undefined };
+      return { bookId: item.id, title: item.title, quantity: item.quantity, price: item.price, currency: "INR", sku: book?.sku, batchNo: book?.batchNo, preorder: feedPreorderable(book) || undefined };
     }),
     subtotal: draft.subtotal,
     discount: input.promo?.amount ?? 0,

@@ -40,6 +40,7 @@ export function bookSpecRows(book: Book) {
   const rows: [string, string | undefined][] = [
     ["Book title", book.title],
     ["SKU", book.sku],
+    ["Batch no.", book.batchNo],
     ["ISBN", isbn],
     ["Product code", book.productCode],
     ["Author", book.author],

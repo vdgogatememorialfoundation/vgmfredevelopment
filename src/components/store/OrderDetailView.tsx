@@ -10,7 +10,7 @@ import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store
 import { useOrderSettings } from "@/lib/use-cms";
 import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
-import { currentProductTitle } from "@/lib/product-data";
+import { currentProductTitle, orderItemBatch } from "@/lib/product-data";
 import { orderStatusText, shippingIsFree } from "@/lib/integrations";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 import { agreedDelivery, customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
@@ -115,6 +115,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                 >
                   <span className="min-w-0 flex-1 truncate text-text-primary">
                     {currentProductTitle(item)}
+                    {orderItemBatch(item) ? <span className="ml-1 text-xs text-text-muted">· Batch {orderItemBatch(item)}</span> : null}
                   </span>
                   <span className="text-text-muted">
                     × {item.quantity}

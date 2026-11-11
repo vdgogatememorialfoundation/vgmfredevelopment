@@ -1,4 +1,4 @@
-import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
+import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
 import type { Order, RefundRecord } from "@/types";
 
 const stamp = (value?: string) =>
@@ -121,18 +121,11 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
         ]),
   ];
   const current = stages.map((stage) => stage.reached).lastIndexOf(true);
+  // The step the refund is waiting on pulses live, like the order tracker's current step.
+  if (!failed && current < stages.length - 1) stages[current] = { ...stages[current], partial: true };
   const expected = refundExpectedCredit(refund);
   const day = (value?: Date) =>
     value ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(value) : "";
-  // Live timing, like order tracking: is the current step still within Razorpay's usual window?
-  const timingFor = (stage: PipelineStageShape): { label: string; tone: PipelineTone } | null => {
-    if (failed || credit || manual) return null;
-    const late = (until: number) => (Date.now() > until ? { label: "Delayed", tone: "red" as const } : { label: "On time", tone: "emerald" as const });
-    if (stage.id === "bank" && !done) return late(refundProcessingDue(refund));
-    if (stage.id === "processed" && done && expected && !expected.done) return late(expected.date.getTime());
-    if (stage.id === "credited" && stage.reached) return { label: "Credited", tone: "emerald" };
-    return null;
-  };
   const metaFor = (stage: PipelineStageShape) =>
     stage.id === "initiated"
       ? stamp(refund.at)
@@ -143,7 +136,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
           : "";
   return (
     <div className="mt-2">
-      <VerticalPipeline stages={stages} currentIndex={current} failed={failed} pace={refundPace(refund)} timingFor={timingFor} metaFor={metaFor} />
+      <VerticalPipeline stages={stages} currentIndex={current} failed={failed} pace={refundPace(refund)} metaFor={metaFor} />
     </div>
   );
 }
