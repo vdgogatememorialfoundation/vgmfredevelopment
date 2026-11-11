@@ -411,31 +411,8 @@
     box-shadow: 0 0 0 10px color-mix(in srgb, var(--tl-green) 0%, transparent);
   }
 }
-/* Live "beep" at the head of the moving line. */
-.vgmf-ship-beep {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--tl-green);
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  pointer-events: none;
-  animation: vgmfTrkBeep 1.4s ease-out infinite;
-}
-@keyframes vgmfTrkBeep {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tl-green) 55%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 12px color-mix(in srgb, var(--tl-green) 0%, transparent);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .vgmf-ship-pipe > li.active > .dot {
-    animation: none;
-  }
-  .vgmf-ship-beep {
     animation: none;
   }
   .vgmf-ship-fill { transition: none; }
