@@ -1538,7 +1538,7 @@ export function OrderSettingsDesk() {
           <Text label="Minimum courier charge shown (₹)" type="number" value={value.courierMarkup.minimum} onChange={(minimum) => set({ courierMarkup: { ...value.courierMarkup, minimum: Math.max(0, Number(minimum) || 0) } })} />
           <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
-          <Check label="Hide delivery dates on the site (product cards, product page, bag, checkout and tracking)" checked={value.hideDeliveryDates} onChange={(hideDeliveryDates) => set({ hideDeliveryDates })} />
+          <Check label="Hide delivery dates on the site (product cards, product page, bag, checkout and tracking until a courier is booked)" checked={value.hideDeliveryDates} onChange={(hideDeliveryDates) => set({ hideDeliveryDates })} />
           <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
           <Text label="Packing / processing time (hours)" type="number" value={value.processingHours} onChange={(hours) => set({ processingHours: Math.max(0, Number(hours) || 0) })} />
           <Text label="Dispatch cut-off (India time, HH:MM)" value={value.dispatchCutoff} onChange={(dispatchCutoff) => set({ dispatchCutoff })} />
@@ -1568,6 +1568,7 @@ export function OrderSettingsDesk() {
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Pre-order payment</span>
             <p className="text-sm text-slate-700">Advance at checkout; the rest plus the courier charge is paid by payment link. Full payment and cash on delivery are not offered for pre-orders.</p>
           </div>
+          <Check label="Show packing and delivery dates on pre-order tracking (off: shown only once a courier is booked)" checked={value.showPreorderStepDates} onChange={(showPreorderStepDates) => set({ showPreorderStepDates })} />
           <Text label="Advance (%) — 1 to 99" type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: "percent", advanceValue: Math.min(99, Math.max(1, Math.round(Number(amount) || 50))) } })} />
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Balance due</span>

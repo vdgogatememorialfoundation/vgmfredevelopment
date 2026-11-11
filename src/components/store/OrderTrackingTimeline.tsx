@@ -65,7 +65,7 @@ function Tile({ label, value }: { label: string; value: string }) {
 }
 
 export default function OrderTrackingTimeline({ order, phone = "", shipmentId = "" }: { order: Order; phone?: string; shipmentId?: string }) {
-  const hideDates = useOrderSettings().hideDeliveryDates;
+  const orderSettings = useOrderSettings();
   useEffect(() => {
     if (order.status !== "Delivered") return;
     const key = `vgmf_delivered_beep_${order.id}`;
@@ -82,7 +82,13 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   const provider = shipment?.provider ?? order.courierChoice?.provider;
   const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
-  const expectedText = agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date) || now);
+  const preorder = Boolean(order.preorderPayment) || order.items.some((item) => item.preorder);
+  const courierBooked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.courier));
+  // Hidden dates (or a pre-order with dates off) only show once a courier is booked, and then only the courier's own date.
+  const hideDates = orderSettings.hideDeliveryDates || (preorder && !orderSettings.showPreorderStepDates);
+  const expectedText = hideDates
+    ? courierBooked ? shipment?.expectedBy || "" : ""
+    : agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date) || now);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,10 +183,14 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
         detail: [shipment.agentPhone ? `Phone ${shipment.agentPhone}` : "", shipment.deliveryOtp ? `Delivery PIN ${shipment.deliveryOtp}` : ""].filter(Boolean).join(" · ") || "Contact shared by the courier",
       };
     }
-    if (stage.id === "packed" && !stage.reached) next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
+    const promised = parseExpected(expectedText, placed.getTime());
+    // Never show a packing date on or after the delivery date.
+    if (stage.id === "packed" && !stage.reached && !hideDates && (!promised || expectedFrom.getTime() < promised - 12 * 60 * 60 * 1000)) {
+      next.expected = `Packing expected by ${formatDate(expectedFrom)}`;
+    }
     const alreadyDelivered = order.status === "Delivered" || shipment?.status === "Delivered" || stage.reached;
     if (stage.id === "delivered" && !alreadyDelivered) {
-      next.expected = expectedText ? `Expected by ${deliveryDatePhrase(expectedText)}` : "Expected delivery date is pending from the courier";
+      next.expected = expectedText ? `Expected by ${deliveryDatePhrase(expectedText)}` : hideDates ? undefined : "Expected delivery date is pending from the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = order.status === "Delivered" ? "OTP verified" : `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
@@ -188,6 +198,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
 
   const stageTiming = (stage: PipelineStageShape): { label: string; tone: PipelineTone } | null => {
     if (stage.id === "failed") return { label: "Failed", tone: "red" };
+    if (hideDates && !courierBooked) return null;
     if (stage.id === "shipped" || stage.id === "out") {
       if (!stage.reached) return null;
       return now > expectedTo.getTime() ? { label: "Delayed", tone: "red" } : { label: "On time", tone: "emerald" };
@@ -322,7 +333,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   return (
     <div className="vgmf-trk">
       {tiles}
-      {!hideDates && order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
+      {(!hideDates || expectedText) && order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
         <p className="vgmf-trk-note">
           <b>Expected delivery by</b> {expectedText ? deliveryDatePhrase(expectedText) : "— shown once the courier confirms the booking"}
         </p>

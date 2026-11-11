@@ -1091,6 +1091,11 @@ export default function CheckoutClient() {
             {holdingNote && (
               <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{holdingNote}</p>
             )}
+            {!codSelected && (
+              <p className="mt-3 text-xs leading-5 text-text-muted">
+                If money is taken from your account but your order is not confirmed, the payment is held while we check with Razorpay. If it cannot be matched to an order, it may be refunded automatically to the same account, usually within 5–7 working days.
+              </p>
+            )}
             {error && (
               <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
                 {error}
