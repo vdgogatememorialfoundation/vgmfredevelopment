@@ -107,7 +107,7 @@ export function AppDrawer() {
           <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border, flexDirection: "row", alignItems: "center", gap: 12 }}>
             <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={44} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.primary, fontWeight: "800", fontFamily: theme.fontFamily, fontSize: 15 }} numberOfLines={2}>{SITE.name}</Text>
+              <Text style={{ color: theme.colors.primary, fontWeight: "600", fontFamily: theme.fontFamily, fontSize: 15 }} numberOfLines={2}>{SITE.name}</Text>
               <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
                 {session?.name || SITE.name}
               </Text>

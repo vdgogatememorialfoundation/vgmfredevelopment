@@ -38,7 +38,7 @@ export default function ArticleDetail() {
       <View style={{ marginTop: 6, marginBottom: 10 }}>
         <Tag label={str(item.category, "Article")} tone="gold" />
       </View>
-      <Text style={{ fontSize: 28, lineHeight: 35, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily, letterSpacing: -0.3 }}>{str(item.title)}</Text>
+      <Text style={{ fontSize: 28, lineHeight: 35, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily, letterSpacing: -0.3 }}>{str(item.title)}</Text>
       <View style={{ width: 44, height: 3, borderRadius: 2, backgroundColor: theme.colors.accent, marginVertical: 12 }} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
         {meta("person-outline", str(item.author))}

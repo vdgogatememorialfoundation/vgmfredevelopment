@@ -111,8 +111,8 @@ export default function AboutScreen() {
 function Stat({ value, label }: { value: string; label: string }) {
   const theme = useTheme();
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 14, padding: 12 }}>
-      <Text style={{ fontSize: 22, fontWeight: "800", color: theme.colors.primary, fontFamily: theme.fontFamily }}>{value}</Text>
+    <View style={{ flex: 1, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, padding: 12 }}>
+      <Text style={{ fontSize: 22, fontWeight: "600", color: theme.colors.primary, fontFamily: theme.fontFamily }}>{value}</Text>
       <Text style={{ color: theme.colors.muted, fontSize: 11, marginTop: 4 }}>{label}</Text>
     </View>
   );

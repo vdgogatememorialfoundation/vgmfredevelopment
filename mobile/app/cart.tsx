@@ -48,12 +48,12 @@ export default function CartScreen() {
       <Screen>
         <PageHeader kicker="Shop" title="Your bag" subtitle={priced.length ? `${cart.count} item${cart.count === 1 ? "" : "s"}` : undefined} />
         {priced.map((item) => (
-          <View key={item.id} style={{ flexDirection: "row", gap: 12, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 18, padding: 12, marginBottom: 12 }}>
+          <View key={item.id} style={{ flexDirection: "row", gap: 12, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, padding: 12, marginBottom: 12 }}>
             <View style={{ width: 76 }}>
               <CoverArt uri={mediaUrl(item.book?.coverImage) || undefined} title={item.title} ratio={0.75} radius={10} />
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "800", fontSize: 15, fontFamily: theme.fontFamily }}>{item.title}</Text>
+              <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "600", fontSize: 15, fontFamily: theme.fontFamily }}>{item.title}</Text>
               <Text style={{ color: theme.colors.primary, fontWeight: "800" }}>
                 {money(item.price)}
                 {item.original > item.price ? <Text style={{ color: theme.colors.muted, fontWeight: "500", textDecorationLine: "line-through", fontSize: 12 }}>  {money(item.original)}</Text> : null}

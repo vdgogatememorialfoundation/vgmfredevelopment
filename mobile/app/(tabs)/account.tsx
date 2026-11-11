@@ -64,14 +64,14 @@ export default function AccountScreen() {
     <View style={{ flex: 1 }}>
       <Screen refreshing={loading} onRefresh={refresh}>
         <TopBar bag />
-        <View style={{ backgroundColor: theme.colors.primary, borderRadius: 22, padding: 18, marginBottom: 16, overflow: "hidden" }}>
+        <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 10, padding: 18, marginBottom: 16, overflow: "hidden" }}>
           <View style={{ position: "absolute", right: -40, top: -40, width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,255,255,0.07)" }} />
           <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
             <View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: theme.colors.paper, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: theme.colors.accent }}>
               <Text style={{ color: theme.colors.primary, fontWeight: "800", fontSize: 20 }}>{initials || "VG"}</Text>
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ color: theme.colors.onPrimary, fontWeight: "800", fontSize: 19, fontFamily: theme.fontFamily }}>{name}</Text>
+              <Text numberOfLines={1} style={{ color: theme.colors.onPrimary, fontWeight: "600", fontSize: 19, fontFamily: theme.fontFamily }}>{name}</Text>
               {session?.email ? <Text numberOfLines={1} style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2 }}>{session.email}</Text> : null}
               <Text style={{ color: theme.colors.accent, fontSize: 12, fontWeight: "800", marginTop: 4 }}>
                 {session?.accountId ? `Account ID ${session.accountId}` : "Account ID appears after first verified sign-in"}
@@ -87,7 +87,7 @@ export default function AccountScreen() {
               onPress={() => go(tile.id)}
               accessibilityRole="button"
               accessibilityLabel={tile.label}
-              style={({ pressed }) => [{ flex: 1, backgroundColor: theme.colors.paper, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 14, alignItems: "center", gap: 6, opacity: pressed ? 0.85 : 1 }]}
+              style={({ pressed }) => [{ flex: 1, backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 14, alignItems: "center", gap: 6, opacity: pressed ? 0.85 : 1 }]}
             >
               <Ionicons name={tile.icon} size={22} color={theme.colors.primary} />
               <Text numberOfLines={1} style={{ color: theme.colors.text, fontSize: 11, fontWeight: "700" }}>{tile.label}</Text>
@@ -104,14 +104,14 @@ export default function AccountScreen() {
           return (
             <View key={group.title} style={{ marginBottom: 16 }}>
               <Text style={{ color: theme.colors.muted, fontSize: 11, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8, marginLeft: 4 }}>{group.title}</Text>
-              <View style={{ backgroundColor: theme.colors.paper, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 14 }}>
+              <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 14 }}>
                 {items.map((item, index) => row(item, index === items.length - 1))}
               </View>
             </View>
           );
         })}
 
-        <View style={{ backgroundColor: theme.colors.paper, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 14, marginBottom: 8 }}>
+        <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 14, marginBottom: 8 }}>
           {row({ id: "privacy", title: "Privacy policy", subtitle: "How the Foundation handles your data", icon: "shield-checkmark-outline" }, false)}
           {row({ id: "terms", title: "Terms of use", subtitle: "Terms for the website and app", icon: "document-text-outline" }, true)}
         </View>

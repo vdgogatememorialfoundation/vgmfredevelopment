@@ -61,7 +61,7 @@ export default function BookDetail() {
         </View>
         <View style={{ height: 14 }} />
         <Kicker>{str(item.category, "Publication")}</Kicker>
-        <Text style={{ fontSize: 26, lineHeight: 32, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }}>{str(item.title)}</Text>
+        <Text style={{ fontSize: 26, lineHeight: 32, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily }}>{str(item.title)}</Text>
         {isBook ? <Muted>{str(item.author)}</Muted> : null}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
           {stars.ratings ? (

@@ -20,16 +20,16 @@ export function ArticleCard({ item }: { item: Row }) {
       style={({ pressed }) => [
         {
           backgroundColor: theme.colors.paper,
-          borderRadius: 18,
+          borderRadius: 10,
           borderWidth: 1,
           borderColor: theme.colors.border,
           marginBottom: 14,
           overflow: "hidden",
           shadowColor: "#3B2A14",
-          shadowOpacity: 0.06,
+          shadowOpacity: 0,
           shadowRadius: 10,
           shadowOffset: { width: 0, height: 4 },
-          elevation: 2,
+          elevation: 0,
           opacity: pressed ? 0.92 : 1,
         },
       ]}
@@ -45,7 +45,7 @@ export function ArticleCard({ item }: { item: Row }) {
             </View>
           ) : null}
         </View>
-        <Text style={{ color: theme.colors.text, fontWeight: "800", fontSize: 18, lineHeight: 24, fontFamily: theme.fontFamily }}>{str(item.title)}</Text>
+        <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 18, lineHeight: 24, fontFamily: theme.fontFamily }}>{str(item.title)}</Text>
         <Text numberOfLines={2} style={{ color: theme.colors.muted, fontSize: 13, lineHeight: 20 }}>{plainText(item.excerpt)}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
           <Text style={{ color: theme.colors.muted, fontSize: 12 }}>{[str(item.author), formatDate(item.date)].filter(Boolean).join(" · ")}</Text>

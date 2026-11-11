@@ -113,7 +113,7 @@ function ChatBody() {
             backgroundColor: theme.colors.paper,
             borderColor: theme.colors.border,
             borderWidth: 1,
-            borderRadius: 16,
+            borderRadius: 10,
             padding: 12,
             marginBottom: 10,
           }}
@@ -133,7 +133,7 @@ function ChatBody() {
             backgroundColor: line.from === "you" ? theme.colors.primary : theme.colors.paper,
             borderColor: theme.colors.border,
             borderWidth: 1,
-            borderRadius: 16,
+            borderRadius: 10,
             padding: 12,
             marginBottom: 10,
           }}

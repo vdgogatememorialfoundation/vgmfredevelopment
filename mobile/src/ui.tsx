@@ -111,7 +111,7 @@ export function Title({ children }: { children: ReactNode }) {
 export function Heading({ children }: { children: ReactNode }) {
   const theme = useTheme();
   return (
-    <Text style={{ fontSize: 17, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily, letterSpacing: -0.2, lineHeight: 22 }}>
+    <Text style={{ fontSize: 17, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily, letterSpacing: -0.2, lineHeight: 22 }}>
       {children}
     </Text>
   );
@@ -314,7 +314,7 @@ export function Cover({ uri, height = 180, ratio, fit = "cover" }: { uri?: strin
         width: "100%",
         height: square ? undefined : height,
         aspectRatio: square ? 1 : ratio === "wide" ? 16 / 10 : undefined,
-        borderRadius: 14,
+        borderRadius: 10,
         marginBottom: 12,
         overflow: "hidden",
         backgroundColor: theme.colors.background,
@@ -465,7 +465,7 @@ export function Price({ value, original }: { value: string; original?: string })
   const theme = useTheme();
   return (
     <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, marginTop: 6 }}>
-      <Text style={{ color: theme.colors.text, fontWeight: "700", fontSize: 18, fontFamily: theme.fontFamily }}>{value}</Text>
+      <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 18, fontFamily: theme.fontFamily }}>{value}</Text>
       {original ? <Text style={{ color: theme.colors.muted, textDecorationLine: "line-through", fontSize: 12 }}>{original}</Text> : null}
     </View>
   );
@@ -614,7 +614,7 @@ export function CoverArt({ uri, title, icon = "book-outline", ratio = 1, radius 
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 12, backgroundColor: theme.colors.primary }}>
           <View style={{ position: "absolute", top: 10, left: 10, right: 10, bottom: 10, borderWidth: 1, borderColor: theme.colors.accent, borderRadius: Math.max(6, radius - 6) }} />
           <Ionicons name={icon} size={26} color={theme.colors.accent} />
-          <Text numberOfLines={3} style={{ color: theme.colors.onPrimary, fontFamily: theme.fontFamily, fontWeight: "700", fontSize: 15, textAlign: "center", marginTop: 8 }}>
+          <Text numberOfLines={3} style={{ color: theme.colors.onPrimary, fontFamily: theme.fontFamily, fontWeight: "600", fontSize: 15, textAlign: "center", marginTop: 8 }}>
             {title}
           </Text>
         </View>
@@ -667,7 +667,7 @@ export function Panel({ title, children }: { title?: string; children: ReactNode
 export function Hero({ kicker, title, subtitle, children }: { kicker?: string; title: string; subtitle?: string; children?: ReactNode }) {
   const theme = useTheme();
   return (
-    <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 14, padding: 20, marginBottom: 18, overflow: "hidden" }}>
+    <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 10, padding: 20, marginBottom: 18, overflow: "hidden" }}>
       <View style={{ position: "absolute", right: -40, top: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.07)" }} />
       <View style={{ position: "absolute", right: 30, bottom: -60, width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(184,149,58,0.22)" }} />
       {kicker ? <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>{kicker}</Text> : null}

@@ -67,9 +67,9 @@ export default function EventDetail() {
       {mediaUrl(item.bannerUrl) ? (
         <Cover uri={mediaUrl(item.bannerUrl)} height={210} />
       ) : (
-        <View style={{ backgroundColor: theme.colors.primary, borderRadius: 20, padding: 18, marginBottom: 14, flexDirection: "row", alignItems: "center", gap: 16, overflow: "hidden" }}>
+        <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 10, padding: 18, marginBottom: 14, flexDirection: "row", alignItems: "center", gap: 16, overflow: "hidden" }}>
           <View style={{ position: "absolute", right: -30, top: -30, width: 130, height: 130, borderRadius: 65, backgroundColor: "rgba(255,255,255,0.07)" }} />
-          <View style={{ width: 70, borderRadius: 14, backgroundColor: theme.colors.paper, alignItems: "center", paddingVertical: 10 }}>
+          <View style={{ width: 70, borderRadius: 10, backgroundColor: theme.colors.paper, alignItems: "center", paddingVertical: 10 }}>
             <Text style={{ color: theme.colors.primary, fontSize: 11, fontWeight: "800", letterSpacing: 1 }}>{when.month}</Text>
             <Text style={{ color: theme.colors.text, fontSize: 28, fontWeight: "800", lineHeight: 32 }}>{when.day}</Text>
             <Text style={{ color: theme.colors.muted, fontSize: 10, fontWeight: "700" }}>{when.year}</Text>
@@ -84,7 +84,7 @@ export default function EventDetail() {
         <Tag label={str(item.eventType, "Event")} tone="ink" />
         <Tag label={closed ? "Registration closed" : "Registration open"} tone={closed ? "red" : "green"} />
       </View>
-      <Text style={{ fontSize: 28, lineHeight: 34, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }}>{str(item.name)}</Text>
+      <Text style={{ fontSize: 28, lineHeight: 34, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily }}>{str(item.name)}</Text>
       <View style={{ width: 44, height: 3, borderRadius: 2, backgroundColor: theme.colors.accent, marginVertical: 12 }} />
       {str(item.description, str(item.shortDescription)) ? <Body>{str(item.description, str(item.shortDescription))}</Body> : null}
       <View style={{ height: 14 }} />
