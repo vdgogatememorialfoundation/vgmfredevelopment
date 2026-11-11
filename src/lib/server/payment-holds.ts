@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { HostedGatewayId } from "@/lib/integrations";
 import { dataFile } from "@/lib/server/paths";
+import type { Order } from "@/types";
 
 export type HoldStatus = "holding" | "confirmed" | "failed";
 
@@ -14,6 +15,8 @@ export type PaymentHold = {
   createdAt: string;
   updatedAt: string;
   reference?: string;
+  /** The checkout order as it will be once paid; the server saves it if Razorpay confirms and the browser never did. */
+  order?: Order;
 };
 
 const FILE = () => dataFile("payment-holds.json");
@@ -31,6 +34,10 @@ function writeAll(rows: PaymentHold[]) {
   const file = FILE();
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(rows));
+}
+
+export function listHolds() {
+  return readAll();
 }
 
 export function readHold(id: string) {

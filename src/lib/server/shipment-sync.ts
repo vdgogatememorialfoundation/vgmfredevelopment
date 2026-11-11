@@ -1,7 +1,8 @@
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { listShopShipments } from "@/lib/server/shop-shipments";
-import { listShopOrders, patchShopOrder } from "@/lib/server/shop-orders";
-import { razorpayCreds, razorpayLinkStatus, razorpayRefundStatus } from "@/lib/server/providers";
+import { findShopOrder, listShopOrders, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
+import { listHolds, saveHold } from "@/lib/server/payment-holds";
+import { razorpayCreds, razorpayLinkStatus, razorpayOrderPayments, razorpayRefundStatus } from "@/lib/server/providers";
 import type { Order, RefundRecord } from "@/types";
 
 const EVERY_MS = 3 * 60 * 1000;
@@ -136,6 +137,47 @@ function paidNote(order: Order, at: string, note: string) {
   return { at, status: order.preorderPayment ? "Balance paid" : "Payment received", note };
 }
 
+/** A customer paid on Razorpay but the browser closed or dropped before the order was saved: confirm it from Razorpay. */
+export async function syncRazorpayHolds() {
+  const creds = razorpayCreds({});
+  if (!creds) return;
+  const now = Date.now();
+  for (const hold of listHolds()) {
+    if (hold.gateway !== "razorpay" || hold.status !== "holding" || !hold.reference || !hold.order) continue;
+    const age = now - (Date.parse(hold.createdAt) || now);
+    // Give the browser two minutes to finish normally first.
+    if (age < 2 * 60_000) continue;
+    try {
+      const payment = await razorpayOrderPayments(creds, hold.reference);
+      const at = new Date().toISOString();
+      if (payment.status === "paid" || payment.paymentId) {
+        const existing = findShopOrder(hold.id);
+        if (!existing || existing.paymentStatus === "Pending") {
+          const base = existing ?? hold.order;
+          upsertShopOrder({
+            ...base,
+            paymentStatus: base.preorderPayment ? "Partially Paid" : "Paid",
+            paymentMethod: "Online",
+            paidAt: at,
+            razorpayOrderId: hold.reference,
+            razorpayPaymentId: payment.paymentId || base.razorpayPaymentId,
+            preorderPayment: base.preorderPayment ? { ...base.preorderPayment, advancePaidAt: at } : undefined,
+            history: [
+              ...(base.history ?? []),
+              { at, status: base.status, note: `Payment confirmed from Razorpay ${payment.paymentId ?? ""}`.trim(), by: "Razorpay sync" },
+            ],
+          });
+        }
+        saveHold({ ...hold, status: "confirmed", updatedAt: at });
+      } else if (age > 2 * 60 * 60_000) {
+        saveHold({ ...hold, status: "failed", updatedAt: at });
+      }
+    } catch {
+      /* try again next round */
+    }
+  }
+}
+
 export function startShipmentSync() {
   if (started) return;
   started = true;
@@ -143,6 +185,7 @@ export function startShipmentSync() {
     void syncOpenShipments();
     void syncOpenRefunds();
     void syncOpenPaymentLinks();
+    void syncRazorpayHolds();
   };
   setTimeout(tick, 20_000).unref?.();
   setInterval(tick, EVERY_MS).unref?.();

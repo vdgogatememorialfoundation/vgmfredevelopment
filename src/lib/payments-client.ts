@@ -96,6 +96,8 @@ export async function payWithRazorpay(input: {
   method?: "upi" | "card";
   /** POS always tries to create a Razorpay order, even if this browser is in demo mode. */
   skipDemo?: boolean;
+  /** Called with the Razorpay order id before the payment window opens. */
+  onCreated?: (razorpayOrderId: string) => void;
 }): Promise<CheckoutOutcome> {
   const simulate = async (): Promise<CheckoutOutcome> => {
     await sleep(900);
@@ -113,6 +115,7 @@ export async function payWithRazorpay(input: {
     }
     throw new Error(order.error ?? "Razorpay could not create the payment.");
   }
+  input.onCreated?.(order.orderId);
   await loadCheckoutScript();
   const methodBlock =
     input.method === "upi"
@@ -133,7 +136,9 @@ export async function payWithRazorpay(input: {
             },
           }
         : undefined;
-  const response = await new Promise<RazorpayResponse>((resolve, reject) => {
+  let response: RazorpayResponse;
+  try {
+    response = await new Promise<RazorpayResponse>((resolve, reject) => {
     const checkout = new window.Razorpay!({
       key: order.keyId,
       order_id: order.orderId,
@@ -152,7 +157,13 @@ export async function payWithRazorpay(input: {
       reject(new Error(error?.description ?? "Payment failed."));
     });
     checkout.open();
-  });
+    });
+  } catch (problem) {
+    // UPI apps sometimes finish after the window closes: ask Razorpay before calling it unpaid.
+    const late = await waitForRazorpay(order.orderId, 2).catch(() => "");
+    if (late) return { kind: "paid", paymentId: late, razorpayOrderId: order.orderId, live: true };
+    throw problem;
+  }
   const verified = await api<{ verified: boolean }>({
     action: "verify",
     orderId: response.razorpay_order_id,

@@ -33,6 +33,7 @@ import { printGstInvoice } from "@/lib/gst-invoice";
 import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, notifyStaffOfOrder, sendEmail } from "@/lib/admin-store";
 import { commitStockForOrder } from "@/lib/product-data";
 import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
+import { beep } from "@/lib/scan-beep";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import Glyph from "@/components/store/Glyph";
@@ -101,6 +102,7 @@ export default function CheckoutClient() {
     const key = "vgmf_checkout_deadline";
     if (step === "success") {
       window.sessionStorage.removeItem(key);
+      beep("delivered");
       return;
     }
     const fresh = () => window.sessionStorage.setItem(key, String(Date.now() + CHECKOUT_MINUTES * 60_000));
@@ -417,6 +419,84 @@ export default function CheckoutClient() {
     let payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean };
     let awaitingGateway = false;
     const hosted = hostedSelected;
+    const deliveryAddress =
+      deliveryMode === "delivery"
+        ? { ...address, fullName: address.fullName.trim() }
+        : { ...address, fullName: address.fullName.trim() || "Store pickup" };
+    const buildOrder = (payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean }): Order => {
+      const courierName = selectedCourier?.courierName;
+      const now = new Date().toISOString();
+      const account =
+        user ??
+        ensureCustomerAccount({
+          name: deliveryAddress.fullName,
+          email: deliveryAddress.email,
+          phone: deliveryAddress.phone,
+        });
+      const firstStatus: Order["status"] =
+        orderSettings.confirmMode !== "manual" && orderItems.every((item) => !item.preorder) && rows.every(({ item, book }) => book.stock >= item.quantity) ? "Ordered" : "Awaiting Confirmation";
+      const order: Order = {
+        id,
+        userId: account?.id ?? user?.id ?? "guest",
+        date: now,
+        items: orderItems,
+        subtotal: totals.subtotal,
+        discount: totals.discount,
+        gst: totals.gst,
+        platformFee: totals.platformFee,
+        shipping: totals.shipping,
+        total: totals.total,
+        currency: "INR",
+        paymentStatus: payment.paid ? (payNow < totals.total || preorderShippingLater ? "Partially Paid" : "Paid") : "Pending",
+        paymentMethod: payment.method,
+        paidAt: payment.paid ? now : undefined,
+        razorpayPaymentId: payment.paymentId,
+        razorpayOrderId: payment.razorpayOrderId,
+        status: firstStatus,
+        channel: "online",
+        storeCreditUsed: creditApplied || undefined,
+        preorderPayment:
+          payNow < totals.total || preorderShippingLater
+            ? {
+                advance: payNow,
+                balance: Math.round((totals.total - payNow) * 100) / 100,
+                balanceWhen: orderSettings.preorderPayment.balanceWhen,
+                advancePaidAt: payment.paid ? now : undefined,
+                shippingDue: preorderShippingLater || undefined,
+              }
+            : undefined,
+        stockCommitted: false,
+        deliveryMode,
+        deliveryAddress,
+        eta:
+          deliveryMode === "store_pickup"
+            ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
+            : hasPreorder && preorderBook
+              ? preorderDeliveryDate(preorderBook)
+              : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
+        pickupHoldUntil: deliveryMode === "store_pickup" ? quote?.pickupHoldUntil : undefined,
+        courierName: deliveryMode === "delivery" ? courierName : undefined,
+                courierChoice:
+          deliveryMode === "delivery" && selectedCourier
+            ? {
+                provider: selectedCourier.provider,
+                courierId: selectedCourier.courierId,
+                courierName: selectedCourier.courierName,
+                rate: selectedCourier.rate,
+                etaDays: selectedCourier.etaDays,
+                live: selectedCourier.live,
+                lastMile: selectedCourier.lastMile,
+              }
+            : undefined,
+        returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
+        accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
+        createdBy: user?.email ?? "guest checkout",
+        history: [
+          { at: now, status: firstStatus, note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
+        ],
+      };
+      return order;
+    };
     if (cashAtStoreSelected) {
       payment = { method: "Cash at Store", paid: false };
     } else if (codSelected) {
@@ -432,6 +512,22 @@ export default function CheckoutClient() {
           email: address.email || user?.email,
           phone: address.phone,
           description: `Vaidya Gogate Memorial Foundation order ${id}`,
+          onCreated: (razorpayOrderId) => {
+            void fetch("/api/payments/hosted", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              keepalive: true,
+              body: JSON.stringify({
+                action: "hold",
+                gateway: "razorpay",
+                orderId: id,
+                amount: payNow,
+                kind: "order",
+                reference: razorpayOrderId,
+                order: buildOrder({ method: "Online", paid: true, razorpayOrderId }),
+              }),
+            }).catch(() => undefined);
+          },
         });
         if (outcome.kind === "holding") {
           awaitingGateway = true;
@@ -455,84 +551,10 @@ export default function CheckoutClient() {
         return;
       }
     }
-    const courierName = selectedCourier?.courierName;
-    const now = new Date().toISOString();
-    const deliveryAddress =
-      deliveryMode === "delivery"
-        ? { ...address, fullName: address.fullName.trim() }
-        : { ...address, fullName: address.fullName.trim() || "Store pickup" };
+    const order = buildOrder(payment);
     if (creditApplied > 0 && user?.email && !hosted && !awaitingGateway) {
       adjustStoreCredit(user.email, -creditApplied, `Used on order ${id}`, id);
     }
-    const account =
-      user ??
-      ensureCustomerAccount({
-        name: deliveryAddress.fullName,
-        email: deliveryAddress.email,
-        phone: deliveryAddress.phone,
-      });
-    const firstStatus: Order["status"] =
-      orderSettings.confirmMode !== "manual" && orderItems.every((item) => !item.preorder) && rows.every(({ item, book }) => book.stock >= item.quantity) ? "Ordered" : "Awaiting Confirmation";
-    const order: Order = {
-      id,
-      userId: account?.id ?? user?.id ?? "guest",
-      date: now,
-      items: orderItems,
-      subtotal: totals.subtotal,
-      discount: totals.discount,
-      gst: totals.gst,
-      platformFee: totals.platformFee,
-      shipping: totals.shipping,
-      total: totals.total,
-      currency: "INR",
-      paymentStatus: payment.paid ? (payNow < totals.total || preorderShippingLater ? "Partially Paid" : "Paid") : "Pending",
-      paymentMethod: payment.method,
-      paidAt: payment.paid ? now : undefined,
-      razorpayPaymentId: payment.paymentId,
-      razorpayOrderId: payment.razorpayOrderId,
-      status: firstStatus,
-      channel: "online",
-      storeCreditUsed: creditApplied || undefined,
-      preorderPayment:
-        payNow < totals.total || preorderShippingLater
-          ? {
-              advance: payNow,
-              balance: Math.round((totals.total - payNow) * 100) / 100,
-              balanceWhen: orderSettings.preorderPayment.balanceWhen,
-              advancePaidAt: payment.paid ? now : undefined,
-              shippingDue: preorderShippingLater || undefined,
-            }
-          : undefined,
-      stockCommitted: false,
-      deliveryMode,
-      deliveryAddress,
-      eta:
-        deliveryMode === "store_pickup"
-          ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
-          : hasPreorder && preorderBook
-            ? preorderDeliveryDate(preorderBook)
-            : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
-      pickupHoldUntil: deliveryMode === "store_pickup" ? quote?.pickupHoldUntil : undefined,
-      courierName: deliveryMode === "delivery" ? courierName : undefined,
-              courierChoice:
-        deliveryMode === "delivery" && selectedCourier
-          ? {
-              provider: selectedCourier.provider,
-              courierId: selectedCourier.courierId,
-              courierName: selectedCourier.courierName,
-              rate: selectedCourier.rate,
-              etaDays: selectedCourier.etaDays,
-              live: selectedCourier.live,
-              lastMile: selectedCourier.lastMile,
-            }
-          : undefined,
-      returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
-      accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
-      createdBy: user?.email ?? "guest checkout",
-      history: [
-        { at: now, status: firstStatus, note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
-      ],
-    };
     if (hosted || awaitingGateway) {
       window.sessionStorage.setItem(PENDING_CHECKOUT, JSON.stringify(order));
       await fetch("/api/payments/hosted", {

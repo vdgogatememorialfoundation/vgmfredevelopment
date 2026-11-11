@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { HostedGatewayId, HostedGatewaySettings } from "@/lib/integrations";
 import { PaymentError, pollHostedPayment, startHostedPayment } from "@/lib/server/hosted-payments";
 import { readHold, saveHold, type PaymentHold } from "@/lib/server/payment-holds";
+import type { Order } from "@/types";
 import { listReadyGateways, readVault, writePaymentVault, type PaymentVault } from "@/lib/server/payment-vault";
 
 export const runtime = "nodejs";
@@ -26,6 +27,12 @@ function adminCookie(request: NextRequest) {
     }
   }
   return false;
+}
+
+function validDraft(value: unknown, id: string): Order | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const order = value as Order;
+  return order.id === id && Array.isArray(order.items) && order.items.length > 0 ? order : undefined;
 }
 
 function cleanGateway(value: unknown): HostedGatewaySettings | null {
@@ -78,6 +85,7 @@ export async function POST(request: NextRequest) {
       createdAt: existing?.createdAt || now,
       updatedAt: now,
       reference: String(body.reference || existing?.reference || ""),
+      order: validDraft(body.order, id) ?? existing?.order,
     });
     return NextResponse.json({ ok: true, status: "holding" });
   }
