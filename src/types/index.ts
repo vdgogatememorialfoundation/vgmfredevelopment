@@ -1007,6 +1007,7 @@ export interface OutboxEmail {
   replyTo?: string;
   images?: string[];
   html?: boolean;
+  fromName?: string;
 }
 
 export interface OrderPlan {

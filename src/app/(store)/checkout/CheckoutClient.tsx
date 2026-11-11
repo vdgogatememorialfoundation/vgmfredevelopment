@@ -852,6 +852,9 @@ export default function CheckoutClient() {
                       <p className="mt-1 text-xs text-text-muted">
                         Published by {book.publisher?.name ?? storeConfig.publisherName}
                       </p>
+                      {book.language ? (
+                        <p className="mt-1 text-sm font-semibold text-burgundy">Language: {book.language}</p>
+                      ) : null}
                       <p className="mt-2 text-sm">
                         <span className="text-base font-bold text-text-primary">
                           {formatPrice(book.price * item.quantity)}

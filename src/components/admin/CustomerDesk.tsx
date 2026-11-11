@@ -20,6 +20,7 @@ import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/comp
 import { AdminModal } from "@/components/admin/AdminModal";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import { SignupFormsPanel } from "@/components/admin/SignupFormsPanel";
+import { EmailComposer } from "@/components/admin/EmailComposer";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, statesFor } from "@/lib/geo";
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { downloadCsv, downloadExcel } from "@/lib/export-file";
@@ -226,6 +227,7 @@ export function CustomerDesk() {
         </AdminModal>
       )}
 
+      <EmailComposer accounts={shown} selected={shown.filter((account) => picked[account.email])} />
       <SignupFormsPanel />
 
       {selected ? (

@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
         {
           ...creds,
           provider: String(body.provider || creds.provider || "cpaas"),
+          ...(typeof body.fromName === "string" && body.fromName.trim() ? { fromName: body.fromName.trim().slice(0, 120) } : {}),
         },
         mail
       );

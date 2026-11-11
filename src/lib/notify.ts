@@ -56,6 +56,7 @@ export function queueNotification(input: {
   replyTo?: string;
   images?: string[];
   html?: boolean;
+  fromName?: string;
 }) {
   const now = new Date().toISOString();
   const settings = getIntegrations();
@@ -75,6 +76,7 @@ export function queueNotification(input: {
       replyTo: input.replyTo,
       images: input.images?.filter(Boolean),
       html: input.html,
+      fromName: input.fromName,
     });
   }
   const templateName = settings.whatsapp.mapping[input.template as NotificationEventId];
@@ -175,6 +177,7 @@ export async function deliver(id: string) {
         replyTo: record.replyTo,
         images: record.images,
         html: record.html,
+        fromName: record.fromName,
         creds: settings.email,
       };
     }

@@ -30,7 +30,7 @@ import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
 import { logAudit } from "@/lib/audit";
 import { emptySocial } from "@/lib/social";
-import { staffReplyTo } from "@/lib/account-mail";
+import { senderName, staffReplyTo } from "@/lib/account-mail";
 import { pushTicket } from "@/lib/ticket-sync";
 
 export type OrderStatus = Order["status"];
@@ -1691,6 +1691,7 @@ export function sendEmail(input: {
   name?: string;
   params?: string[];
   replyTo?: string;
+  fromName?: string;
 }) {
   return queueNotification({
     ...input,
@@ -1722,6 +1723,7 @@ export function sendPeopleEmail(recipients: User[], subject: string, body: strin
   const title = subject.trim();
   if (!title || !text || recipients.length === 0) return 0;
   const replyTo = staffReplyTo();
+  const fromName = senderName();
   for (const account of recipients) {
     const name = displayName(account, true) || account.firstName || "there";
     sendEmail({
@@ -1732,6 +1734,7 @@ export function sendPeopleEmail(recipients: User[], subject: string, body: strin
       template: "custom",
       body: text.split("{name}").join(name),
       replyTo,
+      fromName,
     });
   }
   return recipients.length;

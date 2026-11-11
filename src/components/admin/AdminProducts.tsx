@@ -353,7 +353,6 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
   const save = () => {
     if (!form.title.trim()) return setError("Add a title.");
     if (!form.price || form.price < 0) return setError("Add a selling price.");
-    if (!form.language?.trim()) return setError("Choose the book language.");
     const sku = (form.sku ?? "").trim() || generateSku(form.category, form.id);
     const productCode = (form.productCode ?? "").trim() || generateProductCode(form.id);
     if (isSkuTaken(sku, form.id)) return setError(`SKU ${sku} is already used.`);
@@ -424,9 +423,9 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             <Field label="Published year"><TextInput type="number" value={form.publishedYear ?? ""} onChange={(event) => set({ publishedYear: Number(event.target.value) || undefined })} /></Field>
             <Field label="Pages"><TextInput type="number" value={form.pages || ""} onChange={(event) => set({ pages: Number(event.target.value) || undefined })} /></Field>
             <Field label="Binding"><TextInput value={form.binding ?? ""} onChange={(event) => set({ binding: event.target.value })} /></Field>
-            <Field label="Book language *">
-              <SelectInput required value={form.language ?? ""} onChange={(event) => set({ language: event.target.value })}>
-                <option value="" disabled>Select language</option>
+            <Field label="Language (optional, for books)">
+              <SelectInput value={form.language ?? ""} onChange={(event) => set({ language: event.target.value || undefined })}>
+                <option value="">No language (not a book)</option>
                 {Array.from(new Set([...BOOK_LANGUAGES, ...(form.language ? [form.language] : [])])).map((language) => (
                   <option key={language} value={language}>{language}</option>
                 ))}
