@@ -243,20 +243,27 @@ export default function OrderScreen() {
       {refunds.length ? (
         <Card featured>
           <Heading>Refunds</Heading>
-          {refunds.map((refund, index) => (
-            <View key={str(refund.id, String(index))} style={{ marginTop: 8 }}>
-              <Body>{money(refund.amount)} · {str(refund.status) === "processed" || str(refund.processedAt) ? (refundCredited(refund) ? "Credited to your account" : "Refund processed") : str(refund.status) === "failed" ? "Refund failed — the Foundation will contact you" : "Refund in progress"}</Body>
-              <Muted>
-                {[
-                  str(refund.destination) === "store_credit" ? "To your wallet" : "To the original payment method",
-                  `Started ${formatDate(refund.at)}`,
-                  str(refund.processedAt) ? `Processed ${formatDate(refund.processedAt)}` : "",
-                  str(refund.utr || refund.arn || refund.rrn) ? `Bank ref ${str(refund.utr || refund.arn || refund.rrn)}` : "",
-                ].filter(Boolean).join(" · ")}
-              </Muted>
-              {str(refund.destination) !== "store_credit" && str(refund.status) !== "failed" && !refundCredited(refund) ? <Muted>{REFUND_CREDIT_NOTE}</Muted> : null}
-            </View>
-          ))}
+          {refunds.map((refund, index) => {
+            const toWallet = str(refund.destination) === "store_credit";
+            const failed = str(refund.status) === "failed";
+            const processed = str(refund.status) === "processed" || Boolean(str(refund.processedAt));
+            const credited = toWallet || refundCredited(refund);
+            const bankRef = str(refund.utr || refund.arn || refund.rrn);
+            const stages: TrackStage[] = [
+              { id: "initiated", label: "Refund initiated", caption: `${money(refund.amount)} · ${formatDate(refund.at)}`, reached: true },
+              { id: "bank", label: "Refund processing", caption: "Takes 3–5 working days", reached: true },
+              failed
+                ? { id: "failed", label: "Refund failed", caption: "The Foundation will contact you", reached: true }
+                : { id: "processed", label: "Refund processed", caption: [str(refund.processedAt) ? formatDate(refund.processedAt) : "", bankRef ? `Bank ref ${bankRef}` : ""].filter(Boolean).join(" · "), reached: processed || toWallet },
+              ...(failed ? [] : [{ id: "credited", label: toWallet ? "Added to your wallet" : "Credited to your account", caption: toWallet ? "" : REFUND_CREDIT_NOTE, reached: credited }]),
+            ];
+            return (
+              <View key={str(refund.id, String(index))} style={{ marginTop: 8 }}>
+                <Body>{money(refund.amount)} · {toWallet ? "To your wallet" : "To the original payment method"}</Body>
+                <Pipeline stages={stages} current={stages.map((stage) => Boolean(stage.reached)).lastIndexOf(true)} failed={failed} />
+              </View>
+            );
+          })}
         </Card>
       ) : null}
       {links.map((item) => (

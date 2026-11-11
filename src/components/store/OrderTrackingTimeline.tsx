@@ -341,7 +341,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
         </p>
       ) : null}
       {order.preorderPayment ? (
-        <p className="vgmf-trk-note">
+        <p className="vgmf-trk-note font-bold">
           Pre-order · advance ₹{order.preorderPayment.advance.toLocaleString("en-IN")} {order.preorderPayment.advancePaidAt ? "paid" : "pending"} · balance ₹
           {order.preorderPayment.balance.toLocaleString("en-IN")}{" "}
           {order.preorderPayment.balancePaidAt

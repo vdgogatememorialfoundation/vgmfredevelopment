@@ -1,4 +1,4 @@
-import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
+import VerticalPipeline, { type PipelineStageShape, type PipelineTone } from "@/components/tracking/VerticalPipeline";
 import type { Order, RefundRecord } from "@/types";
 
 const stamp = (value?: string) =>
@@ -87,7 +87,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
   const done = credit || refund.status === "processed";
   const bankRef = refund.rrn || refund.arn || refund.utr;
   const stages: PipelineStageShape[] = [
-    { id: "initiated", label: "Refund initiated", caption: `₹${refund.amount.toLocaleString("en-IN")} · ${stamp(refund.at)}`, reached: true, partial: false, events: [] },
+    { id: "initiated", label: "Refund initiated", caption: `₹${refund.amount.toLocaleString("en-IN")}`, reached: true, partial: false, events: [] },
     credit
       ? { id: "refunded", label: "Added to store credit", caption: "Use it on your next order.", reached: true, partial: false, events: [] }
       : manual
@@ -101,7 +101,7 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
             label: failed ? "Refund failed" : "Refund processed",
             caption: failed
               ? stamp(refund.checkedAt)
-              : [stamp(refund.processedAt), bankRef && `Bank reference ${bankRef}`].filter(Boolean).join(" · "),
+              : bankRef ? `Bank reference ${bankRef}` : "",
             reached: done || failed || manual,
             partial: false,
             events: [],
@@ -121,9 +121,29 @@ function RefundSteps({ refund }: { refund: RefundRecord }) {
         ]),
   ];
   const current = stages.map((stage) => stage.reached).lastIndexOf(true);
+  const expected = refundExpectedCredit(refund);
+  const day = (value?: Date) =>
+    value ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(value) : "";
+  // Live timing, like order tracking: is the current step still within Razorpay's usual window?
+  const timingFor = (stage: PipelineStageShape): { label: string; tone: PipelineTone } | null => {
+    if (failed || credit || manual) return null;
+    const late = (until: number) => (Date.now() > until ? { label: "Delayed", tone: "red" as const } : { label: "On time", tone: "emerald" as const });
+    if (stage.id === "bank" && !done) return late(refundProcessingDue(refund));
+    if (stage.id === "processed" && done && expected && !expected.done) return late(expected.date.getTime());
+    if (stage.id === "credited" && stage.reached) return { label: "Credited", tone: "emerald" };
+    return null;
+  };
+  const metaFor = (stage: PipelineStageShape) =>
+    stage.id === "initiated"
+      ? stamp(refund.at)
+      : stage.id === "processed" || stage.id === "failed"
+        ? stamp(failed ? refund.checkedAt : refund.processedAt)
+        : stage.id === "credited" && stage.reached
+          ? day(expected?.date)
+          : "";
   return (
     <div className="mt-2">
-      <VerticalPipeline stages={stages} currentIndex={current} failed={failed} pace={refundPace(refund)} />
+      <VerticalPipeline stages={stages} currentIndex={current} failed={failed} pace={refundPace(refund)} timingFor={timingFor} metaFor={metaFor} />
     </div>
   );
 }
