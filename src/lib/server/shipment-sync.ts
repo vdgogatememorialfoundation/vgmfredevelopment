@@ -1,8 +1,8 @@
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { listShopShipments } from "@/lib/server/shop-shipments";
-import { findShopOrder, listShopOrders, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
+import { deletedShopOrderIds, findShopOrder, listShopOrders, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import { listHolds, saveHold } from "@/lib/server/payment-holds";
-import { razorpayCreds, razorpayLinkStatus, razorpayOrderPayments, razorpayRefundStatus } from "@/lib/server/providers";
+import { razorpayCreds, razorpayLinkStatus, razorpayOrderPayments, razorpayRefund, razorpayRefundStatus } from "@/lib/server/providers";
 import type { Order, RefundRecord } from "@/types";
 
 const EVERY_MS = 3 * 60 * 1000;
@@ -137,23 +137,35 @@ function paidNote(order: Order, at: string, note: string) {
   return { at, status: order.preorderPayment ? "Balance paid" : "Payment received", note };
 }
 
-/** A customer paid on Razorpay but the browser closed or dropped before the order was saved: confirm it from Razorpay. */
+/**
+ * A customer paid on Razorpay but the browser closed or dropped before the order was saved: confirm it from Razorpay.
+ * A payment that cannot be matched to a live order (order deleted, already paid by another payment, or no order at all
+ * after 2 hours) is refunded to the customer automatically.
+ */
 export async function syncRazorpayHolds() {
   const creds = razorpayCreds({});
   if (!creds) return;
   const now = Date.now();
+  const deleted = new Set(deletedShopOrderIds());
   for (const hold of listHolds()) {
-    if (hold.gateway !== "razorpay" || hold.status !== "holding" || !hold.reference || !hold.order) continue;
+    if (hold.gateway !== "razorpay" || hold.kind !== "order" || hold.status !== "holding" || !hold.reference) continue;
     const age = now - (Date.parse(hold.createdAt) || now);
     // Give the browser two minutes to finish normally first.
     if (age < 2 * 60_000) continue;
     try {
       const payment = await razorpayOrderPayments(creds, hold.reference);
       const at = new Date().toISOString();
-      if (payment.status === "paid" || payment.paymentId) {
-        const existing = findShopOrder(hold.id);
+      const paid = payment.status === "paid" || Boolean(payment.paymentId);
+      if (!paid) {
+        if (age > 2 * 60 * 60_000) saveHold({ ...hold, status: "failed", updatedAt: at });
+        continue;
+      }
+      const existing = deleted.has(hold.id) ? undefined : findShopOrder(hold.id);
+      const paidElsewhere =
+        existing && existing.paymentStatus !== "Pending" && existing.razorpayPaymentId && payment.paymentId && existing.razorpayPaymentId !== payment.paymentId;
+      if (!deleted.has(hold.id) && !paidElsewhere && (existing || hold.order)) {
         if (!existing || existing.paymentStatus === "Pending") {
-          const base = existing ?? hold.order;
+          const base = (existing ?? hold.order)!;
           upsertShopOrder({
             ...base,
             paymentStatus: base.preorderPayment ? "Partially Paid" : "Paid",
@@ -169,8 +181,19 @@ export async function syncRazorpayHolds() {
           });
         }
         saveHold({ ...hold, status: "confirmed", updatedAt: at });
-      } else if (age > 2 * 60 * 60_000) {
-        saveHold({ ...hold, status: "failed", updatedAt: at });
+        continue;
+      }
+      // Unmatched: wait the full 2 hours (unless the order was deleted or is already paid) before refunding.
+      if (!payment.paymentId || (!deleted.has(hold.id) && !paidElsewhere && age < 2 * 60 * 60_000)) continue;
+      const refund = await razorpayRefund(creds, payment.paymentId);
+      saveHold({ ...hold, status: "refunded", refundId: refund.refundId, updatedAt: at });
+      if (existing) {
+        patchShopOrder(existing.id, {
+          history: [
+            ...(existing.history ?? []),
+            { at, status: existing.status, note: `Extra Razorpay payment ${payment.paymentId} refunded automatically (refund ${refund.refundId}).`, by: "Razorpay sync" },
+          ],
+        });
       }
     } catch {
       /* try again next round */

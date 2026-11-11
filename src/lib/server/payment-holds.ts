@@ -4,7 +4,7 @@ import type { HostedGatewayId } from "@/lib/integrations";
 import { dataFile } from "@/lib/server/paths";
 import type { Order } from "@/types";
 
-export type HoldStatus = "holding" | "confirmed" | "failed";
+export type HoldStatus = "holding" | "confirmed" | "failed" | "refunded";
 
 export type PaymentHold = {
   id: string;
@@ -17,6 +17,8 @@ export type PaymentHold = {
   reference?: string;
   /** The checkout order as it will be once paid; the server saves it if Razorpay confirms and the browser never did. */
   order?: Order;
+  /** Razorpay refund for a payment that never matched an order. */
+  refundId?: string;
 };
 
 const FILE = () => dataFile("payment-holds.json");
