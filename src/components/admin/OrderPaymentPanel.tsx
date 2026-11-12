@@ -23,7 +23,8 @@ function Fact({ label, value }: { label: string; value?: string | number }) {
 
 /** Payment facts, gateway refund and refund status checks for one order on the payments and refunds desks. */
 export default function OrderPaymentPanel({ order, onChange }: { order: Order; onChange: () => void }) {
-  const cap = maxRefundable(order);
+  const [withFee, setWithFee] = useState(false);
+  const cap = maxRefundable(order, { withPlatformFee: withFee });
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
@@ -75,12 +76,18 @@ export default function OrderPaymentPanel({ order, onChange }: { order: Order; o
             placeholder={`Amount (max ₹${cap})`}
             className="w-40 rounded-lg border border-slate-200 px-3 py-1.5 text-xs"
           />
-          <button type="button" className={ghost} disabled={Boolean(busy)} onClick={() => void run("refund", () => refundThroughGateway(order.id, value()))}>
+          <button type="button" className={ghost} disabled={Boolean(busy)} onClick={() => void run("refund", () => refundThroughGateway(order.id, value(), { withPlatformFee: withFee }))}>
             {busy === "refund" ? "Refunding…" : gateway ? "Refund via Razorpay" : "Record refund"}
           </button>
-          <button type="button" className={ghost} disabled={Boolean(busy)} onClick={() => void run("credit", () => (refundToStoreCredit(order.id, value()), "Store credit issued."))}>
+          <button type="button" className={ghost} disabled={Boolean(busy)} onClick={() => void run("credit", () => (refundToStoreCredit(order.id, value(), undefined, { withPlatformFee: withFee }), "Store credit issued."))}>
             Refund to store credit
           </button>
+          {(order.platformFee ?? 0) > 0 ? (
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input type="checkbox" checked={withFee} onChange={(event) => setWithFee(event.target.checked)} />
+              Also refund the platform fee (₹{order.platformFee})
+            </label>
+          ) : null}
           {!gateway ? <span className="text-xs text-slate-500">No gateway payment on this order — pay it back by hand and record it here.</span> : null}
         </div>
       ) : null}

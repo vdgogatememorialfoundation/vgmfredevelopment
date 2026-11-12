@@ -843,7 +843,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
   const [linkAmount, setLinkAmount] = useState("");
   const [reference, setReference] = useState("");
-  const refundCap = maxRefundable(order);
+  const [refundFee, setRefundFee] = useState(false);
+  const refundCap = maxRefundable(order, { withPlatformFee: refundFee });
   const [refundAmount, setRefundAmount] = useState(String(refundCap));
   const [cancelReason, setCancelReason] = useState("");
   const [approvalKind, setApprovalKind] = useState<ApprovalRequest["kind"]>("cancellation");
@@ -1282,13 +1283,16 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <Button variant="danger" disabled={busy === "refund"} onClick={() => {
                 if (!window.confirm(`Refund ₹${refundAmount} to ${refundDest === "store_credit" ? "store credit" : "the original method"}?`)) return;
                 run("refund", () => refundDest === "store_credit"
-                  ? (refundToStoreCredit(order.id, Number(refundAmount)), "Store credit issued.")
-                  : refundThroughGateway(order.id, Number(refundAmount)));
+                  ? (refundToStoreCredit(order.id, Number(refundAmount), undefined, { withPlatformFee: refundFee }), "Store credit issued.")
+                  : refundThroughGateway(order.id, Number(refundAmount), { withPlatformFee: refundFee }));
               }}>
                 {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund via Razorpay" : "Record refund"}
               </Button>
               {(order.platformFee ?? 0) > 0 && (
-                <p className="w-full text-xs text-slate-500">Platform fee of ₹{order.platformFee} is non-refundable and is kept on every refund.</p>
+                <label className="flex w-full items-center gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={refundFee} onChange={(event) => { const on = event.target.checked; setRefundFee(on); setRefundAmount(String(maxRefundable(order, { withPlatformFee: on }))); }} />
+                  Also refund the platform fee (₹{order.platformFee}). Left unticked, the platform fee is kept.
+                </label>
               )}
             </div>
           )}

@@ -480,14 +480,14 @@ export async function refreshPaymentLink(orderId: string) {
   return `Razorpay link status: ${result.status}.`;
 }
 
-export async function refundThroughGateway(orderId: string, amount?: number) {
+export async function refundThroughGateway(orderId: string, amount?: number, options: { withPlatformFee?: boolean } = {}) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
-  const cap = maxRefundable(order);
+  const cap = maxRefundable(order, options);
   if (amount != null && !(Number.isFinite(amount) && amount > 0)) throw new Error("Enter a refund amount above ₹0.");
   if (amount != null && amount > cap + 0.001) throw new Error(`At most ₹${cap.toLocaleString("en-IN")} can still be refunded on this order.`);
   const value = Math.round(Math.min(amount ?? cap, cap) * 100) / 100;
-  if (value <= 0) throw new Error("Nothing left to refund. The platform fee is non-refundable.");
+  if (value <= 0) throw new Error("Nothing left to refund. The platform fee is kept unless you tick \"Also refund the platform fee\".");
   if (order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") && paymentMode() !== "demo") {
     const result = await api<RefundView>({ action: "refund", paymentId: order.razorpayPaymentId, amount: value });
     if (!result.ok) throw new Error(result.error ?? "Razorpay refused the refund.");
@@ -501,10 +501,10 @@ export async function refundThroughGateway(orderId: string, amount?: number) {
       utr: result.utr || undefined,
       speed: result.speed || undefined,
       checkedAt: new Date().toISOString(),
-    });
+    }, options);
     return `Refund ${result.refundId} created on Razorpay (${result.status}).`;
   }
-  refundOrder(order.id, value, order.razorpayPaymentId ? "Demo refund" : "Refund recorded");
+  refundOrder(order.id, value, order.razorpayPaymentId ? "Demo refund" : "Refund recorded", undefined, options);
   return order.razorpayPaymentId ? "Demo refund recorded." : "Refund recorded. Pay it back through the original method.";
 }
 

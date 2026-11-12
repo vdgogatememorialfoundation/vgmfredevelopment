@@ -779,23 +779,23 @@ export function resaveOrder(
   return next;
 }
 
-/** Amount still refundable. The platform fee is never refunded. */
-export function maxRefundable(order: Order) {
-  const kept = Math.max(0, order.platformFee ?? 0);
+/** Amount still refundable. The platform fee is kept unless the desk ticks "also refund the platform fee" on that refund. */
+export function maxRefundable(order: Order, options: { withPlatformFee?: boolean } = {}) {
+  const kept = options.withPlatformFee ? 0 : Math.max(0, order.platformFee ?? 0);
   const collected = order.preorderPayment && !order.preorderPayment.balancePaidAt ? order.preorderPayment.advance : order.total;
   return Math.max(0, collected - kept - (order.refundAmount ?? 0));
 }
 
-export function refundToStoreCredit(orderId: string, amount?: number, note?: string) {
+export function refundToStoreCredit(orderId: string, amount?: number, note?: string, options: { withPlatformFee?: boolean } = {}) {
   const order = getOrder(orderId);
   if (!order) return;
   const email = order.deliveryAddress?.email;
   if (!email) throw new Error("This order has no customer email to credit.");
-  const cap = maxRefundable(order);
+  const cap = maxRefundable(order, options);
   if (amount != null && !(Number.isFinite(amount) && amount > 0)) throw new Error("Enter a refund amount above ₹0.");
   if (amount != null && amount > cap + 0.001) throw new Error(`At most ₹${cap.toLocaleString("en-IN")} can still be refunded on this order.`);
   const refundAmount = Math.round(Math.min(amount ?? cap, cap) * 100) / 100;
-  if (refundAmount <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
+  if (refundAmount <= 0) throw new Error("Nothing left to refund. The platform fee is kept unless you tick \"Also refund the platform fee\".");
   const balance = adjustStoreCredit(email, refundAmount, note ?? `Refund for order ${order.id}`, order.id);
   const next: Order = withHistory(
     {
@@ -1244,10 +1244,10 @@ export function cancelOrder(orderId: string, reason?: string) {
   sendOrderStatusEmail(next, "Cancelled");
 }
 
-export function refundOrder(orderId: string, amount?: number, note?: string, extra?: Partial<RefundRecord>) {
+export function refundOrder(orderId: string, amount?: number, note?: string, extra?: Partial<RefundRecord>, options: { withPlatformFee?: boolean } = {}) {
   const order = getOrder(orderId);
   if (!order) return;
-  const cap = maxRefundable(order);
+  const cap = maxRefundable(order, options);
   const refundAmount = Math.min(amount ?? cap, cap);
   if (refundAmount <= 0) return;
   const next: Order = withHistory(

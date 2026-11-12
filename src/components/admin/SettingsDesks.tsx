@@ -1780,9 +1780,9 @@ export function OrderSettingsDesk() {
       </Card>
       <Card title="Platform fee">
         <div className="grid gap-4 md:grid-cols-2">
-          <Check label="Add a platform fee at checkout" hint="Charged once per order: with the pre-order advance, never again on the balance. Kept on refunds unless the next switch is on." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
+          <Check label="Add a platform fee at checkout" hint="Charged once per order: with the pre-order advance, never again on the balance. Kept on refunds." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
           <Text label="Amount (₹)" type="number" value={value.platformFee.amount} onChange={(amount) => set({ platformFee: { ...value.platformFee, amount: Number(amount) || 0 } })} />
-          <p className="text-sm text-slate-700">The platform fee is non-refundable: it is kept on every cancellation, refund and return.</p>
+          <p className="text-sm text-slate-700">The platform fee is non-refundable for customers: it is kept on every cancellation, refund and return. To give it back on a particular order, tick "Also refund the platform fee" when you refund that order.</p>
         </div>
       </Card>
       <Card title="GST" text="Leave this off until the Foundation is GST compliant. Turning on GST adds it to checkout. Turning on invoices lets a customer print a GST invoice after payment.">
