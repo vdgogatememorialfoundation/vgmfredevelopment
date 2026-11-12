@@ -665,6 +665,9 @@ export interface Order {
     packScan: Record<string, number>;
     orderScannedAt?: string;
     packedAt?: string;
+    /** Packer, when packing is given to someone other than the picker. */
+    packer?: string;
+    packerAssignedAt?: string;
   };
   weightKg?: number;
   /** Photos the packer took of the packed items, kept as proof. Desk only; never sent to customers. */

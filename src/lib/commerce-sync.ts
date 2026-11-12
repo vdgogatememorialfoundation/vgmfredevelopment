@@ -55,7 +55,7 @@ function alertOrderChange(prev: Order, next: Order) {
 
 function pickStamp(pick?: Order["pick"]) {
   if (!pick) return 0;
-  return Math.max(...[pick.assignedAt, pick.acceptedAt, pick.pickedAt, pick.orderScannedAt, pick.packedAt].map((at) => Date.parse(at || "") || 0));
+  return Math.max(...[pick.assignedAt, pick.acceptedAt, pick.pickedAt, pick.orderScannedAt, pick.packedAt, pick.packerAssignedAt].map((at) => Date.parse(at || "") || 0));
 }
 
 function rememberOrders(remote: Order[]) {

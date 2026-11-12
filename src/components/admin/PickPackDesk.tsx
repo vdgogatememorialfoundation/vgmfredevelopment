@@ -4,7 +4,7 @@ import { orderItemBatch } from "@/lib/product-data";
 import { useEffect, useRef, useState } from "react";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
-import { acceptPick, assignPicker, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
+import { acceptPick, assignPicker, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
 import { uploadMediaFile } from "@/lib/media-client";
 import { getOrders } from "@/lib/store";
 import { getSession } from "@/lib/auth";
@@ -48,7 +48,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   const mine = orders.filter(
     (order) =>
       order.pick &&
-      (lead || order.pick.assignee === me) &&
+      (lead || (order.pick.pickedAt && order.pick.packer ? order.pick.packer : order.pick.assignee) === me) &&
       !order.pick.packedAt &&
       order.status !== "Cancelled" &&
       (mode === "all" || (mode === "pick" ? !order.pick.pickedAt : Boolean(order.pick.pickedAt)))
@@ -77,7 +77,11 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   const seen = useRef<Set<string> | null>(null);
 
   useEffect(() => {
-    const ids = new Set(mine.filter((order) => !order.pick?.acceptedAt).map((order) => order.id));
+    const ids = new Set(
+      mine
+        .filter((order) => !order.pick?.acceptedAt || (order.pick.packer === me && !order.pick.orderScannedAt))
+        .map((order) => `${order.id}:${order.pick?.assignedAt}:${order.pick?.packerAssignedAt ?? ""}`)
+    );
     if (seen.current && [...ids].some((id) => !seen.current?.has(id))) {
       ring();
       if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("New order to pick");
@@ -188,7 +192,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
             {mine.map((order) => (
               <li key={order.id} className={`rounded-xl border p-3 ${active === order.id ? "border-blue-400 bg-blue-50/50" : "border-slate-200"}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-900">Order {order.id} · {order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}{lead && order.pick?.assignee !== me ? <span className="ml-1 text-xs font-normal text-slate-500">· {order.pick?.assignee}</span> : null}</p>
+                  <p className="font-semibold text-slate-900">Order {order.id} · {order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}{lead ? <span className="ml-1 text-xs font-normal text-slate-500">· Picker {order.pick?.assignee}{order.pick?.packer ? ` · Packer ${order.pick.packer}` : ""}</span> : null}</p>
                   <span className="text-xs font-semibold text-blue-800">
                     {order.pick?.acceptedAt ? progress(order) : "New"} · <span className={dueBy(order).endsWith("late") ? "text-red-700" : ""}>{dueBy(order)}</span>
                   </span>
@@ -212,6 +216,31 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                     </label>
                   ) : null}
                 </div>
+                {lead ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <select className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" value={assignee[order.id] ?? ""} onChange={(event) => setAssignee({ ...assignee, [order.id]: event.target.value })}>
+                      <option value="">{order.pick?.pickedAt ? "Choose packer…" : "Choose picker…"}</option>
+                      {staff.map((account) => (
+                        <option key={account.email} value={account.email.toLowerCase()}>{account.firstName} {account.lastName} · {account.email}</option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="outline"
+                      disabled={!assignee[order.id]}
+                      onClick={() => {
+                        try {
+                          reassignPickPack(order.id, assignee[order.id], order.pick?.pickedAt ? "pack" : "pick");
+                          setAssignee({ ...assignee, [order.id]: "" });
+                          setTick((value) => value + 1);
+                        } catch (problem) {
+                          setError(problem instanceof Error ? problem.message : "Could not reassign.");
+                        }
+                      }}
+                    >
+                      {order.pick?.pickedAt ? (order.pick.packer ? "Reassign packer" : "Assign packer") : "Reassign picker"}
+                    </Button>
+                  </div>
+                ) : null}
                 {active === order.id ? (
                   <div className="mt-3">
                     <div className="flex flex-wrap items-end gap-2">

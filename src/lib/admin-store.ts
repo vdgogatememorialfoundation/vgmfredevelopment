@@ -909,6 +909,20 @@ export function assignPicker(orderId: string, assignee: string) {
   updateOrderInStore(withHistory({ ...order, pick: { assignee: email, assignedAt: new Date().toISOString(), picked: {}, packScan: {} } }, "Picker assigned", email));
 }
 
+/** Hand picking (or packing, once picked) to the same or another staff member; their scanner rings. */
+export function reassignPickPack(orderId: string, assignee: string, stage: "pick" | "pack") {
+  const order = getOrder(orderId);
+  const email = assignee.trim().toLowerCase();
+  if (!order?.pick) throw new Error("Assign a picker first.");
+  if (!email) throw new Error("Pick a staff member.");
+  const at = new Date().toISOString();
+  const pick =
+    stage === "pick"
+      ? { ...order.pick, assignee: email, assignedAt: at, acceptedAt: undefined }
+      : { ...order.pick, packer: email, packerAssignedAt: at };
+  updateOrderInStore(withHistory({ ...order, pick }, stage === "pick" ? "Picker reassigned" : "Packer assigned", email));
+}
+
 export function acceptPick(orderId: string) {
   const order = getOrder(orderId);
   if (!order?.pick) return;
