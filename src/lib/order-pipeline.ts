@@ -73,7 +73,7 @@ export function isCourierInfoLine(text: string) {
 
 const FAILED_ATTEMPT =
   /\b(undeliver(ed|able)?|not delivered|delivery failed|failed delivery|failed attempt|delivery attempt(ed)?|attempt(ed)? (failed|unsuccessful)|unsuccessful|(consignee|customer|receiver) (not available|unavailable|not reachable|not responding)|door locked|premises closed|address (incomplete|not found|issue)|re ?attempt|ndr|reschedul(e|ed))\b/;
-const FINAL_FAILURE = /\b(rto|return to origin|returned to (origin|seller|shipper)|lost|destroyed|damaged in transit)\b/;
+const FINAL_FAILURE = /\b(rto|return to origin|returned to (origin|seller|shipper)|lost|destroyed|damaged)\b/;
 
 /** A missed delivery the courier will try again (NDR), as opposed to a return to origin. */
 export function isFailedAttempt(text: string) {
@@ -86,7 +86,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
   if (!value || isCourierInfoLine(value)) return null;
   // A failed attempt keeps the order out for delivery; only RTO / lost ends it as failed.
   if (FAILED_ATTEMPT.test(value) && !FINAL_FAILURE.test(value)) return "out";
-  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|failed|declined|incomplete)\b/.test(value)) {
+  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|damaged|failed|declined|incomplete)\b/.test(value)) {
     return "failed";
   }
   if (/\bcancel/.test(value)) return "cancelled";

@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  goswiftBook,
+  goswiftCancel,
+  goswiftNdr,
+  goswiftRates,
+  goswiftRegisterWebhook,
+  goswiftTest,
+  goswiftTrack,
   ithinkBook,
   ithinkCancel,
   ithinkInvoice,
@@ -76,7 +83,7 @@ export async function POST(request: NextRequest) {
         const parcel = body.parcel as Parameters<typeof shiprocketRates>[1];
         const wanted = Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari"];
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift"];
         // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
         const stored = readShippingCreds() as typeof creds;
         const keys = (id: keyof typeof creds) => ({ ...(stored[id] ?? {}), ...Object.fromEntries(Object.entries(creds[id] ?? {}).filter(([, value]) => value !== "" && value != null)) });
@@ -86,6 +93,7 @@ export async function POST(request: NextRequest) {
             if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(keys("nimbuspost"), parcel) };
             if (id === "ithink") return { provider: id, rates: await ithinkRates(keys("ithink"), parcel) };
             if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(keys("shipyaari"), parcel) };
+            if (id === "goswift") return { provider: id, rates: await goswiftRates(keys("goswift"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -115,7 +123,9 @@ export async function POST(request: NextRequest) {
                       ? await shipdayBook(own, order)
                       : provider === "shipyaari"
                         ? await shipyaariBook(creds.shipyaari ?? own, order)
-                        : undefined;
+                        : provider === "goswift"
+                          ? await goswiftBook(creds.goswift ?? own, order)
+                          : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -173,6 +183,10 @@ export async function POST(request: NextRequest) {
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipyaari credentials are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
+        if (provider === "goswift") {
+          const awb = String(body.awb ?? "");
+          return NextResponse.json({ ok: true, configured: true, awb, labelUrl: `/api/shipping/goswift/label?awb=${encodeURIComponent(awb)}` });
+        }
         if (provider !== "shiprocket") return unsupported(provider);
         const result = await shiprocketLabelSheet(own, String(body.shipmentId ?? ""), String(body.awb ?? ""));
         if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shiprocket credentials are not configured." });
@@ -210,7 +224,9 @@ export async function POST(request: NextRequest) {
                     ? await shipdayTrack(own, String(body.orderNumber ?? body.orderId ?? ""), String(body.providerOrderId ?? awb))
                     : provider === "shipyaari"
                       ? await shipyaariTrack(creds.shipyaari ?? own, awb)
-                      : undefined;
+                      : provider === "goswift"
+                        ? await goswiftTrack(creds.goswift ?? own, awb)
+                        : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -229,7 +245,9 @@ export async function POST(request: NextRequest) {
                     ? await shipdayCancel(own, String(body.providerOrderId ?? body.awb ?? ""))
                     : provider === "shipyaari"
                       ? await shipyaariCancel(creds.shipyaari ?? own, String(body.awb ?? ""))
-                      : undefined;
+                      : provider === "goswift"
+                        ? await goswiftCancel(creds.goswift ?? own, String(body.awb ?? ""))
+                        : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -268,6 +286,25 @@ export async function POST(request: NextRequest) {
         if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shiprocket credentials are not configured." });
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
+      case "ndr": {
+        if (provider !== "goswift") return unsupported(provider);
+        const action = body.ndrAction === "RTO" ? "RTO" : "Re-Attempt";
+        const result = await goswiftNdr(creds.goswift ?? own, String(body.awb ?? ""), action, {
+          date: body.date ? String(body.date) : undefined,
+          phone: body.phone ? String(body.phone) : undefined,
+          address: body.address ? String(body.address) : undefined,
+          instructions: body.instructions ? String(body.instructions) : undefined,
+        });
+        if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift credentials are not configured." });
+        return NextResponse.json({ ok: true, configured: true, ...result });
+      }
+      case "webhook-register": {
+        if (provider !== "goswift") return unsupported(provider);
+        const url = `${request.nextUrl.origin}/api/shipping/goswift/webhook`;
+        const result = await goswiftRegisterWebhook(creds.goswift ?? own, url);
+        if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift credentials are not configured." });
+        return NextResponse.json({ ok: true, configured: true, ...result });
+      }
       case "webhook-events": {
         return NextResponse.json({ ok: true, events: listWebhooks("shiprocket") });
       }
@@ -296,6 +333,11 @@ export async function POST(request: NextRequest) {
         if (provider === "shipday") {
           const result = await shipdayTest(own);
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipday API key is not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
+        if (provider === "goswift") {
+          const result = await goswiftTest(creds.goswift ?? own);
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift client ID, username and password are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
         if (provider === "shipyaari") {

@@ -2118,3 +2118,210 @@ export async function sendMsg91Sms(
   return { id: String(data.message ?? data.request_id ?? "msg91") };
 }
 
+
+/* ---------------- GoSwift (app.goswift.in/api/docs) ---------------- */
+
+const GOSWIFT = "https://app.goswift.in";
+const goswiftTokens = new Map<string, { token: string; until: number }>();
+
+async function goswiftToken(input: Json) {
+  const clientId = pick(input.clientId, "GOSWIFT_CLIENT_ID");
+  const username = pick(input.username, "GOSWIFT_USERNAME");
+  const password = pick(input.password, "GOSWIFT_PASSWORD");
+  if (!clientId || !username || !password) return null;
+  const key = `${clientId}\0${username}`;
+  const cached = goswiftTokens.get(key);
+  if (cached && cached.until > Date.now()) return cached.token;
+  const data = await call(`${GOSWIFT}/integrations/v2/auth/token/${encodeURIComponent(clientId)}`, {
+    method: "POST",
+    json: { username, password },
+  });
+  const token = String(data.access_token ?? "");
+  if (!token) throw new ProviderError("GoSwift rejected the client ID, username or password.", 401);
+  const seconds = Number(data.expires_in) || 86400;
+  goswiftTokens.set(key, { token, until: Date.now() + Math.max(60, seconds - 300) * 1000 });
+  return token;
+}
+
+const goswiftAuth = (token: string) => ({ authorization: `Bearer ${token}` });
+const goswiftPhone = (phone: string) => Number(phone.replace(/\D/g, "").slice(-10)) || undefined;
+const goswiftTime = (ms: unknown) => (Number(ms) > 0 ? new Date(Number(ms)).toISOString() : "");
+
+export function goswiftTrackingUrl(id: string) {
+  return `${GOSWIFT}/track/${encodeURIComponent(id)}`;
+}
+
+/** GoSwift has no public rate API: serviceability decides, and the desk sets the charge shown at checkout. */
+export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${GOSWIFT}/api/v2/serviceability/${encodeURIComponent(parcel.deliveryPincode)}`, { headers: goswiftAuth(token) });
+  const details = (data.details as Json) ?? {};
+  if (data.status === false || details.forward_drop === false) return [];
+  if (parcel.cod && details.cod === false) return [];
+  return [
+    {
+      provider: "goswift",
+      courierId: "goswift",
+      courierName: "GoSwift",
+      rate: Number(input.rate) > 0 ? Number(input.rate) : 79,
+      etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
+      live: true as const,
+      cod: details.cod !== false,
+    },
+  ];
+}
+
+export async function goswiftBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const place = (who: { name: string; phone: string; line1: string; line2?: string; city: string; state: string; pincode: string }) => ({
+    name: who.name,
+    phone: goswiftPhone(who.phone),
+    address: [who.line1, who.line2].filter(Boolean).join(", "),
+    city: who.city,
+    state: who.state,
+    country: "India",
+    pin: Number(who.pincode),
+  });
+  const alias = String(input.pickupAlias ?? "").trim();
+  const pickup = alias ? { name: alias } : place({ ...order.pickup, name: order.pickup.contactName });
+  const value = Math.max(1, Math.round(order.total));
+  const units = order.items.reduce((sum, item) => sum + item.units, 0) || 1;
+  const data = await call(`${GOSWIFT}/api/v1/package/create`, {
+    method: "PUT",
+    headers: goswiftAuth(token),
+    json: {
+      seller_name: order.pickup.contactName,
+      seller_address: [order.pickup.line1, order.pickup.line2, order.pickup.city, order.pickup.state, order.pickup.pincode].filter(Boolean).join(", "),
+      seller_gst_tin: "",
+      seller_gst_amount: 0,
+      consignee_gst_amount: 0,
+      integrated_gst_amount: 0,
+      tax_value: 0,
+      order_number: order.orderId,
+      invoice_number: order.orderId,
+      invoice_date: order.orderDate.slice(0, 10),
+      consignee_name: order.customer.name,
+      payment_mode: order.cod ? "COD" : "Prepaid",
+      category_of_goods: String(input.category ?? "").trim() || "Books",
+      products_desc: order.items.map((item) => `${item.name} x${item.units}`).join(", ").slice(0, 10000),
+      total_amount: value,
+      taxable_amount: value,
+      commodity_value: String(value),
+      cod_amount: order.cod ? value : 0,
+      return_reason: "",
+      quantity: units,
+      weight: Math.max(1, Math.round(order.weightKg * 1000)),
+      length: Math.max(1, Math.round(order.length)),
+      width: Math.max(1, Math.round(order.breadth)),
+      height: Math.max(1, Math.round(order.height)),
+      drop_location: place(order.customer),
+      pickup_location: pickup,
+      return_location: pickup,
+      service: String(input.service ?? "").trim() || "SURFACE",
+      items: order.items.map((item) => ({ product_name: item.name, sku: item.sku, quantity: item.units, taxable_value: Math.max(1, Math.round(item.price)) })),
+    },
+  });
+  const id = String(data.tracking_id ?? "");
+  if (data.status === false || !id) throw new ProviderError(String(data.remark ?? data.message ?? "GoSwift did not create the shipment."));
+  const barcodes = (data.barcodes as Json) ?? {};
+  return {
+    provider: "goswift",
+    awb: id,
+    courierName: String(data.vendor || "GoSwift"),
+    providerOrderId: id,
+    providerShipmentId: String(barcodes.wbn ?? ""),
+    trackingUrl: goswiftTrackingUrl(id),
+    labelUrl: `/api/shipping/goswift/label?awb=${encodeURIComponent(id)}`,
+  };
+}
+
+/** The label PDF as raw bytes (GoSwift replies with application/octet-stream). */
+export async function goswiftLabelPdf(input: Json, awb: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const response = await fetch(`${GOSWIFT}/api/v1/package/label`, {
+    method: "POST",
+    headers: { ...goswiftAuth(token), "content-type": "application/json" },
+    body: JSON.stringify({ ids: [awb] }),
+    signal: AbortSignal.timeout(30000),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new ProviderError(`GoSwift label failed (HTTP ${response.status}).`, response.status);
+  return response.arrayBuffer();
+}
+
+export async function goswiftTrack(_input: Json, awb: string) {
+  const data = await call(`${GOSWIFT}/api/v1/track/${encodeURIComponent(awb)}`);
+  const nested = (data.data as Json) ?? data;
+  const track = (nested.track as Json) ?? {};
+  const line = (row: Json) => {
+    const status = String(row.status ?? "").trim();
+    const extra = String(row.ndrStatus ?? "").trim() || String(row.desc ?? "").trim();
+    return extra && extra.toLowerCase() !== status.toLowerCase() ? `${status} – ${extra}` : status;
+  };
+  const details = (Array.isArray(track.details) ? (track.details as Json[]) : [])
+    .map((row) => ({ at: goswiftTime(row.ctime), status: line(row), location: String(row.location ?? "") }))
+    .filter((row) => row.status)
+    .sort((a, b) => Date.parse(a.at || "0") - Date.parse(b.at || "0"));
+  const status = line(track);
+  return {
+    status,
+    courierName: "",
+    awb,
+    events: details.length ? details : status ? [{ at: goswiftTime(track.ctime), status, location: String(track.location ?? "") }] : [],
+    trackingUrl: goswiftTrackingUrl(awb),
+    expectedBy: goswiftTime(nested.edd),
+  };
+}
+
+export async function goswiftCancel(input: Json, awb: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${GOSWIFT}/api/v1/package/cancel?tracking_id=${encodeURIComponent(awb)}`, { method: "DELETE", headers: goswiftAuth(token) });
+  if (data.status === false) throw new ProviderError(String(data.remark ?? "GoSwift did not cancel the shipment."));
+  return { cancelled: true };
+}
+
+/** Non-delivery action: ask the courier to re-attempt (on a date) or return the parcel to us. */
+export async function goswiftNdr(input: Json, awb: string, action: "Re-Attempt" | "RTO", extra: { date?: string; phone?: string; address?: string; instructions?: string } = {}) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const at = extra.date ? Date.parse(extra.date) : NaN;
+  const data = await call(`${GOSWIFT}/api/v2/package/ndr`, {
+    method: "POST",
+    headers: goswiftAuth(token),
+    json: {
+      action,
+      wbn: awb,
+      ...(Number.isFinite(at) ? { date: at } : {}),
+      ...(extra.phone ? { phone: extra.phone.replace(/\D/g, "").slice(-10) } : {}),
+      ...(extra.address ? { address: extra.address } : {}),
+      ...(extra.instructions ? { instructions: extra.instructions } : {}),
+    },
+  });
+  if (data.status === false) throw new ProviderError(String(data.remark ?? "GoSwift did not accept the request."));
+  return { message: String(data.remark ?? "Sent to GoSwift.") };
+}
+
+/** Subscribes this site to GoSwift track updates so undelivered, RTO and every other scan reaches the order at once. */
+export async function goswiftRegisterWebhook(input: Json, url: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const existing = await call(`${GOSWIFT}/api/v2/webhook`, { headers: goswiftAuth(token) }).catch(() => ({}) as Json);
+  const rows = (Array.isArray(existing) ? existing : []) as Json[];
+  const same = rows.find((row) => row.url === url);
+  const body = { url, secret: randomBytes(12).toString("hex"), topics: ["track_updated", "shipment_created", "shipment_recreated"], active: true };
+  const data = same
+    ? await call(`${GOSWIFT}/api/v2/webhook/${encodeURIComponent(String(same.id))}`, { method: "PUT", headers: goswiftAuth(token), json: body })
+    : await call(`${GOSWIFT}/api/v2/webhook`, { method: "POST", headers: goswiftAuth(token), json: body });
+  return { webhookId: String(data.id ?? same?.id ?? ""), message: `Live updates are connected to ${url}.` };
+}
+
+export async function goswiftTest(input: Json) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${GOSWIFT}/api/v2/serviceability/110001`, { headers: goswiftAuth(token) });
+  return { message: data.status === false ? "Connected. GoSwift says 110001 is not serviceable." : "Connected. GoSwift serves Delhi 110001." };
+}

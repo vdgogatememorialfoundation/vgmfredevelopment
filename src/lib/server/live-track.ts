@@ -6,6 +6,7 @@ import {
   shipdayTrack,
   shiprocketTrack,
   shipyaariTrack,
+  goswiftTrack,
   tookanTrack,
 } from "@/lib/server/providers";
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
@@ -60,6 +61,7 @@ async function track(
   if (provider === "nimbuspost") return nimbusTrack(own, awb);
   if (provider === "ithink") return ithinkTrack(creds.ithink ?? own, awb);
   if (provider === "shipyaari") return shipyaariTrack(creds.shipyaari ?? own, awb);
+  if (provider === "goswift") return goswiftTrack(creds.goswift ?? own, awb);
   if (provider === "tookan" || provider === "tookan-parcel") {
     return tookanTrack(creds.tookan ?? own, String(providerOrderId || awb), String(extraId || awb));
   }

@@ -64,7 +64,7 @@ import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesF
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
-import { listPickupLocations } from "@/lib/shipping-client";
+import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
 import { getOrder as getStoredOrder, patchOrder as patchStoredOrder } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
@@ -1487,6 +1487,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>Track</Button>
+                    {shipment.provider === "goswift" && shipment.live && shipment.status !== "Delivered" && (
+                      <>
+                        <Button variant="outline" onClick={() => run("ndr-reattempt", () => goswiftNdrRequest(shipment.id, "Re-Attempt", { date: new Date(Date.now() + 864e5).toISOString() }))}>Ask GoSwift to re-attempt</Button>
+                        <Button variant="outline" onClick={() => run("ndr-rto", () => goswiftNdrRequest(shipment.id, "RTO"))}>Return to us (RTO)</Button>
+                      </>
+                    )}
                     <Button variant="outline" onClick={() => run("realloc", async () => {
                       const quoteResult = quote ?? await fetchCourierRates({
                         deliveryPincode: order.deliveryAddress?.pincode ?? "",

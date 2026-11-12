@@ -4,7 +4,7 @@ import { redeemPromo } from "@/lib/server/promotions";
 import { preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import type { MobileOrder } from "@/lib/server/mobile-store";
-import { ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
+import { goswiftRates, ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 
@@ -174,6 +174,7 @@ export async function preorderCourierFee(order: Order) {
     nimbusRates(keys("nimbuspost"), parcel).catch(() => null),
     ithinkRates(keys("ithink"), parcel).catch(() => null),
     shipyaariRates(keys("shipyaari"), parcel).catch(() => null),
+    goswiftRates(keys("goswift"), parcel).catch(() => null),
   ]);
   const cheapest = results.flatMap((list) => list ?? []).map((rate) => Number(rate.rate)).filter((rate) => rate > 0).sort((a, b) => a - b)[0];
   return Math.round(cheapest ?? flat);

@@ -26,7 +26,7 @@ import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
 import { pushPaymentVault, testPaytmEdc, testRazorpay } from "@/lib/payments-client";
-import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
+import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote, connectGoswiftUpdates } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { fileToDataUrl } from "@/lib/images";
 import { subscribeCms } from "@/lib/cms";
@@ -1393,6 +1393,34 @@ export function ShippingApisDesk() {
             <Text label="Email (if no API key)" value={value.shipyaari.email} onChange={(email) => set({ shipyaari: { ...value.shipyaari, email } })} />
             <Secret label="Password" value={value.shipyaari.password} onChange={(password) => set({ shipyaari: { ...value.shipyaari, password } })} />
             <button type="button" className={primary} disabled={busy === "shipyaari"} onClick={() => test("shipyaari")}>{busy === "shipyaari" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
+        <Card title="GoSwift" text="app.goswift.in/api/docs — client ID from Swift onboarding plus the API username and password. Books shipments, prints labels, tracks every scan and sends re-attempt or RTO requests for undelivered parcels. Swift has no rate API, so set the charge shown at checkout." badge={<ProviderStatus id="goswift" />} right={<Check label="Use" checked={value.goswift.enabled} onChange={(enabled) => set({ goswift: { ...value.goswift, enabled } })} />}>
+          <div className="space-y-3">
+            <Text label="Client ID" value={value.goswift.clientId} onChange={(clientId) => set({ goswift: { ...value.goswift, clientId } })} />
+            <Text label="API username" value={value.goswift.username} onChange={(username) => set({ goswift: { ...value.goswift, username } })} />
+            <Secret label="API password" value={value.goswift.password} onChange={(password) => set({ goswift: { ...value.goswift, password } })} />
+            <Text label="Pickup address alias" value={value.goswift.pickupAlias} onChange={(pickupAlias) => set({ goswift: { ...value.goswift, pickupAlias } })} hint="As saved in the Swift dashboard. Leave blank to send the pickup address from Settings." />
+            <Text label="Charge shown at checkout (₹)" value={value.goswift.rate} onChange={(rate) => set({ goswift: { ...value.goswift, rate } })} hint="Default ₹79" />
+            <Text label="Delivery days shown" value={value.goswift.etaDays} onChange={(etaDays) => set({ goswift: { ...value.goswift, etaDays } })} hint="Default 4" />
+            <Text label="Service" value={value.goswift.service} onChange={(service) => set({ goswift: { ...value.goswift, service: service.toUpperCase() } })} hint="SURFACE, EXPRESS, NDD or SDD" />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={primary} disabled={busy === "goswift"} onClick={() => test("goswift")}>{busy === "goswift" ? "Checking live…" : "Save & test"}</button>
+              <button
+                type="button"
+                className={primary}
+                disabled={busy === "goswift-hook"}
+                onClick={async () => {
+                  save();
+                  setBusy("goswift-hook");
+                  const result = await connectGoswiftUpdates().catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
+                  setBusy("");
+                  setNote(result.ok ? `GoSwift: ${result.message}` : `GoSwift live updates failed: ${result.error}`);
+                }}
+              >
+                {busy === "goswift-hook" ? "Connecting…" : "Connect live status updates"}
+              </button>
+            </div>
           </div>
         </Card>
       </div>
