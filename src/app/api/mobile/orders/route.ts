@@ -72,6 +72,7 @@ function trackingFor(order: Order, shipment?: ShipmentRecord) {
           when: event.at ? statusStamp(event.at, country) : "",
           location: event.location ?? "",
           detail: event.detail ?? "",
+          notice: event.notice ?? "",
         })),
       })),
     };

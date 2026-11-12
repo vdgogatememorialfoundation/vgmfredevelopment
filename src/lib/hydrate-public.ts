@@ -261,6 +261,7 @@ function installPublishedCatalogue(feed: MobileFeed) {
   writeSplit(seededClinics, feed.clinics, "vgmf_clinic_edits", "vgmf_custom_clinics");
   writeSplit(seededVideos, feed.videos, "vgmf_video_edits", "vgmf_custom_videos");
   if (feed.gallery?.length) tryWrite(() => window.localStorage.setItem("vgmf_gallery", JSON.stringify(feed.gallery)));
+  if (feed.policies && Object.keys(feed.policies).length) tryWrite(() => window.localStorage.setItem("vgmf_policies", JSON.stringify(feed.policies)));
   if (feed.about) tryWrite(() => window.localStorage.setItem("vgmf_about", JSON.stringify(feed.about)));
   if (feed.flags) tryWrite(() => window.localStorage.setItem("vgmf_site_flags", JSON.stringify(feed.flags)));
   if (feed.publishedAt) window.localStorage.setItem(CATALOGUE_STAMP, feed.publishedAt);

@@ -2,6 +2,11 @@ import { subscribeCms } from "@/lib/cms";
 
 const KEY = "vgmf_policies";
 
+const WRONG_ADDRESS = {
+  title: "Wrong delivery address",
+  body: "Please check your delivery address and phone number before placing the order. If a wrong or incomplete address is entered and the shipment has been picked up by the courier, the Foundation is not responsible for delay, loss, non-delivery or return of the parcel, and any re-shipping charge is payable by the customer.",
+};
+
 export type PolicyId = "privacy" | "terms" | "shipping" | "returns" | "refund" | "cancellation";
 
 export interface PolicySection {
@@ -93,6 +98,7 @@ export const defaultPolicies: Record<PolicyId, PolicyDoc> = {
         title: "Shipping Charges",
         body: "Shipping is calculated at checkout based on weight and the delivery address. Orders above a stated threshold may qualify for free shipping.",
       },
+      WRONG_ADDRESS,
     ],
   },
   returns: {
@@ -165,7 +171,11 @@ function readSaved(): Partial<Record<PolicyId, PolicyDoc>> {
 
 export function getPolicy(id: PolicyId): PolicyDoc {
   const saved = readSaved()[id];
-  return saved ? { ...defaultPolicies[id], ...saved, id } : defaultPolicies[id];
+  const doc = saved ? { ...defaultPolicies[id], ...saved, id } : defaultPolicies[id];
+  if (id === "shipping" && !doc.sections.some((section) => /wrong (delivery )?address/i.test(`${section.title} ${section.body}`))) {
+    return { ...doc, sections: [...doc.sections, WRONG_ADDRESS] };
+  }
+  return doc;
 }
 
 export function getPolicies(): Record<PolicyId, PolicyDoc> {

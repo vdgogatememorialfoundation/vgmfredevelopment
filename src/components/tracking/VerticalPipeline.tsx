@@ -291,9 +291,10 @@ export default function VerticalPipeline({
                     {kids.map((event) => (
                       <li key={event.id} className={/fail|undeliver|rto/i.test(event.title) ? "failed" : ""}>
                         <b>{event.title}</b>
-                        {event.at ? <div className="when">{stage.id === "delivered" || stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)}</div> : null}
+                        {event.at ? <div className="when">{stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)}</div> : null}
                         {event.location ? <div className="where">{event.location}</div> : null}
                         {event.detail ? <div className="where">{event.detail}</div> : null}
+                        {event.notice ? <div className="vgmf-ship-notice">{event.notice}</div> : null}
                         {event.agent?.name || event.agent?.phone ? (
                           <div className="where">
                             Agent: {[event.agent?.name, event.agent?.phone].filter(Boolean).join(" · ")}

@@ -94,6 +94,7 @@ export default function CheckoutClient() {
   const [courierId] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const processingRef = useRef(false);
   useEffect(() => {
@@ -414,6 +415,10 @@ export default function CheckoutClient() {
   const preorderShippingLater = hasPreorder && deliveryMode === "delivery";
 
   const placeOrder = async () => {
+    if (!agreed) {
+      setError("Please read and accept the terms and policies before placing the order.");
+      return;
+    }
     const over = rows.find(({ item, book }) => item.quantity > quantityCap(book.id) || (book.stock <= 0 && !book.preorder?.enabled));
     if (over) {
       setError(`${over.book.title}: that quantity is not available. Lower the quantity or save it for later.`);
@@ -1145,6 +1150,27 @@ export default function CheckoutClient() {
                 {error}
               </p>
             )}
+
+            <label className="mt-6 flex items-start gap-2 rounded-lg border border-border bg-warm-cream p-3 text-sm text-text-muted">
+              <input type="checkbox" className="mt-1" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
+              <span>
+                I have read and agree to the{" "}
+                {([
+                  ["/terms", "Terms & Conditions"],
+                  ["/privacy", "Privacy Policy"],
+                  ["/shipping-policy", "Shipping Policy"],
+                  ["/return-policy", "Return Policy"],
+                  ["/refund-policy", "Refund Policy"],
+                  ["/cancellation-policy", "Cancellation Policy"],
+                ] as const).map(([href, label], index, all) => (
+                  <span key={href}>
+                    <Link href={href} target="_blank" className="font-semibold text-burgundy underline">{label}</Link>
+                    {index < all.length - 2 ? ", " : index === all.length - 2 ? " and " : "."}
+                  </span>
+                ))}{" "}
+                I have checked my delivery address and phone number; once the courier picks up a parcel sent to a wrong address, the Foundation is not responsible.
+              </span>
+            </label>
 
             <button
               type="button"

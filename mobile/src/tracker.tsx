@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Animated, Easing, Text, View } from "react-native";
 import { useTheme } from "./theme";
 
-export type TrackEvent = { title?: string; when?: string; location?: string; detail?: string };
+export type TrackEvent = { title?: string; when?: string; location?: string; detail?: string; notice?: string };
 export type TrackStage = { id?: string; label?: string; caption?: string; reached?: boolean; partial?: boolean; events?: TrackEvent[] };
 
 const DONE = "#0F7B5F";
@@ -83,6 +83,7 @@ export function Pipeline({ stages, current, failed, expected, footer }: { stages
                       <Text style={{ fontSize: 13.5, fontWeight: "600", color: theme.colors.text }}>{event.title}</Text>
                       <Text style={{ fontSize: 12, color: theme.colors.muted }}>{[event.when, event.location].filter(Boolean).join(" · ")}</Text>
                       {event.detail ? <Text style={{ fontSize: 12, color: theme.colors.muted }}>{event.detail}</Text> : null}
+                      {event.notice ? <Text style={{ marginTop: 4, fontSize: 14.5, lineHeight: 20, fontWeight: "700", color: theme.colors.text }}>{event.notice}</Text> : null}
                     </View>
                   ))}
                 </View>

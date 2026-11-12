@@ -515,7 +515,7 @@ export function buildTrackingStages(
     return tally(stages.filter((stage) => stage.reached || stage.id === "failed"), order);
   }
   const lastDelivered = deliveredEvents.at(-1);
-  if (deliveredReached && lastDelivered && !hyperlocal) lastDelivered.detail = [lastDelivered.detail, COURIER_DELIVERED_NOTE].filter(Boolean).join(" · ");
+  if (deliveredReached && lastDelivered && !hyperlocal) lastDelivered.notice = COURIER_DELIVERED_NOTE;
   stages.push(makeStage("delivered", "Delivered", "Delivered to the address", deliveredEvents, deliveredReached));
 
   return tally(holdBeforeNext(stages), order);

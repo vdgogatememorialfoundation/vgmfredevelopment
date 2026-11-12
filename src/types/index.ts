@@ -558,6 +558,8 @@ export interface ShipmentEvent {
   id: string;
   title: string;
   detail?: string;
+  /** Customer notice shown bold under the event (e.g. courier-delivered responsibility). */
+  notice?: string;
   at: string;
   location?: string;
   agent?: { name?: string; phone?: string };
