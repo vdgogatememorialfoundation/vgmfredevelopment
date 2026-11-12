@@ -242,7 +242,7 @@ export function buildTrackingStages(
   totalEvents: number;
 } {
   const dest = destLabel(order);
-  const origin = "Pune, Maharashtra, India";
+  const origin: string | undefined = undefined;
   const courier = customerCourierLabel({
     provider: shipment?.provider ?? order.courierChoice?.provider,
     courier: shipment?.courier || order.courierName,
