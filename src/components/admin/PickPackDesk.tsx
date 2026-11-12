@@ -15,14 +15,35 @@ import { getOrderSettings } from "@/lib/integrations";
 
 const OPEN = new Set(["Paid", "Ordered", "Accepted", "Processing", "Awaiting Confirmation", "To Ship"]);
 
+let ringer: AudioContext | null = null;
+
+/** Phones only play sound from an audio context started by a tap, so one is opened on the first tap and reused. */
+function unlockRinger() {
+  try {
+    const Context = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Context) return;
+    ringer ??= new Context();
+    void ringer.resume();
+  } catch {
+    /* no audio on this device */
+  }
+}
+
 function ring() {
   try {
-    const audio = new AudioContext();
-    [0, 0.35].forEach((delay) => {
+    navigator.vibrate?.([400, 150, 400, 150, 400]);
+  } catch {
+    /* no vibration */
+  }
+  try {
+    const audio = ringer;
+    if (!audio) return;
+    void audio.resume();
+    [0, 0.35, 0.7].forEach((delay) => {
       const tone = audio.createOscillator();
       const gain = audio.createGain();
       tone.frequency.value = 880;
-      gain.gain.setValueAtTime(0.25, audio.currentTime + delay);
+      gain.gain.setValueAtTime(0.3, audio.currentTime + delay);
       gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + delay + 0.3);
       tone.connect(gain).connect(audio.destination);
       tone.start(audio.currentTime + delay);
@@ -30,6 +51,23 @@ function ring() {
     });
   } catch {
     /* sound blocked until the page is tapped */
+  }
+}
+
+/** Android Chrome has no `new Notification()`; it only shows alerts through the service worker. */
+function alertNewOrder() {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.getRegistration().then((registration) => {
+        if (registration) void registration.showNotification("New order to pick", { tag: "vgmf-pick", requireInteraction: true });
+        else new Notification("New order to pick");
+      }).catch(() => undefined);
+      return;
+    }
+    new Notification("New order to pick");
+  } catch {
+    /* the ring and the banner still show */
   }
 }
 
@@ -75,6 +113,21 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   const [error, setError] = useState("");
   const [assignee, setAssignee] = useState<Record<string, string>>({});
   const seen = useRef<Set<string> | null>(null);
+  const [fresh, setFresh] = useState(false);
+  const [soundReady, setSoundReady] = useState(false);
+
+  useEffect(() => {
+    const unlock = () => {
+      unlockRinger();
+      setSoundReady(true);
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   useEffect(() => {
     const ids = new Set(
@@ -84,7 +137,8 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
     );
     if (seen.current && [...ids].some((id) => !seen.current?.has(id))) {
       ring();
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("New order to pick");
+      alertNewOrder();
+      setFresh(true);
     }
     seen.current = ids;
   });
@@ -157,6 +211,14 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
         description="New assignments ring a bell. Follow the steps below; each order shows what to scan next."
         action={mine.length ? <Button variant="outline" onClick={() => printPackagingSlips(mine)}>Download packaging slips ({mine.length})</Button> : undefined}
       >
+        {fresh ? (
+          <button type="button" onClick={() => setFresh(false)} className="mb-3 block w-full rounded-xl bg-red-600 px-3 py-2 text-left text-sm font-semibold text-white">
+            New order assigned to you. Tap to dismiss.
+          </button>
+        ) : null}
+        {!soundReady ? (
+          <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">On a phone, tap anywhere on this page once so it can ring for new orders. Keep this page open with the screen on.</p>
+        ) : null}
         <details open className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
           <summary className="cursor-pointer font-semibold text-slate-900">What to scan</summary>
           {mode !== "pack" ? (
