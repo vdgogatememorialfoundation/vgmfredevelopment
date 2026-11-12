@@ -1,6 +1,5 @@
 import type { CourierRate, Order } from "@/types";
-import { getIntegrations, paytmKeys, razorpayKeys, shippingFeeFor } from "@/lib/integrations";
-import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
+import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import { getOrder, maxRefundable, patchOrder, recordBalancePayment, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
 
@@ -389,33 +388,16 @@ export function emailReturnLabel(orderId: string) {
 
 /** Pre-orders sent by courier: works out the courier charge and adds it to the balance before the customer pays. */
 export async function addPreorderShipping(orderId: string) {
-  const order = getOrder(orderId);
-  const plan = order?.preorderPayment;
-  if (!order || !plan?.shippingDue || plan.balancePaidAt) return order;
-  const quote = await fetchCourierRates({
-    deliveryPincode: order.deliveryAddress?.pincode ?? "",
-    weightKg: orderWeightKg(order),
-    declaredValue: order.subtotal,
-    bookIds: order.items.map((item) => item.bookId),
-  });
-  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  const fee = shippingFeeFor(order.subtotal, units, quote.rates[0]?.rate);
-  patchOrder(
-    order.id,
-    {
-      shipping: (order.shipping || 0) + fee,
-      total: Math.round((order.total + fee) * 100) / 100,
-      preorderPayment: { ...plan, balance: Math.round((plan.balance + fee) * 100) / 100, shipping: fee, shippingDue: false },
-    },
-    `Courier charge ₹${fee} added to the pre-order balance`
-  );
-  return getOrder(order.id);
+  // The courier charge is added only when the desk selects the courier (selectPreorderCourier), never guessed.
+  return getOrder(orderId);
 }
 
 /** Sends the pre-order customer a link for the remaining balance. */
 export async function createBalancePaymentLink(orderId: string) {
-  await addPreorderShipping(orderId);
   const order = getOrder(orderId);
+  if (order?.preorderPayment?.shippingDue && !order.preorderPayment.balancePaidAt) {
+    throw new Error("Select the courier first (Courier → Show couriers & rates). Its charge is added to the balance, then the link is sent.");
+  }
   const plan = order?.preorderPayment;
   if (!order || !plan) throw new Error("This order has no pre-order balance.");
   if (plan.balancePaidAt) throw new Error("The balance is already paid.");

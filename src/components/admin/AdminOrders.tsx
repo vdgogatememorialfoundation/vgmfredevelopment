@@ -45,6 +45,8 @@ import {
   rescheduleOwnDelivery,
   downloadManifest,
   fetchCourierRates,
+  selectPreorderCourier,
+  bookPaidPreorders,
   orderWeightKg,
   reallocateCourier,
   schedulePickup,
@@ -127,6 +129,9 @@ export function OrdersDashboard() {
   const [bulkNote, setBulkNote] = useState("");
 
   const orders = getOrders();
+  useEffect(() => {
+    void bookPaidPreorders(getOrders());
+  }, [remoteVersion]);
   void version;
   void remoteVersion;
   const seenOrders = useRef<Set<string> | null>(null);
@@ -845,6 +850,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [approvalNote, setApprovalNote] = useState("");
   const [quote, setQuote] = useState<RateQuote | null>(null);
   const [picked, setPicked] = useState<number | undefined>();
+  const [typedCharge, setTypedCharge] = useState("");
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [pickupSlot, setPickupSlot] = useState(shipment?.pickupSlot || settings.pickupTimeslots[0]?.label || "10:00 – 13:00");
   const [manualPortal, setManualPortal] = useState<string>("delhivery");
@@ -1413,12 +1419,30 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <ParcelEditor key={`${order.id}:${order.weightKg ?? ""}:${order.parcel ? JSON.stringify(order.parcel) : ""}`} order={order} onSaved={() => { setQuote(null); setPicked(undefined); setMessage("Package saved. Click Show couriers & rates for rates with this package."); }} />
                 {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {order.preorderPayment && !order.preorderPayment.balancePaidAt ? (
+                    <>
+                      <Button
+                        disabled={busy === "preorder-courier" || picked === undefined || !quote}
+                        onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, picked !== undefined ? quote?.rates[picked] : undefined))}
+                      >
+                        {picked !== undefined && quote ? `Select ${quote.rates[picked]?.courierName} & send balance link` : "Pick a courier from the rates"}
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <TextInput className="w-32" inputMode="decimal" placeholder="Charge ₹" value={typedCharge} onChange={(event) => setTypedCharge(event.target.value)} />
+                        <Button variant="outline" disabled={busy === "preorder-courier" || typedCharge.trim() === ""} onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, undefined, Number(typedCharge)))}>
+                          Add charge & send link
+                        </Button>
+                      </div>
+                      <p className="w-full text-xs text-text-muted">Pre-order: the courier charge is added only when you select the courier. The shipment is created automatically once the customer pays the balance.</p>
+                    </>
+                  ) : (
                   <Button
                     disabled={busy === "book"}
                     onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined, pickupOverride(pickupChoices.find((row) => row.nickname === pickupNick)))).message)}
                   >
                     {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pack & book courier"}
                   </Button>
+                  )}
                 </div>
                 <SplitShipments
                   order={order}

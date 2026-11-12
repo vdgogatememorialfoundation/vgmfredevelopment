@@ -190,16 +190,8 @@ export async function preparePreorderBalance(id: string, email: string) {
   const plan = order.preorderPayment;
   if (!plan || plan.balancePaidAt) return { error: "Nothing is due on this order." };
   if (NOT_PROCESSED.includes(order.status)) return { error: "You can pay the balance once your order is processed." };
-  if (!plan.shippingDue) return { order, balance: plan.balance };
-  const fee = await preorderCourierFee(order);
-  const at = new Date().toISOString();
-  const next = patchShopOrder(id, {
-    shipping: (order.shipping || 0) + fee,
-    total: Math.round((order.total + fee) * 100) / 100,
-    preorderPayment: { ...plan, balance: Math.round((plan.balance + fee) * 100) / 100, shipping: fee, shippingDue: false },
-    history: [...(order.history ?? []), { at, status: order.status, note: `Courier charge ₹${fee} added to the pre-order balance` }],
-  }) ?? order;
-  return { order: next, balance: next.preorderPayment?.balance ?? plan.balance + fee };
+  if (plan.shippingDue) return { error: "We will send you the payment link once we select the courier for your parcel. Its charge is added to the balance then." };
+  return { order, balance: plan.balance };
 }
 
 export function markPreorderBalancePaid(id: string, payment: { paymentId: string; razorpayOrderId: string }) {

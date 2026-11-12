@@ -321,6 +321,10 @@ async function bookShipmentOnce(
     (shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled" && (!split || shipment.part === split.part)
   );
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
+  const unpaidPlan = order.preorderPayment;
+  if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
+    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. The shipment is created once it is paid.");
+  }
   const shipOrder = split ? splitOrder(order, split) : order;
   if (!shipOrder.items.length) throw new Error(`Shipment ${split?.part ?? ""} has no items. Set the quantities first.`);
 
@@ -437,6 +441,52 @@ async function bookShipmentOnce(
   return { shipment, live: Boolean(shipment.live), message };
 }
 
+/** Desk picks the courier for a pre-order (from the rates, or a typed charge): its charge goes on the balance and the payment link is sent. */
+export async function selectPreorderCourier(orderId: string, choice?: CourierRate, typedFee?: number) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan) throw new Error("This order has no pre-order balance.");
+  if (plan.balancePaidAt) throw new Error("The balance is already paid.");
+  if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders have no courier charge.");
+  if (!choice && !(typedFee !== undefined && Number.isFinite(typedFee) && typedFee >= 0)) throw new Error("Pick a courier from the rates, or type the courier charge.");
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const fee = choice ? shippingFeeFor(order.subtotal, units, choice.rate, getOrderSettings()) : Math.round((typedFee ?? 0) * 100) / 100;
+  const previous = plan.shippingDue ? 0 : plan.shipping ?? 0;
+  const round = (value: number) => Math.round(value * 100) / 100;
+  patchOrder(
+    order.id,
+    {
+      shipping: round((order.shipping || 0) - previous + fee),
+      total: round(order.total - previous + fee),
+      courierChoice: choice ?? order.courierChoice,
+      preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
+    },
+    `Courier ${choice ? `${choice.courierName} ` : ""}selected · charge ₹${fee} added to the pre-order balance`
+  );
+  if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return `Courier charge ₹${fee} added. Nothing is left to pay.`;
+  const { createBalancePaymentLink } = await import("@/lib/payments-client");
+  const link = await createBalancePaymentLink(order.id);
+  return `Courier charge ₹${fee} added. Balance payment link sent: ${link.url}`;
+}
+
+const autoBooking = new Set<string>();
+
+/** Paid pre-orders with a selected courier get their shipment created automatically. */
+export async function bookPaidPreorders(orders: Order[]) {
+  for (const order of orders) {
+    const plan = order.preorderPayment;
+    if (!plan?.balancePaidAt || order.deliveryMode !== "delivery" || !order.courierChoice || order.shipmentId || order.trackingId) continue;
+    if (["Cancelled", "Delivered", "Failed"].includes(order.status) || autoBooking.has(order.id)) continue;
+    if (getShipments().some((shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled")) continue;
+    autoBooking.add(order.id);
+    try {
+      await bookShipment(order.id, order.courierChoice);
+    } catch {
+      /* the desk can book it from the order */
+    }
+  }
+}
+
 /** Pre-order courier charge: added to the balance once a courier is booked, then the customer gets a link for the rest. */
 async function chargePreorderCourier(orderId: string, choice: CourierRate) {
   const order = getOrder(orderId);
@@ -478,6 +528,10 @@ export async function attachDirectTracking(orderId: string, courierId: string, a
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
+  const unpaidPlan = order.preorderPayment;
+  if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
+    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. The shipment is created once it is paid.");
+  }
   const trackingId = awb.trim();
   if (trackingId.length < 3) throw new Error("Paste the tracking id from the courier.");
   const courierInfo = directCourier(courierId);

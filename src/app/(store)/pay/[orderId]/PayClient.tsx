@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { getOrder, recordBalancePayment, recordCourierPayment, recordPayment, recordReturnChargePayment } from "@/lib/admin-store";
 import { subscribeCms } from "@/lib/cms";
-import { addPreorderShipping, decodeSummary, payWithRazorpay, paymentNotice, waitForRazorpay } from "@/lib/payments-client";
+import { decodeSummary, payWithRazorpay, paymentNotice, waitForRazorpay } from "@/lib/payments-client";
 import { formatPrice } from "@/lib/store";
 
 type Summary = { id: string; amount: number; name: string; email: string; phone: string; items: string[]; paid: boolean };
@@ -80,23 +80,17 @@ export default function PayClient({ orderId }: { orderId: string }) {
   const [result, setResult] = useState<{ paymentId: string; demo: boolean } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [, setShippingTick] = useState(0);
   const shippingDue = ready && balance && Boolean(getOrder(orderId)?.preorderPayment?.shippingDue);
 
-  useEffect(() => {
-    if (!shippingDue) return;
-    let alive = true;
-    void addPreorderShipping(orderId)
-      .catch(() => undefined)
-      .then(() => alive && setShippingTick((tick) => tick + 1));
-    return () => {
-      alive = false;
-    };
-  }, [shippingDue, orderId]);
 
   if (!ready) return <main className="container py-20 text-center text-text-muted">Loading payment…</main>;
 
-  if (shippingDue) return <main className="container py-20 text-center text-text-muted">Working out the courier charge…</main>;
+  if (shippingDue)
+    return (
+      <main className="container max-w-xl py-20 text-center text-text-muted">
+        We will email you the payment link once we select the courier for your parcel. The courier charge is added to the balance then.
+      </main>
+    );
 
   const summary = readSummary(orderId, encoded, courier, balance, returnCharge);
 
