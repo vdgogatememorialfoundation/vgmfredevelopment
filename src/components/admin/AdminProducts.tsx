@@ -153,11 +153,21 @@ export function ProductsSection() {
           <Button
             variant="outline"
             onClick={() => {
-              const stocked = shown.filter((book) => (book.stock ?? 0) > 0);
-              if (!stocked.length || !window.confirm(`Print one numbered label per copy in stock for ${stocked.length} product${stocked.length === 1 ? "" : "s"}? Each copy gets its own code, which locks to the order it is scanned for.`)) return;
-              const rows = stocked.flatMap((book) => issueStockLabels(book.id, book.stock ?? 0).map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) })));
-              void printStockLabels(rows);
-              setStockNote(`${rows.length} stock labels for ${stocked.length} products.`);
+              if (!shown.length) {
+                setStockNote("No products in this list to print labels for.");
+                return;
+              }
+              const answer = window.prompt(
+                `Stock labels for ${shown.length} product${shown.length === 1 ? "" : "s"}. Each copy gets its own code, which locks to the order it is scanned for.\n\nHow many labels per product? Leave blank to print one per copy in stock (products with no stock get 1).`,
+                ""
+              );
+              if (answer === null) return;
+              const fixed = Math.floor(Number(answer));
+              const perBook = (book: Book) => (answer.trim() && fixed > 0 ? fixed : Math.max(1, book.stock ?? 0));
+              const rows = shown.flatMap((book) => issueStockLabels(book.id, perBook(book)).map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) })));
+              void printStockLabels(rows).then((opened) =>
+                setStockNote(opened ? `${rows.length} stock labels for ${shown.length} products.` : "The label window was blocked. Allow pop-ups for this site and try again.")
+              );
             }}
           >
             Bulk stock labels
@@ -308,8 +318,9 @@ export function ProductsSection() {
                             const count = Math.floor(Number(answer));
                             if (!answer || !Number.isFinite(count) || count < 1) return;
                             const codes = issueStockLabels(book.id, count);
-                            void printStockLabels(codes.map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) })));
-                            setStockNote(`${book.title}: ${codes.length} labels, ${codes[0]} to ${codes[codes.length - 1]}.`);
+                            void printStockLabels(codes.map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) }))).then((opened) =>
+                              setStockNote(opened ? `${book.title}: ${codes.length} labels, ${codes[0]} to ${codes[codes.length - 1]}.` : `${book.title}: the label window was blocked. Allow pop-ups for this site and try again.`)
+                            );
                           }}
                         >
                           Labels

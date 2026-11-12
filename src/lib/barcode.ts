@@ -178,15 +178,10 @@ function escapeHtml(value: string) {
 
 /** Prints one Code 128 label per stock unit, each with its own number. */
 export async function printStockLabels(rows: { title: string; code: string; sku?: string; price?: string }[]) {
-  if (typeof window === "undefined" || !rows.length) return;
+  if (typeof window === "undefined" || !rows.length) return false;
   const win = window.open("", "_blank");
-  if (!win) return;
-  const { default: JsBarcode } = await import("jsbarcode");
-  const svgFor = (code: string) => {
-    const node = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    JsBarcode(node, code, { format: "CODE128", height: 46, width: 1.4, fontSize: 11, margin: 2, lineColor: "#1b1410" });
-    return new XMLSerializer().serializeToString(node);
-  };
+  if (!win) return false;
+  const svgFor = (code: string) => barcodeSvg(code, { height: 46, format: "code128" });
   const cards = rows
     .map(
       (row) => `<article class="label">
@@ -208,4 +203,5 @@ export async function printStockLabels(rows: { title: string; code: string; sku?
     </style></head><body><div class="grid">${cards}</div></body></html>`);
   win.document.close();
   win.setTimeout(() => win.print(), 300);
+  return true;
 }
