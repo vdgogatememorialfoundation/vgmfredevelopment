@@ -1764,6 +1764,9 @@ export function printPackagingSlips(orders: Order[]) {
 
 function packagingSlipHtml(order: Order) {
   const slipBooks = getLiveBooks();
+  const orderBooks = order.items.map((item) => slipBooks.find((row) => row.id === item.bookId));
+  const packIn = Array.from(new Set(orderBooks.map((book) => book?.packIn?.trim()).filter((value): value is string => Boolean(value)))).join(" + ");
+  const packingNotes = Array.from(new Set(orderBooks.map((book) => book?.packingNote?.trim()).filter((value): value is string => Boolean(value))));
   return `${letterhead()}
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
     <div>
@@ -1777,8 +1780,8 @@ function packagingSlipHtml(order: Order) {
     <div class="box"><p class="label">Customer</p>${addressBlock(order.deliveryAddress)}</div>
     <div class="box">
       <p class="label">Pack in</p>
-      <strong>${esc(order.plan?.packagingLabel ?? "Standard cardboard box")}</strong>
-      <p class="sub">Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside.</p>
+      <strong>${esc(packIn || order.plan?.packagingLabel || "Standard cardboard box")}</strong>
+      ${packingNotes.length ? packingNotes.map((note) => `<p class="sub">${esc(note)}</p>`).join("") : `<p class="sub">Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside.</p>`}
     </div>
   </div>
   <table><tr><th></th><th>Scan this barcode</th><th>Title / codes</th><th class="right">Qty</th></tr>

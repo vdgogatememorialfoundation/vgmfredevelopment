@@ -544,6 +544,19 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           <VideoFields videos={videos} onChange={(next) => set({ media: [...(form.media ?? []).filter((item) => item.type === "image"), ...next] })} />
 
           <div className="rounded-xl border border-border p-3">
+            <p className="mb-2 text-sm font-semibold text-text-primary">Packing</p>
+            <Field label="Pack in">
+              <TextInput placeholder="Standard cardboard box" value={form.packIn ?? ""} onChange={(event) => set({ packIn: event.target.value })} />
+            </Field>
+            <div className="mt-2">
+              <Field label="Packing instructions">
+                <TextArea rows={3} placeholder="Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside." value={form.packingNote ?? ""} onChange={(event) => set({ packingNote: event.target.value })} />
+              </Field>
+            </div>
+            <p className="mt-1 text-xs text-text-muted">Printed on the packaging slip. Leave blank to use the standard text.</p>
+          </div>
+
+          <div className="rounded-xl border border-border p-3">
             <p className="mb-2 text-sm font-semibold text-text-primary">Generated codes</p>
             <Field label="SKU">
               <div className="flex gap-2">
