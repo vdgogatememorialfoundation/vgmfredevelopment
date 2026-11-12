@@ -174,8 +174,8 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
     if (stage.id === "shipped" && (trackingId || courier) && stage.reached) {
       const viaNote = hyperlocal ? "Hyperlocal" : "Logistics";
       next.courierNote = {
-        title: courier,
-        detail: [viaNote, trackingId ? `Tracking ID ${trackingId}` : ""].filter(Boolean).join(" · "),
+        title: `Shipped with ${courier || "the courier"}`,
+        detail: [trackingId ? `Tracking id: ${trackingId}` : "", viaNote].filter(Boolean).join(" · "),
       };
     }
     if (stage.id === "out" && stage.reached && order.status !== "Delivered" && (shipment?.agentPhone || shipment?.agentName || shipment?.deliveryOtp)) {

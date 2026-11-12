@@ -34,7 +34,7 @@ function Beep({ color }: { color: string }) {
 }
 
 /** Native copy of the website's vertical tracker: dots, a filled line up to the current step, and each step's scans. */
-export function Pipeline({ stages, current, failed, expected, footer }: { stages: TrackStage[]; current: number; failed?: boolean; expected?: string; footer?: string }) {
+export function Pipeline({ stages, current, failed, expected, footer, shippedWith }: { stages: TrackStage[]; current: number; failed?: boolean; expected?: string; footer?: string; shippedWith?: string }) {
   const theme = useTheme();
   const last = stages.length - 1;
   return (
@@ -73,6 +73,9 @@ export function Pipeline({ stages, current, failed, expected, footer }: { stages
                 {stamp ? <Text style={{ fontSize: 12, color: theme.colors.muted }}>{stamp}</Text> : null}
               </View>
               {stage.caption ? <Text style={{ marginTop: 2, fontSize: 13, color: theme.colors.muted }}>{stage.caption}</Text> : null}
+              {stage.id === "shipped" && reached && shippedWith ? (
+                <Text style={{ marginTop: 4, fontSize: 14, fontWeight: "800", color: theme.colors.text }}>{shippedWith}</Text>
+              ) : null}
               {active && expected && !failed ? (
                 <Text style={{ marginTop: 4, fontSize: 13, fontWeight: "700", color: DONE }}>Expected delivery by {expected}</Text>
               ) : null}
@@ -92,7 +95,19 @@ export function Pipeline({ stages, current, failed, expected, footer }: { stages
           </View>
         );
       })}
-      {footer ? <Text style={{ marginTop: 8, fontSize: 12.5, color: theme.colors.muted }}>{footer}</Text> : null}
+      {footer ? (
+        <Text style={{ marginTop: 8, fontSize: 12.5, color: theme.colors.muted }}>
+          {footer.split(/((?:Courier|Tracking id|AWB):?\s*)([^·]+)/).map((part, index) =>
+            index % 3 === 2 ? (
+              <Text key={index} style={{ fontWeight: "700", color: theme.colors.text }}>
+                {part}
+              </Text>
+            ) : (
+              part
+            ),
+          )}
+        </Text>
+      ) : null}
     </View>
   );
 }

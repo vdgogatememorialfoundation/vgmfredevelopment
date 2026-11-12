@@ -198,6 +198,7 @@ export default function OrderScreen() {
               current={Number(tracker.current) || 0}
               failed={/cancel|fail|rto/i.test(str(order.status))}
               expected={str(order.status) === "Delivered" ? "" : str(tracker.expected)}
+              shippedWith={tracker.trackingId || tracker.courier ? [`Shipped with ${str(tracker.courier) || "the courier"}`, tracker.trackingId ? `Tracking id ${str(tracker.trackingId)}` : ""].filter(Boolean).join(" · ") : undefined}
               footer={tracker.trackingId ? `Courier: ${[str(tracker.courier), `Tracking id: ${str(tracker.trackingId)}`].filter(Boolean).join(" · ")}` : undefined}
             />
           </Card>

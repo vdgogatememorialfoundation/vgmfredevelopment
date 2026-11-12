@@ -283,7 +283,7 @@ export default function VerticalPipeline({
                 {stage.courierNote && state !== "upcoming" ? (
                   <div className="vgmf-ship-courier">
                     <b>{stage.courierNote.title}</b>
-                    <span>{stage.courierNote.detail}</span>
+                    <span><CourierText text={stage.courierNote.detail} /></span>
                   </div>
                 ) : null}
                 {kids.length ? (
@@ -293,7 +293,7 @@ export default function VerticalPipeline({
                         <b>{event.title}</b>
                         {event.at ? <div className="when">{stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)}</div> : null}
                         {event.location ? <div className="where">{event.location}</div> : null}
-                        {event.detail ? <div className="where">{event.detail}</div> : null}
+                        {event.detail ? <div className="where"><CourierText text={event.detail} /></div> : null}
                         {event.notice ? <div className="vgmf-ship-notice">{event.notice}</div> : null}
                         {event.agent?.name || event.agent?.phone ? (
                           <div className="where">
@@ -312,5 +312,24 @@ export default function VerticalPipeline({
         </ol>
       </div>
     </div>
+  );
+}
+
+/** "Courier: Ekart · Tracking id: LUAP…" with the courier and tracking id in bold. */
+function CourierText({ text }: { text: string }) {
+  const parts = text.split(/((?:Courier|Tracking id|Tracking ID|AWB(?: no\.)?):?\s*)([^·]+)/);
+  if (parts.length < 3) return <>{text}</>;
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 3 === 2 ? (
+          <strong key={index} className="font-bold text-text-primary">
+            {part}
+          </strong>
+        ) : (
+          part
+        ),
+      )}
+    </>
   );
 }
