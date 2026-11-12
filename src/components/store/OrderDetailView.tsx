@@ -13,6 +13,7 @@ import { formatDate } from "@/lib/utils";
 import { currentProductTitle, orderItemBatch } from "@/lib/product-data";
 import { orderStatusText, shippingIsFree } from "@/lib/integrations";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
+import OrderFeedback from "@/components/store/OrderFeedback";
 import { agreedDelivery, customerAddressLine, deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
 
@@ -101,6 +102,8 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
             ));
           })()}
         </div>
+
+        <OrderFeedback orderId={order.id} />
 
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <div className="rounded-2xl border border-border bg-white p-5">

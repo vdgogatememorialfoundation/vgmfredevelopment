@@ -572,6 +572,8 @@ export interface Order {
   userId: string;
   /** Login email this order belongs to, including when the delivery email is different. */
   accountEmail?: string;
+  /** When the delivery-experience / product-rating email went out. */
+  feedbackInvitedAt?: string;
   date: string;
   items: OrderItem[];
   subtotal: number;

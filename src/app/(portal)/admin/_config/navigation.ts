@@ -77,6 +77,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Disclaimers, reels, signup & birthdays", href: "/admin/website/extras" },
       { label: "About Us", href: "/admin/website/about" },
       { label: "Reviews", href: "/admin/website/reviews" },
+      { label: "Reviews & forms", href: "/admin/website/forms" },
       { label: "Announcements", href: "/admin/website/announcements" },
       { label: "Slideshow & posters", href: "/admin/website/flyers" },
       { label: "Banners", href: "/admin/website/banners" },

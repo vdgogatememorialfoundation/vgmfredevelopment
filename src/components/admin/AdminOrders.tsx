@@ -1,5 +1,6 @@
 "use client";
 
+import OrderFeedback from "@/components/store/OrderFeedback";
 import { DIRECT_COURIERS } from "@/lib/couriers";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -1594,6 +1595,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
       {(order.status === "Delivered" || returnRequest || order.returnShipment || getOrderSettings().adminActions.processAfterDelivery) && order.status !== "Cancelled" && (
         <div className="mt-4">
+          <OrderFeedback orderId={order.id} readOnly />
           {order.packPhotos?.length ? (
             <Section title="Packing photos (desk only)">
               <div className="flex flex-wrap gap-2">

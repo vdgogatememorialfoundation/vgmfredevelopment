@@ -15,6 +15,7 @@ import { findShopOrder, patchShopOrder } from "@/lib/server/shop-orders";
 import { findShopShipment, replaceShopShipment } from "@/lib/server/shop-shipments";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
 import type { Order, ShipmentRecord } from "@/types";
+import { inviteOrderFeedback } from "@/lib/server/forms";
 
 type TrackHit = {
   status?: string;
@@ -167,7 +168,10 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
         ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: wrongDelivered ? `Corrected from courier: ${latestStatus}` : latestStatus }] } : {}),
       });
     }
-    if (move && target === "Delivered") void issueDeliveryInvoice(orderId);
+    if (move && target === "Delivered") {
+      void issueDeliveryInvoice(orderId);
+      void inviteOrderFeedback(orderId);
+    }
   }
   return {
     ok: true as const,

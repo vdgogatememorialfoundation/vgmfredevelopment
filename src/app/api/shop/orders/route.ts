@@ -5,6 +5,7 @@ import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, or
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
 import { redeemPromo } from "@/lib/server/promotions";
 import { ensureGuestAccount } from "@/lib/server/guest-account";
+import { inviteOrderFeedback } from "@/lib/server/forms";
 import type { Order } from "@/types";
 
 export const runtime = "nodejs";
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest) {
   upsertShopOrder(order);
   if (isNew && !commerceViewer(request).portal && (!order.userId || order.userId === "guest")) void ensureGuestAccount(order);
   if (order.promo?.code && order.paymentStatus !== "Pending") redeemPromo(order);
-  if (order.status === "Delivered") void issueDeliveryInvoice(order.id);
+  if (order.status === "Delivered") {
+    void issueDeliveryInvoice(order.id);
+    void inviteOrderFeedback(order.id);
+  }
   return NextResponse.json({ ok: true });
 }
