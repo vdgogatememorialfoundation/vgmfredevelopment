@@ -2,6 +2,7 @@
 
 import OrderFeedback from "@/components/store/OrderFeedback";
 import { DIRECT_COURIERS } from "@/lib/couriers";
+import { isDeskScan } from "@/lib/order-pipeline";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelOrder,
@@ -1552,17 +1553,31 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </div>
                 <div className="lg:col-span-2 rounded-xl border border-border bg-warm-cream/40 p-3 text-xs">
                   <p className="font-semibold text-text-primary">Advanced courier tracking</p>
-                  <p className="mt-1 text-text-muted">Provider {shipment.provider || "courier"} · order {shipment.providerOrderId || "—"} · shipment {shipment.providerShipmentId || "—"} · AWB {shipment.awb}</p>
                   <p className="mt-1 text-text-muted">
-                    Agent {shipment.agentName || "not allotted"}
-                    {shipment.agentPhone ? ` · ${shipment.agentPhone}` : ""}
-                    {shipment.deliveryOtp ? ` · OTP ${shipment.deliveryOtp}` : ""}
-                    {shipment.agentLeg ? ` · ${shipment.agentLeg}` : ""}
+                    {[
+                      shipment.directCourier ? `${shipment.courier} (tracked from the courier's site)` : `${shipment.provider || "Courier"} · ${shipment.courier}`,
+                      shipment.providerOrderId ? `order ${shipment.providerOrderId}` : "",
+                      shipment.providerShipmentId ? `shipment ${shipment.providerShipmentId}` : "",
+                      `AWB ${shipment.awb}`,
+                      `status ${shipment.status}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
-                  <p className="mt-1 text-text-muted">
-                    Pickup {shipment.pickupLat ?? "—"}, {shipment.pickupLng ?? "—"} · drop {shipment.dropLat ?? "—"}, {shipment.dropLng ?? "—"}
-                    {shipment.agentLat != null ? ` · rider ${shipment.agentLat}, ${shipment.agentLng}` : ""}
-                  </p>
+                  {shipment.agentName || shipment.agentPhone ? (
+                    <p className="mt-1 text-text-muted">
+                      Agent {shipment.agentName || ""}
+                      {shipment.agentPhone ? ` · ${shipment.agentPhone}` : ""}
+                      {shipment.deliveryOtp ? ` · OTP ${shipment.deliveryOtp}` : ""}
+                      {shipment.agentLeg ? ` · ${shipment.agentLeg}` : ""}
+                    </p>
+                  ) : null}
+                  {shipment.pickupLat != null || shipment.dropLat != null || shipment.agentLat != null ? (
+                    <p className="mt-1 text-text-muted">
+                      Pickup {shipment.pickupLat ?? "—"}, {shipment.pickupLng ?? "—"} · drop {shipment.dropLat ?? "—"}, {shipment.dropLng ?? "—"}
+                      {shipment.agentLat != null ? ` · rider ${shipment.agentLat}, ${shipment.agentLng}` : ""}
+                    </p>
+                  ) : null}
                   <p className="mt-2 break-all font-mono text-[11px] text-burgundy">
                     {typeof window !== "undefined" ? `${window.location.origin}/track/${order.trackToken || ""}` : `/track/${order.trackToken || ""}`}
                   </p>
@@ -1578,7 +1593,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </div>
                   {shipment.tracking && shipment.tracking.length > 0 ? (
                     <ol className="mt-3 space-y-1 border-t border-border pt-3">
-                      {shipment.tracking.slice().reverse().map((event, index) => (
+                      {shipment.tracking.filter((event) => !isDeskScan(event)).reverse().map((event, index) => (
                         <li key={index} className="flex gap-3"><span className="w-44 shrink-0 text-text-muted">{statusStamp(event.at)}</span><span>{event.status}{event.location ? ` · ${event.location}` : ""}</span></li>
                       ))}
                     </ol>

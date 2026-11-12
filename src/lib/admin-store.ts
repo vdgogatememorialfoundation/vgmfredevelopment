@@ -18,7 +18,7 @@ import { formatDate, formatDateTime } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
-import { matchesBarcode } from "@/lib/barcode";
+import { matchesBarcode, matchesTag } from "@/lib/barcode";
 import QRCode from "qrcode";
 import { sameShipmentSlot } from "@/lib/shipment-slot";
 import { getNotifications, queueNotification } from "@/lib/notify";
@@ -923,11 +923,20 @@ export function recordPickScan(orderId: string, code: string): string {
   const value = code.trim();
   const books = getLiveBooks();
   const needed = (map: Record<string, number>) => order.items.every((item) => (map[item.bookId] ?? 0) >= item.quantity);
-  const matchItem = (map: Record<string, number>) =>
-    order.items.find((item) => {
-      const book = books.find((row) => row.id === item.bookId);
-      return (book ? matchesBarcode(book, value) : item.bookId === value || item.sku === value) && (map[item.bookId] ?? 0) < item.quantity;
+  const matchItem = (map: Record<string, number>) => {
+    const open = order.items.filter((item) => (map[item.bookId] ?? 0) < item.quantity);
+    const bookOf = (item: (typeof open)[number]) => books.find((row) => row.id === item.bookId);
+    const strong = open.find((item) => {
+      const book = bookOf(item);
+      return matchesBarcode({ ...(book ?? {}), id: item.bookId, sku: item.sku || book?.sku, batchNo: item.batchNo || book?.batchNo }, value) || (book ? matchesBarcode(book, value) : false);
     });
+    if (strong) return strong;
+    const tagged = open.filter((item) => {
+      const book = bookOf(item);
+      return book ? matchesTag(book, value) : false;
+    });
+    return tagged.length === 1 ? tagged[0] : undefined;
+  };
   if (!pick.pickedAt) {
     const item = matchItem(pick.picked);
     if (!item) throw new Error("This barcode is not an item still to pick on this order.");

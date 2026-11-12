@@ -96,6 +96,10 @@ export function classifyCourierScan(text: string): CourierStage | null {
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
     return "packed";
   }
+  // Ekart and others route a new booking to the mother hub before the parcel is collected.
+  if (/mother ?hub|shipment created|manifest(ed)? created|soft data|order (information|info) received/.test(value) && !/picked|collected|arrived|received at|reached/.test(value)) {
+    return "packed";
+  }
   if (
     /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
       value
@@ -141,6 +145,11 @@ function cityName(value?: string) {
 }
 
 /** Plain names for parcel scans from Tookan parcel, Shiprocket, and the other courier portals. */
+/** Lines the desk wrote when a tracking id was attached; not a courier scan. */
+export function isDeskScan(scan: { status: string; location?: string }) {
+  return !scan.location && /^(handed to [^·]+|tracking id added\b.*)$/i.test(scan.status.trim());
+}
+
 export function courierEventTitle(status: string, location?: string) {
   const value = status.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   const city = cityName(location) || cityName(status.split(/[-–]/).slice(1).join(" "));
@@ -239,7 +248,7 @@ export function buildTrackingStages(
     courier: shipment?.courier || order.courierName,
   });
   const trackingId = order.trackingId ?? shipment?.awb ?? "";
-  const liveScans = scans.length ? scans : shipment?.tracking ?? [];
+  const liveScans = (scans.length ? scans : shipment?.tracking ?? []).filter((scan) => !isDeskScan(scan));
   const fromScans = highestScanStage(liveScans);
   const packedAt =
     order.history?.find((item) => /pack|book/i.test(`${item.status} ${item.note ?? ""}`))?.at ||
@@ -374,7 +383,7 @@ export function buildTrackingStages(
   const failedReached = (scanStage === "failed" || orderStage === "failed") && scanStage !== "delivered" && scanStage !== "out" && order.status !== "Delivered";
   const packedReached = STAGE_RANK[progress] >= STAGE_RANK.packed || failedReached;
   const collected = liveScans.some((scan) =>
-    /\b(picked up|pickup done|pickup complete|collected|handed to|handover|dispatched)\b/i.test(scan.status)
+    /\b(picked up|pickup done|pickup complete|collected|handed to|handover|dispatched)\b/i.test(scan.status) && classifyCourierScan(scan.status) !== "packed"
   );
   const shipmentLeft = Boolean(
     shipment && ["Picked Up", "In Transit", "Out for Delivery", "Delivered"].includes(shipment.status ?? "")

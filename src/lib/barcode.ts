@@ -1,3 +1,5 @@
+import JsBarcode from "jsbarcode";
+
 /** EAN-13 bar patterns. First digit picks the left-side L/G mix. */
 const LEFT_L = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"];
 const LEFT_G = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"];
@@ -18,11 +20,24 @@ export function normalizeEan13(value: string) {
 }
 
 export function barcodeSvg(code: string, options?: { height?: number; module?: number }) {
-  const value = normalizeEan13(code) || "0000000000000";
   const height = options?.height ?? 56;
-  const module = options?.module ?? 1.6;
-  if (value.length === 13) return ean13Svg(value, height, module);
-  return genericBarsSvg(value, height, module);
+  const bar = options?.module ?? 1.6;
+  const raw = code.trim();
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{12,13}$/.test(raw) || (digits.length >= 12 && digits.length <= 13 && /^[\d\s-]+$/.test(raw))) return ean13Svg(normalizeEan13(raw), height, bar);
+  // Real Code 128 so phone cameras, wedge scanners and couriers can read AWBs, SKUs and order numbers.
+  return code128Svg(raw || "0", height, bar) || genericBarsSvg(digits || "0", height, bar);
+}
+
+function code128Svg(value: string, height: number, module: number) {
+  if (typeof document === "undefined") return "";
+  try {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    JsBarcode(node, value, { format: "CODE128", height: Math.max(20, height - 16), width: Math.max(1, module), fontSize: 11, margin: 4, lineColor: "#000", background: "#fff" });
+    return new XMLSerializer().serializeToString(node);
+  } catch {
+    return "";
+  }
 }
 
 function ean13Svg(value: string, height: number, module: number) {
@@ -74,12 +89,36 @@ export function stockLabelCode(base: string, serial: number) {
   return `${base}-U${String(serial).padStart(5, "0")}`;
 }
 
-export function matchesBarcode(book: { productCode?: string; sku?: string; barcode?: string; isbn?: string; id?: string }, scanned: string) {
-  const value = stripUnitSuffix(scanned).toLowerCase().replace(/[\s-]/g, "");
+type Codes = { productCode?: string; sku?: string; barcode?: string; isbn?: string; id?: string; slug?: string; previousSlugs?: string[]; batchNo?: string };
+
+const squash = (value: unknown) => String(value ?? "").toLowerCase().replace(/[\s_-]/g, "");
+
+/** Every code the system generated for a product: product code, SKU, barcode (with or without EAN check digit), ISBN, id, slug or product link, batch no., stock-unit labels. */
+export function matchesBarcode(book: Codes, scanned: string) {
+  const text = scanned.trim();
+  const fromLink = text.match(/\/shop\/([^/?#\s]+)/i)?.[1] ?? "";
+  const value = squash(stripUnitSuffix(fromLink || text));
   if (!value) return false;
-  return [book.productCode, book.sku, book.barcode, book.isbn, book.id]
+  const digits = value.replace(/\D/g, "");
+  return [book.productCode, book.sku, book.barcode, book.isbn, book.id, book.slug, book.batchNo, ...(book.previousSlugs ?? [])]
     .filter(Boolean)
-    .some((item) => String(item).toLowerCase().replace(/[\s-]/g, "") === value);
+    .some((item) => {
+      const code = squash(item);
+      if (code === value) return true;
+      const codeDigits = code.replace(/\D/g, "");
+      return /^\d{12,13}$/.test(digits) && /^\d{12,13}$/.test(codeDigits) && code === codeDigits && normalizeEan13(codeDigits) === normalizeEan13(digits);
+    });
+}
+
+type Tagged = { category?: string; productType?: string; subject?: string; language?: string; edition?: string; audience?: string[]; specifications?: { label: string; value: string }[] };
+
+/** Weaker match on product tags (category, type, subject, language, edition, audience, specification values): used only when exactly one line of the order carries the tag. */
+export function matchesTag(book: Tagged, scanned: string) {
+  const value = squash(scanned);
+  if (value.length < 3) return false;
+  return [book.category, book.productType, book.subject, book.language, book.edition, ...(book.audience ?? []), ...(book.specifications ?? []).map((row) => row.value)]
+    .filter(Boolean)
+    .some((tag) => squash(tag) === value);
 }
 
 export function printBarcodeSheet(rows: { title: string; sku?: string; barcode: string }[]) {

@@ -132,14 +132,15 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
     void run();
     const terminal = order.status === "Delivered" || order.status === "Cancelled" || order.status === "Failed";
     const ping = Math.min(10, Math.max(8, getIntegrations().shipping.hyperlocalPingSeconds || 8));
-    const ms = terminal ? 120_000 : hyperlocal ? ping * 1000 : 45_000;
+    const refundOpen = order.refunds?.some((refund) => refund.gatewayRefundId && refund.status !== "processed" && refund.status !== "failed");
+    const ms = refundOpen ? 60_000 : terminal ? 120_000 : hyperlocal ? ping * 1000 : 45_000;
     const timer = window.setInterval(run, ms);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order.id, order.status, phone, hyperlocal, shipmentId]);
+  }, [order.id, order.status, phone, hyperlocal, shipmentId, order.refunds?.map((refund) => refund.status).join()]);
 
   const delivered = order.status === "Delivered";
   const shownScans = scans.map((scan, index, list) =>

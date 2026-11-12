@@ -178,7 +178,6 @@ export default function RefundDetails({
               <Fact label="ARN" value={refund.arn} />
               <Fact label="UTR" value={refund.utr} />
               <Fact label="Speed" value={refund.speed ? refund.speed[0].toUpperCase() + refund.speed.slice(1) : ""} />
-              <Fact label="Last checked" value={stamp(refund.checkedAt)} />
             </dl>
             {refund.gatewayRefundId && refund.status !== "processed" && refund.status !== "failed" && !refund.rrn && !refund.arn ? (
               <p className="mt-2 text-xs text-slate-600">The bank reference (RRN/ARN) shows here once the refund is processed, usually within 3–5 working days. This page updates on its own.</p>

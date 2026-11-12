@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { orderBelongsTo, phonesMatch } from "@/lib/commerce-stamp";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { refreshStoredShipment } from "@/lib/server/live-track";
+import { syncOpenRefunds } from "@/lib/server/shipment-sync";
 import { findShopOrder, orderPhoneMatches } from "@/lib/server/shop-orders";
 import { deleteShopShipments, deletedShopShipmentIds, findShopShipment, listShopShipments, upsertShopShipment } from "@/lib/server/shop-shipments";
 import type { Order, ShipmentRecord } from "@/types";
@@ -75,8 +76,12 @@ export async function POST(request: NextRequest) {
     if (!allowed(request, order, shipment, body.phone ?? "")) {
       return NextResponse.json({ ok: false, error: "Sign in, or enter the mobile number on the order." }, { status: 403 });
     }
+    // Open Razorpay refunds are read back on every page refresh (at most once a minute per order), so nobody presses "Check status".
+    const stale = order?.refunds?.some((refund) => refund.gatewayRefundId && refund.status !== "processed" && refund.status !== "failed" && Date.now() - Date.parse(refund.checkedAt || refund.at) > 60_000);
+    if (stale) await syncOpenRefunds(orderId).catch(() => undefined);
     const result = await refreshStoredShipment(orderId, typeof body.shipmentId === "string" ? body.shipmentId : "");
-    return NextResponse.json(result, { headers: { "cache-control": "no-store" } });
+    const latest = findShopOrder(orderId);
+    return NextResponse.json({ ...result, ...(latest ? { order: latest } : {}) }, { headers: { "cache-control": "no-store" } });
   }
   const shipment = body?.shipment;
   if (!shipment || typeof shipment.id !== "string" || typeof shipment.orderId !== "string") {

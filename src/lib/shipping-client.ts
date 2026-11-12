@@ -496,7 +496,7 @@ export async function attachDirectTracking(orderId: string, courierId: string, a
     directCourier: courierInfo?.id ?? "other",
     trackingUrl: courierTrackingLink(courierInfo?.id, trackingId) || undefined,
     note: `Sent with ${courier}.`,
-    tracking: [{ at: new Date().toISOString(), status: `Handed to ${courier}` }],
+    tracking: [{ at: new Date().toISOString(), status: `Tracking ID added · waiting for ${courier} pickup` }],
   };
   saveShipmentRecord(shipment);
   patchOrder(order.id, { shipmentId: shipment.id, trackingId, courierName: courier }, `Tracking ${trackingId} attached from ${courier}`);

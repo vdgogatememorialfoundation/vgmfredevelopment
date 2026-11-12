@@ -36,11 +36,11 @@ export async function syncOpenShipments() {
 }
 
 /** Reads open Razorpay refunds back from the gateway, so the status and bank RRN/ARN reach the customer without anyone pressing "Check status". */
-export async function syncOpenRefunds() {
+export async function syncOpenRefunds(onlyOrderId = "") {
   const creds = razorpayCreds({});
   if (!creds) return;
   const open = (refund: RefundRecord) => refund.gatewayRefundId && refund.status !== "processed" && refund.status !== "failed";
-  for (const order of listShopOrders().filter((item) => item.refunds?.some(open))) {
+  for (const order of listShopOrders().filter((item) => (!onlyOrderId || item.id === onlyOrderId) && item.refunds?.some(open))) {
     try {
       const now = new Date().toISOString();
       const history = [...(order.history ?? [])];

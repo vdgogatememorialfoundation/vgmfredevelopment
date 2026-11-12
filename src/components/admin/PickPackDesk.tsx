@@ -182,7 +182,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
         ) : null}
         {note ? <p className="mt-2 text-sm text-emerald-700">{note}</p> : null}
         {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
-        {camera ? <BarcodeCamera label="Scan a product barcode or the order QR" onScan={(value) => { setCamera(false); scan(value); if (cameraFirst) window.setTimeout(() => setCamera(true), 900); }} onClose={() => setCamera(false)} /> : null}
+        {camera ? <BarcodeCamera label="Scan a product barcode or the order QR" continuous onScan={(value) => scan(value)} onClose={() => setCamera(false)} /> : null}
       </Panel>
 
       {lead && mode !== "pack" ? (
