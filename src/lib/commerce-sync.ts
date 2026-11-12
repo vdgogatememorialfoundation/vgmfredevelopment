@@ -53,6 +53,11 @@ function alertOrderChange(prev: Order, next: Order) {
   }
 }
 
+function pickStamp(pick?: Order["pick"]) {
+  if (!pick) return 0;
+  return Math.max(...[pick.assignedAt, pick.acceptedAt, pick.pickedAt, pick.orderScannedAt, pick.packedAt].map((at) => Date.parse(at || "") || 0));
+}
+
 function rememberOrders(remote: Order[]) {
   if (!remote.length) return;
   const byId = new Map(getOrders().map((order) => [order.id, order]));
@@ -62,6 +67,10 @@ function rememberOrders(remote: Order[]) {
     if (prev) alertOrderChange(prev, order);
     if (!prev || orderActivityAt(order) >= orderActivityAt(prev)) {
       byId.set(order.id, prev ? { ...prev, ...order } : order);
+      changed = true;
+    } else if (order.pick && pickStamp(order.pick) > pickStamp(prev.pick)) {
+      // A picker assignment made on another device must reach this phone even if its own copy looks newer.
+      byId.set(order.id, { ...prev, pick: order.pick });
       changed = true;
     } else if (order.refunds?.length && JSON.stringify(order.refunds) !== JSON.stringify(prev.refunds ?? [])) {
       // Refund status comes from the gateway on the server, so the server copy wins.
@@ -247,12 +256,10 @@ export async function syncCart() {
 /** Publish this browser's bookings, then pull the server copy onto this device. */
 export async function syncCommerce() {
   if (typeof window === "undefined") return;
-  await publishSecrets();
-  await pushLocalCommerce();
-  await pullCommerce();
-  await syncWishlist();
-  await syncCart();
-  await syncWallet();
+  for (const step of [publishSecrets, pushLocalCommerce, pullCommerce, syncWishlist, syncCart, syncWallet]) {
+    // One failing step must not stop this device from receiving the server's orders.
+    await step().catch(() => undefined);
+  }
 }
 
 /** Load the signed-in account's orders onto this phone, then re-render when they arrive. */
@@ -269,8 +276,18 @@ export function useCommerceMirror() {
       setReady(true);
       bump();
     });
+    // Keep pulling while the page is open, so changes made on another device show up without a refresh.
+    const pull = () => {
+      if (document.visibilityState === "visible") void pullCommerce().catch(() => undefined);
+    };
+    const timer = window.setInterval(pull, 20000);
+    window.addEventListener("focus", pull);
+    document.addEventListener("visibilitychange", pull);
     return () => {
       live = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", pull);
+      document.removeEventListener("visibilitychange", pull);
       window.removeEventListener("vgmf-cms", bump);
       window.removeEventListener("vgmf-wishlist", bump);
     };

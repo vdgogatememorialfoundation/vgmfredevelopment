@@ -83,7 +83,7 @@ export function isFailedAttempt(text: string) {
 
 /** Courier pickup scans, worded differently by each courier (Ekart "Pickup from seller", Delhivery "Picked up", …). */
 const PICKED_UP =
-  /\b(picked up|pickup done|pickup complete(d)?|pickup successful|pick ?up from (the )?(seller|shipper|merchant|vendor|warehouse|customer)|picked (from|by)|shipment picked|collected from (the )?(seller|shipper|merchant|vendor)|received at (the )?(mother ?hub|origin))\b/;
+  /\b(picked up|pickup done|pickup complete(d)?|pickup successful|pick ?up from (the )?(seller|shipper|merchant|vendor|warehouse|customer)|picked (from|by)|shipment picked|collected from (the )?(seller|shipper|merchant|vendor)|received at (the )?(mother ?hub|origin)|in ?scan(ned)? (at|to|in)|inscan|shipment received)\b/;
 const PICKUP_PENDING = /scheduled|awaited|pending|request|out for pickup|assigned|generated|failed|cancel|reattempt|not picked/;
 
 export function classifyCourierScan(text: string): CourierStage | null {
@@ -103,11 +103,11 @@ export function classifyCourierScan(text: string): CourierStage | null {
   }
   if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value)) return "shipped";
   // Ekart and others route a new booking to the mother hub before the parcel is collected.
-  if (/mother ?hub|shipment created|manifest(ed)? created|soft data|order (information|info) received/.test(value) && !/picked|collected|arrived|received at|reached/.test(value)) {
+  if (/mother ?hub|shipment created|manifest(ed)? created|^manifested$|manifest generated|soft data|order (information|info) received/.test(value) && !/picked|collected|arrived|received at|reached/.test(value)) {
     return "packed";
   }
   if (
-    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|manifested)\b/.test(
+    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)
