@@ -4,6 +4,7 @@ import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
 import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder, forCustomer } from "@/lib/server/shop-orders";
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
 import { redeemPromo } from "@/lib/server/promotions";
+import { ensureGuestAccount } from "@/lib/server/guest-account";
 import type { Order } from "@/types";
 
 export const runtime = "nodejs";
@@ -49,7 +50,9 @@ export async function POST(request: NextRequest) {
   if (!order || typeof order.id !== "string" || !Array.isArray(order.items)) {
     return NextResponse.json({ ok: false, error: "Send the order." }, { status: 400 });
   }
+  const isNew = !findShopOrder(order.id);
   upsertShopOrder(order);
+  if (isNew && !commerceViewer(request).portal && (!order.userId || order.userId === "guest")) void ensureGuestAccount(order);
   if (order.promo?.code && order.paymentStatus !== "Pending") redeemPromo(order);
   if (order.status === "Delivered") void issueDeliveryInvoice(order.id);
   return NextResponse.json({ ok: true });
