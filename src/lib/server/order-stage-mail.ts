@@ -195,7 +195,7 @@ function details(order: Order) {
       : `Deliver to: ${[address?.fullName, address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ")}`,
     address?.phone ? `Phone: ${address.phone}` : "",
     order.trackingId ? `Courier: ${order.courierName || "Courier"} · AWB ${order.trackingId}` : "",
-    order.eta ? `Expected delivery: ${order.eta}` : "",
+    order.eta && order.status !== "Delivered" ? `Expected delivery: ${order.eta}` : "",
   ];
   return lines.filter((line, index, all) => line !== "" || (all[index - 1] !== "" && index > 0)).join("\n");
 }

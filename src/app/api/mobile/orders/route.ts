@@ -59,7 +59,7 @@ function trackingFor(order: Order, shipment?: ShipmentRecord) {
       part: shipment?.part ?? 0,
       courier: customerCourierLabel({ provider: shipment?.provider ?? order.courierChoice?.provider, courier: shipment?.courier || order.courierName }),
       trackingId: shipment?.awb || order.trackingId || "",
-      expected: expected ? deliveryDatePhrase(expected) : "",
+      expected: expected && order.status !== "Delivered" && shipment?.status !== "Delivered" ? deliveryDatePhrase(expected) : "",
       current: Math.max(0, current),
       stages: stages.map((stage) => ({
         id: stage.id,

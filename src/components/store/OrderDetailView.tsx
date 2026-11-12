@@ -13,7 +13,7 @@ import { formatDate } from "@/lib/utils";
 import { currentProductTitle, orderItemBatch } from "@/lib/product-data";
 import { orderStatusText, shippingIsFree } from "@/lib/integrations";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
-import { agreedDelivery, customerAddressLine, deliveryDatePhrase } from "@/lib/delivery-expectation";
+import { agreedDelivery, customerAddressLine, deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
 
 /** One order on its own page: live tracking, items, totals, delivery details and replacement requests. */
@@ -173,7 +173,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
             </dl>
             {orderSettings.gst.invoiceEnabled && (
               <button type="button" className="btn-outline mt-4" onClick={() => printGstInvoice(order)}>
-                GST invoice
+                Invoice
               </button>
             )}
             {order.status === "Delivered" && order.trackToken ? (
@@ -213,12 +213,24 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                       {customerAddressLine(order.deliveryAddress)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-text-muted">Expected delivery</dt>
-                    <dd className="text-right font-medium text-emerald-700">
-                      {deliveryDatePhrase(agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date))) || "Within 5 business days"}
-                    </dd>
-                  </div>
+                  {order.status === "Delivered" || shipment?.status === "Delivered" ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-text-muted">Delivered</dt>
+                      <dd className="text-right font-medium text-emerald-700">
+                        {(() => {
+                          const at = [...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.at || shipment?.tracking?.at(-1)?.at;
+                          return at ? statusStamp(at, order.deliveryAddress?.country) : "Delivered";
+                        })()}
+                      </dd>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-text-muted">Expected delivery</dt>
+                      <dd className="text-right font-medium text-emerald-700">
+                        {deliveryDatePhrase(agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date))) || "Within 5 business days"}
+                      </dd>
+                    </div>
+                  )}
                 </dl>
               )}
             </div>
