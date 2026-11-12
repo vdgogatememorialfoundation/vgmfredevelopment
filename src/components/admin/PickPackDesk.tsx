@@ -4,7 +4,7 @@ import { orderItemBatch } from "@/lib/product-data";
 import { useEffect, useRef, useState } from "react";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
-import { acceptPick, assignPicker, confirmPacked, pickPackLeft, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
+import { acceptPick, assignPicker, confirmPacked, pickPackChecklist, pickPackLeft, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
 import { uploadMediaFile } from "@/lib/media-client";
 import { getOrders } from "@/lib/store";
 import { getSession } from "@/lib/auth";
@@ -278,6 +278,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                     <li key={item.bookId}>{item.quantity} × {item.title}{item.sku ? ` · ${item.sku}` : ""}{orderItemBatch(item) ? ` · Batch ${orderItemBatch(item)}` : ""}</li>
                   ))}
                 </ul>
+                {order.pick?.acceptedAt ? <ScanChecklist order={order} /> : null}
                 <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-sm font-medium text-amber-900">Next: {nextStep(order)}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {!order.pick?.acceptedAt ? (
@@ -363,6 +364,43 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
             </ul>
           )}
         </Panel>
+      ) : null}
+    </div>
+  );
+}
+
+function ScanMark({ label, done }: { label: string; done: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${done ? "bg-emerald-100 text-emerald-800" : "bg-red-50 text-red-700"}`}>
+      {done ? "✓" : "○"} {label} · {done ? "Scanned" : "Not scanned"}
+    </span>
+  );
+}
+
+function ScanChecklist({ order }: { order: Order }) {
+  const list = pickPackChecklist(order);
+  return (
+    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-sm">
+      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">{list.stage === "pick" ? "Picker checklist" : "Packer checklist"}</p>
+      <div className="flex flex-wrap gap-1">
+        {list.steps.map((step) => <ScanMark key={step.label} label={step.label} done={step.done} />)}
+      </div>
+      {list.items.map((item) => (
+        <div key={item.id} className="mt-1.5">
+          <p className="font-medium text-slate-800">{item.title}</p>
+          <div className="mt-0.5 flex flex-wrap gap-1">
+            {item.codes.map((code) => <ScanMark key={code.label} label={code.label} done={code.done} />)}
+          </div>
+        </div>
+      ))}
+      {list.finish.length ? (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {list.finish.map((step) => (
+            <span key={step.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${step.done ? "bg-emerald-100 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
+              {step.done ? "✓" : "○"} {step.label}
+            </span>
+          ))}
+        </div>
       ) : null}
     </div>
   );

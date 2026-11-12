@@ -988,6 +988,42 @@ export function pickPackLeft(order: Order, stage: "pick" | "pack") {
     .join(" · ");
 }
 
+/** Scanned / not scanned checklist for the picker or packer screen. */
+export function pickPackChecklist(order: Order) {
+  const pick = order.pick;
+  const stage: "pick" | "pack" = pick?.pickedAt ? "pack" : "pick";
+  const books = getLiveBooks();
+  const { counts, seen } = stageState(order, stage);
+  const steps =
+    stage === "pick"
+      ? [{ label: "Order code", done: Boolean(pick?.pickOrderScannedAt) }]
+      : [
+          { label: "Box code", done: Boolean(pick?.boxScannedAt) },
+          { label: "Order code", done: Boolean(pick?.orderScannedAt) },
+        ];
+  const items = order.items.map((item) => {
+    const req = requiredKinds(stage, item, books.find((row) => row.id === item.bookId));
+    const count = Math.min(item.quantity, counts[item.bookId] ?? 0);
+    return {
+      id: item.bookId,
+      title: item.title,
+      codes: req.map((kind, index) =>
+        index === 0
+          ? { label: `${KIND_LABEL[kind]} ${count}/${item.quantity}`, done: count >= item.quantity }
+          : { label: KIND_LABEL[kind], done: (seen[item.bookId] ?? []).includes(kind) }
+      ),
+    };
+  });
+  const finish =
+    stage === "pack"
+      ? [
+          { label: `Packing photos${order.packPhotos?.length ? ` (${order.packPhotos.length})` : ""}`, done: Boolean(order.packPhotos?.length) },
+          { label: "Items match description", done: Boolean(pick?.matchedAt || pick?.packedAt) },
+        ]
+      : [];
+  return { stage, steps, items, finish };
+}
+
 /** One scan in the store. Picker: order code, then each item's product code and SKU. Packer: box code, order code, then each item's SKU and ISBN. */
 export function recordPickScan(orderId: string, code: string): string {
   const order = getOrder(orderId);
