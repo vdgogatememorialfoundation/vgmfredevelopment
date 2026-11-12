@@ -325,6 +325,11 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
   const [form, setForm] = useState<Book>(() => ({
     ...blankProduct(),
     ...book,
+    // Older products may lack codes; fill them so the form shows what save will store.
+    sku: book.sku?.trim() || generateSku(book.category, book.id),
+    productCode: book.productCode?.trim() || generateProductCode(book.id),
+    batchNo: book.batchNo?.trim() || generateBatchNo(),
+    barcode: book.barcode?.trim() || generateBarcode(),
     publisher: { ...blankPublisher(), ...book.publisher },
     preorder: { enabled: false, releaseDate: "", limit: 0, note: "", ...book.preorder },
     licenses: book.licenses?.length ? book.licenses : [{ label: "ISBN", value: book.isbn ?? "" }],

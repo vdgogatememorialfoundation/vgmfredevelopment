@@ -1763,9 +1763,16 @@ export function printPackagingSlips(orders: Order[]) {
 }
 
 function packagingSlipHtml(order: Order) {
+  const slipBooks = getLiveBooks();
   return `${letterhead()}
-  <h1>Packaging slip</h1>
-  <p class="sub">Order ${esc(order.id)} · ${esc(formatDate(order.date))} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+    <div>
+      <h1>Packaging slip</h1>
+      <p class="sub">Order ${esc(order.id)} · ${esc(formatDate(order.date))} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
+      <p class="sub"><strong>Step 1:</strong> scan this order QR. <strong>Step 2:</strong> scan each item's barcode below as it goes in the box, once per copy.</p>
+    </div>
+    <div style="text-align:center">${qrSvg(order.id, 84)}<div>${barcodeSvg(order.id, { height: 40, module: 1.2 })}</div><p class="sub" style="margin:0">Order QR</p></div>
+  </div>
   <div class="grid">
     <div class="box"><p class="label">Customer</p>${addressBlock(order.deliveryAddress)}</div>
     <div class="box">
@@ -1774,12 +1781,15 @@ function packagingSlipHtml(order: Order) {
       <p class="sub">Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside.</p>
     </div>
   </div>
-  <table><tr><th></th><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
+  <table><tr><th></th><th>Scan this barcode</th><th>Title / codes</th><th class="right">Qty</th></tr>
   ${order.items
-    .map(
-      (item) =>
-        `<tr><td class="check">☐</td><td>${esc(item.sku || item.bookId)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`
-    )
+    .map((item) => {
+      const book = slipBooks.find((row) => row.id === item.bookId);
+      const sku = item.sku || book?.sku || "";
+      const code = book?.barcode || book?.isbn || sku || book?.productCode || item.bookId;
+      const codes = [sku && `SKU ${sku}`, book?.isbn && `ISBN ${book.isbn}`, book?.barcode && `Barcode ${book.barcode}`, book?.productCode && `Code ${book.productCode}`, (item.batchNo || book?.batchNo) && `Batch ${item.batchNo || book?.batchNo}`].filter(Boolean).join(" · ");
+      return `<tr><td class="check">☐</td><td>${barcodeSvg(code, { height: 46, module: 1.3 })}</td><td><strong>${esc(item.title)}</strong><br/><span class="sub">${esc(codes)}</span></td><td class="right">${esc(item.quantity)}</td></tr>`;
+    })
     .join("")}</table>
   <p class="foot">Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________<br/>Pack, seal, and attach the shipping label. Then book the courier pickup, or hold the parcel for store pickup.</p>`;
 }
