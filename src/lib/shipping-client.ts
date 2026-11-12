@@ -4,7 +4,6 @@ import type { CourierRate, Order, ShipmentRecord } from "@/types";
 import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
-import { highestCourierRate } from "@/lib/checkout-couriers";
 import { getIntegrations, getOrderSettings, hasShippingCredentials, shippingFeeFor, packingChargeFor, recordShippingConnection, type IntegrationSettings, type PickupAddress, type ShippingProviderId, nextStoreWorkingDay } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import {
@@ -443,7 +442,7 @@ async function bookShipmentOnce(
 }
 
 /** Desk picks the courier for a pre-order (from the rates, or a typed charge): its charge goes on the balance and the payment link is sent. */
-export async function selectPreorderCourier(orderId: string, choice?: CourierRate, typedFee?: number, allRates: CourierRate[] = []) {
+export async function selectPreorderCourier(orderId: string, choice?: CourierRate, typedFee?: number) {
   const order = getOrder(orderId);
   const plan = order?.preorderPayment;
   if (!order || !plan) throw new Error("This order has no pre-order balance.");
@@ -451,8 +450,7 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders have no courier charge.");
   if (!choice && !(typedFee !== undefined && Number.isFinite(typedFee) && typedFee >= 0)) throw new Error("Pick a courier from the rates, or type the courier charge.");
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  const highest = getOrderSettings().courierMarkup.chargeHighest ? highestCourierRate(allRates) : 0;
-  const fee = choice ? shippingFeeFor(order.subtotal, units, Math.max(choice.rate, highest), getOrderSettings()) : Math.round(((typedFee ?? 0) + packingChargeFor(units, getOrderSettings())) * 100) / 100;
+  const fee = choice ? shippingFeeFor(order.subtotal, units, choice.rate, getOrderSettings()) : Math.round(((typedFee ?? 0) + packingChargeFor(units, getOrderSettings())) * 100) / 100;
   const previous = plan.shippingDue ? 0 : plan.shipping ?? 0;
   const round = (value: number) => Math.round(value * 100) / 100;
   patchOrder(
