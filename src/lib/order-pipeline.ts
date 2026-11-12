@@ -81,6 +81,11 @@ export function isFailedAttempt(text: string) {
   return FAILED_ATTEMPT.test(value) && !FINAL_FAILURE.test(value);
 }
 
+/** Courier pickup scans, worded differently by each courier (Ekart "Pickup from seller", Delhivery "Picked up", …). */
+const PICKED_UP =
+  /\b(picked up|pickup done|pickup complete(d)?|pickup successful|pick ?up from (the )?(seller|shipper|merchant|vendor|warehouse|customer)|picked (from|by)|shipment picked|collected from (the )?(seller|shipper|merchant|vendor)|received at (the )?(mother ?hub|origin))\b/;
+const PICKUP_PENDING = /scheduled|awaited|pending|request|out for pickup|assigned|generated|failed|cancel|reattempt|not picked/;
+
 export function classifyCourierScan(text: string): CourierStage | null {
   const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   if (!value || isCourierInfoLine(value)) return null;
@@ -96,6 +101,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
     return "packed";
   }
+  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value)) return "shipped";
   // Ekart and others route a new booking to the mother hub before the parcel is collected.
   if (/mother ?hub|shipment created|manifest(ed)? created|soft data|order (information|info) received/.test(value) && !/picked|collected|arrived|received at|reached/.test(value)) {
     return "packed";
@@ -157,6 +163,8 @@ export function courierEventTitle(status: string, location?: string) {
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
     return "Pickup scheduled";
   }
+  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at/.test(value)) return `Picked up by the courier${place}`;
+  if (classifyCourierScan(status) === "packed") return status;
   if (/arrived at|reached at|received at|inward|bag received|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
     return `Shipment arrived at courier facility${place}`;
   }
@@ -383,7 +391,8 @@ export function buildTrackingStages(
   const failedReached = (scanStage === "failed" || orderStage === "failed") && scanStage !== "delivered" && scanStage !== "out" && order.status !== "Delivered";
   const packedReached = STAGE_RANK[progress] >= STAGE_RANK.packed || failedReached;
   const collected = liveScans.some((scan) =>
-    /\b(picked up|pickup done|pickup complete|collected|handed to|handover|dispatched)\b/i.test(scan.status) && classifyCourierScan(scan.status) !== "packed"
+    (/\b(picked up|pickup done|pickup complete|collected|handed to|handover|dispatched)\b/i.test(scan.status) && classifyCourierScan(scan.status) !== "packed") ||
+    ["shipped", "out", "delivered"].includes(classifyCourierScan(scan.status) ?? "")
   );
   const shipmentLeft = Boolean(
     shipment && ["Picked Up", "In Transit", "Out for Delivery", "Delivered"].includes(shipment.status ?? "")
