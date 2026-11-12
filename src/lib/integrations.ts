@@ -209,6 +209,8 @@ export interface OrderSettings {
   flatFee: number;
   perItemFee: number;
   freeAbove: number;
+  /** Packing charge, folded into the courier/shipping charge (never shown to customers on its own). */
+  packingCharge: { enabled: boolean; amount: number; per: "order" | "copy" };
   showCourierChoice: boolean;
   /** Keep our own Tookan / Shipday fleet off the checkout courier list. */
   hideTookanAtCheckout: boolean;
@@ -407,6 +409,7 @@ export const defaultOrderSettings: OrderSettings = {
   flatFee: 49,
   perItemFee: 25,
   freeAbove: 499,
+  packingCharge: { enabled: false, amount: 0, per: "order" },
   showCourierChoice: true,
   hideTookanAtCheckout: false,
   hideShipdayAtCheckout: false,
@@ -659,6 +662,11 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     flatFee: Math.max(0, finiteNumber(merged.flatFee, defaultOrderSettings.flatFee)),
     perItemFee: Math.max(0, finiteNumber(merged.perItemFee, defaultOrderSettings.perItemFee)),
     freeAbove: Math.max(0, finiteNumber(merged.freeAbove, defaultOrderSettings.freeAbove)),
+    packingCharge: {
+      enabled: Boolean(merged.packingCharge?.enabled),
+      amount: Math.max(0, finiteNumber(merged.packingCharge?.amount, 0)),
+      per: merged.packingCharge?.per === "copy" ? "copy" : "order",
+    },
     showCourierChoice: Boolean(merged.showCourierChoice),
     hideTookanAtCheckout: Boolean(merged.hideTookanAtCheckout),
     hideShipdayAtCheckout: Boolean(merged.hideShipdayAtCheckout),
@@ -749,7 +757,8 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     platformFee: {
       enabled: Boolean(merged.platformFee?.enabled),
       amount: Math.max(0, finiteNumber(merged.platformFee?.amount, 0)),
-      refundable: Boolean(merged.platformFee?.refundable),
+      // The platform fee is never refunded.
+      refundable: false,
     },
     gst: {
       enabled: Boolean(merged.gst?.enabled),
@@ -815,6 +824,17 @@ export function shippingFeeFor(
   courierRate: number | undefined,
   settings = getOrderSettings()
 ) {
+  return courierOnlyFee(subtotal, itemCount, courierRate, settings) + packingChargeFor(itemCount, settings);
+}
+
+/** Packing charge for a delivery; it is added into the courier charge, never listed on its own. */
+export function packingChargeFor(itemCount: number, settings: Pick<OrderSettings, "packingCharge"> = getOrderSettings()) {
+  const packing = settings.packingCharge;
+  if (!packing?.enabled || !(packing.amount > 0)) return 0;
+  return Math.round(packing.amount * (packing.per === "copy" ? Math.max(1, itemCount) : 1) * 100) / 100;
+}
+
+function courierOnlyFee(subtotal: number, itemCount: number, courierRate: number | undefined, settings: OrderSettings) {
   switch (settings.shippingFeeMode) {
     case "free":
       return 0;
@@ -849,6 +869,7 @@ export function nextStoreWorkingDay(at: number, settings = getOrderSettings()) {
 }
 
 export function shippingIsFree(subtotal: number, settings = getOrderSettings()) {
+  if (packingChargeFor(1, settings) > 0) return false;
   return settings.shippingFeeMode === "free" || (settings.shippingFeeMode === "free_above" && subtotal >= settings.freeAbove);
 }
 

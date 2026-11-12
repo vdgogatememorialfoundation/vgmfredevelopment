@@ -1287,8 +1287,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               }}>
                 {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund via Razorpay" : "Record refund"}
               </Button>
-              {(order.platformFee ?? 0) > 0 && !getOrderSettings().platformFee.refundable && (
-                <p className="w-full text-xs text-slate-500">Platform fee of ₹{order.platformFee} is kept. Switch on “Allow the desk to refund the platform fee” to include it.</p>
+              {(order.platformFee ?? 0) > 0 && (
+                <p className="w-full text-xs text-slate-500">Platform fee of ₹{order.platformFee} is non-refundable and is kept on every refund.</p>
               )}
             </div>
           )}

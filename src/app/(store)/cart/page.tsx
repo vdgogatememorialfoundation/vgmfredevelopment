@@ -260,7 +260,7 @@ export default function CartPage() {
                 )}
                 {orderSettings.platformFee.enabled && (
                   <div className="flex justify-between">
-                    <dt className="text-text-muted">Platform fee{orderSettings.platformFee.refundable ? "" : " (kept on refund)"}</dt>
+                    <dt className="text-text-muted">Platform fee (non-refundable)</dt>
                     <dd className="font-medium text-text-primary">{formatPrice(totals.platformFee)}</dd>
                   </div>
                 )}

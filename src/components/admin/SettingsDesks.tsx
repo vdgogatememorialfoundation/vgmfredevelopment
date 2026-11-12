@@ -1763,13 +1763,26 @@ export function OrderSettingsDesk() {
           )}
           {value.shippingFeeMode === "per_item" && <Text label="Fee per item (₹)" type="number" value={value.perItemFee} onChange={(fee) => set({ perItemFee: Number(fee) || 0 })} />}
           {value.shippingFeeMode === "free_above" && <Text label="Free above (₹)" type="number" value={value.freeAbove} onChange={(amount) => set({ freeAbove: Number(amount) || 0 })} />}
+          <Check label="Add a packing charge" hint="Added into the courier charge for normal orders and pre-orders (on a pre-order it joins the balance with the courier charge). Customers never see it on its own." checked={value.packingCharge.enabled} onChange={(enabled) => set({ packingCharge: { ...value.packingCharge, enabled } })} />
+          {value.packingCharge.enabled && (
+            <>
+              <Text label="Packing charge (₹)" type="number" value={value.packingCharge.amount} onChange={(amount) => set({ packingCharge: { ...value.packingCharge, amount: Math.max(0, Number(amount) || 0) } })} />
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Packing charge per</span>
+                <select className={input} value={value.packingCharge.per} onChange={(event) => set({ packingCharge: { ...value.packingCharge, per: event.target.value === "copy" ? "copy" : "order" } })}>
+                  <option value="order">Order</option>
+                  <option value="copy">Copy</option>
+                </select>
+              </label>
+            </>
+          )}
         </div>
       </Card>
       <Card title="Platform fee">
         <div className="grid gap-4 md:grid-cols-2">
           <Check label="Add a platform fee at checkout" hint="Charged once per order: with the pre-order advance, never again on the balance. Kept on refunds unless the next switch is on." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
           <Text label="Amount (₹)" type="number" value={value.platformFee.amount} onChange={(amount) => set({ platformFee: { ...value.platformFee, amount: Number(amount) || 0 } })} />
-          <Check label="Allow the desk to refund the platform fee" hint="Leave this off. The platform fee is then kept on every refund." checked={value.platformFee.refundable} onChange={(refundable) => set({ platformFee: { ...value.platformFee, refundable } })} />
+          <p className="text-sm text-slate-700">The platform fee is non-refundable: it is kept on every cancellation, refund and return.</p>
         </div>
       </Card>
       <Card title="GST" text="Leave this off until the Foundation is GST compliant. Turning on GST adds it to checkout. Turning on invoices lets a customer print a GST invoice after payment.">

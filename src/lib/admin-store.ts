@@ -779,10 +779,9 @@ export function resaveOrder(
   return next;
 }
 
-/** Amount still refundable. The platform fee is kept unless the desk has allowed refunding it. */
+/** Amount still refundable. The platform fee is never refunded. */
 export function maxRefundable(order: Order) {
-  const settings = getOrderSettings();
-  const kept = settings.platformFee.enabled && !settings.platformFee.refundable ? Math.max(0, order.platformFee ?? 0) : 0;
+  const kept = Math.max(0, order.platformFee ?? 0);
   const collected = order.preorderPayment && !order.preorderPayment.balancePaidAt ? order.preorderPayment.advance : order.total;
   return Math.max(0, collected - kept - (order.refundAmount ?? 0));
 }

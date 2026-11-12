@@ -1,7 +1,7 @@
 import type { Order } from "@/types";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { redeemPromo } from "@/lib/server/promotions";
-import { preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
+import { packingChargeFor, preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import type { MobileOrder } from "@/lib/server/mobile-store";
 import { goswiftRates, ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
@@ -20,9 +20,17 @@ export function feedPreorderable(book?: FeedBook) {
 
 type Fees = { shippingFeeMode?: string; flatFee?: number; perItemFee?: number; freeAbove?: number; deliveryEnabled?: boolean; pickupEnabled?: boolean };
 
-/** Shipping for an app order, using the same fee rule as the website checkout. Store pickup is free. */
+function appPacking(quantity: number) {
+  return packingChargeFor(quantity, publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined));
+}
+
+/** Shipping for an app order (packing charge included), using the same fee rule as the website checkout. Store pickup is free. */
 export function appShipping(subtotal: number, quantity: number, pickup: boolean) {
   if (pickup) return 0;
+  return appCourierOnly(subtotal, quantity) + appPacking(quantity);
+}
+
+function appCourierOnly(subtotal: number, quantity: number) {
   const fees = (readMobileFeed().orderSettings ?? {}) as Fees;
   const flat = Math.max(0, Number(fees.flatFee) || 0);
   switch (fees.shippingFeeMode) {
@@ -160,9 +168,15 @@ export function appOrdersFor(email: string) {
   return ordersForEmail(email);
 }
 
-/** Courier charge for a pre-order, worked out when the customer pays the balance (store pickup pays none). */
+/** Courier charge (packing charge included) for a pre-order, worked out when the customer pays the balance (store pickup pays none). */
 export async function preorderCourierFee(order: Order) {
   if (order.deliveryMode === "store_pickup") return 0;
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  if (((readMobileFeed().orderSettings ?? {}) as Fees).shippingFeeMode !== "courier_rate") return appShipping(order.subtotal, units, false);
+  return (await preorderCourierOnly(order)) + appPacking(units);
+}
+
+async function preorderCourierOnly(order: Order) {
   const fees = (readMobileFeed().orderSettings ?? {}) as Fees;
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
   if (fees.shippingFeeMode !== "courier_rate") return appShipping(order.subtotal, units, false);
