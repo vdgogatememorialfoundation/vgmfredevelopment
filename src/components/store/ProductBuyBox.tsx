@@ -147,6 +147,12 @@ export default function ProductBuyBox({ book }: { book: Book }) {
         )}
       </div>
 
+      {book.priceNote?.trim() ? (
+        <p className="mt-1 text-sm font-semibold text-burgundy">
+          ₹{book.price.toLocaleString("en-IN")} per copy · {book.priceNote.trim()}
+        </p>
+      ) : null}
+
       {book.originalPrice != null && book.originalPrice > book.price && (
         <p className="mt-1.5 text-xs text-emerald-700">
           You save ₹

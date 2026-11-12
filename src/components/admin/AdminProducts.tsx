@@ -635,6 +635,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Selling price (₹)"><TextInput type="number" value={form.price} onChange={(event) => set({ price: Number(event.target.value) })} /></Field>
             <Field label="MRP (₹)"><TextInput type="number" value={form.originalPrice ?? 0} onChange={(event) => set({ originalPrice: Number(event.target.value) })} /></Field>
+            <Field label="Price note (shown under the price)"><TextInput value={form.priceNote ?? ""} placeholder="For Vaidyas and students" onChange={(event) => set({ priceNote: event.target.value })} /></Field>
           </div>
 
           <div className="rounded-xl border border-border p-3">

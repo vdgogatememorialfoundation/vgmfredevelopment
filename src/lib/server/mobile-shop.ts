@@ -42,12 +42,12 @@ export function appPickupAllowed() {
 }
 
 /** The pre-order advance from Order settings (full amount or a part); the rest and the courier charge are paid later. */
-function preorderPlan(subtotal: number) {
+function preorderPlan(total: number, copies: number, platformFee: number) {
   const settings = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined);
-  const advance = preorderAdvance(subtotal, settings);
+  const advance = preorderAdvance(total, settings, { copies, platformFee });
   return {
     advance,
-    balance: Math.round((subtotal - advance) * 100) / 100,
+    balance: Math.round((total - advance) * 100) / 100,
     balanceWhen: settings.preorderPayment.balanceWhen,
     shippingDue: true,
   };
@@ -62,6 +62,9 @@ export function recordAppOrder(
   const quantity = draft.items.reduce((sum, item) => sum + item.quantity, 0);
   const preorder = draft.items.some((item) => feedPreorderable(books.find((row) => String(row.id) === item.id)));
   const shipping = preorder ? 0 : appShipping(draft.subtotal, quantity, input.pickup);
+  const fees = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined).platformFee;
+  const platformFee = fees.enabled ? Math.max(0, Math.round(fees.amount)) : 0;
+  const total = Math.max(0, draft.subtotal - (input.promo?.amount ?? 0)) + platformFee + shipping;
   const now = new Date().toISOString();
   const order: Order = {
     id: draft.id,
@@ -76,8 +79,9 @@ export function recordAppOrder(
     discount: input.promo?.amount ?? 0,
     promo: input.promo,
     gst: 0,
+    platformFee: platformFee || undefined,
     shipping,
-    total: Math.max(0, draft.subtotal - (input.promo?.amount ?? 0)) + shipping,
+    total,
     currency: "INR",
     paymentStatus: "Pending",
     status: "Pending",
@@ -96,7 +100,7 @@ export function recordAppOrder(
       countryCode: input.address.countryCode || "IN",
     },
     paymentMethod: "Razorpay",
-    preorderPayment: preorder && !input.pickup ? preorderPlan(Math.max(0, draft.subtotal - (input.promo?.amount ?? 0))) : undefined,
+    preorderPayment: preorder && !input.pickup ? preorderPlan(total, quantity, platformFee) : undefined,
     createdBy: "Android app",
     history: [{ at: now, status: "Pending", note: "Placed in the Android app; awaiting payment." }],
   };

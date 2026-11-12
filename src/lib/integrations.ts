@@ -711,10 +711,13 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
           .map((row, index) => ({ id: String(row.id || index + 1), label: String(row.label ?? ""), stage: String(row.stage || "shipped") }))
       : [],
     preorderPayment: {
-      // Pre-orders are always part-paid (1–99%, default 50%); the rest plus the courier charge is paid later by link.
+      // Pre-orders are always part-paid: a % (1–99) or a fixed ₹ per copy; the rest plus the courier charge is paid later by link.
       mode: "advance",
-      advanceType: "percent",
-      advanceValue: Math.min(99, Math.max(1, Math.round(finiteNumber(merged.preorderPayment?.advanceValue, defaultOrderSettings.preorderPayment.advanceValue)))),
+      advanceType: merged.preorderPayment?.advanceType === "amount" ? "amount" : "percent",
+      advanceValue:
+        merged.preorderPayment?.advanceType === "amount"
+          ? Math.max(1, Math.round(finiteNumber(merged.preorderPayment?.advanceValue, 100)))
+          : Math.min(99, Math.max(1, Math.round(finiteNumber(merged.preorderPayment?.advanceValue, defaultOrderSettings.preorderPayment.advanceValue)))),
       balanceWhen: merged.preorderPayment?.balanceWhen === "on_ready" ? "on_ready" : "before_dispatch",
     },
     returns: {
@@ -879,13 +882,20 @@ export function canCustomerRequestReplacement(order: Order, settings = getOrderS
   return (Date.now() - Date.parse(deliveredAt)) / 864e5 <= (order.returnableDays || settings.returns.windowDays);
 }
 
-/** What a pre-order customer pays when ordering: the full total, or the advance set in Order settings. */
-/** Pre-orders always take a part now (the admin's %, never the full amount); the balance and courier charge follow by payment link. */
-export function preorderAdvance(total: number, settings = getOrderSettings()) {
+/**
+ * What a pre-order customer pays now: the admin's % of the order, or a fixed ₹ per copy.
+ * The platform fee is paid once, with this advance, and never again on the balance.
+ */
+export function preorderAdvance(total: number, settings = getOrderSettings(), options: { copies?: number; platformFee?: number } = {}) {
   if (total <= 0) return total;
+  const fee = Math.min(total, Math.max(0, Number(options.platformFee) || 0));
+  const rest = total - fee;
   const raw = Number(settings.preorderPayment?.advanceValue);
-  const percent = Number.isFinite(raw) ? Math.min(99, Math.max(1, raw)) : 50;
-  return Math.min(total, Math.max(1, Math.round((total * percent) / 100)));
+  const part =
+    settings.preorderPayment?.advanceType === "amount"
+      ? Math.max(1, Number.isFinite(raw) ? raw : 100) * Math.max(1, Math.floor(Number(options.copies) || 1))
+      : Math.round((rest * (Number.isFinite(raw) ? Math.min(99, Math.max(1, raw)) : 50)) / 100);
+  return Math.min(total, Math.max(1, Math.round((fee + Math.min(rest, part)) * 100) / 100));
 }
 
 export function customerOrderPolicyCopy() {

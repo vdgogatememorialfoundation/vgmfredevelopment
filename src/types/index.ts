@@ -292,6 +292,8 @@ export interface Book {
   binding?: string;
   price: number;
   originalPrice?: number;
+  /** Shown under the price, e.g. "For Vaidyas and students". */
+  priceNote?: string;
   currency: string;
   coverImage?: string;
   stock: number;

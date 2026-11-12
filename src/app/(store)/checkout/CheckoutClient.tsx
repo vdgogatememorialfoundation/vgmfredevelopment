@@ -420,7 +420,9 @@ export default function CheckoutClient() {
   };
 
   const preorderBalanceLater = orderItems.some((item) => item.preorder) && !codSelected && !cashAtStoreSelected;
-  const payNow = preorderBalanceLater ? preorderAdvance(totals.total, orderSettings) : totals.total;
+  const payNow = preorderBalanceLater
+    ? preorderAdvance(totals.total, orderSettings, { copies: orderItems.reduce((sum, item) => sum + item.quantity, 0), platformFee: totals.platformFee })
+    : totals.total;
   const preorderShippingLater = hasPreorder && deliveryMode === "delivery";
 
   const placeOrder = async () => {

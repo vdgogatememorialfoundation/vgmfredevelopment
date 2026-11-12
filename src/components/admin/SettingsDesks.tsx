@@ -1701,7 +1701,18 @@ export function OrderSettingsDesk() {
             <p className="text-sm text-slate-700">Advance at checkout; the rest plus the courier charge is paid by payment link. Full payment and cash on delivery are not offered for pre-orders.</p>
           </div>
           <Check label="Show packing and delivery dates on pre-order tracking (off: shown only once a courier is booked)" checked={value.showPreorderStepDates} onChange={(showPreorderStepDates) => set({ showPreorderStepDates })} />
-          <Text label="Advance (%) — 1 to 99" type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: "percent", advanceValue: Math.min(99, Math.max(1, Math.round(Number(amount) || 50))) } })} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Advance type</span>
+            <select className={input} value={value.preorderPayment.advanceType} onChange={(event) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: event.target.value === "amount" ? "amount" : "percent", advanceValue: event.target.value === "amount" ? 100 : 50 } })}>
+              <option value="amount">Fixed ₹ per copy</option>
+              <option value="percent">% of the order</option>
+            </select>
+          </label>
+          {value.preorderPayment.advanceType === "amount" ? (
+            <Text label="Advance per copy (₹)" type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: "amount", advanceValue: Math.max(1, Math.round(Number(amount) || 100)) } })} />
+          ) : (
+            <Text label="Advance (%) — 1 to 99" type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: "percent", advanceValue: Math.min(99, Math.max(1, Math.round(Number(amount) || 50))) } })} />
+          )}
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Balance due</span>
                 <select className={input} value={value.preorderPayment.balanceWhen} onChange={(event) => set({ preorderPayment: { ...value.preorderPayment, balanceWhen: event.target.value === "on_ready" ? "on_ready" : "before_dispatch" } })}>
@@ -1756,7 +1767,7 @@ export function OrderSettingsDesk() {
       </Card>
       <Card title="Platform fee">
         <div className="grid gap-4 md:grid-cols-2">
-          <Check label="Add a platform fee at checkout" hint="Switch this off to charge no platform fee. While it is on, the fee stays with the Foundation unless the next switch is on." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
+          <Check label="Add a platform fee at checkout" hint="Charged once per order: with the pre-order advance, never again on the balance. Kept on refunds unless the next switch is on." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
           <Text label="Amount (₹)" type="number" value={value.platformFee.amount} onChange={(amount) => set({ platformFee: { ...value.platformFee, amount: Number(amount) || 0 } })} />
           <Check label="Allow the desk to refund the platform fee" hint="Leave this off. The platform fee is then kept on every refund." checked={value.platformFee.refundable} onChange={(refundable) => set({ platformFee: { ...value.platformFee, refundable } })} />
         </div>

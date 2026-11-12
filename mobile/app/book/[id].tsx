@@ -80,6 +80,7 @@ export default function BookDetail() {
           {discount ? <Tag label={`${discount}% off`} tone="green" /> : null}
           {offer ? <Tag label={offer} tone="green" /> : null}
         </View>
+        {str(item.priceNote).trim() ? <Muted>{`${money(price)} per copy · ${str(item.priceNote).trim()}`}</Muted> : null}
         <Text style={{ color: theme.colors.muted, fontSize: 11, marginTop: 2 }}>Inclusive of all taxes</Text>
         <View style={{ marginTop: 10 }}>
           <Tag {...productBadge(item)} />
