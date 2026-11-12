@@ -191,6 +191,11 @@ export interface IntegrationSettings {
   };
 }
 
+export interface ScanRules {
+  pick: { orderCode: boolean; productCode: boolean; sku: boolean };
+  pack: { boxCode: boolean; orderCode: boolean; sku: boolean; isbn: boolean; photos: boolean; confirm: boolean };
+}
+
 export interface OrderSettings {
   deliveryEnabled: boolean;
   pickupEnabled: boolean;
@@ -226,6 +231,8 @@ export interface OrderSettings {
   workingDays: { saturday: boolean; sunday: boolean; holidays: string[] };
   /** Minutes a picker / packer has after being assigned. */
   pickSchedule: { pickMinutes: number; packMinutes: number };
+  /** Which picker / packer scans are required (true) or optional (false). */
+  scanRules: ScanRules;
   /** Customer-facing names for statuses and tracking steps, keyed by the built-in name. */
   statusLabels: Record<string, string>;
   /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
@@ -410,6 +417,10 @@ export const defaultOrderSettings: OrderSettings = {
   dispatchCutoff: "17:00",
   workingDays: { saturday: false, sunday: false, holidays: [] },
   pickSchedule: { pickMinutes: 30, packMinutes: 30 },
+  scanRules: {
+    pick: { orderCode: true, productCode: true, sku: true },
+    pack: { boxCode: true, orderCode: true, sku: true, isbn: true, photos: true, confirm: true },
+  },
   statusLabels: {},
   customStatuses: [],
   preorderPayment: { mode: "advance", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
@@ -659,6 +670,21 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
     },
     processingHours: Math.max(0, finiteNumber(merged.processingHours, defaultOrderSettings.processingHours)),
     dispatchCutoff: /^\d{1,2}:\d{2}$/.test(String(merged.dispatchCutoff ?? "")) ? String(merged.dispatchCutoff) : defaultOrderSettings.dispatchCutoff,
+    scanRules: {
+      pick: {
+        orderCode: merged.scanRules?.pick?.orderCode !== false,
+        productCode: merged.scanRules?.pick?.productCode !== false,
+        sku: merged.scanRules?.pick?.sku !== false,
+      },
+      pack: {
+        boxCode: merged.scanRules?.pack?.boxCode !== false,
+        orderCode: merged.scanRules?.pack?.orderCode !== false,
+        sku: merged.scanRules?.pack?.sku !== false,
+        isbn: merged.scanRules?.pack?.isbn !== false,
+        photos: merged.scanRules?.pack?.photos !== false,
+        confirm: merged.scanRules?.pack?.confirm !== false,
+      },
+    },
     pickSchedule: {
       pickMinutes: Math.max(1, finiteNumber(merged.pickSchedule?.pickMinutes, 30)),
       packMinutes: Math.max(1, finiteNumber(merged.pickSchedule?.packMinutes, 30)),

@@ -682,6 +682,8 @@ export interface Order {
     /** Numbered stock labels (…-U00001) scanned for this order; a label is locked to one order. */
     pickUnits?: string[];
     packUnits?: string[];
+    /** Scan steps an admin skipped (pickOrder, pickItems, box, packOrder, packItems, photos). */
+    bypassed?: string[];
     /** Packer confirmed the items match the order description. */
     matchedAt?: string;
   };

@@ -1659,6 +1659,21 @@ export function OrderSettingsDesk() {
           <Text label="Dispatch cut-off (India time, HH:MM)" value={value.dispatchCutoff} onChange={(dispatchCutoff) => set({ dispatchCutoff })} />
           <Text label="Picker time per order (minutes)" type="number" value={value.pickSchedule.pickMinutes} onChange={(minutes) => set({ pickSchedule: { ...value.pickSchedule, pickMinutes: Math.max(1, Number(minutes) || 1) } })} />
           <Text label="Packer time per order (minutes)" type="number" value={value.pickSchedule.packMinutes} onChange={(minutes) => set({ pickSchedule: { ...value.pickSchedule, packMinutes: Math.max(1, Number(minutes) || 1) } })} />
+          <div className="md:col-span-3 rounded-lg border border-slate-200 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Picker / packer scans (ticked = required, unticked = optional)</p>
+            <div className="grid gap-2 md:grid-cols-3">
+              <Check label="Picker: order code" checked={value.scanRules.pick.orderCode} onChange={(orderCode) => set({ scanRules: { ...value.scanRules, pick: { ...value.scanRules.pick, orderCode } } })} />
+              <Check label="Picker: product code / barcode" checked={value.scanRules.pick.productCode} onChange={(productCode) => set({ scanRules: { ...value.scanRules, pick: { ...value.scanRules.pick, productCode } } })} />
+              <Check label="Picker: SKU" checked={value.scanRules.pick.sku} onChange={(sku) => set({ scanRules: { ...value.scanRules, pick: { ...value.scanRules.pick, sku } } })} />
+              <Check label="Packer: box code" checked={value.scanRules.pack.boxCode} onChange={(boxCode) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, boxCode } } })} />
+              <Check label="Packer: order code" checked={value.scanRules.pack.orderCode} onChange={(orderCode) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, orderCode } } })} />
+              <Check label="Packer: SKU" checked={value.scanRules.pack.sku} onChange={(sku) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, sku } } })} />
+              <Check label="Packer: ISBN (books)" checked={value.scanRules.pack.isbn} onChange={(isbn) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, isbn } } })} />
+              <Check label="Packer: packing photos" checked={value.scanRules.pack.photos} onChange={(photos) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, photos } } })} />
+              <Check label="Packer: confirm items match description" checked={value.scanRules.pack.confirm} onChange={(confirm) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, confirm } } })} />
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Each copy is still counted once. Admin can skip any step on an order from the pick &amp; pack desk.</p>
+          </div>
           <Check label="Saturday is a working day" hint="Off: Saturday orders are processed on the next working day." checked={value.workingDays.saturday} onChange={(saturday) => set({ workingDays: { ...value.workingDays, saturday } })} />
           <Check label="Sunday is a working day" hint="Off: Sunday orders are processed on the next working day." checked={value.workingDays.sunday} onChange={(sunday) => set({ workingDays: { ...value.workingDays, sunday } })} />
           <label className="block md:col-span-3">

@@ -4,7 +4,7 @@ import { orderItemBatch } from "@/lib/product-data";
 import { useEffect, useRef, useState } from "react";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
-import { acceptPick, assignPicker, confirmPacked, pickPackChecklist, pickPackLeft, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
+import { acceptPick, assignPicker, bypassPickStep, confirmPacked, maybeFinishPack, pickPackChecklist, pickPackGates, pickPackLeft, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
 import { uploadMediaFile } from "@/lib/media-client";
 import { getOrders } from "@/lib/store";
 import { getSession } from "@/lib/auth";
@@ -174,7 +174,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
       const added: NonNullable<Order["packPhotos"]> = [];
       for (const file of Array.from(files)) added.push({ url: await uploadMediaFile(file), at: new Date().toISOString(), by });
       patchOrder(orderId, { packPhotos: [...(getOrder(orderId)?.packPhotos ?? []), ...added] });
-      setNote(`${added.length} packing photo${added.length === 1 ? "" : "s"} saved for order ${orderId}.`);
+      setNote(maybeFinishPack(orderId) || `${added.length} packing photo${added.length === 1 ? "" : "s"} saved for order ${orderId}.`);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not upload the photo.");
     } finally {
@@ -186,17 +186,29 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   const nextStep = (order: Order) => {
     const pick = order.pick;
     if (!pick?.acceptedAt) return "Tap Accept & start picking.";
+    const gates = pickPackGates(order);
     if (!pick.pickedAt) {
-      if (!pick.pickOrderScannedAt) return "Pick step 1: scan the order code (barcode or QR) on the packaging slip.";
-      return `Pick step 2: scan each item's product code and SKU. Still to scan: ${pickPackLeft(order, "pick")}.`;
+      if (!gates.pickOrder) return "Pick step 1: scan the order code (barcode or QR) on the packaging slip.";
+      return `Pick: scan each item. Still to scan: ${pickPackLeft(order, "pick")}.`;
     }
     if (pick.packedAt) return "Packed. Ready for pickup.";
-    if (!pick.boxScannedAt) return "Pack step 1: scan the box code (BOX-…) on the packaging slip.";
-    if (!pick.orderScannedAt) return "Pack step 2: scan the order code (barcode or QR) on the packaging slip.";
+    if (!gates.box) return "Pack step 1: scan the box code (BOX-…) on the packaging slip.";
+    if (!gates.packOrder) return "Pack step 2: scan the order code (barcode or QR) on the packaging slip.";
     const rest = pickPackLeft(order, "pack");
-    if (rest) return `Pack step 3: scan each item's SKU, and ISBN for books, as it goes into the box. Still to scan: ${rest}.`;
-    if (!order.packPhotos?.length) return "Pack step 4: tap Add packing photos and photograph the items in the open box.";
+    if (rest) return `Pack: scan each item as it goes into the box. Still to scan: ${rest}.`;
+    if (!gates.photos) return "Pack: tap Add packing photos and photograph the items in the open box.";
     return "Pack step 5: check the items match the order description, then tap Items match — mark packed.";
+  };
+
+  const bypass = (orderId: string, all: boolean) => {
+    try {
+      setError("");
+      setNote(bypassPickStep(orderId, all));
+    } catch (problem) {
+      setNote("");
+      setError(problem instanceof Error ? problem.message : "Could not skip the step.");
+    }
+    setTick((value) => value + 1);
   };
 
   const confirm = (orderId: string) => {
@@ -292,8 +304,14 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                       <input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={uploading === order.id} onChange={(event) => { void addPackPhotos(order.id, event.target.files); event.target.value = ""; }} />
                     </label>
                   ) : null}
-                  {order.pick?.pickedAt && order.pick.boxScannedAt && order.pick.orderScannedAt && !pickPackLeft(order, "pack") ? (
-                    <Button disabled={!order.packPhotos?.length} onClick={() => confirm(order.id)}>Items match — mark packed</Button>
+                  {order.pick?.pickedAt && !order.pick.packedAt && pickPackGates(order).box && pickPackGates(order).packOrder && !pickPackLeft(order, "pack") ? (
+                    <Button disabled={!pickPackGates(order).photos} onClick={() => confirm(order.id)}>Items match — mark packed</Button>
+                  ) : null}
+                  {lead && order.pick?.acceptedAt && !order.pick.packedAt ? (
+                    <>
+                      <Button variant="outline" onClick={() => bypass(order.id, false)}>Skip this step (admin)</Button>
+                      <Button variant="outline" onClick={() => { if (window.confirm(`Skip every remaining scan for order ${order.id} and mark it packed?`)) bypass(order.id, true); }}>Skip all &amp; mark packed</Button>
+                    </>
                   ) : null}
                 </div>
                 {lead ? (
@@ -369,10 +387,11 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   );
 }
 
-function ScanMark({ label, done }: { label: string; done: boolean }) {
+function ScanMark({ label, done, optional, bypassed }: { label: string; done: boolean; optional?: boolean; bypassed?: boolean }) {
+  const tone = done ? "bg-emerald-100 text-emerald-800" : bypassed ? "bg-slate-100 text-slate-600" : optional ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700";
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${done ? "bg-emerald-100 text-emerald-800" : "bg-red-50 text-red-700"}`}>
-      {done ? "✓" : "○"} {label} · {done ? "Scanned" : "Not scanned"}
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>
+      {done ? "✓" : "○"} {label} · {done ? "Scanned" : bypassed ? "Skipped by admin" : "Not scanned"}{optional && !done ? " (optional)" : ""}
     </span>
   );
 }
@@ -383,23 +402,19 @@ function ScanChecklist({ order }: { order: Order }) {
     <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-sm">
       <p className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">{list.stage === "pick" ? "Picker checklist" : "Packer checklist"}</p>
       <div className="flex flex-wrap gap-1">
-        {list.steps.map((step) => <ScanMark key={step.label} label={step.label} done={step.done} />)}
+        {list.steps.map((step) => <ScanMark key={step.label} {...step} />)}
       </div>
       {list.items.map((item) => (
         <div key={item.id} className="mt-1.5">
           <p className="font-medium text-slate-800">{item.title}</p>
           <div className="mt-0.5 flex flex-wrap gap-1">
-            {item.codes.map((code) => <ScanMark key={code.label} label={code.label} done={code.done} />)}
+            {item.codes.map((code) => <ScanMark key={code.label} {...code} />)}
           </div>
         </div>
       ))}
       {list.finish.length ? (
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {list.finish.map((step) => (
-            <span key={step.label} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${step.done ? "bg-emerald-100 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
-              {step.done ? "✓" : "○"} {step.label}
-            </span>
-          ))}
+          {list.finish.map((step) => <ScanMark key={step.label} {...step} />)}
         </div>
       ) : null}
     </div>
