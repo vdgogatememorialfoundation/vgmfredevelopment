@@ -4,7 +4,7 @@ import { orderItemBatch } from "@/lib/product-data";
 import { useEffect, useRef, useState } from "react";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
-import { acceptPick, assignPicker, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
+import { acceptPick, assignPicker, confirmPacked, pickPackLeft, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
 import { uploadMediaFile } from "@/lib/media-client";
 import { getOrders } from "@/lib/store";
 import { getSession } from "@/lib/auth";
@@ -186,15 +186,28 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   const nextStep = (order: Order) => {
     const pick = order.pick;
     if (!pick?.acceptedAt) return "Tap Accept & start picking.";
-    const left = (map: Record<string, number>) =>
-      order.items
-        .filter((item) => (map[item.bookId] ?? 0) < item.quantity)
-        .map((item) => `${item.quantity - (map[item.bookId] ?? 0)} × ${item.title}`)
-        .join(", ");
-    if (!pick.pickedAt) return `Pick: take each item off the shelf and scan its barcode. Still to scan: ${left(pick.picked)}.`;
-    if (!pick.orderScannedAt) return "Pack: first scan the order QR on the packaging slip (or type the order number).";
-    const rest = left(pick.packScan);
-    return rest ? `Pack: scan each item as it goes into the box. Still to scan: ${rest}.` : "All items scanned. Add packing photos, then seal the box.";
+    if (!pick.pickedAt) {
+      if (!pick.pickOrderScannedAt) return "Pick step 1: scan the order code (barcode or QR) on the packaging slip.";
+      return `Pick step 2: scan each item's product code and SKU. Still to scan: ${pickPackLeft(order, "pick")}.`;
+    }
+    if (pick.packedAt) return "Packed. Ready for pickup.";
+    if (!pick.boxScannedAt) return "Pack step 1: scan the box code (BOX-…) on the packaging slip.";
+    if (!pick.orderScannedAt) return "Pack step 2: scan the order code (barcode or QR) on the packaging slip.";
+    const rest = pickPackLeft(order, "pack");
+    if (rest) return `Pack step 3: scan each item's SKU, and ISBN for books, as it goes into the box. Still to scan: ${rest}.`;
+    if (!order.packPhotos?.length) return "Pack step 4: tap Add packing photos and photograph the items in the open box.";
+    return "Pack step 5: check the items match the order description, then tap Items match — mark packed.";
+  };
+
+  const confirm = (orderId: string) => {
+    try {
+      setError("");
+      setNote(confirmPacked(orderId));
+    } catch (problem) {
+      setNote("");
+      setError(problem instanceof Error ? problem.message : "Could not mark packed.");
+    }
+    setTick((value) => value + 1);
   };
 
   const progress = (order: Order) => {
@@ -226,10 +239,10 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
               <p className="font-semibold text-slate-900">Picker</p>
               <ol className="ml-5 list-decimal space-y-1">
                 <li>Tap <b>Accept &amp; start picking</b> on your order. The camera opens on a phone.</li>
-                <li>Take each item off the shelf and scan its barcode: the barcode sticker we print, the ISBN barcode on the back of a book, or the SKU / product code on the shelf label.</li>
-                <li>Scan once for every copy. 2 copies ordered means 2 scans.</li>
-                <li>If the camera can&apos;t read it, type the SKU or barcode number in the box and tap <b>Record scan</b>.</li>
-                <li>When every item is scanned, the order moves to the packer.</li>
+                <li>Scan the <b>order code</b> (barcode or QR) on the packaging slip.</li>
+                <li>For each item, scan its <b>product code</b> (barcode sticker) and its <b>SKU</b>. Scan the product code once for every copy: 2 copies means 2 scans.</li>
+                <li>If the camera can&apos;t read a code, type it in the box and tap <b>Record scan</b>.</li>
+                <li>Every step is required. When every item is done, the order moves to the packer.</li>
               </ol>
             </div>
           ) : null}
@@ -237,11 +250,12 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
             <div className="mt-2">
               <p className="font-semibold text-slate-900">Packer</p>
               <ol className="ml-5 list-decimal space-y-1">
-                <li>Print the slip with <b>Download packaging slips</b>.</li>
-                <li>Tap <b>Scan for this order</b>, then scan the <b>order QR</b> on the packaging slip first (or type the order number).</li>
-                <li>Scan each item as you put it into the box, once per copy.</li>
-                <li>Tap <b>Add packing photos</b> and photograph the items in the open box, then seal it. Only the desk sees these photos.</li>
-                <li>When every item is scanned, the order is ready for dispatch.</li>
+                <li>Print the slip with <b>Download packaging slips</b>, then tap <b>Scan for this order</b>.</li>
+                <li>Scan the <b>box code</b> (BOX-…) on the slip.</li>
+                <li>Scan the <b>order code</b> (barcode or QR) on the slip.</li>
+                <li>Scan each item&apos;s <b>SKU</b> as it goes into the box, once per copy, and its <b>ISBN</b> too if it is a book.</li>
+                <li>Tap <b>Add packing photos</b> and photograph the items in the open box. Only the desk sees these photos.</li>
+                <li>Check the items match the order description, then tap <b>Items match — mark packed</b>. The order is then ready for pickup, and admin assigns the courier.</li>
               </ol>
             </div>
           ) : null}
@@ -276,6 +290,9 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                       {uploading === order.id ? "Uploading…" : `Add packing photos${order.packPhotos?.length ? ` (${order.packPhotos.length})` : ""}`}
                       <input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={uploading === order.id} onChange={(event) => { void addPackPhotos(order.id, event.target.files); event.target.value = ""; }} />
                     </label>
+                  ) : null}
+                  {order.pick?.pickedAt && order.pick.boxScannedAt && order.pick.orderScannedAt && !pickPackLeft(order, "pack") ? (
+                    <Button disabled={!order.packPhotos?.length} onClick={() => confirm(order.id)}>Items match — mark packed</Button>
                   ) : null}
                 </div>
                 {lead ? (

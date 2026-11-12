@@ -1,3 +1,4 @@
+import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
 
 /** EAN-13 bar patterns. First digit picks the left-side L/G mix. */
@@ -19,12 +20,13 @@ export function normalizeEan13(value: string) {
   return digits;
 }
 
-export function barcodeSvg(code: string, options?: { height?: number; module?: number }) {
+export function barcodeSvg(code: string, options?: { height?: number; module?: number; format?: "code128" }) {
   const height = options?.height ?? 56;
   const bar = options?.module ?? 1.6;
   const raw = code.trim();
   const digits = raw.replace(/\D/g, "");
-  if (/^\d{12,13}$/.test(raw) || (digits.length >= 12 && digits.length <= 13 && /^[\d\s-]+$/.test(raw))) return ean13Svg(normalizeEan13(raw), height, bar);
+  if (options?.format !== "code128" && /^\d{12,13}$/.test(raw)) return ean13Svg(normalizeEan13(raw), height, bar);
+  if (options?.format !== "code128" && (digits.length >= 12 && digits.length <= 13 && /^[\d\s-]+$/.test(raw))) return ean13Svg(normalizeEan13(raw), height, bar);
   // Real Code 128 so phone cameras, wedge scanners and couriers can read AWBs, SKUs and order numbers.
   return code128Svg(raw || "0", height, bar) || genericBarsSvg(digits || "0", height, bar);
 }
@@ -121,34 +123,53 @@ export function matchesTag(book: Tagged, scanned: string) {
     .some((tag) => squash(tag) === value);
 }
 
-export function printBarcodeSheet(rows: { title: string; sku?: string; barcode: string }[]) {
-  if (typeof window === "undefined") return;
+function qrBlock(text: string, px = 96) {
+  try {
+    const qr = QRCode.create(text, { errorCorrectionLevel: "M" });
+    const size = qr.modules.size;
+    let path = "";
+    for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) if (qr.modules.get(y, x)) path += `M${x + 2} ${y + 2}h1v1h-1z`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${size + 4} ${size + 4}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+  } catch {
+    return "";
+  }
+}
+
+/** Bulk sheet: for every product its QR plus product code / barcode, SKU and ISBN barcodes. */
+export function printBarcodeSheet(rows: { title: string; sku?: string; barcode?: string; productCode?: string; isbn?: string }[]) {
+  if (typeof window === "undefined" || !rows.length) return;
   const win = window.open("", "_blank");
   if (!win) return;
   const cards = rows
-    .map(
-      (row) => `<article class="card">
+    .map((row) => {
+      const product = row.barcode || row.productCode || "";
+      const bars = [
+        product && ["Product code", product, undefined],
+        row.sku && ["SKU", row.sku, "code128"],
+        row.isbn && row.isbn !== product && ["ISBN", row.isbn, undefined],
+      ].filter(Boolean) as [string, string, "code128" | undefined][];
+      return `<article class="card">
         <p class="title">${escapeHtml(row.title)}</p>
-        <p class="sku">${escapeHtml(row.sku || "")}</p>
-        <div class="bars">${barcodeSvg(row.barcode, { height: 64, module: 1.8 })}</div>
-      </article>`
-    )
+        ${product || row.sku ? `<div class="qr">${qrBlock(product || row.sku || "")}</div>` : ""}
+        ${bars.map(([label, code, format]) => `<p class="sku">${escapeHtml(label)}</p><div class="bars">${barcodeSvg(code, { height: 54, module: 1.6, format })}</div>`).join("")}
+      </article>`;
+    })
     .join("");
   win.document.write(`<!doctype html><html><head><title>Product barcodes</title>
     <style>
       body{font-family:Georgia,serif;color:#1b1410;margin:24px;background:#fffdf8}
       h1{font-size:18px;margin:0 0 16px}
-      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
-      .card{border:1px solid #d8c8b4;border-radius:10px;padding:12px;text-align:center}
-      .title{font-size:13px;font-weight:700;margin:0}
-      .sku{font-size:11px;color:#6b5b4f;margin:4px 0 8px}
+      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+      .card{border:1px solid #d8c8b4;border-radius:10px;padding:12px;text-align:center;break-inside:avoid}
+      .title{font-size:13px;font-weight:700;margin:0 0 6px}
+      .sku{font-size:11px;color:#6b5b4f;margin:6px 0 2px}
       .bars svg{max-width:100%;height:auto}
     </style></head><body>
-    <h1>Vaidya Gogate Memorial Foundation · Inventory barcodes</h1>
+    <h1>Vaidya Gogate Memorial Foundation · Product barcodes</h1>
     <div class="grid">${cards}</div>
     </body></html>`);
   win.document.close();
-  win.print();
+  win.setTimeout(() => win.print(), 300);
 }
 
 function escapeHtml(value: string) {

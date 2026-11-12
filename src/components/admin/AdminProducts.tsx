@@ -143,12 +143,24 @@ export function ProductsSection() {
             onClick={() =>
               printBarcodeSheet(
                 shown
-                  .filter((book) => book.barcode)
-                  .map((book) => ({ title: book.title, sku: book.sku, barcode: book.barcode as string }))
+                  .filter((book) => book.barcode || book.productCode || book.sku || book.isbn)
+                  .map((book) => ({ title: book.title, sku: book.sku, barcode: book.barcode, productCode: book.productCode, isbn: book.isbn }))
               )
             }
           >
-            Print barcodes
+            Download barcodes &amp; QR ({shown.length})
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const stocked = shown.filter((book) => (book.stock ?? 0) > 0);
+              if (!stocked.length || !window.confirm(`Print one numbered label per copy in stock for ${stocked.length} product${stocked.length === 1 ? "" : "s"}? Each copy gets its own code, which locks to the order it is scanned for.`)) return;
+              const rows = stocked.flatMap((book) => issueStockLabels(book.id, book.stock ?? 0).map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) })));
+              void printStockLabels(rows);
+              setStockNote(`${rows.length} stock labels for ${stocked.length} products.`);
+            }}
+          >
+            Bulk stock labels
           </Button>
           <Button variant="outline" onClick={() => setScanOpen(true)}>Scan barcode</Button>
           <Button

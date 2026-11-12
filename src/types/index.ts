@@ -672,6 +672,18 @@ export interface Order {
     /** Packer, when packing is given to someone other than the picker. */
     packer?: string;
     packerAssignedAt?: string;
+    /** Picker step 1: the order code was scanned. */
+    pickOrderScannedAt?: string;
+    /** Which codes (product code, SKU, ISBN) were scanned for each item while picking / packing. */
+    pickCodes?: Record<string, string[]>;
+    packCodes?: Record<string, string[]>;
+    /** Packer step 1: the box code on the slip was scanned. */
+    boxScannedAt?: string;
+    /** Numbered stock labels (…-U00001) scanned for this order; a label is locked to one order. */
+    pickUnits?: string[];
+    packUnits?: string[];
+    /** Packer confirmed the items match the order description. */
+    matchedAt?: string;
   };
   weightKg?: number;
   /** Photos the packer took of the packed items, kept as proof. Desk only; never sent to customers. */

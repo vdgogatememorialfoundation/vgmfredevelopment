@@ -2,6 +2,7 @@ import type {
   AccountStatus,
   DeliveryAddress,
   Order,
+  Book,
   OrderItem,
   OrderPlan,
   OutboxEmail,
@@ -929,53 +930,169 @@ export function acceptPick(orderId: string) {
   updateOrderInStore(withHistory({ ...order, pick: { ...order.pick, acceptedAt: new Date().toISOString() } }, "Picking started", order.pick.assignee));
 }
 
-/** One scan in the store. Before picking is complete a product barcode counts as picked; afterwards the order QR then each product marks it packed. */
+type ScanKind = "productCode" | "sku" | "isbn" | "any";
+const KIND_LABEL: Record<ScanKind, string> = { productCode: "product code", sku: "SKU", isbn: "ISBN", any: "barcode" };
+type PickItem = Order["items"][number];
+
+/** Code printed on the packaging slip that the packer scans first. */
+export function packingBoxCode(orderId: string) {
+  return `BOX-${orderId}`;
+}
+
+const plainCode = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+const isBoxCode = (order: Order, value: string) => plainCode(value) === plainCode(packingBoxCode(order.id));
+const isOrderCode = (order: Order, value: string) =>
+  !plainCode(value).startsWith("BOX") && (value.replace(/\D/g, "") === order.id.replace(/\D/g, "") || value.includes(order.id));
+
+/** Picker scans product code + SKU; packer scans SKU + ISBN (books). Products without those codes fall back to any of their codes. */
+function requiredKinds(stage: "pick" | "pack", item: PickItem, book?: Book): ScanKind[] {
+  const sku = item.sku || book?.sku;
+  const kinds = (stage === "pick" ? [book?.productCode || book?.barcode ? "productCode" : "", sku ? "sku" : ""] : [sku ? "sku" : "", book?.isbn ? "isbn" : ""]).filter(Boolean) as ScanKind[];
+  return kinds.length ? kinds : ["any"];
+}
+
+function matchedKinds(item: PickItem, book: Book | undefined, value: string): ScanKind[] {
+  const kinds: ScanKind[] = [];
+  if ((book?.productCode || book?.barcode) && matchesBarcode({ productCode: book?.productCode, barcode: book?.barcode }, value)) kinds.push("productCode");
+  const sku = item.sku || book?.sku;
+  if (sku && matchesBarcode({ sku }, value)) kinds.push("sku");
+  if (book?.isbn && matchesBarcode({ isbn: book.isbn }, value)) kinds.push("isbn");
+  if (matchesBarcode({ ...(book ?? {}), id: item.bookId, sku, batchNo: item.batchNo || book?.batchNo }, value)) kinds.push("any");
+  return kinds;
+}
+
+function stageState(order: Order, stage: "pick" | "pack") {
+  const pick = order.pick;
+  return { counts: (stage === "pick" ? pick?.picked : pick?.packScan) ?? {}, seen: (stage === "pick" ? pick?.pickCodes : pick?.packCodes) ?? {} };
+}
+
+function itemMissing(stage: "pick" | "pack", item: PickItem, book: Book | undefined, counts: Record<string, number>, seen: Record<string, string[]>) {
+  const req = requiredKinds(stage, item, book);
+  const left = item.quantity - (counts[item.bookId] ?? 0);
+  const missing: string[] = [];
+  if (left > 0) missing.push(`${left} × ${KIND_LABEL[req[0]]}`);
+  for (const kind of req.slice(1)) if (!(seen[item.bookId] ?? []).includes(kind)) missing.push(KIND_LABEL[kind]);
+  return missing;
+}
+
+/** What is still to scan, item by item, e.g. "VGMF BOOK: 1 × product code, SKU". Empty when every item is done. */
+export function pickPackLeft(order: Order, stage: "pick" | "pack") {
+  const books = getLiveBooks();
+  const { counts, seen } = stageState(order, stage);
+  return order.items
+    .map((item) => {
+      const missing = itemMissing(stage, item, books.find((row) => row.id === item.bookId), counts, seen);
+      return missing.length ? `${item.title}: ${missing.join(", ")}` : "";
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** One scan in the store. Picker: order code, then each item's product code and SKU. Packer: box code, order code, then each item's SKU and ISBN. */
 export function recordPickScan(orderId: string, code: string): string {
   const order = getOrder(orderId);
   const pick = order?.pick;
   if (!order || !pick) throw new Error("This order has no picker assigned.");
   const value = code.trim();
+  if (!value) throw new Error("Scan a code.");
   const books = getLiveBooks();
-  const needed = (map: Record<string, number>) => order.items.every((item) => (map[item.bookId] ?? 0) >= item.quantity);
-  const matchItem = (map: Record<string, number>) => {
-    const open = order.items.filter((item) => (map[item.bookId] ?? 0) < item.quantity);
-    const bookOf = (item: (typeof open)[number]) => books.find((row) => row.id === item.bookId);
-    const strong = open.find((item) => {
-      const book = bookOf(item);
-      return matchesBarcode({ ...(book ?? {}), id: item.bookId, sku: item.sku || book?.sku, batchNo: item.batchNo || book?.batchNo }, value) || (book ? matchesBarcode(book, value) : false);
-    });
-    if (strong) return strong;
-    const tagged = open.filter((item) => {
-      const book = bookOf(item);
-      return book ? matchesTag(book, value) : false;
-    });
-    return tagged.length === 1 ? tagged[0] : undefined;
+  const now = new Date().toISOString();
+  const bookOf = (item: PickItem) => books.find((row) => row.id === item.bookId);
+
+  const unit = /[\s-]?U\d{5}$/i.test(value) ? plainCode(value) : "";
+  const scanItem = (stage: "pick" | "pack") => {
+    const { counts, seen } = stageState(order, stage);
+    const unitsKey = stage === "pick" ? "pickUnits" : "packUnits";
+    const units = order.pick?.[unitsKey] ?? [];
+    if (unit) {
+      if (units.includes(unit)) throw new Error("This copy's label is already scanned for this order. Scan the next copy.");
+      const other = getOrders().find((row) => row.id !== order.id && row.status !== "Cancelled" && [...(row.pick?.pickUnits ?? []), ...(row.pick?.packUnits ?? [])].includes(unit));
+      if (other) throw new Error(`This copy is already assigned to order ${other.id}. Use another copy.`);
+    }
+    const open = order.items.filter((item) => itemMissing(stage, item, bookOf(item), counts, seen).length);
+    let hit = open
+      .map((item) => {
+        const req = requiredKinds(stage, item, bookOf(item));
+        const kinds = matchedKinds(item, bookOf(item), value);
+        const useful = req[0] === "any" ? (kinds.length ? (["any"] as ScanKind[]) : []) : kinds.filter((kind) => req.includes(kind));
+        return { item, req, useful, any: kinds.length > 0 };
+      })
+      .find((row) => row.useful.length);
+    if (!hit) {
+      const tagged = open.filter((item) => requiredKinds(stage, item, bookOf(item))[0] === "any" && matchesTag(bookOf(item) ?? {}, value));
+      if (tagged.length === 1) hit = { item: tagged[0], req: ["any"], useful: ["any"], any: true };
+    }
+    if (!hit) {
+      const wrongKind = open.find((item) => matchedKinds(item, bookOf(item), value).length);
+      if (wrongKind) {
+        const need = requiredKinds(stage, wrongKind, bookOf(wrongKind)).map((kind) => KIND_LABEL[kind]).join(" and ");
+        throw new Error(`Wrong code for ${wrongKind.title}. ${stage === "pick" ? "Picker" : "Packer"} scans its ${need}.`);
+      }
+      const finished = order.items.find((item) => matchedKinds(item, bookOf(item), value).length);
+      throw new Error(finished ? `${finished.title} is already fully scanned.` : "This code is not an item on this order.");
+    }
+    const { item, req, useful } = hit;
+    const have = seen[item.bookId] ?? [];
+    const nextCounts = { ...counts };
+    let fresh = useful.filter((kind) => !have.includes(kind));
+    if (useful.includes(req[0]) && (counts[item.bookId] ?? 0) < item.quantity) {
+      nextCounts[item.bookId] = (counts[item.bookId] ?? 0) + 1;
+      fresh = useful;
+    } else if (!fresh.length) {
+      throw new Error(`${KIND_LABEL[useful[0]]} of ${item.title} is already scanned. Still to scan: ${itemMissing(stage, item, bookOf(item), counts, seen).join(", ")}.`);
+    }
+    const nextSeen = { ...seen, [item.bookId]: Array.from(new Set([...have, ...fresh])) };
+    const done = order.items.every((row) => !itemMissing(stage, row, bookOf(row), nextCounts, nextSeen).length);
+    const leftHere = itemMissing(stage, item, bookOf(item), nextCounts, nextSeen);
+    return { nextCounts, nextSeen, done, units: unit ? [...units, unit] : units, message: `${KIND_LABEL[useful[0]]} of ${item.title} scanned.${leftHere.length ? ` Still for this item: ${leftHere.join(", ")}.` : ""}` };
   };
+
   if (!pick.pickedAt) {
-    const item = matchItem(pick.picked);
-    if (!item) throw new Error("This barcode is not an item still to pick on this order.");
-    const picked = { ...pick.picked, [item.bookId]: (pick.picked[item.bookId] ?? 0) + 1 };
-    const done = needed(picked);
-    const next = { ...order, pick: { ...pick, acceptedAt: pick.acceptedAt ?? new Date().toISOString(), picked, pickedAt: done ? new Date().toISOString() : undefined } };
-    updateOrderInStore(done ? withHistory(next, "Item picked", "All items picked from inventory") : next);
-    return done ? "All items picked. Scan the order QR, then each item to pack." : `Picked ${item.title}.`;
+    if (!pick.pickOrderScannedAt) {
+      if (!isOrderCode(order, value)) throw new Error("Step 1: scan the order code (barcode or QR) on the packaging slip first.");
+      updateOrderInStore({ ...order, pick: { ...pick, acceptedAt: pick.acceptedAt ?? now, pickOrderScannedAt: now } });
+      return "Order matched. Now scan each item's product code and SKU.";
+    }
+    if (isOrderCode(order, value) || isBoxCode(order, value)) throw new Error("The order is already matched. Now scan the items' product code and SKU.");
+    const result = scanItem("pick");
+    const next = { ...order, pick: { ...pick, acceptedAt: pick.acceptedAt ?? now, picked: result.nextCounts, pickCodes: result.nextSeen, pickUnits: result.units, pickedAt: result.done ? now : undefined } };
+    updateOrderInStore(result.done ? withHistory(next, "Item picked", "All items picked from inventory") : next);
+    return result.done ? "All items picked. Packer: scan the box code, the order code, then each item's SKU / ISBN." : result.message;
   }
-  if (pick.packedAt) return "Already packed and ready for dispatch.";
+  if (pick.packedAt) return "Already packed and ready for pickup.";
+  if (!pick.boxScannedAt) {
+    if (!isBoxCode(order, value)) throw new Error("Step 1: scan the box code (BOX-…) on the packaging slip first.");
+    updateOrderInStore({ ...order, pick: { ...pick, boxScannedAt: now } });
+    return "Box matched. Step 2: scan the order code.";
+  }
   if (!pick.orderScannedAt) {
-    if (value.replace(/\D/g, "") !== order.id.replace(/\D/g, "") && !value.includes(order.id)) throw new Error("Scan the order QR first.");
-    updateOrderInStore({ ...order, pick: { ...pick, orderScannedAt: new Date().toISOString() } });
-    return "Order matched. Now scan each item into the box.";
+    if (isBoxCode(order, value)) throw new Error("The box is already scanned. Step 2: scan the order code.");
+    if (!isOrderCode(order, value)) throw new Error("Step 2: scan the order code (barcode or QR) on the packaging slip.");
+    updateOrderInStore({ ...order, pick: { ...pick, orderScannedAt: now } });
+    return "Order matched. Step 3: scan each item's SKU, and ISBN for books, as it goes into the box.";
   }
-  const item = matchItem(pick.packScan);
-  if (!item) throw new Error("This barcode is not an item still to pack on this order.");
-  const packScan = { ...pick.packScan, [item.bookId]: (pick.packScan[item.bookId] ?? 0) + 1 };
-  if (!needed(packScan)) {
-    updateOrderInStore({ ...order, pick: { ...pick, packScan } });
-    return `Packed ${item.title}.`;
-  }
-  updateOrderInStore({ ...order, pick: { ...pick, packScan, packedAt: new Date().toISOString() } });
+  if (!pickPackLeft(order, "pack")) return "All items are scanned. Take packing photos, then confirm the items match the description.";
+  if (isOrderCode(order, value) || isBoxCode(order, value)) throw new Error("Box and order are already matched. Now scan the items' SKU / ISBN.");
+  const result = scanItem("pack");
+  updateOrderInStore({ ...order, pick: { ...pick, packScan: result.nextCounts, packCodes: result.nextSeen, packUnits: result.units } });
+  return result.done ? "All items scanned. Step 4: take packing photos. Step 5: confirm the items match the description." : result.message;
+}
+
+/** Last packer step: every scan done, at least one packing photo, items checked against the order description. */
+export function confirmPacked(orderId: string) {
+  const order = getOrder(orderId);
+  const pick = order?.pick;
+  if (!order || !pick?.pickedAt) throw new Error("Picking is not finished yet.");
+  if (pick.packedAt) return "Already packed.";
+  if (!pick.boxScannedAt) throw new Error("Scan the box code first.");
+  if (!pick.orderScannedAt) throw new Error("Scan the order code first.");
+  const left = pickPackLeft(order, "pack");
+  if (left) throw new Error(`Still to scan: ${left}.`);
+  if (!order.packPhotos?.length) throw new Error("Take at least one packing photo first.");
+  const now = new Date().toISOString();
+  updateOrderInStore(withHistory({ ...order, pick: { ...pick, matchedAt: now, packedAt: now } }, "Packed", "Items checked against the order description"));
   setOrderStatus(order.id, order.deliveryMode === "store_pickup" ? "Packed" : "Ready to Ship");
-  return order.deliveryMode === "store_pickup" ? "Packed. Ready for store pickup (OTP unlocked)." : "Packed and ready for dispatch. Allocate a courier from Orders.";
+  return order.deliveryMode === "store_pickup" ? "Packed. Ready for store pickup (OTP unlocked)." : "Packed and ready for pickup. Admin assigns the courier from Orders.";
 }
 
 export function setOrderStatus(orderId: string, status: OrderStatus) {
@@ -1643,7 +1760,7 @@ export function printShippingLabel(
     <div class="agg-row center">
       <div class="agg-cell grow">
         <p class="label">AWB no.</p>
-        ${barcodeSvg(awb, { height: 56, module: 1.6 })}
+        ${barcodeSvg(awb, { height: 56, module: 1.6, format: "code128" })}
         <p class="awb">${esc(awb)}</p>
       </div>
     </div>
@@ -1661,11 +1778,14 @@ export function printShippingLabel(
       </div>
       <div class="agg-cell side">
         <p class="label">Order no.</p>
-        ${barcodeSvg(shipment.orderId, { height: 30, module: 1 })}
+        <b>${esc(shipment.orderId)}</b>
         <p class="meta">Order date ${esc(formatDate(order?.date || shipment.generatedAt))}</p>
         <p class="meta">Invoice value ${esc(rupees(value || order?.total || 0))}</p>
-        ${qrSvg(shipment.orderId, 54)}
       </div>
+    </div>
+    <div class="agg-row center">
+      <div class="agg-cell grow"><p class="label">Order barcode</p>${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
+      <div class="agg-cell side" style="text-align:center"><p class="label">Order QR</p>${qrSvg(shipment.orderId, 100)}</div>
     </div>
     <table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr>
     ${priced
@@ -1772,9 +1892,13 @@ function packagingSlipHtml(order: Order) {
     <div>
       <h1>Packaging slip</h1>
       <p class="sub">Order ${esc(order.id)} · ${esc(formatDate(order.date))} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
-      <p class="sub"><strong>Step 1:</strong> scan this order QR. <strong>Step 2:</strong> scan each item's barcode below as it goes in the box, once per copy.</p>
+      <p class="sub"><strong>Picker:</strong> order code, then each item's product code and SKU. <strong>Packer:</strong> box code, order code, each item's SKU (and ISBN for books), packing photos, then confirm the items match.</p>
     </div>
-    <div style="text-align:center">${qrSvg(order.id, 84)}<div>${barcodeSvg(order.id, { height: 40, module: 1.2 })}</div><p class="sub" style="margin:0">Order QR</p></div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin:8px 0">
+    <div style="text-align:center"><p class="label">Box code (packer step 1)</p>${barcodeSvg(packingBoxCode(order.id), { height: 64, module: 1.5, format: "code128" })}</div>
+    <div style="text-align:center"><p class="label">Order code (picker step 1 · packer step 2)</p>${barcodeSvg(order.id, { height: 64, module: 1.6, format: "code128" })}</div>
+    <div style="text-align:center"><p class="label">Order QR</p>${qrSvg(order.id, 110)}</div>
   </div>
   <div class="grid">
     <div class="box"><p class="label">Customer</p>${addressBlock(order.deliveryAddress)}</div>
@@ -1789,9 +1913,11 @@ function packagingSlipHtml(order: Order) {
     .map((item) => {
       const book = slipBooks.find((row) => row.id === item.bookId);
       const sku = item.sku || book?.sku || "";
-      const code = book?.barcode || book?.isbn || sku || book?.productCode || item.bookId;
+      const product = book?.barcode || book?.productCode || "";
+      const bars = [product && ["Product code", product], sku && ["SKU", sku], book?.isbn && book.isbn !== product && ["ISBN", book.isbn]].filter(Boolean) as string[][];
+      const scanCell = (bars.length ? bars : [["Code", item.bookId]]).map(([label, value]) => `<div style="margin-bottom:4px"><span class="sub">${esc(label)}</span>${barcodeSvg(value, { height: 46, module: 1.3, format: label === "SKU" || label === "Code" ? "code128" : undefined })}</div>`).join("");
       const codes = [sku && `SKU ${sku}`, book?.isbn && `ISBN ${book.isbn}`, book?.barcode && `Barcode ${book.barcode}`, book?.productCode && `Code ${book.productCode}`, (item.batchNo || book?.batchNo) && `Batch ${item.batchNo || book?.batchNo}`].filter(Boolean).join(" · ");
-      return `<tr><td class="check">☐</td><td>${barcodeSvg(code, { height: 46, module: 1.3 })}</td><td><strong>${esc(item.title)}</strong><br/><span class="sub">${esc(codes)}</span></td><td class="right">${esc(item.quantity)}</td></tr>`;
+      return `<tr><td class="check">☐</td><td>${scanCell}</td><td><strong>${esc(item.title)}</strong><br/><span class="sub">${esc(codes)}</span></td><td class="right">${esc(item.quantity)}</td></tr>`;
     })
     .join("")}</table>
   <p class="foot">Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________<br/>Pack, seal, and attach the shipping label. Then book the courier pickup, or hold the parcel for store pickup.</p>`;
