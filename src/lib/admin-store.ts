@@ -1439,6 +1439,25 @@ function printHtml(title: string, html: string, page = "A4") {
     .size-4x6 td, .size-4x6 th { padding: 3px 5px; font-size: 10px; }
     .size-4x6 .foot { margin-top: 6px; padding-top: 4px; font-size: 9px; line-height: 1.35; }
     .size-4x6 svg { max-width: 100%; height: 44px; }
+    .agg { border: 2px solid #000; }
+    .agg-row { display: flex; border-bottom: 1.5px solid #000; }
+    .agg-row.center { text-align: center; }
+    .agg-row.center svg { margin: 0 auto; }
+    .agg-cell { flex: 1 1 0; padding: 6px 8px; border-right: 1.5px solid #000; font-size: 11px; line-height: 1.4; }
+    .agg-cell:last-child { border-right: none; }
+    .agg-cell.grow { flex: 2 1 0; }
+    .agg-cell.side { flex: 1.1 1 0; }
+    .agg .to-name { font-size: 14px; }
+    .agg .pin { font-size: 14px; letter-spacing: 0.04em; }
+    .agg .courier { font-size: 14px; }
+    .agg .routing { font-size: 18px; letter-spacing: 0.06em; }
+    .agg .pay-mode { font-size: 18px; letter-spacing: 0.08em; }
+    .agg table { margin-top: 0; }
+    .agg td, .agg th { border-bottom: 1px solid #000; }
+    .agg .qr { display: block; margin-top: 4px; }
+    .agg-foot { display: flex; gap: 8px; align-items: center; padding: 6px 8px; font-size: 9px; line-height: 1.35; }
+    .size-4x6 .agg-cell { padding: 4px 6px; font-size: 10px; }
+    .size-4x6 .agg .pay-mode, .size-4x6 .agg .routing { font-size: 15px; }
     .mono .label-sheet, .mono .label-sheet * { color: #000 !important; }
     .mono .label-sheet { border: 2px solid #fff; background: #fff; }
     .mono .label-sheet .label-band { background: #fff; border-bottom: 1.5px solid #000; }
@@ -1572,46 +1591,71 @@ export function printShippingLabel(
   const order = getOrder(shipment.orderId);
   const cod = Boolean(order && order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid");
   const collect = cod && order ? Math.max(0, order.total - (order.storeCreditUsed ?? 0)) : 0;
-  const payBlock = `<div class="pay"><b>${cod ? "COD" : "PREPAID"}</b><span>${cod ? `Collect ${esc(rupees(collect))} cash` : "Collect ₹0 · do not collect cash"}</span></div>`;
-  const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet">
-    <div class="label-band">
-      <div class="label-brand">
-        ${logoImg("label-logo")}
-        <div><b>VGMF</b><div>${esc(siteConfig.name)}</div></div>
+  // Laid out like the Shiprocket / Nimbuspost / GoSwift 4x6 labels: Ship to, courier + AWB, parcel, shipped by, order, items.
+  const shipping = getIntegrations().shipping;
+  const box = order?.parcel ?? shipping.packageCm;
+  const weight = order?.weightKg || shipping.defaultWeightKg;
+  const priced = shipment.items.map((item) => {
+    const line = order?.items.find((row) => (item.sku && row.sku === item.sku) || row.bookId === item.sku || row.title === item.title);
+    return { ...item, price: line?.price ?? 0, batch: line?.batchNo ?? "" };
+  });
+  const value = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
+    <div class="agg-row">
+      <div class="agg-cell grow to">
+        <p class="label">Ship to</p>
+        <strong class="to-name">${esc(to.fullName)}</strong><br/>
+        ${esc([to.line1, to.landmark].filter(Boolean).join(", "))}<br/>
+        ${esc([to.city, to.state].filter(Boolean).join(", "))}<br/>
+        <b class="pin">PIN ${esc(to.pincode)}</b><br/>
+        Mobile: ${esc(to.phone)}
       </div>
-      <span>Shipping label</span>
+      <div class="agg-cell side">
+        <p class="label">Courier</p>
+        <b class="courier">${esc(courier)}</b>
+        ${routing ? `<p class="label" style="margin-top:6px">Routing code</p><b class="routing">${esc(routing)}</b>` : ""}
+        ${hub ? `<p class="meta">Hub ${esc(hub)}</p>` : ""}
+      </div>
     </div>
-    <div class="label-body">
-      <div class="label-head"><div>
-      <p class="label">${esc(courier)}</p>
-      <p class="awb">${esc(awb)}</p>
-      ${barcodeSvg(awb, { height: 56, module: 1.6 })}
-      <p class="meta">Order ${esc(shipment.orderId)} · ${esc(formatDate(shipment.generatedAt))}</p>
-      </div>${qrSvg(shipment.orderId)}</div>
-      ${payBlock}
-      ${
-        routing || hub
-          ? `<div class="route"><div><p class="label">Routing</p><b>${esc(routing || "—")}</b></div><div><p class="label">Hub</p><b>${esc(hub || "—")}</b></div></div>`
-          : ""
-      }
-      <div class="grid">
-        <div class="box">
-          <p class="label">From</p>
-          <strong>${esc(fromName)}</strong><br/>
-          ${esc(fromAddress)}<br/>
-          ${esc(fromPhone)}
-        </div>
-        <div class="box to">
-          <p class="label">Deliver to</p>
-          <strong>${esc(to.fullName)}</strong><br/>
-          ${esc([to.line1, to.landmark, to.city, to.state, to.pincode].filter(Boolean).join(", "))}<br/>
-          ${esc(to.phone)}
-        </div>
+    <div class="agg-row center">
+      <div class="agg-cell grow">
+        <p class="label">AWB no.</p>
+        ${barcodeSvg(awb, { height: 56, module: 1.6 })}
+        <p class="awb">${esc(awb)}</p>
       </div>
-      <table><tr><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
-      ${shipment.items.map((item) => `<tr><td>${esc(item.sku)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`).join("")}
-      </table>
-      <p class="foot">If undelivered, return to the sender address above. Handle books with care. Do not bend.</p>
+    </div>
+    <div class="agg-row">
+      <div class="agg-cell"><p class="label">Dimensions (cm)</p><b>${esc(`${box.length} × ${box.breadth} × ${box.height}`)}</b></div>
+      <div class="agg-cell"><p class="label">Weight</p><b>${esc(weight)} kg</b></div>
+      <div class="agg-cell pay-cell"><p class="label">Payment</p><b class="pay-mode">${cod ? "COD" : "PREPAID"}</b><br/>${cod ? `Collect ${esc(rupees(collect))}` : "Do not collect cash"}</div>
+    </div>
+    <div class="agg-row">
+      <div class="agg-cell grow">
+        <p class="label">Shipped by (if undelivered, return to)</p>
+        <strong>${esc(fromName)}</strong><br/>
+        ${esc(fromAddress)}<br/>
+        ${esc(fromPhone)}
+      </div>
+      <div class="agg-cell side">
+        <p class="label">Order no.</p>
+        ${barcodeSvg(shipment.orderId, { height: 30, module: 1 })}
+        <p class="meta">Order date ${esc(formatDate(order?.date || shipment.generatedAt))}</p>
+        <p class="meta">Invoice value ${esc(rupees(value || order?.total || 0))}</p>
+        ${qrSvg(shipment.orderId, 54)}
+      </div>
+    </div>
+    <table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr>
+    ${priced
+      .map(
+        (item) =>
+          `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(item.sku)}</td><td class="right">${esc(item.quantity)}</td><td class="right">${esc(rupees(item.price))}</td><td class="right">${esc(rupees(item.price * item.quantity))}</td></tr>`
+      )
+      .join("")}
+    <tr><td colspan="4" class="right"><b>Total</b></td><td class="right"><b>${esc(rupees(value))}</b></td></tr>
+    </table>
+    <div class="agg-foot">
+      <span>${logoImg("label-logo")}</span>
+      <span>${esc(siteConfig.name)} · ${esc(siteConfig.phone)} · Handle books with care. Do not bend.<br/>This is a computer-generated label and does not need a signature.</span>
     </div>
   </div></div>`;
   const page = size === "printer" ? "auto" : size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
