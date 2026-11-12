@@ -224,7 +224,7 @@ export interface OrderSettings {
   /** Store pickup shows a ready date (off: the desk tells the customer when it is ready). */
   pickupDates: { inStock: boolean; preorder: boolean };
   /** Buffer added to aggregator rates shown on the site, in case a courier does not pick up and a costlier one is used. */
-  courierMarkup: { percent: number; rupees: number; minimum: number };
+  courierMarkup: { percent: number; rupees: number; minimum: number; chargeHighest: boolean };
   /** Hours the desk needs to pack an order before the courier can collect it. */
   processingHours: number;
   /** Orders packed after this India time (HH:MM) are dispatched the next day. */
@@ -417,7 +417,7 @@ export const defaultOrderSettings: OrderSettings = {
   hideDeliveryDates: false,
   showPreorderStepDates: false,
   pickupDates: { inStock: false, preorder: false },
-  courierMarkup: { percent: 0, rupees: 0, minimum: 0 },
+  courierMarkup: { percent: 0, rupees: 0, minimum: 0, chargeHighest: false },
   processingHours: 4,
   dispatchCutoff: "17:00",
   workingDays: { saturday: false, sunday: false, holidays: [] },
@@ -678,6 +678,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       percent: Math.max(0, Number(merged.courierMarkup?.percent) || 0),
       rupees: Math.max(0, Number(merged.courierMarkup?.rupees) || 0),
       minimum: Math.max(0, Number(merged.courierMarkup?.minimum) || 0),
+      chargeHighest: Boolean(merged.courierMarkup?.chargeHighest),
     },
     processingHours: Math.max(0, finiteNumber(merged.processingHours, defaultOrderSettings.processingHours)),
     dispatchCutoff: /^\d{1,2}:\d{2}$/.test(String(merged.dispatchCutoff ?? "")) ? String(merged.dispatchCutoff) : defaultOrderSettings.dispatchCutoff,

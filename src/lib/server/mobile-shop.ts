@@ -18,7 +18,7 @@ export function feedPreorderable(book?: FeedBook) {
   return enabled && !purchasable;
 }
 
-type Fees = { shippingFeeMode?: string; flatFee?: number; perItemFee?: number; freeAbove?: number; deliveryEnabled?: boolean; pickupEnabled?: boolean };
+type Fees = { courierMarkup?: { chargeHighest?: boolean }; shippingFeeMode?: string; flatFee?: number; perItemFee?: number; freeAbove?: number; deliveryEnabled?: boolean; pickupEnabled?: boolean };
 
 function appPacking(quantity: number) {
   return packingChargeFor(quantity, publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined));
@@ -194,8 +194,9 @@ async function preorderCourierOnly(order: Order) {
     shipyaariRates(keys("shipyaari"), parcel).catch(() => null),
     goswiftRates(keys("goswift"), parcel).catch(() => null),
   ]);
-  const cheapest = results.flatMap((list) => list ?? []).map((rate) => Number(rate.rate)).filter((rate) => rate > 0).sort((a, b) => a - b)[0];
-  return Math.round(cheapest ?? flat);
+  const sorted = results.flatMap((list) => list ?? []).map((rate) => Number(rate.rate)).filter((rate) => rate > 0).sort((a, b) => a - b);
+  const picked = fees.courierMarkup?.chargeHighest ? sorted[sorted.length - 1] : sorted[0];
+  return Math.round(picked ?? flat);
 }
 
 const NOT_PROCESSED = ["Pending", "Paid", "Awaiting Confirmation", "Ordered", "Cancelled"];

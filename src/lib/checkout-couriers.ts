@@ -23,13 +23,24 @@ export function displayedCourierRate(rate: number, markup: OrderSettings["courie
   return Math.ceil(Math.max(raised, Math.max(0, markup.minimum || 0)));
 }
 
-/** Couriers the site shows customers, with the buffered charge. The courier's real charge stays in providerRate. */
+function isLocal(rate: CourierRate) {
+  return rate.provider === "tookan" || rate.provider === "tookan-parcel" || rate.provider === "shipday" || rate.provider === "local";
+}
+
+/** Highest courier charge among the (non-local) rates, so any courier can be booked if the cheaper one doesn't pick up. */
+export function highestCourierRate(rates: CourierRate[]) {
+  return rates.filter((rate) => !isLocal(rate) && rate.rate > 0).reduce((max, rate) => Math.max(max, rate.rate), 0);
+}
+
+/** Couriers the site shows customers, with the buffered charge (or the highest charge for every courier when that is switched on). The courier's real charge stays in providerRate. */
 export function customerCourierRates(rates: CourierRate[], settings: CourierShowSettings): CourierRate[] {
-  return rates
+  const shown = rates
     .filter((rate) => !hiddenBy(rate, settings))
     .map((rate) => {
       const actual = rate.providerRate ?? rate.rate;
-      const local = rate.provider === "tookan" || rate.provider === "tookan-parcel" || rate.provider === "shipday" || rate.provider === "local";
-      return { ...rate, providerRate: actual, rate: local ? actual : displayedCourierRate(actual, settings.courierMarkup) };
+      return { ...rate, providerRate: actual, rate: isLocal(rate) ? actual : displayedCourierRate(actual, settings.courierMarkup) };
     });
+  if (!settings.courierMarkup?.chargeHighest) return shown;
+  const highest = highestCourierRate(shown);
+  return highest > 0 ? shown.map((rate) => (isLocal(rate) ? rate : { ...rate, rate: highest })) : shown;
 }
