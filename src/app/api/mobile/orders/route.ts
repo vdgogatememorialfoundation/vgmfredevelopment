@@ -4,9 +4,10 @@ import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { appOrdersFor } from "@/lib/server/mobile-shop";
 import { listShopShipments } from "@/lib/server/shop-shipments";
+import { forCustomer } from "@/lib/server/shop-orders";
 import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
 import { buildTrackingStages, shipmentScans } from "@/lib/order-pipeline";
-import { agreedDelivery, deliveryDatePhrase, statusDay, statusStamp } from "@/lib/delivery-expectation";
+import { agreedDelivery, deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
 import { customerCourierLabel } from "@/lib/courier-label";
 import type { Order, ShipmentRecord } from "@/types";
 
@@ -68,7 +69,7 @@ function trackingFor(order: Order, shipment?: ShipmentRecord) {
         partial: stage.partial,
         events: stage.events.map((event) => ({
           title: event.title,
-          when: event.at ? (stage.id === "delivered" || stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)) : "",
+          when: event.at ? statusStamp(event.at, country) : "",
           location: event.location ?? "",
           detail: event.detail ?? "",
         })),
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
   const shipments = listShopShipments().filter((item) => item.note !== "Cancelled");
   const shop = appOrdersFor(session.email).map((order) => {
     const own = shipments.filter((item) => item.orderId === order.id);
-    return { ...order, shipments: own, tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
+    return { ...forCustomer(order as Order), shipments: own, tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
   });
   const ids = new Set(shop.map((order) => order.id));
   const legacy = listOrders(session.email).filter((order) => !ids.has(order.id));

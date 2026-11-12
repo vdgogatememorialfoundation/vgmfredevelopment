@@ -1683,8 +1683,20 @@ export function printPosReceipt(order: Order) {
 }
 
 export function printPackagingSlip(order: Order) {
-  const title = `Packaging slip ${order.id}`;
-  const html = `${letterhead()}
+  printHtml(`Packaging slip ${order.id}`, packagingSlipHtml(order));
+}
+
+/** All the chosen orders' packaging slips in one print, one slip per page. */
+export function printPackagingSlips(orders: Order[]) {
+  if (orders.length === 0) return;
+  const html = orders
+    .map((order, index) => `<section style="${index < orders.length - 1 ? "page-break-after:always;break-after:page" : ""}">${packagingSlipHtml(order)}</section>`)
+    .join("");
+  printHtml(`Packaging slips (${orders.length})`, html);
+}
+
+function packagingSlipHtml(order: Order) {
+  return `${letterhead()}
   <h1>Packaging slip</h1>
   <p class="sub">Order ${esc(order.id)} · ${esc(formatDate(order.date))} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
   <div class="grid">
@@ -1703,7 +1715,6 @@ export function printPackagingSlip(order: Order) {
     )
     .join("")}</table>
   <p class="foot">Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________<br/>Pack, seal, and attach the shipping label. Then book the courier pickup, or hold the parcel for store pickup.</p>`;
-  printHtml(title, html);
 }
 
 /* ---------------- Notifications ---------------- */

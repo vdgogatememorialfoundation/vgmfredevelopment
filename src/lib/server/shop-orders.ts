@@ -49,6 +49,14 @@ export function orderPhoneMatches(order: Order, phone: string) {
   return phonesMatch(order.deliveryAddress?.phone, phone);
 }
 
+/** The order as a customer may see it: packing proof photos stay with the desk. */
+export function forCustomer(order: Order): Order {
+  if (!order.packPhotos) return order;
+  const copy = { ...order };
+  delete copy.packPhotos;
+  return copy;
+}
+
 export function upsertShopOrder(order: Order) {
   if (!order?.id) return;
   // A browser with an old cached copy must not bring back an order the desk deleted.

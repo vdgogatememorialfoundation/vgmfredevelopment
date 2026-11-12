@@ -157,6 +157,9 @@ export function courierEventTitle(status: string, location?: string) {
   return status;
 }
 
+export const COURIER_DELIVERED_NOTE =
+  "The courier has marked this order as delivered. If the parcel is not with you or anyone at your address, please contact the courier directly. Once we hand the parcel to the courier, we are not responsible for it.";
+
 function scanEvent(scan: CourierScan, index: number, reached: boolean, title = scan.status): ShipmentEvent {
   return {
     id: `scan-${index}-${scan.at}`,
@@ -505,12 +508,14 @@ export function buildTrackingStages(
       makeStage("shipped", "Shipped", "Handed over to the courier", shippedEvents, shippedReached)
     );
   }
-  stages.push(makeStage("out", "Out for delivery", "On the way to the address", outEvents, outReached));
+  stages.push(makeStage("out", "Out for delivery", "", outEvents, outReached));
 
   if (failedReached) {
     stages.push(makeStage("failed", "Failed", "Delivery failed", failedEvents, true));
     return tally(stages.filter((stage) => stage.reached || stage.id === "failed"), order);
   }
+  const lastDelivered = deliveredEvents.at(-1);
+  if (deliveredReached && lastDelivered && !hyperlocal) lastDelivered.detail = [lastDelivered.detail, COURIER_DELIVERED_NOTE].filter(Boolean).join(" · ");
   stages.push(makeStage("delivered", "Delivered", "Delivered to the address", deliveredEvents, deliveredReached));
 
   return tally(holdBeforeNext(stages), order);

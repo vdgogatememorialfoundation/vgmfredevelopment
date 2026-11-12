@@ -16,6 +16,7 @@ import {
   printOrderInvoice,
   printOrdersPdf,
   printPackagingSlip,
+  printPackagingSlips,
   recordPayment,
   maxRefundable,
   refundToStoreCredit,
@@ -297,6 +298,7 @@ export function OrdersDashboard() {
             const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
             if (shipment) await downloadLabel(shipment.id);
           })}>Labels</Button>
+          <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]))}>Packaging slips</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", async (id) => {
             await dropOrderShipments(id);
             cancelOrder(id, "Bulk cancel");
@@ -1586,6 +1588,19 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
       {(order.status === "Delivered" || returnRequest || order.returnShipment || getOrderSettings().adminActions.processAfterDelivery) && order.status !== "Cancelled" && (
         <div className="mt-4">
+          {order.packPhotos?.length ? (
+            <Section title="Packing photos (desk only)">
+              <div className="flex flex-wrap gap-2">
+                {order.packPhotos.map((photo) => (
+                  <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer" title={`${photo.by} · ${formatDateTime(photo.at)}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt="Packed items" className="h-20 w-20 rounded-lg border border-border object-cover" />
+                  </a>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-text-muted">Taken by the packer as proof of what was packed. Customers never see these.</p>
+            </Section>
+          ) : null}
           <Section title="Senior approval">
             {order.approval ? (
               <p className={`mb-2 rounded-lg p-2 text-xs ${order.approval.status === "Pending" ? "bg-amber-50 text-amber-900" : order.approval.status === "Approved" ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}>

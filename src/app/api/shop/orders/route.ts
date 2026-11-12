@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
-import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder } from "@/lib/server/shop-orders";
+import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder, forCustomer } from "@/lib/server/shop-orders";
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
 import { redeemPromo } from "@/lib/server/promotions";
 import type { Order } from "@/types";
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const phone = request.nextUrl.searchParams.get("phone") ?? "";
   if (id && phone) {
     const order = findShopOrder(id);
-    const match = order && orderPhoneMatches(order, phone) ? [order] : [];
+    const match = order && orderPhoneMatches(order, phone) ? [forCustomer(order)] : [];
     return NextResponse.json({ ok: true, orders: match }, { headers: { "cache-control": "no-store" } });
   }
   if (request.nextUrl.searchParams.get("sync")) {
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const orders = viewer.portal
       ? listShopOrders()
       : viewer.email || viewer.phone || viewer.id
-        ? ordersForAccount(viewer)
+        ? ordersForAccount(viewer).map(forCustomer)
         : [];
     return NextResponse.json({ ok: true, orders, deleted: deletedShopOrderIds() }, { headers: { "cache-control": "no-store" } });
   }

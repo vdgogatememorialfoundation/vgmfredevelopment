@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dataFile } from "@/lib/server/paths";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 import { findShopOrder } from "@/lib/server/shop-orders";
+import { siteConfig } from "@/lib/constants";
 import type { Order } from "@/types";
 
 export type IssuedInvoice = { number: string; issuedAt: string; emailedTo?: string };
@@ -44,7 +45,7 @@ export function invoiceLink(order: Order) {
   return base && order.trackToken ? `${base}/api/shop/invoice/${order.trackToken}` : "";
 }
 
-/** Printable tax invoice for a delivered order. */
+/** Printable invoice for a delivered order. The Foundation is not GST-registered, so no tax lines. */
 export function deliveryInvoiceHtml(order: Order, invoice: IssuedInvoice) {
   const address = order.deliveryAddress;
   const rows = order.items
@@ -71,12 +72,13 @@ td{border-bottom:1px solid #eee7da;padding:8px}.r{text-align:right}
 @media print{body{background:#fff}.page{border:0;margin:0}.print{display:none}}
 </style></head><body><div class="page">
 <div class="head"><div style="display:flex;gap:12px;align-items:center"><img src="${siteUrl()}/uploads/site-logo.png" alt="" style="height:56px;width:auto;max-width:160px;object-fit:contain" onerror="this.style.display='none'"/><div><h1>Vaidya Gogate Memorial Foundation</h1><p class="muted">Pune, Maharashtra, India</p></div></div>
-<div style="text-align:right"><p style="margin:0;font-size:18px"><b>Tax invoice</b></p>
+<div style="text-align:right"><p style="margin:0;font-size:18px"><b>Invoice</b></p>
 <p class="muted">Invoice no. ${esc(invoice.number)}<br>Invoice date ${esc(day(invoice.issuedAt))}<br>Order no. ${esc(order.id)}<br>Order date ${esc(day(order.date))}</p></div></div>
-<div class="grid"><div><b>Billed and shipped to</b><br>${esc(address?.fullName)}<br>${esc(address?.line1)}${address?.landmark ? `, ${esc(address.landmark)}` : ""}<br>${esc(address?.city)}, ${esc(address?.state)} ${esc(address?.pincode)}</div>
-<div style="text-align:right"><b>Payment</b><br>${esc(order.paymentStatus)}${order.paymentMethod ? ` · ${esc(order.paymentMethod)}` : ""}<br>${order.courierName ? `Delivered by ${esc(order.courierName)}` : ""}</div></div>
+<div class="grid"><div><b>From</b><br>${esc(siteConfig.name)}<br>${esc(siteConfig.address)}<br>Phone ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}</div>
+<div style="text-align:right"><b>To</b><br>${esc(address?.fullName)}<br>${esc(address?.line1)}${address?.landmark ? `, ${esc(address.landmark)}` : ""}<br>${esc(address?.city)}, ${esc(address?.state)} ${esc(address?.pincode)}${address?.phone ? `<br>Phone ${esc(address.phone)}` : ""}</div></div>
+<p class="muted" style="margin-top:12px">Payment: ${esc(order.paymentStatus)}${order.paymentMethod ? ` · ${esc(order.paymentMethod)}` : ""}${order.courierName ? ` · Delivered by ${esc(order.courierName)}` : ""}</p>
 <table><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-<table class="totals">${line("Subtotal", order.subtotal)}${order.discount ? line("Discount", -order.discount) : ""}${order.gst ? line("GST", order.gst) : ""}${order.platformFee ? line("Platform fee", order.platformFee) : ""}${line("Shipping", order.shipping)}${line("Total", order.total, true)}</table>
+<table class="totals">${line("Subtotal", order.subtotal)}${order.discount ? line("Discount", -order.discount) : ""}${order.platformFee ? line("Platform fee", order.platformFee) : ""}${line("Shipping", order.shipping)}${line("Total", order.total, true)}</table>
 <p class="foot">This is a computer-generated invoice and needs no signature.<br>Thank you for supporting the Vaidya Gogate Memorial Foundation.</p>
 <div style="text-align:center"><button class="print" onclick="window.print()">Print or save as PDF</button></div>
 </div></body></html>`;

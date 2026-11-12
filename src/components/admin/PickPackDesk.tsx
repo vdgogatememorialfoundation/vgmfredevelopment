@@ -4,7 +4,8 @@ import { orderItemBatch } from "@/lib/product-data";
 import { useEffect, useRef, useState } from "react";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
-import { acceptPick, assignPicker, getAccounts, recordPickScan } from "@/lib/admin-store";
+import { acceptPick, assignPicker, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
+import { uploadMediaFile } from "@/lib/media-client";
 import { getOrders } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { useCommerceMirror } from "@/lib/commerce-sync";
@@ -103,6 +104,25 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
     setTick((value) => value + 1);
   };
 
+  const [uploading, setUploading] = useState("");
+  const addPackPhotos = async (orderId: string, files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(orderId);
+    setError("");
+    try {
+      const by = getSession()?.email ?? "packer";
+      const added: NonNullable<Order["packPhotos"]> = [];
+      for (const file of Array.from(files)) added.push({ url: await uploadMediaFile(file), at: new Date().toISOString(), by });
+      patchOrder(orderId, { packPhotos: [...(getOrder(orderId)?.packPhotos ?? []), ...added] });
+      setNote(`${added.length} packing photo${added.length === 1 ? "" : "s"} saved for order ${orderId}.`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not upload the photo.");
+    } finally {
+      setUploading("");
+      setTick((value) => value + 1);
+    }
+  };
+
   const progress = (order: Order) => {
     const total = order.items.reduce((sum, item) => sum + item.quantity, 0);
     const map = order.pick?.pickedAt ? order.pick.packScan : order.pick?.picked ?? {};
@@ -112,7 +132,11 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
 
   return (
     <div className="space-y-5">
-      <Panel title={lead ? (mode === "pack" ? "Orders to pack" : mode === "pick" ? "Orders being picked" : "Pick & pack board") : "My pick list"} description="New assignments ring a bell. Accept, scan each product to pick it, then scan the order QR and each product again to pack. Packed orders become ready for dispatch.">
+      <Panel
+        title={lead ? (mode === "pack" ? "Orders to pack" : mode === "pick" ? "Orders being picked" : "Pick & pack board") : "My pick list"}
+        description="New assignments ring a bell. Accept, scan each product to pick it, then scan the order QR and each product again to pack. Take photos of the packed items before sealing. Packed orders become ready for dispatch."
+        action={mine.length ? <Button variant="outline" onClick={() => printPackagingSlips(mine)}>Download packaging slips ({mine.length})</Button> : undefined}
+      >
         {mine.length === 0 ? (
           <p className="text-sm text-slate-500">{lead ? (mode === "pack" ? "Nothing is waiting to be packed. Orders appear here once every item is picked." : "No orders are being picked. Assign a picker below.") : "No orders assigned to you right now."}</p>
         ) : (
@@ -136,6 +160,12 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                   ) : (
                     <Button variant={active === order.id ? "primary" : "outline"} onClick={() => { setActive(order.id); setCamera(cameraFirst); }}>{active === order.id ? "Scanning this order" : "Scan for this order"}</Button>
                   )}
+                  {order.pick?.pickedAt ? (
+                    <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800">
+                      {uploading === order.id ? "Uploading…" : `Add packing photos${order.packPhotos?.length ? ` (${order.packPhotos.length})` : ""}`}
+                      <input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={uploading === order.id} onChange={(event) => { void addPackPhotos(order.id, event.target.files); event.target.value = ""; }} />
+                    </label>
+                  ) : null}
                 </div>
               </li>
             ))}

@@ -663,6 +663,8 @@ export interface Order {
     packedAt?: string;
   };
   weightKg?: number;
+  /** Photos the packer took of the packed items, kept as proof. Desk only; never sent to customers. */
+  packPhotos?: { url: string; at: string; by: string }[];
   /** Packed parcel for this shipment (single or bulk). Overrides the default box size in Shipping settings. */
   parcel?: { length: number; breadth: number; height: number; boxes: number; kind: "single" | "bulk"; contents?: string };
   createdBy?: string;
