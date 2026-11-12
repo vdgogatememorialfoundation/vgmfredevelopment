@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
@@ -15,6 +15,13 @@ export default function TrackLookup() {
   const [link, setLink] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const fromLink = new URLSearchParams(window.location.search).get("order");
+    if (!fromLink) return;
+    const timer = setTimeout(() => setRef(fromLink), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();

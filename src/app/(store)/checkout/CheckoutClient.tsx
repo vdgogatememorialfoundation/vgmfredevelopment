@@ -410,6 +410,15 @@ export default function CheckoutClient() {
     return "";
   };
 
+  /** Guests are not asked to sign up; the order is linked to the email and phone given here. */
+  const guestContactProblem = () => {
+    if (user) return "";
+    if (!address.fullName.trim()) return "Please fill in your full name.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((address.email || "").trim())) return "Please enter a valid email address. Your order is linked to it.";
+    if (!isValidPhone(address.phone)) return "Please enter a valid phone number, including country code.";
+    return "";
+  };
+
   const preorderBalanceLater = orderItems.some((item) => item.preorder) && !codSelected && !cashAtStoreSelected;
   const payNow = preorderBalanceLater ? preorderAdvance(totals.total, orderSettings) : totals.total;
   const preorderShippingLater = hasPreorder && deliveryMode === "delivery";
@@ -728,6 +737,13 @@ export default function CheckoutClient() {
               )}
             </div>
 
+            {!user && (
+              <p className="mb-4 rounded-xl border border-border bg-warm-cream px-4 py-3 text-sm text-text-primary">
+                No sign-up needed. Your order is linked to the email and phone you enter here, and you can track it with the order ID.{" "}
+                <Link href="/login?mode=signin&next=/checkout" className="font-semibold text-burgundy underline">Sign in</Link> to use saved addresses.
+              </p>
+            )}
+
             {deliveryMode === "delivery" && (
               <>
                 {user && savedAddresses.length > 0 && (
@@ -804,6 +820,23 @@ export default function CheckoutClient() {
               </>
             )}
 
+            {deliveryMode === "store_pickup" && !user && (
+              <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                <label className="text-sm font-medium text-text-primary">
+                  Full name
+                  <input className="input-field mt-1" value={address.fullName} onChange={(event) => setAddress({ ...address, fullName: event.target.value })} autoComplete="name" />
+                </label>
+                <label className="text-sm font-medium text-text-primary">
+                  Phone
+                  <input className="input-field mt-1" type="tel" value={address.phone} onChange={(event) => setAddress({ ...address, phone: event.target.value })} autoComplete="tel" placeholder="+91 98765 43210" />
+                </label>
+                <label className="text-sm font-medium text-text-primary">
+                  Email
+                  <input className="input-field mt-1" type="email" value={address.email ?? ""} onChange={(event) => setAddress({ ...address, email: event.target.value })} autoComplete="email" />
+                </label>
+              </div>
+            )}
+
             {deliveryMode === "store_pickup" && (
               <div className="rounded-xl border border-gold/40 bg-warm-cream p-5 text-sm">
                 <p className="font-semibold text-text-primary">Pickup from store</p>
@@ -834,8 +867,7 @@ export default function CheckoutClient() {
               type="button"
               disabled={!canReview}
               onClick={() => {
-                const problem =
-                  deliveryMode === "delivery" ? validateAddress() : "";
+                const problem = (deliveryMode === "delivery" ? validateAddress() : "") || guestContactProblem();
                 if (problem) {
                   setError(problem);
                   return;
@@ -1060,8 +1092,9 @@ export default function CheckoutClient() {
               </span>
             </div>
 
+            {(orderSettings.promoCodes.coupons || orderSettings.promoCodes.giftCards || promo) && (
             <div className="mt-5 rounded-xl border border-border px-4 py-3 text-sm">
-              <p className="font-semibold text-text-primary">Coupon or gift card</p>
+              <p className="font-semibold text-text-primary">{orderSettings.promoCodes.coupons && orderSettings.promoCodes.giftCards ? "Coupon or gift card" : orderSettings.promoCodes.giftCards ? "Gift card" : "Coupon"}</p>
               {promo ? (
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <span className="text-emerald-700">
@@ -1089,6 +1122,7 @@ export default function CheckoutClient() {
               )}
               {promoNote ? <p className="mt-2 text-xs text-red-700">{promoNote}</p> : null}
             </div>
+            )}
 
             {storeCredit > 0 && (
               <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-border px-4 py-3 text-sm">
@@ -1210,7 +1244,7 @@ export default function CheckoutClient() {
             </div>
             <h2 className="heading-2 mt-5">Order placed successfully!</h2>
             <p className="mt-2 text-sm text-text-muted">
-              {cashAtStoreSelected ? "Pay at the clinic counter when you collect the order." : codSelected ? "Pay in cash when the order arrives." : "Your payment was received."} Track your order anytime from My Orders.
+              {cashAtStoreSelected ? "Pay at the clinic counter when you collect the order." : codSelected ? "Pay in cash when the order arrives." : "Your payment was received."} {user ? "Track your order anytime from My Orders." : `We linked this order to ${placedOrder?.deliveryAddress?.email || address.email}. Sign in with an OTP to that email or phone to see it under My Orders.`}
             </p>
             <div className="mx-auto mt-6 inline-flex flex-col items-center rounded-2xl border border-emerald-200 bg-white px-8 py-5">
               <p className="text-xs uppercase tracking-[0.14em] text-text-muted">
@@ -1261,7 +1295,7 @@ export default function CheckoutClient() {
                   GST invoice
                 </button>
               )}
-              <Link href="/account/orders" className="btn-primary">
+              <Link href={user ? "/account/orders" : `/track?order=${encodeURIComponent(orderId)}`} className="btn-primary">
                 Track Your Order
               </Link>
               <Link href="/shop" className="btn-outline">

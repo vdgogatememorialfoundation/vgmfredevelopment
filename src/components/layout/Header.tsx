@@ -593,9 +593,6 @@ export default function Header() {
 
               {/* Mobile */}
               <div className="flex shrink-0 items-center gap-2 lg:hidden">
-                <Link href="/search" aria-label="Search" className="flex h-10 w-10 items-center justify-center text-ink">
-                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-                </Link>
                 <Link
                   href="/cart"
                   aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
@@ -609,8 +606,18 @@ export default function Header() {
                   )}
                 </Link>
 
-                <Link href={isAuthenticated ? "/account" : "/login"} className="flex h-10 w-10 items-center justify-center text-ink" aria-label={isAuthenticated ? "My account" : "Account"}>
-                  <UserIcon />
+                <Link
+                  href={isAuthenticated ? "/account" : "/login"}
+                  className="flex min-w-10 flex-col items-center justify-center text-ink"
+                  aria-label={isAuthenticated ? `Signed in${user?.firstName ? ` as ${user.firstName}` : ""} · My account` : "Signed out · Sign in"}
+                >
+                  <span className="relative">
+                    <UserIcon />
+                    <span className={`absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${isAuthenticated ? "bg-emerald-500" : "bg-slate-400"}`} aria-hidden="true" />
+                  </span>
+                  <span className={`max-w-[4.5rem] truncate text-[10px] font-semibold leading-tight ${isAuthenticated ? "text-emerald-700" : "text-text-muted"}`}>
+                    {isAuthenticated ? (user?.firstName ? `Hi, ${user.firstName}` : "Signed in") : "Signed out"}
+                  </span>
                 </Link>
 
                 <button
@@ -624,8 +631,24 @@ export default function Header() {
                 </button>
               </div>
             </div>
-            <div className="-mt-3 flex min-w-0 pb-1.5">
-              <DeliverTo />
+            <div className="-mt-3 flex min-w-0 items-center gap-2 pb-1.5">
+              <div className="min-w-0 shrink">
+                <DeliverTo />
+              </div>
+              <form
+                action="/search"
+                role="search"
+                className="flex min-w-[8.5rem] flex-1 items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 lg:hidden"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-text-muted" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+                <input
+                  type="search"
+                  name="q"
+                  placeholder="Search books, articles…"
+                  aria-label="Search the site"
+                  className="min-w-0 flex-1 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted"
+                />
+              </form>
             </div>
           </div>
 

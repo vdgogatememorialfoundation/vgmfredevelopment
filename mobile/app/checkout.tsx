@@ -58,6 +58,8 @@ export default function CheckoutScreen() {
   const shipping = preorder ? 0 : subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
   const [promo, setPromo] = useState<PromoRule | null>(null);
   const [promoInput, setPromoInput] = useState("");
+  const promoRules = (feed?.orderSettings as { promoCodes?: { coupons?: boolean; giftCards?: boolean } } | undefined)?.promoCodes;
+  const promoAllowed = promoRules?.coupons === true || promoRules?.giftCards === true;
   const [promoNote, setPromoNote] = useState("");
   const promoOff = promoAmount(promo, subtotal);
   const total = Math.max(0, subtotal - promoOff) + shipping;
@@ -207,9 +209,13 @@ export default function CheckoutScreen() {
             {promoOff ? <Muted>{promo?.label} · −{money(promoOff)}</Muted> : null}
             <Heading>Total {money(total)}</Heading>
           </Card>
-          <Field label="Coupon or gift card code" value={promoInput} onChange={(next) => { setPromoInput(next.toUpperCase()); if (promo) setPromo(null); }} autoCapitalize="none" />
-          <Button kind="ghost" label={promo ? "Code applied" : "Apply code"} disabled={!promoInput.trim() || Boolean(promo)} onPress={() => void applyPromo()} />
-          {promoNote ? <Muted>{promoNote}</Muted> : null}
+          {promoAllowed ? (
+            <>
+              <Field label="Coupon or gift card code" value={promoInput} onChange={(next) => { setPromoInput(next.toUpperCase()); if (promo) setPromo(null); }} autoCapitalize="none" />
+              <Button kind="ghost" label={promo ? "Code applied" : "Apply code"} disabled={!promoInput.trim() || Boolean(promo)} onPress={() => void applyPromo()} />
+              {promoNote ? <Muted>{promoNote}</Muted> : null}
+            </>
+          ) : null}
           <Field label="Full name" value={name} onChange={setName} autoCapitalize="words" />
           <CountryField
             value={country.code}

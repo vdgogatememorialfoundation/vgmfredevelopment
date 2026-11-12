@@ -233,6 +233,8 @@ export interface OrderSettings {
   pickSchedule: { pickMinutes: number; packMinutes: number };
   /** Which picker / packer scans are required (true) or optional (false). */
   scanRules: ScanRules;
+  /** Show the coupon / gift card box to customers (off by default). */
+  promoCodes: { coupons: boolean; giftCards: boolean };
   /** Customer-facing names for statuses and tracking steps, keyed by the built-in name. */
   statusLabels: Record<string, string>;
   /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
@@ -421,6 +423,7 @@ export const defaultOrderSettings: OrderSettings = {
     pick: { orderCode: true, productCode: true, sku: true },
     pack: { boxCode: true, orderCode: true, sku: true, isbn: true, photos: true, confirm: true },
   },
+  promoCodes: { coupons: false, giftCards: false },
   statusLabels: {},
   customStatuses: [],
   preorderPayment: { mode: "advance", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
@@ -685,6 +688,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
         confirm: merged.scanRules?.pack?.confirm !== false,
       },
     },
+    promoCodes: { coupons: merged.promoCodes?.coupons === true, giftCards: merged.promoCodes?.giftCards === true },
     pickSchedule: {
       pickMinutes: Math.max(1, finiteNumber(merged.pickSchedule?.pickMinutes, 30)),
       packMinutes: Math.max(1, finiteNumber(merged.pickSchedule?.packMinutes, 30)),

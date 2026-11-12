@@ -1653,6 +1653,8 @@ export function OrderSettingsDesk() {
           <Text label="Minimum courier charge shown (₹)" type="number" value={value.courierMarkup.minimum} onChange={(minimum) => set({ courierMarkup: { ...value.courierMarkup, minimum: Math.max(0, Number(minimum) || 0) } })} />
           <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
+          <Check label="Coupons at checkout (customers can enter a coupon code)" checked={value.promoCodes.coupons} onChange={(coupons) => set({ promoCodes: { ...value.promoCodes, coupons } })} />
+          <Check label="Gift cards at checkout (customers can redeem a gift card)" checked={value.promoCodes.giftCards} onChange={(giftCards) => set({ promoCodes: { ...value.promoCodes, giftCards } })} />
           <Check label="Hide delivery dates on the site (product cards, product page, bag, checkout and tracking until a courier is booked)" checked={value.hideDeliveryDates} onChange={(hideDeliveryDates) => set({ hideDeliveryDates })} />
           <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
           <Text label="Packing / processing time (hours)" type="number" value={value.processingHours} onChange={(hours) => set({ processingHours: Math.max(0, Number(hours) || 0) })} />
