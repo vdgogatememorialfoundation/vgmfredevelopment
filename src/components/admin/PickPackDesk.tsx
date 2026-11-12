@@ -125,6 +125,20 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
     }
   };
 
+  const nextStep = (order: Order) => {
+    const pick = order.pick;
+    if (!pick?.acceptedAt) return "Tap Accept & start picking.";
+    const left = (map: Record<string, number>) =>
+      order.items
+        .filter((item) => (map[item.bookId] ?? 0) < item.quantity)
+        .map((item) => `${item.quantity - (map[item.bookId] ?? 0)} × ${item.title}`)
+        .join(", ");
+    if (!pick.pickedAt) return `Pick: take each item off the shelf and scan its barcode. Still to scan: ${left(pick.picked)}.`;
+    if (!pick.orderScannedAt) return "Pack: first scan the order QR on the packaging slip (or type the order number).";
+    const rest = left(pick.packScan);
+    return rest ? `Pack: scan each item as it goes into the box. Still to scan: ${rest}.` : "All items scanned. Add packing photos, then seal the box.";
+  };
+
   const progress = (order: Order) => {
     const total = order.items.reduce((sum, item) => sum + item.quantity, 0);
     const map = order.pick?.pickedAt ? order.pick.packScan : order.pick?.picked ?? {};
@@ -136,9 +150,37 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
     <div className="space-y-5">
       <Panel
         title={lead ? (mode === "pack" ? "Orders to pack" : mode === "pick" ? "Orders being picked" : "Pick & pack board") : "My pick list"}
-        description="New assignments ring a bell. Accept, scan each product to pick it, then scan the order QR and each product again to pack. Take photos of the packed items before sealing. Packed orders become ready for dispatch."
+        description="New assignments ring a bell. Follow the steps below; each order shows what to scan next."
         action={mine.length ? <Button variant="outline" onClick={() => printPackagingSlips(mine)}>Download packaging slips ({mine.length})</Button> : undefined}
       >
+        <details open className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <summary className="cursor-pointer font-semibold text-slate-900">What to scan</summary>
+          {mode !== "pack" ? (
+            <div className="mt-2">
+              <p className="font-semibold text-slate-900">Picker</p>
+              <ol className="ml-5 list-decimal space-y-1">
+                <li>Tap <b>Accept &amp; start picking</b> on your order. The camera opens on a phone.</li>
+                <li>Take each item off the shelf and scan its barcode: the barcode sticker we print, the ISBN barcode on the back of a book, or the SKU / product code on the shelf label.</li>
+                <li>Scan once for every copy. 2 copies ordered means 2 scans.</li>
+                <li>If the camera can&apos;t read it, type the SKU or barcode number in the box and tap <b>Record scan</b>.</li>
+                <li>When every item is scanned, the order moves to the packer.</li>
+              </ol>
+            </div>
+          ) : null}
+          {mode !== "pick" ? (
+            <div className="mt-2">
+              <p className="font-semibold text-slate-900">Packer</p>
+              <ol className="ml-5 list-decimal space-y-1">
+                <li>Print the slip with <b>Download packaging slips</b>.</li>
+                <li>Tap <b>Scan for this order</b>, then scan the <b>order QR</b> on the packaging slip first (or type the order number).</li>
+                <li>Scan each item as you put it into the box, once per copy.</li>
+                <li>Tap <b>Add packing photos</b> and photograph the items in the open box, then seal it. Only the desk sees these photos.</li>
+                <li>When every item is scanned, the order is ready for dispatch.</li>
+              </ol>
+            </div>
+          ) : null}
+          <p className="mt-2 text-xs text-slate-500">A red message means the scan was not counted: the item is not in this order, or that item is already fully scanned. Put it back and check the slip.</p>
+        </details>
         {mine.length === 0 ? (
           <p className="text-sm text-slate-500">{lead ? (mode === "pack" ? "Nothing is waiting to be packed. Orders appear here once every item is picked." : "No orders are being picked. Assign a picker below.") : "No orders assigned to you right now."}</p>
         ) : (
@@ -156,6 +198,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                     <li key={item.bookId}>{item.quantity} × {item.title}{item.sku ? ` · ${item.sku}` : ""}{orderItemBatch(item) ? ` · Batch ${orderItemBatch(item)}` : ""}</li>
                   ))}
                 </ul>
+                <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1.5 text-sm font-medium text-amber-900">Next: {nextStep(order)}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {!order.pick?.acceptedAt ? (
                     <Button onClick={() => { acceptPick(order.id); setActive(order.id); setCamera(cameraFirst || onPhone()); setTick((value) => value + 1); }}>Accept & start picking</Button>
