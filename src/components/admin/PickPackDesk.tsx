@@ -33,6 +33,8 @@ function ring() {
   }
 }
 
+const onPhone = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
 /** Store pickers get assigned orders with a bell, scan items to pick, then the order QR and items to pack. */
 export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pick" | "pack" | "all"; cameraFirst?: boolean }) {
   const { version } = useCommerceMirror();
@@ -156,9 +158,9 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                 </ul>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {!order.pick?.acceptedAt ? (
-                    <Button onClick={() => { acceptPick(order.id); setActive(order.id); setCamera(cameraFirst); setTick((value) => value + 1); }}>Accept & start picking</Button>
+                    <Button onClick={() => { acceptPick(order.id); setActive(order.id); setCamera(cameraFirst || onPhone()); setTick((value) => value + 1); }}>Accept & start picking</Button>
                   ) : (
-                    <Button variant={active === order.id ? "primary" : "outline"} onClick={() => { setActive(order.id); setCamera(cameraFirst); }}>{active === order.id ? "Scanning this order" : "Scan for this order"}</Button>
+                    <Button variant={active === order.id ? "primary" : "outline"} onClick={() => { setActive(order.id); setCamera(cameraFirst || onPhone()); }}>{active === order.id ? "Scanning this order" : "Scan for this order"}</Button>
                   )}
                   {order.pick?.pickedAt ? (
                     <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800">
@@ -167,21 +169,25 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                     </label>
                   ) : null}
                 </div>
+                {active === order.id ? (
+                  <div className="mt-3">
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="min-w-0 flex-1 basis-56">
+                        <TextInput placeholder="Scan or type a product barcode / SKU or the order number" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") scan(code); }} />
+                      </div>
+                      <Button variant="outline" onClick={() => scan(code)}>Record scan</Button>
+                      <Button variant="outline" onClick={() => setCamera(true)}>Use camera</Button>
+                    </div>
+                    {note ? <p className="mt-2 text-sm text-emerald-700">{note}</p> : null}
+                    {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
-        {active ? (
-          <div className="mt-4 flex flex-wrap items-end gap-2">
-            <div className="min-w-56 flex-1">
-              <TextInput placeholder="Scan or type a product barcode / SKU or the order number" value={code} onChange={(event) => setCode(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") scan(code); }} />
-            </div>
-            <Button variant="outline" onClick={() => scan(code)}>Record scan</Button>
-            <Button variant="outline" onClick={() => setCamera(true)}>Use camera</Button>
-          </div>
-        ) : null}
-        {note ? <p className="mt-2 text-sm text-emerald-700">{note}</p> : null}
-        {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+        {!active && note ? <p className="mt-2 text-sm text-emerald-700">{note}</p> : null}
+        {!active && error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
         {camera ? <BarcodeCamera label="Scan a product barcode or the order QR" continuous onScan={(value) => scan(value)} onClose={() => setCamera(false)} /> : null}
       </Panel>
 
