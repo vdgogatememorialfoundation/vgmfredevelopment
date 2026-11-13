@@ -1406,6 +1406,43 @@ export function convertToStorePickup(orderId: string) {
     : "Changed to store pickup.";
 }
 
+/** Adds a charge the customer still owes (e.g. courier shown as free by mistake); what they already paid stays recorded, so only the difference is due. */
+export function addExtraCharge(orderId: string, input: { amount: number; reason: string; kind: "shipping" | "other" }) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.status === "Cancelled") return "This order is cancelled.";
+  const amount = Math.round(Number(input.amount) * 100) / 100;
+  if (!(amount > 0)) return "Enter an amount above ₹0.";
+  const reason = input.reason.trim();
+  if (!reason) return "Enter the reason the customer will see.";
+  const round = (value: number) => Math.round(value * 100) / 100;
+  const total = round(order.total + amount);
+  const plan = order.preorderPayment;
+  const paidSoFar =
+    order.paymentStatus === "Paid"
+      ? order.amountPaid ?? order.total
+      : order.paymentStatus === "Partially Paid"
+        ? order.amountPaid ?? (plan?.advancePaidAt ? plan.advance : 0)
+        : undefined;
+  const next = withHistory(
+    {
+      ...order,
+      total,
+      shipping: input.kind === "shipping" ? round((order.shipping ?? 0) + amount) : order.shipping,
+      extraCharges: [...(order.extraCharges ?? []), { amount, reason, kind: input.kind, at: new Date().toISOString(), by: currentActor() }],
+      paymentStatus: paidSoFar !== undefined && paidSoFar > 0 ? "Partially Paid" : order.paymentStatus,
+      amountPaid: paidSoFar !== undefined && paidSoFar > 0 ? round(paidSoFar) : order.amountPaid,
+      preorderPayment: plan && !plan.balancePaidAt ? { ...plan, balance: round(plan.balance + amount) } : plan,
+    },
+    order.status,
+    `Extra ${input.kind === "shipping" ? "courier charge" : "charge"} ₹${amount} added by the desk: ${reason}.`
+  );
+  updateOrderInStore(next);
+  return paidSoFar
+    ? `Added ₹${amount}. The customer has paid ₹${round(paidSoFar)}, so ₹${round(total - paidSoFar)} is now due; send them the payment link below.`
+    : `Added ₹${amount}. The order total is now ₹${total}.`;
+}
+
 /** Turns a normal order into a pre-order: books not in stock yet are held and the order is not booked with a courier until the desk packs it. */
 export function convertToPreorder(orderId: string, releaseDate?: string) {
   const order = getOrder(orderId);

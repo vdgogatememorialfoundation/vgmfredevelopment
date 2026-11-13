@@ -356,6 +356,21 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
                 } — we will send a payment link`}
         </p>
       ) : null}
+      {order.extraCharges?.length && order.status !== "Cancelled" ? (
+        <p className="vgmf-trk-note font-bold">
+          {order.extraCharges.map((charge) => `Extra ${charge.kind === "shipping" ? "courier charge" : "charge"} ₹${charge.amount.toLocaleString("en-IN")} (${charge.reason})`).join(" · ")}
+          {" · "}
+          {order.paymentStatus === "Paid" || order.preorderPayment
+            ? order.paymentStatus === "Paid" ? "paid" : "added to the balance"
+            : order.paymentLink
+              ? (
+                  <a href={order.paymentLink.url} className="font-semibold text-burgundy underline">
+                    pay now
+                  </a>
+                )
+              : "we will send a payment link"}
+        </p>
+      ) : null}
       <RefundDetails order={order} />
       {returnActive && returnRequest && returnPipeline ? (
         <div>

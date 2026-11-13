@@ -28,6 +28,7 @@ import {
   recordCourierPayment,
   convertToStorePickup,
   convertToPreorder,
+  addExtraCharge,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
@@ -843,6 +844,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [method, setMethod] = useState("UPI");
   const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
   const [linkAmount, setLinkAmount] = useState("");
+  const [extraAmount, setExtraAmount] = useState("");
+  const [extraReason, setExtraReason] = useState("");
+  const [extraKind, setExtraKind] = useState<"shipping" | "other">("shipping");
   const [reference, setReference] = useState("");
   const [refundFee, setRefundFee] = useState(() => {
     if (order.status !== "Cancelled") return false;
@@ -1250,6 +1254,30 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           </p>
           {order.paidAt && <p className="text-xs text-text-muted">Paid {formatDateTime(order.paidAt)}</p>}
           {order.razorpayPaymentId && <p className="font-mono text-xs text-text-muted">{order.razorpayPaymentId}</p>}
+          {order.paymentStatus === "Partially Paid" && <p className="text-xs text-text-muted">Paid {rupees(order.amountPaid ?? 0)} · due {rupees(remainingDue(order))}</p>}
+          {order.extraCharges?.map((charge) => (
+            <p key={charge.at} className="text-xs text-text-muted">
+              Extra {charge.kind === "shipping" ? "courier charge" : "charge"} {rupees(charge.amount)} · {charge.reason} · {formatDateTime(charge.at)}
+            </p>
+          ))}
+          {order.status !== "Cancelled" && (
+            <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[7rem_9rem_1fr_auto]">
+              <TextInput type="number" min={1} placeholder="₹ extra" aria-label="Extra amount" value={extraAmount} onChange={(event) => setExtraAmount(event.target.value)} />
+              <SelectInput aria-label="Extra charge type" value={extraKind} onChange={(event) => setExtraKind(event.target.value as "shipping" | "other")}>
+                <option value="shipping">Courier charge</option>
+                <option value="other">Other charge</option>
+              </SelectInput>
+              <TextInput placeholder="Reason the customer sees (e.g. courier was shown free by mistake)" aria-label="Extra charge reason" value={extraReason} onChange={(event) => setExtraReason(event.target.value)} />
+              <Button variant="outline" disabled={busy === "extra"} onClick={() => {
+                if (!window.confirm(`Add ₹${extraAmount || 0} to this order?`)) return;
+                run("extra", () => {
+                  const result = addExtraCharge(order.id, { amount: Number(extraAmount), reason: extraReason, kind: extraKind });
+                  if (result.startsWith("Added")) { setExtraAmount(""); setExtraReason(""); setLinkMode("remaining"); }
+                  return result;
+                });
+              }}>Add extra charge</Button>
+            </div>
+          )}
 
           {!paid && order.status !== "Cancelled" && (
             <div className="mt-3 space-y-3">

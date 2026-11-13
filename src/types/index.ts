@@ -641,6 +641,8 @@ export interface Order {
   razorpayPaymentId?: string;
   paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string };
   courierChoice?: CourierRate;
+  /** Amounts the desk added after ordering, e.g. a charge wrongly shown as free. */
+  extraCharges?: { amount: number; reason: string; kind: "shipping" | "other"; at: string; by?: string }[];
   /** A store-pickup order switched to courier delivery once the customer pays only the courier charge. */
   courierUpgrade?: {
     amount: number;

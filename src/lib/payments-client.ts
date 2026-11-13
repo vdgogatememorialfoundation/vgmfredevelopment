@@ -270,7 +270,8 @@ export async function createPaymentLink(orderId: string, amountOverride?: number
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
     link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), amount, expiresAt };
   }
-  patchOrder(order.id, { paymentLink: link, paymentStatus: order.paymentStatus === "Paid" ? "Paid" : "Pending" }, "Payment link created");
+  const keep = order.paymentStatus === "Paid" || order.paymentStatus === "Partially Paid";
+  patchOrder(order.id, { paymentLink: link, paymentStatus: keep ? order.paymentStatus : "Pending" }, "Payment link created");
   sendEmail({
     to: order.deliveryAddress?.email ?? "",
     phone: order.deliveryAddress?.phone,
