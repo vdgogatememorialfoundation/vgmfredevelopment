@@ -680,7 +680,7 @@ export function notifyStaffOfOrder(order: Order) {
     order.discount ? `Discount: − ₹${order.discount}` : "",
     order.gst ? `GST: ₹${order.gst}` : "",
     order.platformFee ? `Platform fee: ₹${order.platformFee}` : "",
-    `Shipping: ${order.shipping ? `₹${order.shipping}` : "Free / later"}`,
+    `Shipping: ${order.shipping ? `₹${order.shipping}` : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment ? "Calculated once packed" : "Free"}`,
     `Total: ₹${order.total}`,
     `Payment: ${order.paymentStatus}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}${order.razorpayPaymentId ? ` · ${order.razorpayPaymentId}` : ""}`,
     order.preorderPayment ? `Pre-order: advance ₹${order.preorderPayment.advance ?? ""} · balance ₹${order.preorderPayment.balance ?? ""}` : "",

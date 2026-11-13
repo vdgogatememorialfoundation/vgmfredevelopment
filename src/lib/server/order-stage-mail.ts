@@ -177,7 +177,7 @@ function details(order: Order) {
     order.discount ? `Discount: − ${rupees(order.discount)}` : "",
     order.gst ? `GST: ${rupees(order.gst)}` : "",
     order.platformFee ? `Platform fee: ${rupees(order.platformFee)}` : "",
-    `Shipping: ${order.shipping ? rupees(order.shipping) : pre?.shippingDue ? "added to the balance" : order.shippingDue ? "calculated once packed" : "Free"}`,
+    `Shipping: ${order.shipping ? rupees(order.shipping) : pre?.shippingDue ? "added to the balance" : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || pre ? "calculated once packed" : "Free"}`,
     order.storeCreditUsed ? `Store credit used: − ${rupees(order.storeCreditUsed)}` : "",
     `Order total: ${rupees(order.total)}`,
     "",

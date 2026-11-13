@@ -151,7 +151,7 @@ async function mailDeskNewOrder(order: Order, paymentId: string) {
     ...order.items.map((item) => `- ${item.title}${item.sku ? ` (SKU ${item.sku})` : ""} × ${item.quantity} @ ₹${item.price} = ₹${item.price * item.quantity}`),
     "",
     `Subtotal: ₹${order.subtotal}`,
-    `Shipping: ${order.shipping ? `₹${order.shipping}` : "Free / later"}`,
+    `Shipping: ${order.shipping ? `₹${order.shipping}` : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment ? "Calculated once packed" : "Free"}`,
     `Total: ₹${order.total}`,
     `Payment: Razorpay · ${paymentId}`,
   ].join("\n");
