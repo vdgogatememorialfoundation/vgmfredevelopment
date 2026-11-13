@@ -72,9 +72,10 @@ import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
-import { getOrder as getStoredOrder, patchOrder as patchStoredOrder } from "@/lib/admin-store";
+import { getOrder as getStoredOrder, orderLanguages, patchOrder as patchStoredOrder } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
+import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
 import { beep } from "@/lib/scan-beep";
 import { APPROVAL_LABELS, requestApproval } from "@/lib/approvals";
 import type { ApprovalRequest } from "@/types";
@@ -126,6 +127,8 @@ export function OrdersDashboard() {
   const [showBulk, setShowBulk] = useState<"grid" | "import" | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All");
+  const [languageFilter, setLanguageFilter] = useState("All");
+  const [shipOne, setShipOne] = useState(false);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [bulkBusy, setBulkBusy] = useState("");
@@ -159,8 +162,12 @@ export function OrdersDashboard() {
     setTimeout(() => setNewOrders((current) => [...fresh, ...current].slice(0, 10)), 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderIds]);
+  const catalogue = getLiveBooks();
+  const languagesOf = (order: Order) => orderLanguages(order, catalogue);
+  const languages = [...new Set(orders.flatMap(languagesOf))].sort();
   const filtered = orders
     .filter((order) => statusFilter === "All" || order.status === statusFilter)
+    .filter((order) => languageFilter === "All" || languagesOf(order).includes(languageFilter))
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
     .filter((order) => {
       const q = query.trim().toLowerCase();
@@ -259,7 +266,7 @@ export function OrdersDashboard() {
           <Button onClick={() => setShowCreate(true)}>+ Create order</Button>
           <Button variant="outline" onClick={() => setShowBulk("grid")}>+ Bulk order</Button>
           <Button variant="outline" onClick={() => setShowBulk("import")}>Import orders</Button>
-          <Button variant="outline" onClick={() => exportOrdersCsv(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>Excel</Button>
+          <Button variant="outline" onClick={() => exportOrdersCsv(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered, languageFilter === "All" ? undefined : languageFilter)}>{languageFilter === "All" ? "Excel" : `Excel · ${languageFilter}`}</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>PDF</Button>
           <Button variant="outline" onClick={refresh}>Refresh</Button>
         </div>
@@ -296,6 +303,18 @@ export function OrdersDashboard() {
         )}
       </div>
 
+      {shipOne && (
+        <BulkShipCourier
+          orderIds={selectedIds}
+          onClose={() => setShipOne(false)}
+          onDone={(note) => {
+            setShipOne(false);
+            setBulkNote(note);
+            setPicked({});
+            refresh();
+          }}
+        />
+      )}
       {bulkNote && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{bulkNote}</p>}
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
@@ -313,9 +332,10 @@ export function OrdersDashboard() {
             if (order?.deliveryMode === "delivery" && !isPreorderOrder(order)) await bookShipment(id);
           })}>To Ship</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => void readyForPickup()}>Ready to pickup</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => setShipOne(true)}>Ship with one courier</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Out for Delivery", (id) => setOrderStatus(id, "Out for Delivery"))}>Out for Delivery</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Delivered", (id) => setOrderStatus(id, "Delivered"))}>Delivered</Button>
-          <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]))}>Excel</Button>
+          <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]), languageFilter === "All" ? undefined : languageFilter)}>Excel</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(filtered.filter((order) => picked[order.id]))}>PDF</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Labels", async (id) => {
             const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
@@ -389,7 +409,7 @@ export function OrdersDashboard() {
               </Button>
             }
           >
-            <div className="mb-3 grid gap-2 sm:grid-cols-3">
+            <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <TextInput placeholder="Search id, name, phone, AWB" value={query} onChange={(event) => setQuery(event.target.value)} />
               <SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option>All</option>
@@ -401,6 +421,10 @@ export function OrdersDashboard() {
                 <option>Paid</option>
                 <option>Refunded</option>
                 <option>Failed</option>
+              </SelectInput>
+              <SelectInput value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label="Language">
+                <option value="All">All languages</option>
+                {languages.map((language) => <option key={language}>{language}</option>)}
               </SelectInput>
             </div>
             {filtered.length === 0 ? (

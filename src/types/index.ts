@@ -610,6 +610,8 @@ export interface Order {
     | "Cancelled";
   channel?: "online" | "admin" | "pos" | "shipment";
   stockCommitted?: boolean;
+  /** Pre-order items take stock only once the order is packed from real stock. */
+  preorderStockCommitted?: boolean;
   storeCreditUsed?: number;
   /** Coupon or gift card applied at checkout. */
   promo?: { code: string; kind: "coupon" | "gift"; amount: number; label?: string };

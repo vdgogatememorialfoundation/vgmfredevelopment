@@ -19,7 +19,7 @@ import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment,
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, isPortalRole, saveAccount, setSession } from "@/lib/auth";
-import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
+import { commitPreorderStock, commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { matchesBarcode, matchesTag } from "@/lib/barcode";
 import QRCode from "qrcode";
 import { sameShipmentSlot } from "@/lib/shipment-slot";
@@ -713,7 +713,7 @@ export function getOrder(orderId: string) {
 
 export function deleteOrder(orderId: string) {
   const order = getOrder(orderId);
-  if (order?.stockCommitted) releaseStockForOrder(order);
+  if (order) releaseStockForOrder(order);
   writeJSON("vgmf_orders", getOrders().filter((item) => item.id !== orderId));
   removeOrderShipments(orderId);
   forgetShopOrder(orderId);
@@ -726,9 +726,10 @@ export function resaveOrder(
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   const items = update.items ?? order.items;
-  if (update.items && order.stockCommitted) {
+  if (update.items && (order.stockCommitted || order.preorderStockCommitted)) {
     releaseStockForOrder(order);
-    commitStockForOrder({ items, stockCommitted: false });
+    if (order.stockCommitted) commitStockForOrder({ items, stockCommitted: false });
+    if (order.preorderStockCommitted) commitPreorderStock({ items, preorderStockCommitted: false });
   }
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = items.reduce(
@@ -824,11 +825,18 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
   return next;
 }
 
-export function exportOrdersCsv(orders: Order[]) {
+/** Languages of the products in an order, from the catalogue. */
+export function orderLanguages(order: Pick<Order, "items">, books = getLiveBooks()) {
+  const byId = new Map(books.map((book) => [book.id, book.language?.trim()]));
+  return [...new Set(order.items.map((item) => byId.get(item.bookId) || "Unspecified"))];
+}
+
+export function exportOrdersCsv(orders: Order[], label?: string) {
+  const books = getLiveBooks();
   const header = [
     "Order ID", "Order type", "Date", "Channel", "Customer", "Phone", "Email", "Account email",
     "Delivery mode", "Address", "Landmark", "City", "State", "Pincode", "Country",
-    "Items", "Item count", "Total quantity", "SKUs",
+    "Items", "Languages", "Item count", "Total quantity", "SKUs",
     "Subtotal", "Discount", "GST", "Platform fee", "Shipping", "Store credit used", "Total",
     "Order status", "Payment status", "Payment method", "Payment ref", "Razorpay payment ID", "Razorpay order ID", "Paid at",
     "Pre-order advance", "Pre-order balance", "Refunded",
@@ -854,6 +862,7 @@ export function exportOrdersCsv(orders: Order[]) {
       address?.pincode ?? "",
       address?.country ?? "India",
       order.items.map((item) => `${item.title} x ${item.quantity} @ ${item.price}`).join("; "),
+      orderLanguages(order, books).join("; "),
       order.items.length,
       order.items.reduce((sum, item) => sum + item.quantity, 0),
       order.items.map((item) => item.sku || item.bookId).join("; "),
@@ -887,7 +896,8 @@ export function exportOrdersCsv(orders: Order[]) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `vgmf-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  const tag = label ? `-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : "";
+  link.download = `vgmf-orders${tag}-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -1234,6 +1244,8 @@ export function bypassPickStep(orderId: string, all = false) {
   return last;
 }
 
+const PACKED_OR_LATER = new Set<OrderStatus>(["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered"]);
+
 export function setOrderStatus(orderId: string, status: OrderStatus) {
   logAudit("Order status changed", orderId, status);
   const order = getOrder(orderId);
@@ -1243,10 +1255,13 @@ export function setOrderStatus(orderId: string, status: OrderStatus) {
     next.paymentStatus = "Paid";
   }
   if (!pickupOtpReady(order) && pickupOtpReady(next)) sendPickupOtp(next);
-  if (status === "Cancelled" && order.stockCommitted) {
+  if (status === "Cancelled" && (order.stockCommitted || order.preorderStockCommitted)) {
     releaseStockForOrder(order);
     next.stockCommitted = false;
+    next.preorderStockCommitted = false;
   }
+  // Picker/packer assignment leaves pre-order stock alone; it is taken once the order is packed.
+  if (PACKED_OR_LATER.has(status) && commitPreorderStock(order)) next.preorderStockCommitted = true;
   updateOrderInStore(next);
   sendOrderStatusEmail(next, status);
   syncReplacementProgress(next);
@@ -1255,9 +1270,9 @@ export function setOrderStatus(orderId: string, status: OrderStatus) {
 export function cancelOrder(orderId: string, reason?: string) {
   const order = getOrder(orderId);
   if (!order) return;
-  if (order.stockCommitted) releaseStockForOrder(order);
+  releaseStockForOrder(order);
   const next: Order = withHistory(
-    { ...order, status: "Cancelled", cancelReason: reason, stockCommitted: false },
+    { ...order, status: "Cancelled", cancelReason: reason, stockCommitted: false, preorderStockCommitted: false },
     "Cancelled",
     reason
   );

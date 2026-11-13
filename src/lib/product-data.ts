@@ -268,17 +268,26 @@ export function restockProduct(bookId: string, add: number) {
   return getLiveBook(bookId);
 }
 
-/** Takes the ordered units out of stock once per order. */
+/** Takes the ordered units out of stock once per order; pre-order items wait until they are packed. */
 export function commitStockForOrder(order: Pick<Order, "items" | "stockCommitted">) {
   if (order.stockCommitted) return false;
-  for (const item of order.items) adjustStock(item.bookId, -item.quantity);
+  for (const item of order.items) if (!item.preorder) adjustStock(item.bookId, -item.quantity);
+  return true;
+}
+
+/** Takes pre-order items out of stock once the product is in stock and the order is packed. */
+export function commitPreorderStock(order: Pick<Order, "items" | "preorderStockCommitted">) {
+  if (order.preorderStockCommitted || !order.items.some((item) => item.preorder)) return false;
+  for (const item of order.items) if (item.preorder) adjustStock(item.bookId, -item.quantity);
   return true;
 }
 
 /** Puts the units back, for cancelled orders that were never shipped. */
-export function releaseStockForOrder(order: Pick<Order, "items" | "stockCommitted">) {
-  if (!order.stockCommitted) return false;
-  for (const item of order.items) adjustStock(item.bookId, item.quantity);
+export function releaseStockForOrder(order: Pick<Order, "items" | "stockCommitted" | "preorderStockCommitted">) {
+  if (!order.stockCommitted && !order.preorderStockCommitted) return false;
+  for (const item of order.items) {
+    if (item.preorder ? order.preorderStockCommitted : order.stockCommitted) adjustStock(item.bookId, item.quantity);
+  }
   return true;
 }
 
