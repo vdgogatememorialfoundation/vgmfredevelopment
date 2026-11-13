@@ -34,10 +34,13 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   const { user, signOut } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
 
+  const userEmail = user?.email
+  const userRole = user?.role
+  // Keyed on identity, not the user object: syncs fire "vgmf-cms", which hands back a fresh user object.
   useEffect(() => {
-    if (user) void hydratePartnerFeed()
-    if (user?.role === "admin" || user?.role === "coadmin") void syncAdminIntegrations()
-  }, [user])
+    if (userEmail) void hydratePartnerFeed()
+    if (userRole === "admin" || userRole === "coadmin") void syncAdminIntegrations()
+  }, [userEmail, userRole])
 
   if (!user || (user.role !== "admin" && user.role !== "coadmin" && user.role !== "staff" && user.role !== "doctor")) {
     return (

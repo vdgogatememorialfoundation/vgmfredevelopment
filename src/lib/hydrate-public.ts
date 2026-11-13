@@ -43,7 +43,8 @@ function tryWrite(write: () => void) {
 export async function hydratePublishedSite() {
   if (typeof window === "undefined") return;
   void hydrateReviewsFromServer();
-  const dirty = window.localStorage.getItem(DIRTY_KEY);
+  // Set only while a publish is in flight; a tab closed mid-publish must not freeze this browser on old content.
+  const dirty = Date.now() - Number(window.localStorage.getItem(DIRTY_KEY) || 0) < 2 * 60 * 1000;
   const urls = ["/api/mobile/brand", "/api/mobile/feed", "/app-feed.json"];
   for (const url of urls) {
     try {

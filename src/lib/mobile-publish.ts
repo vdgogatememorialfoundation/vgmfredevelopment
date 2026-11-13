@@ -129,7 +129,7 @@ const DIRTY_KEY = "vgmf_live_dirty";
 
 export function markLiveDirty(dirty: boolean) {
   if (typeof window === "undefined") return;
-  if (dirty) window.localStorage.setItem(DIRTY_KEY, "1");
+  if (dirty) window.localStorage.setItem(DIRTY_KEY, String(Date.now()));
   else window.localStorage.removeItem(DIRTY_KEY);
 }
 

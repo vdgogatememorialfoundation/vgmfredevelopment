@@ -198,6 +198,10 @@ export function useSiteSettings(): SiteSettings | null {
       const hasLocal = Boolean(window.localStorage.getItem("vgmf_settings"));
       settingsValue = {
         ...local,
+        // Visitors never edit maintenance, so the live copy decides it on every device.
+        maintenanceMode: published?.maintenanceMode ?? local.maintenanceMode,
+        maintenanceUntil: published?.maintenanceUntil ?? local.maintenanceUntil,
+        maintenanceMessage: published?.maintenanceMessage || local.maintenanceMessage,
         siteName: hasLocal ? local.siteName : published?.name || local.siteName,
         tagline: hasLocal ? local.tagline : published?.tagline || local.tagline,
         logoUrl: local.logoUrl || published?.logoUrl || "",
