@@ -17,6 +17,16 @@ function onlyRemoved(current: unknown, incoming: unknown, removed?: string[]) {
   });
 }
 
+const SEEDED = new Set(["slide-legacy", "slide-events", "slide-shop"]);
+
+/** A browser that never loaded the live slideshow holds only the built-in slides; those must not replace real banners. */
+function seedsOverReal(current: unknown, incoming: unknown, removed?: string[]) {
+  if (!Array.isArray(current) || !Array.isArray(incoming) || !incoming.length) return false;
+  const id = (item: unknown) => String((item as { id?: unknown })?.id ?? "");
+  const real = current.filter((item) => !SEEDED.has(id(item)));
+  return real.length > 0 && incoming.every((item) => SEEDED.has(id(item))) && !real.every((item) => removed?.includes(id(item)));
+}
+
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
@@ -87,7 +97,8 @@ export async function POST(request: NextRequest) {
       const changedAt = current.sectionAt?.[key] || current.publishedAt || "";
       const stale = key !== "site" && !(body.removed?.[key]?.length) && (!basedOn || Boolean(changedAt && changedAt > basedOn));
       const removedIds = Array.isArray(body.removed?.[key]) ? body.removed[key].map(String) : undefined;
-      if (collapsed((current as Record<string, unknown>)[key], value) && !onlyRemoved((current as Record<string, unknown>)[key], value, removedIds)) {
+      const live = (current as Record<string, unknown>)[key];
+      if ((collapsed(live, value) && !onlyRemoved(live, value, removedIds)) || (key === "flyers" && seedsOverReal(live, value, removedIds))) {
         rejected.push(key);
         continue;
       }

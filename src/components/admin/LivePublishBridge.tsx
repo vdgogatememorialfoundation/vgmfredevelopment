@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { collectMobileSnapshot, publishLiveSite } from "@/lib/mobile-publish";
 import { pendingProductIds } from "@/lib/product-data";
+import { hydratePublishedSite } from "@/lib/hydrate-public";
 
 const SETTLE_MS = 1800;
 const HYDRATE_GUARD_MS = 4000;
@@ -51,11 +52,14 @@ export function LivePublishBridge() {
       timer.current = window.setTimeout(flush, SETTLE_MS);
     };
 
-    let warned = false;
+    // The live copy wins quietly: this browser pulls it instead of asking the admin to reload.
+    let pulling = false;
     const onConflict = () => {
-      if (warned) return;
-      warned = true;
-      window.alert("Another device updated the live site after this page loaded, so your older copy was not published over it. Hard-reload this page to get the latest content, then make your edit again.");
+      if (pulling) return;
+      pulling = true;
+      void hydratePublishedSite().finally(() => {
+        pulling = false;
+      });
     };
 
     window.addEventListener("vgmf-cms", onCms);

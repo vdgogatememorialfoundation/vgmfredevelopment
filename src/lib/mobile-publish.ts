@@ -216,6 +216,8 @@ export function publishLiveSite(options: { removed?: Record<string, string[]> } 
   // Without a baseline this browser never loaded the live feed, so only its own branding is safe to send.
   const body: Partial<MobileFeed> = baseline ? sections : { site: snapshot.site };
   for (const key of Object.keys(options.removed ?? {})) (body as Record<string, unknown>)[key] = (snapshot as Record<string, unknown>)[key];
+  // Only the built-in slides means this browser never loaded the live slideshow; never send them over real banners.
+  if (body.flyers && !options.removed?.flyers && body.flyers.every((flyer) => String(flyer.id).startsWith("slide-"))) delete body.flyers;
   // Products saved here always go out, even when an earlier feed load reset the baseline; the server takes just these ids.
   const editedBooks = pendingProductIds();
   if (editedBooks.length) body.books = snapshot.books;
