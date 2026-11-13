@@ -906,9 +906,10 @@ export default function CheckoutClient() {
                     key={item.bookId}
                     className="flex flex-col gap-4 border-b border-border pb-5 last:border-0 last:pb-0 sm:flex-row sm:items-center"
                   >
-                    <Link href={`/shop/${book.slug}`} className="shrink-0">
+                    <Link href={`/shop/${book.slug}`} className="w-20 shrink-0">
                       <MediaPlaceholder
                         variant="book"
+                        src={book.coverImage}
                         label={book.title}
                         aspectClassName="aspect-[3/4] rounded-xl"
                       />

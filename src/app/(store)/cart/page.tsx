@@ -324,11 +324,12 @@ export default function CartPage() {
   );
 }
 
-function MediumBookCover({ book }: { book: { slug: string; title: string } }) {
+function MediumBookCover({ book }: { book: { slug: string; title: string; coverImage?: string } }) {
   return (
     <div className="w-20 shrink-0">
       <MediaPlaceholder
         variant="book"
+        src={book.coverImage}
         label={book.title}
         aspectClassName="aspect-[3/4] rounded-xl"
       />

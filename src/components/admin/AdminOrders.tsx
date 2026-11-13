@@ -179,6 +179,10 @@ export function OrdersDashboard() {
   const delivered = orders.filter((order) => order.status === "Delivered").length;
   const inTransit = orders.filter((order) => order.status === "Shipped" || order.status === "Out for Delivery").length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
+  const openPreorders = orders.filter((order) => isPreorderOrder(order) && !["Delivered", "Cancelled"].includes(order.status));
+  const preordersOn = openPreorders.length > 0 || getLiveBooks().some((book) => book.preorder?.enabled);
+  const preorderDue = openPreorders.reduce((sum, order) => sum + remainingDue(order), 0);
+  const preorderReceived = openPreorders.reduce((sum, order) => sum + order.total, 0) - preorderDue;
 
   /** Store-pickup orders become ready at the counter (OTP unlocks); courier orders are packed and booked, one shipment each. */
   const readyForPickup = async () => {
@@ -260,7 +264,7 @@ export function OrdersDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className={classNames("grid gap-3 sm:grid-cols-2 lg:grid-cols-4", preordersOn ? "xl:grid-cols-8" : "xl:grid-cols-7")}>
         {[
           ["To pack", toPack, "Accepted"],
           ["To Ship", toShip, "To Ship"],
@@ -280,6 +284,15 @@ export function OrdersDashboard() {
             <p className="mt-1 text-2xl font-bold text-text-primary">{count}</p>
           </button>
         ))}
+        {preordersOn && (
+          <div className="rounded-xl border border-border bg-white p-4 text-left">
+            <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Pre-orders</p>
+            <p className="mt-1 text-2xl font-bold text-text-primary">{openPreorders.length}</p>
+            <p className="mt-1 text-xs text-text-muted">
+              Received <b className="text-emerald-700">{rupees(Math.round(preorderReceived * 100) / 100)}</b> · due <b>{rupees(Math.round(preorderDue * 100) / 100)}</b>
+            </p>
+          </div>
+        )}
       </div>
 
       {bulkNote && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{bulkNote}</p>}
