@@ -2023,6 +2023,12 @@ export function printShippingLabel(
   printHtml(`Label ${awb}`, html, page);
 }
 
+/** Item value before discount, chosen so subtotal − discount + charges always equals what the order charged. */
+function invoiceSubtotal(order: Order) {
+  const extras = (order.extraCharges ?? []).filter((extra) => extra.kind === "other").reduce((sum, extra) => sum + extra.amount, 0);
+  return Math.round((order.total + (order.discount || 0) - (order.gst || 0) - (order.platformFee || 0) - (order.shipping || 0) + (order.storeCreditUsed || 0) - extras) * 100) / 100;
+}
+
 export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
   const itemsHtml = order.items
     .map(
@@ -2036,7 +2042,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     )
     .join("");
   const html = `${letterhead()}
-  <h1>Tax invoice</h1>
+  <h1>Invoice</h1>
   <p class="sub">Invoice ${esc(order.id)} · ${esc(formatDate(order.date))} · Payment ${esc(order.paymentStatus)}${order.paymentMethod ? ` · ${esc(order.paymentMethod)}` : ""}</p>
   <div class="grid">
     <div class="box"><p class="label">Bill to</p>${addressBlock(order.deliveryAddress)}</div>
@@ -2056,10 +2062,12 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     ${itemsHtml}
   </table>
   <table class="totals">
-    <tr><td>Subtotal</td><td class="right">${rupees(order.subtotal)}</td></tr>
-    <tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>
-    <tr><td>GST</td><td class="right">${rupees(order.gst)}</td></tr>
-    <tr><td>Shipping</td><td class="right">${rupees(order.shipping)}</td></tr>
+    <tr><td>Subtotal</td><td class="right">${rupees(invoiceSubtotal(order))}</td></tr>
+    ${(order.extraCharges ?? []).filter((extra) => extra.kind === "other").map((extra) => `<tr><td>${esc(extra.reason)}</td><td class="right">${rupees(extra.amount)}</td></tr>`).join("")}
+    ${order.discount ? `<tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>` : ""}
+    ${order.gst ? `<tr><td>GST</td><td class="right">${rupees(order.gst)}</td></tr>` : ""}
+    ${order.platformFee ? `<tr><td>Platform fee</td><td class="right">${rupees(order.platformFee)}</td></tr>` : ""}
+    <tr><td>Shipping</td><td class="right">${order.shipping ? rupees(order.shipping) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</td></tr>
     ${order.storeCreditUsed ? `<tr><td>Store credit</td><td class="right">−${rupees(order.storeCreditUsed)}</td></tr>` : ""}
     <tr class="grand"><td>Total</td><td class="right">${rupees(order.total)}</td></tr>
   </table>

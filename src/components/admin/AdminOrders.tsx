@@ -1114,7 +1114,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <dl className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
             <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(order.subtotal)}</dd></div>
             {order.discount ? <div className="flex justify-between text-emerald-700"><dt>Discount</dt><dd>−{rupees(order.discount)}</dd></div> : null}
-            <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div>
+            {order.gst ? <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div> : null}
             {order.platformFee ? <div className="flex justify-between"><dt className="text-text-muted">Platform fee</dt><dd>{rupees(order.platformFee)}</dd></div> : null}
             <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{order.shipping > 0 ? rupees(order.shipping) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</dd></div>
             {order.storeCreditUsed ? <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(order.storeCreditUsed)}</dd></div> : null}

@@ -61,7 +61,7 @@ export default function OrderPaymentPanel({ order, onChange }: { order: Order; o
         <Fact label="Payment reference" value={order.paymentRef} />
         <Fact label="Subtotal" value={`₹${order.subtotal.toLocaleString("en-IN")}`} />
         <Fact label="Shipping" value={`₹${(order.shipping ?? 0).toLocaleString("en-IN")}`} />
-        <Fact label="GST" value={`₹${(order.gst ?? 0).toLocaleString("en-IN")}`} />
+        {order.gst ? <Fact label="GST" value={`₹${order.gst.toLocaleString("en-IN")}`} /> : null}
         <Fact label="Discount" value={order.discount ? `₹${order.discount.toLocaleString("en-IN")}` : ""} />
         <Fact label="Courier charge paid" value={order.courierUpgrade?.paidAt ? `₹${order.courierUpgrade.amount.toLocaleString("en-IN")}${order.courierUpgrade.paymentRef ? ` · ${order.courierUpgrade.paymentRef}` : ""}` : ""} />
         <Fact label="Refunded" value={order.refundAmount ? `₹${order.refundAmount.toLocaleString("en-IN")}` : ""} />

@@ -181,10 +181,17 @@ function resolve(invoice: IssuedInvoice, settings = readInvoiceSettings()): Reso
     const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
     return { invoice, order, title: "Platform fee invoice", to, lines, discount: 0, platformFee: 0, shipping: 0, total, ...shipped };
   }
-  const lines = invoice.lines?.length
-    ? invoice.lines
-    : (order?.items ?? []).map((item) => ({ title: item.title, quantity: item.quantity, price: item.price, batchNo: item.batchNo }));
-  const discount = invoice.discount ?? order?.discount ?? 0;
+  const orderLines = !invoice.lines?.length;
+  const lines = !orderLines
+    ? invoice.lines!
+    : [
+        ...(order?.items ?? []).map((item) => ({ title: item.title, quantity: item.quantity, price: Math.max(item.price, Number(item.originalPrice) || 0), batchNo: item.batchNo })),
+        ...(order?.extraCharges ?? []).filter((extra) => extra.kind === "other").map((extra) => ({ title: extra.reason, quantity: 1, price: extra.amount, batchNo: undefined })),
+      ];
+  const listed = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
+  // Lines are at MRP; the discount is whatever makes the invoice match what the order actually charged.
+  const derived = order && orderLines ? Math.max(0, Math.round((listed + (order.shipping || 0) + (Number(order.platformFee) || 0) + (order.gst || 0) - order.total) * 100) / 100) : undefined;
+  const discount = invoice.discount ?? derived ?? order?.discount ?? 0;
   const shipping = invoice.shipping ?? order?.shipping ?? 0;
   const platformFee = invoice.kind === "order" && !settings.separatePlatformFee ? Number(order?.platformFee) || 0 : 0;
   const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0) - discount + shipping + platformFee;

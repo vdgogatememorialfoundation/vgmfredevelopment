@@ -54,7 +54,8 @@ export function printGstInvoice(order: Order, settings: OrderSettings = getOrder
     </tr></table>
     <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
     <table>
-      <tr><td>Subtotal</td><td class="right">${rupees(order.subtotal)}</td></tr>
+      <tr><td>Subtotal</td><td class="right">${rupees(order.subtotal + (order.discount || 0))}</td></tr>
+      ${order.discount ? `<tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>` : ""}
       ${gst ? `<tr><td>GST ${esc(settings.gst.ratePercent)}%</td><td class="right">${rupees(order.gst)}</td></tr>` : ""}
       ${(order.platformFee || 0) > 0 ? `<tr><td>Platform fee</td><td class="right">${rupees(order.platformFee || 0)}</td></tr>` : ""}
       <tr><td>Shipping</td><td class="right">${rupees(order.shipping)}</td></tr>
