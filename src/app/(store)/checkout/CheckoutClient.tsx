@@ -26,7 +26,7 @@ import {
 import { storeConfig } from "@/lib/constants";
 import { canPreorder, preorderDeliveryDate } from "@/lib/product-data";
 import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
-import { preorderAdvance, preorderDatesHidden, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
+import { customerOrderPolicyCopy, preorderAdvance, preorderDatesHidden, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
 import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
@@ -1024,10 +1024,10 @@ export default function CheckoutClient() {
 
             <div className="rounded-2xl border border-border bg-white p-6 text-xs text-text-muted">
               <p className="font-semibold text-text-primary">
-                Replacements
+                {customerOrderPolicyCopy(orderSettings).title}
               </p>
-              <p className="mt-1">
-                Orders cannot be cancelled or returned from your account. If an item arrives damaged, share photos from My Orders. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.
+              <p className="mt-1 whitespace-pre-line">
+                {customerOrderPolicyCopy(orderSettings).body}
               </p>
             </div>
 

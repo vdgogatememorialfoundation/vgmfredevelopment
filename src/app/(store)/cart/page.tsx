@@ -6,7 +6,7 @@ import PageHeader from "@/components/common/PageHeader";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { useCart } from "@/lib/use-cart";
 import { deliveryCheckText, readDeliveryCheck, type DeliveryCheck } from "@/lib/delivery-check";
-import { preorderDatesHidden, shippingIsFree } from "@/lib/integrations";
+import { customerOrderPolicyCopy, preorderDatesHidden, shippingIsFree } from "@/lib/integrations";
 import {
   getBookById,
   setCartQuantity,
@@ -213,10 +213,10 @@ export default function CartPage() {
 
             <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
               <p className="font-semibold text-text-primary">
-                Replacements
+                {customerOrderPolicyCopy(orderSettings).title}
               </p>
-              <p className="mt-1">
-                Orders cannot be cancelled or returned from your account. Damaged items can be replaced after delivery if you share photos for the Foundation desk to review.
+              <p className="mt-1 whitespace-pre-line">
+                {customerOrderPolicyCopy(orderSettings).body}
               </p>
             </div>
           </div>
