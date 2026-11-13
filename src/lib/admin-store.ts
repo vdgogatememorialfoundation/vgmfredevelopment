@@ -12,6 +12,7 @@ import type {
   SupportTicket,
   FAQItem,
   User, RefundRecord } from "@/types";
+import { dropPortalAccount, pushPortalAccounts } from "@/lib/portal-accounts-sync";
 import { pickupInstructions } from "@/lib/fulfillment";
 import { siteConfig, storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
@@ -259,6 +260,7 @@ export function updateAccount(email: string, update: Partial<User>) {
   if (index === -1) return;
   accounts[index] = { ...accounts[index], ...update };
   writeJSON("vgmf_accounts", accounts);
+  if (accounts[index].role === "staff" || accounts[index].role === "coadmin") pushPortalAccounts();
   if (typeof window !== "undefined") {
     const session = getSession();
     if (session?.email.toLowerCase() === email.toLowerCase()) setSession({ ...session, ...update });
@@ -268,6 +270,7 @@ export function updateAccount(email: string, update: Partial<User>) {
 export function removeAccount(email: string) {
   recordActivity({ email, kind: "deleted", by: currentActorEmail() });
   writeJSON("vgmf_accounts", getAccounts().filter((account) => account.email.toLowerCase() !== email.toLowerCase()));
+  dropPortalAccount(email);
   const session = getSession();
   if (session?.email.toLowerCase() === email.toLowerCase()) clearSession();
   notifyCms();
@@ -513,6 +516,7 @@ export function createUserAccount(input: {
     password,
   };
   saveAccount(account);
+  if (account.role === "staff" || account.role === "coadmin") pushPortalAccounts();
   recordActivity({ email: account.email, kind: "created", by: currentActorEmail(), detail: `${input.role} account created` });
   sendAccountDetails(account.email, true);
   return account;
@@ -2140,10 +2144,18 @@ function packingListHtml(orders: Order[]) {
 }
 
 /** The chosen orders as a packing list first, then each order's packaging slip on its own page. */
-export function printPackagingSlips(orders: Order[]) {
+/** "individual" = one slip per order, "bulk" = the combined packing list, "both" = list then slips. */
+export function printPackagingSlips(orders: Order[], mode: "individual" | "bulk" | "both" = "both") {
   if (orders.length === 0) return;
-  const slips = orders.map((order) => `<section style="page-break-before:always;break-before:page">${packagingSlipHtml(order)}</section>`).join("");
-  printHtml(`Packaging slips (${orders.length})`, `${pagedFooterStyle()}<section>${packingListHtml(orders)}</section>${slips}`);
+  const list = mode === "individual" ? "" : `<section>${packingListHtml(orders)}</section>`;
+  const slips =
+    mode === "bulk"
+      ? ""
+      : orders
+          .map((order, index) => `<section style="${list || index > 0 ? "page-break-before:always;break-before:page" : ""}">${packagingSlipHtml(order)}</section>`)
+          .join("");
+  const title = mode === "bulk" ? "Packing list" : "Packaging slips";
+  printHtml(`${title} (${orders.length})`, `${pagedFooterStyle()}${list}${slips}`);
 }
 
 function packagingSlipHtml(order: Order) {

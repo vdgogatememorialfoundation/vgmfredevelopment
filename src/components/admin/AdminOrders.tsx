@@ -321,7 +321,8 @@ export function OrdersDashboard() {
             const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
             if (shipment) await downloadLabel(shipment.id);
           })}>Labels</Button>
-          <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]))}>Packaging slips</Button>
+          <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "individual")}>Print slips: individual</Button>
+          <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "bulk")}>Print slips: bulk list</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", async (id) => {
             await dropOrderShipments(id);
             cancelOrder(id, "Bulk cancel");

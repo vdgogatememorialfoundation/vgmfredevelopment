@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
 import { ensureAdminCredentials, getAccounts, sendOtpCode } from "@/lib/admin-store";
+import { saveAccount } from "@/lib/auth";
+import { serverPortalLogin } from "@/lib/portal-accounts-sync";
 import { loginBlockReason } from "@/lib/auth";
 import { OTP_RESEND_SECONDS, issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
@@ -66,9 +68,16 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
     );
   };
 
-  const submitPassword = (event: React.FormEvent) => {
+  const submitPassword = async (event: React.FormEvent) => {
     event.preventDefault();
-    const account = findPortalAccount();
+    let account = findPortalAccount();
+    if (!account || !account.password || account.password !== password) {
+      const remote = await serverPortalLogin(email.trim(), password);
+      if (remote && matchesPortal(remote, portal)) {
+        account = { ...account, ...remote, password } as User;
+        saveAccount(account);
+      }
+    }
     if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
       return;

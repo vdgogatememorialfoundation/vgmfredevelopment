@@ -14,6 +14,7 @@ import { isStaffModuleEnabled } from "@/lib/site-visibility"
 import { hydratePartnerFeed } from "@/lib/partner-hydrate"
 import { LivePublishBridge } from "@/components/admin/LivePublishBridge"
 import { syncAdminIntegrations } from "@/lib/integrations"
+import { pushPortalAccounts } from "@/lib/portal-accounts-sync"
 
 export default function AdminLayout({
   children,
@@ -39,7 +40,10 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
   // Keyed on identity, not the user object: syncs fire "vgmf-cms", which hands back a fresh user object.
   useEffect(() => {
     if (userEmail) void hydratePartnerFeed()
-    if (userRole === "admin" || userRole === "coadmin") void syncAdminIntegrations()
+    if (userRole === "admin" || userRole === "coadmin") {
+      void syncAdminIntegrations()
+      pushPortalAccounts()
+    }
   }, [userEmail, userRole])
 
   if (!user || (user.role !== "admin" && user.role !== "coadmin" && user.role !== "staff" && user.role !== "doctor")) {
