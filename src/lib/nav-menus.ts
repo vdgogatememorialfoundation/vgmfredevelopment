@@ -13,6 +13,15 @@ const MENUS: Record<string, NavLink[]> = {
     href: page.href,
     key: page.key as MessageKey,
   })),
+  "/legal": [
+    { href: "/privacy", key: "footer.privacy" },
+    { href: "/terms", key: "footer.terms" },
+    { href: "/shipping-policy", key: "footer.shipping" },
+    { href: "/return-policy", key: "footer.returns" },
+    { href: "/refund-policy", key: "footer.refund" },
+    { href: "/cancellation-policy", key: "footer.cancellation" },
+    { href: "/faq", key: "footer.faq" },
+  ],
 };
 
 export function navDropdown(href: string): NavLink[] {

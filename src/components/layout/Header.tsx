@@ -185,7 +185,7 @@ export default function Header() {
     () => "",
   );
   const visibility = getSiteVisibility();
-  const navItems = visiblePublicNav(visibility);
+  const navItems = [...visiblePublicNav(visibility), { name: "Legal", href: "/legal" } as const];
   const accountItems = visibleAccountNav(visibility);
   const chrome = cleanChrome(settings?.chrome);
   const shell = headerShell[headerStyleOf(chrome)];

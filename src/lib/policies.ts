@@ -204,3 +204,12 @@ export function subscribePolicies(onChange: () => void) {
 }
 
 export const policyIds: PolicyId[] = ["privacy", "terms", "shipping", "returns", "refund", "cancellation"];
+
+export const policyHref: Record<PolicyId, string> = {
+  privacy: "/privacy",
+  terms: "/terms",
+  shipping: "/shipping-policy",
+  returns: "/return-policy",
+  refund: "/refund-policy",
+  cancellation: "/cancellation-policy",
+};
