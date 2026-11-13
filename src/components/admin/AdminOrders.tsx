@@ -1741,7 +1741,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {returnRequest.status === "Return Requested" && (
                     <Button variant="outline" onClick={() => run("rt", () => { updateReturnRequest(order.id, { status: "Return Approved" }); return "Return approved."; })}>Approve</Button>
                   )}
-                  {returnRequest.status === "Return Approved" && (
+                  {returnRequest.status === "Return Approved" && returnRequest.resolution !== "refund" && (
                     <Button variant="outline" onClick={() => run("rt", async () => {
                       const created = await createReturnShipment(order.id);
                       patchOrder(order.id, {
@@ -1788,10 +1788,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                         advanceReturnRequest(order.id, "Picked Up", "return-pickup", "The courier collected the defective item.");
                         return "Marked as picked up. Check the item when it arrives, then send the replacement.";
                       }
-                      updateReturnRequest(order.id, { status: "Picked Up" });
+                      advanceReturnRequest(order.id, "Picked Up", "pickup", "The courier collected the item.");
                       if (returnRequest.kind === "return" && getOrderSettings().refunds.autoRefundOnReturnPickup && paid) {
                         const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
-                        updateReturnRequest(order.id, { status: "Refunded" });
+                        advanceReturnRequest(order.id, "Refunded", "refund", text || undefined);
                         return `Picked up. ${text}`;
                       }
                       return "Marked as picked up.";
@@ -1806,12 +1806,17 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       });
                     }}>Item received & checked — send replacement</Button>
                   )}
-                  {returnRequest.kind === "return" && returnRequest.status === "Picked Up" && paid && (
-                    <Button variant="danger" onClick={() => run("rt", async () => {
-                      const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
-                      updateReturnRequest(order.id, { status: "Refunded" });
-                      return text;
-                    })}>Refund {rupees(returnRequest.refundAmount ?? 0)}</Button>
+                  {returnRequest.kind === "return" && (returnRequest.status === "Picked Up" || (returnRequest.status === "Return Approved" && returnRequest.resolution === "refund")) && paid && (
+                    <Button variant="danger" onClick={() => {
+                      const back = returnRequest.status === "Picked Up";
+                      if (back && !window.confirm("Has the returned item arrived and been checked? This sends the refund.")) return;
+                      run("rt", async () => {
+                        if (back) advanceReturnRequest(order.id, "Picked Up", "inspected", "The returned item was received and checked.");
+                        const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
+                        advanceReturnRequest(order.id, "Refunded", "refund", text || undefined);
+                        return text;
+                      });
+                    }}>{returnRequest.status === "Picked Up" ? "Item received & checked — refund" : "Send refund"} {rupees(returnRequest.refundAmount ?? 0)}</Button>
                   )}
                 </div>
               </div>
