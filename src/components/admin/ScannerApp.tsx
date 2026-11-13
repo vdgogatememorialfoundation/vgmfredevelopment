@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { PickPackDesk } from "@/components/admin/PickPackDesk";
 import { useAuth } from "@/components/auth/AuthContext";
 import { canOpen } from "@/lib/roles";
+import { PortalShell } from "@/components/admin/PortalShell";
 
 /** Stand-alone phone web app for store pickers and packers, with its own sign-in. */
 export function ScannerApp({ mode }: { mode?: "pick" | "pack" }) {
@@ -23,19 +24,27 @@ export function ScannerApp({ mode }: { mode?: "pick" | "pack" }) {
     if (!allowed) router.replace(loginUrl);
   }, [allowed, loginUrl, router]);
   if (!allowed) return <p className="p-8 text-center text-sm text-slate-500">Opening sign in…</p>;
+  const signOutNow = () => {
+    signOut();
+    router.replace(loginUrl);
+  };
   return (
-    <div className="mx-auto max-w-2xl px-3 py-4">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">VGMF store scanner</p>
-          <h1 className="text-xl font-bold text-slate-900">{mode === "pick" ? "Picker" : mode === "pack" ? "Packer" : "Choose your job"}</h1>
-        </div>
-        <nav className="flex flex-wrap gap-2 text-sm font-semibold">
-          <Link href="/picker" className={`rounded-lg border px-3 py-1.5 ${mode === "pick" ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700"}`}>Picker</Link>
-          <Link href="/packer" className={`rounded-lg border px-3 py-1.5 ${mode === "pack" ? "border-blue-600 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700"}`}>Packer</Link>
-          <button type="button" onClick={() => { signOut(); router.replace(loginUrl); }} className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-700">Sign out</button>
-        </nav>
-      </header>
+    <PortalShell
+      eyebrow="VGMF store scanner"
+      title={mode === "pick" ? "Picker" : mode === "pack" ? "Packer" : "Choose your job"}
+      groups={[
+        {
+          items: [
+            { label: "Picker", href: "/picker", active: mode === "pick" },
+            { label: "Packer", href: "/packer", active: mode === "pack" },
+            { label: "Sign out", onSelect: signOutNow },
+          ],
+        },
+      ]}
+      contentClassName="px-3 py-4 sm:px-5 lg:p-8"
+      actions={<button type="button" onClick={signOutNow} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700">Sign out</button>}
+    >
+    <div className="mx-auto max-w-2xl">
       {mode ? (
         <PickPackDesk mode={mode} cameraFirst />
       ) : (
@@ -51,5 +60,6 @@ export function ScannerApp({ mode }: { mode?: "pick" | "pack" }) {
         </div>
       )}
     </div>
+    </PortalShell>
   );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { adminNavigation } from "./_config/navigation"
 import { useAuth } from "@/components/auth/AuthContext"
 import ClientOnly from "@/components/common/ClientOnly"
@@ -15,6 +15,7 @@ import { hydratePartnerFeed } from "@/lib/partner-hydrate"
 import { LivePublishBridge } from "@/components/admin/LivePublishBridge"
 import { syncAdminIntegrations } from "@/lib/integrations"
 import { pushPortalAccounts } from "@/lib/portal-accounts-sync"
+import { PortalShell, type PortalNavGroup } from "@/components/admin/PortalShell"
 
 export default function AdminLayout({
   children,
@@ -33,7 +34,6 @@ export default function AdminLayout({
 function AdminShell({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const userEmail = user?.email
   const userRole = user?.role
@@ -106,97 +106,38 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
     canOpen(user, pathname) &&
     (user.role === "admin" || user.role === "coadmin" || !owner || isStaffModuleEnabled(owner))
 
-  const nav = (
-    <nav className="flex-1 overflow-y-auto px-3 py-4">
-      {groups.map((group) => (
-        <div key={group.label} className="mb-6">
-          <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-            {group.label}
-          </div>
-          <div className="space-y-1">
-            {group.items.map((item) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== "/admin" && pathname.startsWith(item.href + "/"))
-              return (
-                <Link
-                  key={item.label + item.href}
-                  href={item.href}
-                  prefetch
-                  onClick={() => setMenuOpen(false)}
-                  className={[
-                    "block rounded-lg px-3 py-2 text-sm transition",
-                    active
-                      ? "bg-burgundy/10 font-semibold text-burgundy"
-                      : "text-gray-700 hover:bg-slate-50 hover:text-burgundy",
-                  ].join(" ")}
-                >
-                  {item.label}
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-    </nav>
-  )
+  const navGroups: PortalNavGroup[] = groups.map((group) => ({
+    label: group.label,
+    items: group.items.map((item) => ({
+      label: item.label,
+      href: item.href,
+      active: pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href + "/")),
+    })),
+  }))
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <>
       <LivePublishBridge />
-      <div className="flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:block">
-          <div className="sticky top-0 flex h-screen flex-col">
-            <div className="border-b border-slate-200 px-6 py-5">
-              <div className="text-xs font-semibold uppercase tracking-widest text-burgundy">Foundation</div>
-              <div className="mt-1 text-lg font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin workspace" : "Admin Console"}</div>
-              <div className="mt-1 text-xs text-gray-500">
-                {isStaff ? `${role?.name} · ${role?.category}` : isDoctor ? "Clinic pages" : isCoadmin ? "Higher-authority access via /staff" : "Vaidya Gogate Memorial Foundation"}
-              </div>
-            </div>
-            {nav}
-            <div className="border-t border-slate-200 p-4">
-              <Link href="/" className="block rounded-lg border border-slate-200 px-3 py-2 text-center text-sm hover:bg-gray-50">
-                ← Back to website
-              </Link>
-            </div>
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-            <div className="flex h-16 items-center justify-between gap-3 px-5 lg:px-8">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm lg:hidden"
-                  onClick={() => setMenuOpen((open) => !open)}
-                >
-                  Menu
-                </button>
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-wider text-gray-400">Foundation</div>
-                  <div className="font-semibold">{isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin" : "Administration"}</div>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-end gap-3 text-sm">
-                <span className="hidden text-gray-600 sm:inline">
-                  {user.firstName} {user.lastName} · {isDoctor ? "Doctor" : isStaff ? role?.name : isCoadmin ? "Co-admin" : "Administrator"}
-                </span>
-                <Link href="/" className="text-burgundy hover:underline">View website</Link>
-                <LoginStamp
-                  compact
-                  onLogout={() => {
-                    signOut()
-                    router.push(isDoctor ? "/doctor/login" : isStaff || isCoadmin ? "/staff/login" : "/admin/login")
-                  }}
-                />
-              </div>
-            </div>
-            {menuOpen && <div className="max-h-[70vh] overflow-y-auto border-t border-slate-200 bg-white lg:hidden">{nav}</div>}
-          </header>
-
-          <div className="p-5 lg:p-8">
+      <PortalShell
+        title={isDoctor ? "Doctor workspace" : isStaff ? "Staff workspace" : isCoadmin ? "Co-admin workspace" : "Admin Console"}
+        subtitle={isStaff ? `${role?.name} · ${role?.category}` : isDoctor ? "Clinic pages" : isCoadmin ? "Higher-authority access via /staff" : "Vaidya Gogate Memorial Foundation"}
+        groups={navGroups}
+        actions={
+          <>
+            <span className="hidden text-gray-600 md:inline">
+              {user.firstName} {user.lastName} · {isDoctor ? "Doctor" : isStaff ? role?.name : isCoadmin ? "Co-admin" : "Administrator"}
+            </span>
+            <Link href="/" className="hidden text-burgundy hover:underline sm:inline">View website</Link>
+            <LoginStamp
+              compact
+              onLogout={() => {
+                signOut()
+                router.push(isDoctor ? "/doctor/login" : isStaff || isCoadmin ? "/staff/login" : "/admin/login")
+              }}
+            />
+          </>
+        }
+      >
             {allowed ? (
               children
             ) : (
@@ -209,9 +150,7 @@ function AdminShell({ pathname, children }: { pathname: string; children: React.
                 <Link href={isDoctor ? "/doctor" : isCoadmin || isStaff ? "/staff" : "/admin"} className="btn-outline mt-5">Open my workspace</Link>
               </div>
             )}
-          </div>
-        </main>
-      </div>
-    </div>
+      </PortalShell>
+    </>
   )
 }

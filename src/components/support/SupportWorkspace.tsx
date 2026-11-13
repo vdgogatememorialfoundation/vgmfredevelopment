@@ -14,6 +14,7 @@ import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getShipments } from "@/lib/admin-store";
 import { courierTrackingLink } from "@/lib/couriers";
 import type { Order } from "@/types";
+import { PortalShell } from "@/components/admin/PortalShell";
 
 const ORDER_STATUSES: OrderStatus[] = [
   "Pending", "Paid", "Processing", "Accepted", "Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled",
@@ -42,43 +43,29 @@ export function SupportWorkspace() {
     { id: "orders", label: "Customer orders" },
   ];
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-3">
-          <div className="flex items-center gap-3">
-            <SiteLogo size={40} />
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-burgundy">Customer support desk</p>
-              <p className="text-sm text-slate-600">{displayName(user) || user.email} · {user.email}</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {(user.role === "admin" || user.role === "coadmin") && <Link href="/admin" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700">Admin</Link>}
-            <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700" onClick={signOut}>Sign out</button>
-          </div>
-        </div>
-        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-5">
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setTab(item.id)}
-              className={`whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold ${tab === item.id ? "border-burgundy text-burgundy" : "border-transparent text-slate-500 hover:text-burgundy"}`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </header>
-      <main className="mx-auto max-w-7xl px-5 py-6">
+    <PortalShell
+      eyebrow="Customer support"
+      title="Customer support desk"
+      subtitle={`${displayName(user) || user.email} · ${user.email}`}
+      groups={[{ items: tabs.map((item) => ({ label: item.label, active: tab === item.id, onSelect: () => setTab(item.id) })) }]}
+      contentClassName="bg-slate-50 p-4 sm:p-5 lg:p-8"
+      actions={
+        <>
+          <SiteLogo size={32} />
+          {(user.role === "admin" || user.role === "coadmin") && <Link href="/admin" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700">Admin</Link>}
+          <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700" onClick={signOut}>Sign out</button>
+        </>
+      }
+    >
+      <div className="mx-auto max-w-7xl">
         <ClientOnly>
           {tab === "chats" && <LiveChatDesk />}
           {tab === "tickets" && <SupportSection />}
           {tab === "new" && <CreateTicket agent={user.email} onCreated={() => setTab("tickets")} />}
           {tab === "orders" && <OrderLookup />}
         </ClientOnly>
-      </main>
-    </div>
+      </div>
+    </PortalShell>
   );
 }
 

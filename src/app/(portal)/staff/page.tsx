@@ -11,6 +11,7 @@ import { isStaffModuleEnabled } from "@/lib/site-visibility";
 import { useRouter } from "next/navigation";
 import { InboxBell, InboxList } from "@/components/notifications/InboxBell";
 import { markAllInboxRead } from "@/lib/inbox";
+import { PortalShell, type PortalNavGroup } from "@/components/admin/PortalShell";
 
 function StaffHome() {
   const { user, signOut } = useAuth();
@@ -30,8 +31,22 @@ function StaffHome() {
       return owner ? isStaffModuleEnabled(owner) : true;
     });
 
+  const navGroups: PortalNavGroup[] = [
+    { items: [{ label: "Home", href: "/staff", active: true }, { label: "Edit profile", href: "/staff/profile" }] },
+    ...Array.from(new Set(cards.map((card) => card.group))).map((group) => ({
+      label: group,
+      items: cards.filter((card) => card.group === group).map((card) => ({ label: card.label, href: card.href })),
+    })),
+  ];
+
   return (
-    <div className="mx-auto max-w-5xl space-y-8 p-6">
+    <PortalShell
+      title={isCoadmin ? "Co-admin portal" : "Staff portal"}
+      subtitle={isCoadmin ? "Co-administrator access" : `${role?.name ?? "Staff"} · ${role?.category ?? ""}`}
+      groups={navGroups}
+      actions={<InboxBell href="#staff-notifications" />}
+    >
+    <div className="mx-auto max-w-5xl space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-burgundy">{isCoadmin ? "Co-admin portal" : "Staff portal"}</p>
@@ -44,7 +59,6 @@ function StaffHome() {
         </div>
         <div className="flex flex-col items-end gap-2 text-sm">
           <div className="flex items-center gap-3">
-            <InboxBell href="#staff-notifications" />
             <Link href="/staff/profile" className="font-semibold text-burgundy hover:underline">Edit profile</Link>
           </div>
           <LoginStamp
@@ -95,6 +109,7 @@ function StaffHome() {
       </div>
       <Link href="/" className="inline-block text-sm text-slate-500 hover:text-burgundy">← Back to website</Link>
     </div>
+    </PortalShell>
   );
 }
 
