@@ -1872,9 +1872,9 @@ export function OrderSettingsDesk() {
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Allowed until the order is</span>
               <select className={input} value={value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
-                <option value="Ordered">Ordered (before packing)</option>
-                <option value="Packed">Packed (before courier pickup)</option>
-                <option value="Shipped">Shipped</option>
+                <option value="Ordered">Until packing (not once packed)</option>
+                <option value="Packed">Until shipped (not once the courier picks it up)</option>
+                <option value="Shipped">Until out for delivery (even after shipping)</option>
               </select>
             </label>
             <Text label="Within hours of ordering (0 = any time)" type="number" value={value.cancellation.windowHours} onChange={(hours) => set({ cancellation: { ...value.cancellation, windowHours: Number(hours) || 0 } })} />
