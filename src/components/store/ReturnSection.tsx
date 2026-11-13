@@ -12,7 +12,7 @@ import type { DeliveryAddress, Order, ReturnEvidenceKind, ReturnRequest, ReturnR
 type Step = "items" | "reason" | "details" | "evidence" | "resolution" | "address" | "review";
 
 const RESOLUTION_LABEL: Record<ReturnResolution, string> = {
-  refund: "Refund to original payment method",
+  refund: "Refund",
   return_refund: "Return for refund (after admin approval)",
   replacement: "Replacement copy (free)",
 };
@@ -47,7 +47,6 @@ export default function ReturnSection({ order, phone }: { order: Order; phone?: 
   const rule = rules.find((item) => item.label === reason);
   const reasons = flow === "replacement" ? rules.filter((item) => item.replacement) : rules;
   const resolutions: ReturnResolution[] = [
-    ...(canReturn && settings.returns.refundWithoutReturn ? (["refund"] as const) : []),
     ...(canReturn ? (["return_refund"] as const) : []),
     ...(canReplace && rule?.replacement ? (["replacement"] as const) : []),
   ];

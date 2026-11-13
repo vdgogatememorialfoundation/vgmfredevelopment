@@ -1805,7 +1805,6 @@ export function OrderSettingsDesk() {
             <Check label="Offer replacements (wrong, damaged or defective items)" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
             <Text label="Return window (days after delivery)" type="number" value={value.returns.windowDays} onChange={(days) => set({ returns: { ...value.returns, windowDays: Number(days) || 0 } })} />
             <Text label="Return pickup charge for desk-opened returns (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
-            <Check label='Offer "Refund to original payment method" without sending the item back' checked={value.returns.refundWithoutReturn} onChange={(refundWithoutReturn) => set({ returns: { ...value.returns, refundWithoutReturn } })} />
             <Check label="Customer can give a corrected address for a replacement" checked={value.returns.replacementAddressChange} onChange={(replacementAddressChange) => set({ returns: { ...value.returns, replacementAddressChange } })} />
             <div className="space-y-2">
               <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Customer reasons and required evidence</span>

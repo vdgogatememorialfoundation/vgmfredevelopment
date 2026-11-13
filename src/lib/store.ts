@@ -621,7 +621,7 @@ export function submitCustomerRequest(order: Order, input: CustomerRequestInput)
   if (missing.length) throw new Error("Add the evidence marked required.");
   if (input.resolution === "replacement" && !(settings.returns.replacementAllowed && rule.replacement)) throw new Error("Replacement is not available for this reason.");
   if (input.resolution === "return_refund" && !settings.returns.enabled) throw new Error("Returns are not available.");
-  if (input.resolution === "refund" && !(settings.returns.enabled && settings.returns.refundWithoutReturn)) throw new Error("Refund without return is not available.");
+  if (input.resolution === "refund") throw new Error("The item has to be sent back first.");
 
   const requestedAt = new Date().toISOString();
   const value = items.reduce((sum, item) => sum + item.price * item.quantity, 0);

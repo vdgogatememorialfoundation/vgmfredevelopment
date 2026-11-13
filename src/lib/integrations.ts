@@ -260,7 +260,6 @@ export interface OrderSettings {
     /** Reasons customers pick, with the evidence each needs and whether it qualifies for a free replacement. */
     reasonRules: ReturnReasonRule[];
     /** Offer "Refund to original payment method" without sending the item back. */
-    refundWithoutReturn: boolean;
     /** Let the customer give a different address for the replacement copy. */
     replacementAddressChange: boolean;
   };
@@ -467,7 +466,6 @@ export const defaultOrderSettings: OrderSettings = {
     pickupReplacement: false,
     reasons: ["Damaged or defective item"],
     reasonRules: DEFAULT_RETURN_REASONS,
-    refundWithoutReturn: false,
     replacementAddressChange: true,
   },
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
@@ -779,7 +777,6 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
             }))
             .filter((rule) => rule.label)
         : DEFAULT_RETURN_REASONS,
-      refundWithoutReturn: Boolean(merged.returns?.refundWithoutReturn),
       replacementAddressChange: merged.returns?.replacementAddressChange !== false,
     },
     refunds: {
