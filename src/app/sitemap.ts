@@ -5,7 +5,7 @@ import { isPublishedNow } from "@/lib/schedule";
 import { articles as seedArticles } from "@/data/articles";
 import { clinics as seedClinics } from "@/data/clinics";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 function stamp(value?: string) {
   const time = Date.parse(value || "");
