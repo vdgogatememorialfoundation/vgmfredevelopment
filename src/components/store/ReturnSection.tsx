@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { classNames } from "@/lib/utils";
-import { getOrders, getReturnRequest, requestDamagedReplacement } from "@/lib/store";
-import { canCustomerRequestReplacement, customerOrderPolicyCopy } from "@/lib/integrations";
+import { getOrders, getReturnRequest, requestCustomerReturn, requestDamagedReplacement } from "@/lib/store";
+import { canCustomerRequestReplacement, canCustomerReturn, customerOrderPolicyCopy } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
 import { fileToDataUrl } from "@/lib/images";
 import { statusDay } from "@/lib/delivery-expectation";
@@ -22,7 +22,12 @@ export default function ReturnSection({ order }: { order: Order }) {
   const [busy, setBusy] = useState(false);
 
   const request = getReturnRequest(order.id) ?? order.returnRequest;
-  const canRequest = canCustomerRequestReplacement({ ...order, returnRequest: request }, settings);
+  const canReplace = canCustomerRequestReplacement({ ...order, returnRequest: request }, settings);
+  const canReturn = canCustomerReturn({ ...order, returnRequest: request }, settings);
+  const canRequest = canReplace || canReturn;
+  const reasons = settings.returns.reasons.length ? settings.returns.reasons : ["Changed my mind", "Wrong item", "Other"];
+  const [mode, setMode] = useState<"replacement" | "return">("replacement");
+  const [reason, setReason] = useState("");
 
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -36,6 +41,19 @@ export default function ReturnSection({ order }: { order: Order }) {
   };
 
   const handleSubmit = () => {
+    if (mode === "return") {
+      setBusy(true);
+      try {
+        requestCustomerReturn(order, { reason: reason || reasons[0], note, images });
+        setShowForm(false);
+        setTick((value) => value + 1);
+      } catch (problem) {
+        setError(problem instanceof Error ? problem.message : "Could not send the request.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (images.length === 0) {
       setError("Share at least one photo of the damage.");
       return;
@@ -58,7 +76,7 @@ export default function ReturnSection({ order }: { order: Order }) {
 
   return (
     <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
-      <p className="font-semibold text-text-primary">Replacement for damaged items</p>
+      <p className="font-semibold text-text-primary">{canReturn ? "Returns and replacements" : "Replacement for damaged items"}</p>
 
       {request ? (
         <ReplacementStatus request={request} order={order} />
@@ -66,17 +84,37 @@ export default function ReturnSection({ order }: { order: Order }) {
         <>
           {!showForm ? (
             <div className="mt-3 space-y-3">
-              <p>
-                If this item arrived damaged, request a replacement. Photos are required. The Foundation desk reviews the request and, if accepted, places a new free order.
-              </p>
+              {canReplace && (
+                <p>
+                  If this item arrived damaged, request a replacement. Photos are required. The Foundation desk reviews the request and, if accepted, places a new free order.
+                </p>
+              )}
+              {canReturn && <p>You can also return this order free of charge. The desk accepts or cancels the request and emails you; the refund follows once the item is back.</p>}
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowForm(true)}
-                  className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white transition hover:bg-burgundy-dark"
-                >
-                  Request replacement
-                </button>
+                {canReplace && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("replacement");
+                      setShowForm(true);
+                    }}
+                    className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white transition hover:bg-burgundy-dark"
+                  >
+                    Request replacement
+                  </button>
+                )}
+                {canReturn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("return");
+                      setShowForm(true);
+                    }}
+                    className="rounded-lg border border-burgundy px-4 py-2 text-sm font-semibold text-burgundy transition hover:bg-warm-cream"
+                  >
+                    Request return
+                  </button>
+                )}
                 <Link
                   href="/contact"
                   className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-burgundy transition hover:bg-warm-cream"
@@ -94,10 +132,22 @@ export default function ReturnSection({ order }: { order: Order }) {
               className="mt-4 space-y-4"
             >
               <p className="text-text-primary">
-                Damaged item only. Upload clear photos of the package and the damaged product. Returns and cancellations are not available from your account.
+                {mode === "return"
+                  ? "Return request. There is no charge for the return; the desk emails you once it is accepted."
+                  : "Damaged item only. Upload clear photos of the package and the damaged product."}
               </p>
+              {mode === "return" && (
+                <label className="block">
+                  <span className="mb-1.5 block font-semibold text-text-primary">Reason</span>
+                  <select value={reason || reasons[0]} onChange={(event) => setReason(event.target.value)} className="input-field">
+                    {reasons.map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="block">
-                <span className="mb-1.5 block font-semibold text-text-primary">Photos of the damage</span>
+                <span className="mb-1.5 block font-semibold text-text-primary">{mode === "return" ? "Photos (optional)" : "Photos of the damage"}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -123,7 +173,7 @@ export default function ReturnSection({ order }: { order: Order }) {
                 </div>
               )}
               <label className="block">
-                <span className="mb-1.5 block font-semibold text-text-primary">What is damaged? (optional)</span>
+                <span className="mb-1.5 block font-semibold text-text-primary">{mode === "return" ? "Anything else? (optional)" : "What is damaged? (optional)"}</span>
                 <textarea
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
@@ -135,7 +185,7 @@ export default function ReturnSection({ order }: { order: Order }) {
               {error && <p className="text-xs text-red-500">{error}</p>}
               <div className="flex flex-wrap gap-2">
                 <button type="submit" disabled={busy} className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white transition hover:bg-burgundy-dark disabled:opacity-60">
-                  {busy ? "Sending…" : "Submit replacement request"}
+                  {busy ? "Sending…" : mode === "return" ? "Submit return request" : "Submit replacement request"}
                 </button>
                 <button
                   type="button"

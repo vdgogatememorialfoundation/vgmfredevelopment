@@ -35,6 +35,10 @@ async function carryOut(order: Order): Promise<string> {
     reviewReplacementRequest(order.id, { accept: true, note: approval.note || "Approved after review.", by: "approver" });
     return "Replacement accepted. Create the return AWB next.";
   }
+  if (approval.kind === "return" && request?.kind === "return" && request.status === "Pending Review") {
+    reviewReplacementRequest(order.id, { accept: true, note: approval.note || "Return accepted.", by: "approver" });
+    return "Return accepted and the customer emailed.";
+  }
   if (approval.kind === "return" && request?.kind === "return" && request.status === "Return Requested") {
     updateReturnRequest(order.id, { status: "Return Approved" });
     return "Return approved.";

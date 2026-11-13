@@ -1702,6 +1702,22 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 ) : null}
                 {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)} after ₹{returnRequest.returnCharges} pickup charge.</p>}
                 <div className="flex flex-wrap gap-2">
+                  {returnRequest.status === "Pending Review" && returnRequest.kind === "return" && (
+                    <>
+                      <Button variant="success" onClick={() => run("rt", () => {
+                        reviewReplacementRequest(order.id, { accept: true, note: "Return accepted." });
+                        return "Return accepted and the customer emailed. Arrange the free pickup next.";
+                      })}>Accept return</Button>
+                      <Button variant="danger" onClick={() => {
+                        const reason = window.prompt("Reason for cancelling this return request? (sent to the customer)");
+                        if (reason === null) return;
+                        run("rt", () => {
+                          reviewReplacementRequest(order.id, { accept: false, note: reason });
+                          return "Return request cancelled and the customer emailed.";
+                        });
+                      }}>Cancel return</Button>
+                    </>
+                  )}
                   {returnRequest.status === "Pending Review" && returnRequest.kind === "replacement" && (
                     <>
                       <Button variant="success" onClick={() => run("rt", () => {

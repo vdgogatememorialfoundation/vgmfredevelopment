@@ -8,6 +8,7 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { videos as seededVideos } from "@/data/videos";
 import { books as seededBooks } from "@/data/books";
 import { getOrderSettings, publicOrderSettings, saveOrderSettings } from "@/lib/integrations";
+import { pendingProductIds } from "@/lib/product-data";
 import { appliedFeedAt, emptyFeedFallback, hasFeedBaseline, recordFeedBaseline, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
 import type { Book, Flyer } from "@/types";
@@ -218,10 +219,12 @@ function installPublishedProducts(feed: MobileFeed) {
     local = [];
   }
   const localById = new Map(local.map((book) => [book.id, book]));
-  // A product saved here after the live copy (stock, price…) is kept until this browser publishes it.
-  const newer = (book?: Book) => Boolean(book?.updatedAt && book.updatedAt > feedAt);
+  // A product saved here (price, stock…) is kept until this browser has published it, whatever the clocks say.
+  const pending = new Set(pendingProductIds());
+  const newer = (book?: Book) => Boolean(book && (pending.has(book.id) || (book.updatedAt && book.updatedAt > feedAt)));
   const merged = books.map((book) => {
     const mine = localById.get(book.id);
+    if (mine && pending.has(mine.id)) return mine;
     return mine && newer(mine) && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
   });
   const unpublished = local.filter((book) => !present.has(book.id) && newer(book));

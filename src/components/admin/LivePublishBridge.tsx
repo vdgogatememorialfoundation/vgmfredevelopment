@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { collectMobileSnapshot, publishLiveSite } from "@/lib/mobile-publish";
+import { pendingProductIds } from "@/lib/product-data";
 
 const SETTLE_MS = 1800;
 const HYDRATE_GUARD_MS = 4000;
@@ -30,18 +31,20 @@ export function LivePublishBridge() {
     };
     window.addEventListener("pointerdown", markTouched);
     window.addEventListener("keydown", markTouched);
-    const unlock = window.setTimeout(() => {
-      ready.current = true;
-    }, HYDRATE_GUARD_MS);
-
     const flush = () => {
-      if (!ready.current || !touched.current || busy.current) return;
+      // Product saves that never reached the live site (closed tab, network drop) are sent without waiting for a click.
+      if (!ready.current || busy.current || (!touched.current && !pendingProductIds().length)) return;
       if (!snapshotLooksPublishable()) return;
       busy.current = true;
       void publishLiveSite().finally(() => {
         busy.current = false;
       });
     };
+
+    const unlock = window.setTimeout(() => {
+      ready.current = true;
+      if (pendingProductIds().length) flush();
+    }, HYDRATE_GUARD_MS);
 
     const onCms = () => {
       window.clearTimeout(timer.current);

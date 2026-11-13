@@ -20,7 +20,7 @@ import { siteConfig } from "@/lib/constants";
 import { getGallery } from "@/lib/gallery";
 import { defaultMobileAppConfig, getMobileAppConfig, type MobileAppConfig } from "@/lib/mobile-config";
 import { getPolicies } from "@/lib/policies";
-import { getAllProducts } from "@/lib/product-data";
+import { clearPendingProducts, getAllProducts, pendingProductIds } from "@/lib/product-data";
 import { getLiveCmsPages } from "@/lib/cms-pages";
 import { getSiteVisibility } from "@/lib/site-visibility";
 import { getPlatformCountries } from "@/lib/platform-countries";
@@ -211,7 +211,10 @@ export function publishLiveSite() {
     Object.entries(snapshot).filter(([key]) => key !== "publishedAt" && (!baseline || baseline[key] !== hashes[key]))
   ) as Partial<MobileFeed>;
   // Without a baseline this browser never loaded the live feed, so only its own branding is safe to send.
-  const body = baseline ? sections : { site: snapshot.site };
+  const body: Partial<MobileFeed> = baseline ? sections : { site: snapshot.site };
+  // Products saved here always go out, even when an earlier feed load reset the baseline; the server takes just these ids.
+  const editedBooks = pendingProductIds();
+  if (editedBooks.length) body.books = snapshot.books;
   if (!Object.keys(body).length) {
     markLiveDirty(false);
     return Promise.resolve({ ok: true as const, publishedAt: appliedFeedAt(), unchanged: true });
@@ -219,7 +222,7 @@ export function publishLiveSite() {
   return fetch("/api/mobile/publish", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ partial: true, basedOn: appliedFeedAt(), sections: body }),
+    body: JSON.stringify({ partial: true, basedOn: appliedFeedAt(), sections: body, editedBooks }),
   })
     .then(async (response) => {
       const data = (await response.json().catch(() => null)) as {
@@ -229,6 +232,7 @@ export function publishLiveSite() {
         rejected?: string[];
         error?: string;
       } | null;
+      if (data?.ok && editedBooks.length && !data.rejected?.includes("books")) clearPendingProducts(editedBooks);
       const clean = !data?.rejected?.length && data?.previousAt === appliedFeedAt();
       // Only claim to be up to date when nobody else published in between; otherwise the next load pulls the live copy.
       if (data?.ok && data.publishedAt && clean) {

@@ -1635,7 +1635,7 @@ export function OrderSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="Orders, returns & refunds" text="Customers may cancel when allowed under Cancellations, and may request a damaged-item replacement with photos. The desk cancels, modifies, refunds, opens a return, or places a free replacement." action={<button type="button" className={primary} onClick={save}>Save</button>} />
+      <Header title="Orders, returns & refunds" text="Customers may cancel and return when allowed below, and may request a damaged-item replacement with photos. The desk cancels, modifies, refunds, opens a return, or places a free replacement." action={<button type="button" className={primary} onClick={save}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
       <Card title="Fulfilment options at checkout">
@@ -1799,11 +1799,11 @@ export function OrderSettingsDesk() {
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Returns">
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">Customer returns stay off. The desk can still open a return from an order.</p>
-            <Check label="Accept customer returns" checked={false} onChange={() => set({ returns: { ...value.returns, enabled: false } })} />
+            <p className="text-xs text-slate-500">When ticked, customers request a return from a delivered order within the window. Customer returns are free (the Foundation bears the pickup). The desk accepts (the customer is emailed) or cancels it, and can always open a return from an order.</p>
+            <Check label="Accept customer returns" checked={value.returns.enabled} onChange={(enabled) => set({ returns: { ...value.returns, enabled } })} />
             <Check label="Offer damaged-item replacements" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
             <Text label="Return window (days after delivery)" type="number" value={value.returns.windowDays} onChange={(days) => set({ returns: { ...value.returns, windowDays: Number(days) || 0 } })} />
-            <Text label="Return pickup charge (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
+            <Text label="Return pickup charge for desk-opened returns (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Return reasons (one per line)</span>
               <textarea className={input} rows={4} value={value.returns.reasons.join("\n")} onChange={(event) => set({ returns: { ...value.returns, reasons: event.target.value.split("\n") } })} />
@@ -1843,7 +1843,7 @@ export function OrderSettingsDesk() {
       </div>
       <Card title="Admin order actions">
         <p className="mb-3 text-sm text-slate-500">
-          Customer returns stay off. From the admin order desk you can cancel, modify, refund (full or partial), open a return, or place a free replacement — including after delivery.
+          From the admin order desk you can cancel, modify, refund (full or partial), open a return, or place a free replacement — including after delivery.
         </p>
         <Check
           label="Admin can cancel, refund or replace even after delivery"

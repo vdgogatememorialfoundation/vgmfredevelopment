@@ -5,7 +5,7 @@ import { saveMobileEmailCreds, type MobileEmailCreds } from "@/lib/server/mobile
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; basedOn?: string; sections?: Partial<MobileFeed> };
+type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; basedOn?: string; sections?: Partial<MobileFeed>; editedBooks?: string[] };
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
@@ -32,6 +32,15 @@ function mergeBooks(current: FeedBooks, incoming: FeedBooks, basedOn: string): F
   return [...added, ...kept];
 }
 
+/** Products the sending browser saved go live as sent, stamped with server time so device clocks never decide. */
+function withEditedBooks(base: FeedBooks, incoming: FeedBooks, edited: Set<string>): FeedBooks {
+  const at = new Date().toISOString();
+  const mine = new Map(incoming.filter((book) => edited.has(book.id)).map((book) => [book.id, { ...book, updatedAt: at }]));
+  const kept = base.map((book) => mine.get(book.id) ?? book);
+  const known = new Set(base.map((book) => book.id));
+  return [...Array.from(mine.values()).filter((book) => !known.has(book.id)), ...kept];
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as PublishBody | null;
   if (body?.partial && body.sections && typeof body.sections === "object") {
@@ -47,7 +56,11 @@ export async function POST(request: NextRequest) {
       const changedAt = current.sectionAt?.[key] || current.publishedAt || "";
       const stale = key !== "site" && (!basedOn || Boolean(changedAt && changedAt > basedOn));
       // Products merge one by one, so a stock edit is never lost to (or rolled back by) another tab.
-      if (stale && key === "books" && Array.isArray(value) && Array.isArray(current.books)) sections[key] = mergeBooks(current.books, value as FeedBooks, basedOn);
+      const edited = new Set(Array.isArray(body.editedBooks) ? body.editedBooks.map(String) : []);
+      if (key === "books" && edited.size && Array.isArray(value)) {
+        const base = stale && Array.isArray(current.books) ? mergeBooks(current.books, value as FeedBooks, basedOn) : (value as FeedBooks);
+        sections[key] = withEditedBooks(base, value as FeedBooks, edited);
+      } else if (stale && key === "books" && Array.isArray(value) && Array.isArray(current.books)) sections[key] = mergeBooks(current.books, value as FeedBooks, basedOn);
       else if (stale) rejected.push(key);
       else sections[key] = value;
     }

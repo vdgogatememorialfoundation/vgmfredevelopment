@@ -730,7 +730,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       balanceWhen: merged.preorderPayment?.balanceWhen === "on_ready" ? "on_ready" : "before_dispatch",
     },
     returns: {
-      enabled: false,
+      enabled: Boolean(merged.returns?.enabled),
       windowDays: Math.max(0, finiteNumber(merged.returns?.windowDays, defaultOrderSettings.returns.windowDays)),
       pickupCharge: Math.max(0, finiteNumber(merged.returns?.pickupCharge, defaultOrderSettings.returns.pickupCharge)),
       replacementAllowed: true,
@@ -919,8 +919,11 @@ export function customerCancellationRefund(order: Order, settings = getOrderSett
   return Math.max(0, paid - Math.max(0, order.platformFee ?? 0) - (settings.cancellation?.fee ?? 0) - (order.refundAmount ?? 0));
 }
 
-export function canCustomerReturn(_order?: Order, _settings = getOrderSettings()) {
-  return false;
+export function canCustomerReturn(order?: Order, settings = getOrderSettings()) {
+  if (!order || !settings.returns.enabled || order.status !== "Delivered" || order.returnRequest) return false;
+  if (order.deliveryMode === "store_pickup" && !settings.returns.pickupReturns) return false;
+  const deliveredAt = order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
+  return (Date.now() - Date.parse(deliveredAt)) / 864e5 <= (order.returnableDays || settings.returns.windowDays);
 }
 
 export function canCustomerRequestReplacement(order: Order, settings = getOrderSettings()) {
@@ -949,13 +952,13 @@ export function preorderAdvance(total: number, settings = getOrderSettings(), op
 export function customerOrderPolicyCopy(settings = getOrderSettings()) {
   const replacement = "If an item arrives damaged, share photos and request a replacement. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.";
   if (!settings.cancellation?.enabled) {
-    return { title: "Replacements", body: `Orders cannot be cancelled or returned from your account. ${replacement}` };
+    return { title: "Replacements", body: `Orders cannot be cancelled from your account. ${settings.returns.enabled ? "Delivered orders can be returned free of charge within the return window; the desk accepts or declines the request by email." : "Orders cannot be returned."} ${replacement}` };
   }
   const until = settings.cancellation.allowedUntil;
   const stage = until === "Ordered" ? "before it is packed" : until === "Shipped" ? "until it is out for delivery" : "until the courier picks it up";
   const hours = settings.cancellation.windowHours > 0 ? ` and within ${settings.cancellation.windowHours} hours of ordering` : "";
   const fee = settings.cancellation.fee > 0 ? ` A cancellation fee of ₹${settings.cancellation.fee} and the platform fee are kept from the refund.` : " The platform fee is kept from the refund.";
-  return { title: "Cancellations & replacements", body: `You can cancel an order from its page ${stage}${hours}.${fee} Orders cannot be returned. ${replacement}` };
+  return { title: "Cancellations & replacements", body: `You can cancel an order from its page ${stage}${hours}.${fee} ${settings.returns.enabled ? "Delivered orders can be returned free of charge within the return window; the desk accepts or declines the request by email." : "Orders cannot be returned."} ${replacement}` };
 }
 
 export function mask(value: string) {

@@ -584,14 +584,71 @@ function notifyReplacement(order: Order, title: string, body: string, who: "cust
   }
 }
 
+/** Customer return of a delivered order. No charge to the customer; the desk accepts or cancels it. */
+export function requestCustomerReturn(order: Order, input: { reason: string; note?: string; images?: string[] }): ReturnRequest {
+  if (getReturnRequest(order.id) ?? order.returnRequest) throw new Error("A request is already open on this order.");
+  const requestedAt = new Date().toISOString();
+  const refundAmount = Math.max(0, order.total - Math.max(0, order.platformFee ?? 0) - (order.refundAmount ?? 0));
+  const request: ReturnRequest = {
+    id: returnRequestId(),
+    orderId: order.id,
+    kind: "return",
+    reason: input.reason.trim() || "Return requested",
+    requestedAt,
+    source: "customer",
+    status: "Pending Review",
+    returnCharges: 0,
+    refundAmount,
+    images: input.images?.length ? input.images.slice(0, 6) : undefined,
+    note: input.note?.trim() || undefined,
+    stages: [
+      { id: "requested", title: "Return requested", at: requestedAt, reached: true, detail: "The Foundation desk will review this request." },
+      { id: "decision", title: "Decision", at: requestedAt, reached: false, detail: "You will get an email once the desk accepts or cancels the return." },
+      { id: "pickup", title: "Pickup", at: requestedAt, reached: false, detail: "Free pickup. The courier will call before collecting the parcel." },
+      { id: "refund", title: "Refund", at: requestedAt, reached: false, detail: `Refund of ${formatPrice(refundAmount)} to your original payment method after the item is back (the platform fee is non-refundable).` },
+    ],
+  };
+  persistReturnRequest(order.id, request);
+  notifyReplacement(order, `Return request ${request.id}`, "We received your return request. The desk will accept or cancel it and email you.", "both");
+  return request;
+}
+
 export function reviewReplacementRequest(
   orderId: string,
   input: { accept: boolean; note?: string; by?: string }
 ): ReturnRequest {
   const current = getReturnRequest(orderId);
-  if (!current || current.kind !== "replacement") throw new Error("No replacement request is waiting on this order.");
-  if (current.status !== "Pending Review") throw new Error("This replacement request has already been reviewed.");
+  if (!current) throw new Error("No request is waiting on this order.");
+  if (current.status !== "Pending Review") throw new Error("This request has already been reviewed.");
   const now = new Date().toISOString();
+  if (current.kind === "return") {
+    const source = getOrders().find((order) => order.id === orderId);
+    const note = input.note?.trim();
+    const request: ReturnRequest = {
+      ...current,
+      status: input.accept ? "Return Approved" : "Rejected",
+      decidedAt: now,
+      decidedBy: input.by,
+      decisionNote: note || (input.accept ? "Return accepted." : "Return request cancelled."),
+      stages: current.stages.map((stage) =>
+        stage.id === "decision"
+          ? { ...stage, at: now, reached: true, detail: input.accept ? "Return accepted. A free pickup will be arranged." : note || "The return request was cancelled by the desk." }
+          : stage
+      ),
+    };
+    persistReturnRequest(orderId, request);
+    if (source) {
+      notifyReplacement(
+        source,
+        input.accept ? `Return request ${request.id} accepted` : `Return request ${request.id} cancelled`,
+        input.accept
+          ? "Your return request has been accepted. There is no charge for the return; we will arrange the pickup and share the details. The refund is sent once the item is back with us."
+          : `Your return request was cancelled by the Foundation desk.${note ? ` Reason: ${note}` : ""}`,
+        "both"
+      );
+    }
+    return request;
+  }
   if (!input.accept) {
     const request: ReturnRequest = {
       ...current,

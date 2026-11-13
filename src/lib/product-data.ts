@@ -30,6 +30,24 @@ function writeJSON(key: string, value: unknown) {
   window.dispatchEvent(new Event("vgmf-cms"));
 }
 
+const PENDING_KEY = "vgmf_unpublished_products";
+
+/** Products saved in this browser that the live site has not received yet. */
+export function pendingProductIds(): string[] {
+  return readJSON<string[]>(PENDING_KEY, []);
+}
+
+export function clearPendingProducts(ids: string[]) {
+  if (typeof window === "undefined" || !ids.length) return;
+  const sent = new Set(ids);
+  window.localStorage.setItem(PENDING_KEY, JSON.stringify(pendingProductIds().filter((id) => !sent.has(id))));
+}
+
+function markProductPending(id: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PENDING_KEY, JSON.stringify(Array.from(new Set([id, ...pendingProductIds()])).slice(0, 500)));
+}
+
 export function getOverrides(): ProductOverride[] {
   return readJSON<ProductOverride[]>(OVERRIDES_KEY, []);
 }
@@ -174,6 +192,7 @@ export function saveProduct(book: Book) {
   });
   const list = getCustomBooks().filter((item) => item.id !== book.id);
   list.unshift(record);
+  markProductPending(record.id);
   writeJSON(CUSTOM_KEY, list);
   writeJSON(OVERRIDES_KEY, getOverrides().filter((o) => o.bookId !== book.id));
   writeJSON(DELETED_KEY, getDeletedIds().filter((id) => id !== book.id));
