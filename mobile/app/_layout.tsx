@@ -62,6 +62,11 @@ function ThemedStack() {
         <Stack.Screen name="ticket/[id]" options={{ title: "Ticket" }} />
         <Stack.Screen name="order/[id]" options={{ title: "Order" }} />
         <Stack.Screen name="web" options={{ title: "Foundation" }} />
+        <Stack.Screen name="about-page/[id]" options={{ title: "About" }} />
+        <Stack.Screen name="legal" options={{ title: "Legal" }} />
+        <Stack.Screen name="speakers" options={{ title: "Speakers" }} />
+        <Stack.Screen name="schedules" options={{ title: "Schedules" }} />
+        <Stack.Screen name="application-status" options={{ title: "Application status" }} />
         <Stack.Screen name="page/[slug]" options={{ title: "Page" }} />
       </Stack>
     </>

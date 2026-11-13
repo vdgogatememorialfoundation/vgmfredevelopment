@@ -48,7 +48,14 @@ export default function EventDetail() {
     );
   }
   const register = str(item.registrationUrl);
-  const maps = str(item.mapsUrl).replace("/maps/embed/v1/place?", "/maps/search/?api=1&").replace(/key=[^&]+&?/, "");
+  const place = [str(item.venue), str(item.city)].filter(Boolean).join(", ");
+  const rawMaps = str(item.mapsUrl);
+  const embedQuery = /\/maps\/embed\//.test(rawMaps) ? decodeURIComponent((rawMaps.match(/[?&]q=([^&]+)/) ?? [])[1] ?? "") : "";
+  const maps = rawMaps && !/\/maps\/embed\//.test(rawMaps)
+    ? rawMaps
+    : embedQuery || place
+      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(embedQuery || place)}`
+      : "";
   const closed = isRegistrationClosed(item);
   const source = str(item.source);
   const portalId = source === "seminar" || source === "autism" ? Number(str(item.id).split("-").pop()) : 0;

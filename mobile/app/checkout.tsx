@@ -62,7 +62,11 @@ export default function CheckoutScreen() {
   const promoAllowed = promoRules?.coupons === true || promoRules?.giftCards === true;
   const [promoNote, setPromoNote] = useState("");
   const promoOff = promoAmount(promo, subtotal);
-  const total = Math.max(0, subtotal - promoOff) + shipping;
+  const fees = (feed?.orderSettings as { platformFee?: { enabled?: boolean; amount?: number }; preorderPayment?: { advanceType?: string; advanceValue?: number } } | undefined) ?? {};
+  const platformFee = fees.platformFee?.enabled ? Math.max(0, Math.round(Number(fees.platformFee.amount) || 0)) : 0;
+  const total = Math.max(0, subtotal - promoOff) + platformFee + shipping;
+  const copies = priced.reduce((sum, item) => sum + item.quantity, 0);
+  const payNow = preorder && !pickup ? preorderAdvance(total, platformFee, copies, fees.preorderPayment) : total;
   const applyPromo = async () => {
     setPromoNote("");
     try {
@@ -115,7 +119,7 @@ export default function CheckoutScreen() {
       const options = {
         key: started.keyId,
         orderId: started.razorpayOrderId,
-        amount: Math.round(Number(started.amount ?? total) * 100),
+        amount: Math.round(Number(started.amount ?? payNow) * 100),
         name: name.trim(),
         email: session?.email ?? "",
         phone: mobile.replace(/\s/g, ""),
@@ -211,7 +215,9 @@ export default function CheckoutScreen() {
               <Muted>Shipping {shipping ? money(shipping) : "Free"}</Muted>
             )}
             {promoOff ? <Muted>{promo?.label} · −{money(promoOff)}</Muted> : null}
+            {platformFee ? <Muted>Platform fee · {money(platformFee)}</Muted> : null}
             <Heading>Total {money(total)}</Heading>
+            {payNow < total ? <Muted>Pay now (pre-order advance) · {money(payNow)}{"\n"}Balance later · {money(total - payNow)} + courier charge</Muted> : null}
           </Card>
           {promoAllowed ? (
             <>
@@ -263,10 +269,10 @@ export default function CheckoutScreen() {
           </>
           ) : null}
           {preorder ? (
-            <Muted>Pre-order: you pay for the items now. When your order is ready, the courier charge is added and you pay the balance from the order page.</Muted>
+            <Muted>{payNow < total ? `Pre-order: you pay an advance of ${money(payNow)} now. When your order is ready, the courier charge is added and you pay the balance from the order page.` : "Pre-order: you pay for the items now. When your order is ready, the courier charge is added and you pay the balance from the order page."}</Muted>
           ) : null}
           <Muted>Pay securely with UPI, card or net banking through Razorpay. Damaged items can be replaced after delivery if you share photos.</Muted>
-          <Button label={busy ? "Please wait…" : `Pay ${money(total)}`} disabled={busy} onPress={() => void submit()} />
+          <Button label={busy ? "Please wait…" : `Pay ${money(payNow)}`} disabled={busy} onPress={() => void submit()} />
           <Button kind="ghost" label="Back to cart" onPress={() => router.replace("/cart")} />
         </>
       )}
@@ -274,3 +280,15 @@ export default function CheckoutScreen() {
   );
 }
 
+/** Same rule as the server (preorderAdvance): platform fee plus a fixed amount per copy or a percentage of the rest. */
+function preorderAdvance(total: number, platformFee: number, copies: number, plan?: { advanceType?: string; advanceValue?: number }) {
+  if (total <= 0) return total;
+  const fee = Math.min(total, Math.max(0, platformFee));
+  const rest = total - fee;
+  const raw = Number(plan?.advanceValue);
+  const part =
+    plan?.advanceType === "amount"
+      ? Math.max(1, Number.isFinite(raw) ? raw : 100) * Math.max(1, Math.floor(copies || 1))
+      : Math.round((rest * (Number.isFinite(raw) ? Math.min(99, Math.max(1, raw)) : 50)) / 100);
+  return Math.min(total, Math.max(1, Math.round((fee + Math.min(rest, part)) * 100) / 100));
+}

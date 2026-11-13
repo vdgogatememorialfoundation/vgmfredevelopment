@@ -737,3 +737,13 @@ export async function registerPushToken(token: string, platform: string) {
   const response = await fetch(`${getApiBase()}/api/push/register`, { method: "POST", headers: headers(), body: JSON.stringify({ token, platform }) });
   return response.ok;
 }
+
+export type TrackedApplication = { id?: string; portal?: string; eventName?: string; status?: string; paymentStatus?: string; amount?: number; issuedAt?: string; applicationNo?: string };
+
+/** Seminar, Autism and Fellowship application lookup, the same one the website's Application status page uses. */
+export async function trackApplication(id: string) {
+  const response = await fetch(`${getApiBase()}/api/partners/track?id=${encodeURIComponent(id.trim())}`, { headers: headers(false) });
+  const data = (await response.json().catch(() => null)) as { found?: boolean; ticket?: TrackedApplication | null; error?: string } | null;
+  if (!response.ok) throw new Error(data?.error || "The application could not be looked up.");
+  return data?.found && data.ticket ? data.ticket : null;
+}

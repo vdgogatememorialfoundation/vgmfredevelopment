@@ -168,10 +168,21 @@ export default function OrderScreen() {
           </Muted>
         ))}
         <Divider />
-        {Number(order.discount) > 0 ? <Muted>Discount −{money(order.discount)}</Muted> : null}
-        <Muted>Shipping {Number(order.shipping) > 0 ? money(order.shipping) : "Free"}</Muted>
+        <Muted>MRP {money((Number(order.subtotal) || 0) + (Number(order.discount) || 0))}</Muted>
+        <Muted>Discount −{money(Number(order.discount) || 0)}</Muted>
         {Number(order.gst) > 0 ? <Muted>GST {money(order.gst)}</Muted> : null}
-        <Heading>Total {money(order.total)}</Heading>
+        {Number(order.platformFee) > 0 ? <Muted>Platform fee {money(order.platformFee)}</Muted> : null}
+        <Muted>
+          Shipping{" "}
+          {pickup
+            ? "Store pickup · no charge"
+            : Number(order.shipping) > 0
+              ? money(order.shipping)
+              : order.shippingDue || preorder?.shippingDue
+                ? "Calculated once packed"
+                : "FREE"}
+        </Muted>
+        <Heading>Order total {money(order.total)}</Heading>
       </Card>
 
       <Card>
@@ -179,9 +190,11 @@ export default function OrderScreen() {
         {pickup ? (
           <Muted>Collect from the Foundation store. Show your pickup OTP at the counter.</Muted>
         ) : (
-          <Muted>
-            {[str(address.fullName), str(address.line1), str(address.landmark), str(address.city), str(address.state), str(address.pincode)].filter(Boolean).join(", ")}
-          </Muted>
+          <>
+            <Muted>Deliver to · {[str(address.fullName), str(address.phone)].filter(Boolean).join(" · ")}</Muted>
+            <Muted>Address · {[str(address.line1), str(address.landmark), str(address.city), str(address.state), str(address.pincode)].filter(Boolean).join(", ")}</Muted>
+            {str(order.status) === "Delivered" ? <Muted>Delivered</Muted> : trackers[0]?.expected ? <Muted>Expected delivery · {str(trackers[0].expected)}</Muted> : null}
+          </>
         )}
       </Card>
 
@@ -210,11 +223,11 @@ export default function OrderScreen() {
         ))
       ) : (
         <Card>
-          <Heading>Order progress</Heading>
-          {[...history].reverse().map((step, index) => (
+          <Heading>Tracking</Heading>
+          {[...history].reverse().filter((step, index, list) => str(step.status) && list.findIndex((other) => str(other.status) === str(step.status)) === index).map((step, index) => (
             <View key={`${step.at ?? ""}-${index}`} style={{ marginTop: 8 }}>
-              <Body>{str(step.custom) || str(step.status)}</Body>
-              <Muted>{[when(step.at), str(step.note)].filter(Boolean).join(" · ")}</Muted>
+              <Body>{str(step.status)}</Body>
+              <Muted>{when(step.at)}</Muted>
             </View>
           ))}
           {!history.length ? <Muted>Recorded {when(order.date)}</Muted> : null}

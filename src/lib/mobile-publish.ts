@@ -204,7 +204,7 @@ export function hasFeedBaseline() {
  * Push the sections edited in this browser. A browser holding older content (another device, a fresh login)
  * never overwrites slides, banners or anything else it did not change.
  */
-export function publishLiveSite() {
+export function publishLiveSite(options: { removed?: Record<string, string[]> } = {}) {
   if (typeof window === "undefined") return Promise.resolve({ ok: false as const });
   markLiveDirty(true);
   const snapshot = collectMobileSnapshot();
@@ -215,6 +215,7 @@ export function publishLiveSite() {
   ) as Partial<MobileFeed>;
   // Without a baseline this browser never loaded the live feed, so only its own branding is safe to send.
   const body: Partial<MobileFeed> = baseline ? sections : { site: snapshot.site };
+  for (const key of Object.keys(options.removed ?? {})) (body as Record<string, unknown>)[key] = (snapshot as Record<string, unknown>)[key];
   // Products saved here always go out, even when an earlier feed load reset the baseline; the server takes just these ids.
   const editedBooks = pendingProductIds();
   if (editedBooks.length) body.books = snapshot.books;
@@ -225,7 +226,7 @@ export function publishLiveSite() {
   return fetch("/api/mobile/publish", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ partial: true, basedOn: appliedFeedAt(), sections: body, editedBooks }),
+    body: JSON.stringify({ partial: true, basedOn: appliedFeedAt(), sections: body, editedBooks, removed: options.removed }),
   })
     .then(async (response) => {
       const data = (await response.json().catch(() => null)) as {

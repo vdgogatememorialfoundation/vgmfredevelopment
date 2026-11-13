@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vaidya Gogate Memorial Foundation",
     "slug": "vgmf-foundation",
-    "version": "3.1.0",
+    "version": "3.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "org.vaidyagogate.app",
-      "versionCode": 27,
+      "versionCode": 28,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#8F2D2D",

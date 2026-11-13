@@ -5,7 +5,17 @@ import { saveMobileEmailCreds, type MobileEmailCreds } from "@/lib/server/mobile
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; basedOn?: string; sections?: Partial<MobileFeed>; editedBooks?: string[] };
+type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; basedOn?: string; sections?: Partial<MobileFeed>; editedBooks?: string[]; removed?: Record<string, string[]> };
+
+/** Items Admin deleted on purpose may empty a list; the collapse guard only stops accidental wipes. */
+function onlyRemoved(current: unknown, incoming: unknown, removed?: string[]) {
+  if (!Array.isArray(current) || !Array.isArray(incoming) || !removed?.length) return false;
+  const kept = new Set(incoming.map((item) => String((item as { id?: unknown })?.id ?? "")));
+  return current.every((item) => {
+    const id = String((item as { id?: unknown })?.id ?? "");
+    return kept.has(id) || removed.includes(id);
+  });
+}
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
@@ -75,8 +85,9 @@ export async function POST(request: NextRequest) {
     for (const [key, value] of Object.entries(incoming)) {
       // A section changed on another device after this browser loaded the live site is kept, not overwritten.
       const changedAt = current.sectionAt?.[key] || current.publishedAt || "";
-      const stale = key !== "site" && (!basedOn || Boolean(changedAt && changedAt > basedOn));
-      if (collapsed((current as Record<string, unknown>)[key], value)) {
+      const stale = key !== "site" && !(body.removed?.[key]?.length) && (!basedOn || Boolean(changedAt && changedAt > basedOn));
+      const removedIds = Array.isArray(body.removed?.[key]) ? body.removed[key].map(String) : undefined;
+      if (collapsed((current as Record<string, unknown>)[key], value) && !onlyRemoved((current as Record<string, unknown>)[key], value, removedIds)) {
         rejected.push(key);
         continue;
       }
