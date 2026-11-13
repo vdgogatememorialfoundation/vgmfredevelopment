@@ -17,7 +17,7 @@ import { PartnerDrawerProvider } from "@/components/account/PartnerPortalDrawer"
 import AbandonedCartNotice from "@/components/store/AbandonedCartNotice";
 import CookieConsent from "@/components/common/CookieConsent";
 import NativeAppBridge from "@/components/layout/NativeAppBridge";
-import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { publicFeed, readMobileFeed } from "@/lib/server/mobile-feed";
 
 export const revalidate = 60;
 
@@ -36,7 +36,7 @@ export default function StoreLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const feed = readMobileFeed();
+  const feed = publicFeed(readMobileFeed());
   const initial = {
     site: feed.site,
     flyers: feed.flyers ?? [],
