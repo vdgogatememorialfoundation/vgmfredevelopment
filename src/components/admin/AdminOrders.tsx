@@ -56,7 +56,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
+import { fetchRazorpayPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -857,6 +857,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [method, setMethod] = useState("UPI");
   const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
   const [linkAmount, setLinkAmount] = useState("");
+  const [rzpPaymentId, setRzpPaymentId] = useState("");
   const [extraAmount, setExtraAmount] = useState("");
   const [extraReason, setExtraReason] = useState("");
   const [extraKind, setExtraKind] = useState<"shipping" | "other">("shipping");
@@ -1324,6 +1325,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </SelectInput>
                 <TextInput placeholder="Reference / UTR" value={reference} onChange={(event) => setReference(event.target.value)} />
                 <Button variant="success" onClick={() => run("record", () => { recordPayment(order.id, { method, reference }); return "Payment recorded. The order is confirmed."; })}>Record payment</Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <TextInput placeholder="Paid on Razorpay but not showing? Paste payment ID (pay_…)" aria-label="Razorpay payment ID" value={rzpPaymentId} onChange={(event) => setRzpPaymentId(event.target.value)} />
+                <Button variant="outline" disabled={busy === "rzp-fetch" || !rzpPaymentId.trim()} onClick={() => run("rzp-fetch", async () => {
+                  const result = await fetchRazorpayPayment(order.id, rzpPaymentId);
+                  setRzpPaymentId("");
+                  return result;
+                })}>{busy === "rzp-fetch" ? "Checking…" : "Fetch from Razorpay"}</Button>
               </div>
             </div>
           )}

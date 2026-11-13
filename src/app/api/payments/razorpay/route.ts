@@ -9,6 +9,7 @@ import {
   razorpayLinkCancel,
   razorpayOrder,
   razorpayOrderPayments,
+  razorpayPayment,
   razorpayRefund,
   razorpayRefundStatus,
   razorpayVerify,
@@ -63,6 +64,11 @@ export async function POST(request: NextRequest) {
             expiryMinutes: Number(body.expiryMinutes ?? 30),
           })),
         });
+      case "payment": {
+        const paymentId = String(body.paymentId || "").trim();
+        if (!/^pay_[A-Za-z0-9]{6,}$/.test(paymentId)) return NextResponse.json({ ok: false, configured: true, error: "Enter a Razorpay payment ID like pay_ABC123." });
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayPayment(creds, paymentId)) });
+      }
       case "link-cancel":
         return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkCancel(creds, String(body.linkId))) });
       case "link-status":

@@ -231,6 +231,22 @@ export async function razorpayDeviceActivityStatus(
   };
 }
 
+/** One payment by id, with the receipt of its Razorpay order (our order id) when it was paid through checkout. */
+export async function razorpayPayment(creds: { keyId: string; keySecret: string }, paymentId: string) {
+  const headers = { authorization: razorpayAuth(creds) };
+  const data = await call(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, { headers });
+  const orderId = data.order_id ? String(data.order_id) : "";
+  const order = orderId ? await call(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}`, { headers }).catch(() => null) : null;
+  return {
+    paymentId: String(data.id ?? paymentId),
+    status: String(data.status ?? ""),
+    amount: Number(data.amount ?? 0) / 100,
+    method: data.method ? String(data.method) : "",
+    orderId,
+    receipt: order?.receipt ? String(order.receipt) : "",
+  };
+}
+
 export async function razorpayOrderPayments(
   creds: { keyId: string; keySecret: string },
   orderId: string,

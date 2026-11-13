@@ -1,6 +1,7 @@
 import type { CourierRate, Order } from "@/types";
 import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
+import { getOrders } from "@/lib/store";
 import { getOrder, maxRefundable, patchOrder, recordBalancePayment, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
@@ -479,6 +480,64 @@ export async function refreshPaymentLink(orderId: string) {
     return "Paid on Razorpay. The order is confirmed.";
   }
   return `Razorpay link status: ${result.status}.`;
+}
+
+/** Desk pastes a Razorpay payment id for an order whose payment never reached the site; Razorpay confirms it before anything is recorded. */
+export async function fetchRazorpayPayment(orderId: string, paymentId: string) {
+  const id = paymentId.trim();
+  if (!/^pay_[A-Za-z0-9]{6,}$/.test(id)) throw new Error("Enter the Razorpay payment ID, e.g. pay_ABC123.");
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  const usedOn = (row: Order) => row.razorpayPaymentId === id || row.paymentRef === id || row.preorderPayment?.balanceRef === id;
+  if (usedOn(order)) return "This payment is already recorded on this order.";
+  const other = getOrders().find((row) => row.id !== order.id && usedOn(row));
+  if (other) throw new Error(`This payment is already recorded on order ${other.id}.`);
+  const payment = await api<{ status: string; amount: number; method: string; orderId: string; receipt: string }>({ action: "payment", paymentId: id });
+  if (!payment.ok) throw new Error(payment.error ?? "Razorpay could not find this payment.");
+  if (payment.receipt && payment.receipt !== order.id && order.razorpayOrderId !== payment.orderId) {
+    throw new Error(`Razorpay shows this payment for order ${payment.receipt}, not ${order.id}.`);
+  }
+  if (payment.status !== "captured") {
+    return `Razorpay shows this payment as "${payment.status}", so nothing was recorded.${payment.status === "authorized" ? " Capture it in the Razorpay dashboard first." : ""}`;
+  }
+  const amount = Math.round(payment.amount * 100) / 100;
+  const method = `Razorpay${payment.method ? ` (${payment.method})` : ""}`;
+  const now = new Date().toISOString();
+  const plan = order.preorderPayment;
+  const due = remainingDue(order);
+  if (plan && !plan.advancePaidAt && amount + 0.01 >= plan.advance && amount + 0.01 < due) {
+    patchOrder(
+      order.id,
+      {
+        paymentStatus: "Partially Paid",
+        amountPaid: amount,
+        paymentMethod: method,
+        paymentRef: id,
+        razorpayPaymentId: id,
+        razorpayOrderId: order.razorpayOrderId ?? (payment.orderId || undefined),
+        paidAt: order.paidAt ?? now,
+        status: order.status === "Pending" ? "Ordered" : order.status,
+        preorderPayment: { ...plan, advancePaidAt: now },
+      },
+      `Pre-order advance ₹${amount} fetched from Razorpay · ${id}`
+    );
+    return `Advance of ₹${amount} recorded from Razorpay. Balance ₹${plan.balance} is still due.`;
+  }
+  if (plan && plan.advancePaidAt && !plan.balancePaidAt && amount + 0.01 >= plan.balance) {
+    recordBalancePayment(order.id, { method, reference: id });
+    return `Balance of ₹${amount} recorded from Razorpay. The order is fully paid.`;
+  }
+  if (amount + 0.01 >= due) {
+    recordPayment(order.id, { method, reference: id, razorpayPaymentId: id });
+    return `Payment of ₹${amount} recorded from Razorpay. The order is confirmed.`;
+  }
+  const paidSoFar = Math.round((order.total - due + amount) * 100) / 100;
+  patchOrder(
+    order.id,
+    { paymentStatus: "Partially Paid", amountPaid: paidSoFar, paymentRef: id, razorpayPaymentId: order.razorpayPaymentId ?? id, paymentMethod: order.paymentMethod ?? method },
+    `Part payment ₹${amount} fetched from Razorpay · ${id}`
+  );
+  return `Part payment of ₹${amount} recorded. ₹${Math.round((order.total - paidSoFar) * 100) / 100} is still due.`;
 }
 
 export async function refundThroughGateway(orderId: string, amount?: number, options: { withPlatformFee?: boolean } = {}) {
