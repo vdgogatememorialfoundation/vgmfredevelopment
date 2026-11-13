@@ -1635,7 +1635,7 @@ export function OrderSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="Orders, returns & refunds" text="Customers cannot cancel or return. They may request a damaged-item replacement with photos. The desk cancels, modifies, refunds, opens a return, or places a free replacement." action={<button type="button" className={primary} onClick={save}>Save</button>} />
+      <Header title="Orders, returns & refunds" text="Customers may cancel when allowed under Cancellations, and may request a damaged-item replacement with photos. The desk cancels, modifies, refunds, opens a return, or places a free replacement." action={<button type="button" className={primary} onClick={save}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
       <Card title="Fulfilment options at checkout">
@@ -1826,8 +1826,8 @@ export function OrderSettingsDesk() {
         </Card>
         <Card title="Cancellations">
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">Customers cannot cancel. The desk cancels from the order and the customer sees cancellation tracking.</p>
-            <Check label="Customers can cancel" checked={false} onChange={() => set({ cancellation: { ...value.cancellation, enabled: false } })} />
+            <p className="text-xs text-slate-500">When ticked, customers cancel from their order page within the limits below, and the desk then sends the refund (amount paid less the cancellation fee and platform fee). The desk can always cancel from the order.</p>
+            <Check label="Customers can cancel" checked={value.cancellation.enabled} onChange={(enabled) => set({ cancellation: { ...value.cancellation, enabled } })} />
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Allowed until the order is</span>
               <select className={input} value={value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
@@ -1843,7 +1843,7 @@ export function OrderSettingsDesk() {
       </div>
       <Card title="Admin order actions">
         <p className="mb-3 text-sm text-slate-500">
-          Customers cannot cancel or return. From the admin order desk you can cancel, modify, refund (full or partial), open a return, or place a free replacement — including after delivery.
+          Customer returns stay off. From the admin order desk you can cancel, modify, refund (full or partial), open a return, or place a free replacement — including after delivery.
         </p>
         <Check
           label="Admin can cancel, refund or replace even after delivery"

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
-import { deleteShopOrder, deletedShopOrderIds, findShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder, forCustomer } from "@/lib/server/shop-orders";
+import { deleteShopOrder, deletedShopOrderIds, findShopOrder, patchShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder, forCustomer } from "@/lib/server/shop-orders";
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
 import { redeemPromo } from "@/lib/server/promotions";
 import { ensureGuestAccount } from "@/lib/server/guest-account";
 import { inviteOrderFeedback } from "@/lib/server/forms";
+import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { canCustomerCancel, customerCancellationRefund, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import type { Order } from "@/types";
 
 export const runtime = "nodejs";
@@ -37,7 +39,34 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { order?: Order; action?: string; orderId?: string } | null;
+  const body = (await request.json().catch(() => null)) as { order?: Order; action?: string; orderId?: string; reason?: string; phone?: string } | null;
+  if (body?.action === "cancel") {
+    const viewer = commerceViewer(request);
+    const orderId = String(body.orderId ?? "");
+    const order = findShopOrder(orderId);
+    const owns = Boolean(
+      order &&
+        (((viewer.email || viewer.phone || viewer.id) && ordersForAccount(viewer).some((item) => item.id === orderId)) ||
+          (body.phone && orderPhoneMatches(order, String(body.phone))))
+    );
+    if (!order || !owns) return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
+    const settings = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined);
+    if (!canCustomerCancel(order, settings)) {
+      return NextResponse.json({ ok: false, error: "This order can no longer be cancelled from your account. Please contact the Foundation desk." }, { status: 400 });
+    }
+    const refund = customerCancellationRefund(order, settings);
+    const fee = settings.cancellation.fee;
+    const reason = String(body.reason ?? "").trim().slice(0, 300) || "Cancelled by the customer";
+    const note = refund > 0
+      ? `Cancelled by the customer. A refund of ₹${refund} will be sent to the original payment method${fee > 0 ? ` (₹${fee} cancellation fee kept)` : ""}.`
+      : "Cancelled by the customer.";
+    const next = patchShopOrder(order.id, {
+      status: "Cancelled",
+      cancelReason: reason,
+      history: [...(order.history ?? []), { at: new Date().toISOString(), status: "Cancelled", note, by: "Customer" }],
+    });
+    return NextResponse.json({ ok: true, order: next ? forCustomer(next) : undefined });
+  }
   if (body?.action === "delete") {
     const viewer = commerceViewer(request);
     if (!viewer.portal) return NextResponse.json({ ok: false, error: "Sign in to the desk." }, { status: 403 });

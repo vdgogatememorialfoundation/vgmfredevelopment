@@ -747,7 +747,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       autoRefundOnReturnPickup: Boolean(merged.refunds?.autoRefundOnReturnPickup),
     },
     cancellation: {
-      enabled: false,
+      enabled: Boolean(merged.cancellation?.enabled),
       allowedUntil: until === "Ordered" || until === "Shipped" || until === "Packed" ? until : "Packed",
       windowHours: Math.max(0, finiteNumber(merged.cancellation?.windowHours, 0)),
       fee: Math.max(0, finiteNumber(merged.cancellation?.fee, 0)),
@@ -889,8 +889,34 @@ export function shippingFeeSummary(settings = getOrderSettings()) {
   }
 }
 
-export function canCustomerCancel(_order?: Order, _settings = getOrderSettings(), _now = Date.now()) {
-  return false;
+const CANCEL_STAGE: Partial<Record<Order["status"], number>> = {
+  Paid: 0,
+  Processing: 0,
+  "Awaiting Confirmation": 0,
+  Ordered: 0,
+  Accepted: 0,
+  Packed: 1,
+  "Ready to Ship": 1,
+  "To Ship": 1,
+  Shipped: 2,
+};
+
+export function canCustomerCancel(order?: Order, settings = getOrderSettings(), now = Date.now()) {
+  if (!order || !settings.cancellation?.enabled || order.returnRequest) return false;
+  const stage = CANCEL_STAGE[order.status];
+  if (stage === undefined) return false;
+  const until = settings.cancellation.allowedUntil;
+  if (stage > (until === "Ordered" ? 0 : until === "Shipped" ? 2 : 1)) return false;
+  const hours = settings.cancellation.windowHours;
+  return !(hours > 0) || (now - Date.parse(order.date)) / 36e5 <= hours;
+}
+
+/** What a customer gets back on cancelling: paid amount less the platform fee and the cancellation fee. */
+export function customerCancellationRefund(order: Order, settings = getOrderSettings()) {
+  const paid = order.preorderPayment && !order.preorderPayment.balancePaidAt
+    ? order.paymentStatus === "Pending" ? 0 : order.preorderPayment.advance
+    : order.paymentStatus === "Paid" || order.paymentStatus === "Partially Refunded" ? order.total : 0;
+  return Math.max(0, paid - Math.max(0, order.platformFee ?? 0) - (settings.cancellation?.fee ?? 0) - (order.refundAmount ?? 0));
 }
 
 export function canCustomerReturn(_order?: Order, _settings = getOrderSettings()) {
@@ -920,11 +946,16 @@ export function preorderAdvance(total: number, settings = getOrderSettings(), op
   return Math.min(total, Math.max(1, Math.round((fee + Math.min(rest, part)) * 100) / 100));
 }
 
-export function customerOrderPolicyCopy() {
-  return {
-    title: "Replacements",
-    body: "Orders cannot be cancelled or returned from your account. If an item arrives damaged, share photos and request a replacement. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.",
-  };
+export function customerOrderPolicyCopy(settings = getOrderSettings()) {
+  const replacement = "If an item arrives damaged, share photos and request a replacement. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.";
+  if (!settings.cancellation?.enabled) {
+    return { title: "Replacements", body: `Orders cannot be cancelled or returned from your account. ${replacement}` };
+  }
+  const until = settings.cancellation.allowedUntil;
+  const stage = until === "Ordered" ? "before it is packed" : until === "Shipped" ? "until it is out for delivery" : "until the courier picks it up";
+  const hours = settings.cancellation.windowHours > 0 ? ` and within ${settings.cancellation.windowHours} hours of ordering` : "";
+  const fee = settings.cancellation.fee > 0 ? ` A cancellation fee of ₹${settings.cancellation.fee} and the platform fee are kept from the refund.` : " The platform fee is kept from the refund.";
+  return { title: "Cancellations & replacements", body: `You can cancel an order from its page ${stage}${hours}.${fee} Orders cannot be returned. ${replacement}` };
 }
 
 export function mask(value: string) {

@@ -13,7 +13,7 @@ import type { Order, ReturnRequest } from "@/types";
 export default function ReturnSection({ order }: { order: Order }) {
   const settings = useOrderSettings();
   const windowDays = order.returnableDays || settings.returns.windowDays;
-  const policy = customerOrderPolicyCopy();
+  const policy = customerOrderPolicyCopy(settings);
   const [, setTick] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [note, setNote] = useState("");

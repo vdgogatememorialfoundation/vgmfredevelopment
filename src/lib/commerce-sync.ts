@@ -6,6 +6,7 @@ import { getCart, getOrders, getWishlist, withAccountEmail } from "@/lib/store";
 import { publishCartChange } from "@/lib/cart-store";
 import type { CartItem, Order, ShipmentRecord } from "@/types";
 import { sameShipmentSlot } from "@/lib/shipment-slot";
+import { releaseStockForOrder } from "@/lib/product-data";
 
 function writeOrders(orders: Order[]) {
   window.localStorage.setItem("vgmf_orders", JSON.stringify(orders));
@@ -162,7 +163,22 @@ async function pullCommerce() {
   ]);
   if (ordersRes.ok) {
     const data = (await ordersRes.json()) as { orders?: Order[]; deleted?: string[] };
-    rememberOrders(data.orders ?? []);
+    const pulled = data.orders ?? [];
+    if (isPortalRole(getSession()?.role)) {
+      // A customer cancelled on the server: the desk puts the stock back once and records it.
+      for (const order of pulled) {
+        if (order.status !== "Cancelled" || !order.stockCommitted || order.history?.slice(-1)[0]?.by !== "Customer") continue;
+        if (!releaseStockForOrder(order)) continue;
+        order.stockCommitted = false;
+        void fetch("/api/shop/orders", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ order }),
+        }).catch(() => undefined);
+      }
+    }
+    rememberOrders(pulled);
     const gone = new Set(data.deleted ?? []);
     if (gone.size) {
       const orders = getOrders();

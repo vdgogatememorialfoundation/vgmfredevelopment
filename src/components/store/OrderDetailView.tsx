@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import ReturnSection from "@/components/store/ReturnSection";
+import CancelOrderSection from "@/components/store/CancelOrderSection";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
@@ -238,6 +239,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
               )}
             </div>
 
+            <CancelOrderSection order={order} />
             <ReturnSection order={order} />
           </div>
         </div>

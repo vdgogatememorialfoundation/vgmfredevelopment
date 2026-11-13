@@ -210,6 +210,24 @@ export function getOrders(): Order[] {
 }
 
 /** Keep a copy on this website so the clinic desk can find the order from another device. */
+/** Customer cancels their own order; the server checks the desk's cancellation rules. */
+export async function cancelMyOrder(orderId: string, reason: string, phone?: string): Promise<Order> {
+  const response = await fetch("/api/shop/orders", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "cancel", orderId, reason, phone }),
+  });
+  const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string; order?: Order } | null;
+  if (!response.ok || !data?.ok || !data.order) throw new Error(data?.error || "Could not cancel the order.");
+  const cancelled = data.order;
+  const orders = getOrders();
+  const next = orders.some((item) => item.id === orderId) ? orders.map((item) => (item.id === orderId ? { ...item, ...cancelled } : item)) : [cancelled, ...orders];
+  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new Event("vgmf-cms"));
+  return cancelled;
+}
+
 export function publishShopOrder(order: Order) {
   if (typeof window === "undefined" || !order?.id) return;
   void fetch("/api/shop/orders", {
