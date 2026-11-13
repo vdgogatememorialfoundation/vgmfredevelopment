@@ -30,9 +30,9 @@ const ALL: Record<FlavorId, Flavor> = {
     accent: colors.secondary,
     tabs: [
       { id: "home", title: "Home", icon: "home" },
-      { id: "articles", title: "Articles", icon: "book" },
-      { id: "events", title: "Events", icon: "calendar" },
       { id: "shop", title: "Shop", icon: "bag-handle" },
+      { id: "events", title: "Events", icon: "calendar" },
+      { id: "clinics", title: "Clinics", icon: "medkit" },
       { id: "account", title: "Account", icon: "person" },
     ],
   },

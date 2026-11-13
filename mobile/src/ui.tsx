@@ -60,14 +60,14 @@ export function Card({
         backgroundColor: theme.colors.paper,
         borderColor: featured ? theme.colors.accent : theme.colors.border,
         borderWidth: 1,
-        borderRadius: 10,
+        borderRadius: 16,
         padding: pad,
         marginBottom: 14,
         shadowColor: "#3B2A14",
-        shadowOpacity: 0.03,
+        shadowOpacity: 0.07,
         shadowRadius: 12,
         shadowOffset: { width: 0, height: 4 },
-        elevation: 0,
+        elevation: 2,
       }}
     >
       {children}
@@ -102,7 +102,7 @@ export function Kicker({ children }: { children: ReactNode }) {
 export function Title({ children }: { children: ReactNode }) {
   const theme = useTheme();
   return (
-    <Text style={{ fontSize: 28, fontWeight: "600", color: theme.colors.text, marginBottom: 6, fontFamily: theme.fontFamily, letterSpacing: -0.4, lineHeight: 34 }}>
+    <Text style={{ fontSize: 26, fontWeight: "700", color: theme.colors.text, marginBottom: 6, fontFamily: theme.fontFamily, letterSpacing: -0.5, lineHeight: 32 }}>
       {children}
     </Text>
   );
@@ -172,7 +172,7 @@ export function Button({
 }) {
   const theme = useTheme();
   const palette = {
-    primary: { bg: theme.colors.secondary, border: theme.colors.secondary, text: theme.colors.onPrimary },
+    primary: { bg: theme.colors.primary, border: theme.colors.primary, text: theme.colors.onPrimary },
     ghost: { bg: theme.colors.paper, border: theme.colors.border, text: theme.colors.text },
     soft: { bg: theme.colors.surface, border: theme.colors.accent, text: theme.colors.primary },
     ink: { bg: theme.colors.secondary, border: theme.colors.secondary, text: theme.colors.onPrimary },
@@ -187,7 +187,7 @@ export function Button({
         {
           marginTop: 10,
           backgroundColor: palette.bg,
-          borderRadius: 8,
+          borderRadius: 12,
           paddingVertical: 13,
           paddingHorizontal: 16,
           alignItems: "center",
@@ -244,7 +244,7 @@ export function Field({
         style={{
           borderWidth: 1,
           borderColor: theme.colors.border,
-          borderRadius: 8,
+          borderRadius: 12,
           padding: 13,
           minHeight: 48,
           backgroundColor: theme.colors.paper,
@@ -270,7 +270,7 @@ export function Empty({
 }) {
   const theme = useTheme();
   return (
-    <View style={{ paddingVertical: 28, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.paper, marginBottom: 12, alignItems: "center" }}>
+    <View style={{ paddingVertical: 28, paddingHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.paper, marginBottom: 12, alignItems: "center" }}>
       <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
         <Ionicons name={icon} size={22} color={theme.colors.accent} />
       </View>
@@ -288,7 +288,7 @@ export function Banner({ text, tone = "note" }: { text: string; tone?: "note" | 
   const bg = tone === "error" ? "#F8E8E8" : tone === "success" ? "#EAF6EE" : theme.colors.paper;
   const fg = tone === "error" ? theme.colors.primary : tone === "success" ? "#1F4A32" : theme.colors.text;
   return (
-    <View style={{ backgroundColor: bg, padding: 14, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: theme.colors.border }}>
+    <View style={{ backgroundColor: bg, padding: 14, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: theme.colors.border }}>
       <Text style={{ color: fg, fontWeight: "600", lineHeight: 20 }}>{shown}</Text>
     </View>
   );
@@ -314,7 +314,7 @@ export function Cover({ uri, height = 180, ratio, fit = "cover" }: { uri?: strin
         width: "100%",
         height: square ? undefined : height,
         aspectRatio: square ? 1 : ratio === "wide" ? 16 / 10 : undefined,
-        borderRadius: 10,
+        borderRadius: 16,
         marginBottom: 12,
         overflow: "hidden",
         backgroundColor: theme.colors.background,
@@ -431,7 +431,7 @@ export function IconTile({ label, icon, onPress }: { label: string; icon: keyof 
       accessibilityLabel={label}
       style={({ pressed }) => [{ width: "23%", minWidth: 70, alignItems: "center", paddingVertical: 10, opacity: pressed ? 0.88 : 1 }]}
     >
-      <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+      <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: theme.colors.surface, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
         <Ionicons name={icon} size={21} color={theme.colors.primary} />
       </View>
       <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 11, textAlign: "center" }} numberOfLines={1}>
@@ -455,7 +455,7 @@ export function DateBadge({ label }: { label: string }) {
   const theme = useTheme();
   if (!label) return null;
   return (
-    <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5, alignSelf: "flex-start" }}>
+    <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5, alignSelf: "flex-start" }}>
       <Text style={{ color: theme.colors.onPrimary, fontSize: 10, fontWeight: "800" }}>{label}</Text>
     </View>
   );
@@ -485,7 +485,7 @@ export function ListRow({ icon, title, subtitle, onPress }: { icon: keyof typeof
           backgroundColor: theme.colors.paper,
           borderColor: theme.colors.border,
           borderWidth: 1,
-          borderRadius: 10,
+          borderRadius: 16,
           padding: 14,
           marginBottom: 8,
           opacity: pressed ? 0.9 : 1,
@@ -530,7 +530,7 @@ export function IconButton({ icon, label, onPress, badge }: { icon: keyof typeof
     >
       <Ionicons name={icon} size={22} color={theme.colors.text} />
       {badge ? (
-        <View style={{ position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: theme.colors.primary, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 }}>
+        <View style={{ position: "absolute", top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 12, backgroundColor: theme.colors.primary, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 }}>
           <Text style={{ color: theme.colors.onPrimary, fontSize: 9, fontWeight: "800" }}>{badge > 99 ? "99+" : badge}</Text>
         </View>
       ) : null}
@@ -559,7 +559,7 @@ export function Portrait({
         minHeight: size,
         maxWidth: size,
         maxHeight: size,
-        borderRadius: 10,
+        borderRadius: 16,
         overflow: "hidden",
         backgroundColor: theme.colors.background,
         borderWidth: 1,
@@ -632,7 +632,7 @@ export function Tag({ label, tone = "gold" }: { label: string; tone?: "gold" | "
     ink: { bg: "#E9EEF6", fg: "#0B1F3A", border: "#C9D4E6" },
   }[tone];
   return (
-    <View style={{ alignSelf: "flex-start", backgroundColor: palette.bg, borderColor: palette.border, borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+    <View style={{ alignSelf: "flex-start", backgroundColor: palette.bg, borderColor: palette.border, borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 }}>
       <Text style={{ color: palette.fg, fontSize: 11, fontWeight: "800", letterSpacing: 0.3 }}>{label}</Text>
     </View>
   );
@@ -643,7 +643,7 @@ export function InfoRow({ icon, label, value }: { icon: keyof typeof Ionicons.gl
   if (!value) return null;
   return (
     <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ width: 34, height: 34, borderRadius: 16, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center" }}>
         <Ionicons name={icon} size={17} color={theme.colors.primary} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -657,7 +657,7 @@ export function InfoRow({ icon, label, value }: { icon: keyof typeof Ionicons.gl
 export function Panel({ title, children }: { title?: string; children: ReactNode }) {
   const theme = useTheme();
   return (
-    <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 14 }}>
+    <View style={{ backgroundColor: theme.colors.paper, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 14 }}>
       {title ? <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 16, paddingTop: 12, paddingBottom: 4, fontFamily: theme.fontFamily }}>{title}</Text> : null}
       {children}
     </View>
@@ -667,7 +667,7 @@ export function Panel({ title, children }: { title?: string; children: ReactNode
 export function Hero({ kicker, title, subtitle, children }: { kicker?: string; title: string; subtitle?: string; children?: ReactNode }) {
   const theme = useTheme();
   return (
-    <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 10, padding: 20, marginBottom: 18, overflow: "hidden" }}>
+    <View style={{ backgroundColor: theme.colors.primary, borderRadius: 20, padding: 22, marginBottom: 18, overflow: "hidden", elevation: 4, shadowColor: "#5A1A1A", shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } }}>
       <View style={{ position: "absolute", right: -40, top: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: "rgba(255,255,255,0.07)" }} />
       <View style={{ position: "absolute", right: 30, bottom: -60, width: 120, height: 120, borderRadius: 60, backgroundColor: "rgba(184,149,58,0.22)" }} />
       {kicker ? <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: "800", letterSpacing: 1.6, textTransform: "uppercase", marginBottom: 8 }}>{kicker}</Text> : null}
@@ -690,16 +690,16 @@ export function ProductTile({ title, author, price, original, uri, badge, line, 
         {
           width: "48%",
           backgroundColor: theme.colors.paper,
-          borderRadius: 10,
+          borderRadius: 16,
           borderWidth: 1,
           borderColor: theme.colors.border,
           padding: 10,
           marginBottom: 14,
           shadowColor: "#3B2A14",
-          shadowOpacity: 0.03,
+          shadowOpacity: 0.07,
           shadowRadius: 10,
           shadowOffset: { width: 0, height: 4 },
-          elevation: 0,
+          elevation: 2,
           opacity: pressed ? 0.92 : 1,
         },
       ]}

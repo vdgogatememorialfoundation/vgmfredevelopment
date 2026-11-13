@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
 import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { isPastDate, mediaUrl, moduleOn, str, chatOn } from "../../src/api";
+import { isPastDate, mediaUrl, moduleOn, str } from "../../src/api";
 import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { EXPLORE, SITE, resolvedAbout } from "../../src/site-content";
+import { QUICK_ACTIONS, resolvedAbout } from "../../src/site-content";
 import { useTheme } from "../../src/theme";
 import { Banner, Card, Heading, Hero, IconTile, Kicker, LinkRow, Loading, Muted, Portrait, Screen, SearchBar, SectionHeader, SiteFooter } from "../../src/ui";
 import { EventCard } from "../../src/event-card";
@@ -12,7 +12,7 @@ import { ArticleCard } from "./articles";
 import { ProductGrid } from "./shop";
 
 export default function HomeScreen() {
-  const { feed, loading, error, refresh } = useFeed();
+  const { feed, notices, loading, error, refresh } = useFeed();
   const theme = useTheme();
   const about = resolvedAbout(feed?.about);
   const [query, setQuery] = useState("");
@@ -36,15 +36,6 @@ export default function HomeScreen() {
     <View style={{ flex: 1 }}>
     <Screen refreshing={loading} onRefresh={refresh}>
       <TopBar bag={enabled("shop")} />
-      <Hero kicker="Preserving Ayurveda" title={str(feed?.site.tagline, SITE.tagline)} subtitle={SITE.purpose}>
-        <View style={{ height: 14 }} />
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder="Search articles, publications, events…"
-          onSubmit={() => router.push({ pathname: "/search", params: { q: query } })}
-        />
-      </Hero>
       <Banner text={error} tone="error" />
 
       {flyers.length ? (
@@ -77,11 +68,25 @@ export default function HomeScreen() {
         </View>
       ) : null}
 
-      <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 8, paddingHorizontal: 6, marginBottom: 20, flexDirection: "row", flexWrap: "wrap" }}>
-        {EXPLORE.filter((item) => (item.id === "chat" ? chatOn(feed) : enabled(item.id) || ["certificates", "contact", "notices"].includes(item.id))).map((item) => (
+      <View style={{ backgroundColor: theme.colors.paper, borderRadius: 18, paddingVertical: 10, paddingHorizontal: 6, marginBottom: 20, flexDirection: "row", flexWrap: "wrap", elevation: 2, shadowColor: "#3B2A14", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } }}>
+        {QUICK_ACTIONS.filter((item) => enabled(item.id) || ["certificates", "about"].includes(item.id)).map((item) => (
           <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
         ))}
       </View>
+
+      {notices.length ? (
+        <>
+          <SectionHeader title="Notice board" subtitle="From the Foundation office" actionLabel="All notices" onAction={() => router.push("/notices")} />
+          <View style={{ backgroundColor: theme.colors.paper, borderRadius: 18, borderLeftWidth: 4, borderLeftColor: theme.colors.accent, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 20 }}>
+            {notices.slice(0, 3).map((item, index) => (
+              <Pressable key={str(item.id, String(index))} onPress={() => router.push("/notices")} style={{ paddingVertical: 10, borderTopWidth: index ? 1 : 0, borderTopColor: theme.colors.border }}>
+                <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "700", fontSize: 14 }}>{str(item.title)}</Text>
+                {str(item.date, str(item.publishedAt)) ? <Text style={{ color: theme.colors.muted, fontSize: 11, marginTop: 3 }}>{str(item.date, str(item.publishedAt)).slice(0, 10)}</Text> : null}
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
 
       {enabled("shop") && books.length ? (
         <>
@@ -184,7 +189,7 @@ export function openPublishedHref(href: string) {
     [/^\/articles\/([^/?#]+)/, "/article/"],
     [/^\/shop\/([^/?#]+)/, "/book/"],
     [/^\/clinics\/([^/?#]+)/, "/clinic/"],
-    [/^\/p\//, ""],
+    [/^\/p\/([^/?#]+)/, "/page/"],
   ];
   for (const [pattern, prefix] of routes) {
     const match = href.match(pattern);
@@ -193,9 +198,5 @@ export function openPublishedHref(href: string) {
     router.push(`${prefix}${match[1]}` as never);
     return;
   }
-  if (href.startsWith("/") && !href.startsWith("//")) {
-    const origin = str((globalThis as { location?: { origin?: string } }).location?.origin);
-    void Linking.openURL(`https://staging.vaidyagogate.org${href}`);
-    void origin;
-  }
+  if (href.startsWith("/") && !href.startsWith("//")) router.push({ pathname: "/web", params: { path: href } });
 }

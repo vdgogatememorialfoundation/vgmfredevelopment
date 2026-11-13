@@ -1,5 +1,5 @@
 /** Next.js host that serves `/api/mobile/*` on the Mumbai VPS. */
-export const NEXT_API = "https://staging.vaidyagogate.org";
+export const NEXT_API = "https://vaidyagogate.org";
 export const STAGING_SPELLING_API = "https://stagging.vaidyagogate.org";
 export const DEMO_API = "https://demo.vaidyagogate.org";
 export const DEFAULT_API = process.env.EXPO_PUBLIC_API_URL || NEXT_API;
