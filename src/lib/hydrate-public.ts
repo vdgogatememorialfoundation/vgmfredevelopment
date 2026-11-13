@@ -120,6 +120,9 @@ function applyFeed(feed: MobileFeed) {
       queryButton: feed.site.queryButton ?? current.queryButton,
       queryNumber: feed.site.queryNumber ?? current.queryNumber,
       queryMessage: feed.site.queryMessage ?? current.queryMessage,
+      maintenanceMode: feed.site.maintenanceMode ?? current.maintenanceMode,
+      maintenanceUntil: feed.site.maintenanceUntil ?? current.maintenanceUntil,
+      maintenanceMessage: feed.site.maintenanceMessage || current.maintenanceMessage,
       chrome: feed.site.chrome ?? current.chrome,
     });
   });

@@ -27,6 +27,9 @@ export type MobileFeed = {
     queryButton?: boolean;
     queryNumber?: string;
     queryMessage?: string;
+    maintenanceMode?: boolean;
+    maintenanceUntil?: string;
+    maintenanceMessage?: string;
     liveChat?: { enabled: boolean; online: boolean };
     chrome?: SiteChrome;
   };
