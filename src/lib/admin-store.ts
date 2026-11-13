@@ -1422,6 +1422,17 @@ export function convertToStorePickup(orderId: string) {
 }
 
 /** Adds a charge the customer still owes (e.g. courier shown as free by mistake); what they already paid stays recorded, so only the difference is due. */
+/** Shipping shown free by mistake: the customer sees "calculated once packed" until the desk adds the courier charge. */
+export function markShippingDue(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.deliveryMode !== "delivery") return "This is a store pickup order.";
+  if (order.shipping > 0 || order.shippingDue || order.preorderPayment?.shippingDue) return "Shipping is already charged or due.";
+  if (["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status)) return "This order is already sent or closed.";
+  updateOrderInStore(withHistory({ ...order, shippingDue: true }, order.status, "Shipping changed from free to calculated once packed; the courier charge will be added then."));
+  return "Shipping now shows as \"Calculated once packed\". After packing, add the courier charge under Payment → Add extra charge → Courier charge and send the payment link.";
+}
+
 export function addExtraCharge(orderId: string, input: { amount: number; reason: string; kind: "shipping" | "other" }) {
   const order = getOrder(orderId);
   if (!order) return "Order not found.";
@@ -1444,6 +1455,7 @@ export function addExtraCharge(orderId: string, input: { amount: number; reason:
       ...order,
       total,
       shipping: input.kind === "shipping" ? round((order.shipping ?? 0) + amount) : order.shipping,
+      shippingDue: input.kind === "shipping" ? undefined : order.shippingDue,
       extraCharges: [...(order.extraCharges ?? []), { amount, reason, kind: input.kind, at: new Date().toISOString(), by: currentActor() }],
       paymentStatus: paidSoFar !== undefined && paidSoFar > 0 ? "Partially Paid" : order.paymentStatus,
       amountPaid: paidSoFar !== undefined && paidSoFar > 0 ? round(paidSoFar) : order.amountPaid,

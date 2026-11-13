@@ -161,9 +161,13 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                 <dd className="font-medium text-text-primary">
                   {order.deliveryMode === "store_pickup"
                     ? "Store pickup · no charge"
-                    : order.shipping > 0 || !shippingIsFree(order.subtotal)
+                    : order.shipping > 0
                       ? formatPrice(order.shipping)
-                      : "FREE"}
+                      : order.shippingDue || order.preorderPayment?.shippingDue
+                        ? "Calculated once packed"
+                        : !shippingIsFree(order.subtotal)
+                          ? formatPrice(order.shipping)
+                          : "FREE"}
                 </dd>
               </div>
               <div className="flex justify-between border-t border-border pt-2 text-sm">

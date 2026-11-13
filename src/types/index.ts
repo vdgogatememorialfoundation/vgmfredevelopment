@@ -642,6 +642,8 @@ export interface Order {
   paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string };
   courierChoice?: CourierRate;
   /** Amounts the desk added after ordering, e.g. a charge wrongly shown as free. */
+  /** Shipping was left at ₹0; the courier charge is added once the parcel is packed and weighed. */
+  shippingDue?: boolean;
   extraCharges?: { amount: number; reason: string; kind: "shipping" | "other"; at: string; by?: string }[];
   /** A store-pickup order switched to courier delivery once the customer pays only the courier charge. */
   courierUpgrade?: {

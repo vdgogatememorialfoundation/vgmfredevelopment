@@ -28,6 +28,7 @@ import {
   recordCourierPayment,
   convertToStorePickup,
   convertToPreorder,
+  markShippingDue,
   addExtraCharge,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
@@ -1112,8 +1113,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           )}
           <dl className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
             <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(order.subtotal)}</dd></div>
+            {order.discount ? <div className="flex justify-between text-emerald-700"><dt>Discount</dt><dd>−{rupees(order.discount)}</dd></div> : null}
             <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div>
-            <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{order.shipping === 0 ? "Free" : rupees(order.shipping)}</dd></div>
+            {order.platformFee ? <div className="flex justify-between"><dt className="text-text-muted">Platform fee</dt><dd>{rupees(order.platformFee)}</dd></div> : null}
+            <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{order.shipping > 0 ? rupees(order.shipping) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</dd></div>
             {order.storeCreditUsed ? <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(order.storeCreditUsed)}</dd></div> : null}
             <div className="flex justify-between text-sm font-bold"><dt>Total</dt><dd className="text-burgundy">{rupees(order.total)}</dd></div>
             {order.refundAmount ? <div className="flex justify-between text-red-600"><dt>Refunded</dt><dd>−{rupees(order.refundAmount)}</dd></div> : null}
@@ -1464,6 +1467,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             }}
           >
             Change to pre-order
+          </Button>
+        </div>
+      )}
+
+      {order.deliveryMode === "delivery" && order.shipping === 0 && !order.shippingDue && !order.preorderPayment?.shippingDue && !["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-warm-cream/50 p-3 text-sm">
+          <span>Shipping shown free by mistake?</span>
+          <Button variant="outline" disabled={busy === "shipping-due"} onClick={() => run("shipping-due", () => markShippingDue(order.id))}>
+            Charge courier once packed
           </Button>
         </div>
       )}
