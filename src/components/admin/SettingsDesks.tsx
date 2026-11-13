@@ -1870,7 +1870,7 @@ export function OrderSettingsDesk() {
             <p className="text-xs text-slate-500">When ticked, customers cancel from their order page within the limits below, and the desk then sends the refund (amount paid less the cancellation fee and platform fee). The desk can always cancel from the order.</p>
             <Check label="Customers can cancel" checked={value.cancellation.enabled} onChange={(enabled) => set({ cancellation: { ...value.cancellation, enabled } })} />
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Allowed until the order is</span>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Customers can cancel</span>
               <select className={input} value={value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
                 <option value="Ordered">Until packing (not once packed)</option>
                 <option value="Packed">Until shipped (not once the courier picks it up)</option>
