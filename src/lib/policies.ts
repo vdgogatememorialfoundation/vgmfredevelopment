@@ -19,6 +19,8 @@ export interface PolicyDoc {
   title: string;
   description: string;
   lastUpdated: string;
+  /** ISO time of the last admin save; lets the server keep the newest copy of each policy. */
+  updatedAt?: string;
   sections: PolicySection[];
 }
 
@@ -172,7 +174,8 @@ function readSaved(): Partial<Record<PolicyId, PolicyDoc>> {
 export function getPolicy(id: PolicyId): PolicyDoc {
   const saved = readSaved()[id];
   const doc = saved ? { ...defaultPolicies[id], ...saved, id } : defaultPolicies[id];
-  if (id === "shipping" && !doc.sections.some((section) => /wrong (delivery )?address/i.test(`${section.title} ${section.body}`))) {
+  // Only very old unsaved copies get the wrong-address clause; an admin-edited policy shows exactly what was saved.
+  if (id === "shipping" && !saved?.updatedAt && !doc.sections.some((section) => /wrong (delivery )?address/i.test(`${section.title} ${section.body}`))) {
     return { ...doc, sections: [...doc.sections, WRONG_ADDRESS] };
   }
   return doc;
@@ -191,7 +194,7 @@ export function getPolicies(): Record<PolicyId, PolicyDoc> {
 
 export function savePolicy(doc: PolicyDoc) {
   if (typeof window === "undefined") return;
-  const next = { ...readSaved(), [doc.id]: { ...doc, lastUpdated: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }) } };
+  const next = { ...readSaved(), [doc.id]: { ...doc, updatedAt: new Date().toISOString(), lastUpdated: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }) } };
   window.localStorage.setItem(KEY, JSON.stringify(next));
   window.dispatchEvent(new Event("vgmf-cms"));
 }

@@ -32,6 +32,20 @@ function mergeBooks(current: FeedBooks, incoming: FeedBooks, basedOn: string): F
   return [...added, ...kept];
 }
 
+type FeedPolicies = MobileFeed["policies"];
+type PolicyCopy = { updatedAt?: string };
+
+/** Each policy keeps whichever copy was saved last, so an edit from another device is never thrown away. */
+function mergePolicies(current: FeedPolicies, incoming: FeedPolicies): FeedPolicies {
+  const next = { ...current } as Record<string, unknown>;
+  for (const [id, doc] of Object.entries(incoming ?? {})) {
+    const mine = (doc as PolicyCopy | undefined)?.updatedAt ?? "";
+    const theirs = ((current as Record<string, unknown>)[id] as PolicyCopy | undefined)?.updatedAt ?? "";
+    if (mine > theirs) next[id] = doc;
+  }
+  return next as FeedPolicies;
+}
+
 /** Products the sending browser saved go live as sent, stamped with server time so device clocks never decide. */
 function withEditedBooks(base: FeedBooks, incoming: FeedBooks, edited: Set<string>): FeedBooks {
   const at = new Date().toISOString();
@@ -61,6 +75,7 @@ export async function POST(request: NextRequest) {
         const base = stale && Array.isArray(current.books) ? mergeBooks(current.books, value as FeedBooks, basedOn) : (value as FeedBooks);
         sections[key] = withEditedBooks(base, value as FeedBooks, edited);
       } else if (stale && key === "books" && Array.isArray(value) && Array.isArray(current.books)) sections[key] = mergeBooks(current.books, value as FeedBooks, basedOn);
+      else if (stale && key === "policies" && value && typeof value === "object") sections[key] = mergePolicies(current.policies ?? {}, value as FeedPolicies);
       else if (stale) rejected.push(key);
       else sections[key] = value;
     }
