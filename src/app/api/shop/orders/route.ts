@@ -7,7 +7,7 @@ import { redeemPromo } from "@/lib/server/promotions";
 import { ensureGuestAccount } from "@/lib/server/guest-account";
 import { inviteOrderFeedback } from "@/lib/server/forms";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
-import { canCustomerCancel, customerCancellationRefund, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
+import { canCustomerCancel, customerCancellationRefund, preorderLate, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import type { Order } from "@/types";
 
 export const runtime = "nodejs";
@@ -55,10 +55,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "This order can no longer be cancelled from your account. Please contact the Foundation desk." }, { status: 400 });
     }
     const refund = customerCancellationRefund(order, settings);
-    const fee = settings.cancellation.fee;
+    const late = preorderLate(order, settings);
+    const fee = late ? 0 : settings.cancellation.fee;
     const reason = String(body.reason ?? "").trim().slice(0, 300) || "Cancelled by the customer";
     const note = refund > 0
-      ? `Cancelled by the customer. A refund of ₹${refund} will be sent to the original payment method${fee > 0 ? ` (₹${fee} cancellation fee kept)` : ""}.`
+      ? `Cancelled by the customer. A refund of ₹${refund} will be sent to the original payment method${late ? " (pre-order delayed: full refund including the platform fee)" : fee > 0 ? ` (₹${fee} cancellation fee kept)` : ""}.`
       : "Cancelled by the customer.";
     const next = patchShopOrder(order.id, {
       status: "Cancelled",

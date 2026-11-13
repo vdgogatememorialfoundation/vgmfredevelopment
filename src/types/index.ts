@@ -538,6 +538,8 @@ export interface OrderItem {
   /** Batch number of the product when the order was placed. */
   batchNo?: string;
   preorder?: boolean;
+  /** Announced release date of a pre-order product when the order was placed. */
+  releaseDate?: string;
 }
 
 export interface DeliveryAddress {

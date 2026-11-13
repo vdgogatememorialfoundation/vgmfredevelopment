@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { canCustomerCancel, customerCancellationRefund } from "@/lib/integrations";
+import { canCustomerCancel, customerCancellationRefund, preorderLate } from "@/lib/integrations";
 import { cancelMyOrder, formatPrice } from "@/lib/store";
 import { useOrderSettings } from "@/lib/use-cms";
 import type { Order } from "@/types";
@@ -22,7 +22,8 @@ export default function CancelOrderSection({ order, phone }: { order: Order; pho
   }
   if (!canCustomerCancel(order, settings)) return null;
   const refund = customerCancellationRefund(order, settings);
-  const fee = settings.cancellation.fee;
+  const late = preorderLate(order, settings);
+  const fee = late ? 0 : settings.cancellation.fee;
 
   const submit = async () => {
     setBusy(true);
@@ -43,7 +44,7 @@ export default function CancelOrderSection({ order, phone }: { order: Order; pho
       <h3 className="text-sm font-semibold text-text-primary">Cancel this order</h3>
       <p className="mt-1 text-xs text-text-muted">
         {refund > 0
-          ? `You will get back ${formatPrice(refund)}${fee > 0 ? ` (a ${formatPrice(fee)} cancellation fee and the platform fee are kept)` : " (the platform fee is kept)"}.`
+          ? `You will get back ${formatPrice(refund)}${late ? " — a full refund including the platform fee, as the pre-order is delayed" : fee > 0 ? ` (a ${formatPrice(fee)} cancellation fee and the platform fee are kept)` : " (the platform fee is kept)"}.`
           : fee > 0 ? `A ${formatPrice(fee)} cancellation fee applies.` : "Nothing has been charged that needs a refund."}
       </p>
       {!open ? (

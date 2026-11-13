@@ -275,6 +275,12 @@ export interface OrderSettings {
     allowedUntil: "Ordered" | "Packed" | "Shipped";
     windowHours: number;
     fee: number;
+    /** Days past a pre-order's announced date after which the customer may cancel for a full refund, platform fee included. 0 = off. */
+    delayDays: number;
+    /** Tick "Also refund the platform fee" by default when the desk cancels an order. */
+    refundFeeOnDesk: boolean;
+    /** Days a store pickup may wait uncollected before the desk is prompted to cancel and refund. 0 = off. */
+    pickupHoldDays: number;
   };
   adminActions: {
     processAfterDelivery: boolean;
@@ -473,7 +479,7 @@ export const defaultOrderSettings: OrderSettings = {
     replacementAddressChange: true,
   },
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
-  cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0 },
+  cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0, delayDays: 30, refundFeeOnDesk: true, pickupHoldDays: 30 },
   adminActions: { processAfterDelivery: true },
   platformFee: { enabled: false, amount: 0, refundable: false },
   gst: { enabled: false, ratePercent: 0, invoiceEnabled: false, legalName: "", gstin: "", stateName: "Maharashtra" },
@@ -796,6 +802,9 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       allowedUntil: until === "Ordered" || until === "Shipped" || until === "Packed" ? until : "Packed",
       windowHours: Math.max(0, finiteNumber(merged.cancellation?.windowHours, 0)),
       fee: Math.max(0, finiteNumber(merged.cancellation?.fee, 0)),
+      delayDays: Math.max(0, finiteNumber(merged.cancellation?.delayDays, 30)),
+      refundFeeOnDesk: merged.cancellation?.refundFeeOnDesk !== false,
+      pickupHoldDays: Math.max(0, finiteNumber(merged.cancellation?.pickupHoldDays, 30)),
     },
     adminActions: {
       processAfterDelivery: merged.adminActions?.processAfterDelivery !== false,
@@ -946,10 +955,19 @@ const CANCEL_STAGE: Partial<Record<Order["status"], number>> = {
   Shipped: 2,
 };
 
+/** A pre-order whose announced date has passed by more than the allowed delay. */
+export function preorderLate(order: Order, settings = getOrderSettings(), now = Date.now()) {
+  const days = settings.cancellation?.delayDays ?? 0;
+  const dates = order.items.filter((item) => item.preorder && item.releaseDate).map((item) => Date.parse(item.releaseDate as string)).filter(Number.isFinite);
+  return days > 0 && dates.length > 0 && now > Math.max(...dates) + days * 864e5;
+}
+
 export function canCustomerCancel(order?: Order, settings = getOrderSettings(), now = Date.now()) {
-  if (!order || !settings.cancellation?.enabled || order.returnRequest) return false;
+  if (!order || order.returnRequest) return false;
   const stage = CANCEL_STAGE[order.status];
   if (stage === undefined) return false;
+  if (stage <= 1 && preorderLate(order, settings, now)) return true;
+  if (!settings.cancellation?.enabled) return false;
   const until = settings.cancellation.allowedUntil;
   if (stage > (until === "Ordered" ? 0 : until === "Shipped" ? 2 : 1)) return false;
   const hours = settings.cancellation.windowHours;
@@ -961,6 +979,7 @@ export function customerCancellationRefund(order: Order, settings = getOrderSett
   const paid = order.preorderPayment && !order.preorderPayment.balancePaidAt
     ? order.paymentStatus === "Pending" ? 0 : order.preorderPayment.advance
     : order.paymentStatus === "Paid" || order.paymentStatus === "Partially Refunded" ? order.total : 0;
+  if (preorderLate(order, settings)) return Math.max(0, paid - (order.refundAmount ?? 0));
   return Math.max(0, paid - Math.max(0, order.platformFee ?? 0) - (settings.cancellation?.fee ?? 0) - (order.refundAmount ?? 0));
 }
 
@@ -1020,17 +1039,18 @@ export function customerOrderPolicyCopy(settings = getOrderSettings()) {
         "The desk accepts or rejects each request. An accepted request gets a free return pickup and, after the item is checked, a free replacement with no charge for the book or shipping.",
       ].join("\n")
     : "";
+  const late = settings.cancellation.delayDays > 0 ? `If a pre-order is more than ${settings.cancellation.delayDays} days late, you can cancel it for a full refund, including the platform fee.` : "";
   const returns = settings.returns.enabled && settings.returns.returnForRefund
     ? "Delivered orders can be returned free of charge within the return window; the desk accepts or declines the request by email."
     : "Delivered books are not refunded; wrong or damaged copies are replaced as below.";
   if (!settings.cancellation?.enabled) {
-    return { title: "Replacements", body: [`Orders cannot be cancelled from your account. ${returns}`, replacement].filter(Boolean).join("\n") };
+    return { title: "Replacements", body: [`Orders cannot be cancelled from your account. ${returns}`, late, replacement].filter(Boolean).join("\n") };
   }
   const until = settings.cancellation.allowedUntil;
   const stage = until === "Ordered" ? "before it is packed" : until === "Shipped" ? "until it is out for delivery" : "until the courier picks it up";
   const hours = settings.cancellation.windowHours > 0 ? ` and within ${settings.cancellation.windowHours} hours of ordering` : "";
   const fee = settings.cancellation.fee > 0 ? ` A cancellation fee of ₹${settings.cancellation.fee} and the platform fee are kept from the refund.` : " The platform fee is kept from the refund.";
-  return { title: "Cancellations & replacements", body: [`You can cancel an order from its page ${stage}${hours}.${fee}`, returns, replacement].filter(Boolean).join("\n") };
+  return { title: "Cancellations & replacements", body: [`You can cancel an order from its page ${stage}${hours}.${fee}`, late, returns, replacement].filter(Boolean).join("\n") };
 }
 
 export function mask(value: string) {

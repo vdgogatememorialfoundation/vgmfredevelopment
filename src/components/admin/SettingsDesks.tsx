@@ -1879,6 +1879,9 @@ export function OrderSettingsDesk() {
             </label>
             <Text label="Within hours of ordering (0 = any time)" type="number" value={value.cancellation.windowHours} onChange={(hours) => set({ cancellation: { ...value.cancellation, windowHours: Number(hours) || 0 } })} />
             <Text label="Cancellation fee (₹)" type="number" value={value.cancellation.fee} onChange={(fee) => set({ cancellation: { ...value.cancellation, fee: Number(fee) || 0 } })} />
+            <Text label="Delayed pre-order: customer may cancel for a full refund (incl. platform fee) this many days after the announced date (0 = off)" type="number" value={value.cancellation.delayDays} onChange={(days) => set({ cancellation: { ...value.cancellation, delayDays: Number(days) || 0 } })} />
+            <Check label="Refund the platform fee when the desk cancels an order (pre-ticked on the refund panel)" checked={value.cancellation.refundFeeOnDesk} onChange={(refundFeeOnDesk) => set({ cancellation: { ...value.cancellation, refundFeeOnDesk } })} />
+            <Text label="Store pickup: flag orders not collected after this many days (0 = off)" type="number" value={value.cancellation.pickupHoldDays} onChange={(days) => set({ cancellation: { ...value.cancellation, pickupHoldDays: Number(days) || 0 } })} />
           </div>
         </Card>
       </div>

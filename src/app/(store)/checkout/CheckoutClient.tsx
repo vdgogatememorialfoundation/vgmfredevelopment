@@ -363,6 +363,7 @@ export default function CheckoutClient() {
     originalPrice: book.originalPrice,
     currency: "INR",
     preorder: canPreorder(book),
+    releaseDate: canPreorder(book) ? book.preorder?.releaseDate || undefined : undefined,
   }));
 
   const priced = computeTotals(orderItems);

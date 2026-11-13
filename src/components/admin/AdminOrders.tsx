@@ -31,7 +31,7 @@ import {
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
 import { currentProductTitle, getLiveBooks, orderItemBatch } from "@/lib/product-data";
-import { getIntegrations, getOrderSettings, orderStatusText, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
+import { getIntegrations, getOrderSettings, orderStatusText, preorderLate, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
   attachDirectTracking,
@@ -843,7 +843,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
   const [linkAmount, setLinkAmount] = useState("");
   const [reference, setReference] = useState("");
-  const [refundFee, setRefundFee] = useState(false);
+  const [refundFee, setRefundFee] = useState(() => {
+    if (order.status !== "Cancelled") return false;
+    const cancelled = order.history?.slice().reverse().find((entry) => entry.status === "Cancelled");
+    return cancelled?.by === "Customer" ? preorderLate(order, getOrderSettings(), Date.parse(cancelled.at)) : getOrderSettings().cancellation.refundFeeOnDesk;
+  });
   const refundCap = maxRefundable(order, { withPlatformFee: refundFee });
   const [refundAmount, setRefundAmount] = useState(String(refundCap));
   const [cancelReason, setCancelReason] = useState("");
@@ -1189,6 +1193,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           )}
           {order.status !== "Cancelled" && (
             <div className="mt-3 rounded-lg border border-red-100 bg-red-50/60 p-3">
+              {(() => {
+                const hold = getOrderSettings().cancellation.pickupHoldDays;
+                const ready = order.history?.slice().reverse().find((entry) => entry.status === "Packed")?.at;
+                const days = ready ? Math.floor((Date.now() - Date.parse(ready)) / 864e5) : 0;
+                return order.deliveryMode === "store_pickup" && order.status === "Packed" && hold > 0 && days >= hold ? (
+                  <p className="mb-2 text-xs font-semibold text-red-800">Not collected for {days} days (limit {hold}). You may cancel and refund; the platform fee is kept.</p>
+                ) : null;
+              })()}
+              {preorderLate(order) && <p className="mb-2 text-xs font-semibold text-red-800">This pre-order is past its announced date by more than {getOrderSettings().cancellation.delayDays} days: refund in full, including the platform fee.</p>}
               <p className="text-xs font-semibold text-red-800">Cancel this order</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <div className="min-w-48 flex-1"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
