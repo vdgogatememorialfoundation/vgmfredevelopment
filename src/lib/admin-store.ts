@@ -822,7 +822,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
 
 export function exportOrdersCsv(orders: Order[]) {
   const header = [
-    "Order ID", "Date", "Channel", "Customer", "Phone", "Email", "Account email",
+    "Order ID", "Order type", "Date", "Channel", "Customer", "Phone", "Email", "Account email",
     "Delivery mode", "Address", "Landmark", "City", "State", "Pincode", "Country",
     "Items", "Item count", "Total quantity", "SKUs",
     "Subtotal", "Discount", "GST", "Platform fee", "Shipping", "Store credit used", "Total",
@@ -835,6 +835,7 @@ export function exportOrdersCsv(orders: Order[]) {
     const refunded = (order.refunds ?? []).reduce((sum, refund) => sum + (Number(refund.amount) || 0), 0);
     return [
       order.id,
+      order.preorderPayment || order.items.some((item) => item.preorder) ? "Pre-order" : "Normal",
       formatDateTime(order.date),
       order.channel ?? "online",
       address?.fullName ?? "",
@@ -894,23 +895,25 @@ export function printOrdersPdf(orders: Order[]) {
     .map((order) => {
       const address = order.deliveryAddress;
       const refunded = (order.refunds ?? []).reduce((sum, refund) => sum + (Number(refund.amount) || 0), 0);
+      const preorder = Boolean(order.preorderPayment || order.items.some((item) => item.preorder));
+      const release = order.items.map((item) => item.releaseDate).filter(Boolean).sort()[0];
       const items = order.items.map((item) => `${esc(item.title)} × ${item.quantity} @ ${money(item.price)}${item.sku || item.bookId ? ` <span class="muted">(${esc(item.sku || item.bookId)})</span>` : ""}`).join("<br/>");
       return `<tr>
-        <td><b>${esc(order.id)}</b><br/>${lines(formatDateTime(order.date), order.channel ?? "online")}</td>
+        <td><b>${esc(order.id)}</b><br/><span class="tag ${preorder ? "pre" : ""}">${preorder ? "Pre-order" : "Normal"}</span><br/>${lines(formatDateTime(order.date), order.channel ?? "online")}</td>
         <td>${lines(address?.fullName, address?.phone, address?.email, order.accountEmail && order.accountEmail !== address?.email ? `Account: ${order.accountEmail}` : "")}</td>
         <td>${lines(order.deliveryMode === "store_pickup" ? "Store pickup" : "Delivery", address?.line1, address?.landmark, [address?.city, address?.state, address?.pincode].filter(Boolean).join(", "), address?.country ?? "India")}</td>
         <td>${items}<br/><span class="muted">${order.items.length} item(s) · qty ${order.items.reduce((sum, item) => sum + item.quantity, 0)}</span></td>
         <td>${lines(`Subtotal ${money(order.subtotal)}`, order.discount ? `Discount ${money(order.discount)}` : "", order.gst ? `GST ${money(order.gst)}` : "", order.platformFee ? `Platform fee ${money(order.platformFee)}` : "", `Shipping ${money(order.shipping)}`, order.storeCreditUsed ? `Store credit ${money(order.storeCreditUsed)}` : "")}<br/><b>Total ${money(order.total)}</b></td>
         <td>${lines(order.status, `${order.paymentStatus}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}`, order.paymentRef ? `Ref ${order.paymentRef}` : "", order.razorpayPaymentId ? `Txn ${order.razorpayPaymentId}` : "", order.razorpayOrderId ? `RZP order ${order.razorpayOrderId}` : "", order.paidAt ? `Paid ${formatDateTime(order.paidAt)}` : "", order.preorderPayment ? `Pre-order: advance ${money(order.preorderPayment.advance)}, balance ${money(order.preorderPayment.balance)}` : "", refunded ? `Refunded ${money(refunded)}` : "")}</td>
-        <td>${lines(order.courierName, order.trackingId ? `AWB ${order.trackingId}` : "", order.plan?.deliveredBy ? `Expected ${formatDate(order.plan.deliveredBy)}` : order.eta, order.returnShipment?.awb ? `Return AWB ${order.returnShipment.awb}` : "", order.returnShipment?.charge ? `Return charge ${money(order.returnShipment.charge)}${order.returnShipment.chargePaidBy ? ` (${order.returnShipment.chargePaidBy})` : ""}` : "")}</td>
+        <td>${lines(order.courierName, order.trackingId ? `AWB ${order.trackingId}` : "", preorder ? `Pre-order: ships after release${release ? ` (${formatDate(release)})` : ""}` : order.plan?.deliveredBy ? `Expected ${formatDate(order.plan.deliveredBy)}` : order.eta, order.returnShipment?.awb ? `Return AWB ${order.returnShipment.awb}` : "", order.returnShipment?.charge ? `Return charge ${money(order.returnShipment.charge)}${order.returnShipment.chargePaidBy ? ` (${order.returnShipment.chargePaidBy})` : ""}` : "")}</td>
       </tr>`;
     })
     .join("");
   printHtml(
     "Orders",
-    `<style>.orders{width:100%;border-collapse:collapse;font-size:9px;line-height:1.35}.orders th,.orders td{border:1px solid #d6d3d1;padding:4px;vertical-align:top;text-align:left}.orders th{background:#f5f5f4}.orders tr{page-break-inside:avoid}.muted{color:#78716c}</style>
-    <h1>Vaidya Gogate Memorial Foundation orders</h1><p class="muted">${orders.length} order(s) · printed ${esc(formatDateTime(new Date().toISOString()))}</p>
-    <table class="orders"><tr><th>Order</th><th>Customer</th><th>Address</th><th>Items ordered</th><th>Amounts</th><th>Status &amp; payment</th><th>Courier</th></tr>${rows}</table>`,
+    `<style>.orders{width:100%;border-collapse:collapse;font-size:9px;line-height:1.35}.orders th,.orders td{border:1px solid #d6d3d1;padding:4px;vertical-align:top;text-align:left}.orders th{background:#f5f5f4}.orders tr{page-break-inside:avoid}.muted{color:#78716c}.tag{display:inline-block;margin:2px 0;padding:0 5px;border-radius:8px;background:#e7e5e4;font-weight:600}.tag.pre{background:#fde68a;color:#78350f}</style>
+    <h1>Vaidya Gogate Memorial Foundation orders</h1><p class="muted">${orders.length} order(s) · ${orders.filter((order) => order.preorderPayment || order.items.some((item) => item.preorder)).length} pre-order(s) · printed ${esc(formatDateTime(new Date().toISOString()))}</p>
+    <table class="orders"><tr><th>Order · type</th><th>Customer</th><th>Address</th><th>Items ordered</th><th>Amounts</th><th>Status &amp; payment</th><th>Courier</th></tr>${rows}</table>`,
     "A4 landscape"
   );
 }
