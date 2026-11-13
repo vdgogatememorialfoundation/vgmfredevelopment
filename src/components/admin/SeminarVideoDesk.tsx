@@ -19,10 +19,11 @@ export function SeminarVideoDesk() {
       document.head.appendChild(link);
     }
     const start = () => window.loadVideoLibraryAdmin?.();
+    const removeCss = () => document.getElementById(cssId)?.remove();
     const existing = document.querySelector("script[data-vgmf-seminar-office]");
     if (existing) {
       start();
-      return;
+      return removeCss;
     }
     const script = document.createElement("script");
     script.src = "/office/seminar-videos.js";
@@ -30,6 +31,7 @@ export function SeminarVideoDesk() {
     script.dataset.vgmfSeminarOffice = "1";
     script.onload = () => start();
     document.body.appendChild(script);
+    return removeCss;
   }, []);
 
   return (

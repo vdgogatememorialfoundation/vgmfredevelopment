@@ -14,6 +14,7 @@ import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
 import { SiteTheme } from "@/components/theme/SiteTheme";
 import { platformEnv, publicSiteUrl } from "@/lib/platform";
 import { siteConfig } from "@/lib/constants";
+import { SEMINAR_ADSENSE_SCRIPT } from "@/lib/seminar-ads";
 import "./globals.css";
 
 const sans = Outfit({
@@ -163,6 +164,7 @@ export default function RootLayout({
       className={`${sans.variable} ${serif.variable} ${devanagari.variable} ${kannada.variable} ${tamil.variable} ${malayalam.variable} ${gujarati.variable} scroll-smooth`}
       data-scroll-behavior="smooth"
     >
+      <head>{platformEnv() === "production" ? <script async src={SEMINAR_ADSENSE_SCRIPT} crossOrigin="anonymous" /> : null}</head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <SiteTheme />
         <EnvironmentBanner />
