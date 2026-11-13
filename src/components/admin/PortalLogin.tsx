@@ -26,9 +26,9 @@ const copy = {
 
 type PortalId = keyof typeof copy;
 
-/** Staff-side portals sign in with an emailed one-time code only; Admin and Doctor keep password + code. */
+/** Admin and staff-side portals sign in with an emailed one-time code only; Doctor keeps password + code. */
 function codeOnly(portal: PortalId) {
-  return portal !== "admin" && portal !== "doctor";
+  return portal !== "doctor";
 }
 
 type Mode = "password" | "mfa" | "otp" | "forgot";
