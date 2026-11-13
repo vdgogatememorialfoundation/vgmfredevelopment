@@ -101,7 +101,6 @@ export function generateMetadata(): Metadata {
     robots: noIndex
       ? { index: false, follow: false, googleBot: { index: false, follow: false } }
       : { index: true, follow: true, googleBot: { index: true, follow: true } },
-    alternates: { canonical: url },
     openGraph: {
       type: "website",
       locale: "en_IN",

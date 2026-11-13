@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import HeroSection from "@/components/home/HeroSection";
 import NoticeBoard from "@/components/home/NoticeBoard";
 import FoundationDirectory from "@/components/home/FoundationDirectory";
@@ -13,6 +14,8 @@ import AwardsSection from "@/components/home/AwardsSection";
 import { SpeakerBoard } from "@/components/events/EventSchedules";
 import HomeSections from "@/components/home/HomeSections";
 import InstagramReels from "@/components/home/InstagramReels";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function HomePage() {
   return (

@@ -55,6 +55,13 @@ function withEditedBooks(base: FeedBooks, incoming: FeedBooks, edited: Set<strin
   return [...Array.from(mine.values()).filter((book) => !known.has(book.id)), ...kept];
 }
 
+/** A browser whose local copy never loaded (fresh domain, storage full) sends defaults; a list that collapses in one publish is refused. */
+function collapsed(current: unknown, incoming: unknown) {
+  if (!Array.isArray(current) || !Array.isArray(incoming)) return false;
+  const lost = current.length - incoming.length;
+  return current.length > 0 && (incoming.length === 0 || (lost >= 3 && incoming.length < current.length / 2));
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as PublishBody | null;
   if (body?.partial && body.sections && typeof body.sections === "object") {
@@ -69,6 +76,10 @@ export async function POST(request: NextRequest) {
       // A section changed on another device after this browser loaded the live site is kept, not overwritten.
       const changedAt = current.sectionAt?.[key] || current.publishedAt || "";
       const stale = key !== "site" && (!basedOn || Boolean(changedAt && changedAt > basedOn));
+      if (collapsed((current as Record<string, unknown>)[key], value)) {
+        rejected.push(key);
+        continue;
+      }
       // Products merge one by one, so a stock edit is never lost to (or rolled back by) another tab.
       const edited = new Set(Array.isArray(body.editedBooks) ? body.editedBooks.map(String) : []);
       if (key === "books" && edited.size && Array.isArray(value)) {

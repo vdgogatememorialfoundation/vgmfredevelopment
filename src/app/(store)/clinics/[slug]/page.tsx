@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { clinics } from "@/data/clinics";
 import { ClinicDetail } from "@/components/site/PublicRecords";
+import { absoluteUrl } from "@/lib/seo";
 
 interface ClinicDetailPageProps {
   params: Promise<{ slug: string }>;
@@ -14,7 +15,7 @@ export async function generateMetadata({ params }: ClinicDetailPageProps): Promi
   const { slug } = await params;
   const clinic = clinics.find((item) => item.slug === slug);
   if (!clinic) return { title: "Clinic" };
-  return { title: clinic.name, description: clinic.about };
+  return { title: clinic.name, description: clinic.about, alternates: { canonical: absoluteUrl(`/clinics/${clinic.slug}`) } };
 }
 
 export default async function ClinicDetailPage({ params }: ClinicDetailPageProps) {
