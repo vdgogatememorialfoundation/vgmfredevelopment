@@ -2096,16 +2096,54 @@ export function printPosReceipt(order: Order) {
 }
 
 export function printPackagingSlip(order: Order) {
-  printHtml(`Packaging slip ${order.id}`, packagingSlipHtml(order));
+  printHtml(`Packaging slip ${order.id}`, `${pagedFooterStyle()}${packagingSlipHtml(order)}`);
 }
 
-/** All the chosen orders' packaging slips in one print, one slip per page. */
+/** Foundation footer and "Page X of Y" on every printed page (Chrome page margin boxes). */
+function pagedFooterStyle() {
+  const foot = `${siteConfig.name} · ${siteConfig.address} · ${siteConfig.phone} · ${siteConfig.email}`.replace(/["\\]/g, "");
+  return `<style>
+    @page { margin: 12mm 10mm 16mm;
+      @bottom-left { content: "${foot}"; font-size: 8px; color: #57534e; }
+      @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #1c1917; }
+    }
+    .plist { width: 100%; border-collapse: collapse; margin-top: 0; }
+    .plist thead { display: table-header-group; }
+    .plist tfoot { display: table-footer-group; }
+    .plist tr { page-break-inside: avoid; break-inside: avoid; }
+    .plist .hd td { border: none; padding: 0 0 10px; }
+    .plist .ft td { border: none; padding: 10px 0 0; font-size: 10px; color: #57534e; border-top: 1px solid #e7e5e4; }
+    .tag-pre { display: inline-block; background: #fde68a; color: #78350f; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+  </style>`;
+}
+
+/** One table of every chosen order, like a student list: Foundation header and footer repeat on each page. */
+function packingListHtml(orders: Order[]) {
+  const qty = orders.reduce((sum, order) => sum + order.items.reduce((count, item) => count + item.quantity, 0), 0);
+  const rows = orders
+    .map((order, index) => {
+      const address = order.deliveryAddress;
+      const place = order.deliveryMode === "store_pickup" ? "Store pickup" : [address?.city, address?.state, address?.pincode].filter(Boolean).join(", ");
+      const items = order.items.map((item) => `${esc(item.title)} × ${esc(item.quantity)}${item.sku ? ` <span class="sub">(${esc(item.sku)})</span>` : ""}`).join("<br/>");
+      const type = order.preorderPayment ? `<span class="tag-pre">PRE-ORDER</span>` : "Normal";
+      return `<tr><td>${index + 1}</td><td><strong>${esc(order.id)}</strong><br/><span class="sub">${esc(formatDate(order.date))}</span><br/>${type}</td><td>${esc(address?.fullName || "Customer")}<br/><span class="sub">${esc(address?.phone || "")}</span></td><td>${esc(place)}</td><td>${items}</td><td class="right">${order.items.reduce((count, item) => count + item.quantity, 0)}</td><td class="check">☐</td></tr>`;
+    })
+    .join("");
+  return `<table class="plist">
+    <thead>
+      <tr class="hd"><td colspan="7">${letterhead()}<h1>Packing list</h1><p class="sub">${orders.length} order${orders.length === 1 ? "" : "s"} · ${qty} item${qty === 1 ? "" : "s"} · printed ${esc(formatDate(new Date().toISOString()))}</p></td></tr>
+      <tr><th>#</th><th>Order</th><th>Customer</th><th>Deliver to</th><th>Items</th><th class="right">Qty</th><th>Packed</th></tr>
+    </thead>
+    <tfoot><tr class="ft"><td colspan="7">${esc(siteConfig.name)} · ${esc(siteConfig.address)} · ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}<br/>Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________</td></tr></tfoot>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+/** The chosen orders as a packing list first, then each order's packaging slip on its own page. */
 export function printPackagingSlips(orders: Order[]) {
   if (orders.length === 0) return;
-  const html = orders
-    .map((order, index) => `<section style="${index < orders.length - 1 ? "page-break-after:always;break-after:page" : ""}">${packagingSlipHtml(order)}</section>`)
-    .join("");
-  printHtml(`Packaging slips (${orders.length})`, html);
+  const slips = orders.map((order) => `<section style="page-break-before:always;break-before:page">${packagingSlipHtml(order)}</section>`).join("");
+  printHtml(`Packaging slips (${orders.length})`, `${pagedFooterStyle()}<section>${packingListHtml(orders)}</section>${slips}`);
 }
 
 function packagingSlipHtml(order: Order) {
