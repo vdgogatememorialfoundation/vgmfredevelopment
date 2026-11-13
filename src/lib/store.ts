@@ -7,6 +7,7 @@ import type {
   ShipmentEvent,
   ShipmentRecord,
 } from "@/types";
+import type { DeliveryAddress, ReturnEvidenceKind, ReturnResolution } from "@/types";
 import { getSession, isPortalRole } from "@/lib/auth";
 import { orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { buildTrackingStages as buildCourierStages, isSampleOrder } from "@/lib/order-pipeline";
@@ -419,8 +420,12 @@ function returnRequestId() {
   return `RTN${Math.floor(100000000000 + Math.random() * 900000000000)}`;
 }
 
-function generateReplacementOrder(source: Order): Order {
+function generateReplacementOrder(source: Order, request?: ReturnRequest): Order {
   const id = generateOrderId();
+  const chosen = new Map((request?.items ?? []).map((item) => [item.bookId, item.quantity]));
+  const items = chosen.size
+    ? source.items.filter((item) => chosen.has(item.bookId)).map((item) => ({ ...item, quantity: Math.min(item.quantity, chosen.get(item.bookId) ?? item.quantity) }))
+    : source.items;
   const placedAt = new Date().toISOString();
   const courierName = source.deliveryMode === "delivery" ? pickCourier(id) : undefined;
   return {
@@ -451,6 +456,8 @@ function generateReplacementOrder(source: Order): Order {
     courierName,
     returnableDays: storeConfig.returnDays,
     replacementOf: source.id,
+    items,
+    deliveryAddress: request?.replacementAddress ?? source.deliveryAddress,
     returnRequest: undefined,
     returnShipment: undefined,
     history: [{ at: placedAt, status: "Ordered", note: `Free replacement for ${source.id}` }],
@@ -490,7 +497,7 @@ export function advanceReturnRequest(orderId: string, status: ReturnRequest["sta
   // Returned (or wrongly delivered) units go back on the shelf once, when the return is closed.
   if ((status === "Refunded" || status === "Replacement Created") && !current.restockedAt) {
     const original = getOrders().find((order) => order.id === orderId);
-    for (const item of original?.items ?? []) restockProduct(item.bookId, item.quantity);
+    if (current.resolution !== "refund") for (const item of current.items ?? original?.items ?? []) restockProduct(item.bookId, item.quantity);
     next.restockedAt = now;
   }
   persistReturnRequest(orderId, next);
@@ -507,7 +514,7 @@ export function sendReplacementAfterInspection(orderId: string, by?: string) {
   if (current.replacementOrderId) throw new Error(`Replacement order ${current.replacementOrderId} is already placed.`);
   const source = getOrders().find((order) => order.id === orderId);
   if (!source) throw new Error("The original order could not be found.");
-  const replacement = generateReplacementOrder(source);
+  const replacement = generateReplacementOrder(source, current);
   saveOrder(replacement);
   const now = new Date().toISOString();
   const request: ReturnRequest = {
@@ -584,33 +591,100 @@ function notifyReplacement(order: Order, title: string, body: string, who: "cust
   }
 }
 
-/** Customer return of a delivered order. No charge to the customer; the desk accepts or cancels it. */
-export function requestCustomerReturn(order: Order, input: { reason: string; note?: string; images?: string[] }): ReturnRequest {
+export type CustomerRequestInput = {
+  resolution: ReturnResolution;
+  items: { bookId: string; quantity: number }[];
+  reason: string;
+  note?: string;
+  evidence: Partial<Record<ReturnEvidenceKind, string[]>>;
+  replacementAddress?: DeliveryAddress;
+};
+
+/**
+ * Customer return or replacement of a delivered order. Nothing is refunded or sent here:
+ * the desk approves first and, where the item comes back, checks it before the refund or new copy.
+ */
+export function submitCustomerRequest(order: Order, input: CustomerRequestInput): ReturnRequest {
   if (getReturnRequest(order.id) ?? order.returnRequest) throw new Error("A request is already open on this order.");
+  const settings = getOrderSettings();
+  const rule = settings.returns.reasonRules.find((item) => item.label === input.reason);
+  if (!rule) throw new Error("Choose a reason.");
+  const items = input.items
+    .map((pick) => {
+      const line = order.items.find((item) => item.bookId === pick.bookId);
+      const quantity = Math.min(line?.quantity ?? 0, Math.max(0, Math.floor(pick.quantity)));
+      return line && quantity > 0 ? { bookId: line.bookId, title: line.title, quantity, price: line.price } : null;
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  if (!items.length) throw new Error("Choose at least one product.");
+  const missing = rule.require.filter((kind) => !input.evidence[kind]?.length);
+  if (missing.length) throw new Error("Add the evidence marked required.");
+  if (input.resolution === "replacement" && !(settings.returns.replacementAllowed && rule.replacement)) throw new Error("Replacement is not available for this reason.");
+  if (input.resolution === "return_refund" && !settings.returns.enabled) throw new Error("Returns are not available.");
+  if (input.resolution === "refund" && !(settings.returns.enabled && settings.returns.refundWithoutReturn)) throw new Error("Refund without return is not available.");
+
   const requestedAt = new Date().toISOString();
-  const refundAmount = Math.max(0, order.total - Math.max(0, order.platformFee ?? 0) - (order.refundAmount ?? 0));
+  const value = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const refundable = Math.max(0, order.total - Math.max(0, order.platformFee ?? 0) - (order.refundAmount ?? 0));
+  const refundAmount = input.resolution === "replacement" ? 0 : Math.min(value, refundable);
+  const photos = (["product", "packaging", "label"] as const).flatMap((kind) => input.evidence[kind] ?? []);
+  const step = (id: string, title: string, detail: string, reached = false) => ({ id, title, at: requestedAt, reached, detail });
+  const stages =
+    input.resolution === "replacement"
+      ? withReplacementStages([
+          step("requested", "Replacement requested", "Evidence received. The Foundation desk will review this request.", true),
+          step("review", "Under review", "You will get an email once the desk accepts or rejects it."),
+        ])
+      : [
+          step("requested", "Return requested", "Evidence received. The Foundation desk will review this request.", true),
+          step("decision", "Decision", "You will get an email once the desk accepts or cancels the request."),
+          ...(input.resolution === "return_refund"
+            ? [
+                step("pickup", "Pickup", "Free pickup. The courier will call before collecting the parcel."),
+                step("inspected", "Received and checked", "The desk checks the returned item before the refund."),
+              ]
+            : []),
+          step("refund", "Refund", `Refund of ${formatPrice(refundAmount)} to your original payment method once approved${input.resolution === "return_refund" ? " and the item is checked" : ""}. The platform fee is non-refundable.`),
+        ];
   const request: ReturnRequest = {
     id: returnRequestId(),
     orderId: order.id,
-    kind: "return",
-    reason: input.reason.trim() || "Return requested",
+    kind: input.resolution === "replacement" ? "replacement" : "return",
+    reason: rule.label,
     requestedAt,
     source: "customer",
     status: "Pending Review",
     returnCharges: 0,
-    refundAmount,
-    images: input.images?.length ? input.images.slice(0, 6) : undefined,
+    refundAmount: input.resolution === "replacement" ? undefined : refundAmount,
+    items,
+    resolution: input.resolution,
+    evidence: input.evidence,
+    images: photos.length ? photos : undefined,
     note: input.note?.trim() || undefined,
-    stages: [
-      { id: "requested", title: "Return requested", at: requestedAt, reached: true, detail: "The Foundation desk will review this request." },
-      { id: "decision", title: "Decision", at: requestedAt, reached: false, detail: "You will get an email once the desk accepts or cancels the return." },
-      { id: "pickup", title: "Pickup", at: requestedAt, reached: false, detail: "Free pickup. The courier will call before collecting the parcel." },
-      { id: "refund", title: "Refund", at: requestedAt, reached: false, detail: `Refund of ${formatPrice(refundAmount)} to your original payment method after the item is back (the platform fee is non-refundable).` },
-    ],
+    replacementAddress: input.resolution === "replacement" ? input.replacementAddress : undefined,
+    stages,
   };
   persistReturnRequest(order.id, request);
-  notifyReplacement(order, `Return request ${request.id}`, "We received your return request. The desk will accept or cancel it and email you.", "both");
+  const label = input.resolution === "replacement" ? "Replacement" : "Return";
+  notifyReplacement(
+    order,
+    `${label} request ${request.id} received`,
+    `We received your ${label.toLowerCase()} request ${request.id} for ${items.map((item) => `${item.quantity} × ${item.title}`).join(", ")}. The Foundation desk will review it and email you. There is no charge to you for this ${label.toLowerCase()}.`,
+    "both"
+  );
   return request;
+}
+
+/** Uploads one photo or video for a return / replacement request. */
+export async function uploadReturnEvidence(file: File, orderId: string, phone?: string) {
+  const body = new FormData();
+  body.set("file", file, file.name);
+  body.set("orderId", orderId);
+  if (phone) body.set("phone", phone);
+  const response = await fetch("/api/shop/evidence", { method: "POST", body, credentials: "same-origin" });
+  const data = (await response.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
+  if (!response.ok || !data.ok || !data.url) throw new Error(data.error || "Could not upload the file.");
+  return data.url;
 }
 
 export function reviewReplacementRequest(
@@ -632,7 +706,7 @@ export function reviewReplacementRequest(
       decisionNote: note || (input.accept ? "Return accepted." : "Return request cancelled."),
       stages: current.stages.map((stage) =>
         stage.id === "decision"
-          ? { ...stage, at: now, reached: true, detail: input.accept ? "Return accepted. A free pickup will be arranged." : note || "The return request was cancelled by the desk." }
+          ? { ...stage, at: now, reached: true, detail: input.accept ? (current.resolution === "refund" ? "Return accepted. The refund is on its way." : "Return accepted. A free pickup will be arranged.") : note || "The return request was cancelled by the desk." }
           : stage
       ),
     };
@@ -642,7 +716,9 @@ export function reviewReplacementRequest(
         source,
         input.accept ? `Return request ${request.id} accepted` : `Return request ${request.id} cancelled`,
         input.accept
-          ? "Your return request has been accepted. There is no charge for the return; we will arrange the pickup and share the details. The refund is sent once the item is back with us."
+          ? current.resolution === "refund"
+            ? `Your return request has been accepted. A refund of ${formatPrice(current.refundAmount ?? 0)} will be sent to your original payment method.`
+            : "Your return request has been accepted. There is no charge for the return; we will arrange the pickup and share the details. The refund is sent once the item is back with us and checked."
           : `Your return request was cancelled by the Foundation desk.${note ? ` Reason: ${note}` : ""}`,
         "both"
       );

@@ -1,4 +1,4 @@
-import type { Order } from "@/types";
+import type { Order, ReturnEvidenceKind } from "@/types";
 import { requiresLiveCommerce } from "@/lib/platform";
 
 const INTEGRATIONS_KEY = "vgmf_integrations";
@@ -257,6 +257,12 @@ export interface OrderSettings {
     pickupReturns: boolean;
     pickupReplacement: boolean;
     reasons: string[];
+    /** Reasons customers pick, with the evidence each needs and whether it qualifies for a free replacement. */
+    reasonRules: ReturnReasonRule[];
+    /** Offer "Refund to original payment method" without sending the item back. */
+    refundWithoutReturn: boolean;
+    /** Let the customer give a different address for the replacement copy. */
+    replacementAddressChange: boolean;
   };
   refunds: {
     enabled: boolean;
@@ -398,6 +404,28 @@ export const defaultIntegrations: IntegrationSettings = {
   },
 };
 
+export interface ReturnReasonRule {
+  label: string;
+  require: ReturnEvidenceKind[];
+  /** Our fault (wrong, damaged or defective item): a free replacement can be chosen. */
+  replacement: boolean;
+}
+
+export const RETURN_EVIDENCE: { id: ReturnEvidenceKind; label: string }[] = [
+  { id: "product", label: "Product photos" },
+  { id: "packaging", label: "Packaging photos" },
+  { id: "label", label: "Shipping label photo" },
+  { id: "video", label: "Unboxing video" },
+];
+
+export const DEFAULT_RETURN_REASONS: ReturnReasonRule[] = [
+  { label: "Received wrong book/product", require: ["product", "label"], replacement: true },
+  { label: "Received a different language", require: ["product", "label"], replacement: true },
+  { label: "Product damaged", require: ["product", "packaging", "label"], replacement: true },
+  { label: "Product defective", require: ["product"], replacement: true },
+  { label: "Other eligible issue", require: [], replacement: false },
+];
+
 export const defaultOrderSettings: OrderSettings = {
   deliveryEnabled: true,
   pickupEnabled: true,
@@ -438,6 +466,9 @@ export const defaultOrderSettings: OrderSettings = {
     pickupReturns: false,
     pickupReplacement: false,
     reasons: ["Damaged or defective item"],
+    reasonRules: DEFAULT_RETURN_REASONS,
+    refundWithoutReturn: false,
+    replacementAddressChange: true,
   },
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
   cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0 },
@@ -733,12 +764,23 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       enabled: Boolean(merged.returns?.enabled),
       windowDays: Math.max(0, finiteNumber(merged.returns?.windowDays, defaultOrderSettings.returns.windowDays)),
       pickupCharge: Math.max(0, finiteNumber(merged.returns?.pickupCharge, defaultOrderSettings.returns.pickupCharge)),
-      replacementAllowed: true,
+      replacementAllowed: merged.returns?.replacementAllowed !== false,
       pickupReturns: Boolean(merged.returns?.pickupReturns),
       pickupReplacement: Boolean(merged.returns?.pickupReplacement),
       reasons: Array.isArray(merged.returns?.reasons)
         ? merged.returns.reasons.map((item) => String(item ?? "").trim()).filter(Boolean)
         : defaultOrderSettings.returns.reasons,
+      reasonRules: Array.isArray(merged.returns?.reasonRules) && merged.returns.reasonRules.length
+        ? merged.returns.reasonRules
+            .map((rule) => ({
+              label: String(rule?.label ?? "").trim(),
+              require: (Array.isArray(rule?.require) ? rule.require : []).filter((kind): kind is ReturnEvidenceKind => RETURN_EVIDENCE.some((item) => item.id === kind)),
+              replacement: Boolean(rule?.replacement),
+            }))
+            .filter((rule) => rule.label)
+        : DEFAULT_RETURN_REASONS,
+      refundWithoutReturn: Boolean(merged.returns?.refundWithoutReturn),
+      replacementAddressChange: merged.returns?.replacementAddressChange !== false,
     },
     refunds: {
       enabled: Boolean(merged.refunds?.enabled),

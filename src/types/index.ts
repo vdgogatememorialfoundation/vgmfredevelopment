@@ -762,6 +762,9 @@ export interface CourierRate {
 }
 
 export type ReturnKind = "return" | "replacement";
+export type ReturnEvidenceKind = "product" | "packaging" | "label" | "video";
+/** refund: refund without sending the item back; return_refund: item comes back, then refund; replacement: free new copy. */
+export type ReturnResolution = "refund" | "return_refund" | "replacement";
 
 /** A cancellation, refund, return or replacement the desk sent to a senior reviewer. */
 export interface ApprovalRequest {
@@ -805,6 +808,12 @@ export interface ReturnRequest {
   decisionNote?: string;
   /** Set once the returned units are put back into stock. */
   restockedAt?: string;
+  /** Products and quantities the customer chose; absent on older requests (whole order). */
+  items?: { bookId: string; title: string; quantity: number; price: number }[];
+  resolution?: ReturnResolution;
+  evidence?: Partial<Record<ReturnEvidenceKind, string[]>>;
+  /** Address for the replacement copy when it differs from the order address. */
+  replacementAddress?: DeliveryAddress;
   stages: ShipmentEvent[];
 }
 

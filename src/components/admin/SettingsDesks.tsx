@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth";
 import { getSettings, saveSettings } from "@/lib/admin-store";
 import { getPolicy, savePolicy } from "@/lib/fulfillment";
 import {
+  RETURN_EVIDENCE,
   getIntegrations,
   getOrderSettings,
   getShippingConnection,
@@ -1801,11 +1802,46 @@ export function OrderSettingsDesk() {
           <div className="space-y-3">
             <p className="text-xs text-slate-500">When ticked, customers request a return from a delivered order within the window. Customer returns are free (the Foundation bears the pickup). The desk accepts (the customer is emailed) or cancels it, and can always open a return from an order.</p>
             <Check label="Accept customer returns" checked={value.returns.enabled} onChange={(enabled) => set({ returns: { ...value.returns, enabled } })} />
-            <Check label="Offer damaged-item replacements" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
+            <Check label="Offer replacements (wrong, damaged or defective items)" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
             <Text label="Return window (days after delivery)" type="number" value={value.returns.windowDays} onChange={(days) => set({ returns: { ...value.returns, windowDays: Number(days) || 0 } })} />
             <Text label="Return pickup charge for desk-opened returns (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
+            <Check label='Offer "Refund to original payment method" without sending the item back' checked={value.returns.refundWithoutReturn} onChange={(refundWithoutReturn) => set({ returns: { ...value.returns, refundWithoutReturn } })} />
+            <Check label="Customer can give a corrected address for a replacement" checked={value.returns.replacementAddressChange} onChange={(replacementAddressChange) => set({ returns: { ...value.returns, replacementAddressChange } })} />
+            <div className="space-y-2">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Customer reasons and required evidence</span>
+              <p className="text-xs text-slate-500">Tick the evidence each reason needs. &quot;Free replacement&quot; marks it as our fault: the customer may choose a replacement, with no charge for the product or shipping.</p>
+              {value.returns.reasonRules.map((rule, index) => {
+                const update = (patch: Partial<typeof rule>) =>
+                  set({ returns: { ...value.returns, reasonRules: value.returns.reasonRules.map((item, i) => (i === index ? { ...item, ...patch } : item)) } });
+                return (
+                  <div key={index} className="space-y-1 rounded-lg border border-slate-200 p-2">
+                    <div className="flex gap-2">
+                      <input className={input} value={rule.label} onChange={(event) => update({ label: event.target.value })} />
+                      <button type="button" className="text-xs text-red-600" onClick={() => set({ returns: { ...value.returns, reasonRules: value.returns.reasonRules.filter((_, i) => i !== index) } })}>Remove</button>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      {RETURN_EVIDENCE.map((kind) => (
+                        <label key={kind.id} className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={rule.require.includes(kind.id)}
+                            onChange={(event) => update({ require: event.target.checked ? [...rule.require, kind.id] : rule.require.filter((item) => item !== kind.id) })}
+                          />
+                          {kind.label}
+                        </label>
+                      ))}
+                      <label className="flex items-center gap-1 font-semibold">
+                        <input type="checkbox" checked={rule.replacement} onChange={(event) => update({ replacement: event.target.checked })} />
+                        Free replacement
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+              <button type="button" className="text-xs font-semibold text-burgundy" onClick={() => set({ returns: { ...value.returns, reasonRules: [...value.returns.reasonRules, { label: "New reason", require: ["product"], replacement: false }] } })}>+ Add reason</button>
+            </div>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Return reasons (one per line)</span>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Desk return reasons (one per line)</span>
               <textarea className={input} rows={4} value={value.returns.reasons.join("\n")} onChange={(event) => set({ returns: { ...value.returns, reasons: event.target.value.split("\n") } })} />
             </label>
           </div>

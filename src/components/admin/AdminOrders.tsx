@@ -1691,7 +1691,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <div className="space-y-2 text-sm">
                 <p><b>{returnRequest.kind === "replacement" ? "Replacement" : "Return"}</b> · {returnRequest.status}{returnRequest.source ? ` · ${returnRequest.source}` : ""}</p>
                 <p className="text-xs text-text-muted">Reason: {returnRequest.reason} · requested {formatDateTime(returnRequest.requestedAt)}</p>
+                {returnRequest.items?.length ? <p className="text-xs">Products: <b>{returnRequest.items.map((item) => `${item.quantity} × ${item.title}`).join(", ")}</b></p> : null}
+                {returnRequest.resolution && <p className="text-xs">Customer wants: <b>{returnRequest.resolution === "refund" ? "Refund without return" : returnRequest.resolution === "return_refund" ? "Return for refund" : "Free replacement"}</b></p>}
+                {returnRequest.replacementAddress && <p className="text-xs">Replacement address: {[returnRequest.replacementAddress.fullName, returnRequest.replacementAddress.phone, returnRequest.replacementAddress.line1, returnRequest.replacementAddress.city, returnRequest.replacementAddress.pincode].filter(Boolean).join(", ")}</p>}
                 {returnRequest.note && <p className="text-xs text-text-muted">{returnRequest.note}</p>}
+                {returnRequest.evidence?.video?.length ? <video src={returnRequest.evidence.video[0]} controls className="h-32 rounded-lg" /> : null}
                 {returnRequest.images?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {returnRequest.images.map((src, index) => (
@@ -1700,7 +1704,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ))}
                   </div>
                 ) : null}
-                {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)} after ₹{returnRequest.returnCharges} pickup charge.</p>}
+                {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)}{returnRequest.returnCharges ? ` after ₹${returnRequest.returnCharges} pickup charge` : " · no charge to the customer"}.</p>}
                 <div className="flex flex-wrap gap-2">
                   {returnRequest.status === "Pending Review" && returnRequest.kind === "return" && (
                     <>
