@@ -25,7 +25,7 @@ import { sameShipmentSlot } from "@/lib/shipment-slot";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
-import { commerceCharges, getIntegrations, getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { commerceCharges, getIntegrations, getOrderSettings, preorderAdvance, shippingFeeFor } from "@/lib/integrations";
 import { barcodeSvg } from "@/lib/barcode";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
@@ -1404,6 +1404,40 @@ export function convertToStorePickup(orderId: string) {
   return paidFull
     ? `Changed to store pickup. The customer paid ₹${shipping} courier charge; refund it from Refunds if needed.`
     : "Changed to store pickup.";
+}
+
+/** Turns a normal order into a pre-order: books not in stock yet are held and the order is not booked with a courier until the desk packs it. */
+export function convertToPreorder(orderId: string, releaseDate?: string) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.preorderPayment || order.items.every((item) => item.preorder)) return "This order is already a pre-order.";
+  if (["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status)) return "This order is already packed, sent or closed.";
+  const items = order.items.map((item) => ({ ...item, preorder: true, releaseDate: releaseDate || item.releaseDate }));
+  const round = (value: number) => Math.round(value * 100) / 100;
+  const settings = getOrderSettings();
+  const balanceWhen = settings.preorderPayment.balanceWhen;
+  const now = new Date().toISOString();
+  let preorderPayment: Order["preorderPayment"] = order.preorderPayment;
+  let money = "already paid in full, nothing more to collect";
+  if (order.paymentStatus === "Partially Paid" && order.amountPaid !== undefined) {
+    const advance = round(order.amountPaid);
+    preorderPayment = { advance, balance: Math.max(0, round(order.total - advance)), balanceWhen, advancePaidAt: order.paidAt || now };
+    money = `₹${advance} already paid is the advance; balance ₹${preorderPayment.balance}`;
+  } else if (order.paymentStatus === "Pending" && order.deliveryMode === "delivery") {
+    const copies = order.items.reduce((sum, item) => sum + item.quantity, 0);
+    const advance = preorderAdvance(order.total, settings, { copies, platformFee: order.platformFee });
+    preorderPayment = { advance, balance: round(order.total - advance), balanceWhen };
+    money = `advance ₹${advance} to pay, then balance ₹${preorderPayment.balance}`;
+  } else if (order.paymentStatus !== "Paid") {
+    money = "payment unchanged";
+  }
+  const next = withHistory(
+    { ...order, items, preorderPayment },
+    order.status,
+    `Changed to a pre-order by the desk${releaseDate ? `; expected ${formatDate(releaseDate)}` : ""}; ${money}.`
+  );
+  updateOrderInStore(next);
+  return `Changed to a pre-order (${money}). It won't be booked with a courier until you pack it.`;
 }
 
 export function patchOrder(orderId: string, update: Partial<Order>, note?: string) {

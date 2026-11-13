@@ -27,6 +27,7 @@ import {
   recordBalancePayment,
   recordCourierPayment,
   convertToStorePickup,
+  convertToPreorder,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
@@ -1392,6 +1393,28 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               </div>
             )}
           </Section>
+        </div>
+      )}
+
+      {!isPreorderOrder(order) && !shipment && !["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-warm-cream/50 p-3 text-sm">
+          <span>Book not in stock yet?</span>
+          <Button
+            variant="outline"
+            disabled={busy === "to-preorder"}
+            onClick={() => {
+              const date = window.prompt("Change this order to a pre-order. Expected date (YYYY-MM-DD), or leave blank if not announced:", "");
+              if (date === null) return;
+              const releaseDate = date.trim();
+              if (releaseDate && !/^\d{4}-\d{2}-\d{2}$/.test(releaseDate)) {
+                window.alert("Enter the date as YYYY-MM-DD, for example 2026-12-31.");
+                return;
+              }
+              run("to-preorder", () => convertToPreorder(order.id, releaseDate || undefined));
+            }}
+          >
+            Change to pre-order
+          </Button>
         </div>
       )}
 
