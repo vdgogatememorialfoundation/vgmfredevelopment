@@ -18,6 +18,7 @@ import {
 } from "@/lib/site-visibility";
 import { isAppDownloadPublic } from "@/lib/mobile-config";
 import { useSiteSettings } from "@/lib/use-cms";
+import { configuredSocial } from "@/lib/social";
 import {
   cleanChrome,
   footerShell,
@@ -182,10 +183,14 @@ export default function Footer() {
                 )}
               </ul>
               <div className="mt-5">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
-                  {t("footer.connect")}
-                </p>
-                <SocialLinks tone="dark" always />
+                {configuredSocial(settings?.social).length > 0 ? (
+                  <>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">
+                      {t("footer.connect")}
+                    </p>
+                    <SocialLinks tone="dark" />
+                  </>
+                ) : null}
                 {isAppDownloadPublic() ? (
                   <p className="mt-3">
                     <Link
