@@ -57,7 +57,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { fetchRazorpayPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
+import { fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -859,6 +859,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
   const [linkAmount, setLinkAmount] = useState("");
   const [rzpPaymentId, setRzpPaymentId] = useState("");
+  const [partAmount, setPartAmount] = useState("");
   const [extraAmount, setExtraAmount] = useState("");
   const [extraReason, setExtraReason] = useState("");
   const [extraKind, setExtraKind] = useState<"shipping" | "other">("shipping");
@@ -1328,6 +1329,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </SelectInput>
                 <TextInput placeholder="Reference / UTR" value={reference} onChange={(event) => setReference(event.target.value)} />
                 <Button variant="success" onClick={() => run("record", () => { recordPayment(order.id, { method, reference }); return "Payment recorded. The order is confirmed."; })}>Record payment</Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <TextInput type="number" min={1} placeholder={`Part amount received (₹${remainingDue(order)} due)`} value={partAmount} onChange={(event) => setPartAmount(event.target.value)} />
+                <Button variant="outline" disabled={!partAmount} onClick={() => run("partial", () => { const note = recordPartialPayment(order.id, { amount: Number(partAmount), method, reference }); setPartAmount(""); return note; })}>Mark partially paid</Button>
               </div>
               <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                 <TextInput placeholder="Paid on Razorpay but not showing? Paste payment ID (pay_…)" aria-label="Razorpay payment ID" value={rzpPaymentId} onChange={(event) => setRzpPaymentId(event.target.value)} />

@@ -17,7 +17,7 @@ import { siteConfig, storeConfig } from "@/lib/constants";
 import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
-import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
+import { clearSession, findAccountByIdentifier, getSession, isPortalRole, saveAccount, setSession } from "@/lib/auth";
 import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
 import { matchesBarcode, matchesTag } from "@/lib/barcode";
 import QRCode from "qrcode";
@@ -2155,6 +2155,9 @@ export function getOutbox(): OutboxEmail[] {
   return getNotifications();
 }
 
+/** Automatic customer mails that a desk change must not trigger; links, labels and replies the desk sends on purpose still go. */
+const DESK_SILENT_TEMPLATES = new Set(["order-status", "order-placed", "store-credit", "refund", "shipment-booked"]);
+
 export function sendEmail(input: {
   to: string;
   subject: string;
@@ -2166,6 +2169,7 @@ export function sendEmail(input: {
   replyTo?: string;
   fromName?: string;
 }) {
+  if (DESK_SILENT_TEMPLATES.has(input.template) && isPortalRole(getSession()?.role)) return;
   return queueNotification({
     ...input,
     replyTo: input.replyTo || staffReplyTo(),

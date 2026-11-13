@@ -57,7 +57,8 @@ export function forCustomer(order: Order): Order {
   return copy;
 }
 
-export function upsertShopOrder(order: Order) {
+/** `quiet`: a desk edit, so the customer gets no stage email or push for it. */
+export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {}) {
   if (!order?.id) return;
   // A browser with an old cached copy must not bring back an order the desk deleted.
   if (deletedShopOrderIds().includes(order.id)) return;
@@ -68,7 +69,7 @@ export function upsertShopOrder(order: Order) {
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
   orders.unshift(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken });
   writeAll(orders);
-  void notifyOrderStage(prev, orders[0]).catch(() => undefined);
+  if (!options.quiet) void notifyOrderStage(prev, orders[0]).catch(() => undefined);
   return orders[0];
 }
 

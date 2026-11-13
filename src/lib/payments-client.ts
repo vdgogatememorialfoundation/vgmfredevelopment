@@ -224,6 +224,37 @@ export function remainingDue(order: Order) {
   return Math.max(0, Math.round((order.total - paid) * 100) / 100);
 }
 
+/** Desk records money received by hand (UPI, bank, cash) that covers only part of what is due. */
+export function recordPartialPayment(orderId: string, input: { amount: number; method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  const amount = Math.round(Number(input.amount) * 100) / 100;
+  if (!(amount > 0)) return "Enter the amount received.";
+  const due = remainingDue(order);
+  if (due <= 0) return "Nothing is due on this order.";
+  if (amount + 0.01 >= due) {
+    recordPayment(order.id, { method: input.method, reference: input.reference });
+    return `₹${amount} covers everything due, so the order is marked Paid.`;
+  }
+  const paid = Math.round((order.total - due + amount) * 100) / 100;
+  const plan = order.preorderPayment;
+  const now = new Date().toISOString();
+  patchOrder(
+    order.id,
+    {
+      paymentStatus: "Partially Paid",
+      amountPaid: paid,
+      paymentMethod: input.method,
+      paymentRef: input.reference?.trim() || order.paymentRef,
+      paidAt: order.paidAt ?? now,
+      status: order.status === "Pending" ? "Ordered" : order.status,
+      preorderPayment: plan && !plan.advancePaidAt && paid + 0.01 >= plan.advance ? { ...plan, advancePaidAt: now } : plan,
+    },
+    `Part payment ₹${amount} recorded by the desk (${input.method}${input.reference?.trim() ? ` · ${input.reference.trim()}` : ""}); ₹${paid} received so far`
+  );
+  return `Marked Partially Paid: ₹${paid} received, ₹${Math.round((order.total - paid) * 100) / 100} still due.`;
+}
+
 /** Cancels every open Razorpay link on an order (used when the order is deleted). */
 export async function cancelOrderPaymentLinks(orderId: string) {
   const order = getOrder(orderId);

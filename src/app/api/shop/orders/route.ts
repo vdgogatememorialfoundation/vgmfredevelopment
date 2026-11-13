@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Send the order." }, { status: 400 });
   }
   const isNew = !findShopOrder(order.id);
-  upsertShopOrder(order);
+  upsertShopOrder(order, { quiet: commerceViewer(request).portal });
   if (isNew && !commerceViewer(request).portal && (!order.userId || order.userId === "guest")) void ensureGuestAccount(order);
   if (order.promo?.code && order.paymentStatus !== "Pending") redeemPromo(order);
   if (order.status === "Delivered") {
