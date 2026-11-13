@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { isPastDate, mediaUrl, moduleOn, str } from "../../src/api";
+import { Ionicons } from "@expo/vector-icons";
+import { isPastDate, mediaUrl, moduleOn, str, type Row } from "../../src/api";
 import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
 import { QUICK_ACTIONS, resolvedAbout } from "../../src/site-content";
@@ -13,6 +14,7 @@ import { ProductGrid } from "./shop";
 
 export default function HomeScreen() {
   const { feed, notices, loading, error, refresh } = useFeed();
+  const voices = ((feed?.seminarReviews ?? []) as Row[]).filter((row) => row.published !== false && str(row.text)).slice(0, 12);
   const theme = useTheme();
   const about = resolvedAbout(feed?.about);
   const [query, setQuery] = useState("");
@@ -110,6 +112,27 @@ export default function HomeScreen() {
           {articles.map((item) => (
             <ArticleCard key={str(item.id)} item={item} />
           ))}
+        </>
+      ) : null}
+
+      {voices.length ? (
+        <>
+          <SectionHeader title="Seminar voices" subtitle="What participants say" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={292} decelerationRate="fast" contentContainerStyle={{ gap: 12, paddingRight: 20 }} style={{ marginBottom: 20, marginHorizontal: -20, paddingLeft: 20 }}>
+            {voices.map((row, index) => (
+              <View key={str(row.id, String(index))} style={{ width: 280, backgroundColor: theme.colors.paper, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: theme.colors.border }}>
+                <Ionicons name="chatbox-ellipses-outline" size={22} color={theme.colors.accent} />
+                <Text numberOfLines={5} style={{ color: theme.colors.text, fontSize: 14, lineHeight: 21, marginTop: 8, fontStyle: "italic" }}>{str(row.text).replace(/^[“"]|[”"]$/g, "")}</Text>
+                <View style={{ flexDirection: "row", marginTop: 10 }}>
+                  {Array.from({ length: 5 }, (_, star) => (
+                    <Ionicons key={star} name={star < (Number(row.rating) || 5) ? "star" : "star-outline"} size={13} color={theme.colors.accent} />
+                  ))}
+                </View>
+                <Text style={{ color: theme.colors.text, fontWeight: "800", fontSize: 13, marginTop: 6 }} numberOfLines={1}>{str(row.name)}</Text>
+                {str(row.event) ? <Text style={{ color: theme.colors.muted, fontSize: 12 }} numberOfLines={1}>{str(row.event)}</Text> : null}
+              </View>
+            ))}
+          </ScrollView>
         </>
       ) : null}
 

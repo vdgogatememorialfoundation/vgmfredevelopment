@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { formatDate, listOrders, money, startBalancePayment, str, verifyBalancePayment, type Row } from "../../src/api";
-import { razorpayPage } from "../../src/razorpay";
+import { nativeCheckout, razorpayPage } from "../../src/razorpay";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { useAuth } from "../../src/auth";
 import { Banner, Body, Button, Card, Divider, Empty, Heading, Loading, Muted, PageHeader, Screen } from "../../src/ui";
@@ -92,17 +92,22 @@ export default function OrderScreen() {
       const started = await startBalancePayment(str(order.id));
       if (!started.keyId || !started.razorpayOrderId) throw new Error("Online payment is not available right now. Please try again later.");
       const address = (order.deliveryAddress ?? {}) as Row;
-      setPayment(
-        razorpayPage({
-          key: started.keyId,
-          orderId: started.razorpayOrderId,
-          amount: Math.round(Number(started.amount ?? 0) * 100),
-          name: str(address.fullName, session?.name ?? ""),
-          email: session?.email ?? "",
-          phone: str(address.phone),
-          description: `Pre-order balance · ${str(order.id)}`,
-        })
-      );
+      const options = {
+        key: started.keyId,
+        orderId: started.razorpayOrderId,
+        amount: Math.round(Number(started.amount ?? 0) * 100),
+        name: str(address.fullName, session?.name ?? ""),
+        email: session?.email ?? "",
+        phone: str(address.phone),
+        description: `Balance · ${str(order.id)}`,
+      };
+      const native = await nativeCheckout(options);
+      if (native) {
+        setPaying(false);
+        await onPayment(native as WebViewMessageEvent);
+        return;
+      }
+      setPayment(razorpayPage(options));
       void load();
     } catch (error) {
       setPayTone("error");

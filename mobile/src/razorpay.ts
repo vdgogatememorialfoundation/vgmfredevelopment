@@ -1,3 +1,39 @@
+import { NativeModules } from "react-native";
+
+type NativeOptions = { key: string; orderId: string; amount: number; name: string; email: string; phone: string; description: string };
+
+/** Opens the native Razorpay SDK (UPI apps, cards, net banking). Returns a WebView-style message, or null when the SDK is not in this build so callers fall back to the web checkout. */
+export async function nativeCheckout(input: NativeOptions): Promise<{ nativeEvent: { data: string } } | null> {
+  if (!NativeModules.RNRazorpayCheckout) return null;
+  const RazorpayCheckout = (await import("react-native-razorpay")).default;
+  const wrap = (value: object) => ({ nativeEvent: { data: JSON.stringify(value) } });
+  try {
+    const result = (await RazorpayCheckout.open({
+      key: input.key,
+      order_id: input.orderId,
+      amount: String(input.amount),
+      currency: "INR",
+      name: "Vaidya Gogate Memorial Foundation",
+      description: input.description,
+      prefill: { name: input.name, email: input.email, contact: input.phone },
+      theme: { color: "#8F2D2D" },
+    } as never)) as { razorpay_payment_id?: string; razorpay_order_id?: string; razorpay_signature?: string };
+    return wrap({ type: "success", paymentId: result.razorpay_payment_id, razorpayOrderId: result.razorpay_order_id, signature: result.razorpay_signature });
+  } catch (error) {
+    const err = error as { code?: number; description?: string; error?: { description?: string } };
+    if (err?.code === 0 || err?.code === 2) return wrap({ type: "dismiss" });
+    let detail = err?.error?.description || "";
+    if (!detail && typeof err?.description === "string") {
+      try {
+        detail = (JSON.parse(err.description) as { error?: { description?: string } }).error?.description || err.description;
+      } catch {
+        detail = err.description;
+      }
+    }
+    return wrap({ type: "error", error: detail || "The payment did not go through." });
+  }
+}
+
 /** A tiny page that opens Razorpay Checkout inside a WebView and posts the result back. */
 export function razorpayPage(input: { key: string; orderId: string; amount: number; name: string; email: string; phone: string; description: string }) {
   const options = JSON.stringify({

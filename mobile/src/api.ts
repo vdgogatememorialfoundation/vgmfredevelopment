@@ -46,6 +46,7 @@ export type Feed = {
   policies: Record<string, { title?: string; description?: string; sections?: { title: string; body: string }[] }>;
   faqs: Array<{ question?: string; answer?: string }>;
   productReviews?: Row[];
+  seminarReviews?: Row[];
   banners?: Row[];
   awards?: Row[];
   pages?: Row[];
@@ -730,4 +731,9 @@ export async function trackOrder(id: string, phone: string) {
   const response = await fetch(`${getApiBase()}/api/shop/orders?id=${encodeURIComponent(id.trim())}&phone=${encodeURIComponent(phone.trim())}`, { headers: headers(false) });
   const data = (await response.json().catch(() => ({}))) as { orders?: Row[] };
   return data.orders?.[0] ?? null;
+}
+
+export async function registerPushToken(token: string, platform: string) {
+  const response = await fetch(`${getApiBase()}/api/push/register`, { method: "POST", headers: headers(), body: JSON.stringify({ token, platform }) });
+  return response.ok;
 }

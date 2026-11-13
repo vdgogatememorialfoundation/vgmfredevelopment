@@ -1,3 +1,4 @@
+import { listenForPushTaps, registerForPush } from "./push";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { checkSession, getSession, logoutSession, saveSession, type Session } from "./api";
 
@@ -18,7 +19,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void checkSession()
       .then((next) => setSessionState(next))
       .finally(() => setReady(true));
+    return listenForPushTaps();
   }, []);
+
+  useEffect(() => {
+    if (ready) void registerForPush();
+  }, [ready, session?.token]);
 
   const setSession = useCallback(async (next: Session | null) => {
     await saveSession(next);

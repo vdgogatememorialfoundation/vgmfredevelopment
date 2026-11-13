@@ -429,6 +429,7 @@ export function OrdersDashboard() {
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isPreorderOrder(order) ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
                             {isPreorderOrder(order) ? "Pre-order" : "Normal"}
                           </span>
+                          {isAppOrder(order) ? <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">App</span> : null}
                         </span>
                         <span className="block truncate text-xs text-text-muted">
                           {order.deliveryAddress?.fullName || (order.items[0] ? currentProductTitle(order.items[0]) : "")} · {formatDate(order.date)}
@@ -995,7 +996,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   return (
     <Panel
       title={`Order #${order.id}`}
-      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${order.channel ? ` · ${order.channel}` : ""}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
+      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${isAppOrder(order) ? " · APP order" : order.channel ? ` · ${order.channel}` : ""}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
       action={
         <span className="flex gap-1">
           <StatusBadge status={order.status} mapping={ORDER_STATUS_TONES} />
@@ -2145,4 +2146,9 @@ function SplitShipments({
       )}
     </div>
   );
+}
+
+/** Placed from the Android/iOS app (mobile checkout stamps createdBy "Android app"). */
+function isAppOrder(order: { createdBy?: string }) {
+  return /\bapp\b/i.test(order.createdBy ?? "");
 }

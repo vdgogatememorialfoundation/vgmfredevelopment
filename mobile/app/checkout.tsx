@@ -1,4 +1,4 @@
-import { razorpayPage } from "../src/razorpay";
+import { nativeCheckout, razorpayPage } from "../src/razorpay";
 import { useEffect, useMemo, useState } from "react";
 import { Modal, View } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
@@ -112,18 +112,22 @@ export default function CheckoutScreen() {
       });
       const id = str(started.order?.id);
       if (!started.keyId || !started.razorpayOrderId || !id) throw new Error("Online payment is not available right now. Please try again later.");
-      setPayment({
-        orderId: id,
-        html: razorpayPage({
-          key: started.keyId,
-          orderId: started.razorpayOrderId,
-          amount: Math.round(Number(started.amount ?? total) * 100),
-          name: name.trim(),
-          email: session?.email ?? "",
-          phone: mobile.replace(/\s/g, ""),
-          description: `Order ${id}`,
-        }),
-      });
+      const options = {
+        key: started.keyId,
+        orderId: started.razorpayOrderId,
+        amount: Math.round(Number(started.amount ?? total) * 100),
+        name: name.trim(),
+        email: session?.email ?? "",
+        phone: mobile.replace(/\s/g, ""),
+        description: `Order ${id}`,
+      };
+      const native = await nativeCheckout(options);
+      if (native) {
+        setBusy(false);
+        await onPayment(native as WebViewMessageEvent, { orderId: id, html: "" });
+        return;
+      }
+      setPayment({ orderId: id, html: razorpayPage(options) });
     } catch (error) {
       setTone("error");
       setNote((error as Error).message);
@@ -132,8 +136,8 @@ export default function CheckoutScreen() {
     }
   };
 
-  const onPayment = async (event: WebViewMessageEvent) => {
-    const current = payment;
+  const onPayment = async (event: WebViewMessageEvent, direct?: { orderId: string; html: string }) => {
+    const current = direct ?? payment;
     setPayment(null);
     if (!current) return;
     let message: { type?: string; paymentId?: string; razorpayOrderId?: string; signature?: string; error?: string } = {};
