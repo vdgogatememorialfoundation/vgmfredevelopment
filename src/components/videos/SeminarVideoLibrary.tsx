@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
-import { SEMINAR_ADSENSE_CLIENT, seminarDisplaySlot, seminarSavedTag, seminarVideoAdTag } from "@/lib/seminar-ads";
+import { SEMINAR_ADSENSE_CLIENT, SEMINAR_DEFAULT_SLOT, seminarDisplaySlot, seminarSavedTag, seminarVideoAdTag } from "@/lib/seminar-ads";
 
 type Access = {
   allowed?: boolean;
@@ -227,6 +227,9 @@ function loadScript(src: string, marker: string) {
   });
 }
 
+/** One ad after this many video cards in a seminar year. */
+const VIDEOS_PER_AD = 4;
+
 function AdBanner({ slot }: { slot: string }) {
   const pushed = useRef(false);
   useEffect(() => {
@@ -242,11 +245,12 @@ function AdBanner({ slot }: { slot: string }) {
   return (
     <ins
       className="adsbygoogle my-4 block"
-      style={{ display: "block" }}
+      style={{ display: "block", textAlign: "center" }}
       data-ad-client={SEMINAR_ADSENSE_CLIENT}
       data-ad-slot={slot}
-      data-ad-format="auto"
-      data-full-width-responsive="true"
+      {...(slot === SEMINAR_DEFAULT_SLOT
+        ? { "data-ad-layout": "in-article", "data-ad-format": "fluid" }
+        : { "data-ad-format": "auto", "data-full-width-responsive": "true" })}
     />
   );
 }
@@ -982,7 +986,8 @@ export function SeminarVideoLibrary() {
               ) : null}
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              {albums.map((album) => (
+              {[
+                ...albums.map((album) => (
                 <article key={album.id} className="rounded-2xl border border-border bg-white p-5 lg:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-burgundy">Album</p>
                   <h3 className="mt-1 font-semibold text-ink">{album.title}</h3>
@@ -993,10 +998,15 @@ export function SeminarVideoLibrary() {
                     ))}
                   </div>
                 </article>
-              ))}
-              {singles.map((item) => (
-                <article key={item.id} className="rounded-2xl border border-border bg-white p-5">{renderCard(item, false)}</article>
-              ))}
+                )),
+                ...singles.map((item) => (
+                  <article key={item.id} className="rounded-2xl border border-border bg-white p-5">{renderCard(item, false)}</article>
+                )),
+              ].flatMap((card, index, cards) =>
+                slot && (index + 1) % VIDEOS_PER_AD === 0 && index < cards.length - 1
+                  ? [card, <div key={`ad-${year.year}-${index}`} className="lg:col-span-2"><AdBanner slot={slot} /></div>]
+                  : [card]
+              )}
             </div>
           </section>
         );
