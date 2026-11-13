@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
 import { ensureAdminCredentials, getAccounts, sendOtpCode } from "@/lib/admin-store";
 import { saveAccount } from "@/lib/auth";
-import { serverPortalLogin } from "@/lib/portal-accounts-sync";
+import { applyPortalAccess, serverPortalLogin, serverPortalSendCode, serverPortalVerify } from "@/lib/portal-accounts-sync";
 import { loginBlockReason } from "@/lib/auth";
 import { OTP_RESEND_SECONDS, issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
@@ -26,6 +26,11 @@ const copy = {
 
 type PortalId = keyof typeof copy;
 
+/** Staff-side portals sign in with an emailed one-time code only; Admin and Doctor keep password + code. */
+function codeOnly(portal: PortalId) {
+  return portal !== "admin" && portal !== "doctor";
+}
+
 type Mode = "password" | "mfa" | "otp" | "forgot";
 
 export function PortalLogin({ portal }: { portal: PortalId }) {
@@ -34,7 +39,8 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [mode, setMode] = useState<Mode>("password");
+  const [mode, setMode] = useState<Mode>(codeOnly(portal) ? "otp" : "password");
+  const [serverCode, setServerCode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpHint, setOtpHint] = useState("");
   const [error, setError] = useState("");
@@ -73,8 +79,9 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
     let account = findPortalAccount();
     if (!account || !account.password || account.password !== password) {
       const remote = await serverPortalLogin(email.trim(), password);
-      if (remote && matchesPortal(remote, portal)) {
-        account = { ...account, ...remote, password } as User;
+      if (remote) applyPortalAccess(remote);
+      if (remote && matchesPortal(remote.account, portal)) {
+        account = { ...account, ...remote.account, password } as User;
         saveAccount(account);
       }
     }
@@ -105,8 +112,21 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
     setMode("mfa");
   };
 
-  const sendCode = (event?: React.FormEvent) => {
+  const sendCode = async (event?: React.FormEvent) => {
     event?.preventDefault();
+    setError("");
+    const remote = await serverPortalSendCode(email.trim(), label);
+    if (remote === "sent") {
+      setServerCode(true);
+      setOtpSent(true);
+      setOtpHint(`A code was sent to ${email.trim()}. It expires in 10 minutes.`);
+      return;
+    }
+    if (remote !== "not-found") {
+      setError(remote);
+      return;
+    }
+    setServerCode(false);
     const account = findPortalAccount();
     if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
@@ -130,8 +150,27 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
     setError("");
   };
 
-  const submitOtp = (event: React.FormEvent) => {
+  const submitOtp = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (serverCode) {
+      const result = await serverPortalVerify(email.trim(), otp);
+      if (typeof result === "string") {
+        setError(result);
+        return;
+      }
+      applyPortalAccess(result);
+      const local = findPortalAccount();
+      const merged = { ...local, ...result.account, password: local?.password ?? result.account.password } as User;
+      if (!matchesPortal(merged, portal)) {
+        setError(`This account does not have access to the ${label} portal.`);
+        return;
+      }
+      setError("");
+      saveAccount(merged);
+      signIn(merged);
+      router.push(target);
+      return;
+    }
     const account = findPortalAccount();
     if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
@@ -231,7 +270,7 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
             Back to password
           </button>
         </form>
-      ) : mode === "password" || portal !== "staff" ? (
+      ) : !codeOnly(portal) ? (
         <form onSubmit={submitPassword} className="space-y-5">
           <EmailField portal={portal} email={email} setEmail={setEmail} />
           <div>
@@ -262,11 +301,11 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
           <EmailField portal={portal} email={email} setEmail={setEmail} />
           {otpSent && (
             <div>
-              <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="staff-otp">
+              <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-otp`}>
                 6-digit code
               </label>
               <input
-                id="staff-otp"
+                id={`${portal}-otp`}
                 inputMode="numeric"
                 pattern="[0-9]{6}"
                 maxLength={6}
@@ -285,7 +324,7 @@ export function PortalLogin({ portal }: { portal: PortalId }) {
             {otpSent ? "Verify code" : "Send email code"}
           </button>
           {otpSent && (
-            <ResendButton onResend={() => sendCode()} />
+            <ResendButton onResend={() => void sendCode()} />
           )}
         </form>
       )}
@@ -381,13 +420,11 @@ function Card({
             {label} console
           </p>
           <h1 className="mt-1 text-center text-2xl font-bold text-text-primary">
-            {label} sign in
+            Sign in to {label} portal
           </h1>
           <p className="mt-2 text-center text-sm text-text-muted">
-            {portal === "staff"
-              ? "Staff and co-administrators sign in here with email, password and a one-time email code."
-              : portal === "support"
-                ? "Foundation support executives, staff with the Support module and administrators sign in with email, password and a one-time email code."
+            {codeOnly(portal)
+              ? "Enter your email and we will send you a one-time sign-in code. Sessions stay signed in until Logout."
               : `Use your ${hint} email and password, then the email verification code. Sessions stay signed in until Logout.`}
           </p>
           <div className="mt-7">{children}</div>
