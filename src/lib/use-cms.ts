@@ -183,6 +183,15 @@ export function useSiteFlags() {
   );
 }
 
+/** Footer social links: the published URL wins on every device, so phones and desktops show what Admin saved. */
+function liveSocial(local?: SiteSettings["social"], published?: Partial<SiteSettings["social"]> | null): SiteSettings["social"] {
+  const merged = { ...(local ?? {}) } as SiteSettings["social"];
+  for (const [key, value] of Object.entries(published ?? {})) {
+    if (typeof value === "string" && /^https?:\/\//i.test(value.trim())) (merged as Record<string, string>)[key] = value.trim();
+  }
+  return merged;
+}
+
 let settingsRaw = "\0";
 let settingsValue: SiteSettings | null = null;
 
@@ -213,6 +222,7 @@ export function useSiteSettings(): SiteSettings | null {
         queryNumber: hasLocal ? local.queryNumber : published?.queryNumber ?? local.queryNumber,
         queryMessage: hasLocal ? local.queryMessage : published?.queryMessage ?? local.queryMessage,
         chrome: hasLocal ? local.chrome : published?.chrome ?? local.chrome,
+        social: liveSocial(local.social, published?.social),
       };
       return settingsValue;
     },
@@ -224,6 +234,7 @@ export function useSiteSettings(): SiteSettings | null {
         ...local,
         siteName: published.name || local.siteName,
         tagline: published.tagline || local.tagline,
+        social: liveSocial(local.social, published.social),
         shlokaBar: published.shlokaBar,
         shlokas: published.shlokas,
         queryButton: published.queryButton,
