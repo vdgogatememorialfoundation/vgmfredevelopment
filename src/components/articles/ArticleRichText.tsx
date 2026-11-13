@@ -66,13 +66,17 @@ export function ArticleRichText({
   title,
   style,
   placed = new Set<number>(),
+  insert,
 }: {
   content: string;
   images?: CaptionedImage[];
   title: string;
   style?: ArticleStyle;
   placed?: Set<number>;
+  /** Placed after this many text paragraphs, or at the end when the article is shorter. */
+  insert?: { afterParagraphs: number; node: ReactNode };
 }) {
+  const paragraphAt: number[] = [];
   const blocks = content.split(/\n\s*\n/).map((block, index) => {
     let text = block.trim();
     if (!text) return null;
@@ -123,7 +127,14 @@ export function ArticleRichText({
         </blockquote>
       );
     }
+    paragraphAt.push(index);
     return <p key={index} className="text-body mb-6 whitespace-pre-line" style={blockStyle}>{renderInline(text, String(index))}</p>;
   });
-  return <div style={articleTextStyle(style)}>{blocks}</div>;
+  const after = insert ? paragraphAt[insert.afterParagraphs - 1] ?? blocks.length - 1 : -1;
+  const inserted = insert ? <div key="insert" className="mb-6">{insert.node}</div> : null;
+  return (
+    <div style={articleTextStyle(style)}>
+      {inserted ? [...blocks.slice(0, after + 1), inserted, ...blocks.slice(after + 1)] : blocks}
+    </div>
+  );
 }

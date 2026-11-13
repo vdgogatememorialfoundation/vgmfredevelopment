@@ -27,7 +27,16 @@ function ArticleBody({ article }: { article: Article }) {
   const { t } = useI18n();
   const images = article.images ?? [];
   const placed = new Set<number>();
-  const body = <ArticleRichText content={article.content} images={images} title={article.title} style={article.style} placed={placed} />;
+  const body = (
+    <ArticleRichText
+      content={article.content}
+      images={images}
+      title={article.title}
+      style={article.style}
+      placed={placed}
+      insert={{ afterParagraphs: 2, node: <ArticleAd placement="inline" /> }}
+    />
+  );
   const remaining = images.filter((_, index) => !placed.has(index));
   return (
     <>
@@ -147,16 +156,12 @@ export function ArticleView({ slug, initial }: { slug: string; initial?: Article
             )}
             <ArticleAd placement="top" className="mb-8" />
             <ArticleBody article={article} />
-            <ArticleAd placement="inline" className="mt-10" />
           </article>
           <aside className="space-y-6">
             <h2 className="heading-3">{t("article.related")}</h2>
             {related.map((item) => (
               <ArticleCard key={item.id} article={item} />
             ))}
-            <div className="lg:sticky lg:top-24">
-              <ArticleAd placement="sidebar" />
-            </div>
           </aside>
         </div>
       </section>

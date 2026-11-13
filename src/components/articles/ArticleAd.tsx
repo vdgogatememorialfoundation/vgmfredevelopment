@@ -62,7 +62,7 @@ export function ArticleAd({ placement, className = "" }: { placement: ArticleAdP
       <p className="mb-1 text-[10px] uppercase tracking-wide text-text-muted">Advertisement</p>
       <ins
         className="adsbygoogle block"
-        style={{ display: "block" }}
+        style={{ display: "block", textAlign: "center" }}
         data-ad-client={ARTICLE_ADSENSE_CLIENT}
         data-ad-slot={slot}
         data-ad-format={placement === "inline" ? "fluid" : "auto"}

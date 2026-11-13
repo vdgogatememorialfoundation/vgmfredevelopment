@@ -7,14 +7,17 @@ export const ARTICLE_ADSENSE_SCRIPT = `https://pagead2.googlesyndication.com/pag
 
 export type ArticleAdPlacement = "top" | "inline" | "sidebar";
 
-/** Numeric AdSense ad-unit ids from the build env. Without one, the page script still allows Auto ads. */
+/** The in-article unit from AdSense, placed two paragraphs into each article. */
+const IN_ARTICLE_SLOT = "6028411120";
+
+/** Numeric AdSense ad-unit ids; the build env can override them. Without one, the page script still allows Auto ads. */
 export function articleAdSlot(placement: ArticleAdPlacement) {
   const value =
     placement === "sidebar"
       ? process.env.NEXT_PUBLIC_ADSENSE_ARTICLE_SIDEBAR_SLOT
       : placement === "top"
         ? process.env.NEXT_PUBLIC_ADSENSE_ARTICLE_TOP_SLOT
-        : process.env.NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT;
+        : process.env.NEXT_PUBLIC_ADSENSE_ARTICLE_SLOT || IN_ARTICLE_SLOT;
   const slot = (value || "").trim();
   return /^\d{6,20}$/.test(slot) ? slot : "";
 }
