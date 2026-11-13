@@ -20,7 +20,7 @@ import { getLiveBook, isPurchasable, canPreorder, restockProduct } from "@/lib/p
 import { pushInbox } from "@/lib/inbox";
 import { queueNotification } from "@/lib/notify";
 import { checkPincode } from "@/lib/fulfillment";
-import { commerceCharges, getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { commerceCharges, getOrderSettings, reasonOpen, shippingFeeFor } from "@/lib/integrations";
 
 const CART_KEY = "vgmf_cart";
 const ORDERS_KEY = "vgmf_orders";
@@ -609,6 +609,7 @@ export function submitCustomerRequest(order: Order, input: CustomerRequestInput)
   const settings = getOrderSettings();
   const rule = settings.returns.reasonRules.find((item) => item.label === input.reason);
   if (!rule) throw new Error("Choose a reason.");
+  if (!reasonOpen(rule, order, settings)) throw new Error("The time to report this issue has passed.");
   const items = input.items
     .map((pick) => {
       const line = order.items.find((item) => item.bookId === pick.bookId);
@@ -620,7 +621,7 @@ export function submitCustomerRequest(order: Order, input: CustomerRequestInput)
   const missing = rule.require.filter((kind) => !input.evidence[kind]?.length);
   if (missing.length) throw new Error("Add the evidence marked required.");
   if (input.resolution === "replacement" && !(settings.returns.replacementAllowed && rule.replacement)) throw new Error("Replacement is not available for this reason.");
-  if (input.resolution === "return_refund" && !settings.returns.enabled) throw new Error("Returns are not available.");
+  if (input.resolution === "return_refund" && !(settings.returns.enabled && settings.returns.returnForRefund)) throw new Error("Returns for refund are not available.");
   if (input.resolution === "refund") throw new Error("The item has to be sent back first.");
 
   const requestedAt = new Date().toISOString();

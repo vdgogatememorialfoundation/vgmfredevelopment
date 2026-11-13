@@ -1805,6 +1805,7 @@ export function OrderSettingsDesk() {
             <Check label="Offer replacements (wrong, damaged or defective items)" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
             <Text label="Return window (days after delivery)" type="number" value={value.returns.windowDays} onChange={(days) => set({ returns: { ...value.returns, windowDays: Number(days) || 0 } })} />
             <Text label="Return pickup charge for desk-opened returns (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
+            <Check label='Offer "Return for refund" to customers (off: replacement only)' checked={value.returns.returnForRefund} onChange={(returnForRefund) => set({ returns: { ...value.returns, returnForRefund } })} />
             <Check label="Customer can give a corrected address for a replacement" checked={value.returns.replacementAddressChange} onChange={(replacementAddressChange) => set({ returns: { ...value.returns, replacementAddressChange } })} />
             <div className="space-y-2">
               <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Customer reasons and required evidence</span>
@@ -1833,11 +1834,16 @@ export function OrderSettingsDesk() {
                         <input type="checkbox" checked={rule.replacement} onChange={(event) => update({ replacement: event.target.checked })} />
                         Free replacement
                       </label>
+                      <label className="flex items-center gap-1">
+                        Report within
+                        <input type="number" min={0} className="w-16 rounded border border-slate-300 px-1" value={rule.windowHours} onChange={(event) => update({ windowHours: Math.max(0, Number(event.target.value) || 0) })} />
+                        hours (0 = return window)
+                      </label>
                     </div>
                   </div>
                 );
               })}
-              <button type="button" className="text-xs font-semibold text-burgundy" onClick={() => set({ returns: { ...value.returns, reasonRules: [...value.returns.reasonRules, { label: "New reason", require: ["product"], replacement: false }] } })}>+ Add reason</button>
+              <button type="button" className="text-xs font-semibold text-burgundy" onClick={() => set({ returns: { ...value.returns, reasonRules: [...value.returns.reasonRules, { label: "New reason", require: ["product"], replacement: false, windowHours: 0 }] } })}>+ Add reason</button>
             </div>
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Desk return reasons (one per line)</span>

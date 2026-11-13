@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { classNames } from "@/lib/utils";
 import { getOrders, getReturnRequest, submitCustomerRequest, uploadReturnEvidence } from "@/lib/store";
-import { RETURN_EVIDENCE, canCustomerRequestReplacement, canCustomerReturn, customerOrderPolicyCopy } from "@/lib/integrations";
+import { RETURN_EVIDENCE, canCustomerRequestReplacement, canCustomerReturn, customerOrderPolicyCopy, reasonOpen } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
 import { statusDay } from "@/lib/delivery-expectation";
 import type { DeliveryAddress, Order, ReturnEvidenceKind, ReturnRequest, ReturnResolution } from "@/types";
@@ -45,7 +45,7 @@ export default function ReturnSection({ order, phone }: { order: Order; phone?: 
   const [busy, setBusy] = useState(false);
 
   const rule = rules.find((item) => item.label === reason);
-  const reasons = flow === "replacement" ? rules.filter((item) => item.replacement) : rules;
+  const reasons = (flow === "replacement" ? rules.filter((item) => item.replacement) : rules).filter((item) => reasonOpen(item, order, settings));
   const resolutions: ReturnResolution[] = [
     ...(canReturn ? (["return_refund"] as const) : []),
     ...(canReplace && rule?.replacement ? (["replacement"] as const) : []),
@@ -181,7 +181,10 @@ export default function ReturnSection({ order, phone }: { order: Order; phone?: 
               {reasons.map((item) => (
                 <label key={item.label} className="flex items-center gap-2 rounded-lg border border-border p-2 text-text-primary">
                   <input type="radio" name="return-reason" checked={reason === item.label} onChange={() => setReason(item.label)} />
-                  {item.label}
+                  <span>
+                    {item.label}
+                    {item.windowHours > 0 && <span className="block text-xs text-text-muted">Report within {item.windowHours % 24 ? `${item.windowHours} hours` : `${item.windowHours / 24} day${item.windowHours === 24 ? "" : "s"}`} of delivery</span>}
+                  </span>
                 </label>
               ))}
             </div>
@@ -332,7 +335,7 @@ export default function ReturnSection({ order, phone }: { order: Order; phone?: 
 
       <div className="mt-4 rounded-xl bg-warm-cream/60 p-3">
         <p className="font-semibold text-text-primary">{policy.title}</p>
-        <p className="mt-1">{policy.body}</p>
+        <p className="mt-1 whitespace-pre-line">{policy.body}</p>
       </div>
     </div>
   );

@@ -259,7 +259,8 @@ export interface OrderSettings {
     reasons: string[];
     /** Reasons customers pick, with the evidence each needs and whether it qualifies for a free replacement. */
     reasonRules: ReturnReasonRule[];
-    /** Offer "Refund to original payment method" without sending the item back. */
+    /** Customers may choose "Return for refund". Off: replacement only, as in the book terms. */
+    returnForRefund: boolean;
     /** Let the customer give a different address for the replacement copy. */
     replacementAddressChange: boolean;
   };
@@ -408,6 +409,8 @@ export interface ReturnReasonRule {
   require: ReturnEvidenceKind[];
   /** Our fault (wrong, damaged or defective item): a free replacement can be chosen. */
   replacement: boolean;
+  /** Hours after delivery to report this reason; 0 uses the return window. */
+  windowHours: number;
 }
 
 export const RETURN_EVIDENCE: { id: ReturnEvidenceKind; label: string }[] = [
@@ -418,11 +421,11 @@ export const RETURN_EVIDENCE: { id: ReturnEvidenceKind; label: string }[] = [
 ];
 
 export const DEFAULT_RETURN_REASONS: ReturnReasonRule[] = [
-  { label: "Received wrong book/product", require: ["product", "label"], replacement: true },
-  { label: "Received a different language", require: ["product", "label"], replacement: true },
-  { label: "Product damaged", require: ["product", "packaging", "label"], replacement: true },
-  { label: "Product defective", require: ["product"], replacement: true },
-  { label: "Other eligible issue", require: [], replacement: false },
+  { label: "Received wrong book/product", require: ["product"], replacement: true, windowHours: 72 },
+  { label: "Received a different language", require: ["product"], replacement: true, windowHours: 72 },
+  { label: "Product damaged", require: ["video", "product"], replacement: true, windowHours: 48 },
+  { label: "Product defective", require: ["product"], replacement: true, windowHours: 72 },
+  { label: "Other eligible issue", require: [], replacement: false, windowHours: 0 },
 ];
 
 export const defaultOrderSettings: OrderSettings = {
@@ -466,6 +469,7 @@ export const defaultOrderSettings: OrderSettings = {
     pickupReplacement: false,
     reasons: ["Damaged or defective item"],
     reasonRules: DEFAULT_RETURN_REASONS,
+    returnForRefund: false,
     replacementAddressChange: true,
   },
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
@@ -774,9 +778,11 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
               label: String(rule?.label ?? "").trim(),
               require: (Array.isArray(rule?.require) ? rule.require : []).filter((kind): kind is ReturnEvidenceKind => RETURN_EVIDENCE.some((item) => item.id === kind)),
               replacement: Boolean(rule?.replacement),
+              windowHours: Math.max(0, finiteNumber(rule?.windowHours, DEFAULT_RETURN_REASONS.find((item) => item.label === String(rule?.label ?? "").trim())?.windowHours ?? 0)),
             }))
             .filter((rule) => rule.label)
         : DEFAULT_RETURN_REASONS,
+      returnForRefund: Boolean(merged.returns?.returnForRefund),
       replacementAddressChange: merged.returns?.replacementAddressChange !== false,
     },
     refunds: {
@@ -958,8 +964,18 @@ export function customerCancellationRefund(order: Order, settings = getOrderSett
   return Math.max(0, paid - Math.max(0, order.platformFee ?? 0) - (settings.cancellation?.fee ?? 0) - (order.refundAmount ?? 0));
 }
 
+function deliveredAt(order: Order) {
+  return order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
+}
+
+/** Whether a reason can still be reported: its own hours after delivery, else the return window. */
+export function reasonOpen(rule: ReturnReasonRule, order: Order, settings = getOrderSettings(), now = Date.now()) {
+  const hours = rule.windowHours > 0 ? rule.windowHours : (order.returnableDays || settings.returns.windowDays) * 24;
+  return (now - Date.parse(deliveredAt(order))) / 36e5 <= hours;
+}
+
 export function canCustomerReturn(order?: Order, settings = getOrderSettings()) {
-  if (!order || !settings.returns.enabled || order.status !== "Delivered" || order.returnRequest) return false;
+  if (!order || !settings.returns.enabled || !settings.returns.returnForRefund || order.status !== "Delivered" || order.returnRequest) return false;
   if (order.deliveryMode === "store_pickup" && !settings.returns.pickupReturns) return false;
   const deliveredAt = order.history?.slice().reverse().find((entry) => entry.status === "Delivered")?.at ?? order.date;
   return (Date.now() - Date.parse(deliveredAt)) / 864e5 <= (order.returnableDays || settings.returns.windowDays);
@@ -988,16 +1004,33 @@ export function preorderAdvance(total: number, settings = getOrderSettings(), op
   return Math.min(total, Math.max(1, Math.round((fee + Math.min(rest, part)) * 100) / 100));
 }
 
+function windowText(hours: number, settings: OrderSettings) {
+  const total = hours > 0 ? hours : settings.returns.windowDays * 24;
+  return total % 24 ? `${total} hours` : `${total / 24} day${total === 24 ? "" : "s"}`;
+}
+
 export function customerOrderPolicyCopy(settings = getOrderSettings()) {
-  const replacement = "If an item arrives damaged, share photos and request a replacement. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.";
+  const rules = settings.returns.replacementAllowed ? settings.returns.reasonRules.filter((rule) => rule.replacement) : [];
+  const replacement = rules.length
+    ? [
+        ...rules.map((rule) => {
+          const proof = rule.require.map((kind) => RETURN_EVIDENCE.find((item) => item.id === kind)?.label.toLowerCase()).filter(Boolean).join(", ");
+          return `${rule.label}: report within ${windowText(rule.windowHours, settings)} of delivery${proof ? ` with ${proof}` : ""}.`;
+        }),
+        "The desk accepts or rejects each request. An accepted request gets a free return pickup and, after the item is checked, a free replacement with no charge for the book or shipping.",
+      ].join("\n")
+    : "";
+  const returns = settings.returns.enabled && settings.returns.returnForRefund
+    ? "Delivered orders can be returned free of charge within the return window; the desk accepts or declines the request by email."
+    : "Delivered books are not refunded; wrong or damaged copies are replaced as below.";
   if (!settings.cancellation?.enabled) {
-    return { title: "Replacements", body: `Orders cannot be cancelled from your account. ${settings.returns.enabled ? "Delivered orders can be returned free of charge within the return window; the desk accepts or declines the request by email." : "Orders cannot be returned."} ${replacement}` };
+    return { title: "Replacements", body: [`Orders cannot be cancelled from your account. ${returns}`, replacement].filter(Boolean).join("\n") };
   }
   const until = settings.cancellation.allowedUntil;
   const stage = until === "Ordered" ? "before it is packed" : until === "Shipped" ? "until it is out for delivery" : "until the courier picks it up";
   const hours = settings.cancellation.windowHours > 0 ? ` and within ${settings.cancellation.windowHours} hours of ordering` : "";
   const fee = settings.cancellation.fee > 0 ? ` A cancellation fee of ₹${settings.cancellation.fee} and the platform fee are kept from the refund.` : " The platform fee is kept from the refund.";
-  return { title: "Cancellations & replacements", body: `You can cancel an order from its page ${stage}${hours}.${fee} ${settings.returns.enabled ? "Delivered orders can be returned free of charge within the return window; the desk accepts or declines the request by email." : "Orders cannot be returned."} ${replacement}` };
+  return { title: "Cancellations & replacements", body: [`You can cancel an order from its page ${stage}${hours}.${fee}`, returns, replacement].filter(Boolean).join("\n") };
 }
 
 export function mask(value: string) {

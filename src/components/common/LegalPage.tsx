@@ -36,7 +36,7 @@ export default function LegalPage({
             {sections.map((section) => (
               <div key={section.title}>
                 <h2 className="heading-3 mb-3">{section.title}</h2>
-                <p className="text-body">{section.body}</p>
+                <p className="text-body whitespace-pre-line">{section.body}</p>
               </div>
             ))}
           </div>
