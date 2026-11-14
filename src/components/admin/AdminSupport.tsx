@@ -1,6 +1,7 @@
 "use client";
 
 import { publishLiveSite } from "@/lib/mobile-publish";
+import { queueNotification } from "@/lib/notify";
 import { FOUNDATION_NAME, publicStaffName } from "@/lib/public-name";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -710,6 +711,8 @@ function FaqManager() {
 
 export function EmailSection() {
   const [outbox, setOutbox] = useState(() => getOutbox());
+  const [mailSearch, setMailSearch] = useState("");
+  const shownMail = outbox.filter((mail) => !mailSearch.trim() || `${mail.to} ${mail.subject} ${mail.template}`.toLowerCase().includes(mailSearch.trim().toLowerCase()));
   const [abandon, setAbandon] = useState({ email: "", items: "" });
   const [note, setNote] = useState("");
   const refresh = () => setOutbox(getOutbox());
@@ -746,11 +749,14 @@ export function EmailSection() {
       </Panel>
 
       <Panel title={`Outbox (${outbox.length})`} description="Emails dispatched through ZeptoMail (records persist in-session/demo storage).">
-        {outbox.length === 0 ? (
+        <div className="mb-3 max-w-sm">
+          <TextInput value={mailSearch} onChange={(e) => setMailSearch(e.target.value)} placeholder="Search by customer email, subject or type" />
+        </div>
+        {shownMail.length === 0 ? (
           <EmptyState text="No emails sent yet." />
         ) : (
           <ul className="space-y-2">
-            {outbox.map((mail) => (
+            {shownMail.map((mail) => (
               <li key={mail.id} className="rounded-xl border border-border p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-text-primary">To: {mail.to}</p>
@@ -759,6 +765,17 @@ export function EmailSection() {
                 <p className="mt-1 text-text-primary">{mail.subject}</p>
                 <p className="mt-1 whitespace-pre-line text-xs text-text-muted">{mail.body}</p>
                 <p className="mt-1 text-[11px] text-text-muted">{mail.template} · {formatDateTime(mail.sentAt)}</p>
+                <button
+                  type="button"
+                  className="mt-1 text-xs font-semibold text-burgundy underline"
+                  onClick={() => {
+                    const record = mail as typeof mail & { phone?: string; name?: string; params?: string[] };
+                    queueNotification({ to: record.to, subject: record.subject, template: record.template, body: record.body, phone: record.phone, name: record.name, params: record.params });
+                    refresh();
+                  }}
+                >
+                  Resend to customer
+                </button>
               </li>
             ))}
           </ul>

@@ -21,9 +21,17 @@ export function promiseFor(rate: CourierRate, courierAt: number, samePincode: bo
   if (readyMinutes > (hour || 0) * 60 + (minute || 0)) dispatchDay += 1;
   // The store does not pack or hand over on its weekly offs and holidays.
   const calendar = getOrderSettings();
-  for (let guard = 0; guard < 60 && !isStoreWorkingDay(dispatchDay * DAY_MS + 12 * 60 * 60 * 1000 - IST_MS, calendar); guard += 1) dispatchDay += 1;
+  // Couriers do not pick up on Sundays either, so a Sunday hand-over moves to the next working day.
+  const sunday = (dayIndex: number) => new Date(dayIndex * DAY_MS).getUTCDay() === 0;
+  for (let guard = 0; guard < 60 && (!isStoreWorkingDay(dispatchDay * DAY_MS + 12 * 60 * 60 * 1000 - IST_MS, calendar) || (!rate.lastMile && sunday(dispatchDay))); guard += 1) dispatchDay += 1;
   const transit = samePincode ? (rate.lastMile || rate.etaDays === 0 ? 0 : 1) : Math.max(1, rate.etaDays);
-  let day = dispatchDay + transit;
+  let day = dispatchDay;
+  // Courier transit days are counted on courier working days (no Sunday deliveries); hyperlocal runs every day.
+  for (let left = transit; left > 0; ) {
+    day += 1;
+    if (rate.lastMile || !sunday(day)) left -= 1;
+  }
+  if (!rate.lastMile) while (sunday(day)) day += 1;
   if (!samePincode && Number.isFinite(courierAt)) day = Math.max(day, istDayIndex(courierAt));
   const today = istDayIndex(now);
   const at = day * DAY_MS + 12 * 60 * 60 * 1000 - IST_MS;

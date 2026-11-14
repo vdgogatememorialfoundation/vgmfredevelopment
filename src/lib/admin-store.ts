@@ -845,16 +845,17 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
   if (amount != null && amount > cap + 0.001) throw new Error(`At most ₹${cap.toLocaleString("en-IN")} can still be refunded on this order.`);
   const refundAmount = Math.round(Math.min(amount ?? cap, cap) * 100) / 100;
   if (refundAmount <= 0) throw new Error("Nothing left to refund. The platform fee is kept unless you tick \"Also refund the platform fee\".");
-  const balance = adjustStoreCredit(email, refundAmount, note ?? `Refund for order ${order.id}`, order.id);
+  const txn = `SC${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
+  const balance = adjustStoreCredit(email, refundAmount, `${note ?? `Refund for order ${order.id}`} · Transaction ID ${txn}`, order.id);
   const next: Order = withHistory(
     {
       ...order,
       paymentStatus: (order.refundAmount ?? 0) + refundAmount >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", reference: txn, note, by: currentActor() }],
     },
     "Store credit issued",
-    `₹${refundAmount} · balance ₹${balance}`
+    `₹${refundAmount} · balance ₹${balance} · Transaction ID ${txn}`
   );
   updateOrderInStore(next);
   sendEmail({

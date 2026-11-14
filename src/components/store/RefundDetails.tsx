@@ -46,7 +46,7 @@ export function refundExpectedCreditLabel(refund: RefundRecord) {
 }
 
 export function refundStateLabel(refund: RefundRecord) {
-  if (refund.destination === "store_credit") return "Added to store credit";
+  if (refund.destination === "store_credit") return `Added to store credit${refund.reference ? ` · Transaction ID ${refund.reference}` : ""}`;
   if (!refund.gatewayRefundId) return "Recorded by the Foundation";
   if (refund.status === "processed") return refundExpectedCredit(refund)?.done ? "Credited" : "Refund processed";
   if (refund.status === "failed") return "Failed";
