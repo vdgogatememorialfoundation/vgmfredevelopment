@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { commerceViewer } from "@/lib/server/commerce-viewer";
+import { commerceViewer, customerViewer } from "@/lib/server/commerce-viewer";
 import { addWalletEntries, walletFor, type WalletEntry } from "@/lib/server/shop-wallet";
 import { bearerToken, sessionFromToken } from "@/lib/server/mobile-store";
 
@@ -10,7 +10,9 @@ export async function GET(request: NextRequest) {
   const viewer = commerceViewer(request);
   const asked = request.nextUrl.searchParams.get("email")?.toLowerCase() || "";
   const app = viewer.email ? null : sessionFromToken(bearerToken(request.headers.get("authorization")));
-  const email = viewer.portal && asked ? asked : viewer.email || app?.email?.toLowerCase() || "";
+  // A staff sign-in in the same browser must not replace the customer's own wallet.
+  const own = customerViewer(request)?.email || viewer.email;
+  const email = viewer.portal && asked ? asked : own || app?.email?.toLowerCase() || "";
   if (!email) return NextResponse.json({ ok: true, balance: 0, entries: [] }, { headers: { "cache-control": "no-store" } });
   return NextResponse.json({ ok: true, ...walletFor(email) }, { headers: { "cache-control": "no-store" } });
 }

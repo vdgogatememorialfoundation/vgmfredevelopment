@@ -19,7 +19,7 @@ import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment,
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
 import { clearSession, findAccountByIdentifier, getSession, isPortalRole, saveAccount, setSession } from "@/lib/auth";
-import { commitPreorderStock, commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
+import { commitPreorderStock, commitStockForOrder, getLiveBooks, preorderDeliveryDate, releaseStockForOrder } from "@/lib/product-data";
 import { matchesBarcode, matchesTag } from "@/lib/barcode";
 import QRCode from "qrcode";
 import { sameShipmentSlot } from "@/lib/shipment-slot";
@@ -585,11 +585,13 @@ export function createAdminOrder(input: {
         sku: book.sku,
         batchNo: book.batchNo,
         preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
+        releaseDate: book.preorder?.enabled && book.stock <= 0 ? book.preorder?.releaseDate : undefined,
       };
     })
     .filter(Boolean) as OrderItem[];
 
   if (orderItems.length === 0) throw new Error("No valid items selected.");
+  const preorderBook = live.find((book) => orderItems.some((item) => item.preorder && item.bookId === book.id));
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = orderItems.reduce(
@@ -640,6 +642,7 @@ export function createAdminOrder(input: {
     },
   };
   order.plan = computeOrderPlan(order);
+  if (order.deliveryMode !== "store_pickup") order.eta = preorderBook ? preorderDeliveryDate(preorderBook) : formatDate(order.plan.deliveredBy);
   if (commitStockForOrder(order)) order.stockCommitted = true;
   saveOrder(order);
   sendEmail({
@@ -652,7 +655,7 @@ export function createAdminOrder(input: {
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\n${
       order.deliveryMode === "store_pickup"
         ? pickupInstructions()
-        : `Expected delivery: ${formatDate(order.plan.deliveredBy)}`
+        : `${preorderBook ? "Tentative delivery" : "Expected delivery"}: ${order.eta}`
     }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return order;

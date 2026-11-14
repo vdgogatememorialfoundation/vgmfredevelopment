@@ -235,7 +235,15 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                     <div className="flex justify-between gap-4">
                       <dt className="text-text-muted">Expected delivery</dt>
                       <dd className="text-right font-medium text-emerald-700">
-                        {deliveryDatePhrase(agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date))) || "Within 5 business days"}
+                        {(() => {
+                          const preorder = Boolean(order.preorderPayment) || order.items.some((item) => item.preorder);
+                          const booked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.courier));
+                          // Same rule as the tracking timeline: pre-order dates stay hidden until a courier is booked when "show pre-order dates" is off.
+                          if (orderSettings.hideDeliveryDates || (preorder && !orderSettings.showPreorderStepDates)) {
+                            return (booked && deliveryDatePhrase(shipment?.expectedBy ?? "")) || "Shared once the order is dispatched";
+                          }
+                          return deliveryDatePhrase(agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date))) || (preorder ? "Shared once the book is ready" : "Within 5 business days");
+                        })()}
                       </dd>
                     </div>
                   )}
