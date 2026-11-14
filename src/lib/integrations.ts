@@ -1048,7 +1048,7 @@ export function customerOrderPolicyCopy(settings = getOrderSettings()) {
     return { title: "Replacements", body: [`Orders cannot be cancelled from your account. ${returns}`, late, replacement].filter(Boolean).join("\n") };
   }
   const until = settings.cancellation.allowedUntil;
-  const stage = until === "Ordered" ? "before it is packed" : until === "Shipped" ? "until it is out for delivery" : "until the courier picks it up";
+  const stage = until === "Ordered" ? "before it is packed" : "until the courier picks it up";
   const hours = settings.cancellation.windowHours > 0 ? ` and within ${settings.cancellation.windowHours} hours of ordering` : "";
   const fee = settings.cancellation.fee > 0 ? ` A cancellation fee of ₹${settings.cancellation.fee} and the platform fee are kept from the refund.` : " The platform fee is kept from the refund.";
   return { title: "Cancellations & replacements", body: [`You can cancel an order from its page ${stage}${hours}.${fee}`, late, returns, replacement].filter(Boolean).join("\n") };

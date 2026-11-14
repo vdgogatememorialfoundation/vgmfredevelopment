@@ -1871,10 +1871,9 @@ export function OrderSettingsDesk() {
             <Check label="Customers can cancel" checked={value.cancellation.enabled} onChange={(enabled) => set({ cancellation: { ...value.cancellation, enabled } })} />
             <label className="block">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Customers can cancel</span>
-              <select className={input} value={value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
+              <select className={input} value={value.cancellation.allowedUntil === "Shipped" ? "Packed" : value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
                 <option value="Ordered">Until packing (not once packed)</option>
                 <option value="Packed">Until shipped (not once the courier picks it up)</option>
-                <option value="Shipped">Until out for delivery (even after shipping)</option>
               </select>
             </label>
             <Text label="Within hours of ordering (0 = any time)" type="number" value={value.cancellation.windowHours} onChange={(hours) => set({ cancellation: { ...value.cancellation, windowHours: Number(hours) || 0 } })} />
