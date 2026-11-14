@@ -31,6 +31,12 @@ function writeJSON(key: string, value: unknown) {
 }
 
 const PENDING_KEY = "vgmf_unpublished_products";
+const PENDING_FIELDS_KEY = "vgmf_unpublished_product_fields";
+
+/** The fields each unpublished product changed here; the live site applies only these over its own copy. */
+export function pendingProductFields(): Record<string, string[]> {
+  return readJSON<Record<string, string[]>>(PENDING_FIELDS_KEY, {});
+}
 
 /** Products saved in this browser that the live site has not received yet. */
 export function pendingProductIds(): string[] {
@@ -41,11 +47,25 @@ export function clearPendingProducts(ids: string[]) {
   if (typeof window === "undefined" || !ids.length) return;
   const sent = new Set(ids);
   window.localStorage.setItem(PENDING_KEY, JSON.stringify(pendingProductIds().filter((id) => !sent.has(id))));
+  const fields = pendingProductFields();
+  for (const id of ids) delete fields[id];
+  window.localStorage.setItem(PENDING_FIELDS_KEY, JSON.stringify(fields));
 }
 
-function markProductPending(id: string) {
+const UNTRACKED = new Set(["updatedAt", "createdAt"]);
+
+function markProductPending(id: string, before: Book | undefined, after: Book) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(PENDING_KEY, JSON.stringify(Array.from(new Set([id, ...pendingProductIds()])).slice(0, 500)));
+  const fields = pendingProductFields();
+  const changed = before
+    ? Array.from(new Set([...Object.keys(before), ...Object.keys(after)])).filter(
+        (key) => !UNTRACKED.has(key) && JSON.stringify((before as unknown as Record<string, unknown>)[key]) !== JSON.stringify((after as unknown as Record<string, unknown>)[key])
+      )
+    : ["*"];
+  const merged = Array.from(new Set([...(fields[id] ?? []), ...changed]));
+  fields[id] = merged.includes("*") ? ["*"] : merged;
+  window.localStorage.setItem(PENDING_FIELDS_KEY, JSON.stringify(fields));
 }
 
 export function getOverrides(): ProductOverride[] {
@@ -192,7 +212,7 @@ export function saveProduct(book: Book) {
   });
   const list = getCustomBooks().filter((item) => item.id !== book.id);
   list.unshift(record);
-  markProductPending(record.id);
+  markProductPending(record.id, before, record);
   writeJSON(CUSTOM_KEY, list);
   writeJSON(OVERRIDES_KEY, getOverrides().filter((o) => o.bookId !== book.id));
   writeJSON(DELETED_KEY, getDeletedIds().filter((id) => id !== book.id));

@@ -20,7 +20,7 @@ import { siteConfig } from "@/lib/constants";
 import { getGallery } from "@/lib/gallery";
 import { defaultMobileAppConfig, getMobileAppConfig, type MobileAppConfig } from "@/lib/mobile-config";
 import { getPolicies } from "@/lib/policies";
-import { clearPendingProducts, getAllProducts, pendingProductIds } from "@/lib/product-data";
+import { clearPendingProducts, getAllProducts, pendingProductFields, pendingProductIds } from "@/lib/product-data";
 import { getLiveCmsPages } from "@/lib/cms-pages";
 import { getSiteVisibility } from "@/lib/site-visibility";
 import { getPlatformCountries } from "@/lib/platform-countries";
@@ -228,7 +228,7 @@ export function publishLiveSite(options: { removed?: Record<string, string[]> } 
   return fetch("/api/mobile/publish", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ partial: true, basedOn: appliedFeedAt(), sections: body, editedBooks, removed: options.removed }),
+    body: JSON.stringify({ partial: true, basedOn: appliedFeedAt(), sections: body, editedBooks, editedFields: editedBooks.length ? pendingProductFields() : undefined, removed: options.removed }),
   })
     .then(async (response) => {
       const data = (await response.json().catch(() => null)) as {

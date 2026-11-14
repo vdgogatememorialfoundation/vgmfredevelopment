@@ -5,7 +5,7 @@ import { saveMobileEmailCreds, type MobileEmailCreds } from "@/lib/server/mobile
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; basedOn?: string; sections?: Partial<MobileFeed>; editedBooks?: string[]; removed?: Record<string, string[]> };
+type PublishBody = MobileFeed & { email?: MobileEmailCreds; partial?: boolean; force?: boolean; basedOn?: string; sections?: Partial<MobileFeed>; editedBooks?: string[]; editedFields?: Record<string, string[]>; removed?: Record<string, string[]> };
 
 /** Items Admin deleted on purpose may empty a list; the collapse guard only stops accidental wipes. */
 function onlyRemoved(current: unknown, incoming: unknown, removed?: string[]) {
@@ -67,9 +67,22 @@ function mergePolicies(current: FeedPolicies, incoming: FeedPolicies): FeedPolic
 }
 
 /** Products the sending browser saved go live as sent, stamped with server time so device clocks never decide. */
-function withEditedBooks(base: FeedBooks, incoming: FeedBooks, edited: Set<string>): FeedBooks {
+function withEditedBooks(base: FeedBooks, incoming: FeedBooks, edited: Set<string>, live: FeedBooks, fields: Record<string, string[]> = {}): FeedBooks {
   const at = new Date().toISOString();
-  const mine = new Map(incoming.filter((book) => edited.has(book.id)).map((book) => [book.id, { ...book, updatedAt: at }]));
+  const liveById = new Map(live.map((book) => [book.id, book]));
+  // Only the fields changed on that device are applied, so a stock change from an old copy can't undo pre-order, price or other edits.
+  const applied = (book: FeedBooks[number]) => {
+    const keys = fields[book.id];
+    const server = liveById.get(book.id);
+    if (!server || !Array.isArray(keys) || keys.includes("*")) return { ...book, updatedAt: at };
+    const next = { ...server } as unknown as Record<string, unknown>;
+    for (const key of keys) {
+      if (key in (book as unknown as Record<string, unknown>)) next[key] = (book as unknown as Record<string, unknown>)[key];
+      else delete next[key];
+    }
+    return { ...next, updatedAt: at } as unknown as FeedBooks[number];
+  };
+  const mine = new Map(incoming.filter((book) => edited.has(book.id)).map((book) => [book.id, applied(book)]));
   const kept = base.map((book) => mine.get(book.id) ?? book);
   const known = new Set(base.map((book) => book.id));
   return [...Array.from(mine.values()).filter((book) => !known.has(book.id)), ...kept];
@@ -106,7 +119,7 @@ export async function POST(request: NextRequest) {
       const edited = new Set(Array.isArray(body.editedBooks) ? body.editedBooks.map(String) : []);
       if (key === "books" && edited.size && Array.isArray(value)) {
         const base = stale && Array.isArray(current.books) ? mergeBooks(current.books, value as FeedBooks, basedOn) : (value as FeedBooks);
-        sections[key] = withEditedBooks(base, value as FeedBooks, edited);
+        sections[key] = withEditedBooks(base, value as FeedBooks, edited, Array.isArray(current.books) ? current.books : [], body.editedFields && typeof body.editedFields === "object" ? body.editedFields : {});
       } else if (stale && key === "books" && Array.isArray(value) && Array.isArray(current.books)) sections[key] = mergeBooks(current.books, value as FeedBooks, basedOn);
       else if (stale && key === "policies" && value && typeof value === "object") sections[key] = mergePolicies(current.policies ?? {}, value as FeedPolicies);
       else if (stale) rejected.push(key);

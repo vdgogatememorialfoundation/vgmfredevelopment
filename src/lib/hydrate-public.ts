@@ -8,7 +8,8 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { videos as seededVideos } from "@/data/videos";
 import { books as seededBooks } from "@/data/books";
 import { getOrderSettings, publicOrderSettings, saveOrderSettings } from "@/lib/integrations";
-import { pendingProductIds } from "@/lib/product-data";
+import { clearPendingProducts, pendingProductFields, pendingProductIds } from "@/lib/product-data";
+import { getSession, isPortalRole } from "@/lib/auth";
 import { appliedFeedAt, emptyFeedFallback, hasFeedBaseline, recordFeedBaseline, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
 import type { Book, Flyer } from "@/types";
@@ -224,11 +225,21 @@ function installPublishedProducts(feed: MobileFeed) {
   }
   const localById = new Map(local.map((book) => [book.id, book]));
   // A product saved here (price, stock…) is kept until this browser has published it, whatever the clocks say.
+  // Only Admin/staff browsers publish; a customer's checkout stock change stays local, so their copy always follows the server.
+  const canPublish = isPortalRole(getSession("portal")?.role);
+  if (!canPublish && pendingProductIds().length) clearPendingProducts(pendingProductIds());
   const pending = new Set(pendingProductIds());
-  const newer = (book?: Book) => Boolean(book && (pending.has(book.id) || (book.updatedAt && book.updatedAt > feedAt)));
+  const fields = pendingProductFields();
+  const newer = (book?: Book) => Boolean(canPublish && book && (pending.has(book.id) || (book.updatedAt && book.updatedAt > feedAt)));
   const merged = books.map((book) => {
     const mine = localById.get(book.id);
-    if (mine && pending.has(mine.id)) return mine;
+    if (mine && pending.has(mine.id)) {
+      const keys = fields[mine.id];
+      if (!Array.isArray(keys) || keys.includes("*")) return mine;
+      const next = { ...book } as unknown as Record<string, unknown>;
+      for (const key of keys) next[key] = (mine as unknown as Record<string, unknown>)[key];
+      return next as unknown as Book;
+    }
     return mine && newer(mine) && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
   });
   const unpublished = local.filter((book) => !present.has(book.id) && newer(book));
