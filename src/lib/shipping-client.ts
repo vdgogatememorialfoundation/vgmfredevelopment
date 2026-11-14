@@ -896,9 +896,16 @@ export async function reallocateCourier(orderId: string, choice?: CourierRate) {
 }
 
 /** Creates a reverse pickup on Shiprocket (or iThink) for a customer return. */
-export async function createReturnShipment(orderId: string, provider: "shiprocket" | "ithink" = "shiprocket") {
+export async function createReturnShipment(orderId: string, preferred?: "shiprocket" | "ithink") {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
+  // The reverse pickup goes through the aggregator that delivered the order.
+  const delivered = getShipments().find((shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled");
+  const via = preferred ?? delivered?.provider ?? "shiprocket";
+  if (via !== "shiprocket" && via !== "ithink") {
+    throw new Error(`Reverse pickup through ${label(via)} is not connected yet. Book it on the ${label(via)} portal and use Enter return AWB manually.`);
+  }
+  const provider: "shiprocket" | "ithink" = via;
   const settings = getIntegrations();
   const choice: CourierRate = {
     provider,
@@ -937,6 +944,7 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
     labelUrl: result.labelUrl || undefined,
     courierCost: result.courierCost,
     note: `Return booked on ${label(provider)}. AWB ${result.awb}.`,
+    provider,
   };
 }
 

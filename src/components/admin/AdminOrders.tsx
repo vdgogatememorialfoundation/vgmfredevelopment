@@ -1864,7 +1864,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 ) : null}
                 {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)}{returnRequest.returnCharges ? ` after ₹${returnRequest.returnCharges} pickup charge` : " · no charge to the customer"}.</p>}
                 <div className="flex flex-wrap gap-2">
-                  {returnRequest.status === "Pending Review" && returnRequest.kind === "return" && (
+                  {(returnRequest.status === "Pending Review" || returnRequest.status === "Rejected") && returnRequest.kind === "return" && (
                     <>
                       <Button variant="success" onClick={() => run("rt", () => {
                         reviewReplacementRequest(order.id, { accept: true, note: "Return accepted." });
@@ -1880,7 +1880,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       }}>Cancel return</Button>
                     </>
                   )}
-                  {returnRequest.status === "Pending Review" && returnRequest.kind === "replacement" && (
+                  {(returnRequest.status === "Pending Review" || returnRequest.status === "Rejected") && returnRequest.kind === "replacement" && (
                     <>
                       <Button variant="success" onClick={() => run("rt", () => {
                         reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
@@ -1904,7 +1904,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       const created = await createReturnShipment(order.id);
                       patchOrder(order.id, {
                         returnShipment: {
-                          provider: "shiprocket",
+                          provider: created.provider,
                           live: created.live,
                           awb: created.awb,
                           courierName: created.courierName,
@@ -1927,7 +1927,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       return created.note ?? `Return pickup booked. AWB ${created.awb}.`;
                     })}>Create return AWB & label</Button>
                   )}
-                  {returnRequest.status === "Return Approved" && returnRequest.kind === "replacement" && (
+                  {returnRequest.status === "Return Approved" && (
                     <Button variant="ghost" onClick={() => {
                       const awb = window.prompt("Return AWB / tracking number")?.trim();
                       if (!awb) return;
@@ -1935,7 +1935,13 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       const labelUrl = window.prompt("Link to the return label (optional)")?.trim() || undefined;
                       run("rt", () => {
                         patchOrder(order.id, { returnShipment: { provider: "local", live: false, awb, courierName, createdAt: new Date().toISOString(), labelUrl } }, `Return AWB ${awb} entered`);
-                        advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${awb} · ${courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                        if (returnRequest.kind === "replacement") advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${awb} · ${courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                        else updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                        try {
+                          emailReturnLabel(order.id);
+                        } catch {
+                          /* the label can be emailed from the return box */
+                        }
                         return `Return AWB ${awb} shared with the customer.`;
                       });
                     }}>Enter return AWB manually</Button>
@@ -1955,6 +1961,29 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       return "Marked as picked up.";
                     })}>Mark picked up</Button>
                   )}
+                  {order.returnShipment?.awb && !returnRequest.claim && (
+                    <Button variant="ghost" onClick={() => {
+                      const note = window.prompt("Claim reason (e.g. wrong item returned, item missing, damaged in transit)")?.trim();
+                      if (!note) return;
+                      const amount = Number(window.prompt("Claim amount ₹ (optional)") || 0) || undefined;
+                      run("rt", () => {
+                        updateReturnRequest(order.id, { claim: { at: new Date().toISOString(), note, status: "Open", amount } });
+                        return `Claim recorded. Raise it on the ${bookedViaLabel(order.returnShipment?.provider)} portal for AWB ${order.returnShipment?.awb} with the photos.`;
+                      });
+                    }}>Raise claim</Button>
+                  )}
+                  {returnRequest.claim && (
+                    <span className="flex flex-wrap items-center gap-2 text-xs">
+                      <b>Claim {returnRequest.claim.status}</b> · {returnRequest.claim.note}{returnRequest.claim.amount ? ` · ₹${returnRequest.claim.amount}` : ""}
+                      {returnRequest.claim.status === "Open" && (
+                        <>
+                          <Button variant="ghost" onClick={() => run("rt", () => { updateReturnRequest(order.id, { claim: { ...returnRequest.claim!, status: "Settled" } }); return "Claim marked settled."; })}>Mark settled</Button>
+                          <Button variant="ghost" onClick={() => run("rt", () => { updateReturnRequest(order.id, { claim: { ...returnRequest.claim!, status: "Rejected" } }); return "Claim marked rejected."; })}>Mark rejected</Button>
+                        </>
+                      )}
+                    </span>
+                  )}
+                  {returnRequest.returnMethod && <span className="text-xs text-text-muted">Customer chose: {returnRequest.returnMethod === "self" ? "ships it back themselves" : "Foundation pickup"}</span>}
                   {returnRequest.kind === "replacement" && ["Picked Up", "Pickup Scheduled"].includes(returnRequest.status) && !returnRequest.replacementOrderId && (
                     <Button variant="success" onClick={() => {
                       if (!window.confirm("Has the defective item arrived and been checked? This places the free replacement order.")) return;
@@ -1990,7 +2019,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     const created = await createReturnShipment(order.id);
                     patchOrder(order.id, {
                       returnShipment: {
-                        provider: "shiprocket",
+                        provider: created.provider,
                         live: created.live,
                         awb: created.awb,
                         courierName: created.courierName,

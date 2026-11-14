@@ -10,7 +10,7 @@ import OrderTrackingPreview from "@/components/store/OrderTrackingPreview";
 import OrderAlertsToggle from "@/components/store/OrderAlertsToggle";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getOrdersForAccount, purgeSampleOrders } from "@/lib/store";
+import { getBookById, getOrdersForAccount, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 
 export default function OrdersPage() {
@@ -61,11 +61,12 @@ export default function OrdersPage() {
                   className="flex w-full items-center gap-4 p-5 text-left transition hover:bg-warm-cream/40"
                 >
                   <span className="shrink-0 overflow-hidden rounded-xl">
-                    <MediaPlaceholder
-                      variant="book"
-                      label={first?.title ?? "Book"}
-                      aspectClassName="aspect-[3/4] w-16"
-                    />
+                    {first && getBookById(first.bookId)?.coverImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={getBookById(first.bookId)?.coverImage} alt={first.title} className="aspect-[3/4] w-16 object-cover" />
+                    ) : (
+                      <MediaPlaceholder variant="book" label={first?.title ?? "Book"} aspectClassName="aspect-[3/4] w-16" />
+                    )}
                   </span>
 
                   <span className="min-w-0 flex-1">

@@ -836,6 +836,10 @@ export interface ReturnRequest {
   evidence?: Partial<Record<ReturnEvidenceKind, string[]>>;
   /** Address for the replacement copy when it differs from the order address. */
   replacementAddress?: DeliveryAddress;
+  /** How the item comes back: the Foundation books a pickup, or the customer ships it within the window. */
+  returnMethod?: "pickup" | "self";
+  /** Claim the desk raised with the courier/aggregator, e.g. a wrong item came back. */
+  claim?: { at: string; note: string; status: "Open" | "Settled" | "Rejected"; amount?: number; by?: string };
   stages: ShipmentEvent[];
 }
 

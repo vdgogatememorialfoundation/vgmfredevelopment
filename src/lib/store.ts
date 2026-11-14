@@ -367,6 +367,22 @@ export function updateReturnRequest(orderId: string, update: Partial<ReturnReque
   return next;
 }
 
+/** The customer sends a declined request back to the desk for another look. */
+export function resendCustomerRequest(orderId: string, note?: string) {
+  const current = getReturnRequest(orderId);
+  if (!current || current.status !== "Rejected") throw new Error("Only a declined request can be sent again.");
+  return updateReturnRequest(orderId, {
+    status: "Pending Review",
+    requestedAt: new Date().toISOString(),
+    note: note?.trim() || current.note,
+    stages: current.stages.map((stage) => (stage.id === "decision" ? { ...stage, reached: false, detail: undefined } : stage)),
+  });
+}
+
+export function chooseReturnMethod(orderId: string, method: "pickup" | "self") {
+  return updateReturnRequest(orderId, { returnMethod: method });
+}
+
 /** Records each replacement-order step on the original request and tells the customer. */
 export function syncReplacementProgress(order: Order) {
   const parentId = order.replacementOf;
@@ -694,7 +710,7 @@ export function reviewReplacementRequest(
 ): ReturnRequest {
   const current = getReturnRequest(orderId);
   if (!current) throw new Error("No request is waiting on this order.");
-  if (current.status !== "Pending Review") throw new Error("This request has already been reviewed.");
+  if (current.status !== "Pending Review" && current.status !== "Rejected") throw new Error("This request has already been reviewed.");
   const now = new Date().toISOString();
   if (current.kind === "return") {
     const source = getOrders().find((order) => order.id === orderId);

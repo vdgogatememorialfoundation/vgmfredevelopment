@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { classNames } from "@/lib/utils";
-import { getOrders, getReturnRequest, submitCustomerRequest, uploadReturnEvidence } from "@/lib/store";
+import { chooseReturnMethod, getOrders, getReturnRequest, resendCustomerRequest, submitCustomerRequest, uploadReturnEvidence } from "@/lib/store";
 import { RETURN_EVIDENCE, canCustomerRequestReplacement, canCustomerReturn, customerOrderPolicyCopy, reasonOpen } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
 import { statusDay } from "@/lib/delivery-expectation";
@@ -342,6 +342,7 @@ export default function ReturnSection({ order, phone }: { order: Order; phone?: 
 }
 
 function ReplacementStatus({ request, order }: { request: ReturnRequest; order: Order }) {
+  const [note, setNote] = useState("");
   const tone =
     request.status === "Rejected"
       ? "bg-red-50 text-red-700"
@@ -370,6 +371,25 @@ function ReplacementStatus({ request, order }: { request: ReturnRequest; order: 
         {request.resolution && <p className="mt-1">Resolution: {RESOLUTION_LABEL[request.resolution]}</p>}
         {request.note && <p className="mt-1">{request.note}</p>}
         {request.decisionNote && request.status !== "Pending Review" && <p className="mt-1">{request.decisionNote}</p>}
+        {request.status === "Rejected" && (
+          <button type="button" className={`${outline} mt-2`} onClick={() => { try { resendCustomerRequest(order.id); setNote("Request sent again. The desk will review it."); } catch (error) { setNote((error as Error).message); } }}>
+            Send the request again
+          </button>
+        )}
+        {(request.status === "Return Approved" || request.status === "Accepted") && !back?.awb && (
+          <div className="mt-3">
+            <p className="font-semibold text-text-primary">How will the item come back?</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className={request.returnMethod === "pickup" ? primary : outline} onClick={() => { chooseReturnMethod(order.id, "pickup"); setNote("The Foundation will book a pickup and share the AWB label."); }}>
+                Foundation arranges pickup
+              </button>
+              <button type="button" className={request.returnMethod === "self" ? primary : outline} onClick={() => { chooseReturnMethod(order.id, "self"); setNote("Ship it to the Foundation within the return window and share the tracking number with the desk."); }}>
+                I will ship it back myself
+              </button>
+            </div>
+          </div>
+        )}
+        {note && <p className="mt-2 text-text-primary">{note}</p>}
         {request.images?.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {request.images.map((src, index) => (
@@ -399,7 +419,7 @@ function ReplacementStatus({ request, order }: { request: ReturnRequest; order: 
             Return AWB <span className="font-mono text-burgundy">{back.awb}</span>
             {back.courierName ? ` · ${back.courierName}` : ""}
           </p>
-          <p className="mt-1">Download the label, paste it on the parcel with the defective item and hand it to the courier. The replacement ships once we have checked the item.</p>
+          <p className="mt-1">Download the label (it is also emailed to you), paste it on the parcel and hand it to the courier.{request.kind === "replacement" ? " The replacement ships once we have checked the item." : ""}</p>
           {back.labelUrl ? (
             <a href={back.labelUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block rounded-full bg-burgundy px-4 py-1.5 text-xs font-semibold text-white">
               Download return label
