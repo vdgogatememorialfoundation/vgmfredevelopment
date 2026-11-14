@@ -1585,7 +1585,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     <>
                       <Button
                         disabled={busy === "preorder-courier" || picked === undefined || !quote}
-                        onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, picked !== undefined ? quote?.rates[picked] : undefined))}
+                        onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, picked !== undefined ? quote?.rates[picked] : undefined, undefined, quote?.rates ?? []))}
                       >
                         {picked !== undefined && quote ? `Select ${quote.rates[picked]?.courierName} & send balance link` : "Pick a courier from the rates"}
                       </Button>
