@@ -49,7 +49,6 @@ import {
   downloadManifest,
   fetchCourierRates,
   selectPreorderCourier,
-  bookPaidPreorders,
   orderWeightKg,
   reallocateCourier,
   schedulePickup,
@@ -137,9 +136,6 @@ export function OrdersDashboard() {
   const [bulkNote, setBulkNote] = useState("");
 
   const orders = getOrders();
-  useEffect(() => {
-    void bookPaidPreorders(getOrders());
-  }, [remoteVersion]);
   void version;
   void remoteVersion;
   const seenOrders = useRef<Set<string> | null>(null);

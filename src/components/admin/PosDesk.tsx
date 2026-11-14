@@ -1,17 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   adjustStoreCredit,
   createAdminOrder,
   displayName,
+  fetchCustomerWallet,
   getAccounts,
   getStoreCredit,
+  getStoreCreditExpiry,
+  type WalletExpiry,
   patchOrder,
   printPosReceipt,
   updateCustomer,
 } from "@/lib/admin-store";
-import { storeConfig } from "@/lib/constants";
+import { commerceCharges, getOrderSettings, preorderAdvance } from "@/lib/integrations";
+import { formatDate } from "@/lib/utils";
 import { getPickupLocation } from "@/lib/fulfillment";
 import { payOnPaytmEdc, payOnRazorpayEdc, payWithRazorpay, waitForRazorpay } from "@/lib/payments-client";
 import { generateOrderId } from "@/lib/store";
@@ -56,6 +60,8 @@ export function PosDesk() {
   const [scanOpen, setScanOpen] = useState(false);
   const [fulfil, setFulfil] = useState<"counter" | "delivery">("counter");
   const [deliveryCharge, setDeliveryCharge] = useState("0");
+  const [preorderPay, setPreorderPay] = useState<"advance" | "full">("advance");
+  const [wallet, setWallet] = useState<{ email: string; balance: number; expiring: WalletExpiry | null; error?: string } | null>(null);
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -70,18 +76,43 @@ export function PosDesk() {
   }, [books, query]);
 
   const account = customers.find((item) => item.email === accountEmail);
-  const credit = account ? getStoreCredit(account.email) : 0;
+
+  useEffect(() => {
+    if (!accountEmail) return;
+    let cancelled = false;
+    fetchCustomerWallet(accountEmail)
+      .then((live) => !cancelled && setWallet({ email: accountEmail, balance: live.balance, expiring: live.expiring }))
+      .catch(() => !cancelled && setWallet({ email: accountEmail, balance: getStoreCredit(accountEmail), expiring: getStoreCreditExpiry(accountEmail), error: "Live wallet not reachable; showing this device's copy." }));
+    return () => {
+      cancelled = true;
+    };
+  }, [accountEmail]);
+
+  const walletReady = Boolean(account && wallet?.email === account.email);
+  const credit = account && walletReady ? wallet?.balance ?? 0 : 0;
   const rows = cart
     .map((line) => {
       const book = books.find((item) => item.id === line.bookId);
       return book ? { line, book } : null;
     })
     .filter(Boolean) as { line: Line; book: Book }[];
+  const settings = getOrderSettings();
+  const isPreorderBook = (book: Book) => Boolean(book.preorder?.enabled && book.stock <= 0);
+  const hasPreorder = rows.some((row) => isPreorderBook(row.book));
+  const mixed = hasPreorder && rows.some((row) => !isPreorderBook(row.book));
   const subtotal = rows.reduce((sum, row) => sum + row.book.price * row.line.quantity, 0);
-  const gst = Math.round(subtotal * storeConfig.gstRate);
+  const { gst, platformFee } = rows.length ? commerceCharges(subtotal, settings) : { gst: 0, platformFee: 0 };
   const charge = fulfil === "delivery" ? Math.max(0, Math.round(Number(deliveryCharge) || 0)) : 0;
-  const creditApplied = useCredit ? Math.min(credit, subtotal + gst + charge) : 0;
-  const total = Math.max(0, subtotal + gst + charge - creditApplied);
+  // A pre-order sent by courier with no charge typed gets its courier charge added to the balance later, as on the website.
+  const shippingLater = hasPreorder && fulfil === "delivery" && charge === 0;
+  const grand = subtotal + gst + platformFee + charge;
+  const creditApplied = useCredit ? Math.min(credit, grand) : 0;
+  const orderTotal = Math.max(0, Math.round((grand - creditApplied) * 100) / 100);
+  const copies = rows.reduce((sum, row) => sum + row.line.quantity, 0);
+  const advance = hasPreorder && orderTotal > 0 ? preorderAdvance(orderTotal, settings, { copies, platformFee: Math.max(0, platformFee - creditApplied) }) : orderTotal;
+  const payAdvance = hasPreorder && (preorderPay === "advance" || shippingLater);
+  const total = payAdvance ? advance : orderTotal;
+  const balanceLater = Math.max(0, Math.round((orderTotal - total) * 100) / 100);
 
   const addByCode = (code: string) => {
     const book = getProductByCode(code) || books.find((item) => matchesBarcode(item, code));
@@ -125,6 +156,10 @@ export function PosDesk() {
       setError("Add at least one product.");
       return;
     }
+    if (mixed) {
+      setError("Pre-order books go on their own sale. Remove either the pre-order or the in-stock items, then make a second sale.");
+      return;
+    }
     if (fulfil === "delivery" && (!address.line1.trim() || !address.city.trim() || !address.state.trim() || !/^\d{6}$/.test(address.pincode))) {
       setError("For home delivery, fill the customer's address, city, state and 6-digit pincode.");
       return;
@@ -134,7 +169,8 @@ export function PosDesk() {
     setMessage("");
     try {
       const saleId = generateOrderId();
-      let paymentMethod: string = METHODS.find((item) => item.id === method)?.label ?? "Cash";
+      const methodLabel = METHODS.find((item) => item.id === method)?.label ?? "Cash";
+      let paymentMethod: string = total > 0 ? methodLabel : creditApplied > 0 ? "Store credit" : methodLabel;
       let paymentRef = reference.trim() || undefined;
       let razorpayOrderId: string | undefined;
       let razorpayPaymentId: string | undefined;
@@ -244,27 +280,42 @@ export function PosDesk() {
         channel: "pos",
         shippingOverride: charge,
       });
-      const updates: Partial<Order> = fulfil === "delivery" ? {} : { status: "Delivered" };
-      if (creditApplied > 0 && account) {
-        const balance = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
-        updates.storeCreditUsed = creditApplied;
-        updates.total = total;
-        updates.subtotal = subtotal;
-        updates.gst = gst;
-        updates.shipping = charge;
-        patchOrder(order.id, updates, `Store credit ₹${creditApplied} · balance ₹${balance}`);
-      } else {
-        patchOrder(order.id, updates, fulfil === "delivery" ? "Paid at counter · home delivery" : "Collected at counter");
+      if (creditApplied > 0 && total > 0) paymentMethod = `Store credit ${rupees(creditApplied)} + ${paymentMethod}`;
+      // Pre-orders are not handed over at the counter: they wait in Orders until the book arrives.
+      const updates: Partial<Order> = fulfil === "delivery" || hasPreorder ? {} : { status: "Delivered" };
+      if (hasPreorder && (balanceLater > 0 || shippingLater)) {
+        updates.paymentStatus = balanceLater > 0 ? "Partially Paid" : "Paid";
+        updates.preorderPayment = {
+          advance: total + creditApplied,
+          balance: balanceLater,
+          balanceWhen: settings.preorderPayment.balanceWhen,
+          advancePaidAt: new Date().toISOString(),
+          shippingDue: shippingLater || undefined,
+        };
       }
+      updates.paymentMethod = paymentMethod;
+      const notes = [
+        hasPreorder ? `Pre-order at counter · paid ${rupees(total + creditApplied)}${balanceLater > 0 ? ` · balance ${rupees(balanceLater)} by payment link when ready` : ""}${shippingLater ? " · courier charge added later" : ""}` : fulfil === "delivery" ? "Paid at counter · home delivery" : "Collected at counter",
+      ];
+      if (creditApplied > 0 && account) {
+        const left = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
+        updates.storeCreditUsed = creditApplied;
+        updates.total = orderTotal;
+        notes.push(`Store credit ₹${creditApplied} used · wallet ₹${left}`);
+        setWallet({ email: account.email, balance: left, expiring: wallet?.expiring ?? null });
+      }
+      patchOrder(order.id, updates, notes.join(" · "));
       const paid = { ...order, ...updates, paymentMethod, paymentRef, razorpayOrderId, razorpayPaymentId };
       setLastOrder(paid);
       setCart([]);
       setReference("");
       setUseCredit(false);
       setMessage(
-        fulfil === "delivery"
-          ? `Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}. Home delivery: it is in Orders for picking, packing and courier booking.`
-          : `Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}.`
+        hasPreorder
+          ? `Pre-order ${paid.id} recorded · ${rupees(total + creditApplied)} paid · ${paymentMethod}.${balanceLater > 0 ? ` Balance ${rupees(balanceLater)} is sent as a payment link when the book is ready.` : ""} It waits in Orders until the book arrives; stock is taken then.`
+          : fulfil === "delivery"
+            ? `Sale ${paid.id} recorded · ${rupees(total + creditApplied)} · ${paymentMethod}. Home delivery: it is in Orders for picking, packing and courier booking.`
+            : `Sale ${paid.id} recorded · ${rupees(total + creditApplied)} · ${paymentMethod}.`
       );
       printPosReceipt(paid);
     } catch (problem) {
@@ -347,6 +398,7 @@ export function PosDesk() {
                 onSelect={(item) => {
                   setAccountEmail(item?.email ?? "");
                   setUseCredit(false);
+                  setWallet(null);
                   if (item) {
                     setWalkIn({
                       name: displayName(item, true),
@@ -370,10 +422,18 @@ export function PosDesk() {
               </div>
             )}
             {account && (
-              <p className="mt-2 text-xs text-text-muted">
-                {account.phone} · {account.email}
-                {credit > 0 ? ` · store credit ${rupees(credit)}` : ""}
-              </p>
+              <div className="mt-2 space-y-1 text-xs text-text-muted">
+                <p>
+                  {account.phone} · {account.email}
+                </p>
+                <p className="font-semibold text-text-primary">
+                  Store credit: {walletReady ? rupees(credit) : "checking…"}
+                  {walletReady && wallet?.expiring ? (
+                    <span className="font-normal text-amber-700"> · {rupees(wallet.expiring.amount)} expires {formatDate(wallet.expiring.at)}</span>
+                  ) : null}
+                </p>
+                {wallet?.error && walletReady && <p className="text-amber-700">{wallet.error}</p>}
+              </div>
             )}
             <div className="mt-4">
               <p className="mb-2 text-sm font-semibold text-text-primary">{fulfil === "delivery" ? "Delivery address" : "Registered address"}</p>
@@ -387,11 +447,17 @@ export function PosDesk() {
           <Panel title="Cart" description={`${rows.length} line${rows.length === 1 ? "" : "s"}`}>
             {rows.length === 0 ? (
               <EmptyState text="Scan or add products." />
-            ) : (
+            ) : mixed ? (
+              <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This cart mixes pre-order and in-stock items. Sell them as two separate sales.</p>
+            ) : null}
+            {rows.length > 0 && (
               <ul className="space-y-2">
                 {rows.map(({ line, book }) => (
                   <li key={book.id} className="flex items-center gap-2 text-sm">
-                    <span className="min-w-0 flex-1 truncate">{book.title}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {book.title}
+                      {isPreorderBook(book) && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">Pre-order</span>}
+                    </span>
                     <div className="w-16">
                       <TextInput type="number" min={1} value={line.quantity} onChange={(event) => setQty(book.id, Number(event.target.value))} />
                     </div>

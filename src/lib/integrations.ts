@@ -269,6 +269,8 @@ export interface OrderSettings {
     method: "original" | "manual";
     processingDays: number;
     autoRefundOnReturnPickup: boolean;
+    /** Store credit lapses this many days after it is added; 0 keeps it forever. */
+    creditExpiryDays: number;
   };
   cancellation: {
     enabled: boolean;
@@ -478,7 +480,7 @@ export const defaultOrderSettings: OrderSettings = {
     returnForRefund: false,
     replacementAddressChange: true,
   },
-  refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false },
+  refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false, creditExpiryDays: 0 },
   cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0, delayDays: 30, refundFeeOnDesk: true, pickupHoldDays: 30 },
   adminActions: { processAfterDelivery: true },
   platformFee: { enabled: false, amount: 0, refundable: false },
@@ -796,6 +798,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       method: merged.refunds?.method === "manual" ? "manual" : "original",
       processingDays: Math.max(1, finiteNumber(merged.refunds?.processingDays, defaultOrderSettings.refunds.processingDays)),
       autoRefundOnReturnPickup: Boolean(merged.refunds?.autoRefundOnReturnPickup),
+      creditExpiryDays: Math.max(0, Math.round(finiteNumber(merged.refunds?.creditExpiryDays, 0))),
     },
     cancellation: {
       enabled: Boolean(merged.cancellation?.enabled),

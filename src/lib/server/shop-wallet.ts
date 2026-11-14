@@ -1,5 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dataFile } from "@/lib/server/paths";
+import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 
 export type WalletEntry = { id: string; email: string; amount: number; at: string; note: string; orderId?: string; by?: string };
 
@@ -14,11 +16,44 @@ function readAll(): WalletEntry[] {
   }
 }
 
-export function walletFor(email: string) {
+function creditExpiryDays() {
+  try {
+    return publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined).refunds.creditExpiryDays;
+  } catch {
+    return 0;
+  }
+}
+
+const round = (value: number) => Math.round(value * 100) / 100;
+
+/** Balance after expiry: each credit lapses expiryDays after it was added, and spending uses the oldest live credit first. */
+export function walletFor(email: string, expiryDays = creditExpiryDays()) {
   const value = email.trim().toLowerCase();
   const entries = readAll().filter((entry) => entry.email === value);
-  const balance = Math.max(0, Math.round(entries.reduce((sum, entry) => sum + entry.amount, 0) * 100) / 100);
-  return { entries, balance };
+  if (!(expiryDays > 0)) {
+    return { entries, balance: Math.max(0, round(entries.reduce((sum, entry) => sum + entry.amount, 0))), expiryDays: 0 };
+  }
+  const lots: { left: number; expires: number }[] = [];
+  for (const entry of [...entries].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))) {
+    const at = Date.parse(entry.at) || 0;
+    if (entry.amount > 0) {
+      lots.push({ left: entry.amount, expires: at + expiryDays * 864e5 });
+      continue;
+    }
+    let need = -entry.amount;
+    for (const lot of lots) {
+      if (need <= 0) break;
+      if (lot.left <= 0 || lot.expires < at) continue;
+      const take = Math.min(lot.left, need);
+      lot.left -= take;
+      need -= take;
+    }
+  }
+  const now = Date.now();
+  const live = lots.filter((lot) => lot.left > 0.001 && lot.expires >= now).sort((a, b) => a.expires - b.expires);
+  const balance = Math.max(0, round(live.reduce((sum, lot) => sum + lot.left, 0)));
+  const expiring = live[0] ? { amount: round(live[0].left), at: new Date(live[0].expires).toISOString() } : undefined;
+  return { entries, balance, expiryDays, expiring };
 }
 
 /** Adds ledger lines once each (by id). Customers may only spend their own balance; staff may credit anyone. */

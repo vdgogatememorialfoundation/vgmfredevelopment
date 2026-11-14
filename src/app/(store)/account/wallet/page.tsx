@@ -6,7 +6,7 @@ import SectionHeader from "@/components/account/SectionHeader";
 import EmptyState from "@/components/account/EmptyState";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getStoreCredit, getStoreCreditLedger } from "@/lib/admin-store";
+import { getStoreCredit, getStoreCreditExpiry, getStoreCreditLedger } from "@/lib/admin-store";
 import { formatPrice, getOrdersForAccount } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 
@@ -30,6 +30,7 @@ export default function WalletPage() {
   const live = mounted && ready && Boolean(user?.email);
   const balance = live ? getStoreCredit(user?.email) : 0;
   const ledger = live ? getStoreCreditLedger(user?.email) : [];
+  const expiring = live && balance > 0 ? getStoreCreditExpiry(user?.email) : null;
   const refunds = live
     ? getOrdersForAccount(user).flatMap((order) =>
         (order.refunds ?? []).filter((refund) => refund.destination === "original").map((refund) => ({ order, refund }))
@@ -46,6 +47,11 @@ export default function WalletPage() {
       <div className="rounded-2xl border border-burgundy/15 bg-burgundy/5 p-6 text-center sm:p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-text-muted">Available balance</p>
         <p className="mt-2 text-4xl font-bold text-burgundy sm:text-5xl">{live ? formatPrice(balance) : "…"}</p>
+        {expiring && (
+          <p className="mt-2 text-sm font-medium text-amber-700">
+            {formatPrice(expiring.amount)} expires on {formatDate(expiring.at)}
+          </p>
+        )}
         <p className="mt-2 text-sm text-text-muted">Use it on any shop order. Store credit cannot be withdrawn to a bank account.</p>
         <Link href="/shop" className="mt-4 inline-block rounded-full bg-burgundy px-5 py-2 text-sm font-semibold text-white">
           Shop now

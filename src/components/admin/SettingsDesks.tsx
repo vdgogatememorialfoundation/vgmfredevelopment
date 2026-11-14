@@ -1863,6 +1863,8 @@ export function OrderSettingsDesk() {
             </label>
             <Text label="Processing time (business days)" type="number" value={value.refunds.processingDays} onChange={(days) => set({ refunds: { ...value.refunds, processingDays: Number(days) || 1 } })} />
             <Check label="Refund automatically when the return is picked up" checked={value.refunds.autoRefundOnReturnPickup} onChange={(autoRefundOnReturnPickup) => set({ refunds: { ...value.refunds, autoRefundOnReturnPickup } })} />
+            <Text label="Store credit expires after (days, 0 = never)" type="number" value={value.refunds.creditExpiryDays} onChange={(days) => set({ refunds: { ...value.refunds, creditExpiryDays: Math.max(0, Math.round(Number(days) || 0)) } })} />
+            <p className="text-xs text-slate-500">Each credit lapses on its own date, counted from when it was added. Spending uses the oldest credit first.</p>
           </div>
         </Card>
         <Card title="Cancellations">

@@ -323,7 +323,16 @@ async function bookShipmentOnce(
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
   const unpaidPlan = order.preorderPayment;
   if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
-    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. The shipment is created once it is paid.");
+    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. Book the courier from the order once it is paid.");
+  }
+  const owed = Math.round((order.total - (order.amountPaid ?? order.total)) * 100) / 100;
+  if (!unpaidPlan && order.paymentStatus === "Partially Paid" && owed > 0) {
+    if (override) {
+      patchOrder(order.id, { courierChoice: override, courierName: override.courierName }, `Courier ${override.courierName} selected · book it once the ₹${owed} due is paid`);
+    }
+    throw new Error(
+      `₹${owed} is still due on this order (extra charge). Send the payment link${override ? ` (${override.courierName} is saved on the order)` : ""}, then book the courier once the customer has paid.`
+    );
   }
   const shipOrder = split ? splitOrder(order, split) : order;
   if (!shipOrder.items.length) throw new Error(`Shipment ${split?.part ?? ""} has no items. Set the quantities first.`);
@@ -530,7 +539,7 @@ export async function attachDirectTracking(orderId: string, courierId: string, a
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
   const unpaidPlan = order.preorderPayment;
   if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
-    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. The shipment is created once it is paid.");
+    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. Book the courier from the order once it is paid.");
   }
   const trackingId = awb.trim();
   if (trackingId.length < 3) throw new Error("Paste the tracking id from the courier.");

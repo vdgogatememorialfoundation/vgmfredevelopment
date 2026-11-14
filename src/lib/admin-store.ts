@@ -441,10 +441,36 @@ export function getStoreCredit(email?: string) {
   return Math.max(0, getAccountByEmail(email)?.storeCredit ?? 0);
 }
 
+export type WalletExpiry = { amount: number; at: string };
+
+/** The soonest-lapsing store credit, as last fetched from the server. */
+export function getStoreCreditExpiry(email?: string): WalletExpiry | null {
+  if (!email || typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(`${walletKey(email)}_exp`) || "null") as WalletExpiry | null;
+    return parsed?.at && Number(parsed.amount) > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Desk view: fetches a customer's wallet from the server (balance after expiry) and keeps it on this device. */
+export async function fetchCustomerWallet(email: string) {
+  const value = email.trim().toLowerCase();
+  const response = await fetch(`/api/shop/wallet?email=${encodeURIComponent(value)}`, { cache: "no-store", credentials: "same-origin" });
+  if (!response.ok) throw new Error("Could not load the wallet.");
+  const data = (await response.json()) as { balance?: number; entries?: StoreCreditEntry[]; expiring?: WalletExpiry };
+  const balance = Number(data.balance) || 0;
+  rememberWallet(value, balance, Array.isArray(data.entries) ? data.entries : [], data.expiring);
+  return { balance, expiring: data.expiring ?? null, entries: Array.isArray(data.entries) ? data.entries : [] };
+}
+
 /** Records the server's wallet for this customer on this device. */
-export function rememberWallet(email: string, balance: number, entries: StoreCreditEntry[]) {
+export function rememberWallet(email: string, balance: number, entries: StoreCreditEntry[], expiring?: WalletExpiry) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(walletKey(email), String(balance));
+  if (expiring?.at) window.localStorage.setItem(`${walletKey(email)}_exp`, JSON.stringify(expiring));
+  else window.localStorage.removeItem(`${walletKey(email)}_exp`);
   const value = email.toLowerCase();
   const others = getStoreCreditLedger().filter((entry) => entry.email.toLowerCase() !== value);
   writeJSON(CREDIT_KEY, [...entries, ...others]);
