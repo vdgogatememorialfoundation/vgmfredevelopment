@@ -80,6 +80,7 @@ function flatText(value: unknown): string {
 
 function toIso(value: unknown, extraTime = ""): string {
   if (typeof value === "number") return new Date(value > 1e12 ? value : value * 1000).toISOString();
+  if (typeof value === "string" && /^\d{10,13}$/.test(value.trim())) return toIso(Number(value.trim()));
   const text = `${flatText(value)} ${extraTime}`.trim();
   if (!text) return "";
   // Courier sites print Indian time without a zone.
