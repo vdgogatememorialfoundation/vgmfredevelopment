@@ -123,6 +123,9 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
       : deliveredOn
         ? `Delivered on ${deliveredOn}`
         : "Your order is delivered";
+  } else if (status === "Cancelled") {
+    const cancelledOn = dayLabel(stages.find((stage) => stage.id === "cancelled")?.events.at(-1)?.at, country);
+    headline = `Order cancelled${cancelledOn ? ` on ${cancelledOn}` : ""}`;
   } else if (status === "Awaiting Confirmation") {
     headline = "Awaiting confirmation from the Foundation desk";
   } else if (pickup && current?.id === "ready") {
@@ -147,12 +150,12 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   const returnStages = returnRequest?.stages ?? [];
   const steps = returnRequest && returnStages.length
     ? returnStages.map((stage) => stage.title)
-    : pickup
+    : pickup || status === "Cancelled"
       ? stages.map((stage) => stage.label)
       : STEPS;
   const stepIdx = returnRequest && returnStages.length
     ? Math.max(0, returnStages.map((stage) => Boolean(stage.reached)).lastIndexOf(true))
-    : pickup
+    : pickup || status === "Cancelled"
       ? currentIdx
       : Math.max(STEP_OF[status] ?? 0, STEP_OF[order.status] ?? 0);
   if (returnRequest) {

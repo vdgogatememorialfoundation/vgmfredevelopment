@@ -61,7 +61,7 @@ import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
 import { deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
-import { isOwnFleet } from "@/lib/courier-label";
+import { isOwnFleet, bookedViaLabel } from "@/lib/courier-label";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
@@ -1566,7 +1566,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <div>
                 <p className="text-sm text-text-muted">
                   {order.courierChoice
-                    ? <>Customer chose <b className="text-text-primary">{order.courierChoice.courierName}</b> ({rupees(order.courierChoice.rate)}, {order.courierChoice.etaDays} days).</>
+                    ? <>Customer chose <b className="text-text-primary">{order.courierChoice.courierName}</b> <span className="text-xs">{bookedViaLabel(order.courierChoice.provider)}</span> ({rupees(order.courierChoice.rate)}, {order.courierChoice.etaDays} days).</>
                     : "No courier chosen yet. The cheapest or fastest is picked by the rule in Shipping APIs."}
                 </p>
                 {pickupChoices.length > 0 && (
@@ -1652,7 +1652,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             ) : (
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-1 text-sm">
-                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider || "courier"}{shipment.live ? " · live" : ""}</span></p>
+                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="block text-xs font-normal text-text-muted">{bookedViaLabel(shipment.provider) || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
                   <p className="text-xs text-text-muted">Delivery date: {deliveryDatePhrase(shipment.expectedBy) || "Waiting for the courier"}</p>

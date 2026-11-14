@@ -27,6 +27,7 @@ import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
 import { pushPaymentVault, testPaytmEdc, testRazorpay } from "@/lib/payments-client";
+import { bookedViaLabel } from "@/lib/courier-label";
 import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote, connectGoswiftUpdates } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { fileToDataUrl } from "@/lib/images";
@@ -1586,8 +1587,10 @@ export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick
             <li key={`${rate.provider}-${rate.courierId}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
               <label className="flex items-center gap-2">
                 {onPick && <input type="radio" checked={picked === index} onChange={() => onPick(index)} />}
-                <span className="font-medium text-slate-800">{rate.courierName}</span>
-                <span className="text-xs uppercase text-slate-400">{rate.provider === "local" ? "estimate" : rate.provider}</span>
+                <span>
+                  <span className="block font-medium text-slate-800">{rate.courierName}</span>
+                  <span className="block text-xs text-slate-500">{bookedViaLabel(rate.provider)}</span>
+                </span>
               </label>
               <span className="text-right text-slate-600">
                 <span className="block">

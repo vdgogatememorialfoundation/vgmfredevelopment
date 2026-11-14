@@ -6,7 +6,7 @@ import SectionHeader from "@/components/account/SectionHeader";
 import EmptyState from "@/components/account/EmptyState";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getStoreCredit, getStoreCreditExpiry, getStoreCreditLedger } from "@/lib/admin-store";
+import { getStoreCredit, getStoreCreditExpiry, getStoreCreditId, getStoreCreditLedger } from "@/lib/admin-store";
 import { formatPrice, getOrdersForAccount } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
 
@@ -31,6 +31,7 @@ export default function WalletPage() {
   const balance = live ? getStoreCredit(user?.email) : 0;
   const ledger = live ? getStoreCreditLedger(user?.email) : [];
   const expiring = live && balance > 0 ? getStoreCreditExpiry(user?.email) : null;
+  const walletId = live ? getStoreCreditId(user?.email) : "";
   const refunds = live
     ? getOrdersForAccount(user).flatMap((order) =>
         (order.refunds ?? []).filter((refund) => refund.destination === "original").map((refund) => ({ order, refund }))
@@ -52,6 +53,12 @@ export default function WalletPage() {
             {formatPrice(expiring.amount)} expires on {formatDate(expiring.at)}
           </p>
         )}
+        {walletId && (
+          <p className="mt-3 text-sm text-text-primary">
+            Store Credit ID <span className="ml-1 rounded-md bg-white px-2 py-0.5 font-mono text-base font-bold tracking-[0.2em] text-burgundy">{walletId}</span>
+            <span className="mt-1 block text-xs text-text-muted">Give this ID at the Foundation counter to pay with store credit. Keep it to yourself.</span>
+          </p>
+        )}
         <p className="mt-2 text-sm text-text-muted">Use it on any shop order. Store credit cannot be withdrawn to a bank account.</p>
         <Link href="/shop" className="mt-4 inline-block rounded-full bg-burgundy px-5 py-2 text-sm font-semibold text-white">
           Shop now
@@ -67,6 +74,7 @@ export default function WalletPage() {
                 <span className="block font-medium text-text-primary">{entry.note || (entry.amount > 0 ? "Credit added" : "Used on an order")}</span>
                 <span className="text-xs text-text-muted">
                   {formatDate(entry.at)}
+                  {entry.amount > 0 && entry.expiresAt ? ` · valid till ${formatDate(entry.expiresAt)}` : ""}
                   {entry.orderId ? (
                     <>
                       {" · "}

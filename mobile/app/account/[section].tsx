@@ -211,7 +211,7 @@ function ProfileSection({ title, subtitle }: { title: string; subtitle: string }
 }
 
 function WalletSection({ title, subtitle }: { title: string; subtitle: string }) {
-  const [wallet, setWallet] = useState<{ balance: number; entries: Row[] } | null>(null);
+  const [wallet, setWallet] = useState<{ balance: number; walletId: string; entries: Row[] } | null>(null);
   const [error, setError] = useState("");
   const load = () => {
     fetchWallet()
@@ -231,6 +231,7 @@ function WalletSection({ title, subtitle }: { title: string; subtitle: string })
       <Card featured>
         <Muted>Available balance</Muted>
         <Heading>{money(wallet?.balance ?? 0)}</Heading>
+        {wallet?.walletId ? <Muted>Store Credit ID: {wallet.walletId} · give it at the Foundation counter to pay with store credit.</Muted> : null}
         <Muted>Use it at checkout on the website. Refunds sent to store credit appear here.</Muted>
       </Card>
       {entries.length ? (
@@ -241,6 +242,7 @@ function WalletSection({ title, subtitle }: { title: string; subtitle: string })
               <Muted>
                 {Number(entry.amount) > 0 ? "+" : "−"}
                 {money(Math.abs(Number(entry.amount) || 0))} · {str(entry.note, "Wallet")} · {formatDate(entry.at)}
+                {Number(entry.amount) > 0 && str(entry.expiresAt) ? ` · valid till ${formatDate(str(entry.expiresAt))}` : ""}
                 {str(entry.orderId) ? ` · Order ${str(entry.orderId)}` : ""}
               </Muted>
             </View>

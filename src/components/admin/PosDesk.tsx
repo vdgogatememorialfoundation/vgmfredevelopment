@@ -10,6 +10,7 @@ import {
   getStoreCredit,
   getStoreCreditExpiry,
   type WalletExpiry,
+  verifyStoreCreditId,
   patchOrder,
   printPosReceipt,
   updateCustomer,
@@ -52,6 +53,9 @@ export function PosDesk() {
   const [method, setMethod] = useState<MethodId>("cash");
   const [reference, setReference] = useState("");
   const [useCredit, setUseCredit] = useState(false);
+  const [creditId, setCreditId] = useState("");
+  const [creditIdFor, setCreditIdFor] = useState("");
+  const [creditIdNote, setCreditIdNote] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -106,7 +110,7 @@ export function PosDesk() {
   // A pre-order sent by courier with no charge typed gets its courier charge added to the balance later, as on the website.
   const shippingLater = hasPreorder && fulfil === "delivery" && charge === 0;
   const grand = subtotal + gst + platformFee + charge;
-  const creditApplied = useCredit ? Math.min(credit, grand) : 0;
+  const creditApplied = useCredit && account && creditIdFor === account.email ? Math.min(credit, grand) : 0;
   const orderTotal = Math.max(0, Math.round((grand - creditApplied) * 100) / 100);
   const copies = rows.reduce((sum, row) => sum + row.line.quantity, 0);
   const advance = hasPreorder && orderTotal > 0 ? preorderAdvance(orderTotal, settings, { copies, platformFee: Math.max(0, platformFee - creditApplied) }) : orderTotal;
@@ -310,6 +314,9 @@ export function PosDesk() {
       setCart([]);
       setReference("");
       setUseCredit(false);
+      setCreditId("");
+      setCreditIdFor("");
+      setCreditIdNote("");
       setMessage(
         hasPreorder
           ? `Pre-order ${paid.id} recorded · ${rupees(total + creditApplied)} paid · ${paymentMethod}.${balanceLater > 0 ? ` Balance ${rupees(balanceLater)} is sent as a payment link when the book is ready.` : ""} It waits in Orders until the book arrives; stock is taken then.`
@@ -398,6 +405,9 @@ export function PosDesk() {
                 onSelect={(item) => {
                   setAccountEmail(item?.email ?? "");
                   setUseCredit(false);
+      setCreditId("");
+      setCreditIdFor("");
+      setCreditIdNote("");
                   setWallet(null);
                   if (item) {
                     setWalkIn({
@@ -492,7 +502,35 @@ export function PosDesk() {
               )}
               <div className="flex justify-between font-bold"><dt>To collect</dt><dd className="text-burgundy">{rupees(total)}</dd></div>
             </dl>
-            {credit > 0 && (
+            {credit > 0 && account && creditIdFor !== account.email && (
+              <div className="mt-3 space-y-1">
+                <div className="flex gap-2">
+                  <TextInput
+                    className="w-36"
+                    inputMode="numeric"
+                    maxLength={5}
+                    placeholder="Store Credit ID"
+                    aria-label="Store Credit ID"
+                    value={creditId}
+                    onChange={(event) => setCreditId(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={creditId.length !== 5}
+                    onClick={async () => {
+                      setCreditIdNote("");
+                      const ok = await verifyStoreCreditId(account.email, creditId).catch(() => false);
+                      if (ok) setCreditIdFor(account.email);
+                      else setCreditIdNote("That Store Credit ID does not match this customer.");
+                    }}
+                  >
+                    Verify ID
+                  </Button>
+                </div>
+                <p className="text-xs text-text-muted">{creditIdNote || "Ask the customer for the 5-digit Store Credit ID shown in their wallet."}</p>
+              </div>
+            )}
+            {credit > 0 && account && creditIdFor === account.email && (
               <label className="mt-3 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={useCredit} onChange={(event) => setUseCredit(event.target.checked)} />
                 Apply store credit ({rupees(credit)})

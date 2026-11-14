@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer, customerViewer } from "@/lib/server/commerce-viewer";
-import { addWalletEntries, walletFor, type WalletEntry } from "@/lib/server/shop-wallet";
+import { addWalletEntries, walletFor, walletIdFor, walletIdMatches, type WalletEntry } from "@/lib/server/shop-wallet";
 import { bearerToken, sessionFromToken } from "@/lib/server/mobile-store";
 
 export const runtime = "nodejs";
@@ -14,7 +14,11 @@ export async function GET(request: NextRequest) {
   const own = customerViewer(request)?.email || viewer.email;
   const email = viewer.portal && asked ? asked : own || app?.email?.toLowerCase() || "";
   if (!email) return NextResponse.json({ ok: true, balance: 0, entries: [] }, { headers: { "cache-control": "no-store" } });
-  return NextResponse.json({ ok: true, ...walletFor(email) }, { headers: { "cache-control": "no-store" } });
+  const staffLookup = Boolean(viewer.portal && asked);
+  // Staff never see the ID; the counter can only check the code the customer gives.
+  const code = request.nextUrl.searchParams.get("walletId") || "";
+  const extra = staffLookup ? (code ? { idMatches: walletIdMatches(email, code) } : {}) : { walletId: walletIdFor(email) };
+  return NextResponse.json({ ok: true, ...walletFor(email), ...extra }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: NextRequest) {

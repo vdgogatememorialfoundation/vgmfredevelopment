@@ -172,10 +172,9 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   const stages: PipelineStageShape[] = rawStages.map((stage) => {
     const next: PipelineStageShape = { ...stage };
     if (stage.id === "shipped" && (trackingId || courier) && stage.reached) {
-      const viaNote = hyperlocal ? "Hyperlocal" : "Logistics";
       next.courierNote = {
         title: `Shipped with ${courier || "the courier"}`,
-        detail: [trackingId ? `Tracking id: ${trackingId}` : "", viaNote].filter(Boolean).join(" · "),
+        detail: [trackingId ? `Tracking id: ${trackingId}` : "", hyperlocal ? "Hyperlocal" : ""].filter(Boolean).join(" · "),
       };
     }
     if (stage.id === "out" && stage.reached && order.status !== "Delivered" && (shipment?.agentPhone || shipment?.agentName || shipment?.deliveryOtp)) {

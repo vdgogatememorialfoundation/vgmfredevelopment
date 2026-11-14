@@ -326,6 +326,9 @@ async function bookShipmentOnce(
   if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
     throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. Book the courier from the order once it is paid.");
   }
+  if (!unpaidPlan && order.shippingDue) {
+    throw new Error("The courier charge is not on this order yet. Add it under Payment → Add extra charge (Courier charge) and send the payment link, then book the courier once it is paid.");
+  }
   const owed = Math.round((order.total - (order.amountPaid ?? order.total)) * 100) / 100;
   if (!unpaidPlan && order.paymentStatus === "Partially Paid" && owed > 0) {
     if (override) {

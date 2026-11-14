@@ -422,7 +422,7 @@ export function sendAccountDetails(email: string, isNew = false) {
 
 /* ---------------- Store credit ---------------- */
 
-export type StoreCreditEntry = { id: string; email: string; amount: number; at: string; note: string; orderId?: string; by?: string };
+export type StoreCreditEntry = { id: string; email: string; amount: number; at: string; note: string; orderId?: string; by?: string; expiresAt?: string };
 
 const CREDIT_KEY = "vgmf_store_credit";
 
@@ -442,6 +442,20 @@ export function getStoreCredit(email?: string) {
 }
 
 export type WalletExpiry = { amount: number; at: string };
+
+/** The customer's 5-digit Store Credit ID, as last fetched from the server. */
+export function getStoreCreditId(email?: string) {
+  if (!email || typeof window === "undefined") return "";
+  return window.localStorage.getItem(`${walletKey(email)}_id`) || "";
+}
+
+/** Counter check of the Store Credit ID the customer reads out; the server never reveals the ID to staff. */
+export async function verifyStoreCreditId(email: string, walletId: string) {
+  const response = await fetch(`/api/shop/wallet?email=${encodeURIComponent(email.trim().toLowerCase())}&walletId=${encodeURIComponent(walletId.trim())}`, { cache: "no-store", credentials: "same-origin" });
+  if (!response.ok) throw new Error("Could not check the Store Credit ID.");
+  const data = (await response.json()) as { idMatches?: boolean };
+  return Boolean(data.idMatches);
+}
 
 /** The soonest-lapsing store credit, as last fetched from the server. */
 export function getStoreCreditExpiry(email?: string): WalletExpiry | null {
@@ -466,9 +480,10 @@ export async function fetchCustomerWallet(email: string) {
 }
 
 /** Records the server's wallet for this customer on this device. */
-export function rememberWallet(email: string, balance: number, entries: StoreCreditEntry[], expiring?: WalletExpiry) {
+export function rememberWallet(email: string, balance: number, entries: StoreCreditEntry[], expiring?: WalletExpiry, walletId?: string) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(walletKey(email), String(balance));
+  if (walletId) window.localStorage.setItem(`${walletKey(email)}_id`, walletId);
   if (expiring?.at) window.localStorage.setItem(`${walletKey(email)}_exp`, JSON.stringify(expiring));
   else window.localStorage.removeItem(`${walletKey(email)}_exp`);
   const value = email.toLowerCase();

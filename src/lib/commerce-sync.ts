@@ -239,8 +239,8 @@ export async function syncWallet() {
   }
   const response = await fetch("/api/shop/wallet", { cache: "no-store", credentials: "same-origin" }).catch(() => undefined);
   if (!response?.ok) return;
-  const data = (await response.json()) as { balance?: number; entries?: StoreCreditEntry[]; expiring?: { amount: number; at: string } };
-  rememberWallet(user.email, Number(data.balance) || 0, Array.isArray(data.entries) ? data.entries : [], data.expiring);
+  const data = (await response.json()) as { balance?: number; entries?: StoreCreditEntry[]; expiring?: { amount: number; at: string }; walletId?: string };
+  rememberWallet(user.email, Number(data.balance) || 0, Array.isArray(data.entries) ? data.entries : [], data.expiring, data.walletId);
 }
 
 /** Keep the signed-in customer's cart the same on every device: the newest edit wins. */

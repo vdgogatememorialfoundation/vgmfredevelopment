@@ -22,6 +22,16 @@ export function aggregatorName(provider?: string) {
   return AGGREGATOR_NAMES[(provider ?? "").toLowerCase()] ?? "";
 }
 
+/** Admin only: the aggregator or desk a courier is booked through. */
+export function bookedViaLabel(provider?: string) {
+  const id = (provider ?? "").toLowerCase();
+  if (!id) return "";
+  if (id === "local") return "Own estimate";
+  if (id === "tookan" || id === "tookan-parcel") return "via Tookan";
+  if (id === "shipday") return "via Shipday";
+  return `via ${aggregatorName(id) || provider}`;
+}
+
 /** The in-house name plus the desk that is carrying the order. */
 export function fleetCourierLabel(provider?: string) {
   const id = (provider ?? "").toLowerCase();
@@ -38,6 +48,7 @@ export function customerCourierLabel(input: { provider?: string; courier?: strin
   if (fleet) return fleet;
   if (/tookan/i.test(raw)) return "Gogate Products-Tookan";
   if (/shipday/i.test(raw)) return "Gogate Products-Shipday";
+  if (/^ekart$/i.test(raw)) return "Ekart Logistics";
   if (raw && !AGGREGATOR_ONLY.test(raw)) return raw;
   return aggregatorName(provider) || raw || "Courier";
 }

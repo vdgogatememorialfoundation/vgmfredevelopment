@@ -6,7 +6,7 @@ import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
 import { checkPromo } from "@/lib/server/promotions";
 import { offerActive, promoDiscount } from "@/lib/promotions";
-import { appPickupAllowed, feedPreorderable, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
+import { appCourierEstimate, appPickupAllowed, feedPreorderable, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -138,7 +138,12 @@ export async function POST(request: NextRequest) {
     promo = { code: checked.rule.code, kind: checked.rule.kind, amount, label: checked.rule.label };
   }
 
-  const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup, promo });
+  const feed = readMobileFeed();
+  const preorderBag = draft.items.some((item) => feedPreorderable((feed.books ?? []).find((row) => String(row.id) === item.id) as never));
+  const courierMode = ((feed.orderSettings ?? {}) as { shippingFeeMode?: string }).shippingFeeMode === "courier_rate";
+  const units = draft.items.reduce((sum, item) => sum + item.quantity, 0);
+  const courierFee = !pickup && !preorderBag && courierMode ? (await appCourierEstimate(draft.subtotal, units, address.pincode).catch(() => undefined)) ?? null : undefined;
+  const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup, promo, courierFee });
 
   const creds = razorpayCreds({});
   if (!creds) {

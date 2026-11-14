@@ -1,4 +1,5 @@
-import type { Order } from "@/types";
+import type { CourierRate, Order } from "@/types";
+import { customerCourierRates, highestCourierRate } from "@/lib/checkout-couriers";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { redeemPromo } from "@/lib/server/promotions";
 import { packingChargeFor, preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
@@ -64,12 +65,13 @@ function preorderPlan(total: number, copies: number, platformFee: number) {
 /** Writes an app order into the main shop order list, so admin Orders, picking, couriers and tracking all see it. */
 export function recordAppOrder(
   draft: MobileOrder,
-  input: { name: string; phone: string; address: { line1: string; landmark?: string; city: string; state: string; pincode: string; country?: string; countryCode?: string }; pickup: boolean; promo?: { code: string; kind: "coupon" | "gift"; amount: number; label: string } }
+  input: { name: string; phone: string; address: { line1: string; landmark?: string; city: string; state: string; pincode: string; country?: string; countryCode?: string }; pickup: boolean; promo?: { code: string; kind: "coupon" | "gift"; amount: number; label: string }; courierFee?: number | null }
 ) {
   const books = (readMobileFeed().books ?? []) as FeedBook[];
   const quantity = draft.items.reduce((sum, item) => sum + item.quantity, 0);
   const preorder = draft.items.some((item) => feedPreorderable(books.find((row) => String(row.id) === item.id)));
-  const shipping = preorder ? 0 : appShipping(draft.subtotal, quantity, input.pickup);
+  const courierLater = !preorder && !input.pickup && input.courierFee === null;
+  const shipping = preorder || courierLater ? 0 : typeof input.courierFee === "number" && !input.pickup ? input.courierFee + appPacking(quantity) : appShipping(draft.subtotal, quantity, input.pickup);
   const fees = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined).platformFee;
   const platformFee = fees.enabled ? Math.max(0, Math.round(fees.amount)) : 0;
   const total = Math.max(0, draft.subtotal - (input.promo?.amount ?? 0)) + platformFee + shipping;
@@ -89,6 +91,7 @@ export function recordAppOrder(
     gst: 0,
     platformFee: platformFee || undefined,
     shipping,
+    shippingDue: courierLater || undefined,
     total,
     currency: "INR",
     paymentStatus: "Pending",
@@ -180,12 +183,16 @@ async function preorderCourierOnly(order: Order) {
   const fees = (readMobileFeed().orderSettings ?? {}) as Fees;
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
   if (fees.shippingFeeMode !== "courier_rate") return appShipping(order.subtotal, units, false);
+  const flat = Math.max(0, Number(fees.flatFee) || 0);
+  return (await appCourierEstimate(order.subtotal, units, order.deliveryAddress?.pincode ?? "")) ?? flat;
+}
+
+/** What checkout charges for the courier: the highest rate among the couriers for the pincode, with the admin's markup. Undefined when no courier quotes. */
+export async function appCourierEstimate(subtotal: number, units: number, deliveryPincode: string) {
   const stored = readShippingCreds() as Record<string, Record<string, unknown> | undefined> & { pickup?: { pincode?: string } };
   const pickupPincode = String(stored.pickup?.pincode ?? "");
-  const deliveryPincode = order.deliveryAddress?.pincode ?? "";
-  const flat = Math.max(0, Number(fees.flatFee) || 0);
-  if (!/^\d{6}$/.test(pickupPincode) || !/^\d{6}$/.test(deliveryPincode)) return flat;
-  const parcel = { pickupPincode, deliveryPincode, weightKg: Math.max(0.5, units * 0.5), cod: false, declaredValue: order.subtotal, length: 25, breadth: 18, height: Math.max(3, units * 3) };
+  if (!/^\d{6}$/.test(pickupPincode) || !/^\d{6}$/.test(deliveryPincode)) return undefined;
+  const parcel = { pickupPincode, deliveryPincode, weightKg: Math.max(0.5, units * 0.5), cod: false, declaredValue: subtotal, length: 25, breadth: 18, height: Math.max(3, units * 3) };
   const keys = (id: string) => (stored[id] ?? {}) as Record<string, string>;
   const results = await Promise.all([
     shiprocketRates(keys("shiprocket"), parcel).catch(() => null),
@@ -194,8 +201,10 @@ async function preorderCourierOnly(order: Order) {
     shipyaariRates(keys("shipyaari"), parcel).catch(() => null),
     goswiftRates(keys("goswift"), parcel).catch(() => null),
   ]);
-  const cheapest = results.flatMap((list) => list ?? []).map((rate) => Number(rate.rate)).filter((rate) => rate > 0).sort((a, b) => a - b)[0];
-  return Math.round(cheapest ?? flat);
+  const rates = results.flatMap((list) => list ?? []).filter((rate) => Number(rate.rate) > 0) as unknown as CourierRate[];
+  const settings = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined);
+  const highest = highestCourierRate(customerCourierRates(rates, settings));
+  return highest > 0 ? highest : undefined;
 }
 
 const NOT_PROCESSED = ["Pending", "Paid", "Awaiting Confirmation", "Ordered", "Cancelled"];

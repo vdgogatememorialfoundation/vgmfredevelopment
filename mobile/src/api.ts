@@ -624,7 +624,7 @@ export async function submitRegistration(input: { portal: string; seminarId: num
 
 export async function fetchWallet() {
   const data = await parse(await fetch(`${getApiBase()}/api/shop/wallet`, { headers: headers(false) }));
-  return { balance: Number(data.balance) || 0, entries: (Array.isArray(data.entries) ? data.entries : []) as Row[] };
+  return { balance: Number(data.balance) || 0, walletId: String(data.walletId || ""), entries: (Array.isArray(data.entries) ? data.entries : []) as Row[] };
 }
 
 export async function startBalancePayment(orderId: string) {

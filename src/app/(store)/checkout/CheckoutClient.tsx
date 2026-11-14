@@ -322,7 +322,7 @@ export default function CheckoutClient() {
         });
         if (!cancelled) setLiveRates({ pincode: address.pincode, rates: result.rates });
       } catch {
-        if (!cancelled) setLiveRates(null);
+        if (!cancelled) setLiveRates({ pincode: address.pincode, rates: [] });
       } finally {
         if (!cancelled) setLoadingRates(false);
       }
@@ -372,8 +372,10 @@ export default function CheckoutClient() {
   const codSelected = (payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery" && !hasPreorder) || cashAtStoreSelected;
   const hostedSelected = payMethod === "payu" || payMethod === "easebuzz" || payMethod === "cashfree" || payMethod === "phonepe" ? payMethod : "";
   const codFee = codSelected && !cashAtStoreSelected ? orderSettings.codFee : 0;
+  const courierLater =
+    deliveryMode === "delivery" && !hasPreorder && orderItems.length > 0 && orderSettings.shippingFeeMode === "courier_rate" && !loadingRates && liveRates?.pincode === address.pincode && !selectedCourier;
   const shipping =
-    deliveryMode === "store_pickup" || orderItems.length === 0 || hasPreorder
+    deliveryMode === "store_pickup" || orderItems.length === 0 || hasPreorder || courierLater
       ? 0
       : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
   const storeCredit = user?.email ? getStoreCredit(user.email) : 0;
@@ -468,6 +470,7 @@ export default function CheckoutClient() {
         gst: totals.gst,
         platformFee: totals.platformFee,
         shipping: totals.shipping,
+        shippingDue: courierLater || undefined,
         total: totals.total,
         currency: "INR",
         paymentStatus: payment.paid ? (payNow < totals.total || preorderShippingLater ? "Partially Paid" : "Paid") : "Pending",
@@ -521,7 +524,9 @@ export default function CheckoutClient() {
       };
       return order;
     };
-    if (cashAtStoreSelected) {
+    if (payNow <= 0 && creditApplied > 0 && !codSelected && !cashAtStoreSelected) {
+      payment = { method: "Store credit", paid: true };
+    } else if (cashAtStoreSelected) {
       payment = { method: "Cash at Store", paid: false };
     } else if (codSelected) {
       payment = { method: "Cash on delivery", paid: false };
@@ -1364,6 +1369,8 @@ export default function CheckoutClient() {
                     ? "Store pickup · no charge"
                     : hasPreorder
                       ? "Added when you pay the balance"
+                      : courierLater
+                      ? "Calculated once packed · payment link sent"
                       : shipping > 0
                       ? formatPrice(shipping)
                       : shippingIsFree(priced.subtotal, orderSettings)
