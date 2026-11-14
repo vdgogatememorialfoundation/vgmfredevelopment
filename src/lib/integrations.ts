@@ -952,7 +952,6 @@ const CANCEL_STAGE: Partial<Record<Order["status"], number>> = {
   Packed: 1,
   "Ready to Ship": 1,
   "To Ship": 1,
-  Shipped: 2,
 };
 
 /** A pre-order whose announced date has passed by more than the allowed delay. */
@@ -969,7 +968,9 @@ export function canCustomerCancel(order?: Order, settings = getOrderSettings(), 
   if (stage <= 1 && preorderLate(order, settings, now)) return true;
   if (!settings.cancellation?.enabled) return false;
   const until = settings.cancellation.allowedUntil;
-  if (stage > (until === "Ordered" ? 0 : until === "Shipped" ? 2 : 1)) return false;
+  // Once handed to the courier an order can't be cancelled; "Shipped" means up to booking.
+  if (order.trackingId || order.shipmentId) return false;
+  if (stage > (until === "Ordered" ? 0 : 1)) return false;
   const hours = settings.cancellation.windowHours;
   return !(hours > 0) || (now - Date.parse(order.date)) / 36e5 <= hours;
 }

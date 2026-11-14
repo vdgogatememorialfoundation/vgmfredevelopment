@@ -31,6 +31,12 @@ function viewerFrom(parsed: CookieUser, portal: boolean) {
   };
 }
 
+/** The customer session alone, for shop actions taken while a portal session is also open in the browser. */
+export function customerViewer(request: NextRequest) {
+  const customer = parseCookie(request.cookies.get("vgmf_session")?.value);
+  return customer?.email ? viewerFrom(customer, false) : null;
+}
+
 /** The signed-in shopper for carts: the customer session first, so staff shopping on the site keep one cart too. */
 export function shopperEmail(request: NextRequest) {
   const customer = parseCookie(request.cookies.get("vgmf_session")?.value);

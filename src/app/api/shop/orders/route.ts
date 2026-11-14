@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { commerceViewer } from "@/lib/server/commerce-viewer";
+import { commerceViewer, customerViewer } from "@/lib/server/commerce-viewer";
 import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
 import { deleteShopOrder, deletedShopOrderIds, findShopOrder, patchShopOrder, listShopOrders, orderPhoneMatches, ordersForAccount, searchShopOrders, upsertShopOrder, forCustomer } from "@/lib/server/shop-orders";
 import { deleteShopShipments } from "@/lib/server/shop-shipments";
@@ -41,12 +41,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { order?: Order; action?: string; orderId?: string; reason?: string; phone?: string } | null;
   if (body?.action === "cancel") {
-    const viewer = commerceViewer(request);
     const orderId = String(body.orderId ?? "");
     const order = findShopOrder(orderId);
+    // A staff sign-in in the same browser must not hide the customer's own session.
+    const viewers = [customerViewer(request), commerceViewer(request)].filter((viewer) => viewer && (viewer.email || viewer.phone || viewer.id));
     const owns = Boolean(
       order &&
-        (((viewer.email || viewer.phone || viewer.id) && ordersForAccount(viewer).some((item) => item.id === orderId)) ||
+        (viewers.some((viewer) => ordersForAccount(viewer!).some((item) => item.id === orderId)) ||
           (body.phone && orderPhoneMatches(order, String(body.phone))))
     );
     if (!order || !owns) return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });

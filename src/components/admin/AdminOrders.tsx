@@ -128,6 +128,8 @@ export function OrdersDashboard() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All");
   const [languageFilter, setLanguageFilter] = useState("All");
+  const [productFilter, setProductFilter] = useState("All");
+  const [sortBy, setSortBy] = useState("newest");
   const [shipOne, setShipOne] = useState(false);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Record<string, boolean>>({});
@@ -168,6 +170,7 @@ export function OrdersDashboard() {
   const filtered = orders
     .filter((order) => statusFilter === "All" || order.status === statusFilter)
     .filter((order) => languageFilter === "All" || languagesOf(order).includes(languageFilter))
+    .filter((order) => productFilter === "All" || order.items.some((item) => (catalogue.find((book) => book.id === item.bookId)?.productType === "other" ? "Other" : "Books") === productFilter))
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
     .filter((order) => {
       const q = query.trim().toLowerCase();
@@ -176,6 +179,12 @@ export function OrdersDashboard() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
     })
+    .sort((a, b) =>
+      sortBy === "oldest" ? Date.parse(a.date) - Date.parse(b.date)
+        : sortBy === "amount" ? b.total - a.total
+          : sortBy === "newest" ? Date.parse(b.date) - Date.parse(a.date)
+            : 0
+    )
     .slice(0, 300);
   const selected = selectedId ? getOrderByAdmin(selectedId) : null;
 
@@ -409,7 +418,19 @@ export function OrdersDashboard() {
               </Button>
             }
           >
-            <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mb-2 flex flex-wrap gap-2">
+              {([
+                ["All", () => { setStatusFilter("All"); setPaymentFilter("All"); }, statusFilter === "All" && paymentFilter === "All"],
+                ["Paid", () => { setStatusFilter("All"); setPaymentFilter("Paid"); }, paymentFilter === "Paid"],
+                ["Cancelled", () => { setPaymentFilter("All"); setStatusFilter("Cancelled"); }, statusFilter === "Cancelled" && paymentFilter === "All"],
+                ["Refunded", () => { setStatusFilter("All"); setPaymentFilter("Refunded"); }, paymentFilter === "Refunded"],
+                ["Part refunded", () => { setStatusFilter("All"); setPaymentFilter("Partially Refunded"); }, paymentFilter === "Partially Refunded"],
+              ] as [string, () => void, boolean][]).map(([label, apply, on]) => (
+                <button key={label} type="button" onClick={apply} className={classNames("rounded-full border px-3 py-1 text-xs font-semibold", on ? "border-burgundy bg-burgundy text-white" : "border-border text-text-primary")}>{label}</button>
+              ))}
+              <a href="/admin/payments/refunds" className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-burgundy">Refunds module →</a>
+            </div>
+            <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
               <TextInput placeholder="Search id, name, phone, AWB" value={query} onChange={(event) => setQuery(event.target.value)} />
               <SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option>All</option>
@@ -421,10 +442,22 @@ export function OrdersDashboard() {
                 <option>Paid</option>
                 <option>Refunded</option>
                 <option>Failed</option>
+                <option>Partially Paid</option>
+                <option>Partially Refunded</option>
               </SelectInput>
               <SelectInput value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label="Language">
                 <option value="All">All languages</option>
                 {languages.map((language) => <option key={language}>{language}</option>)}
+              </SelectInput>
+              <SelectInput value={productFilter} onChange={(event) => setProductFilter(event.target.value)} aria-label="Product type">
+                <option value="All">All products</option>
+                <option value="Books">Books</option>
+                <option value="Other">Other products</option>
+              </SelectInput>
+              <SelectInput value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="amount">Highest amount</option>
               </SelectInput>
             </div>
             {filtered.length === 0 ? (
