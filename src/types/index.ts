@@ -838,6 +838,8 @@ export interface ReturnRequest {
   replacementAddress?: DeliveryAddress;
   /** How the item comes back: the Foundation books a pickup, or the customer ships it within the window. */
   returnMethod?: "pickup" | "self";
+  /** What the desk found when the item came back; refunds, replacements and restock wait for this. */
+  inspection?: { at: string; condition: "Good" | "Damaged" | "Wrong item" | "Missing"; note?: string; restock: boolean; by?: string };
   /** Claim the desk raised with the courier/aggregator, e.g. a wrong item came back. */
   claim?: { at: string; note: string; status: "Open" | "Settled" | "Rejected"; amount?: number; by?: string };
   stages: ShipmentEvent[];

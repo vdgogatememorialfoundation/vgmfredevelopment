@@ -32,7 +32,7 @@ import {
   addExtraCharge,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
+import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, recordReturnInspection, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
 import { currentProductTitle, getLiveBooks, orderItemBatch } from "@/lib/product-data";
 import { getIntegrations, getOrderSettings, orderStatusText, preorderLate, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
@@ -1953,7 +1953,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                         return "Marked as picked up. Check the item when it arrives, then send the replacement.";
                       }
                       advanceReturnRequest(order.id, "Picked Up", "pickup", "The courier collected the item.");
-                      if (returnRequest.kind === "return" && getOrderSettings().refunds.autoRefundOnReturnPickup && paid) {
+                      if (returnRequest.kind === "return" && getOrderSettings().refunds.autoRefundOnReturnPickup && paid && returnRequest.inspection) {
                         const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
                         advanceReturnRequest(order.id, "Refunded", "refund", text || undefined);
                         return `Picked up. ${text}`;
@@ -1984,21 +1984,33 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     </span>
                   )}
                   {returnRequest.returnMethod && <span className="text-xs text-text-muted">Customer chose: {returnRequest.returnMethod === "self" ? "ships it back themselves" : "Foundation pickup"}</span>}
-                  {returnRequest.kind === "replacement" && ["Picked Up", "Pickup Scheduled"].includes(returnRequest.status) && !returnRequest.replacementOrderId && (
+                  {["Picked Up", "Pickup Scheduled", "Return Approved"].includes(returnRequest.status) && returnRequest.resolution !== "refund" && (
+                    <Button variant="outline" onClick={() => {
+                      const answer = window.prompt("Condition of the returned item: good, damaged, wrong, or missing", returnRequest.inspection?.condition ?? "good")?.trim().toLowerCase();
+                      if (!answer) return;
+                      const condition = answer.startsWith("g") ? "Good" : answer.startsWith("d") ? "Damaged" : answer.startsWith("w") ? "Wrong item" : answer.startsWith("m") ? "Missing" : null;
+                      if (!condition) { window.alert("Type good, damaged, wrong or missing."); return; }
+                      const note = window.prompt("Inspection notes (optional)") ?? "";
+                      run("rt", () => {
+                        recordReturnInspection(order.id, condition, note);
+                        return condition === "Good" ? "Inspection saved. The copy goes back into stock when the return is closed." : `Inspection saved (${condition}). It will not be restocked.${condition === "Wrong item" || condition === "Missing" ? " Raise a claim if needed." : ""}`;
+                      });
+                    }}>{returnRequest.inspection ? `Inspected: ${returnRequest.inspection.condition} · edit` : "Record inspection"}</Button>
+                  )}
+                  {returnRequest.kind === "replacement" && ["Picked Up", "Pickup Scheduled"].includes(returnRequest.status) && !returnRequest.replacementOrderId && returnRequest.inspection && (
                     <Button variant="success" onClick={() => {
-                      if (!window.confirm("Has the defective item arrived and been checked? This places the free replacement order.")) return;
+                      if (!window.confirm("This places the free replacement order.")) return;
                       run("rt", () => {
                         const next = sendReplacementAfterInspection(order.id);
                         return `Checked. Free replacement order ${next.replacementOrderId} placed.`;
                       });
                     }}>Item received & checked — send replacement</Button>
                   )}
-                  {returnRequest.kind === "return" && (returnRequest.status === "Picked Up" || (returnRequest.status === "Return Approved" && returnRequest.resolution === "refund")) && paid && (
+                  {returnRequest.kind === "return" && ((returnRequest.status === "Picked Up" && returnRequest.inspection) || (returnRequest.status === "Return Approved" && returnRequest.resolution === "refund")) && paid && (
                     <Button variant="danger" onClick={() => {
                       const back = returnRequest.status === "Picked Up";
-                      if (back && !window.confirm("Has the returned item arrived and been checked? This sends the refund.")) return;
+                      if (back && !window.confirm(`Inspected: ${returnRequest.inspection?.condition}. Send the refund?`)) return;
                       run("rt", async () => {
-                        if (back) advanceReturnRequest(order.id, "Picked Up", "inspected", "The returned item was received and checked.");
                         const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
                         advanceReturnRequest(order.id, "Refunded", "refund", text || undefined);
                         return text;

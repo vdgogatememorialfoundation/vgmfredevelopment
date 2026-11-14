@@ -367,6 +367,15 @@ export function updateReturnRequest(orderId: string, update: Partial<ReturnReque
   return next;
 }
 
+/** The desk records the returned item's condition; only a good copy goes back into stock. */
+export function recordReturnInspection(orderId: string, condition: NonNullable<ReturnRequest["inspection"]>["condition"], note?: string, by?: string) {
+  const current = getReturnRequest(orderId);
+  if (!current) throw new Error("No return is open on this order.");
+  const inspection = { at: new Date().toISOString(), condition, note: note?.trim() || undefined, restock: condition === "Good", by };
+  updateReturnRequest(orderId, { inspection });
+  return advanceReturnRequest(orderId, current.status, "inspected", `Checked: ${condition}${inspection.note ? ` · ${inspection.note}` : ""}`);
+}
+
 /** The customer sends a declined request back to the desk for another look. */
 export function resendCustomerRequest(orderId: string, note?: string) {
   const current = getReturnRequest(orderId);
@@ -511,9 +520,9 @@ export function advanceReturnRequest(orderId: string, status: ReturnRequest["sta
   );
   const next: ReturnRequest = { ...current, status, stages };
   // Returned (or wrongly delivered) units go back on the shelf once, when the return is closed.
-  if ((status === "Refunded" || status === "Replacement Created") && !current.restockedAt) {
+  if ((status === "Refunded" || status === "Replacement Created") && !current.restockedAt && current.inspection?.restock) {
     const original = getOrders().find((order) => order.id === orderId);
-    if (current.resolution !== "refund") for (const item of current.items ?? original?.items ?? []) restockProduct(item.bookId, item.quantity);
+    for (const item of current.items ?? original?.items ?? []) restockProduct(item.bookId, item.quantity);
     next.restockedAt = now;
   }
   persistReturnRequest(orderId, next);
@@ -528,6 +537,7 @@ export function sendReplacementAfterInspection(orderId: string, by?: string) {
   const current = getReturnRequest(orderId) ?? getOrders().find((order) => order.id === orderId)?.returnRequest;
   if (!current || current.kind !== "replacement") throw new Error("No replacement is open on this order.");
   if (current.replacementOrderId) throw new Error(`Replacement order ${current.replacementOrderId} is already placed.`);
+  if (!current.inspection) throw new Error("Record the inspection of the returned item first.");
   const source = getOrders().find((order) => order.id === orderId);
   if (!source) throw new Error("The original order could not be found.");
   const replacement = generateReplacementOrder(source, current);
@@ -545,6 +555,10 @@ export function sendReplacementAfterInspection(orderId: string, by?: string) {
       return stage;
     }),
   };
+  if (current.inspection.restock && !current.restockedAt) {
+    for (const item of current.items ?? source.items) restockProduct(item.bookId, item.quantity);
+    request.restockedAt = now;
+  }
   persistReturnRequest(orderId, request);
   notifyReplacement(source, `Replacement order ${replacement.id} placed`, `We received and checked the returned item. Follow order ${replacement.id} until it is delivered.`, "both");
   return request;
