@@ -29,11 +29,14 @@ export function seminarAdTag(saved: string | undefined, pageUrl: string, when: "
   return seminarSavedTag(saved) || seminarVideoAdTag(pageUrl, when, offsetMs);
 }
 
-/** Manual banners need a numeric slot for this publisher. Auto ads use the page script when no slot is saved. */
+/** The Foundation's in-article unit, used when the seminar office has not saved its own slot. */
+export const SEMINAR_DEFAULT_SLOT = "6028411120";
+
+/** Banner slot for this publisher; ads show unless the seminar office switches them off. */
 export function seminarDisplaySlot(ads?: { enabled?: boolean; adsenseClient?: string; adsenseSlot?: string }) {
-  if (!ads?.enabled) return "";
-  const client = (ads.adsenseClient || "").trim();
+  if (ads?.enabled === false) return "";
+  const client = (ads?.adsenseClient || "").trim();
   if (client && client !== SEMINAR_ADSENSE_CLIENT) return "";
-  const slot = (ads.adsenseSlot || "").trim();
-  return /^\d{6,20}$/.test(slot) ? slot : "";
+  const slot = (ads?.adsenseSlot || "").trim();
+  return /^\d{6,20}$/.test(slot) ? slot : SEMINAR_DEFAULT_SLOT;
 }

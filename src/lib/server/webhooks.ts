@@ -1,7 +1,7 @@
 type StoredEvent = {
   id: string;
   at: string;
-  source: "shiprocket" | "meta";
+  source: "shiprocket" | "meta" | "goswift";
   awb?: string;
   orderId?: string;
   status?: string;

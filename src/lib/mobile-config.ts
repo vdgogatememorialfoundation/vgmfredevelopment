@@ -12,7 +12,8 @@ export type MobileModuleId =
   | "about"
   | "support"
   | "certificates"
-  | "account";
+  | "account"
+  | "chat";
 
 export const mobileModules: { id: MobileModuleId; label: string }[] = [
   { id: "home", label: "Home" },
@@ -26,6 +27,7 @@ export const mobileModules: { id: MobileModuleId; label: string }[] = [
   { id: "about", label: "About" },
   { id: "support", label: "Support" },
   { id: "certificates", label: "Certificate verification" },
+  { id: "chat", label: "Chat" },
   { id: "account", label: "Account" },
 ];
 

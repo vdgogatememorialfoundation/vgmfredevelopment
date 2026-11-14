@@ -314,7 +314,7 @@ function CarrierCard({
 
 export function TimelineDesk() {
   const [policy, setPolicy] = useState<FulfillmentPolicy>(() => getPolicy());
-  const [pincode, setPincode] = useState("411005");
+  const [pincode, setPincode] = useState("411002");
   const [saved, setSaved] = useState(false);
   const preview = checkPincode(pincode, books[0]?.id);
 
@@ -599,9 +599,8 @@ export function ProductServiceabilityDesk() {
   );
   const [prefixes, setPrefixes] = useState(profile.serviceablePrefixes.join(", "));
   const [blocked, setBlocked] = useState(profile.blockedPincodes.join(", "));
-  const [pincode, setPincode] = useState("411005");
+  const [pincode, setPincode] = useState("411002");
   const [notice, setNotice] = useState("");
-  const carriers = getCarriers();
   const quote = checkPincode(pincode, bookId);
 
   return (
@@ -710,21 +709,6 @@ export function ProductServiceabilityDesk() {
               placeholder="000000"
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
             />
-          </label>
-          <label className="block text-xs font-semibold text-slate-500">
-            Preferred partner
-            <select
-              value={profile.preferredCarrierId}
-              onChange={(event) => setProfile({ ...profile, preferredCarrierId: event.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-            >
-              <option value="">Fastest available</option>
-              {carriers.map((carrier) => (
-                <option key={carrier.id} value={carrier.id}>
-                  {carrier.name}
-                </option>
-              ))}
-            </select>
           </label>
           <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
             Save product delivery

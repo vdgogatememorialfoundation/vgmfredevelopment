@@ -261,6 +261,20 @@ export function mergePublishedBrand(partial: { site?: Partial<MobileFeed["site"]
   });
 }
 
+/** The feed as visitors may see it: no staff emails, assignees or review notes on articles. */
+export function publicFeed(feed: MobileFeed): MobileFeed {
+  return {
+    ...feed,
+    articles: feed.articles?.map((article) => {
+      const copy = { ...article };
+      delete copy.publishedByEmail;
+      delete copy.assignedTo;
+      delete copy.reviewNote;
+      return copy;
+    }),
+  };
+}
+
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",

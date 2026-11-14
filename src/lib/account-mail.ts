@@ -1,3 +1,4 @@
+import { publicStaffName } from "@/lib/public-name";
 import { getAllAccounts, getSession } from "@/lib/auth";
 import { queueNotification } from "@/lib/notify";
 import type { AccountActivity } from "@/lib/activity";
@@ -41,6 +42,22 @@ export function emailAccountActivity(row: AccountActivity) {
     replyTo: CARE,
     body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour account ${action} on ${when}.${by}${extra}\n\nIf this was not you, write to ${CARE}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
+}
+
+const FOUNDATION_NAME = "Vaidya Gogate Memorial Foundation";
+
+/** "Vaidya Gogate Memorial Foundation" for admins; "Staff Name | Vaidya Gogate Memorial Foundation" for staff. */
+export function senderName() {
+  try {
+    const session = getSession();
+    if (session && session.role !== "admin") {
+      const name = [session.firstName, session.lastName].filter(Boolean).join(" ").trim();
+      if (name && !name.includes(FOUNDATION_NAME) && publicStaffName(name) === name) return `${name} | ${FOUNDATION_NAME}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return FOUNDATION_NAME;
 }
 
 export function staffReplyTo() {

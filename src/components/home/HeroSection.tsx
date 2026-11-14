@@ -7,18 +7,45 @@ import { useI18n } from "@/components/i18n/LanguageProvider";
 
 const INTERVAL = 7000;
 const isImage = (value?: string) =>
-  Boolean(value && (/^(https?:|data:image|\/)/i.test(value) || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(value)));
+  Boolean(
+    value &&
+    (/^(https?:|data:image|\/)/i.test(value) ||
+      /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(value)),
+  );
 
-type ImageSlide = { id: string; title: string; image: string; href?: string; isMobile?: boolean; isDesktop?: boolean };
+type ImageSlide = {
+  id: string;
+  title: string;
+  image: string;
+  href?: string;
+  isMobile?: boolean;
+  isDesktop?: boolean;
+};
 
 const DEFAULT_SLIDES: ImageSlide[] = [
-  { id: "slide-legacy", title: "Preserving Ayurveda. Advancing knowledge.", image: "/slides/legacy.svg", href: "/about" },
-  { id: "slide-events", title: "Seminars, fellowships and workshops", image: "/slides/events.svg", href: "/events" },
-  { id: "slide-shop", title: "Books and study materials from VGMF", image: "/slides/shop.svg", href: "/shop" },
+  {
+    id: "slide-legacy",
+    title: "Preserving Ayurveda. Advancing knowledge.",
+    image: "/slides/legacy.svg",
+    href: "/about",
+  },
+  {
+    id: "slide-events",
+    title: "Seminars, fellowships and workshops",
+    image: "/slides/events.svg",
+    href: "/events",
+  },
+  {
+    id: "slide-shop",
+    title: "Books and study materials from Vaidya Gogate Memorial Foundation",
+    image: "/slides/shop.svg",
+    href: "/shop",
+  },
 ];
 
 /** Phones get a tall frame so a poster is readable. Wider screens keep a short banner strip. */
-const SLIDE_BOX = "relative h-[70vw] min-h-[260px] max-h-[440px] w-full overflow-hidden bg-paper sm:h-[220px] sm:min-h-[220px] sm:max-h-[220px] lg:h-[240px] lg:min-h-[240px] lg:max-h-[240px]";
+const SLIDE_BOX =
+  "relative h-[70vw] min-h-[260px] max-h-[440px] w-full overflow-hidden bg-paper sm:h-[220px] sm:min-h-[220px] sm:max-h-[220px] lg:h-[240px] lg:min-h-[240px] lg:max-h-[240px]";
 
 export default function HeroSection() {
   const flyers = useLiveFlyers();
@@ -47,9 +74,15 @@ export default function HeroSection() {
         isMobile: flyer.isMobile,
         isDesktop: flyer.isDesktop,
       }));
-    const fitted = fromCms.filter((flyer) => (phone ? flyer.isMobile !== false : flyer.isDesktop !== false));
-    const chosen = (fitted.length ? fitted : fromCms).map(({ isMobile: _mobile, isDesktop: _desktop, ...slide }) => slide);
-    return chosen.length ? chosen : DEFAULT_SLIDES.filter((slide) => !failed[slide.id]);
+    const fitted = fromCms.filter((flyer) =>
+      phone ? flyer.isMobile !== false : flyer.isDesktop !== false,
+    );
+    const chosen = (fitted.length ? fitted : fromCms).map(
+      ({ isMobile: _mobile, isDesktop: _desktop, ...slide }) => slide,
+    );
+    return chosen.length
+      ? chosen
+      : DEFAULT_SLIDES.filter((slide) => !failed[slide.id]);
   }, [failed, flyers, phone]);
 
   const [index, setIndex] = useState(0);
@@ -62,12 +95,15 @@ export default function HeroSection() {
       if (!count) return;
       setIndex((nextIndex + count) % count);
     },
-    [count]
+    [count],
   );
 
   useEffect(() => {
     if (count < 2 || paused) return;
-    const timer = window.setInterval(() => setIndex((value) => (value + 1) % count), INTERVAL);
+    const timer = window.setInterval(
+      () => setIndex((value) => (value + 1) % count),
+      INTERVAL,
+    );
     return () => window.clearInterval(timer);
   }, [count, paused, active]);
 
@@ -77,8 +113,12 @@ export default function HeroSection() {
       <section className="relative isolate z-0 border-b border-border bg-white text-ink">
         <div className="container flex min-h-[132px] items-center py-5 sm:min-h-[160px]">
           <div className="max-w-2xl">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">{t("hero.kicker")}</p>
-            <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">{tagline}</h1>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
+              {t("hero.kicker")}
+            </p>
+            <h1 className="font-serif text-2xl font-semibold tracking-tight sm:text-3xl">
+              {tagline}
+            </h1>
           </div>
         </div>
       </section>
@@ -99,7 +139,8 @@ export default function HeroSection() {
       }}
       onTouchEnd={(event) => {
         if (touchX.current == null) return;
-        const delta = (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
+        const delta =
+          (event.changedTouches[0]?.clientX ?? touchX.current) - touchX.current;
         touchX.current = null;
         if (Math.abs(delta) > 40) {
           swiped.current = true;
@@ -117,7 +158,9 @@ export default function HeroSection() {
               src={item.image}
               alt={item.title || "Slideshow image"}
               className={`absolute inset-0 !h-full !w-full !max-w-none object-contain object-center ${item.image.includes("/slides/") ? "object-bottom" : ""}`}
-              onError={() => setFailed((current) => ({ ...current, [item.id]: true }))}
+              onError={() =>
+                setFailed((current) => ({ ...current, [item.id]: true }))
+              }
             />
           );
           return (
@@ -203,32 +246,53 @@ export default function HeroSection() {
       </p>
       {lightbox && typeof document !== "undefined"
         ? createPortal(
-            <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={slide.title || "Flyer"}>
-              <button type="button" className="absolute inset-0 bg-ink/80" aria-label="Close flyer" onClick={() => setLightbox(false)} />
-              <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div
+              className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-6"
+              role="dialog"
+              aria-modal="true"
+              aria-label={slide.title || "Flyer"}
+            >
+              <button
+                type="button"
+                className="absolute inset-0 bg-ink/80"
+                aria-label="Close flyer"
+                onClick={() => setLightbox(false)}
+              />
+              <div className="relative z-10 flex w-full max-w-4xl flex-col items-end gap-2">
                 <button
                   type="button"
-                  className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-lg text-ink shadow"
-                  aria-label="Close flyer"
                   onClick={() => setLightbox(false)}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-white text-xl text-ink shadow-lg"
+                  aria-label="Close flyer"
                 >
                   ×
                 </button>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={slide.image} alt={slide.title || "Flyer"} className="block h-auto max-h-[82dvh] w-full !max-w-none bg-paper object-contain" />
-                {(slide.title || slide.href) && (
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
-                    <p className="text-sm font-medium text-text-primary">{slide.title}</p>
-                    {slide.href ? (
-                      <a href={slide.href} className="text-sm font-semibold text-burgundy">
-                        Open
-                      </a>
-                    ) : null}
-                  </div>
-                )}
+                <div className="w-full overflow-hidden rounded-2xl bg-white shadow-2xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={slide.image}
+                    alt={slide.title || "Flyer"}
+                    className="block h-auto max-h-[76dvh] w-full !max-w-none bg-paper object-contain"
+                  />
+                  {(slide.title || slide.href) && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+                      <p className="text-sm font-medium text-text-primary">
+                        {slide.title}
+                      </p>
+                      {slide.href ? (
+                        <a
+                          href={slide.href}
+                          className="text-sm font-semibold text-burgundy"
+                        >
+                          Open
+                        </a>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>,
-            document.body
+            document.body,
           )
         : null}
     </section>

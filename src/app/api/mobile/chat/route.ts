@@ -31,7 +31,7 @@ function answer(question: string) {
     if (!clinics.length) return "No clinics are in the published feed yet. Open Clinics once the Foundation publishes hours.";
     return `Foundation clinics: ${clinics.slice(0, 3).map((item) => `“${String((item as { name?: string }).name)}”`).join("; ")}.`;
   }
-  if (/certificate|verify/.test(q)) return "Open Certificates in the app menu and enter your VGMF certificate number to verify workshop, fellowship or seminar credentials.";
+  if (/certificate|verify/.test(q)) return "Open Certificates in the app menu and enter your Vaidya Gogate Memorial Foundation certificate number to verify workshop, fellowship or seminar credentials.";
   if (/account|login|sign ?in|sign ?up|otp|password/.test(q)) {
     return "Create one Foundation account from Sign up with your name, email and phone. We verify email with a 6-digit OTP and issue a 12-digit Account ID. Sign in uses the same email, phone or Account ID plus your Foundation password and email OTP — the same flow as the website.";
   }

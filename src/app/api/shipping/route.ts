@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  goswiftBook,
+  goswiftCancel,
+  goswiftNdr,
+  goswiftRates,
+  goswiftRegisterWebhook,
+  goswiftTest,
+  goswiftTrack,
   ithinkBook,
   ithinkCancel,
   ithinkInvoice,
@@ -46,7 +53,8 @@ import {
   tookanTrack,
   type RateOut,
 } from "@/lib/server/providers";
-import { mergeShippingCreds } from "@/lib/server/shipping-vault";
+import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
+import { mergeShippingCreds, readShippingCreds } from "@/lib/server/shipping-vault";
 import { listWebhooks } from "@/lib/server/webhooks";
 
 type Body = Record<string, unknown> & {
@@ -75,13 +83,17 @@ export async function POST(request: NextRequest) {
         const parcel = body.parcel as Parameters<typeof shiprocketRates>[1];
         const wanted = Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari"];
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift"];
+        // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
+        const stored = readShippingCreds() as typeof creds;
+        const keys = (id: keyof typeof creds) => ({ ...(stored[id] ?? {}), ...Object.fromEntries(Object.entries(creds[id] ?? {}).filter(([, value]) => value !== "" && value != null)) });
         const jobs: Promise<{ provider: string; rates: RateOut[] | null; error?: string }>[] = wanted.map(async (id) => {
           try {
-            if (id === "shiprocket") return { provider: id, rates: await shiprocketRates(creds.shiprocket ?? {}, parcel) };
-            if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(creds.nimbuspost ?? {}, parcel) };
-            if (id === "ithink") return { provider: id, rates: await ithinkRates(creds.ithink ?? {}, parcel) };
-            if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(creds.shipyaari ?? {}, parcel) };
+            if (id === "shiprocket") return { provider: id, rates: await shiprocketRates(keys("shiprocket"), parcel) };
+            if (id === "nimbuspost") return { provider: id, rates: await nimbusRates(keys("nimbuspost"), parcel) };
+            if (id === "ithink") return { provider: id, rates: await ithinkRates(keys("ithink"), parcel) };
+            if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(keys("shipyaari"), parcel) };
+            if (id === "goswift") return { provider: id, rates: await goswiftRates(keys("goswift"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -91,7 +103,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           ok: true,
           providers: results.map((result) => ({ provider: result.provider, configured: result.rates !== null, error: result.error })),
-          rates: results.flatMap((result) => result.rates ?? []).sort((a, b) => a.rate - b.rate),
+          rates: results.flatMap((result) => (result.rates ?? []).map((rate) => withWeights(rate, parcel, stored as Record<string, unknown>))).sort((a, b) => a.rate - b.rate),
         });
       }
       case "book": {
@@ -111,7 +123,9 @@ export async function POST(request: NextRequest) {
                       ? await shipdayBook(own, order)
                       : provider === "shipyaari"
                         ? await shipyaariBook(creds.shipyaari ?? own, order)
-                        : undefined;
+                        : provider === "goswift"
+                          ? await goswiftBook(creds.goswift ?? own, order)
+                          : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -169,6 +183,10 @@ export async function POST(request: NextRequest) {
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipyaari credentials are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
+        if (provider === "goswift") {
+          const awb = String(body.awb ?? "");
+          return NextResponse.json({ ok: true, configured: true, awb, labelUrl: `/api/shipping/goswift/label?awb=${encodeURIComponent(awb)}` });
+        }
         if (provider !== "shiprocket") return unsupported(provider);
         const result = await shiprocketLabelSheet(own, String(body.shipmentId ?? ""), String(body.awb ?? ""));
         if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shiprocket credentials are not configured." });
@@ -188,6 +206,11 @@ export async function POST(request: NextRequest) {
       }
       case "track": {
         const awb = String(body.awb ?? body.providerOrderId ?? "");
+        if (provider === "courier-site") {
+          const site = await courierWebTrack(String(body.courier ?? ""), awb, (creds.tracker ?? {}) as TrackerCreds);
+          if (!site) return NextResponse.json({ ok: false, configured: true, error: "The courier has no scans for this tracking id yet." });
+          return NextResponse.json({ ok: true, configured: true, ...site });
+        }
         const result =
           provider === "shiprocket"
             ? await shiprocketTrack(own, awb)
@@ -198,10 +221,12 @@ export async function POST(request: NextRequest) {
                 : provider === "tookan" || provider === "tookan-parcel"
                   ? await tookanTrack(creds.tookan ?? own, String(body.providerOrderId || awb), String(body.providerShipmentId || awb))
                   : provider === "shipday"
-                    ? await shipdayTrack(own, String(body.providerOrderId ?? awb))
+                    ? await shipdayTrack(own, String(body.orderNumber ?? body.orderId ?? ""), String(body.providerOrderId ?? awb))
                     : provider === "shipyaari"
                       ? await shipyaariTrack(creds.shipyaari ?? own, awb)
-                      : undefined;
+                      : provider === "goswift"
+                        ? await goswiftTrack(creds.goswift ?? own, awb)
+                        : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -220,7 +245,9 @@ export async function POST(request: NextRequest) {
                     ? await shipdayCancel(own, String(body.providerOrderId ?? body.awb ?? ""))
                     : provider === "shipyaari"
                       ? await shipyaariCancel(creds.shipyaari ?? own, String(body.awb ?? ""))
-                      : undefined;
+                      : provider === "goswift"
+                        ? await goswiftCancel(creds.goswift ?? own, String(body.awb ?? ""))
+                        : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -259,6 +286,25 @@ export async function POST(request: NextRequest) {
         if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shiprocket credentials are not configured." });
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
+      case "ndr": {
+        if (provider !== "goswift") return unsupported(provider);
+        const action = body.ndrAction === "RTO" ? "RTO" : "Re-Attempt";
+        const result = await goswiftNdr(creds.goswift ?? own, String(body.awb ?? ""), action, {
+          date: body.date ? String(body.date) : undefined,
+          phone: body.phone ? String(body.phone) : undefined,
+          address: body.address ? String(body.address) : undefined,
+          instructions: body.instructions ? String(body.instructions) : undefined,
+        });
+        if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift credentials are not configured." });
+        return NextResponse.json({ ok: true, configured: true, ...result });
+      }
+      case "webhook-register": {
+        if (provider !== "goswift") return unsupported(provider);
+        const url = `${request.nextUrl.origin}/api/shipping/goswift/webhook`;
+        const result = await goswiftRegisterWebhook(creds.goswift ?? own, url);
+        if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift credentials are not configured." });
+        return NextResponse.json({ ok: true, configured: true, ...result });
+      }
       case "webhook-events": {
         return NextResponse.json({ ok: true, events: listWebhooks("shiprocket") });
       }
@@ -278,7 +324,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "test": {
-        const parcel = { pickupPincode: "411005", deliveryPincode: "110001", weightKg: 0.5, cod: false, declaredValue: 500, length: 20, breadth: 15, height: 5 };
+        const parcel = { pickupPincode: "411002", deliveryPincode: "110001", weightKg: 0.5, cod: false, declaredValue: 500, length: 20, breadth: 15, height: 5 };
         if (provider === "tookan" || provider === "tookan-parcel") {
           const result = await tookanTest(creds.tookan ?? own);
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Tookan API key is not configured." });
@@ -287,6 +333,11 @@ export async function POST(request: NextRequest) {
         if (provider === "shipday") {
           const result = await shipdayTest(own);
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipday API key is not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
+        if (provider === "goswift") {
+          const result = await goswiftTest(creds.goswift ?? own);
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift client ID, username and password are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
         if (provider === "shipyaari") {
@@ -313,3 +364,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, configured: true, error: (error as Error).message });
   }
 }
+
+/** Divisors the aggregators publish for surface parcels; an admin value saved as volumetricDivisor in that aggregator's keys wins. Used only when the aggregator does not report the billed weight. */
+const VOLUMETRIC_DIVISOR: Record<string, number> = { shiprocket: 5000, nimbuspost: 5000, ithink: 5000, shipyaari: 5000, goswift: 5000 };
+
+function withWeights(rate: RateOut, parcel: { weightKg: number; length: number; breadth: number; height: number }, stored: Record<string, unknown>) {
+  const saved = Number((stored[rate.provider] as Record<string, unknown> | undefined)?.volumetricDivisor);
+  const divisor = saved > 0 ? saved : VOLUMETRIC_DIVISOR[rate.provider] ?? 5000;
+  const actualKg = Math.round(Number(parcel.weightKg) * 1000) / 1000;
+  const volumetricKg = Math.round(((Number(parcel.length) * Number(parcel.breadth) * Number(parcel.height)) / divisor) * 1000) / 1000;
+  const expected = Math.max(actualKg, volumetricKg);
+  const billed = rate.chargeWeightKg;
+  const weightFlag =
+    billed && billed > Math.ceil(expected * 2) / 2 + 0.5
+      ? `Billed at ${billed} kg, but the packed parcel works out to ${Math.ceil(expected * 2) / 2} kg. Check the weight and size before booking.`
+      : undefined;
+  return { ...rate, actualKg, volumetricKg, volumetricDivisor: divisor, weightFlag };
+}
+

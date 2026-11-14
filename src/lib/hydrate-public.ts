@@ -8,9 +8,11 @@ import { clinics as seededClinics } from "@/data/clinics";
 import { videos as seededVideos } from "@/data/videos";
 import { books as seededBooks } from "@/data/books";
 import { getOrderSettings, publicOrderSettings, saveOrderSettings } from "@/lib/integrations";
-import { appliedFeedAt, emptyFeedFallback, setAppliedFeedAt } from "@/lib/mobile-publish";
+import { clearPendingProducts, pendingProductFields, pendingProductIds } from "@/lib/product-data";
+import { getSession, isPortalRole } from "@/lib/auth";
+import { appliedFeedAt, emptyFeedFallback, hasFeedBaseline, recordFeedBaseline, setAppliedFeedAt } from "@/lib/mobile-publish";
 import type { MobileFeed } from "@/lib/mobile-types";
-import type { Flyer } from "@/types";
+import type { Book, Flyer } from "@/types";
 
 const DIRTY_KEY = "vgmf_live_dirty";
 
@@ -42,7 +44,8 @@ function tryWrite(write: () => void) {
 export async function hydratePublishedSite() {
   if (typeof window === "undefined") return;
   void hydrateReviewsFromServer();
-  const dirty = window.localStorage.getItem(DIRTY_KEY);
+  // Set only while a publish is in flight; a tab closed mid-publish must not freeze this browser on old content.
+  const dirty = Date.now() - Number(window.localStorage.getItem(DIRTY_KEY) || 0) < 2 * 60 * 1000;
   const urls = ["/api/mobile/brand", "/api/mobile/feed", "/app-feed.json"];
   for (const url of urls) {
     try {
@@ -67,6 +70,8 @@ export async function hydratePublishedSite() {
         if (url.includes("/brand")) continue;
         return;
       }
+      // Products follow the live copy on every device (deleted ones go, stock updates), even while this browser has unpublished edits.
+      installPublishedProducts(merged);
       if (dirty) return;
       installPublishedOrderSettings(merged);
       const feedAt = merged.publishedAt || "";
@@ -74,8 +79,12 @@ export async function hydratePublishedSite() {
       if (feedAt && appliedFeedAt() !== feedAt) {
         applyFeed(merged);
         setAppliedFeedAt(feedAt);
+        recordFeedBaseline();
       } else if (feedAt && catalogueAt !== feedAt) {
         installPublishedCatalogue(merged);
+        if (!hasFeedBaseline()) recordFeedBaseline();
+      } else if (feedAt && !hasFeedBaseline()) {
+        recordFeedBaseline();
       }
       return;
     } catch {
@@ -107,6 +116,16 @@ function applyFeed(feed: MobileFeed) {
       supportPhone: feed.site.phone || current.supportPhone,
       social: { ...current.social, ...feed.site.social },
       tickerSeconds: feed.site.tickerSeconds || current.tickerSeconds || 36,
+      productText: { ...current.productText, ...feed.site.productText },
+      shlokaBar: feed.site.shlokaBar ?? current.shlokaBar,
+      shlokas: feed.site.shlokas ?? current.shlokas,
+      queryButton: feed.site.queryButton ?? current.queryButton,
+      queryNumber: feed.site.queryNumber ?? current.queryNumber,
+      queryMessage: feed.site.queryMessage ?? current.queryMessage,
+      maintenanceMode: feed.site.maintenanceMode ?? current.maintenanceMode,
+      maintenanceUntil: feed.site.maintenanceUntil ?? current.maintenanceUntil,
+      maintenanceMessage: feed.site.maintenanceMessage || current.maintenanceMessage,
+      chrome: feed.site.chrome ?? current.chrome,
     });
   });
 
@@ -143,11 +162,32 @@ function applyFeed(feed: MobileFeed) {
     tryWrite(() => window.localStorage.setItem("vgmf_site_text", JSON.stringify(feed.siteText)));
   }
 
+  if (Array.isArray(feed.faqs)) {
+    tryWrite(() => {
+      const live = feed.faqs ?? [];
+      const liveIds = new Set(live.map((item) => item.id));
+      const local = JSON.parse(window.localStorage.getItem("vgmf_faqs") || "[]") as typeof live;
+      const hidden = local.filter((item) => item.active === false && !liveIds.has(item.id));
+      window.localStorage.setItem("vgmf_faqs", JSON.stringify([...live, ...hidden]));
+    });
+  }
+
   if (feed.seminarReviews?.length) {
     tryWrite(() => replaceSeminarReviews(feed.seminarReviews ?? []));
   }
   if (feed.productReviews?.length) {
     tryWrite(() => replaceProductReviews(feed.productReviews as ProductReview[]));
+  }
+
+  if (Array.isArray(feed.pages)) {
+    tryWrite(() => {
+      const live = feed.pages ?? [];
+      const liveIds = new Set(live.map((page) => page.id));
+      const local = JSON.parse(window.localStorage.getItem("vgmf_cms_pages") || "[]") as typeof live;
+      const drafts = local.filter((page) => !page.enabled && !liveIds.has(page.id));
+      window.localStorage.setItem("vgmf_cms_pages", JSON.stringify([...live, ...drafts]));
+      window.dispatchEvent(new Event("vgmf-cms"));
+    });
   }
 
   installPublishedCatalogue(feed);
@@ -169,25 +209,62 @@ function browserEdited(keys: string[], stamped: string | null) {
   return !stamped && keys.some((key) => window.localStorage.getItem(key));
 }
 
-/** Phones and other browsers have no admin localStorage, so the published feed is the catalogue they see. */
-function installPublishedCatalogue(feed: MobileFeed) {
+/** The published product list, merged per product: a local save newer than the live copy is kept, everything else follows the server. */
+function installPublishedProducts(feed: MobileFeed) {
   if (typeof window === "undefined") return;
-  const fromFeed = window.localStorage.getItem(CATALOGUE_STAMP);
-  // Sister-site events land in local storage on every device. That must not block the shop.
-  const authoredProducts = browserEdited(["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"], fromFeed);
-
   const books = feed.books ?? [];
-  if (books.length && !authoredProducts) {
-    const present = new Set(books.map((book) => book.id));
-    tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify(books)));
+  if (!books.length) return;
+
+  const present = new Set(books.map((book) => book.id));
+  const feedAt = feed.publishedAt || "";
+  let local: Book[] = [];
+  try {
+    local = JSON.parse(window.localStorage.getItem("vgmf_custom_books") || "[]") as Book[];
+  } catch {
+    local = [];
+  }
+  const localById = new Map(local.map((book) => [book.id, book]));
+  // A product saved here (price, stock…) is kept until this browser has published it, whatever the clocks say.
+  // Only Admin/staff browsers publish; a customer's checkout stock change stays local, so their copy always follows the server.
+  const canPublish = isPortalRole(getSession("portal")?.role);
+  if (!canPublish && pendingProductIds().length) clearPendingProducts(pendingProductIds());
+  const pending = new Set(pendingProductIds());
+  const fields = pendingProductFields();
+  const newer = (book?: Book) => Boolean(canPublish && book && (pending.has(book.id) || (book.updatedAt && book.updatedAt > feedAt)));
+  const merged = books.map((book) => {
+    const mine = localById.get(book.id);
+    if (mine && pending.has(mine.id)) {
+      const keys = fields[mine.id];
+      if (!Array.isArray(keys) || keys.includes("*")) return mine;
+      const next = { ...book } as unknown as Record<string, unknown>;
+      for (const key of keys) next[key] = (mine as unknown as Record<string, unknown>)[key];
+      return next as unknown as Book;
+    }
+    return mine && newer(mine) && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
+  });
+  const unpublished = local.filter((book) => !present.has(book.id) && newer(book));
+  const stored =
+    tryWrite(() => window.localStorage.setItem("vgmf_custom_books", JSON.stringify([...unpublished, ...merged]))) &&
     tryWrite(() =>
       window.localStorage.setItem(
         "vgmf_deleted_books",
         JSON.stringify(seededBooks.map((book) => book.id).filter((id) => !present.has(id)))
       )
-    );
+    ) &&
     tryWrite(() => window.localStorage.setItem("vgmf_admin_products", "[]"));
+  // Phone storage full: drop the stale local copy so the shop reads the live list held in memory.
+  if (!stored) {
+    for (const key of ["vgmf_custom_books", "vgmf_deleted_books", "vgmf_admin_products"]) {
+      tryWrite(() => window.localStorage.removeItem(key));
+    }
   }
+}
+
+/** Phones and other browsers have no admin localStorage, so the published feed is the catalogue they see. */
+function installPublishedCatalogue(feed: MobileFeed) {
+  if (typeof window === "undefined") return;
+  const fromFeed = window.localStorage.getItem(CATALOGUE_STAMP);
+  installPublishedProducts(feed);
 
   const writeSplit = <T extends { id: string }>(seed: T[], incoming: T[] | undefined, editsKey: string, customKey: string) => {
     if (!incoming?.length || browserEdited([editsKey, customKey], fromFeed)) return;
@@ -202,6 +279,7 @@ function installPublishedCatalogue(feed: MobileFeed) {
   writeSplit(seededClinics, feed.clinics, "vgmf_clinic_edits", "vgmf_custom_clinics");
   writeSplit(seededVideos, feed.videos, "vgmf_video_edits", "vgmf_custom_videos");
   if (feed.gallery?.length) tryWrite(() => window.localStorage.setItem("vgmf_gallery", JSON.stringify(feed.gallery)));
+  if (feed.policies && Object.keys(feed.policies).length) tryWrite(() => window.localStorage.setItem("vgmf_policies", JSON.stringify(feed.policies)));
   if (feed.about) tryWrite(() => window.localStorage.setItem("vgmf_about", JSON.stringify(feed.about)));
   if (feed.flags) tryWrite(() => window.localStorage.setItem("vgmf_site_flags", JSON.stringify(feed.flags)));
   if (feed.publishedAt) window.localStorage.setItem(CATALOGUE_STAMP, feed.publishedAt);

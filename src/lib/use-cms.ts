@@ -1,5 +1,7 @@
 "use client";
 
+import { withOffer } from "@/lib/promotions";
+import { isPublishedNow } from "@/lib/schedule";
 import { useSyncExternalStore } from "react";
 import { defaultOrderSettings, getOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { articles as seededArticles } from "@/data/articles";
@@ -59,7 +61,7 @@ export function useLiveArticles() {
       articleRaw = raw;
       const hasLocal = Boolean(window.localStorage.getItem("vgmf_article_edits") || window.localStorage.getItem("vgmf_custom_articles"));
       const published = getPublishedFeed()?.articles;
-      articleList = !hasLocal && published?.length ? published : getPublishedArticles();
+      articleList = (!hasLocal && published?.length ? published : getPublishedArticles()).filter((article) => isPublishedNow(article));
       return articleList;
     },
     () => seededArticles
@@ -181,6 +183,15 @@ export function useSiteFlags() {
   );
 }
 
+/** Footer social links: the published URL wins on every device, so phones and desktops show what Admin saved. */
+function liveSocial(local?: SiteSettings["social"], published?: Partial<SiteSettings["social"]> | null): SiteSettings["social"] {
+  const merged = { ...(local ?? {}) } as SiteSettings["social"];
+  for (const [key, value] of Object.entries(published ?? {})) {
+    if (typeof value === "string" && /^https?:\/\//i.test(value.trim())) (merged as Record<string, string>)[key] = value.trim();
+  }
+  return merged;
+}
+
 let settingsRaw = "\0";
 let settingsValue: SiteSettings | null = null;
 
@@ -196,11 +207,22 @@ export function useSiteSettings(): SiteSettings | null {
       const hasLocal = Boolean(window.localStorage.getItem("vgmf_settings"));
       settingsValue = {
         ...local,
+        // Visitors never edit maintenance, so the live copy decides it on every device.
+        maintenanceMode: published?.maintenanceMode ?? local.maintenanceMode,
+        maintenanceUntil: published?.maintenanceUntil ?? local.maintenanceUntil,
+        maintenanceMessage: published?.maintenanceMessage || local.maintenanceMessage,
         siteName: hasLocal ? local.siteName : published?.name || local.siteName,
         tagline: hasLocal ? local.tagline : published?.tagline || local.tagline,
         logoUrl: local.logoUrl || published?.logoUrl || "",
         logoText: local.logoText || published?.logoText || local.logoText,
         faviconUrl: local.faviconUrl || published?.faviconUrl || "",
+        shlokaBar: hasLocal ? local.shlokaBar : published?.shlokaBar ?? local.shlokaBar,
+        shlokas: hasLocal ? local.shlokas : published?.shlokas ?? local.shlokas,
+        queryButton: hasLocal ? local.queryButton : published?.queryButton ?? local.queryButton,
+        queryNumber: hasLocal ? local.queryNumber : published?.queryNumber ?? local.queryNumber,
+        queryMessage: hasLocal ? local.queryMessage : published?.queryMessage ?? local.queryMessage,
+        chrome: hasLocal ? local.chrome : published?.chrome ?? local.chrome,
+        social: liveSocial(local.social, published?.social),
       };
       return settingsValue;
     },
@@ -212,6 +234,13 @@ export function useSiteSettings(): SiteSettings | null {
         ...local,
         siteName: published.name || local.siteName,
         tagline: published.tagline || local.tagline,
+        social: liveSocial(local.social, published.social),
+        shlokaBar: published.shlokaBar,
+        shlokas: published.shlokas,
+        queryButton: published.queryButton,
+        queryNumber: published.queryNumber,
+        queryMessage: published.queryMessage,
+        chrome: published.chrome,
         logoUrl: published.logoUrl || "",
         logoText: published.logoText || local.logoText,
         faviconUrl: published.faviconUrl || "",
@@ -234,11 +263,11 @@ function readProducts() {
     const published = getPublishedFeed()?.books;
     if (!hasLocal && published?.length) {
       productAll = published;
-      productLive = published.filter((book) => book.active !== false);
+      productLive = published.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
       return;
     }
     productAll = getAllProducts();
-    productLive = productAll.filter((book) => book.active !== false);
+    productLive = productAll.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
   }
 }
 

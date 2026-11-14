@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders } from "@/lib/server/mobile-feed";
 import { addTicket, bearerToken, listTickets, sessionFromToken, ticketRateLimited } from "@/lib/server/mobile-store";
+import { findTicket, ownsTicket, replyToTicket } from "@/lib/server/support-tickets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const session = sessionOf(request, body);
+  if (body?.action === "reply") {
+    if (!session) return json({ ok: false, error: "Sign in to reply." }, 401);
+    const ticket = findTicket(String(body.id ?? ""));
+    const text = String(body.body ?? "").trim().slice(0, 5000);
+    if (!ticket || !ownsTicket(ticket, session.email)) return json({ ok: false, error: "Ticket not found." }, 404);
+    if (!text) return json({ ok: false, error: "Write a reply." }, 400);
+    return json({ ok: true, ticket: replyToTicket(ticket.id, session.name || ticket.name || "Customer", text) });
+  }
   const email = (session?.email || String(body?.email ?? "")).trim().toLowerCase();
   const name = (session ? session.name || String(body?.name ?? "").trim() : String(body?.name ?? "").trim());
   const subject = String(body?.subject ?? "").trim();

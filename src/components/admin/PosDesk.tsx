@@ -1,17 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   adjustStoreCredit,
   createAdminOrder,
   displayName,
+  fetchCustomerWallet,
   getAccounts,
   getStoreCredit,
+  getStoreCreditExpiry,
+  type WalletExpiry,
+  verifyStoreCreditId,
   patchOrder,
   printPosReceipt,
   updateCustomer,
 } from "@/lib/admin-store";
-import { storeConfig } from "@/lib/constants";
+import { commerceCharges, getOrderSettings, preorderAdvance } from "@/lib/integrations";
+import { formatDate } from "@/lib/utils";
 import { getPickupLocation } from "@/lib/fulfillment";
 import { payOnPaytmEdc, payOnRazorpayEdc, payWithRazorpay, waitForRazorpay } from "@/lib/payments-client";
 import { generateOrderId } from "@/lib/store";
@@ -23,7 +28,6 @@ import { canOrder, getProductByCode, isPurchasable } from "@/lib/product-data";
 import { accountToDelivery } from "@/lib/account-search";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
-import { PickupCounter } from "@/components/admin/PickupCounter";
 import { matchesBarcode } from "@/lib/barcode";
 
 const METHODS = [
@@ -39,6 +43,12 @@ const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN"
 
 type Line = { bookId: string; quantity: number };
 
+async function resendCreditId(email?: string) {
+  const response = await fetch("/api/shop/wallet", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ resendId: true, email }) });
+  const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; sentTo?: string };
+  return data.ok ? `Store Credit ID sent to ${data.sentTo}.` : data.error || "Could not send the ID.";
+}
+
 export function PosDesk() {
   const books = useLiveBooks().filter((book) => book.active !== false);
   const customers = getAccounts().filter((account) => !account.role || account.role === "customer");
@@ -49,12 +59,19 @@ export function PosDesk() {
   const [method, setMethod] = useState<MethodId>("cash");
   const [reference, setReference] = useState("");
   const [useCredit, setUseCredit] = useState(false);
+  const [creditId, setCreditId] = useState("");
+  const [creditIdFor, setCreditIdFor] = useState("");
+  const [creditIdNote, setCreditIdNote] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [address, setAddress] = useState<DeliveryAddress>(emptyDeliveryAddress());
   const [scanOpen, setScanOpen] = useState(false);
+  const [fulfil, setFulfil] = useState<"counter" | "delivery">("counter");
+  const [deliveryCharge, setDeliveryCharge] = useState("0");
+  const [preorderPay, setPreorderPay] = useState<"advance" | "full">("advance");
+  const [wallet, setWallet] = useState<{ email: string; balance: number; expiring: WalletExpiry | null; error?: string } | null>(null);
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -69,17 +86,43 @@ export function PosDesk() {
   }, [books, query]);
 
   const account = customers.find((item) => item.email === accountEmail);
-  const credit = account ? getStoreCredit(account.email) : 0;
+
+  useEffect(() => {
+    if (!accountEmail) return;
+    let cancelled = false;
+    fetchCustomerWallet(accountEmail)
+      .then((live) => !cancelled && setWallet({ email: accountEmail, balance: live.balance, expiring: live.expiring }))
+      .catch(() => !cancelled && setWallet({ email: accountEmail, balance: getStoreCredit(accountEmail), expiring: getStoreCreditExpiry(accountEmail), error: "Live wallet not reachable; showing this device's copy." }));
+    return () => {
+      cancelled = true;
+    };
+  }, [accountEmail]);
+
+  const walletReady = Boolean(account && wallet?.email === account.email);
+  const credit = account && walletReady ? wallet?.balance ?? 0 : 0;
   const rows = cart
     .map((line) => {
       const book = books.find((item) => item.id === line.bookId);
       return book ? { line, book } : null;
     })
     .filter(Boolean) as { line: Line; book: Book }[];
+  const settings = getOrderSettings();
+  const isPreorderBook = (book: Book) => Boolean(book.preorder?.enabled && book.stock <= 0);
+  const hasPreorder = rows.some((row) => isPreorderBook(row.book));
+  const mixed = hasPreorder && rows.some((row) => !isPreorderBook(row.book));
   const subtotal = rows.reduce((sum, row) => sum + row.book.price * row.line.quantity, 0);
-  const gst = Math.round(subtotal * storeConfig.gstRate);
-  const creditApplied = useCredit ? Math.min(credit, subtotal + gst) : 0;
-  const total = Math.max(0, subtotal + gst - creditApplied);
+  const { gst, platformFee } = rows.length ? commerceCharges(subtotal, settings) : { gst: 0, platformFee: 0 };
+  const charge = fulfil === "delivery" ? Math.max(0, Math.round(Number(deliveryCharge) || 0)) : 0;
+  // A pre-order sent by courier with no charge typed gets its courier charge added to the balance later, as on the website.
+  const shippingLater = hasPreorder && fulfil === "delivery" && charge === 0;
+  const grand = subtotal + gst + platformFee + charge;
+  const creditApplied = useCredit && account && creditIdFor === account.email ? Math.min(credit, grand) : 0;
+  const orderTotal = Math.max(0, Math.round((grand - creditApplied) * 100) / 100);
+  const copies = rows.reduce((sum, row) => sum + row.line.quantity, 0);
+  const advance = hasPreorder && orderTotal > 0 ? preorderAdvance(orderTotal, settings, { copies, platformFee: Math.max(0, platformFee - creditApplied) }) : orderTotal;
+  const payAdvance = hasPreorder && (preorderPay === "advance" || shippingLater);
+  const total = payAdvance ? advance : orderTotal;
+  const balanceLater = Math.max(0, Math.round((orderTotal - total) * 100) / 100);
 
   const addByCode = (code: string) => {
     const book = getProductByCode(code) || books.find((item) => matchesBarcode(item, code));
@@ -123,12 +166,21 @@ export function PosDesk() {
       setError("Add at least one product.");
       return;
     }
+    if (mixed) {
+      setError("Pre-order books go on their own sale. Remove either the pre-order or the in-stock items, then make a second sale.");
+      return;
+    }
+    if (fulfil === "delivery" && (!address.line1.trim() || !address.city.trim() || !address.state.trim() || !/^\d{6}$/.test(address.pincode))) {
+      setError("For home delivery, fill the customer's address, city, state and 6-digit pincode.");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
     try {
       const saleId = generateOrderId();
-      let paymentMethod: string = METHODS.find((item) => item.id === method)?.label ?? "Cash";
+      const methodLabel = METHODS.find((item) => item.id === method)?.label ?? "Cash";
+      let paymentMethod: string = total > 0 ? methodLabel : creditApplied > 0 ? "Store credit" : methodLabel;
       let paymentRef = reference.trim() || undefined;
       let razorpayOrderId: string | undefined;
       let razorpayPaymentId: string | undefined;
@@ -142,7 +194,7 @@ export function PosDesk() {
             name,
             email: account?.email || walkIn.email,
             phone,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
             method: "upi",
             skipDemo: true,
           });
@@ -172,7 +224,7 @@ export function PosDesk() {
             name,
             email: account?.email || walkIn.email,
             phone,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
           });
           paymentMethod = outcome.method;
           paymentRef = outcome.reference ?? outcome.paymentId;
@@ -183,7 +235,7 @@ export function PosDesk() {
           const outcome = await payOnPaytmEdc({
             amount: total,
             receipt: saleId,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
           });
           paymentMethod = outcome.method;
           paymentRef = outcome.reference ?? outcome.paymentId;
@@ -219,7 +271,7 @@ export function PosDesk() {
         line1: pickup.address,
         city: "Pune",
         state: "Maharashtra",
-        pincode: "411005",
+        pincode: "411002",
         country: "India",
         countryCode: "IN",
       };
@@ -229,33 +281,55 @@ export function PosDesk() {
         userId: account?.id,
         deliverTo,
         items: cart,
-        deliveryMode: "store_pickup",
+        deliveryMode: fulfil === "delivery" ? "delivery" : "store_pickup",
         payment: "paid",
         paymentMethod,
         paymentRef,
         razorpayOrderId,
         razorpayPaymentId,
         channel: "pos",
-        shippingOverride: 0,
+        shippingOverride: charge,
       });
-      const updates: Partial<Order> = { status: "Delivered" };
-      if (creditApplied > 0 && account) {
-        const balance = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
-        updates.storeCreditUsed = creditApplied;
-        updates.total = total;
-        updates.subtotal = subtotal;
-        updates.gst = gst;
-        updates.shipping = 0;
-        patchOrder(order.id, updates, `Store credit ₹${creditApplied} · balance ₹${balance}`);
-      } else {
-        patchOrder(order.id, updates, "Collected at counter");
+      if (creditApplied > 0 && total > 0) paymentMethod = `Store credit ${rupees(creditApplied)} + ${paymentMethod}`;
+      // Pre-orders are not handed over at the counter: they wait in Orders until the book arrives.
+      const updates: Partial<Order> = fulfil === "delivery" || hasPreorder ? {} : { status: "Delivered" };
+      if (hasPreorder && (balanceLater > 0 || shippingLater)) {
+        updates.paymentStatus = balanceLater > 0 ? "Partially Paid" : "Paid";
+        updates.preorderPayment = {
+          advance: total + creditApplied,
+          balance: balanceLater,
+          balanceWhen: settings.preorderPayment.balanceWhen,
+          advancePaidAt: new Date().toISOString(),
+          shippingDue: shippingLater || undefined,
+        };
       }
+      updates.paymentMethod = paymentMethod;
+      const notes = [
+        hasPreorder ? `Pre-order at counter · paid ${rupees(total + creditApplied)}${balanceLater > 0 ? ` · balance ${rupees(balanceLater)} by payment link when ready` : ""}${shippingLater ? " · courier charge added later" : ""}` : fulfil === "delivery" ? "Paid at counter · home delivery" : "Collected at counter",
+      ];
+      if (creditApplied > 0 && account) {
+        const left = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
+        updates.storeCreditUsed = creditApplied;
+        updates.total = orderTotal;
+        notes.push(`Store credit ₹${creditApplied} used · wallet ₹${left}`);
+        setWallet({ email: account.email, balance: left, expiring: wallet?.expiring ?? null });
+      }
+      patchOrder(order.id, updates, notes.join(" · "));
       const paid = { ...order, ...updates, paymentMethod, paymentRef, razorpayOrderId, razorpayPaymentId };
       setLastOrder(paid);
       setCart([]);
       setReference("");
       setUseCredit(false);
-      setMessage(`Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}.`);
+      setCreditId("");
+      setCreditIdFor("");
+      setCreditIdNote("");
+      setMessage(
+        hasPreorder
+          ? `Pre-order ${paid.id} recorded · ${rupees(total + creditApplied)} paid · ${paymentMethod}.${balanceLater > 0 ? ` Balance ${rupees(balanceLater)} is sent as a payment link when the book is ready.` : ""} It waits in Orders until the book arrives; stock is taken then.`
+          : fulfil === "delivery"
+            ? `Sale ${paid.id} recorded · ${rupees(total + creditApplied)} · ${paymentMethod}. Home delivery: it is in Orders for picking, packing and courier booking.`
+            : `Sale ${paid.id} recorded · ${rupees(total + creditApplied)} · ${paymentMethod}.`
+      );
       printPosReceipt(paid);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not complete the sale.");
@@ -281,8 +355,6 @@ export function PosDesk() {
         <h1 className="text-2xl font-bold text-text-primary">In-store POS</h1>
         <p className="text-sm text-text-muted">Sell from the counter. Stock is deducted immediately and a receipt is printed.</p>
       </div>
-
-      <PickupCounter />
 
       {message && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -339,6 +411,10 @@ export function PosDesk() {
                 onSelect={(item) => {
                   setAccountEmail(item?.email ?? "");
                   setUseCredit(false);
+      setCreditId("");
+      setCreditIdFor("");
+      setCreditIdNote("");
+                  setWallet(null);
                   if (item) {
                     setWalkIn({
                       name: displayName(item, true),
@@ -362,13 +438,21 @@ export function PosDesk() {
               </div>
             )}
             {account && (
-              <p className="mt-2 text-xs text-text-muted">
-                {account.phone} · {account.email}
-                {credit > 0 ? ` · store credit ${rupees(credit)}` : ""}
-              </p>
+              <div className="mt-2 space-y-1 text-xs text-text-muted">
+                <p>
+                  {account.phone} · {account.email}
+                </p>
+                <p className="font-semibold text-text-primary">
+                  Store credit: {walletReady ? rupees(credit) : "checking…"}
+                  {walletReady && wallet?.expiring ? (
+                    <span className="font-normal text-amber-700"> · {rupees(wallet.expiring.amount)} expires {formatDate(wallet.expiring.at)}</span>
+                  ) : null}
+                </p>
+                {wallet?.error && walletReady && <p className="text-amber-700">{wallet.error}</p>}
+              </div>
             )}
             <div className="mt-4">
-              <p className="mb-2 text-sm font-semibold text-text-primary">Registered address</p>
+              <p className="mb-2 text-sm font-semibold text-text-primary">{fulfil === "delivery" ? "Delivery address" : "Registered address"}</p>
               <p className="mb-3 text-xs text-text-muted">
                 The customer&apos;s saved address is shown when you pick an account. The counter can add or correct it.
               </p>
@@ -379,11 +463,17 @@ export function PosDesk() {
           <Panel title="Cart" description={`${rows.length} line${rows.length === 1 ? "" : "s"}`}>
             {rows.length === 0 ? (
               <EmptyState text="Scan or add products." />
-            ) : (
+            ) : mixed ? (
+              <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This cart mixes pre-order and in-stock items. Sell them as two separate sales.</p>
+            ) : null}
+            {rows.length > 0 && (
               <ul className="space-y-2">
                 {rows.map(({ line, book }) => (
                   <li key={book.id} className="flex items-center gap-2 text-sm">
-                    <span className="min-w-0 flex-1 truncate">{book.title}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {book.title}
+                      {isPreorderBook(book) && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">Pre-order</span>}
+                    </span>
                     <div className="w-16">
                       <TextInput type="number" min={1} value={line.quantity} onChange={(event) => setQty(book.id, Number(event.target.value))} />
                     </div>
@@ -392,15 +482,64 @@ export function PosDesk() {
                 ))}
               </ul>
             )}
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-text-primary">Handover</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant={fulfil === "counter" ? "primary" : "outline"} onClick={() => setFulfil("counter")}>Take away now</Button>
+                <Button variant={fulfil === "delivery" ? "primary" : "outline"} onClick={() => setFulfil("delivery")}>Home delivery</Button>
+              </div>
+              {fulfil === "delivery" && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <Field label="Delivery charge (₹)">
+                    <TextInput type="number" min={0} value={deliveryCharge} onChange={(event) => setDeliveryCharge(event.target.value)} />
+                  </Field>
+                  <p className="self-end text-xs text-text-muted">Ships to the address above. The order goes to Orders for picking, packing and courier booking.</p>
+                </div>
+              )}
+            </div>
             <dl className="mt-4 space-y-1 border-t border-border pt-3 text-sm">
               <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(subtotal)}</dd></div>
               <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(gst)}</dd></div>
+              {fulfil === "delivery" && (
+                <div className="flex justify-between"><dt className="text-text-muted">Delivery</dt><dd>{rupees(charge)}</dd></div>
+              )}
               {creditApplied > 0 && (
                 <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(creditApplied)}</dd></div>
               )}
               <div className="flex justify-between font-bold"><dt>To collect</dt><dd className="text-burgundy">{rupees(total)}</dd></div>
             </dl>
-            {credit > 0 && (
+            {credit > 0 && account && creditIdFor !== account.email && (
+              <div className="mt-3 space-y-1">
+                <div className="flex gap-2">
+                  <TextInput
+                    className="w-36"
+                    inputMode="numeric"
+                    maxLength={5}
+                    placeholder="Store Credit ID"
+                    aria-label="Store Credit ID"
+                    value={creditId}
+                    onChange={(event) => setCreditId(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={creditId.length !== 5}
+                    onClick={async () => {
+                      setCreditIdNote("");
+                      const ok = await verifyStoreCreditId(account.email, creditId).catch(() => false);
+                      if (ok) setCreditIdFor(account.email);
+                      else setCreditIdNote("That Store Credit ID does not match this customer.");
+                    }}
+                  >
+                    Verify ID
+                  </Button>
+                  <Button variant="outline" onClick={async () => setCreditIdNote(await resendCreditId(account.email))}>
+                    Resend ID
+                  </Button>
+                </div>
+                <p className="text-xs text-text-muted">{creditIdNote || "Ask the customer for the 5-digit Store Credit ID shown in their wallet."}</p>
+              </div>
+            )}
+            {credit > 0 && account && creditIdFor === account.email && (
               <label className="mt-3 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={useCredit} onChange={(event) => setUseCredit(event.target.checked)} />
                 Apply store credit ({rupees(credit)})

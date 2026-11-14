@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
+import { notifyOrderStage } from "@/lib/server/order-stage-mail";
 import type { Order } from "@/types";
 
 function file() {
@@ -48,8 +49,19 @@ export function orderPhoneMatches(order: Order, phone: string) {
   return phonesMatch(order.deliveryAddress?.phone, phone);
 }
 
-export function upsertShopOrder(order: Order) {
+/** The order as a customer may see it: packing proof photos stay with the desk. */
+export function forCustomer(order: Order): Order {
+  if (!order.packPhotos) return order;
+  const copy = { ...order };
+  delete copy.packPhotos;
+  return copy;
+}
+
+/** `quiet`: a desk edit, so the customer gets no stage email or push for it. */
+export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {}) {
   if (!order?.id) return;
+  // A browser with an old cached copy must not bring back an order the desk deleted.
+  if (deletedShopOrderIds().includes(order.id)) return;
   const all = readAll();
   const prev = all.find((item) => item.id === order.id);
   if (prev && orderActivityAt(prev) > orderActivityAt(order)) return prev;
@@ -57,21 +69,40 @@ export function upsertShopOrder(order: Order) {
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
   orders.unshift(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken });
   writeAll(orders);
+  if (!options.quiet) void notifyOrderStage(prev, orders[0]).catch(() => undefined);
   return orders[0];
+}
+
+function deletedFile() {
+  return dataFile("shop-orders-deleted.json");
+}
+
+/** Ids the desk deleted, so customers' browsers drop their cached copy too. */
+export function deletedShopOrderIds(): string[] {
+  try {
+    const parsed = JSON.parse(readFileSync(deletedFile(), "utf8"));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function deleteShopOrder(id: string) {
   const clean = id.trim();
   if (!clean) return;
   writeAll(readAll().filter((order) => order.id !== clean));
+  const gone = deletedShopOrderIds().filter((item) => item !== clean);
+  writeFileSync(deletedFile(), JSON.stringify([clean, ...gone].slice(0, 2000)));
 }
 
 export function patchShopOrder(id: string, update: Partial<Order>) {
   const all = readAll();
   const index = all.findIndex((order) => order.id === id);
   if (index === -1) return;
-  all[index] = { ...all[index], ...update };
+  const prev = all[index];
+  all[index] = { ...prev, ...update };
   writeAll(all);
+  void notifyOrderStage(prev, all[index]).catch(() => undefined);
   return all[index];
 }
 

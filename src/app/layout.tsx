@@ -8,11 +8,13 @@ import {
   Noto_Sans_Tamil,
   Outfit,
 } from "next/font/google";
+import Script from "next/script";
 import JsonLd from "@/components/seo/JsonLd";
 import { EnvironmentBanner } from "@/components/layout/EnvironmentBanner";
 import { SiteTheme } from "@/components/theme/SiteTheme";
 import { platformEnv, publicSiteUrl } from "@/lib/platform";
 import { siteConfig } from "@/lib/constants";
+import { SEMINAR_ADSENSE_SCRIPT } from "@/lib/seminar-ads";
 import "./globals.css";
 
 const sans = Outfit({
@@ -100,7 +102,6 @@ export function generateMetadata(): Metadata {
     robots: noIndex
       ? { index: false, follow: false, googleBot: { index: false, follow: false } }
       : { index: true, follow: true, googleBot: { index: true, follow: true } },
-    alternates: { canonical: url },
     openGraph: {
       type: "website",
       locale: "en_IN",
@@ -137,6 +138,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const GA_ID = (process.env.NEXT_PUBLIC_GA_ID || "").trim();
+
+/** Google Analytics 4 runs on the public site only, never on staging or demo. */
+function GoogleAnalytics() {
+  if (!/^G-[A-Z0-9]{4,16}$/.test(GA_ID) || platformEnv() !== "production") return null;
+  return (
+    <>
+      <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`} strategy="afterInteractive" />
+      <Script id="ga4" strategy="afterInteractive">
+        {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`}
+      </Script>
+    </>
+  );
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -148,11 +164,13 @@ export default function RootLayout({
       className={`${sans.variable} ${serif.variable} ${devanagari.variable} ${kannada.variable} ${tamil.variable} ${malayalam.variable} ${gujarati.variable} scroll-smooth`}
       data-scroll-behavior="smooth"
     >
+      <head>{platformEnv() === "production" ? <script async src={SEMINAR_ADSENSE_SCRIPT} crossOrigin="anonymous" /> : null}</head>
       <body className="min-h-screen bg-background font-sans antialiased">
         <SiteTheme />
         <EnvironmentBanner />
         <JsonLd />
         {children}
+        <GoogleAnalytics />
       </body>
     </html>
   );

@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
+import { appOrdersFor } from "@/lib/server/mobile-shop";
+import { listShopShipments } from "@/lib/server/shop-shipments";
+import { forCustomer } from "@/lib/server/shop-orders";
 import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
+import { buildTrackingStages, shipmentScans } from "@/lib/order-pipeline";
+import { agreedDelivery, deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
+import { customerCourierLabel } from "@/lib/courier-label";
+import type { Order, ShipmentRecord } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,17 +39,65 @@ function catalogItems(raw: unknown) {
     items.push({
       id: String(book.id),
       title: String(book.title),
-      quantity: Math.max(1, Math.min(20, Math.floor(Number(row.quantity) || 1))),
+      quantity: Math.max(1, Math.min(100, Math.floor(Number(row.quantity) || 1))),
       price: Math.max(0, Number(book.price) || 0),
     });
   }
   return { items };
 }
 
+/** The website's order tracker (same stages, scans and expected date), ready for the app to draw. */
+function trackingFor(order: Order, shipment?: ShipmentRecord) {
+  try {
+    const { stages } = buildTrackingStages(order, shipmentScans(shipment), shipment);
+    const country = order.deliveryAddress?.country;
+    const partial = stages.map((stage) => stage.partial).lastIndexOf(true);
+    const current = partial !== -1 ? partial : stages.map((stage) => stage.reached).lastIndexOf(true);
+    const expected = agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date) || Date.now());
+    return {
+      shipmentId: shipment?.id ?? "",
+      part: shipment?.part ?? 0,
+      courier: customerCourierLabel({ provider: shipment?.provider ?? order.courierChoice?.provider, courier: shipment?.courier || order.courierName }),
+      trackingId: shipment?.awb || order.trackingId || "",
+      expected: expected && order.status !== "Delivered" && shipment?.status !== "Delivered" ? deliveryDatePhrase(expected) : "",
+      current: Math.max(0, current),
+      stages: stages.map((stage) => ({
+        id: stage.id,
+        label: stage.label,
+        caption: stage.caption ?? "",
+        reached: stage.reached,
+        partial: stage.partial,
+        events: stage.events.map((event) => ({
+          title: event.title,
+          when: event.at ? statusStamp(event.at, country) : "",
+          location: event.location ?? "",
+          detail: event.detail ?? "",
+          notice: event.notice ?? "",
+        })),
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function trackersFor(order: Order, shipments: ShipmentRecord[]) {
+  const parts = shipments.filter((item) => item.part).sort((a, b) => (a.part ?? 0) - (b.part ?? 0));
+  const list = parts.length >= 2 ? parts : [shipments[0]];
+  return list.map((shipment) => trackingFor(order, shipment)).filter(Boolean);
+}
+
 export async function GET(request: NextRequest) {
   const session = sessionOf(request);
   if (!session) return json({ ok: false, error: "Sign in to view orders." }, 401);
-  return json({ ok: true, store: "mobile-api", orders: listOrders(session.email) });
+  const shipments = listShopShipments().filter((item) => item.note !== "Cancelled");
+  const shop = appOrdersFor(session.email).map((order) => {
+    const own = shipments.filter((item) => item.orderId === order.id);
+    return { ...forCustomer(order as Order), shipments: own, tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
+  });
+  const ids = new Set(shop.map((order) => order.id));
+  const legacy = listOrders(session.email).filter((order) => !ids.has(order.id));
+  return json({ ok: true, store: "shop", orders: shop, legacy });
 }
 
 export async function POST(request: NextRequest) {

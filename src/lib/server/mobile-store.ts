@@ -2,9 +2,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { dataFile } from "@/lib/server/paths";
+import { saveTicket, ticketsFor } from "@/lib/server/support-tickets";
 
 const OTP_FILE = join("/tmp", "vgmf-mobile-otp.json");
-const TICKETS_FILE = join("/tmp", "vgmf-mobile-tickets.json");
 const ORDERS_FILE = join("/tmp", "vgmf-mobile-orders.json");
 const LEGACY_SESSIONS_FILE = join("/tmp", "vgmf-mobile-sessions.json");
 
@@ -210,7 +210,7 @@ export function publicSession(session: MobileSession) {
 
 export function listTickets(email: string) {
   const normalized = email.trim().toLowerCase();
-  return load<MobileTicket[]>("tickets", TICKETS_FILE, []).filter((ticket) => ticket.email === normalized);
+  return ticketsFor(normalized);
 }
 
 export function ticketRateLimited(email: string) {
@@ -236,10 +236,7 @@ export function addTicket(input: { name: string; email: string; phone?: string; 
     createdAt: now,
     responses: [],
   };
-  const list = load<MobileTicket[]>("tickets", TICKETS_FILE, []);
-  list.unshift(ticket);
-  persist("tickets", TICKETS_FILE, list);
-  return ticket;
+  return saveTicket({ ...ticket, updatedAt: now, portal: "customer" });
 }
 
 export function listOrders(email: string) {
@@ -266,7 +263,7 @@ export function addOrder(input: {
   const items = input.items.map((item) => ({
     id: String(item.id),
     title: String(item.title).slice(0, 200),
-    quantity: Math.max(1, Math.min(20, Math.floor(Number(item.quantity) || 1))),
+    quantity: Math.max(1, Math.min(100, Math.floor(Number(item.quantity) || 1))),
     price: Math.max(0, Number(item.price) || 0),
   }));
   const key = orderKey(email, items);

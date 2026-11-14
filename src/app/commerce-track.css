@@ -42,9 +42,9 @@
 .vgmf-ship-pipe > li::before {
   content: "";
   position: absolute;
-  left: 15px;
-  top: 34px;
-  bottom: 0;
+  left: 14.5px;
+  top: 16px;
+  bottom: -16px;
   width: 3px;
   background: var(--tl-line);
   border-radius: 2px;
@@ -67,10 +67,10 @@
 }
 .vgmf-ship-pipe > li > .dot {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 32px;
-  height: 32px;
+  left: 9px;
+  top: 9px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid var(--tl-line);
   background: #fff;
@@ -87,13 +87,23 @@
   border-color: var(--tl-green);
   color: #fff;
 }
+.vgmf-ship-pipe > li.done:not(.lit) > .dot,
+.vgmf-ship-pipe > li.active:not(.lit) > .dot {
+  background: #fff;
+  border-color: var(--tl-line);
+  animation: none;
+  transition: none;
+}
+.vgmf-ship-pipe > li.lit > .dot {
+  transition: none;
+}
 .vgmf-ship-pipe > li.is-failed > .dot {
   background: var(--tl-failed);
   border-color: var(--tl-failed);
   color: #fff;
 }
 .vgmf-ship-pipe > li.active > .dot {
-  animation: vgmfTrkPulse 2.4s ease-out 3;
+  animation: vgmfTrkPulse 1.6s ease-out infinite;
 }
 .vgmf-ship-copy {
   min-width: 0;
@@ -140,6 +150,15 @@
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--tl-green);
+}
+.vgmf-ship-label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vgmf-ship-expect.is-inline {
+  margin: 0;
 }
 .vgmf-ship-expect.is-late {
   background: #fff7ed;
@@ -397,4 +416,12 @@
     animation: none;
   }
   .vgmf-ship-fill { transition: none; }
+}
+
+.vgmf-ship-notice {
+  margin-top: 6px;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #1f2a44;
 }

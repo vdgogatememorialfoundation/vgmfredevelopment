@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import HeroSection from "@/components/home/HeroSection";
 import NoticeBoard from "@/components/home/NoticeBoard";
 import FoundationDirectory from "@/components/home/FoundationDirectory";
@@ -12,6 +13,9 @@ import SupportUs from "@/components/home/SupportUs";
 import AwardsSection from "@/components/home/AwardsSection";
 import { SpeakerBoard } from "@/components/events/EventSchedules";
 import HomeSections from "@/components/home/HomeSections";
+import InstagramReels from "@/components/home/InstagramReels";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function HomePage() {
   return (
@@ -29,6 +33,7 @@ export default function HomePage() {
         books: <FeaturedBooks />,
         articles: <FeaturedArticles />,
         notices: <NoticeBoard />,
+        reels: <InstagramReels />,
         clinics: <ClinicsSection />,
       }}
     />

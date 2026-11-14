@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import PageHeader from "@/components/common/PageHeader";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import { useCart } from "@/lib/use-cart";
+import { deliveryCheckText, readDeliveryCheck, type DeliveryCheck } from "@/lib/delivery-check";
+import { customerOrderPolicyCopy, preorderDatesHidden, shippingIsFree } from "@/lib/integrations";
 import {
   getBookById,
   setCartQuantity,
@@ -14,15 +17,28 @@ import {
   formatPrice,
   getEstimatedDeliveryDate,
 } from "@/lib/store";
-import { isPurchasable } from "@/lib/product-data";
+import { canPreorder, isPurchasable, preorderDeliveryDate } from "@/lib/product-data";
 import QtyControl from "@/components/store/QtyControl";
 import RestockAlert from "@/components/store/RestockAlert";
 import { moveSavedToCart, removeSavedLater, saveForLater, useSavedLater } from "@/lib/saved-later";
 import { storeConfig } from "@/lib/constants";
 import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
 import Glyph from "@/components/store/Glyph";
+import BulkOrderNote from "@/components/store/BulkOrderNote";
 
 export default function CartPage() {
+  const [deliveryCheck, setDeliveryCheck] = useState<DeliveryCheck | null>(null);
+  const [checkoutExpired, setCheckoutExpired] = useState(false);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setDeliveryCheck(readDeliveryCheck());
+      if (window.sessionStorage.getItem("vgmf_checkout_expired")) {
+        window.sessionStorage.removeItem("vgmf_checkout_expired");
+        setCheckoutExpired(true);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const { items, count } = useCart();
   const saved = useSavedLater();
   const catalogue = useLiveBooks();
@@ -43,6 +59,8 @@ export default function CartPage() {
   );
 
   const orderSettings = useOrderSettings();
+  const hasPreorder = rows.some(({ book }) => canPreorder(book));
+  const shownTotal = hasPreorder ? totals.total - totals.shipping : totals.total;
   const shippingFree = orderSettings.shippingFeeMode !== "free_above" || totals.subtotal >= orderSettings.freeAbove;
 
   return (
@@ -53,6 +71,13 @@ export default function CartPage() {
       />
 
       <section className="section bg-background">
+        {checkoutExpired ? (
+          <div className="container mb-6 max-w-6xl">
+            <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+              Your checkout time expired, so that order was cancelled and no payment was taken. Your items are still in the bag. Start checkout again.
+            </p>
+          </div>
+        ) : null}
         <div className="container grid max-w-6xl gap-10 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
             {rows.length === 0 ? (
@@ -100,19 +125,33 @@ export default function CartPage() {
                         {formatPrice(book.price * item.quantity)}
                       </span>
                       <span className="text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</span>
-                      {book.originalPrice && book.originalPrice > book.price && (
-                        <span className="text-sm text-text-muted line-through">
-                          {formatPrice(book.originalPrice * item.quantity)}
+                      {book.originalPrice != null && book.originalPrice > book.price && (
+                        <span className="text-xs text-text-muted">
+                          MRP <span className="line-through">{formatPrice(book.originalPrice * item.quantity)}</span>
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
-                      <Glyph name="truck" className="h-3.5 w-3.5" />
-                      Delivery by {getEstimatedDeliveryDate(6)} · {book.expectedDelivery}
-                    </p>
+                    {canPreorder(book) ? (
+                      <>
+                        <p className="mt-2 inline-block rounded-lg bg-amber-100 px-2 py-0.5 text-sm font-bold text-amber-900">Pre-order</p>
+                        {preorderDatesHidden(orderSettings) ? null : (
+                          <p className="mt-1 flex items-center gap-1 text-sm font-bold text-emerald-800">
+                            <Glyph name="truck" className="h-3.5 w-3.5" />
+                            Tentative delivery by {preorderDeliveryDate(book)}
+                          </p>
+                        )}
+                      </>
+                    ) : orderSettings.hideDeliveryDates ? null : (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
+                        <Glyph name="truck" className="h-3.5 w-3.5" />
+                        {deliveryCheck ? `Delivery by ${deliveryCheckText(deliveryCheck)} to ${deliveryCheck.pincode}` : "Delivery date for your pincode is shown at checkout"}
+                        {book.expectedDelivery ? ` · ${book.expectedDelivery}` : ""}
+                      </p>
+                    )}
 
-                    {!isPurchasable(book) && <p className="mt-2 text-xs font-semibold text-burgundy">Out of stock</p>}
-                    {!isPurchasable(book) && <RestockAlert bookId={book.id} />}
+                    {!isPurchasable(book) && !canPreorder(book) && <p className="mt-2 text-xs font-semibold text-burgundy">Out of stock</p>}
+                    {!isPurchasable(book) && !canPreorder(book) && <RestockAlert bookId={book.id} />}
+                    <BulkOrderNote quantity={item.quantity} />
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <QtyControl value={item.quantity} max={quantityCap(book.id)} onChange={(quantity) => setCartQuantity(item.bookId, quantity)} />
                       <button
@@ -174,10 +213,10 @@ export default function CartPage() {
 
             <div className="rounded-2xl border border-border bg-white p-5 text-xs text-text-muted">
               <p className="font-semibold text-text-primary">
-                Replacements
+                {customerOrderPolicyCopy(orderSettings).title}
               </p>
-              <p className="mt-1">
-                Orders cannot be cancelled or returned from your account. Damaged items can be replaced after delivery if you share photos for the Foundation desk to review.
+              <p className="mt-1 whitespace-pre-line">
+                {customerOrderPolicyCopy(orderSettings).body}
               </p>
             </div>
           </div>
@@ -189,6 +228,7 @@ export default function CartPage() {
                 Price Details
               </h2>
               <dl className="mt-5 space-y-3 text-sm">
+                {totals.discount > 0 ? (<>
                 <div className="flex justify-between">
                   <dt className="text-text-muted">MRP</dt>
                   <dd className="font-medium text-text-primary">
@@ -201,8 +241,9 @@ export default function CartPage() {
                     − {formatPrice(totals.discount)}
                   </dd>
                 </div>
+                </>) : null}
                 <div className="flex justify-between">
-                  <dt className="text-text-muted">Books</dt>
+                  <dt className="text-text-muted">Items</dt>
                   <dd className="font-medium text-text-primary">{count}</dd>
                 </div>
                 <div className="flex justify-between">
@@ -219,22 +260,28 @@ export default function CartPage() {
                 )}
                 {orderSettings.platformFee.enabled && (
                   <div className="flex justify-between">
-                    <dt className="text-text-muted">Platform fee{orderSettings.platformFee.refundable ? "" : " (kept on refund)"}</dt>
+                    <dt className="text-text-muted">Platform fee (non-refundable)</dt>
                     <dd className="font-medium text-text-primary">{formatPrice(totals.platformFee)}</dd>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <dt className="text-text-muted">Shipping</dt>
-                  <dd className="font-medium text-text-primary">
-                    {totals.shipping === 0 ? "FREE" : formatPrice(totals.shipping)}
-                  </dd>
-                </div>
+                {hasPreorder ? null : (
+                  <div className="flex justify-between">
+                    <dt className="text-text-muted">Shipping</dt>
+                    <dd className="font-medium text-text-primary">
+                      {totals.shipping > 0
+                        ? formatPrice(totals.shipping)
+                        : shippingIsFree(totals.subtotal, orderSettings)
+                          ? "FREE"
+                          : "Calculated at checkout"}
+                    </dd>
+                  </div>
+                )}
                 <div className="flex justify-between border-t border-border pt-3">
                   <dt className="font-semibold text-text-primary">
                     Total Amount
                   </dt>
                   <dd className="font-bold text-burgundy">
-                    {formatPrice(totals.total)}
+                    {formatPrice(shownTotal)}
                   </dd>
                 </div>
               </dl>
@@ -277,11 +324,12 @@ export default function CartPage() {
   );
 }
 
-function MediumBookCover({ book }: { book: { slug: string; title: string } }) {
+function MediumBookCover({ book }: { book: { slug: string; title: string; coverImage?: string } }) {
   return (
     <div className="w-20 shrink-0">
       <MediaPlaceholder
         variant="book"
+        src={book.coverImage}
         label={book.title}
         aspectClassName="aspect-[3/4] rounded-xl"
       />

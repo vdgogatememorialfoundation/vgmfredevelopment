@@ -5,6 +5,7 @@ import { events as seededEvents } from "@/data/events";
 import { videos as seededVideos } from "@/data/videos";
 import type { Announcement, Article, ArticleAssignment, Certificate, Clinic, Event, EventMode, EventType, Flyer, Notice, PrizeAward, RegistrationStatus, SiteBanner, ThanksCredit, User, Video } from "@/types";
 import { isArticlePublished } from "@/lib/article-display";
+import { isPublishedNow } from "@/lib/schedule";
 import { isPublicFellowshipEvent, withResolvedRegistration } from "@/lib/event-status";
 import { modulesFor, type StaffModuleId } from "@/lib/roles";
 
@@ -108,7 +109,7 @@ export function getPublishedArticles() {
 }
 
 export function getLiveArticles(): Article[] {
-  return getPublishedArticles();
+  return getPublishedArticles().filter((article) => isPublishedNow(article));
 }
 
 export function getArticle(idOrSlug: string) {
@@ -294,6 +295,8 @@ export function canEdit(moduleId: ContentModuleId, email: string) {
   if (editorsFor(moduleId).some((item) => item.toLowerCase() === value)) return true;
   const account = readJSON<User[]>("vgmf_accounts", []).find((item) => item.email.toLowerCase() === value);
   if (!account) return false;
+  // Any staff member may write articles (they go for approval); assignment is optional.
+  if (moduleId === "articles" && String(account.role) === "staff") return true;
   const allowed = modulesFor(account);
   return allowed === "all" || allowed.includes(roleModuleFor[moduleId]);
 }

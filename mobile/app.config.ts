@@ -31,7 +31,7 @@ const config = {
     extra: {
       ...appJson.expo.extra,
       flavor: flavorId,
-      apiUrl: process.env.EXPO_PUBLIC_API_URL || appJson.expo.extra.apiUrl || "https://staging.vaidyagogate.org",
+      apiUrl: process.env.EXPO_PUBLIC_API_URL || appJson.expo.extra.apiUrl || "https://vaidyagogate.org",
     },
   },
 };

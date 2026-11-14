@@ -38,7 +38,7 @@ export default function Page() {
       }}
       onHide={(id) => {
         hideFlyer(id);
-        void publishLiveSite();
+        void publishLiveSite({ removed: { flyers: [id] } });
       }}
     />
   );

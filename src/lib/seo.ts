@@ -63,4 +63,33 @@ export const publicSitemapPaths = [
   "/cancellation-policy",
   "/certificate-verification",
   "/support",
+  "/faq",
+  "/notices",
+  "/announcements",
+  "/speakers",
+  "/schedules",
+  "/books",
 ];
+
+export function absoluteUrl(path = "/") {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${siteUrl}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+export function plainText(value = "", max = 160) {
+  const text = value.replace(/<[^>]*>/g, " ").replace(/[#*_>`~[\]]/g, " ").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+export function breadcrumbJsonLd(items: { name: string; path: string }[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: absoluteUrl(item.path),
+    })),
+  };
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import { BookContentFields, BookSpecFields } from "@/components/admin/BookDetailsFields";
+import { isValidIsbn } from "@/lib/book-details";
 import { useMemo, useRef, useState } from "react";
 import {
   deleteCategory,
@@ -7,9 +9,10 @@ import {
   ensureProductBarcodes,
   generateBarcode,
   generateProductCode,
-  generateSku,
+  generateBatchNo, generateSku,
   getCategories,
   isProductCodeTaken,
+  issueStockLabels,
   isSkuTaken,
   pendingStockAlerts,
   restockProduct,
@@ -18,9 +21,10 @@ import {
   stockLevel,
   updateStock,
 } from "@/lib/product-data";
-import { barcodeSvg, printBarcodeSheet } from "@/lib/barcode";
+import { barcodeSvg, printBarcodeSheet, printStockLabels } from "@/lib/barcode";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
 import { useAllProducts } from "@/lib/use-cms";
+import { fromDatetimeLocal, isPublishedNow, toDatetimeLocal } from "@/lib/schedule";
 import { fileToStoredUrl } from "@/lib/images";
 import type { AdminCategory, Book, ProductMedia, PublisherInfo } from "@/types";
 import {
@@ -36,14 +40,16 @@ import {
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
 import type { CaptionedImage } from "@/types";
 
+const BOOK_LANGUAGES = ["English", "Marathi", "Hindi", "Sanskrit", "Gujarati", "Kannada", "Tamil", "Telugu", "Malayalam", "Bengali", "English & Marathi", "English & Hindi", "Sanskrit & Marathi", "Sanskrit & Hindi", "Multilingual"];
+
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `item-${Date.now()}`;
 }
 
 const blankPublisher = (): PublisherInfo => ({
   name: "Vaidya Gogate Memorial Foundation Publications",
-  address: "FC Road, Shivaji Nagar, Pune 411005, Maharashtra",
-  phone: "+91 20 1234 5678",
+  address: "102, Ramprasad Chamber, 368/1, Jawaharlal Nehru Road, Nana Peth, Pune 411002, Maharashtra",
+  phone: "093737 92952",
   email: "publications@vaidyagogate.org",
 });
 
@@ -56,6 +62,7 @@ function blankProduct(): Book {
     description: "",
     isbn: "",
     sku: "",
+    batchNo: "",
     productCode: "",
     barcode: "",
     pages: 0,
@@ -136,12 +143,34 @@ export function ProductsSection() {
             onClick={() =>
               printBarcodeSheet(
                 shown
-                  .filter((book) => book.barcode)
-                  .map((book) => ({ title: book.title, sku: book.sku, barcode: book.barcode as string }))
+                  .filter((book) => book.barcode || book.productCode || book.sku || book.isbn)
+                  .map((book) => ({ title: book.title, sku: book.sku, barcode: book.barcode, productCode: book.productCode, isbn: book.isbn }))
               )
             }
           >
-            Print barcodes
+            Download barcodes &amp; QR ({shown.length})
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!shown.length) {
+                setStockNote("No products in this list to print labels for.");
+                return;
+              }
+              const answer = window.prompt(
+                `Stock labels for ${shown.length} product${shown.length === 1 ? "" : "s"}. Each copy gets its own code, which locks to the order it is scanned for.\n\nHow many labels per product? Leave blank to print one per copy in stock (products with no stock get 1).`,
+                ""
+              );
+              if (answer === null) return;
+              const fixed = Math.floor(Number(answer));
+              const perBook = (book: Book) => (answer.trim() && fixed > 0 ? fixed : Math.max(1, book.stock ?? 0));
+              const rows = shown.flatMap((book) => issueStockLabels(book.id, perBook(book)).map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) })));
+              void printStockLabels(rows).then((opened) =>
+                setStockNote(opened ? `${rows.length} stock labels for ${shown.length} products.` : "The label window was blocked. Allow pop-ups for this site and try again.")
+              );
+            }}
+          >
+            Bulk stock labels
           </Button>
           <Button variant="outline" onClick={() => setScanOpen(true)}>Scan barcode</Button>
           <Button
@@ -275,12 +304,27 @@ export function ProductsSection() {
                       <td className="px-3 text-text-muted">{book.category}</td>
                       <td className="px-3">
                         {book.active === false && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">Hidden</span>}
+                        {book.active !== false && !isPublishedNow(book) && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700">Scheduled</span>}
                         {book.active !== false && level === "in" && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">In stock</span>}
                         {book.active !== false && level === "low" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">Low</span>}
                         {book.active !== false && level === "out" && book.preorder?.enabled && <span className="rounded-full bg-burgundy/10 px-2 py-0.5 text-[11px] font-bold text-burgundy">Pre-order</span>}
                         {book.active !== false && level === "out" && !book.preorder?.enabled && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-600">Out</span>}
                       </td>
                       <td className="px-3 text-right">
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            const answer = window.prompt(`How many stock labels for ${book.title}? Each label gets its own number.`, String(Math.max(1, book.stock || 1)));
+                            const count = Math.floor(Number(answer));
+                            if (!answer || !Number.isFinite(count) || count < 1) return;
+                            const codes = issueStockLabels(book.id, count);
+                            void printStockLabels(codes.map((code) => ({ title: book.title, code, sku: book.sku, price: formatINR(book.price) }))).then((opened) =>
+                              setStockNote(opened ? `${book.title}: ${codes.length} labels, ${codes[0]} to ${codes[codes.length - 1]}.` : `${book.title}: the label window was blocked. Allow pop-ups for this site and try again.`)
+                            );
+                          }}
+                        >
+                          Labels
+                        </Button>
                         <Button variant="ghost" onClick={() => { setCreating(false); setEditedId(editedId === book.id ? null : book.id); }}>
                           {editedId === book.id ? "Close" : "Edit"}
                         </Button>
@@ -304,6 +348,11 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
   const [form, setForm] = useState<Book>(() => ({
     ...blankProduct(),
     ...book,
+    // Older products may lack codes; fill them so the form shows what save will store.
+    sku: book.sku?.trim() || generateSku(book.category, book.id),
+    productCode: book.productCode?.trim() || generateProductCode(book.id),
+    batchNo: book.batchNo?.trim() || generateBatchNo(),
+    barcode: book.barcode?.trim() || generateBarcode(),
     publisher: { ...blankPublisher(), ...book.publisher },
     preorder: { enabled: false, releaseDate: "", limit: 0, note: "", ...book.preorder },
     licenses: book.licenses?.length ? book.licenses : [{ label: "ISBN", value: book.isbn ?? "" }],
@@ -312,7 +361,12 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
-  const set = (patch: Partial<Book>) => setForm((current) => ({ ...current, ...patch }));
+  const set = (patch: Partial<Book>) => {
+    setSaved("");
+    setForm((current) => ({ ...current, ...patch }));
+  };
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const linkSlug = slugify(form.title);
 
   const gallery: CaptionedImage[] = useMemo(
     () => (form.media ?? []).filter((item) => item.type === "image").map((item) => ({ src: item.src ?? "", caption: item.label })),
@@ -335,17 +389,22 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     if (!form.price || form.price < 0) return setError("Add a selling price.");
     const sku = (form.sku ?? "").trim() || generateSku(form.category, form.id);
     const productCode = (form.productCode ?? "").trim() || generateProductCode(form.id);
+    const batchNo = (form.batchNo ?? "").trim() || generateBatchNo();
     if (isSkuTaken(sku, form.id)) return setError(`SKU ${sku} is already used.`);
     if (isProductCodeTaken(productCode, form.id)) return setError(`Product code ${productCode} is already used.`);
-    const isbn = (form.licenses ?? []).find((item) => item.label.toLowerCase() === "isbn")?.value || form.isbn;
+    const isbn = ((form.licenses ?? []).find((item) => item.label.toLowerCase() === "isbn")?.value || form.isbn || "").trim();
+    if (isbn && !isValidIsbn(isbn)) return setError(`${isbn} is not a valid ISBN. Leave the ISBN blank unless one is assigned; the product code is shown instead.`);
     const inStock = form.stockStatus === "in_stock";
     const stock = inStock ? Math.max(0, Math.floor(form.stock)) : 0;
     if (inStock && stock < 1) return setError("In-stock products need a quantity of at least 1.");
+    const nextSlug = slugify(form.title);
     const record: Book = {
       ...form,
       title: form.title.trim(),
-      slug: form.slug || slugify(form.title),
+      slug: nextSlug,
+      previousSlugs: book.slug && book.slug !== nextSlug ? Array.from(new Set([...(form.previousSlugs ?? []), book.slug])).filter((old) => old !== nextSlug) : form.previousSlugs,
       sku,
+      batchNo,
       productCode,
       barcode: form.barcode || generateBarcode(),
       isbn: isbn || undefined,
@@ -357,6 +416,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
       coverImage: form.coverImage || (form.media ?? []).find((item) => item.type === "image")?.src,
       specifications: [
         { label: "SKU", value: sku },
+        { label: "Batch no.", value: batchNo },
         { label: "Product code", value: productCode },
         ...(isbn ? [{ label: "ISBN", value: isbn }] : []),
         ...(form.edition ? [{ label: "Edition", value: form.edition }] : []),
@@ -365,6 +425,8 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
         ...(form.language ? [{ label: "Language", value: form.language }] : []),
         ...(form.publisher?.name ? [{ label: "Publisher", value: form.publisher.name }] : []),
       ],
+      audience: (form.audience ?? []).filter(Boolean),
+      contributors: (form.contributors ?? []).filter((person) => person.name.trim()),
     };
     try {
       saveProduct(record);
@@ -380,15 +442,30 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
     <Panel
       title={isNew ? "Create product" : `Edit — ${book.title}`}
       description="Images and videos, licences, publisher, generated SKU, then stock."
-      action={saved ? <span className="text-sm font-semibold text-emerald-700">Saved ✓</span> : undefined}
+      action={
+        <div className="flex items-center gap-3">
+          {saved ? <span className="text-sm font-semibold text-emerald-700">Saved ✓</span> : null}
+          <Button variant="outline" onClick={onDone}>← Back to products</Button>
+        </div>
+      }
     >
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Field label="Title">
-            <TextInput value={form.title} onChange={(event) => set({ title: event.target.value, slug: isNew ? slugify(event.target.value) : form.slug })} />
+            <TextInput value={form.title} onChange={(event) => set({ title: event.target.value, slug: slugify(event.target.value) })} />
           </Field>
+          {linkSlug ? (
+            <div className="-mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="break-all">Product link{!isNew && linkSlug !== book.slug ? " after saving" : ""}: {origin}/shop/{linkSlug}</span>
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Author"><TextInput value={form.author} onChange={(event) => set({ author: event.target.value })} /></Field>
+            <Field label="Product type">
+              <SelectInput value={form.productType ?? "book"} onChange={(event) => set({ productType: event.target.value === "other" ? "other" : "book" })}>
+                <option value="book">Book</option>
+                <option value="other">Other product (no ISBN, author or publisher)</option>
+              </SelectInput>
+            </Field>
             <Field label="Category">
               <SelectInput value={form.category} onChange={(event) => set({ category: event.target.value })}>
                 {categories.map((category) => (
@@ -396,16 +473,65 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
                 ))}
               </SelectInput>
             </Field>
+          </div>
+          <div className={form.productType === "other" ? "hidden" : "grid gap-3 sm:grid-cols-2"}>
+            <Field label="Author"><TextInput value={form.author} onChange={(event) => set({ author: event.target.value })} /></Field>
             <Field label="Edition"><TextInput value={form.edition ?? ""} onChange={(event) => set({ edition: event.target.value })} /></Field>
             <Field label="Published year"><TextInput type="number" value={form.publishedYear ?? ""} onChange={(event) => set({ publishedYear: Number(event.target.value) || undefined })} /></Field>
             <Field label="Pages"><TextInput type="number" value={form.pages || ""} onChange={(event) => set({ pages: Number(event.target.value) || undefined })} /></Field>
             <Field label="Binding"><TextInput value={form.binding ?? ""} onChange={(event) => set({ binding: event.target.value })} /></Field>
-            <Field label="Language"><TextInput value={form.language ?? ""} onChange={(event) => set({ language: event.target.value })} /></Field>
+            <Field label="Language (optional, for books)">
+              <SelectInput value={form.language ?? ""} onChange={(event) => set({ language: event.target.value || undefined })}>
+                <option value="">No language (not a book)</option>
+                {Array.from(new Set([...BOOK_LANGUAGES, ...(form.language ? [form.language] : [])])).map((language) => (
+                  <option key={language} value={language}>{language}</option>
+                ))}
+              </SelectInput>
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Weight (kg)"><TextInput type="number" step="0.1" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
           </div>
+          <div className="rounded-xl border border-border bg-warm-cream/30 p-3">
+            <p className="text-sm font-semibold text-text-primary">Return, replacement and cancellation</p>
+            <p className="mb-2 text-xs text-text-muted">Shown on the product page on the website and in the app.</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(["returns", "replacement", "cancellation"] as const).map((key) => (
+                <Field key={key} label={key === "returns" ? "Can it be returned?" : key === "replacement" ? "Can it be replaced?" : "Can the order be cancelled?"}>
+                  <SelectInput
+                    value={form.policy?.[key] === undefined ? "" : form.policy[key] ? "yes" : "no"}
+                    onChange={(event) => set({ policy: { ...form.policy, [key]: event.target.value === "" ? undefined : event.target.value === "yes" } })}
+                  >
+                    <option value="">Use shop setting</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </SelectInput>
+                </Field>
+              ))}
+            </div>
+            <Field label="Policy note (optional)">
+              <TextInput
+                value={form.policy?.note ?? ""}
+                placeholder="e.g. Damaged items can be replaced after photos are reviewed"
+                onChange={(event) => set({ policy: { ...form.policy, note: event.target.value || undefined } })}
+              />
+            </Field>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+            <p className="mb-2 text-sm font-semibold text-text-primary">Offer (optional)</p>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Field label="Offer price (₹)"><TextInput type="number" min={0} value={form.offer?.price ?? ""} onChange={(event) => set({ offer: event.target.value ? { ...form.offer, price: Number(event.target.value) } : undefined })} /></Field>
+              <Field label="Offer label"><TextInput value={form.offer?.label ?? ""} placeholder="Diwali offer" onChange={(event) => form.offer && set({ offer: { ...form.offer, label: event.target.value } })} /></Field>
+              <Field label="Starts"><TextInput type="datetime-local" value={toDatetimeLocal(form.offer?.startsAt)} onChange={(event) => form.offer && set({ offer: { ...form.offer, startsAt: fromDatetimeLocal(event.target.value) } })} /></Field>
+              <Field label="Ends"><TextInput type="datetime-local" value={toDatetimeLocal(form.offer?.endsAt)} onChange={(event) => form.offer && set({ offer: { ...form.offer, endsAt: fromDatetimeLocal(event.target.value) } })} /></Field>
+            </div>
+            <p className="mt-1 text-xs text-text-muted">Must be lower than the selling price. The selling price shows struck through while the offer runs.</p>
+          </div>
+          {form.productType !== "other" && <BookSpecFields form={form} set={set} />}
           <Field label="Description">
             <TextArea rows={5} value={form.description} onChange={(event) => set({ description: event.target.value })} />
           </Field>
+          {form.productType !== "other" && <BookContentFields form={form} set={set} />}
 
           <div>
             <p className="mb-2 text-sm font-semibold text-text-primary">Licences & identifiers</p>
@@ -421,7 +547,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             </div>
           </div>
 
-          <div>
+          <div className={form.productType === "other" ? "hidden" : undefined}>
             <p className="mb-2 text-sm font-semibold text-text-primary">Publisher</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Name"><TextInput value={form.publisher?.name ?? ""} onChange={(event) => set({ publisher: { name: event.target.value, address: form.publisher?.address, phone: form.publisher?.phone, email: form.publisher?.email, website: form.publisher?.website } })} /></Field>
@@ -441,6 +567,19 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           <VideoFields videos={videos} onChange={(next) => set({ media: [...(form.media ?? []).filter((item) => item.type === "image"), ...next] })} />
 
           <div className="rounded-xl border border-border p-3">
+            <p className="mb-2 text-sm font-semibold text-text-primary">Packing</p>
+            <Field label="Pack in">
+              <TextInput placeholder="Standard cardboard box" value={form.packIn ?? ""} onChange={(event) => set({ packIn: event.target.value })} />
+            </Field>
+            <div className="mt-2">
+              <Field label="Packing instructions">
+                <TextArea rows={3} placeholder="Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside." value={form.packingNote ?? ""} onChange={(event) => set({ packingNote: event.target.value })} />
+              </Field>
+            </div>
+            <p className="mt-1 text-xs text-text-muted">Printed on the packaging slip. Leave blank to use the standard text.</p>
+          </div>
+
+          <div className="rounded-xl border border-border p-3">
             <p className="mb-2 text-sm font-semibold text-text-primary">Generated codes</p>
             <Field label="SKU">
               <div className="flex gap-2">
@@ -448,6 +587,15 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
                 <Button variant="outline" onClick={() => set({ sku: generateSku(form.category, form.id) })}>Generate</Button>
               </div>
             </Field>
+            <div className="mt-2">
+              <Field label="Batch no.">
+                <div className="flex gap-2">
+                  <TextInput value={form.batchNo ?? ""} onChange={(event) => set({ batchNo: event.target.value.trim() })} />
+                  <Button variant="outline" onClick={() => set({ batchNo: generateBatchNo() })}>Generate</Button>
+                </div>
+                <span className="mt-1 block text-xs text-text-muted">Filled in automatically on save. Change it when stock from a new batch comes in.</span>
+              </Field>
+            </div>
             <div className="mt-2">
               <Field label="Unique product code (10 digits)">
                 <div className="flex gap-2">
@@ -487,6 +635,7 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Selling price (₹)"><TextInput type="number" value={form.price} onChange={(event) => set({ price: Number(event.target.value) })} /></Field>
             <Field label="MRP (₹)"><TextInput type="number" value={form.originalPrice ?? 0} onChange={(event) => set({ originalPrice: Number(event.target.value) })} /></Field>
+            <Field label="Price note (shown under the price)"><TextInput value={form.priceNote ?? ""} placeholder="For Vaidyas and students" onChange={(event) => set({ priceNote: event.target.value })} /></Field>
           </div>
 
           <div className="rounded-xl border border-border p-3">
@@ -525,11 +674,22 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             <input type="checkbox" checked={form.active !== false} onChange={(event) => set({ active: event.target.checked })} />
             Visible in the shop
           </label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Field label="Show in shop from (optional)"><TextInput type="datetime-local" value={toDatetimeLocal(form.publishAt)} onChange={(event) => set({ publishAt: fromDatetimeLocal(event.target.value) })} /></Field>
+            <Field label="Hide from shop after (optional)"><TextInput type="datetime-local" value={toDatetimeLocal(form.unpublishAt)} onChange={(event) => set({ unpublishAt: fromDatetimeLocal(event.target.value) })} /></Field>
+          </div>
         </div>
       </div>
 
       {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      {saved && <p className="mt-4 text-sm text-emerald-700">Published on the shop as /shop/{saved}.</p>}
+      {saved && (
+        <p className="mt-4 break-all text-sm text-emerald-700">
+          Published on the shop at{" "}
+          <a href={`/shop/${saved}`} target="_blank" rel="noreferrer" className="font-semibold underline">
+            {origin}/shop/{saved}
+          </a>
+        </p>
+      )}
       <div className="mt-5 flex flex-wrap gap-2">
         <Button onClick={save}>{isNew ? "Create product" : "Save product"}</Button>
         <Button variant="outline" onClick={onDone}>Close</Button>

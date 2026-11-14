@@ -68,6 +68,7 @@ export const accountNavigation = [
   { name: "Subscriptions", href: "/account/subscriptions", icon: "subs" },
   { name: "Seminar videos", href: "/account/seminar-videos", icon: "videos" },
   { name: "My Payments", href: "/account/payments", icon: "payments" },
+  { name: "Store Wallet", href: "/account/wallet", icon: "wallet" },
   { name: "Payment Receipts", href: "/account/receipts", icon: "receipts" },
   { name: "Support Tickets", href: "/account/tickets", icon: "tickets" },
   { name: "My Wishlist", href: "/account/wishlist", icon: "wishlist" },

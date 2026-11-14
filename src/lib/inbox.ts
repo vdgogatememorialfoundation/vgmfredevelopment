@@ -34,7 +34,7 @@ function write(list: InboxItem[]) {
 }
 
 function newId() {
-  return `INB${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+  return `${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
 }
 
 export function getInbox(): InboxItem[] {

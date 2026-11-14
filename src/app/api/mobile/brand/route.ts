@@ -38,7 +38,6 @@ export async function POST(request: NextRequest) {
       logoText: site.logoText ? String(site.logoText) : undefined,
       faviconUrl: site.faviconUrl != null ? String(site.faviconUrl) : undefined,
     },
-    flyers: Array.isArray(body.flyers) ? (body.flyers as never) : undefined,
   });
   return NextResponse.json(
     { ok: true, publishedAt: feed.publishedAt, site: feed.site, flyers: feed.flyers?.length ?? 0 },

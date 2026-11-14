@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { statusStamp } from "@/lib/delivery-expectation";
+import { statusDay, statusStamp } from "@/lib/delivery-expectation";
 import type { ShipmentEvent } from "@/types";
 
 export type PipelineTone = "emerald" | "sky" | "red";
@@ -28,45 +28,8 @@ interface VerticalPipelineProps {
   country?: string;
   /** Milliseconds. The line creeps from the current step toward the next one until `until`. */
   pace?: { from: number; until: number } | null;
-}
-
-const ICONS: Record<string, string> = {
-  ordered: "M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4",
-  packed: "M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8",
-  shipped: "M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM18 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3z",
-  out: "M5 17a2 2 0 110-4 2 2 0 010 4zM16 17a2 2 0 110-4 2 2 0 010 4zM7 15h7l2-5H10M14 10l2 5M9 8h5",
-  delivered: "M5 12l5 5L20 7",
-  ready: "M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8",
-  picked: "M5 12l5 5L20 7",
-  cancelled: "M6 6l12 12M18 6L6 18",
-  "cancel-review": "M4 6h16M4 12h10M4 18h14",
-  refunded: "M5 12l5 5L20 7",
-  failed: "M6 6l12 12M18 6L6 18",
-  Submitted: "M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4",
-  "Under Review": "M4 6h16M4 12h10M4 18h14",
-  Approved: "M5 12l5 5L20 7",
-  Confirmed: "M5 12l5 5L20 7",
-  Rejected: "M6 6l12 12M18 6L6 18",
-  Pending: "M12 7v5l3 3M12 21a9 9 0 110-18 9 9 0 010 18z",
-  Paid: "M4 7h16v10H4zM4 11h16",
-  Issued: "M6 4h9l5 5v11H6z",
-  "E-ticket": "M2 9a3 3 0 010 6v2a2 2 0 002 2h16a2 2 0 002-2v-2a3 3 0 000-6V7a2 2 0 00-2-2H4a2 2 0 00-2 2z",
-  "Checked in": "M5 12l5 5L20 7",
-  Certificate: "M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7z",
-  "Certificate issued": "M12 3l2.2 4.5 5 .7-3.6 3.5.9 5L12 14.8 7.5 16.7l.9-5L4.8 8.2l5-.7z",
-  Expired: "M12 7v5l3 3M12 21a9 9 0 110-18 9 9 0 010 18z",
-  "Pre-registration": "M8 4h8v3H8zM7 7h10v13H7z",
-  "Main registration": "M4 6h16M4 12h10M4 18h14",
-  Draft: "M6 4h9l5 5v11H6zM15 4v5h5",
-  Shortlisted: "M5 12l5 5L20 7",
-  Waitlisted: "M12 7v5l3 3M12 21a9 9 0 110-18 9 9 0 010 18z",
-  Accepted: "M5 12l5 5L20 7",
-  Invalid: "M6 6l12 12M18 6L6 18",
-  Cancelled: "M6 6l12 12M18 6L6 18",
-};
-
-function iconPath(id: string) {
-  return ICONS[id] || ICONS.ordered;
+  /** 0–1 share of the gap to the next step already covered by the courier's hubs (seller hub → city hubs → buyer hub). */
+  hubShare?: number;
 }
 
 function pipeState(stage: PipelineStageShape, isCurrent: boolean): "done" | "active" | "upcoming" {
@@ -84,6 +47,7 @@ export default function VerticalPipeline({
   note,
   country,
   pace,
+  hubShare = 0,
 }: VerticalPipelineProps) {
   const lastReachedIdx = stages.map((stage) => stage.reached).lastIndexOf(true);
   const partialIdx = stages.map((stage) => stage.partial).lastIndexOf(true);
@@ -92,8 +56,10 @@ export default function VerticalPipeline({
   const frameRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   const phase = useRef<"start" | "to-step" | "at-step">("start");
+  const shownIdx = useRef(-1);
   const readRef = useRef<(() => { left: number; top: number; reached: number; height: number } | null) | null>(null);
   const [line, setLine] = useState({ left: 14.5, top: 34, height: 0, transition: "none" });
+  const [litIdx, setLitIdx] = useState(-1);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 10000);
@@ -102,15 +68,20 @@ export default function VerticalPipeline({
   const terminal = new Set(["delivered", "picked", "failed", "cancelled", "refunded"]);
   const current = stages[nodeCurrentIdx];
   // Time may carry the line into the open gap. It stays short of the next step until that step is reached.
+  // Past the current step the line always shows a short lead, then grows with the courier's expected timing.
   const creep =
-    !pace ||
     !current ||
     terminal.has(current.id) ||
     nodeCurrentIdx >= stages.length - 1 ||
-    stages[nodeCurrentIdx + 1]?.reached ||
-    pace.until <= pace.from
+    stages[nodeCurrentIdx + 1]?.reached
       ? 0
-      : Math.max(0, Math.min(0.42, (now - pace.from) / (pace.until - pace.from)));
+      : Math.min(
+          0.9,
+          Math.max(
+            hubShare,
+            !pace || pace.until <= pace.from ? 0.15 : Math.max(0.15, Math.min(0.8, (now - pace.from) / (pace.until - pace.from)))
+          )
+        );
   const creepRef = useRef(creep);
   creepRef.current = creep;
 
@@ -122,9 +93,35 @@ export default function VerticalPipeline({
     const list = listRef.current;
     const frame = frameRef.current;
     if (!list || !frame || nodeCurrentIdx < 0) return;
+    // A new status replays the line from the first step instead of jumping from where it was.
+    if (shownIdx.current !== nodeCurrentIdx) {
+      shownIdx.current = nodeCurrentIdx;
+      phase.current = "start";
+    }
     let cancelled = false;
     let growTimer = 0;
     let creepTimer = 0;
+    let litFrame = 0;
+    // Each dot turns green on the very frame the moving line reaches it.
+    const lightAlong = (seconds: number) => {
+      window.cancelAnimationFrame(litFrame);
+      const items = [...list.querySelectorAll<HTMLElement>(":scope > li")].slice(0, nodeCurrentIdx + 1);
+      const fill = frame.querySelector<HTMLElement>(".vgmf-ship-fill");
+      const until = performance.now() + seconds * 1000 + 300;
+      const tick = () => {
+        if (cancelled) return;
+        const end = fill ? fill.getBoundingClientRect().bottom : 0;
+        let reached = -1;
+        items.forEach((item, index) => {
+          const box = item.querySelector(".dot")?.getBoundingClientRect();
+          if (box && end >= box.top + 1) reached = index;
+        });
+        if (seconds <= 0 || performance.now() >= until) reached = nodeCurrentIdx;
+        if (reached >= 0) setLitIdx((was) => Math.max(was, reached));
+        if (reached < nodeCurrentIdx) litFrame = window.requestAnimationFrame(tick);
+      };
+      litFrame = window.requestAnimationFrame(tick);
+    };
     const read = () => {
       const items = [...list.querySelectorAll<HTMLElement>(":scope > li")];
       const step = items[nodeCurrentIdx];
@@ -135,18 +132,27 @@ export default function VerticalPipeline({
       const start = firstDot.getBoundingClientRect();
       const end = currentDot.getBoundingClientRect();
       const top = start.top + start.height / 2 - frameBox.top;
-      const bottom = end.top + end.height / 2 - frameBox.top;
+      // The line follows the courier scans inside the current step, down to the latest one.
+      // At a final step (Delivered, Picked Up…) the line ends on its dot, not on the scans listed under it.
+      const finalStep = terminal.has(stages[nodeCurrentIdx]?.id ?? "") || nodeCurrentIdx >= stages.length - 1;
+      const latestScan = finalStep ? undefined : [...(step?.querySelectorAll<HTMLElement>(".vgmf-ship-kids > li") ?? [])].pop();
+      const scanBox = latestScan?.getBoundingClientRect();
+      const bottom = Math.max(
+        end.top + end.height / 2 - frameBox.top,
+        scanBox ? scanBox.top + 10 - frameBox.top : 0
+      );
       const reached = Math.max(0, bottom - top);
       const nextDot = items[nodeCurrentIdx + 1]?.querySelector(".dot");
       let height = reached;
       const portion = creepRef.current;
-      if (nextDot && portion > 0) {
+      if (nextDot && portion > 0 && !finalStep) {
         const nextBox = nextDot.getBoundingClientRect();
         const nextCenter = nextBox.top + nextBox.height / 2 - frameBox.top;
         height += Math.max(0, nextCenter - bottom) * portion;
       }
       return {
-        left: start.left + start.width / 2 - frameBox.left - 1.5,
+        // Sit exactly on the grey rail (li::before at 14.5px, 3px wide), so the green never drifts off it.
+        left: items[0].getBoundingClientRect().left + 14.5 - frameBox.left,
         top,
         reached,
         height,
@@ -175,10 +181,12 @@ export default function VerticalPipeline({
       if (motion("height 1s linear") === "none") {
         phase.current = "at-step";
         paint(next, "none");
+        lightAlong(0);
         return;
       }
       if (phase.current === "start") {
         paint({ ...next, height: 0 }, "none");
+        setLitIdx(-1);
         window.clearTimeout(growTimer);
         window.clearTimeout(creepTimer);
         growTimer = window.setTimeout(() => {
@@ -187,6 +195,7 @@ export default function VerticalPipeline({
           if (!latest) return;
           phase.current = "to-step";
           paint({ ...latest, height: latest.reached }, `height ${statusSeconds}s linear`);
+          lightAlong(statusSeconds);
           settleCreep();
         }, 70);
         return;
@@ -194,6 +203,7 @@ export default function VerticalPipeline({
       window.clearTimeout(creepTimer);
       phase.current = "to-step";
       paint({ ...next, height: next.reached }, `height ${statusSeconds}s linear`);
+      lightAlong(statusSeconds);
       settleCreep();
     };
     const timer = window.setTimeout(apply, 40);
@@ -212,6 +222,7 @@ export default function VerticalPipeline({
       window.clearTimeout(timer);
       window.clearTimeout(growTimer);
       window.clearTimeout(creepTimer);
+      window.cancelAnimationFrame(litFrame);
       observer.disconnect();
       window.removeEventListener("resize", follow);
     };
@@ -250,29 +261,29 @@ export default function VerticalPipeline({
           return (
             <li
               key={stage.id}
-              className={`${state}${failedStep ? " is-failed" : ""}`}
+              className={`${state}${failedStep ? " is-failed" : ""}${index <= litIdx ? " lit" : ""}`}
               style={{ "--i": index } as CSSProperties}
             >
-              <span className="dot" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="16" height="16">
-                  <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d={iconPath(stage.id)} />
-                </svg>
-              </span>
+              <span className="dot" aria-hidden="true" />
               <div className="vgmf-ship-copy">
                 <div className="vgmf-ship-title">
-                  <b>{stage.label}</b>
+                  <span className="vgmf-ship-label">
+                    <b>{stage.label}</b>
+                    {timing && state !== "upcoming" ? (
+                      <span className={`vgmf-ship-expect is-inline${timing.tone === "red" ? " is-late" : ""}`}>{timing.label}</span>
+                    ) : null}
+                  </span>
                   {stamp && state !== "upcoming" ? <span className="vgmf-ship-time">{stamp}</span> : null}
                 </div>
                 {stage.caption && state !== "upcoming" ? <div className="vgmf-ship-msg">{stage.caption}</div> : null}
                 {nextHint && state === "upcoming" ? <div className="vgmf-ship-next">{nextHint}</div> : null}
-                {timing && state !== "upcoming" ? (
-                  <span className={`vgmf-ship-expect${timing.tone === "red" ? " is-late" : ""}`}>{timing.label}</span>
+                {stage.expected && state !== "done" && !(nextHint && state === "upcoming") ? (
+                  <span className="vgmf-ship-expect">{stage.expected}</span>
                 ) : null}
-                {stage.expected && state !== "done" ? <span className="vgmf-ship-expect">{stage.expected}</span> : null}
                 {stage.courierNote && state !== "upcoming" ? (
                   <div className="vgmf-ship-courier">
                     <b>{stage.courierNote.title}</b>
-                    <span>{stage.courierNote.detail}</span>
+                    <span><CourierText text={stage.courierNote.detail} /></span>
                   </div>
                 ) : null}
                 {kids.length ? (
@@ -280,9 +291,10 @@ export default function VerticalPipeline({
                     {kids.map((event) => (
                       <li key={event.id} className={/fail|undeliver|rto/i.test(event.title) ? "failed" : ""}>
                         <b>{event.title}</b>
-                        {event.at ? <div className="when">{statusStamp(event.at, country)}</div> : null}
+                        {event.at ? <div className="when">{stage.id === "picked" ? statusDay(event.at, country) : statusStamp(event.at, country)}</div> : null}
                         {event.location ? <div className="where">{event.location}</div> : null}
-                        {event.detail ? <div className="where">{event.detail}</div> : null}
+                        {event.detail ? <div className="where"><CourierText text={event.detail} /></div> : null}
+                        {event.notice ? <div className="vgmf-ship-notice">{event.notice}</div> : null}
                         {event.agent?.name || event.agent?.phone ? (
                           <div className="where">
                             Agent: {[event.agent?.name, event.agent?.phone].filter(Boolean).join(" · ")}
@@ -300,5 +312,24 @@ export default function VerticalPipeline({
         </ol>
       </div>
     </div>
+  );
+}
+
+/** "Courier: Ekart · Tracking id: LUAP…" with the courier and tracking id in bold. */
+function CourierText({ text }: { text: string }) {
+  const parts = text.split(/((?:Courier|Tracking id|Tracking ID|AWB(?: no\.)?):?\s*)([^·]+)/);
+  if (parts.length < 3) return <>{text}</>;
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 3 === 2 ? (
+          <strong key={index} className="font-bold text-text-primary">
+            {part}
+          </strong>
+        ) : (
+          part
+        ),
+      )}
+    </>
   );
 }

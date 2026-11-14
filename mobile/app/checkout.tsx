@@ -1,7 +1,9 @@
+import { nativeCheckout, razorpayPage } from "../src/razorpay";
 import { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { Modal, View } from "react-native";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { router } from "expo-router";
-import { findRow, money, placeOrder, str } from "../src/api";
+import { checkPromo, createCheckout, findRow, money, offerPrice, preorderable, promoAmount, str, verifyCheckout, type PromoRule } from "../src/api";
 import { useAuth } from "../src/auth";
 import { useCart } from "../src/cart";
 import { CountryField } from "../src/country-field";
@@ -28,6 +30,9 @@ export default function CheckoutScreen() {
   const [note, setNote] = useState("");
   const [tone, setTone] = useState<"note" | "error" | "success">("note");
   const [orderId, setOrderId] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [pickup, setPickup] = useState(false);
+  const [payment, setPayment] = useState<{ html: string; orderId: string } | null>(null);
 
   useEffect(() => {
     if (!countries.length) return;
@@ -43,14 +48,37 @@ export default function CheckoutScreen() {
           id: item.id,
           title: str(book?.title, item.title),
           quantity: item.quantity,
-          price: Number(book?.price ?? item.price) || 0,
+          price: book ? offerPrice(book) : Number(item.price) || 0,
         };
       }),
     [cart.items, feed?.books]
   );
   const subtotal = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
-  const total = subtotal + shipping;
+  const preorder = priced.some((item) => preorderable(findRow(feed?.books, item.id)));
+  const shipping = preorder ? 0 : subtotal >= STORE.freeShippingThreshold ? 0 : STORE.shippingFee;
+  const [promo, setPromo] = useState<PromoRule | null>(null);
+  const [promoInput, setPromoInput] = useState("");
+  const promoRules = (feed?.orderSettings as { promoCodes?: { coupons?: boolean; giftCards?: boolean } } | undefined)?.promoCodes;
+  const promoAllowed = promoRules?.coupons === true || promoRules?.giftCards === true;
+  const [promoNote, setPromoNote] = useState("");
+  const promoOff = promoAmount(promo, subtotal);
+  const fees = (feed?.orderSettings as { platformFee?: { enabled?: boolean; amount?: number }; preorderPayment?: { advanceType?: string; advanceValue?: number } } | undefined) ?? {};
+  const platformFee = fees.platformFee?.enabled ? Math.max(0, Math.round(Number(fees.platformFee.amount) || 0)) : 0;
+  const total = Math.max(0, subtotal - promoOff) + platformFee + shipping;
+  const copies = priced.reduce((sum, item) => sum + item.quantity, 0);
+  const payNow = preorder && !pickup ? preorderAdvance(total, platformFee, copies, fees.preorderPayment) : total;
+  const applyPromo = async () => {
+    setPromoNote("");
+    try {
+      const rule = await checkPromo(promoInput.trim(), preorder);
+      if (!promoAmount(rule, subtotal)) throw new Error("This code doesn't apply to your bag.");
+      setPromo(rule);
+      setPromoNote(`${rule.label} applied.`);
+    } catch (error) {
+      setPromo(null);
+      setPromoNote(error instanceof Error ? error.message : "That code isn't valid.");
+    }
+  };
 
   const submit = async () => {
     if (!priced.length) {
@@ -64,7 +92,7 @@ export default function CheckoutScreen() {
       setNote("Enter your name and a valid international mobile number.");
       return;
     }
-    if (!line1.trim() || !city.trim() || !state.trim() || !isValidPostal(country.code, pincode)) {
+    if (!pickup && (!line1.trim() || !city.trim() || !state.trim() || !isValidPostal(country.code, pincode))) {
       setTone("error");
       setNote(isIndia(country.code) ? "Enter the full delivery address and a 6-digit pincode." : "Enter the full delivery address and a valid postal code.");
       return;
@@ -72,21 +100,68 @@ export default function CheckoutScreen() {
     setBusy(true);
     setNote("");
     try {
-      const order = await placeOrder({
+      const started = await createCheckout({
         name: name.trim(),
         phone: mobile.replace(/\s/g, ""),
         line1: line1.trim(),
+        landmark: landmark.trim(),
         city: city.trim(),
         state: state.trim(),
         pincode: pincode.trim(),
         country: country.name,
         countryCode: country.code,
+        pickup,
+        promoCode: promo?.code,
         items: priced.map((item) => ({ id: item.id, quantity: item.quantity })),
       });
+      const id = str(started.order?.id);
+      if (!started.keyId || !started.razorpayOrderId || !id) throw new Error("Online payment is not available right now. Please try again later.");
+      const options = {
+        key: started.keyId,
+        orderId: started.razorpayOrderId,
+        amount: Math.round(Number(started.amount ?? payNow) * 100),
+        name: name.trim(),
+        email: session?.email ?? "",
+        phone: mobile.replace(/\s/g, ""),
+        description: `Order ${id}`,
+      };
+      const native = await nativeCheckout(options);
+      if (native) {
+        setBusy(false);
+        await onPayment(native as WebViewMessageEvent, { orderId: id, html: "" });
+        return;
+      }
+      setPayment({ orderId: id, html: razorpayPage(options) });
+    } catch (error) {
+      setTone("error");
+      setNote((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onPayment = async (event: WebViewMessageEvent, direct?: { orderId: string; html: string }) => {
+    const current = direct ?? payment;
+    setPayment(null);
+    if (!current) return;
+    let message: { type?: string; paymentId?: string; razorpayOrderId?: string; signature?: string; error?: string } = {};
+    try {
+      message = JSON.parse(event.nativeEvent.data);
+    } catch {
+      message = { type: "error" };
+    }
+    if (message.type !== "success") {
+      setTone("error");
+      setNote(message.type === "dismiss" ? "Payment was cancelled. Your cart is still here." : message.error || "The payment did not go through.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await verifyCheckout({ orderId: current.orderId, paymentId: message.paymentId, razorpayOrderId: message.razorpayOrderId, signature: message.signature });
       cart.clear();
-      setOrderId(str(order.id));
+      setOrderId(current.orderId);
       setTone("success");
-      setNote(`Order ${str(order.id)} is placed. Total ${money(order.total ?? total)}.`);
+      setNote(`Payment received. Order ${current.orderId} is confirmed.`);
     } catch (error) {
       setTone("error");
       setNote((error as Error).message);
@@ -106,13 +181,24 @@ export default function CheckoutScreen() {
 
   return (
     <Screen>
-      <PageHeader kicker="Shop" title="Checkout" subtitle="Confirm the delivery address and place the order." />
+      <PageHeader kicker="Shop" title="Checkout" subtitle="Confirm delivery or store pickup, then pay." />
+      <Modal visible={Boolean(payment)} animationType="slide" onRequestClose={() => onPayment({ nativeEvent: { data: JSON.stringify({ type: "dismiss" }) } } as WebViewMessageEvent)}>
+        {payment ? (
+          <WebView
+            originWhitelist={["*"]}
+            source={{ html: payment.html, baseUrl: "https://api.razorpay.com" }}
+            onMessage={(event) => void onPayment(event)}
+            javaScriptEnabled
+            setSupportMultipleWindows={false}
+          />
+        ) : null}
+      </Modal>
       <Banner text={note} tone={tone} />
       {orderId ? (
         <Card featured>
-          <Heading>Order placed</Heading>
-          <Muted>The Foundation desk will confirm this order. You can follow it from My Orders.</Muted>
-          <Button label="View my orders" onPress={() => router.replace("/account/orders")} />
+          <Heading>Order confirmed</Heading>
+          <Muted>You can follow packing, shipping and delivery from the order page.</Muted>
+          <Button label="Track this order" onPress={() => router.replace(`/order/${orderId}`)} />
           <Button kind="ghost" label="Continue shopping" onPress={() => router.replace("/shop")} />
         </Card>
       ) : (
@@ -123,9 +209,23 @@ export default function CheckoutScreen() {
                 {item.title} × {item.quantity} · {money(item.price * item.quantity)}
               </Muted>
             ))}
-            <Muted>Shipping {shipping ? money(shipping) : "Free"}</Muted>
+            {preorder ? (
+              <Muted>{pickup ? "Store pickup · no charge" : "Shipping · added when you pay the balance"}</Muted>
+            ) : (
+              <Muted>Shipping {shipping ? money(shipping) : "Free"}</Muted>
+            )}
+            {promoOff ? <Muted>{promo?.label} · −{money(promoOff)}</Muted> : null}
+            {platformFee ? <Muted>Platform fee · {money(platformFee)}</Muted> : null}
             <Heading>Total {money(total)}</Heading>
+            {payNow < total ? <Muted>Pay now (pre-order advance) · {money(payNow)}{"\n"}Balance later · {money(total - payNow)} + courier charge</Muted> : null}
           </Card>
+          {promoAllowed ? (
+            <>
+              <Field label="Coupon or gift card code" value={promoInput} onChange={(next) => { setPromoInput(next.toUpperCase()); if (promo) setPromo(null); }} autoCapitalize="none" />
+              <Button kind="ghost" label={promo ? "Code applied" : "Apply code"} disabled={!promoInput.trim() || Boolean(promo)} onPress={() => void applyPromo()} />
+              {promoNote ? <Muted>{promoNote}</Muted> : null}
+            </>
+          ) : null}
           <Field label="Full name" value={name} onChange={setName} autoCapitalize="words" />
           <CountryField
             value={country.code}
@@ -137,7 +237,15 @@ export default function CheckoutScreen() {
             }}
           />
           <Field label="Mobile number" value={phone} onChange={setPhone} keyboard="phone-pad" placeholder={`${country.dial} 98765 43210`} />
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+            <Chip label="Home delivery" selected={!pickup} onPress={() => setPickup(false)} />
+            <Chip label="Pick up from store" selected={pickup} onPress={() => setPickup(true)} />
+          </View>
+          {pickup ? <Muted>We will message you when the order is ready. Show your pickup OTP at the counter.</Muted> : null}
+          {!pickup ? (
+          <>
           <Field label="Address" value={line1} onChange={setLine1} autoCapitalize="words" />
+          <Field label="Landmark (optional)" value={landmark} onChange={setLandmark} autoCapitalize="words" />
           <Field label="City" value={city} onChange={setCity} autoCapitalize="words" />
           {states.length ? (
             <View style={{ marginBottom: 12 }}>
@@ -158,13 +266,29 @@ export default function CheckoutScreen() {
             keyboard={isIndia(country.code) ? "numeric" : "default"}
             placeholder={isIndia(country.code) ? "6-digit PIN" : "Postal code"}
           />
-          <Muted>
-            Delivery partners are Shiprocket, Nimbuspost and iThink Logistics. Same-city orders can use their Porter, Shadowfax Flash or Flash last-mile. Orders cannot be cancelled or returned from the app. Damaged items can be replaced after delivery if you share photos.
-          </Muted>
-          <Button label={busy ? "Placing order…" : `Place order · ${money(total)}`} disabled={busy} onPress={() => void submit()} />
+          </>
+          ) : null}
+          {preorder ? (
+            <Muted>{payNow < total ? `Pre-order: you pay an advance of ${money(payNow)} now. When your order is ready, the courier charge is added and you pay the balance from the order page.` : "Pre-order: you pay for the items now. When your order is ready, the courier charge is added and you pay the balance from the order page."}</Muted>
+          ) : null}
+          <Muted>Pay securely with UPI, card or net banking through Razorpay. Damaged items can be replaced after delivery if you share photos.</Muted>
+          <Button label={busy ? "Please wait…" : `Pay ${money(payNow)}`} disabled={busy} onPress={() => void submit()} />
           <Button kind="ghost" label="Back to cart" onPress={() => router.replace("/cart")} />
         </>
       )}
     </Screen>
   );
+}
+
+/** Same rule as the server (preorderAdvance): platform fee plus a fixed amount per copy or a percentage of the rest. */
+function preorderAdvance(total: number, platformFee: number, copies: number, plan?: { advanceType?: string; advanceValue?: number }) {
+  if (total <= 0) return total;
+  const fee = Math.min(total, Math.max(0, platformFee));
+  const rest = total - fee;
+  const raw = Number(plan?.advanceValue);
+  const part =
+    plan?.advanceType === "amount"
+      ? Math.max(1, Number.isFinite(raw) ? raw : 100) * Math.max(1, Math.floor(copies || 1))
+      : Math.round((rest * (Number.isFinite(raw) ? Math.min(99, Math.max(1, raw)) : 50)) / 100);
+  return Math.min(total, Math.max(1, Math.round((fee + Math.min(rest, part)) * 100) / 100));
 }

@@ -50,7 +50,7 @@ function summariseEvents() {
 }
 
 function summariseArticles() {
-  const articles = getPublishedArticles();
+  const articles = getPublishedArticles().filter((article) => isPublishedNow(article));
   if (articles.length === 0) {
     return "No articles have been published on the public site yet. Staff drafts wait for administrator approval before they go live. Open Articles once pieces are approved.";
   }
@@ -96,7 +96,7 @@ function summariseGallery() {
 
 function summariseNotices() {
   const notices = getLiveNotices().filter((notice) => isPublishedNow(notice));
-  const announcements = getLiveAnnouncements();
+  const announcements = getLiveAnnouncements().filter((item) => isPublishedNow(item));
   if (notices.length) {
     const latest = notices[0];
     return `Latest notice: “${latest.title}”. Open the Notice board for deadlines, lists and circulars from the Foundation office.`;
@@ -137,6 +137,7 @@ function searchFedContent(question: string): string | null {
   const aboutScore = scoreHay(aboutHay, tokens);
 
   const articleHits = getPublishedArticles()
+    .filter((article) => isPublishedNow(article))
     .map((article) => {
       const hay = [article.title, article.excerpt, article.author, article.category, ...(article.tags ?? [])]
         .filter(Boolean)

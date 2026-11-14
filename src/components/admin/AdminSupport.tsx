@@ -1,5 +1,8 @@
 "use client";
 
+import { publishLiveSite } from "@/lib/mobile-publish";
+import { queueNotification } from "@/lib/notify";
+import { FOUNDATION_NAME, publicStaffName } from "@/lib/public-name";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
@@ -17,7 +20,11 @@ import {
   triggerOutOfStockEmails,
   updateTicketStatus,
   saveFaq,
+  maxRefundable,
 } from "@/lib/admin-store";
+import { getOrdersForAccount } from "@/lib/store";
+import { useCommerceMirror } from "@/lib/commerce-sync";
+import { refundThroughGateway } from "@/lib/payments-client";
 import { useAuth } from "@/components/auth/AuthContext";
 import {
   closeChat,
@@ -30,8 +37,13 @@ import {
   subscribeLiveChat,
   takeChat,
   transferChat,
+  fetchDepartments,
+  saveDepartments,
+  inviteAgent,
+  type SupportDepartment,
 } from "@/lib/live-chat";
 import type { FAQItem, SupportTicket } from "@/types";
+import { pullTickets } from "@/lib/ticket-sync";
 import {
   Button,
   EmptyState,
@@ -58,6 +70,7 @@ export function SupportSection() {
   const [messages, setMessages] = useState(() => getSupportMessages());
   const [tickets, setTickets] = useState(() => ticketsVisibleTo(user));
   const [createForm, setCreateForm] = useState({ name: "", email: "", phone: "", subject: "", body: "", assignedTo: "" });
+  const [createError, setCreateError] = useState("");
   const [faqs, setFaqs] = useState(() => getFaqs());
   const [replyingId, setReplyingId] = useState<string | null>(null);
   const [reply, setReply] = useState("");
@@ -66,6 +79,16 @@ export function SupportSection() {
     setTickets(ticketsVisibleTo(user));
     setFaqs(getFaqs());
   };
+  useEffect(() => {
+    let alive = true;
+    const sync = () => void pullTickets().then(() => alive && setTickets(ticketsVisibleTo(user)));
+    sync();
+    const timer = window.setInterval(sync, 15000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [user]);
 
   return (
     <div className="space-y-5">
@@ -148,11 +171,16 @@ export function SupportSection() {
             <TextInput value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} placeholder="Name" />
             <TextInput value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="Email" />
             <TextInput value={createForm.phone} onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })} placeholder="Phone" />
-            <TextInput value={createForm.subject} onChange={(e) => setCreateForm({ ...createForm, subject: e.target.value })} placeholder="Subject" />
-            <TextArea className="sm:col-span-2" rows={2} value={createForm.body} onChange={(e) => setCreateForm({ ...createForm, body: e.target.value })} placeholder="Details" />
+            <TextInput value={createForm.subject} onChange={(e) => setCreateForm({ ...createForm, subject: e.target.value })} placeholder="Subject *" />
+            <TextArea className="sm:col-span-2" rows={2} value={createForm.body} onChange={(e) => setCreateForm({ ...createForm, body: e.target.value })} placeholder="Description (what the team needs to do) *" />
+            {createError ? <p className="text-xs font-semibold text-red-700 sm:col-span-2">{createError}</p> : null}
             <Button
               onClick={() => {
-                if (!createForm.name.trim() || !createForm.email.trim() || !createForm.subject.trim() || !createForm.body.trim()) return;
+                if (!createForm.name.trim() || !createForm.email.trim() || !createForm.subject.trim() || !createForm.body.trim()) {
+                  setCreateError("Enter the name, email, a subject and a description so the right team can act on it.");
+                  return;
+                }
+                setCreateError("");
                 addTicket({
                   ...createForm,
                   portal: user?.role === "admin" ? "admin" : "staff",
@@ -190,6 +218,64 @@ export function SupportSection() {
   );
 }
 
+/** The customer's orders with live status, payment and a refund action, beside the chat or ticket. */
+function CustomerOrders({ email, phone }: { email?: string; phone?: string }) {
+  useCommerceMirror();
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const orders = email || phone ? getOrdersForAccount({ email, phone }) : [];
+  if (!orders.length) return <p className="mt-3 rounded-lg bg-warm-cream p-2.5 text-xs text-text-muted">No orders found for this customer.</p>;
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Customer orders ({orders.length})</p>
+      <ul className="mt-2 space-y-2">
+        {orders.slice(0, 10).map((order) => {
+          const cap = maxRefundable(order);
+          return (
+            <li key={order.id} className="rounded-lg border border-border p-2.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Link href={`/admin/commerce/orders?order=${encodeURIComponent(order.id)}`} className="font-mono font-semibold text-burgundy underline">{order.id}</Link>
+                <span className="font-semibold text-text-primary">{order.status} · {order.paymentStatus} · ₹{order.total}</span>
+              </div>
+              <p className="mt-1 text-text-muted">
+                {formatDateTime(order.date)} · {order.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")}
+                {order.trackingId ? ` · AWB ${order.trackingId}${order.courierName ? ` (${order.courierName})` : ""}` : ""}
+              </p>
+              {cap > 0 ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <TextInput type="number" min={0} className="w-28" placeholder={`Up to ₹${cap}`} value={amounts[order.id] ?? ""} onChange={(event) => setAmounts({ ...amounts, [order.id]: event.target.value })} />
+                  <Button
+                    variant="outline"
+                    disabled={busy === order.id}
+                    onClick={async () => {
+                      const value = Number(amounts[order.id] || cap);
+                      if (!window.confirm(`Refund ₹${value} on order ${order.id}?`)) return;
+                      setBusy(order.id);
+                      setNote("");
+                      try {
+                        await refundThroughGateway(order.id, value);
+                        setNote(`Refund of ₹${value} started on ${order.id}.`);
+                      } catch (problem) {
+                        setNote(problem instanceof Error ? problem.message : "Refund failed.");
+                      } finally {
+                        setBusy("");
+                      }
+                    }}
+                  >
+                    {busy === order.id ? "Refunding…" : "Initiate refund"}
+                  </Button>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {note ? <p className="mt-2 text-xs font-semibold text-burgundy">{note}</p> : null}
+    </div>
+  );
+}
+
 function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: () => void }) {
   const [response, setResponse] = useState("");
   const agents = listSupportAgents();
@@ -203,7 +289,7 @@ function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: (
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={ticket.status} mapping={TICKET_TONES} />
           <SelectInput className="w-40" value={ticket.assignedTo ?? ""} onChange={(e) => { assignTicket(ticket.id, e.target.value); onChanged(); }}>
-            <option value="">Unassigned</option>
+            <option value="">Transfer to… (unassigned)</option>
             {agents.map((agent) => (
               <option key={agent.email} value={agent.email}>
                 {agent.firstName} {agent.lastName} ({agent.role})
@@ -215,7 +301,8 @@ function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: (
           </SelectInput>
         </div>
       </div>
-      <p className="mt-2 text-sm text-text-primary">{ticket.body}</p>
+      <p className="mt-2 whitespace-pre-line text-sm text-text-primary">{ticket.body}</p>
+      <CustomerOrders email={ticket.email} phone={ticket.phone} />
       {ticket.responses.length > 0 && (
         <div className="mt-3 space-y-2">
           {ticket.responses.map((r, index) => (
@@ -238,6 +325,11 @@ function chatSnapshot() {
   return `${window.localStorage.getItem("vgmf_live_chat_settings") ?? ""}|${window.localStorage.getItem("vgmf_live_chat_threads") ?? ""}`;
 }
 
+function saveChatAndPublish(next: Parameters<typeof saveLiveChatSettings>[0]) {
+  saveLiveChatSettings(next);
+  void publishLiveSite();
+}
+
 export function LiveChatDesk() {
   useSyncExternalStore(subscribeLiveChat, chatSnapshot, () => "");
   const { user } = useAuth();
@@ -246,9 +338,19 @@ export function LiveChatDesk() {
   const [activeId, setActiveId] = useState(threads[0]?.id ?? "");
   const [reply, setReply] = useState("");
   const active = threads.find((thread) => thread.id === activeId) ?? threads[0];
-  const agentName = user ? `${user.firstName} ${user.lastName}`.trim() || user.email : "Foundation Support";
+  const [ticketDraft, setTicketDraft] = useState<{ subject: string; description: string; error: string } | null>(null);
+  const agentName = user
+    ? user.role === "admin" || user.role === "coadmin"
+      ? FOUNDATION_NAME
+      : publicStaffName(`${user.firstName} ${user.lastName}`.trim() || user.email)
+    : FOUNDATION_NAME;
   const agentEmail = user?.email || "";
   const agents = listSupportAgents();
+  const [departments, setDepartments] = useState<SupportDepartment[]>([]);
+
+  useEffect(() => {
+    void fetchDepartments().then(setDepartments);
+  }, []);
 
   useEffect(() => {
     void pullServerChats();
@@ -279,7 +381,7 @@ export function LiveChatDesk() {
             <input
               type="checkbox"
               checked={settings.enabled}
-              onChange={(event) => saveLiveChatSettings({ ...settings, enabled: event.target.checked })}
+              onChange={(event) => saveChatAndPublish({ ...settings, enabled: event.target.checked })}
             />
             Enable live chat
           </label>
@@ -287,12 +389,13 @@ export function LiveChatDesk() {
             <input
               type="checkbox"
               checked={settings.online}
-              onChange={(event) => saveLiveChatSettings({ ...settings, enabled: true, online: event.target.checked })}
+              onChange={(event) => saveChatAndPublish({ ...settings, enabled: true, online: event.target.checked })}
             />
             Staff are online
           </label>
         </div>
       </Panel>
+      <DepartmentsDesk />
       <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
         <ul className="space-y-2">
           {threads.length === 0 ? (
@@ -306,6 +409,7 @@ export function LiveChatDesk() {
                   className={`w-full rounded-xl border px-3 py-2 text-left text-sm ${active?.id === thread.id ? "border-burgundy bg-burgundy/5" : "border-border bg-white"}`}
                 >
                   <span className="font-semibold text-text-primary">{thread.name}</span>
+                  {thread.ref && <span className="block font-mono text-[11px] text-burgundy">{thread.ref}</span>}
                   <span className="mt-0.5 block text-xs text-text-muted">
                     {thread.status === "closed" ? "Closed" : thread.assignedName || "Waiting"} · {thread.messages.length} messages
                   </span>
@@ -316,7 +420,14 @@ export function LiveChatDesk() {
         </ul>
         {active ? (
           <div className="rounded-xl border border-border bg-white p-4">
-            <p className="font-semibold text-text-primary">{active.name}</p>
+            <p className="font-semibold text-text-primary">
+              {active.name}
+              {active.ref && <span className="ml-2 font-mono text-xs text-burgundy">Ref {active.ref}</span>}
+            </p>
+            <ChatTimer thread={active} />
+            {active.participants && active.participants.length > 0 && (
+              <p className="text-xs text-text-muted">Agents in chat: {active.participants.map((item) => item.name).join(", ")}</p>
+            )}
             <p className="text-xs text-text-muted">
               {active.email || "no email"} · {active.page}
               {active.assignedName ? ` · ${active.assignedName}` : ""}
@@ -324,10 +435,38 @@ export function LiveChatDesk() {
               {active.ticketId ? ` · ticket ${active.ticketId}` : ""}
               {active.status === "closed" ? " · closed" : ""}
             </p>
+            <CustomerOrders email={active.email} phone={active.phone} />
+            {ticketDraft ? (
+              <div className="mt-3 space-y-2 rounded-xl border border-dashed border-border p-3">
+                <p className="text-xs font-semibold text-text-primary">Ticket for the relevant team</p>
+                <TextInput placeholder="Subject *" value={ticketDraft.subject} onChange={(event) => setTicketDraft({ ...ticketDraft, subject: event.target.value })} />
+                <TextArea rows={3} placeholder="Description: what happened and what the team needs to do *" value={ticketDraft.description} onChange={(event) => setTicketDraft({ ...ticketDraft, description: event.target.value })} />
+                {ticketDraft.error ? <p className="text-xs font-semibold text-red-700">{ticketDraft.error}</p> : null}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      if (!ticketDraft.subject.trim() || !ticketDraft.description.trim()) {
+                        setTicketDraft({ ...ticketDraft, error: "Enter a subject and a description." });
+                        return;
+                      }
+                      if (!active.email) {
+                        setTicketDraft({ ...ticketDraft, error: "This chat has no customer email yet. Ask the customer for it first." });
+                        return;
+                      }
+                      raiseTicketOnBehalf(active.id, agentName, { subject: ticketDraft.subject, description: ticketDraft.description });
+                      setTicketDraft(null);
+                    }}
+                  >
+                    Create ticket
+                  </Button>
+                  <Button variant="ghost" onClick={() => setTicketDraft(null)}>Cancel</Button>
+                </div>
+              </div>
+            ) : null}
             <div className="mt-2 flex flex-wrap gap-2">
               <Button onClick={() => takeChat(active.id, agentEmail, agentName)}>Take chat</Button>
               <Button variant="outline" onClick={() => closeChat(active.id, agentName)}>Close chat</Button>
-              <Button variant="outline" onClick={() => raiseTicketOnBehalf(active.id, agentName)}>Raise ticket on behalf</Button>
+              <Button variant="outline" onClick={() => setTicketDraft(ticketDraft ? null : { subject: "", description: "", error: "" })}>Raise ticket on behalf</Button>
               <SelectInput
                 className="w-56"
                 value={active.assignedTo ?? ""}
@@ -361,9 +500,27 @@ export function LiveChatDesk() {
                 }}
               >
                 <option value="">Transfer to dept…</option>
-                {["Support", "Shop", "Events", "Accounts"].map((dept) => (
+                {(departments.length ? departments.map((dept) => dept.name) : ["Support", "Shop", "Events", "Accounts"]).map((dept) => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
+              </SelectInput>
+              <SelectInput
+                className="w-56"
+                value=""
+                onChange={(event) => {
+                  const agent = agents.find((item) => item.email === event.target.value);
+                  if (agent) void inviteAgent(active.id, agent.email, `${agent.firstName} ${agent.lastName}`.trim() || agent.email, agentName);
+                }}
+              >
+                <option value="">Add another agent to chat…</option>
+                {agents
+                  .filter((agent) => agent.email !== agentEmail)
+                  .map((agent) => (
+                    <option key={agent.email} value={agent.email}>
+                      {agent.firstName} {agent.lastName}
+                      {departments.filter((dept) => dept.agents.includes(agent.email.toLowerCase())).map((dept) => ` · ${dept.name}`).join("")}
+                    </option>
+                  ))}
               </SelectInput>
             </div>
             <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
@@ -422,6 +579,86 @@ export function LiveChatDesk() {
   );
 }
 
+function ChatTimer({ thread }: { thread: { createdAt: string; firstJoinedAt?: string; status?: string } }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (thread.firstJoinedAt || thread.status === "closed") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [thread.firstJoinedAt, thread.status]);
+  const start = Date.parse(thread.createdAt);
+  const end = thread.firstJoinedAt ? Date.parse(thread.firstJoinedAt) : now;
+  const secs = Math.max(0, Math.round((end - start) / 1000));
+  const text = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+  return (
+    <p className={`text-xs font-semibold ${thread.firstJoinedAt ? "text-emerald-700" : "text-amber-700"}`}>
+      {thread.firstJoinedAt ? `Agent joined after ${text}` : thread.status === "closed" ? "Closed before an agent joined" : `Waiting for an agent · ${text}`}
+    </p>
+  );
+}
+
+export function DepartmentsDesk() {
+  const agents = listSupportAgents();
+  const [rows, setRows] = useState<SupportDepartment[]>([]);
+  const [name, setName] = useState("");
+  const [note, setNote] = useState("");
+  useEffect(() => {
+    void fetchDepartments().then(setRows);
+  }, []);
+  const persist = async (next: SupportDepartment[]) => {
+    try {
+      setRows(await saveDepartments(next));
+      setNote("Saved.");
+    } catch (problem) {
+      setNote(problem instanceof Error ? problem.message : "Could not save.");
+    }
+  };
+  return (
+    <Panel title="Support departments" description="Create departments and choose which support agents belong to each. Chats and tickets can be transferred to a department or agent.">
+      <div className="flex flex-wrap gap-2">
+        <TextInput value={name} onChange={(event) => setName(event.target.value)} placeholder="New department, e.g. Orders" className="w-64" />
+        <Button
+          onClick={() => {
+            if (!name.trim() || rows.some((row) => row.name.toLowerCase() === name.trim().toLowerCase())) return;
+            void persist([...rows, { name: name.trim(), agents: [] }]);
+            setName("");
+          }}
+        >
+          Add department
+        </Button>
+      </div>
+      <div className="mt-4 space-y-3">
+        {rows.map((row) => (
+          <div key={row.name} className="rounded-xl border border-border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold text-text-primary">{row.name}</p>
+              <Button variant="outline" onClick={() => void persist(rows.filter((item) => item.name !== row.name))}>Remove</Button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-3">
+              {agents.length === 0 && <p className="text-xs text-text-muted">No support agents yet. Add staff with the Support module.</p>}
+              {agents.map((agent) => {
+                const email = agent.email.toLowerCase();
+                const on = row.agents.includes(email);
+                return (
+                  <label key={email} className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => void persist(rows.map((item) => (item.name === row.name ? { ...item, agents: on ? item.agents.filter((x) => x !== email) : [...item.agents, email] } : item)))}
+                    />
+                    {agent.firstName} {agent.lastName}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      {note && <p className="mt-2 text-xs text-text-muted">{note}</p>}
+    </Panel>
+  );
+}
+
 function FaqManager() {
   const [faqs, setFaqs] = useState<FAQItem[]>(() => getFaqs());
   const [form, setForm] = useState<FAQItem>({ id: "", question: "", answer: "", category: "General", active: true });
@@ -437,9 +674,16 @@ function FaqManager() {
     <div className="space-y-4">
       <div className="space-y-3 rounded-xl border border-border p-4">
         <Field label="Question"><TextInput value={form.question} onChange={(e) => setForm({ ...form, question: e.target.value })} /></Field>
-        <Field label="Answer"><TextArea rows={2} value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} /></Field>
-        <div className="flex gap-2">
-          <Button onClick={save}>{form.id ? "Update FAQ" : "Add FAQ"}</Button>
+        <Field label="Answer"><TextArea rows={4} value={form.answer} onChange={(e) => setForm({ ...form, answer: e.target.value })} /></Field>
+        <Field label="Category (groups questions on /faq)"><TextInput value={form.category ?? ""} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field>
+        <label className="flex items-center gap-2 text-sm text-text-primary">
+          <input type="checkbox" checked={form.active !== false} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+          Show on the website
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={!form.question.trim() || !form.answer.trim()} onClick={save}>{form.id ? "Update FAQ" : "Add FAQ"}</Button>
+          {form.id ? <Button variant="ghost" onClick={() => setForm({ id: "", question: "", answer: "", category: "General", active: true })}>Cancel</Button> : null}
+          <a href="/faq" target="_blank" rel="noreferrer" className="self-center text-sm font-semibold text-burgundy underline">Open /faq</a>
         </div>
       </div>
       {faqs.length === 0 ? (
@@ -450,6 +694,7 @@ function FaqManager() {
             <li key={f.id} className="flex items-start justify-between gap-3 rounded-xl border border-border p-3 text-sm">
               <div>
                 <p className="font-semibold text-text-primary">{f.question}</p>
+                <p className="text-[11px] uppercase tracking-wide text-text-muted">{f.category || "General"}{f.active === false ? " · hidden" : ""}</p>
                 <p className="mt-0.5 text-xs text-text-muted">{f.answer}</p>
               </div>
               <div className="flex shrink-0 gap-1">
@@ -466,6 +711,8 @@ function FaqManager() {
 
 export function EmailSection() {
   const [outbox, setOutbox] = useState(() => getOutbox());
+  const [mailSearch, setMailSearch] = useState("");
+  const shownMail = outbox.filter((mail) => !mailSearch.trim() || `${mail.to} ${mail.subject} ${mail.template}`.toLowerCase().includes(mailSearch.trim().toLowerCase()));
   const [abandon, setAbandon] = useState({ email: "", items: "" });
   const [note, setNote] = useState("");
   const refresh = () => setOutbox(getOutbox());
@@ -502,11 +749,14 @@ export function EmailSection() {
       </Panel>
 
       <Panel title={`Outbox (${outbox.length})`} description="Emails dispatched through ZeptoMail (records persist in-session/demo storage).">
-        {outbox.length === 0 ? (
+        <div className="mb-3 max-w-sm">
+          <TextInput value={mailSearch} onChange={(e) => setMailSearch(e.target.value)} placeholder="Search by customer email, subject or type" />
+        </div>
+        {shownMail.length === 0 ? (
           <EmptyState text="No emails sent yet." />
         ) : (
           <ul className="space-y-2">
-            {outbox.map((mail) => (
+            {shownMail.map((mail) => (
               <li key={mail.id} className="rounded-xl border border-border p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-text-primary">To: {mail.to}</p>
@@ -515,6 +765,17 @@ export function EmailSection() {
                 <p className="mt-1 text-text-primary">{mail.subject}</p>
                 <p className="mt-1 whitespace-pre-line text-xs text-text-muted">{mail.body}</p>
                 <p className="mt-1 text-[11px] text-text-muted">{mail.template} · {formatDateTime(mail.sentAt)}</p>
+                <button
+                  type="button"
+                  className="mt-1 text-xs font-semibold text-burgundy underline"
+                  onClick={() => {
+                    const record = mail as typeof mail & { phone?: string; name?: string; params?: string[] };
+                    queueNotification({ to: record.to, subject: record.subject, template: record.template, body: record.body, phone: record.phone, name: record.name, params: record.params });
+                    refresh();
+                  }}
+                >
+                  Resend to customer
+                </button>
               </li>
             ))}
           </ul>

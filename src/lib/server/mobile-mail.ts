@@ -2,7 +2,7 @@ import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { applyFoundationBrand, wrapFoundationEmail } from "@/lib/email-layout";
 import { readKv } from "@/lib/server/db";
-import { sendTransactionalEmail } from "@/lib/server/providers";
+import { sendMsg91Sms, sendTransactionalEmail } from "@/lib/server/providers";
 
 const FILE = join("/tmp", "vgmf-mobile-email.json");
 
@@ -42,6 +42,24 @@ export function readMobileEmailCreds(): MobileEmailCreds {
 
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+/** Sends an OTP by MSG91 SMS when MSG91 is saved in Admin → SMS. Returns false when SMS is not set up or fails. */
+export async function sendMobileSmsOtp(phone: string, code?: string) {
+  if (!code || phone.replace(/\D/g, "").length < 10) return false;
+  const notify = asRecord(await readKv<Record<string, unknown>>("admin", "notify-creds"));
+  const sms = asRecord(notify.sms);
+  if (sms.provider && sms.provider !== "msg91") return false;
+  try {
+    const sent = await sendMsg91Sms(sms, {
+      to: phone,
+      otp: code,
+      body: `${code} is your Vaidya Gogate Memorial Foundation verification code. It expires in 10 minutes.`,
+    });
+    return Boolean(sent);
+  } catch {
+    return false;
+  }
 }
 
 export async function sendMobileEmail(to: string, subject: string, body: string) {

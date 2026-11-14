@@ -1,8 +1,11 @@
+import { isCourierInfoLine, isFailedAttempt } from "@/lib/order-pipeline";
+import { courierTrackingLink, directCourier } from "@/lib/couriers";
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
-import { customerCourierLabel, GOGATE_COURIER, isOwnFleet } from "@/lib/courier-label";
+import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
-import { getIntegrations, hasShippingCredentials, recordShippingConnection, type IntegrationSettings, type ShippingProviderId } from "@/lib/integrations";
+import { customerCourierRates } from "@/lib/checkout-couriers";
+import { getIntegrations, getOrderSettings, hasShippingCredentials, shippingFeeFor, packingChargeFor, recordShippingConnection, type IntegrationSettings, type PickupAddress, type ShippingProviderId, nextStoreWorkingDay } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import {
   getOrder,
@@ -15,16 +18,30 @@ import {
   sendEmail,
 } from "@/lib/admin-store";
 import { getLiveBooks } from "@/lib/product-data";
+import { logAudit } from "@/lib/audit";
 
 type ShippingCreds = Record<string, Record<string, unknown>>;
 
 function credsFrom(settings: IntegrationSettings): ShippingCreds {
-  const { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday } = settings.shipping;
-  return { shiprocket, nimbuspost, ithink, shipyaari, tookan, shipday };
+  const { shiprocket, nimbuspost, ithink, shipyaari, goswift, tookan, shipday, tracker } = settings.shipping;
+  return { shiprocket, nimbuspost, ithink, shipyaari, goswift: goswift ?? {}, tookan, shipday, tracker: tracker ?? {} };
+}
+
+/** Couriers without an API account: read scans from the courier's own site (or the saved tracking service). */
+async function trackDirect(shipment: ShipmentRecord) {
+  const result = await post<TrackHit>({
+    action: "track",
+    provider: "courier-site",
+    courier: shipment.directCourier,
+    awb: shipment.awb,
+    creds: credsFrom(getIntegrations()),
+  });
+  if (!result.ok) return null;
+  return { result, saved: applyTrackHit(shipment, { ...result, courierName: shipment.courier, trackingUrl: shipment.trackingUrl || result.trackingUrl }) };
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
-export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
+export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift"] as const;
 
 export function lastMileLabel(provider?: string, lastMile?: string, courier?: string) {
   const partner = customerCourierLabel({ provider, courier });
@@ -34,7 +51,7 @@ export function lastMileLabel(provider?: string, lastMile?: string, courier?: st
   return partner;
 }
 
-const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "tookan", "tookan-parcel", "shipday"]);
+const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "tookan", "tookan-parcel", "shipday"]);
 
 export function checkoutCourierRates(rates: CourierRate[]) {
   return rates.filter((rate) => REAL_CHECKOUT.has(rate.provider) && rate.live !== false);
@@ -42,20 +59,20 @@ export function checkoutCourierRates(rates: CourierRate[]) {
 
 function connectedCourierRates(deliveryPincode: string): CourierRate[] {
   const settings = getIntegrations();
-  const origin = (settings.shipping.pickup.pincode || "411005").replace(/\D/g, "").slice(0, 3);
+  const origin = (settings.shipping.pickup.pincode || "411002").replace(/\D/g, "").slice(0, 3);
   const pin = deliveryPincode.replace(/\D/g, "");
   const sameCity = pin.length === 6 && origin.length === 3 && pin.startsWith(origin);
   const rates: CourierRate[] = [];
   if (hasShippingCredentials("tookan", settings)) {
     const tookan = settings.shipping.tookan;
     if (tookan.hyperlocal && sameCity) {
-      rates.push({ provider: "tookan", courierId: "tookan", courierName: GOGATE_COURIER, rate: 39, etaDays: 0, live: true });
+      rates.push({ provider: "tookan", courierId: "tookan", courierName: fleetCourierLabel("tookan"), rate: 39, etaDays: 0, live: true });
     }
     if (tookan.parcel && (!sameCity || !tookan.hyperlocal)) {
       rates.push({
         provider: "tookan-parcel",
         courierId: "tookan-parcel",
-        courierName: GOGATE_COURIER,
+        courierName: fleetCourierLabel("tookan-parcel"),
         rate: 45,
         etaDays: sameCity ? 1 : 3,
         live: true,
@@ -63,7 +80,7 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
     }
   }
   if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && sameCity) {
-    rates.push({ provider: "shipday", courierId: "shipday", courierName: GOGATE_COURIER, rate: 49, etaDays: 0, live: true });
+    rates.push({ provider: "shipday", courierId: "shipday", courierName: fleetCourierLabel("shipday"), rate: 49, etaDays: 0, live: true });
   }
   return rates;
 }
@@ -76,6 +93,7 @@ export function publicTrackingUrl(shipment: Pick<ShipmentRecord, "awb" | "provid
   if (shipment.provider === "nimbuspost") return `https://ship.nimbuspost.com/?awb=${awb}`;
   if (shipment.provider === "ithink") return `https://www.ithinklogistics.com/track-order?awb=${awb}`;
   if (shipment.provider === "shipyaari") return `https://shipyaari.com/track/${awb}`;
+  if (shipment.provider === "goswift") return `https://app.goswift.in/track/${awb}`;
   return "";
 }
 
@@ -97,6 +115,22 @@ export async function checkCourierWallet(provider: string, needed = 0) {
     );
   }
   return { ok: true as const, balance };
+}
+
+export type CourierWallet = { provider: string; label: string; connected: boolean; balance?: number; error?: string };
+
+/** Live wallet balance for every aggregator that has one (Shiprocket, Nimbuspost, iThink, Shipyaari). */
+export async function readCourierWallets(): Promise<CourierWallet[]> {
+  const creds = credsFrom(getIntegrations());
+  return Promise.all(
+    WALLET_PROVIDERS.map(async (provider) => {
+      const name = provider === "ithink" ? "iThink Logistics" : provider === "nimbuspost" ? "NimbusPost" : label(provider);
+      const result = await post<{ balance?: number }>({ action: "wallet", provider, creds }).catch((error: Error) => ({ ok: false, configured: true, error: error.message, balance: undefined }));
+      if (!result.ok) return { provider, label: name, connected: result.configured !== false, error: result.configured === false ? undefined : result.error ?? "Could not read the wallet." };
+      const balance = Number(result.balance ?? 0);
+      return { provider, label: name, connected: true, balance: Number.isFinite(balance) ? balance : 0 };
+    })
+  );
 }
 
 async function post<T>(body: Record<string, unknown>): Promise<T & { ok: boolean; configured?: boolean; error?: string }> {
@@ -127,13 +161,14 @@ export async function fetchCourierRates(input: {
   cod?: boolean;
   declaredValue: number;
   bookIds?: string[];
+  pickupPincode?: string;
+  dims?: { length: number; breadth: number; height: number };
 }): Promise<RateQuote> {
   const settings = getIntegrations();
   const { shipping } = settings;
   const notes: string[] = [];
-  const wanted = CHECKOUT_PROVIDERS.filter(
-    (id) => shipping[id].enabled && hasShippingCredentials(id, settings)
-  );
+  // Keys may live only on the host (customer browsers never hold them); the server reports unconfigured accounts.
+  const wanted = CHECKOUT_PROVIDERS.filter((id) => shipping[id].enabled);
   let live: CourierRate[] = [];
   if (/^\d{6}$/.test(input.deliveryPincode) && wanted.length) {
     try {
@@ -142,14 +177,14 @@ export async function fetchCourierRates(input: {
         providers: wanted,
         creds: credsFrom(settings),
         parcel: {
-          pickupPincode: shipping.pickup.pincode,
+          pickupPincode: input.pickupPincode || shipping.pickup.pincode,
           deliveryPincode: input.deliveryPincode,
           weightKg: input.weightKg,
           cod: Boolean(input.cod),
           declaredValue: input.declaredValue,
-          length: shipping.packageCm.length,
-          breadth: shipping.packageCm.breadth,
-          height: shipping.packageCm.height,
+          length: input.dims?.length || shipping.packageCm.length,
+          breadth: input.dims?.breadth || shipping.packageCm.breadth,
+          height: input.dims?.height || shipping.packageCm.height,
         },
       });
       live = (result.rates ?? []).map((rate) => ({ ...(rate as unknown as CourierRate), live: true }));
@@ -189,7 +224,7 @@ export function pickRate(rates: CourierRate[], rule = getIntegrations().shipping
   return [...rates].sort((a, b) => a.rate - b.rate || a.etaDays - b.etaDays)[0];
 }
 
-function bookingPayload(order: Order, choice: CourierRate, settings: IntegrationSettings) {
+function bookingPayload(order: Order, choice: CourierRate, settings: IntegrationSettings, pickup = settings.shipping.pickup) {
   const address = order.deliveryAddress;
   const books = getLiveBooks();
   return {
@@ -201,9 +236,10 @@ function bookingPayload(order: Order, choice: CourierRate, settings: Integration
     subtotal: order.subtotal,
     shippingCharge: order.shipping,
     weightKg: orderWeightKg(order, settings),
-    length: settings.shipping.packageCm.length,
-    breadth: settings.shipping.packageCm.breadth,
-    height: settings.shipping.packageCm.height,
+    length: order.parcel?.length || settings.shipping.packageCm.length,
+    breadth: order.parcel?.breadth || settings.shipping.packageCm.breadth,
+    height: order.parcel?.height || settings.shipping.packageCm.height,
+    boxes: order.parcel?.boxes || 1,
     customer: {
       name: address?.fullName ?? "Customer",
       phone: address?.phone ?? "",
@@ -214,7 +250,7 @@ function bookingPayload(order: Order, choice: CourierRate, settings: Integration
       state: address?.state ?? "",
       pincode: address?.pincode ?? "",
     },
-    pickup: settings.shipping.pickup,
+    pickup,
     items: order.items.map((item) => ({
       name: item.title,
       sku: books.find((book) => book.id === item.bookId)?.sku ?? item.bookId,
@@ -237,21 +273,93 @@ function statusAfterBooking(status: Order["status"]): Order["status"] {
  * aggregator charges its wallet for the AWB; the ledger keeps what the
  * customer paid next to what the courier cost.
  */
-export async function bookShipment(orderId: string, override?: CourierRate): Promise<BookingResult> {
+export type ShipmentSplit = { part: number; items: { bookId: string; quantity: number }[] };
+
+/** The part of an order that goes in one shipment of a split order. */
+function splitOrder(order: Order, split: ShipmentSplit): Order {
+  const items = order.items
+    .map((item) => ({ ...item, quantity: Math.min(item.quantity, split.items.find((row) => row.bookId === item.bookId)?.quantity ?? 0) }))
+    .filter((item) => item.quantity > 0);
+  const value = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const share = order.subtotal > 0 ? value / order.subtotal : 1;
+  return {
+    ...order,
+    id: `${order.id}-S${split.part}`,
+    items,
+    subtotal: value,
+    total: Math.round(order.total * share * 100) / 100,
+    shipping: split.part === 1 ? order.shipping : 0,
+    weightKg: undefined,
+    parcel: undefined,
+  };
+}
+
+export async function bookShipment(
+  orderId: string,
+  override?: CourierRate,
+  pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>,
+  split?: ShipmentSplit
+): Promise<BookingResult> {
+  const result = await bookShipmentOnce(orderId, override, pickupOverride, split);
+  logAudit(
+    "Shipment created",
+    orderId,
+    `${result.shipment.courier} · AWB ${result.shipment.awb}${split ? ` · shipment ${split.part}` : ""}`
+  );
+  return result;
+}
+
+async function bookShipmentOnce(
+  orderId: string,
+  override?: CourierRate,
+  pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>,
+  split?: ShipmentSplit
+): Promise<BookingResult> {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not need a courier.");
-  const existing = getShipments().find((shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled");
+  const existing = getShipments().find(
+    (shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled" && (!split || shipment.part === split.part)
+  );
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
+  const unpaidPlan = order.preorderPayment;
+  if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
+    throw new Error("The pre-order balance is not paid yet. Click Charge highest quote & send balance link, then book the courier once it is paid.");
+  }
+  const quoted = order.courierQuote;
+  if (unpaidPlan && quoted && override && !split) {
+    const sameParcel =
+      Math.abs(quoted.weightKg - orderWeightKg(order)) < 0.001 &&
+      JSON.stringify(quoted.parcel ?? null) === JSON.stringify(order.parcel ? { length: order.parcel.length, breadth: order.parcel.breadth, height: order.parcel.height } : null);
+    if (!sameParcel) throw new Error("The package weight or size changed after the customer was charged. Check the package matches the packed box, or add the difference as an extra charge, before booking.");
+    const actual = override.providerRate ?? override.rate;
+    if (actual > quoted.highest + 0.5) throw new Error(`${override.courierName} costs ₹${actual}, more than the ₹${quoted.highest} quote the customer paid for. Pick a courier within that amount.`);
+  }
+  if (!unpaidPlan && order.shippingDue) {
+    throw new Error("The courier charge is not on this order yet. Add it under Payment → Add extra charge (Courier charge) and send the payment link, then book the courier once it is paid.");
+  }
+  const owed = Math.round((order.total - (order.amountPaid ?? order.total)) * 100) / 100;
+  if (!unpaidPlan && order.paymentStatus === "Partially Paid" && owed > 0) {
+    if (override) {
+      patchOrder(order.id, { courierChoice: override, courierName: override.courierName }, `Courier ${override.courierName} selected · book it once the ₹${owed} due is paid`);
+    }
+    throw new Error(
+      `₹${owed} is still due on this order (extra charge). Send the payment link${override ? ` (${override.courierName} is saved on the order)` : ""}, then book the courier once the customer has paid.`
+    );
+  }
+  const shipOrder = split ? splitOrder(order, split) : order;
+  if (!shipOrder.items.length) throw new Error(`Shipment ${split?.part ?? ""} has no items. Set the quantities first.`);
 
   const settings = getIntegrations();
+  const pickup = { ...settings.shipping.pickup, ...pickupOverride };
   let choice = override ?? order.courierChoice;
   if (!choice) {
     const quote = await fetchCourierRates({
       deliveryPincode: order.deliveryAddress?.pincode ?? "",
-      weightKg: orderWeightKg(order, settings),
-      declaredValue: order.total,
-      bookIds: order.items.map((item) => item.bookId),
+      weightKg: orderWeightKg(shipOrder, settings),
+      declaredValue: shipOrder.total,
+      bookIds: shipOrder.items.map((item) => item.bookId),
+      dims: shipOrder.parcel,
     });
     choice = pickRate(quote.rates);
   }
@@ -261,18 +369,19 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   }
 
   const base: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier: choice.courierName,
     awb: "",
     charges: choice.rate,
     toAddress: { ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "" }) },
-    items: order.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
+    items: shipOrder.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
     status: "Booked",
     generatedAt: new Date().toISOString(),
+    part: split?.part,
     provider: choice.provider,
     courierCost: choice.rate,
-    customerPaid: order.shipping,
+    customerPaid: shipOrder.shipping,
     tracking: [{ at: new Date().toISOString(), status: "Shipment booked" }],
   };
 
@@ -299,8 +408,10 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
     action: "book",
     provider: choice.provider,
     creds: credsFrom(settings),
-    order: bookingPayload(order, choice, settings),
+    order: bookingPayload(shipOrder, choice, settings, pickup),
     schedulePickup: settings.shipping.autoSchedulePickup,
+    // Courier pickup goes on the next day the store is working (weekly offs and holidays skipped).
+    pickupDate: new Date(nextStoreWorkingDay(Date.now()) + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10),
   });
   if (!result.ok || !result.awb) {
     throw new Error(
@@ -331,14 +442,15 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   patchOrder(
     order.id,
     {
-      shipmentId: shipment.id,
-      trackingId: shipment.awb,
-      courierName: shipment.courier,
-      courierChoice: choice,
+      shipmentId: split && order.shipmentId ? order.shipmentId : shipment.id,
+      trackingId: split && order.trackingId ? order.trackingId : shipment.awb,
+      courierName: split && order.courierName ? order.courierName : shipment.courier,
+      courierChoice: split && order.courierChoice ? order.courierChoice : choice,
       status: statusAfterBooking(order.status),
     },
-    `Courier booked · ${shipment.courier} ${shipment.awb}`
+    `${split ? `Shipment ${split.part} booked` : "Courier booked"} · ${shipment.courier} ${shipment.awb}`
   );
+  await chargePreorderCourier(order.id, choice);
   sendEmail({
     to: order.deliveryAddress?.email ?? "",
     phone: order.deliveryAddress?.phone,
@@ -351,16 +463,161 @@ export async function bookShipment(orderId: string, override?: CourierRate): Pro
   return { shipment, live: Boolean(shipment.live), message };
 }
 
+/** Desk picks the courier for a pre-order (from the rates, or a typed charge): its charge goes on the balance and the payment link is sent. */
+export async function selectPreorderCourier(orderId: string, choice?: CourierRate, typedFee?: number, allRates: CourierRate[] = []) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan) throw new Error("This order has no pre-order balance.");
+  if (plan.balancePaidAt) throw new Error("The balance is already paid.");
+  if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders have no courier charge.");
+  const valid = allRates.filter((rate) => !rate.estimate && rate.rate > 0 && rate.provider !== "local");
+  if (!choice && !valid.length && !(typedFee !== undefined && Number.isFinite(typedFee) && typedFee >= 0)) throw new Error("No live courier quote for this package. Type the courier charge.");
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const settings = getOrderSettings();
+  if (!choice && valid.length && typedFee === undefined) {
+    // No courier is picked: the customer pays the highest valid quote across every enabled aggregator (+ markup, up to the maximum).
+    const shown = customerCourierRates(valid, { ...settings, courierMarkup: { ...settings.courierMarkup, chargeHighest: true } });
+    const charged = Math.max(...shown.map((rate) => rate.rate));
+    const fee = shippingFeeFor(order.subtotal, units, charged, settings);
+    const previous = plan.shippingDue ? 0 : plan.shipping ?? 0;
+    const round = (value: number) => Math.round(value * 100) / 100;
+    patchOrder(
+      order.id,
+      {
+        shipping: round((order.shipping || 0) - previous + fee),
+        total: round(order.total - previous + fee),
+        courierQuote: {
+          at: new Date().toISOString(),
+          charged,
+          highest: Math.max(...valid.map((rate) => rate.providerRate ?? rate.rate)),
+          weightKg: orderWeightKg(order),
+          parcel: order.parcel ? { length: order.parcel.length, breadth: order.parcel.breadth, height: order.parcel.height } : undefined,
+          couriers: valid.length,
+        },
+        preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
+      },
+      `Courier charge ₹${fee} from the highest of ${valid.length} courier quotes added to the pre-order balance`
+    );
+    if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return `Courier charge ₹${fee} added. Nothing is left to pay.`;
+    const { createBalancePaymentLink } = await import("@/lib/payments-client");
+    const link = await createBalancePaymentLink(order.id);
+    return `Courier charge ₹${fee} (highest of ${valid.length} quotes) added. Balance payment link sent: ${link.url}`;
+  }
+  // Same rule as checkout: courier markup, and the highest rate among the couriers when "charge highest" is on.
+  const charged = choice
+    ? customerCourierRates(allRates.some((rate) => rate.courierId === choice.courierId) ? allRates : [choice], settings).find(
+        (rate) => rate.provider === choice.provider && rate.courierId === choice.courierId
+      )?.rate ?? choice.rate
+    : undefined;
+  const fee = choice ? shippingFeeFor(order.subtotal, units, charged, settings) : Math.round(((typedFee ?? 0) + packingChargeFor(units, getOrderSettings())) * 100) / 100;
+  const previous = plan.shippingDue ? 0 : plan.shipping ?? 0;
+  const round = (value: number) => Math.round(value * 100) / 100;
+  patchOrder(
+    order.id,
+    {
+      shipping: round((order.shipping || 0) - previous + fee),
+      total: round(order.total - previous + fee),
+      courierChoice: choice ?? order.courierChoice,
+      preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
+    },
+    `Courier ${choice ? `${choice.courierName} ` : ""}selected · charge ₹${fee} added to the pre-order balance`
+  );
+  if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return `Courier charge ₹${fee} added. Nothing is left to pay.`;
+  const { createBalancePaymentLink } = await import("@/lib/payments-client");
+  const link = await createBalancePaymentLink(order.id);
+  return `Courier charge ₹${fee} added. Balance payment link sent: ${link.url}`;
+}
+
+const autoBooking = new Set<string>();
+
+/** Paid pre-orders with a selected courier get their shipment created automatically. */
+export async function bookPaidPreorders(orders: Order[]) {
+  for (const order of orders) {
+    const plan = order.preorderPayment;
+    if (!plan?.balancePaidAt || order.deliveryMode !== "delivery" || !order.courierChoice || order.shipmentId || order.trackingId) continue;
+    if (["Cancelled", "Delivered", "Failed"].includes(order.status) || autoBooking.has(order.id)) continue;
+    if (getShipments().some((shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled")) continue;
+    autoBooking.add(order.id);
+    try {
+      await bookShipment(order.id, order.courierChoice);
+    } catch {
+      /* the desk can book it from the order */
+    }
+  }
+}
+
+/** Pre-order courier charge: added to the balance once a courier is booked, then the customer gets a link for the rest. */
+async function chargePreorderCourier(orderId: string, choice: CourierRate) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan?.shippingDue || plan.balancePaidAt) return;
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const fee = shippingFeeFor(order.subtotal, units, choice.rate, getOrderSettings());
+  patchOrder(
+    order.id,
+    {
+      shipping: (order.shipping || 0) + fee,
+      total: Math.round((order.total + fee) * 100) / 100,
+      preorderPayment: { ...plan, balance: Math.round((plan.balance + fee) * 100) / 100, shipping: fee, shippingDue: false },
+    },
+    `Courier charge ₹${fee} (${choice.courierName}) added to the pre-order balance`
+  );
+  if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return;
+  try {
+    const { createBalancePaymentLink } = await import("@/lib/payments-client");
+    await createBalancePaymentLink(order.id);
+  } catch {
+    /* the desk can still send the balance link from the order */
+  }
+}
+
 export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "tookan-parcel">; label: string }[] = [
   { id: "shiprocket", label: "Shiprocket" },
   { id: "nimbuspost", label: "Nimbuspost" },
   { id: "ithink", label: "iThink Logistics" },
   { id: "shipyaari", label: "Shipyaari" },
+  { id: "goswift", label: "GoSwift" },
   { id: "tookan", label: "Gogate Products (Tookan)" },
   { id: "shipday", label: "Gogate Products (Shipday)" },
 ];
 
 /** Attach a parcel that was shipped outside Pack & book. The portal is asked for scans and the delivery time. */
+/** Parcel sent with a courier that has no connected API: keep its id, tracking page and manual updates. */
+export async function attachDirectTracking(orderId: string, courierId: string, awb: string, courierName = "") {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not use a courier tracking id.");
+  const unpaidPlan = order.preorderPayment;
+  if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
+    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. Book the courier from the order once it is paid.");
+  }
+  const trackingId = awb.trim();
+  if (trackingId.length < 3) throw new Error("Paste the tracking id from the courier.");
+  const courierInfo = directCourier(courierId);
+  const courier = courierName.trim() || courierInfo?.label || "Courier";
+  const shipment: ShipmentRecord = {
+    id: String(Date.now()),
+    orderId: order.id,
+    courier,
+    awb: trackingId,
+    charges: 0,
+    toAddress: { ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "" }) },
+    items: order.items.map((item) => ({ sku: item.bookId, title: item.title, quantity: item.quantity })),
+    status: "Booked",
+    generatedAt: new Date().toISOString(),
+    live: false,
+    directCourier: courierInfo?.id ?? "other",
+    trackingUrl: courierTrackingLink(courierInfo?.id, trackingId) || undefined,
+    note: `Sent with ${courier}.`,
+    tracking: [{ at: new Date().toISOString(), status: `Tracking ID added · waiting for ${courier} pickup` }],
+  };
+  saveShipmentRecord(shipment);
+  patchOrder(order.id, { shipmentId: shipment.id, trackingId, courierName: courier }, `Tracking ${trackingId} attached from ${courier}`);
+  const fetched = await trackDirect(shipment).catch(() => null);
+  if (fetched?.result.status) return `${courier} · ${trackingId} attached. Latest from ${courier}: ${fetched.result.status}. Status updates are fetched automatically.`;
+  return `${courier} · ${trackingId} attached. ${shipment.trackingUrl ? "No scans on the courier site yet; they are fetched automatically." : "Add status updates from the shipment as they come in."}`;
+}
+
 export async function attachManualTracking(orderId: string, portal: (typeof MANUAL_PORTALS)[number]["id"], awb: string, courierName = "") {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
@@ -380,7 +637,7 @@ export async function attachManualTracking(orderId: string, portal: (typeof MANU
   }
   const courier = customerCourierLabel({ provider: portal, courier: result.courierName || courierName || label(portal) });
   const shipment: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier,
     awb: result.awb || trackingId,
@@ -447,7 +704,7 @@ export async function downloadLabel(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
   const provider = shipment.provider;
-  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari"]);
+  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari", "goswift"]);
   let details: LabelFetch = {
     labelUrl: shipment.labelUrl,
     routingCode: shipment.routingCode,
@@ -490,6 +747,13 @@ export async function downloadLabel(shipmentId: string) {
     }
   }
   const latest = getShipments().find((item) => item.id === shipmentId) ?? shipment;
+  if (getIntegrations().shipping.labelSource !== "foundation" && /^https?:\/\//.test(details.labelUrl ?? "")) {
+    const opened = typeof window !== "undefined" ? window.open(details.labelUrl, "_blank") : null;
+    if (opened) {
+      opened.opener = null;
+      return `Opened the ${label(provider ?? "courier")} label. Its paper size follows the label setting in the ${label(provider ?? "courier")} panel.`;
+    }
+  }
   printShippingLabel(latest, details);
   const fromPortal = fetched.has(provider ?? "") && shipment.live ? ` using the ${label(provider ?? "courier")} shipment` : "";
   return `Printed the shipping label${fromPortal}.`;
@@ -650,6 +914,7 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
     providerOrderId?: string;
     providerShipmentId?: string;
     courierCost?: number;
+    labelUrl?: string;
   }>({
     action: "return",
     provider,
@@ -669,6 +934,8 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
     courierName: result.courierName,
     providerOrderId: result.providerOrderId,
     providerShipmentId: result.providerShipmentId,
+    labelUrl: result.labelUrl || undefined,
+    courierCost: result.courierCost,
     note: `Return booked on ${label(provider)}. AWB ${result.awb}.`,
   };
 }
@@ -676,14 +943,17 @@ export async function createReturnShipment(orderId: string, provider: "shiprocke
 const statusOrder: ShipmentRecord["status"][] = ["Booked", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
 
 function mapCourierStatus(text: string): ShipmentRecord["status"] | undefined {
-  const value = text.toLowerCase();
-  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed)\b/.test(value)) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ");
+  if (isCourierInfoLine(value)) return undefined;
+  if (isFailedAttempt(value)) return "Out for Delivery";
+  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|incomplete)\b/.test(value)) {
     return "Failed";
   }
-  if (value.includes("deliver") && !value.includes("out") && !value.includes("un") && !value.includes("fail")) return "Delivered";
-  if (value.includes("out for")) return "Out for Delivery";
+  if (/\b(already delivered|delivered|successful|completed)\b/.test(value) && !/\b(attempt|fail|undeliver)\b/.test(value)) return "Delivered";
+  if (/\b(out for delivery|ready to deliver|started|in progress|on the way)\b/.test(value)) return "Out for Delivery";
   if (value.includes("transit") || value.includes("shipped") || value.includes("dispatch")) return "In Transit";
-  if (value.includes("picked")) return "Picked Up";
+  if (/\bpicked/.test(value)) return "Picked Up";
+  if (/\b(not assigned|not accepted|not started|booked)\b/.test(value)) return "Booked";
   return undefined;
 }
 
@@ -739,7 +1009,8 @@ function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
   if (result.dropLat != null) update.dropLat = result.dropLat;
   if (result.dropLng != null) update.dropLng = result.dropLng;
   if (result.agentLeg) update.agentLeg = result.agentLeg;
-  if (result.expectedBy) update.expectedBy = result.expectedBy;
+  if (mapped === "Delivered") update.expectedBy = "";
+  else if (result.expectedBy) update.expectedBy = result.expectedBy;
   if (result.accepted === false) {
     update.agentName = "";
     update.agentPhone = "";
@@ -766,10 +1037,16 @@ export async function trackShipment(shipmentId: string) {
       awb: shipment.awb,
       providerOrderId: shipment.providerOrderId,
       providerShipmentId: shipment.providerShipmentId,
+      orderNumber: shipment.orderId,
     });
     if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
     applyTrackHit(shipment, result);
     return result.status || "No scan yet.";
+  }
+  if (shipment.directCourier) {
+    const fetched = await trackDirect(shipment);
+    if (!fetched) return `${shipment.status} · ${shipment.courier} has no new scans on its site yet.`;
+    return fetched.result.status || fetched.saved.status;
   }
   return shipment.status;
 }
@@ -777,6 +1054,18 @@ export async function trackShipment(shipmentId: string) {
 export async function pingLiveAgent(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
+  if (!shipment.live && shipment.directCourier) {
+    const fetched = await trackDirect(shipment).catch(() => null);
+    if (fetched) {
+      return {
+        status: fetched.result.status || fetched.saved.status,
+        events: fetched.saved.tracking ?? [],
+        trackingUrl: publicTrackingUrl(fetched.saved),
+        lat: undefined,
+        lng: undefined,
+      };
+    }
+  }
   if (!shipment.live || !shipment.provider || shipment.provider === "local") {
     return {
       status: shipment.status,
@@ -793,6 +1082,7 @@ export async function pingLiveAgent(shipmentId: string) {
     awb: shipment.awb,
     providerOrderId: shipment.providerOrderId,
     providerShipmentId: shipment.providerShipmentId,
+    orderNumber: shipment.orderId,
   });
   if (!result.ok) throw new Error(result.error ?? "Tracking failed.");
   const saved = applyTrackHit(shipment, result);
@@ -871,7 +1161,7 @@ export async function cancelShipment(shipmentId: string) {
 export async function testShippingProvider(provider: string) {
   const result = await post<{ message?: string }>({ action: "test", provider, creds: credsFrom(getIntegrations()) });
   const id = (provider === "tookan-parcel" ? "tookan" : provider) as ShippingProviderId;
-  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "tookan", "shipday"].includes(id)) {
+  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "tookan", "shipday"].includes(id)) {
     recordShippingConnection(
       id,
       result.ok ? "success" : "failed",
@@ -881,9 +1171,23 @@ export async function testShippingProvider(provider: string) {
   return result;
 }
 
+/** Points GoSwift's track updates at this site, so undelivered, RTO and other scans update orders at once. */
+export async function connectGoswiftUpdates() {
+  return post<{ message?: string; webhookId?: string }>({ action: "webhook-register", provider: "goswift", creds: credsFrom(getIntegrations()) });
+}
+
+/** GoSwift non-delivery: ask for another attempt (optionally on a date) or have the parcel returned. */
+export async function goswiftNdrRequest(shipmentId: string, ndrAction: "Re-Attempt" | "RTO", extra: { date?: string; instructions?: string } = {}) {
+  const shipment = getShipments().find((item) => item.id === shipmentId);
+  if (!shipment?.awb) throw new Error("Shipment not found.");
+  const result = await post<{ message?: string }>({ action: "ndr", provider: "goswift", awb: shipment.awb, ndrAction, ...extra, creds: credsFrom(getIntegrations()) });
+  if (!result.ok) throw new Error(result.error ?? "GoSwift did not accept the request.");
+  return result.message || "Sent to GoSwift.";
+}
+
 export async function testConfiguredShippingProviders() {
   const settings = getIntegrations();
-  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari"] as const).filter((id) => hasShippingCredentials(id, settings));
+  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari", "goswift"] as const).filter((id) => hasShippingCredentials(id, settings));
   const results: { id: string; ok: boolean; message?: string; error?: string }[] = [];
   for (const id of wanted) {
     const result = await testShippingProvider(id);
@@ -899,6 +1203,15 @@ export async function syncPickupAddress() {
     provider: "shiprocket",
     creds: credsFrom(settings),
     pickup: settings.shipping.pickup,
+  });
+}
+
+export async function addPickupLocation(pickup: PickupAddress) {
+  return post<{ saved?: boolean }>({
+    action: "pickup-address",
+    provider: "shiprocket",
+    creds: credsFrom(getIntegrations()),
+    pickup,
   });
 }
 

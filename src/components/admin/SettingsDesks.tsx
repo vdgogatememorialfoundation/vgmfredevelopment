@@ -1,11 +1,13 @@
 "use client";
 
+import { deliveryDatePhrase } from "@/lib/delivery-expectation";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChangePasswordForm } from "@/components/account/PasswordResetForm";
 import { getSession } from "@/lib/auth";
 import { getSettings, saveSettings } from "@/lib/admin-store";
 import { getPolicy, savePolicy } from "@/lib/fulfillment";
 import {
+  RETURN_EVIDENCE,
   getIntegrations,
   getOrderSettings,
   getShippingConnection,
@@ -17,20 +19,22 @@ import {
   type IntegrationSettings,
   type MessageCopy,
   type NotificationEventId,
+  type CustomMessageTemplate,
   type OrderSettings,
   type ShippingProviderId,
-  type WhatsAppTemplate,
-} from "@/lib/integrations";
+  type WhatsAppTemplate, nextStoreWorkingDay, serverSavedSecrets } from "@/lib/integrations";
 import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
 import { pushPaymentVault, testPaytmEdc, testRazorpay } from "@/lib/payments-client";
-import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote } from "@/lib/shipping-client";
+import { bookedViaLabel } from "@/lib/courier-label";
+import { applyShiprocketWebhooks, fetchCourierRates, listPickupLocations, syncPickupAddress, testConfiguredShippingProviders, testShippingProvider, type RateQuote, connectGoswiftUpdates } from "@/lib/shipping-client";
 import { ImageField } from "@/components/admin/ImageField";
 import { fileToDataUrl } from "@/lib/images";
 import { subscribeCms } from "@/lib/cms";
 import { publishLiveSite } from "@/lib/mobile-publish";
-import type { SiteSettings } from "@/types";
+import type { SiteChrome, SiteChromeLink, SiteSettings } from "@/types";
+import { FOOTER_STYLES, HEADER_STYLES } from "@/lib/site-chrome";
 import { SOCIAL_NETWORKS, emptySocial } from "@/lib/social";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
@@ -152,10 +156,14 @@ function minutesFromNow(minutes: number) {
   return new Date(Date.now() + minutes * 60000).toISOString();
 }
 
+type PickupLocation = { nickname: string; city: string; pincode: string; phone?: string; address?: string };
+
 export function GeneralSettingsDesk() {
   const [settings, setSettings] = useState<SiteSettings>(() => getSettings());
   const [note, setNote] = useState("");
   const set = (patch: Partial<SiteSettings>) => setSettings((current) => ({ ...current, ...patch }));
+  const setChrome = (patch: Partial<SiteChrome>) => setSettings((current) => ({ ...current, chrome: { ...current.chrome, ...patch } }));
+  const chrome = settings.chrome ?? {};
 
   const save = () => {
     try {
@@ -217,6 +225,95 @@ export function GeneralSettingsDesk() {
         </div>
       </Card>
 
+      <Card title="Shloka strip" text="A slim line above the header for shlokas, quotes or a welcome. Put one per line; several lines take turns every few seconds. Saving publishes it with the rest of the site.">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={Boolean(settings.shlokaBar)} onChange={(event) => set({ shlokaBar: event.target.checked })} />
+          Show the strip above the header
+        </label>
+        <textarea
+          rows={4}
+          className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+          placeholder={"सर्वे भवन्तु सुखिनः सर्वे सन्तु निरामयाः ।\nधर्मार्थकाममोक्षाणाम् आरोग्यं मूलमुत्तमम् ।"}
+          value={(settings.shlokas ?? []).join("\n")}
+          onChange={(event) => set({ shlokas: event.target.value.split("\n") })}
+        />
+      </Card>
+
+      <Card title="WhatsApp query button" text="A round WhatsApp button on the right side of every public page. Visitors tap it to message this number. Saving publishes it with the rest of the site.">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={Boolean(settings.queryButton)} onChange={(event) => set({ queryButton: event.target.checked })} />
+          Show the WhatsApp button
+        </label>
+        <label className="mt-3 block text-sm text-slate-700">
+          WhatsApp number with country code
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+            placeholder="919876543210"
+            inputMode="tel"
+            value={settings.queryNumber ?? ""}
+            onChange={(event) => set({ queryNumber: event.target.value })}
+          />
+        </label>
+        <label className="mt-3 block text-sm text-slate-700">
+          First message (optional)
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+            placeholder="Namaskar, I have a question about…"
+            value={settings.queryMessage ?? ""}
+            onChange={(event) => set({ queryMessage: event.target.value })}
+          />
+        </label>
+      </Card>
+
+      <Card title="Header & footer" text="Text, shape and extra navigation links for the public header and footer. Saving publishes it with the rest of the site.">
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="block text-sm text-slate-700">
+            Header text (a slim line above the header; blank hides it)
+            <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.headerText ?? ""} onChange={(event) => setChrome({ headerText: event.target.value })} placeholder="Admissions open for Manas Rog 4" />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Header text link (optional)
+            <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.headerTextHref ?? ""} onChange={(event) => setChrome({ headerTextHref: event.target.value })} placeholder="/events or https://…" />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Header style
+            <select className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.headerStyle ?? "classic"} onChange={(event) => setChrome({ headerStyle: event.target.value })}>
+              {HEADER_STYLES.map((style) => (
+                <option key={style.id} value={style.id}>
+                  {style.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
+            <input type="checkbox" checked={Boolean(chrome.headerSticky)} onChange={(event) => setChrome({ headerSticky: event.target.checked })} />
+            Keep the header visible while scrolling
+          </label>
+          <LinksField label="Extra header menu links" links={chrome.navLinks} onChange={(navLinks) => setChrome({ navLinks })} />
+          <LinksField label="Extra footer links" links={chrome.footerLinks} onChange={(footerLinks) => setChrome({ footerLinks })} />
+          <label className="block text-sm text-slate-700">
+            Footer text (replaces the line under the footer logo; blank keeps the default)
+            <textarea rows={3} className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.footerText ?? ""} onChange={(event) => setChrome({ footerText: event.target.value })} />
+          </label>
+          <div className="space-y-3">
+            <label className="block text-sm text-slate-700">
+              Footer note (small line under the copyright)
+              <input className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.footerNote ?? ""} onChange={(event) => setChrome({ footerNote: event.target.value })} />
+            </label>
+            <label className="block text-sm text-slate-700">
+              Footer style
+              <select className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary" value={chrome.footerStyle ?? "classic"} onChange={(event) => setChrome({ footerStyle: event.target.value })}>
+                {FOOTER_STYLES.map((style) => (
+                  <option key={style.id} value={style.id}>
+                    {style.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      </Card>
+
       <Card title="Announcement ticker" text="How fast the bar under the header moves. A lower number is faster. Saving publishes it with the rest of the site.">
         <label className="block text-sm text-slate-700">
           Speed · {Math.min(90, Math.max(12, settings.tickerSeconds || 36))} seconds for one pass
@@ -230,6 +327,31 @@ export function GeneralSettingsDesk() {
             onChange={(event) => set({ tickerSeconds: Number(event.target.value) })}
           />
         </label>
+      </Card>
+
+      <Card title="Product text sizes" text="Font sizes on shop product cards and the product page. Saving publishes them to the site and app.">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm text-slate-700">
+            Product card · title · {settings.productText?.cardTitle || 14}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardTitle || 14} onChange={(event) => set({ productText: { ...settings.productText, cardTitle: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · author / publisher · {settings.productText?.cardMeta || 12}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardMeta || 12} onChange={(event) => set({ productText: { ...settings.productText, cardMeta: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · language · {settings.productText?.cardLanguage || 20}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardLanguage || 20} onChange={(event) => set({ productText: { ...settings.productText, cardLanguage: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · price · {settings.productText?.cardPrice || 14}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.cardPrice || 14} onChange={(event) => set({ productText: { ...settings.productText, cardPrice: Number(event.target.value) } })} />
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product page · language · {settings.productText?.pageLanguage || 24}px
+            <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.pageLanguage || 24} onChange={(event) => set({ productText: { ...settings.productText, pageLanguage: Number(event.target.value) } })} />
+          </label>
+        </div>
       </Card>
 
       <Card title="Google Maps" text="Used on clinics, events, live tracking and the analytics live map. Paste a Maps URL if you leave this blank.">
@@ -295,8 +417,8 @@ export function GeneralSettingsDesk() {
 }
 
 function pickGeneral(settings: SiteSettings): Partial<SiteSettings> {
-  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds } = settings;
-  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds };
+  const { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage, chrome } = settings;
+  return { siteName, tagline, logoText, logoUrl, faviconUrl, supportEmail, supportPhone, maintenanceMode, maintenanceMessage, maintenanceUntil, social, tickerSeconds, shlokaBar, shlokas, queryButton, queryNumber, queryMessage, chrome };
 }
 
 /* ---------------- Payments ---------------- */
@@ -388,7 +510,7 @@ export function PaymentSettingsDesk() {
       </div>
       <Card title="Payment links & webhooks">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Text label="Payment link expiry (hours)" type="number" value={value.linkExpiryHours} onChange={(hours) => set({ linkExpiryHours: Number(hours) || 72 })} />
+          <Text label="Payment link valid for (minutes, 15 or more)" type="number" value={value.linkExpiryMinutes ?? 30} onChange={(minutes) => set({ linkExpiryMinutes: Math.max(15, Number(minutes) || 30) })} />
           <Secret label="Webhook secret" value={value.webhookSecret} onChange={(webhookSecret) => set({ webhookSecret })} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -652,6 +774,91 @@ export function SmsSettingsDesk() {
   );
 }
 
+/* ---------------- Firebase (push notifications) ---------------- */
+
+function parseJson(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function FileField({ label, hint, accept, value, saved, onChange }: { label: string; hint: string; accept: string; value: string; saved?: boolean; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</span>
+      <input
+        type="file"
+        accept={accept}
+        className="mb-2 block text-sm"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          if (file) onChange(await file.text());
+        }}
+      />
+      <textarea
+        className={`${input} h-28 font-mono text-xs`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={saved ? "Saved on the server. Upload or paste a new file to replace it." : "Upload the file or paste its contents"}
+      />
+      <span className="mt-1 block text-xs text-slate-500">{hint}</span>
+    </label>
+  );
+}
+
+export function FirebaseSettingsDesk() {
+  const { value, setValue, note, setNote, save } = useIntegrationSlice("firebase");
+  const set = (patch: Partial<typeof value>) => setValue({ ...value, ...patch });
+  const keySaved = serverSavedSecrets().includes("firebase.serviceAccountSecret");
+  const check = () => {
+    if (value.serviceAccountSecret.trim()) {
+      const key = parseJson(value.serviceAccountSecret);
+      if (!key?.project_id || !key.client_email || !key.private_key) return "The service account key must be the JSON file from Firebase → Project settings → Service accounts → Generate new private key.";
+    }
+    if (value.androidConfig.trim() && !parseJson(value.androidConfig)?.project_info) return "google-services.json does not look right. Download it again from Firebase → Project settings → Your apps → Android.";
+    if (value.iosConfig.trim() && !value.iosConfig.includes("GOOGLE_APP_ID")) return "GoogleService-Info.plist does not look right. Download it again from Firebase → Project settings → Your apps → iOS.";
+    return "";
+  };
+  const submit = () => {
+    const problem = check();
+    if (problem) return setNote(problem);
+    save();
+  };
+  const project = String(parseJson(value.serviceAccountSecret)?.project_id ?? "");
+
+  return (
+    <div className="space-y-5">
+      <Header
+        title="Firebase: app push notifications"
+        text="Order-stage and other notifications are sent to the customer app through Firebase Cloud Messaging. The key is kept on the server and never shown again after saving."
+        action={<button type="button" className={primary} onClick={submit}>Save</button>}
+      />
+      <Saved text={note} />
+      <SettingsSave save={submit}>
+        <Card title="Server key (sending)" text={keySaved || project ? `Status: ${project ? `key for project ${project} ready to save` : "key saved on the server"}. Push sending is on.` : "Status: no key yet. Push notifications are off until a key is saved."}>
+          <FileField
+            label="Service account key (.json)"
+            accept=".json,application/json"
+            hint="Firebase console → Project settings → Service accounts → Generate new private key."
+            value={value.serviceAccountSecret}
+            saved={keySaved}
+            onChange={(serviceAccountSecret) => set({ serviceAccountSecret })}
+          />
+        </Card>
+        <Card title="App files (used when the app is built)" text="Android package org.vaidyagogate.customer. For iPhone push, upload your APNs .p8 key in Firebase → Project settings → Cloud Messaging → Apple app configuration.">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FileField label="Android: google-services.json" accept=".json,application/json" hint="Firebase → Project settings → Your apps → Android app." value={value.androidConfig} onChange={(androidConfig) => set({ androidConfig })} />
+            <FileField label="iOS: GoogleService-Info.plist" accept=".plist" hint="Firebase → Project settings → Your apps → iOS app." value={value.iosConfig} onChange={(iosConfig) => set({ iosConfig })} />
+          </div>
+        </Card>
+      </SettingsSave>
+    </div>
+  );
+}
+
 /* ---------------- WhatsApp ---------------- */
 
 export function WhatsAppSettingsDesk() {
@@ -857,13 +1064,41 @@ export function MessageTemplatesDesk() {
   const [whatsapp, setWhatsapp] = useState(() => getIntegrations().whatsapp);
   const [sms, setSms] = useState(() => getIntegrations().sms);
   const [open, setOpen] = useState<NotificationEventId>("otp");
+  const [customs, setCustoms] = useState<CustomMessageTemplate[]>(() => getIntegrations().customTemplates ?? []);
+  const [openCustom, setOpenCustom] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const custom = customs.find((item) => item.id === openCustom) ?? null;
+  const patchCustom = (patch: Partial<CustomMessageTemplate>) =>
+    setCustoms((list) => list.map((item) => (item.id === openCustom ? { ...item, ...patch } : item)));
+  const addCustom = () => {
+    const id = `custom-${Date.now().toString(36)}`;
+    setCustoms((list) => [
+      ...list,
+      {
+        id,
+        label: "New template",
+        emailSubject: "A message from Vaidya Gogate Memorial Foundation",
+        emailBody: "Dear {name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n\n\nWith warm regards,\nVaidya Gogate Memorial Foundation",
+        smsBody: "Vaidya Gogate Memorial Foundation: ",
+        smsTemplateId: "",
+        whatsappTemplate: "",
+      },
+    ]);
+    setOpenCustom(id);
+    setNote("New template added. Name it, fill the copy, then click Save templates.");
+  };
+  const removeCustom = () => {
+    setCustoms((list) => list.filter((item) => item.id !== openCustom));
+    setOpenCustom(null);
+    setNote("Template removed. Click Save templates to keep this change.");
+  };
 
   const save = () => {
     const current = getIntegrations();
     saveIntegrations({
       ...current,
       messages,
+      customTemplates: customs.filter((item) => item.label.trim()),
       whatsapp: { ...current.whatsapp, mapping: whatsapp.mapping },
       sms: { ...current.sms, mapping: sms.mapping },
     });
@@ -907,14 +1142,62 @@ export function MessageTemplatesDesk() {
               <button
                 key={item.id}
                 type="button"
-                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${open === item.id ? "bg-burgundy/10 font-semibold text-burgundy" : "text-slate-700 hover:bg-slate-50"}`}
-                onClick={() => setOpen(item.id)}
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${!custom && open === item.id ? "bg-burgundy/10 font-semibold text-burgundy" : "text-slate-700 hover:bg-slate-50"}`}
+                onClick={() => { setOpen(item.id); setOpenCustom(null); }}
               >
                 {item.label}
               </button>
             ))}
+            <p className="px-3 pt-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Your templates</p>
+            {customs.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${openCustom === item.id ? "bg-burgundy/10 font-semibold text-burgundy" : "text-slate-700 hover:bg-slate-50"}`}
+                onClick={() => setOpenCustom(item.id)}
+              >
+                {item.label || "Untitled template"}
+              </button>
+            ))}
+            <button type="button" className={`${ghost} mt-2 w-full`} onClick={addCustom}>+ Add template</button>
           </div>
         </Card>
+        {custom ? (
+          <div className="space-y-5">
+            <Card title="Template">
+              <div className="space-y-3">
+                <Text label="Template name" value={custom.label} onChange={(label) => patchCustom({ label })} />
+                <button type="button" className={ghost} onClick={removeCustom}>Delete template</button>
+              </div>
+            </Card>
+            <Card title="Email">
+              <div className="space-y-3">
+                <Text label="Email subject" value={custom.emailSubject} onChange={(emailSubject) => patchCustom({ emailSubject })} />
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Email body</span>
+                  <textarea className={input} rows={10} value={custom.emailBody} onChange={(event) => patchCustom({ emailBody: event.target.value })} />
+                </label>
+              </div>
+            </Card>
+            <Card title="SMS">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">SMS body</span>
+                <textarea className={input} rows={4} value={custom.smsBody} onChange={(event) => patchCustom({ smsBody: event.target.value })} />
+              </label>
+              <div className="mt-3">
+                <Text label="MSG91 / DLT template ID (optional)" value={custom.smsTemplateId} onChange={(smsTemplateId) => patchCustom({ smsTemplateId })} />
+              </div>
+            </Card>
+            <Card title="WhatsApp">
+              <Text
+                label="WhatsApp template / campaign / CPaaS alias"
+                value={custom.whatsappTemplate}
+                onChange={(whatsappTemplate) => patchCustom({ whatsappTemplate })}
+                hint="Must match an approved template on Meta, Zoho CPaaS or AiSensy."
+              />
+            </Card>
+          </div>
+        ) : (
         <div className="space-y-5">
           <Card title={`${notificationEvents.find((item) => item.id === open)?.label} · Email`}>
             <div className="space-y-3">
@@ -947,6 +1230,7 @@ export function MessageTemplatesDesk() {
             />
           </Card>
         </div>
+        )}
       </div>
     </div>
   );
@@ -1001,8 +1285,17 @@ export function ShippingApisDesk() {
     setStamp((current) => current + 1);
   };
 
+  const [pickupLocations, setPickupLocations] = useState<PickupLocation[]>([]);
   const pickup = value.pickup;
   const setPickup = (patch: Partial<typeof pickup>) => set({ pickup: { ...pickup, ...patch } });
+  const applyPickupLocation = (location: PickupLocation) =>
+    setPickup({
+      nickname: location.nickname,
+      city: location.city || pickup.city,
+      pincode: location.pincode || pickup.pincode,
+      phone: location.phone || pickup.phone,
+      line1: location.address || pickup.line1,
+    });
 
   return (
     <div className="space-y-5">
@@ -1026,6 +1319,24 @@ export function ShippingApisDesk() {
           <div className="space-y-3">
             <Secret label="Shipday API key" value={value.shipday.apiKey} onChange={(apiKey) => set({ shipday: { ...value.shipday, apiKey } })} />
             <button type="button" className={primary} disabled={busy === "shipday"} onClick={() => test("shipday")}>{busy === "shipday" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
+        <Card title="Courier website tracking" text="Orders sent with Amazon Shipping, Ekart, Delhivery, Blue Dart, DTDC, India Post and other couriers fetch their status from the courier's own tracking site. When a site gives no scans, this tracking service is asked instead." right={<Check label="Use" checked={value.tracker?.enabled !== false} onChange={(enabled) => set({ tracker: { ...(value.tracker ?? { service: "aftership", apiKey: "" }), enabled } })} />}>
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-slate-700">
+              Fallback tracking service
+              <select
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                value={value.tracker?.service ?? "aftership"}
+                onChange={(event) => set({ tracker: { ...(value.tracker ?? { apiKey: "", enabled: true }), service: event.target.value as "aftership" | "trackingmore" | "17track" } })}
+              >
+                <option value="aftership">AfterShip</option>
+                <option value="trackingmore">TrackingMore</option>
+                <option value="17track">17TRACK</option>
+              </select>
+            </label>
+            <Secret label="Tracking service API key (optional)" value={value.tracker?.apiKey ?? ""} onChange={(apiKey) => set({ tracker: { ...(value.tracker ?? { service: "aftership", enabled: true }), apiKey } })} />
+            <p className="text-xs text-slate-500">Status is checked again every few minutes while customers, support or admin view the order.</p>
           </div>
         </Card>
         <Card title="Shiprocket" text="apidocs.shiprocket.in — Settings → API → Create an API user. Login, serviceability, adhoc order, assign AWB, generate pickup, label, invoice, manifest, track AWB, cancel and reverse pickup all use this account." badge={<ProviderStatus id="shiprocket" />} right={<Check label="Use" checked={value.shiprocket.enabled} onChange={(enabled) => set({ shiprocket: { ...value.shiprocket, enabled } })} />}>
@@ -1086,6 +1397,34 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "shipyaari"} onClick={() => test("shipyaari")}>{busy === "shipyaari" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="GoSwift" text="app.goswift.in/api/docs — client ID from Swift onboarding plus the API username and password. Books shipments, prints labels, tracks every scan and sends re-attempt or RTO requests for undelivered parcels. Swift has no rate API, so set the charge shown at checkout." badge={<ProviderStatus id="goswift" />} right={<Check label="Use" checked={value.goswift.enabled} onChange={(enabled) => set({ goswift: { ...value.goswift, enabled } })} />}>
+          <div className="space-y-3">
+            <Text label="Client ID" value={value.goswift.clientId} onChange={(clientId) => set({ goswift: { ...value.goswift, clientId } })} />
+            <Text label="API username" value={value.goswift.username} onChange={(username) => set({ goswift: { ...value.goswift, username } })} />
+            <Secret label="API password" value={value.goswift.password} onChange={(password) => set({ goswift: { ...value.goswift, password } })} />
+            <Text label="Pickup address alias" value={value.goswift.pickupAlias} onChange={(pickupAlias) => set({ goswift: { ...value.goswift, pickupAlias } })} hint="As saved in the Swift dashboard. Leave blank to send the pickup address from Settings." />
+            <Text label="Charge shown at checkout (₹)" value={value.goswift.rate} onChange={(rate) => set({ goswift: { ...value.goswift, rate } })} hint="Default ₹79" />
+            <Text label="Delivery days shown" value={value.goswift.etaDays} onChange={(etaDays) => set({ goswift: { ...value.goswift, etaDays } })} hint="Default 4" />
+            <Text label="Service" value={value.goswift.service} onChange={(service) => set({ goswift: { ...value.goswift, service: service.toUpperCase() } })} hint="SURFACE, EXPRESS, NDD or SDD" />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={primary} disabled={busy === "goswift"} onClick={() => test("goswift")}>{busy === "goswift" ? "Checking live…" : "Save & test"}</button>
+              <button
+                type="button"
+                className={primary}
+                disabled={busy === "goswift-hook"}
+                onClick={async () => {
+                  save();
+                  setBusy("goswift-hook");
+                  const result = await connectGoswiftUpdates().catch((error: Error) => ({ ok: false, error: error.message, message: "" }));
+                  setBusy("");
+                  setNote(result.ok ? `GoSwift: ${result.message}` : `GoSwift live updates failed: ${result.error}`);
+                }}
+              >
+                {busy === "goswift-hook" ? "Connecting…" : "Connect live status updates"}
+              </button>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <Card
@@ -1120,8 +1459,8 @@ export function ShippingApisDesk() {
                   setNote(`Shiprocket pickup list: ${result.error}`);
                   return;
                 }
-                const names = (result.locations ?? []).map((location) => `${location.nickname} (${location.city} ${location.pincode})`);
-                setNote(names.length ? `Shiprocket pickup locations: ${names.join(" · ")}` : "Shiprocket returned no pickup locations.");
+                setPickupLocations(result.locations ?? []);
+                setNote(result.locations?.length ? `Shiprocket has ${result.locations.length} pickup address(es). Pick one below.` : "Shiprocket returned no pickup locations.");
               }}
             >
               List locations
@@ -1129,6 +1468,24 @@ export function ShippingApisDesk() {
           </div>
         }
       >
+        {pickupLocations.length ? (
+          <div className="mb-4 space-y-2">
+            <p className="text-sm font-medium text-text-primary">Pickup addresses on Shiprocket</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {pickupLocations.map((location) => (
+                <button
+                  key={location.nickname}
+                  type="button"
+                  onClick={() => applyPickupLocation(location)}
+                  className={`rounded-xl border p-3 text-left text-sm ${location.nickname === pickup.nickname ? "border-burgundy bg-burgundy/5" : "border-border bg-white hover:border-burgundy"}`}
+                >
+                  <span className="block font-semibold text-text-primary">{location.nickname}{location.nickname === pickup.nickname ? " · in use" : ""}</span>
+                  <span className="block text-text-muted">{[location.address, location.city, location.pincode].filter(Boolean).join(", ")}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-3">
           <Text label="Nickname" value={pickup.nickname} onChange={(nickname) => setPickup({ nickname })} />
           <Text label="Contact name" value={pickup.contactName} onChange={(contactName) => setPickup({ contactName })} />
@@ -1154,6 +1511,27 @@ export function ShippingApisDesk() {
           <Check label="Schedule pickup automatically" hint="Shiprocket gets a pickup request right after the AWB." checked={value.autoSchedulePickup} onChange={(autoSchedulePickup) => set({ autoSchedulePickup })} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Shipping label</span>
+            <select className={input} value={value.labelSource ?? "aggregator"} onChange={(event) => set({ labelSource: event.target.value === "foundation" ? "foundation" : "aggregator" })}>
+              <option value="aggregator">Aggregator label (Shiprocket, Nimbuspost, iThink, Shipyaari) when available</option>
+              <option value="foundation">Foundation label for every courier</option>
+            </select>
+            <span className="mt-1 block text-xs text-slate-500">Aggregator labels print in the paper size set in that aggregator&apos;s panel (for Shiprocket: Settings → Label). Otherwise the Foundation label is printed.</span>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Foundation label paper</span>
+            <select className={input} value={value.labelSize ?? "4x6"} onChange={(event) => set({ labelSize: event.target.value as typeof value.labelSize })}>
+              <option value="printer">Choose paper in print dialog</option>
+              <option value="4x6">4×6 in tag (thermal)</option>
+              <option value="roll">Paper roll 80 mm</option>
+              <option value="a5">A5 sheet</option>
+              <option value="a4">A4 sheet</option>
+            </select>
+            <span className="mt-1 block text-xs text-slate-500">Default for every device. Each device can still pick a size next to the Print label button.</span>
+          </label>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
           <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.min(15, Math.max(8, Number(seconds) || 8)) })} hint="How often the live map asks Tookan or Shipday for the rider. 8 to 15 seconds." />
         </div>
@@ -1164,16 +1542,6 @@ export function ShippingApisDesk() {
             onChange={(scooterImage) => set({ scooterImage })}
             hint="Upload the bike picture. The live map uses it for the rider and turns it to follow the road."
           />
-        </div>
-        <div className="mt-4">
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">When the customer did not choose</span>
-            <select className={input} value={value.rateChoice} onChange={(event) => set({ rateChoice: event.target.value as typeof value.rateChoice })}>
-              <option value="customer">Cheapest (customer picks at checkout)</option>
-              <option value="cheapest">Always cheapest</option>
-              <option value="fastest">Always fastest</option>
-            </select>
-          </label>
         </div>
       </Card>
 
@@ -1202,6 +1570,7 @@ export function ShippingApisDesk() {
 }
 
 export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick?: (index: number) => void; picked?: number }) {
+  const [pickupDay] = useState(() => new Date(nextStoreWorkingDay(Date.now())).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }));
   return (
     <div className="mt-4 space-y-2">
       <p className="text-xs text-slate-500">
@@ -1218,10 +1587,27 @@ export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick
             <li key={`${rate.provider}-${rate.courierId}`} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
               <label className="flex items-center gap-2">
                 {onPick && <input type="radio" checked={picked === index} onChange={() => onPick(index)} />}
-                <span className="font-medium text-slate-800">{rate.courierName}</span>
-                <span className="text-xs uppercase text-slate-400">{rate.provider === "local" ? "estimate" : rate.provider}</span>
+                <span>
+                  <span className="block font-medium text-slate-800">{rate.courierName}</span>
+                  <span className="block text-xs text-slate-500">{bookedViaLabel(rate.provider)}{rate.estimate ? " · placeholder, not a live quote" : ""}</span>
+                  {rate.actualKg !== undefined && (
+                    <span className="block text-xs text-slate-500">
+                      Actual {rate.actualKg} kg · volumetric {rate.volumetricKg} kg (÷{rate.volumetricDivisor}) · billed {rate.chargeWeightKg ? `${rate.chargeWeightKg} kg` : "not reported"}
+                      {rate.pickupBy ? ` · pickup ${rate.pickupBy}` : ""}
+                    </span>
+                  )}
+                  {rate.weightFlag && <span className="block text-xs font-medium text-amber-700">{rate.weightFlag}</span>}
+                </span>
               </label>
-              <span className="text-slate-600">{rate.etaDays} day{rate.etaDays === 1 ? "" : "s"} · <b>₹{Math.round(rate.rate)}</b></span>
+              <span className="text-right text-slate-600">
+                <span className="block">
+                  {rate.etaDays} day{rate.etaDays === 1 ? "" : "s"} · <b>₹{Math.round(rate.rate)}</b>
+                  {rate.rating ? <span className="ml-1 text-amber-600">★ {rate.rating}</span> : null}
+                </span>
+                <span className="block text-xs text-slate-500">
+                  Pickup {pickupDay} · delivery {rate.deliverBy ? deliveryDatePhrase(rate.deliverBy) : `in ${rate.etaDays} day${rate.etaDays === 1 ? "" : "s"}`}
+                </span>
+              </span>
             </li>
           ))}
         </ul>
@@ -1260,16 +1646,119 @@ export function OrderSettingsDesk() {
 
   return (
     <div className="space-y-5">
-      <Header title="Orders, returns & refunds" text="Customers cannot cancel or return. They may request a damaged-item replacement with photos. The desk cancels, modifies, refunds, opens a return, or places a free replacement." action={<button type="button" className={primary} onClick={save}>Save</button>} />
+      <Header title="Orders, returns & refunds" text="Customers may cancel and return when allowed below, and may request a damaged-item replacement with photos. The desk cancels, modifies, refunds, opens a return, or places a free replacement." action={<button type="button" className={primary} onClick={save}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
       <Card title="Fulfilment options at checkout">
         <div className="grid gap-4 md:grid-cols-3">
           <Check label="Home delivery" checked={value.deliveryEnabled} onChange={(deliveryEnabled) => set({ deliveryEnabled })} />
-          <Check label="Pickup from store" checked={value.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} />
+          <Check label="Pickup from store (off: customers can't choose store pickup)" checked={value.pickupEnabled} onChange={(pickupEnabled) => set({ pickupEnabled })} />
+          <Check label="Store pickup: show a ready date for in-stock items (off: no date; the desk marks it ready)" checked={value.pickupDates.inStock} onChange={(inStock) => set({ pickupDates: { ...value.pickupDates, inStock } })} />
+          <Check label="Store pickup: show a ready date for pre-orders (off: no date; the desk marks it ready)" checked={value.pickupDates.preorder} onChange={(preorder) => set({ pickupDates: { ...value.pickupDates, preorder } })} />
           <Check label="Customer chooses the delivery partner" hint="Shows couriers and rates at checkout." checked={value.showCourierChoice} onChange={(showCourierChoice) => set({ showCourierChoice })} />
+          <Check label="Hide Gogate Products-Tookan at checkout" checked={value.hideTookanAtCheckout} onChange={(hideTookanAtCheckout) => set({ hideTookanAtCheckout })} />
+          <Check label="Hide Gogate Products-Shipday at checkout" checked={value.hideShipdayAtCheckout} onChange={(hideShipdayAtCheckout) => set({ hideShipdayAtCheckout })} />
+          <Text label="Hide these couriers on the site (comma separated, e.g. Ekart, Xpressbees)" value={value.hiddenCouriers.join(",")} onChange={(text) => set({ hiddenCouriers: String(text).split(",") })} />
+          <Text label="Courier charge buffer shown to customers (%)" type="number" value={value.courierMarkup.percent} onChange={(percent) => set({ courierMarkup: { ...value.courierMarkup, percent: Math.max(0, Number(percent) || 0) } })} />
+          <Text label="Courier charge buffer shown to customers (₹ added)" type="number" value={value.courierMarkup.rupees} onChange={(rupees) => set({ courierMarkup: { ...value.courierMarkup, rupees: Math.max(0, Number(rupees) || 0) } })} />
+          <Check label="Charge the highest courier rate" hint="Normal orders: customers pay the highest rate among the available couriers for their pincode (packing included), so you can book any courier if the cheaper one doesn't pick up. Pre-orders keep the rate of the courier you select." checked={value.courierMarkup.chargeHighest} onChange={(chargeHighest) => set({ courierMarkup: { ...value.courierMarkup, chargeHighest } })} />
+          <Text label="Maximum courier charge to customers (₹, 0 = no limit)" type="number" value={value.courierMarkup.maxCharge ?? 0} onChange={(maxCharge) => set({ courierMarkup: { ...value.courierMarkup, maxCharge: Math.max(0, Number(maxCharge) || 0) } })} />
+          <Text label="Minimum courier charge shown (₹)" type="number" value={value.courierMarkup.minimum} onChange={(minimum) => set({ courierMarkup: { ...value.courierMarkup, minimum: Math.max(0, Number(minimum) || 0) } })} />
+          <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />
+          <Check label="Coupons at checkout (customers can enter a coupon code)" checked={value.promoCodes.coupons} onChange={(coupons) => set({ promoCodes: { ...value.promoCodes, coupons } })} />
+          <Check label="Gift cards at checkout (customers can redeem a gift card)" checked={value.promoCodes.giftCards} onChange={(giftCards) => set({ promoCodes: { ...value.promoCodes, giftCards } })} />
+          <Check label="Hide delivery dates on the site (product cards, product page, bag, checkout and tracking until a courier is booked)" checked={value.hideDeliveryDates} onChange={(hideDeliveryDates) => set({ hideDeliveryDates })} />
+          <Check label="Cash at Store (store pickup orders pay at the counter)" checked={value.cashAtStoreEnabled} onChange={(cashAtStoreEnabled) => set({ cashAtStoreEnabled })} />
+          <Text label="Packing / processing time (hours)" type="number" value={value.processingHours} onChange={(hours) => set({ processingHours: Math.max(0, Number(hours) || 0) })} />
+          <Text label="Dispatch cut-off (India time, HH:MM)" value={value.dispatchCutoff} onChange={(dispatchCutoff) => set({ dispatchCutoff })} />
+          <Text label="Picker time per order (minutes)" type="number" value={value.pickSchedule.pickMinutes} onChange={(minutes) => set({ pickSchedule: { ...value.pickSchedule, pickMinutes: Math.max(1, Number(minutes) || 1) } })} />
+          <Text label="Packer time per order (minutes)" type="number" value={value.pickSchedule.packMinutes} onChange={(minutes) => set({ pickSchedule: { ...value.pickSchedule, packMinutes: Math.max(1, Number(minutes) || 1) } })} />
+          <div className="md:col-span-3 rounded-lg border border-slate-200 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Picker / packer scans (ticked = required, unticked = optional)</p>
+            <div className="grid gap-2 md:grid-cols-3">
+              <Check label="Picker: order code" checked={value.scanRules.pick.orderCode} onChange={(orderCode) => set({ scanRules: { ...value.scanRules, pick: { ...value.scanRules.pick, orderCode } } })} />
+              <Check label="Picker: product code / barcode" checked={value.scanRules.pick.productCode} onChange={(productCode) => set({ scanRules: { ...value.scanRules, pick: { ...value.scanRules.pick, productCode } } })} />
+              <Check label="Picker: SKU" checked={value.scanRules.pick.sku} onChange={(sku) => set({ scanRules: { ...value.scanRules, pick: { ...value.scanRules.pick, sku } } })} />
+              <Check label="Packer: box code" checked={value.scanRules.pack.boxCode} onChange={(boxCode) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, boxCode } } })} />
+              <Check label="Packer: order code" checked={value.scanRules.pack.orderCode} onChange={(orderCode) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, orderCode } } })} />
+              <Check label="Packer: SKU" checked={value.scanRules.pack.sku} onChange={(sku) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, sku } } })} />
+              <Check label="Packer: ISBN (books)" checked={value.scanRules.pack.isbn} onChange={(isbn) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, isbn } } })} />
+              <Check label="Packer: packing photos" checked={value.scanRules.pack.photos} onChange={(photos) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, photos } } })} />
+              <Check label="Packer: confirm items match description" checked={value.scanRules.pack.confirm} onChange={(confirm) => set({ scanRules: { ...value.scanRules, pack: { ...value.scanRules.pack, confirm } } })} />
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Each copy is still counted once. Admin can skip any step on an order from the pick &amp; pack desk.</p>
+          </div>
+          <Check label="Saturday is a working day" hint="Off: Saturday orders are processed on the next working day." checked={value.workingDays.saturday} onChange={(saturday) => set({ workingDays: { ...value.workingDays, saturday } })} />
+          <Check label="Sunday is a working day" hint="Off: Sunday orders are processed on the next working day." checked={value.workingDays.sunday} onChange={(sunday) => set({ workingDays: { ...value.workingDays, sunday } })} />
+          <label className="block md:col-span-3">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Holidays (one date per line, YYYY-MM-DD)</span>
+            <textarea
+              className={input}
+              rows={3}
+              defaultValue={value.workingDays.holidays.join("\n")}
+              placeholder={"2026-11-14\n2026-12-25"}
+              onBlur={(event) => set({ workingDays: { ...value.workingDays, holidays: event.target.value.split(/[\s,]+/).map((day) => day.trim()).filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)) } })}
+            />
+            <span className="mt-1 block text-xs text-slate-500">Processing, store-pickup ready dates, courier pickups and every delivery date shown skip these days and the weekly offs.</span>
+          </label>
           {value.codEnabled && <Text label="COD fee (₹)" type="number" value={value.codFee} onChange={(fee) => set({ codFee: Number(fee) || 0 })} />}
+        </div>
+      </Card>
+      <Card title="Store pickup returns & pre-order payments" text="Pickup orders have no return or replacement unless switched on here. Pre-orders take an advance now (default 50%); the balance and courier charge are paid by payment link later.">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Check label="Allow returns on store-pickup orders" checked={value.returns.pickupReturns} onChange={(pickupReturns) => set({ returns: { ...value.returns, pickupReturns } })} />
+          <Check label="Allow replacements on store-pickup orders" checked={value.returns.pickupReplacement} onChange={(pickupReplacement) => set({ returns: { ...value.returns, pickupReplacement } })} />
+          <div className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Pre-order payment</span>
+            <p className="text-sm text-slate-700">Advance at checkout; the rest plus the courier charge is paid by payment link. Full payment and cash on delivery are not offered for pre-orders.</p>
+          </div>
+          <Check label="Show packing and delivery dates on pre-order tracking (off: shown only once a courier is booked)" checked={value.showPreorderStepDates} onChange={(showPreorderStepDates) => set({ showPreorderStepDates })} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Advance type</span>
+            <select className={input} value={value.preorderPayment.advanceType} onChange={(event) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: event.target.value === "amount" ? "amount" : "percent", advanceValue: event.target.value === "amount" ? 100 : 50 } })}>
+              <option value="amount">Fixed ₹ per copy</option>
+              <option value="percent">% of the order</option>
+            </select>
+          </label>
+          {value.preorderPayment.advanceType === "amount" ? (
+            <Text label="Advance per copy (₹)" type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: "amount", advanceValue: Math.max(1, Math.round(Number(amount) || 100)) } })} />
+          ) : (
+            <Text label="Advance (%) — 1 to 99" type="number" value={value.preorderPayment.advanceValue} onChange={(amount) => set({ preorderPayment: { ...value.preorderPayment, mode: "advance", advanceType: "percent", advanceValue: Math.min(99, Math.max(1, Math.round(Number(amount) || 50))) } })} />
+          )}
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Balance due</span>
+                <select className={input} value={value.preorderPayment.balanceWhen} onChange={(event) => set({ preorderPayment: { ...value.preorderPayment, balanceWhen: event.target.value === "on_ready" ? "on_ready" : "before_dispatch" } })}>
+                  <option value="before_dispatch">Before dispatch</option>
+                  <option value="on_ready">When the item is ready</option>
+                </select>
+              </label>
+        </div>
+      </Card>
+      <Card title="Order status names & extra tracking statuses" text="Rename any status or tracking step the customer sees (leave blank to keep the built-in name). Extra statuses are added by the desk from an order's Status box and show inside the chosen tracking step.">
+        <div className="grid gap-3 md:grid-cols-3">
+          {["Awaiting Confirmation", "Ordered", "Packed", "Shipped", "Out for Delivery", "Delivered", "Ready for Pickup", "Picked Up", "Failed", "Cancelled"].map((name) => (
+            <Text key={name} label={name} placeholder={name} value={value.statusLabels[name] ?? ""} onChange={(text) => set({ statusLabels: { ...value.statusLabels, [name]: text } })} />
+          ))}
+        </div>
+        <div className="mt-5 space-y-2">
+          {value.customStatuses.map((row, index) => (
+            <div key={row.id} className="flex flex-wrap items-end gap-2">
+              <div className="min-w-56 flex-1">
+                <Text label="Extra status" placeholder="e.g. Reached Pune hub" value={row.label} onChange={(label) => set({ customStatuses: value.customStatuses.map((item, at) => (at === index ? { ...item, label } : item)) })} />
+              </div>
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Shows under</span>
+                <select className={input} value={row.stage} onChange={(event) => set({ customStatuses: value.customStatuses.map((item, at) => (at === index ? { ...item, stage: event.target.value } : item)) })}>
+                  {[["ordered", "Ordered"], ["packed", "Packed"], ["shipped", "Shipped"], ["out", "Out for Delivery"], ["delivered", "Delivered"], ["ready", "Ready for Pickup"], ["picked", "Picked Up"]].map(([id, label]) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="px-2 py-2 text-sm font-semibold text-red-600" onClick={() => set({ customStatuses: value.customStatuses.filter((_, at) => at !== index) })}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className={primary} onClick={() => set({ customStatuses: [...value.customStatuses, { id: String(Date.now()), label: "", stage: "shipped" }] })}>+ Add status</button>
         </div>
       </Card>
       <Card title="Shipping fee">
@@ -1287,13 +1776,26 @@ export function OrderSettingsDesk() {
           )}
           {value.shippingFeeMode === "per_item" && <Text label="Fee per item (₹)" type="number" value={value.perItemFee} onChange={(fee) => set({ perItemFee: Number(fee) || 0 })} />}
           {value.shippingFeeMode === "free_above" && <Text label="Free above (₹)" type="number" value={value.freeAbove} onChange={(amount) => set({ freeAbove: Number(amount) || 0 })} />}
+          <Check label="Add a packing charge" hint="Added into the courier charge for normal orders and pre-orders (on a pre-order it joins the balance with the courier charge). Customers never see it on its own." checked={value.packingCharge.enabled} onChange={(enabled) => set({ packingCharge: { ...value.packingCharge, enabled } })} />
+          {value.packingCharge.enabled && (
+            <>
+              <Text label="Packing charge (₹)" type="number" value={value.packingCharge.amount} onChange={(amount) => set({ packingCharge: { ...value.packingCharge, amount: Math.max(0, Number(amount) || 0) } })} />
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Packing charge per</span>
+                <select className={input} value={value.packingCharge.per} onChange={(event) => set({ packingCharge: { ...value.packingCharge, per: event.target.value === "copy" ? "copy" : "order" } })}>
+                  <option value="order">Order</option>
+                  <option value="copy">Copy</option>
+                </select>
+              </label>
+            </>
+          )}
         </div>
       </Card>
       <Card title="Platform fee">
         <div className="grid gap-4 md:grid-cols-2">
-          <Check label="Add a platform fee at checkout" hint="Switch this off to charge no platform fee. While it is on, the fee stays with the Foundation unless the next switch is on." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
+          <Check label="Add a platform fee at checkout" hint="Charged once per order: with the pre-order advance, never again on the balance. Kept on refunds." checked={value.platformFee.enabled} onChange={(enabled) => set({ platformFee: { ...value.platformFee, enabled } })} />
           <Text label="Amount (₹)" type="number" value={value.platformFee.amount} onChange={(amount) => set({ platformFee: { ...value.platformFee, amount: Number(amount) || 0 } })} />
-          <Check label="Allow the desk to refund the platform fee" hint="Leave this off. The platform fee is then kept on every refund." checked={value.platformFee.refundable} onChange={(refundable) => set({ platformFee: { ...value.platformFee, refundable } })} />
+          <p className="text-sm text-slate-700">The platform fee is non-refundable for customers: it is kept on every cancellation, refund and return. To give it back on a particular order, tick "Also refund the platform fee" when you refund that order.</p>
         </div>
       </Card>
       <Card title="GST" text="Leave this off until the Foundation is GST compliant. Turning on GST adds it to checkout. Turning on invoices lets a customer print a GST invoice after payment.">
@@ -1309,13 +1811,53 @@ export function OrderSettingsDesk() {
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Returns">
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">Customer returns stay off. The desk can still open a return from an order.</p>
-            <Check label="Accept customer returns" checked={false} onChange={() => set({ returns: { ...value.returns, enabled: false } })} />
-            <Check label="Offer damaged-item replacements" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
+            <p className="text-xs text-slate-500">When ticked, customers request a return from a delivered order within the window. Customer returns are free (the Foundation bears the pickup). The desk accepts (the customer is emailed) or cancels it, and can always open a return from an order.</p>
+            <Check label="Accept customer returns" checked={value.returns.enabled} onChange={(enabled) => set({ returns: { ...value.returns, enabled } })} />
+            <Check label="Offer replacements (wrong, damaged or defective items)" checked={value.returns.replacementAllowed} onChange={(replacementAllowed) => set({ returns: { ...value.returns, replacementAllowed } })} />
             <Text label="Return window (days after delivery)" type="number" value={value.returns.windowDays} onChange={(days) => set({ returns: { ...value.returns, windowDays: Number(days) || 0 } })} />
-            <Text label="Return pickup charge (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
+            <Text label="Return pickup charge for desk-opened returns (₹)" type="number" value={value.returns.pickupCharge} onChange={(charge) => set({ returns: { ...value.returns, pickupCharge: Number(charge) || 0 } })} />
+            <Check label='Offer "Return for refund" to customers (off: replacement only)' checked={value.returns.returnForRefund} onChange={(returnForRefund) => set({ returns: { ...value.returns, returnForRefund } })} />
+            <Check label="Customer can give a corrected address for a replacement" checked={value.returns.replacementAddressChange} onChange={(replacementAddressChange) => set({ returns: { ...value.returns, replacementAddressChange } })} />
+            <div className="space-y-2">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">Customer reasons and required evidence</span>
+              <p className="text-xs text-slate-500">Tick the evidence each reason needs. &quot;Free replacement&quot; marks it as our fault: the customer may choose a replacement, with no charge for the product or shipping.</p>
+              {value.returns.reasonRules.map((rule, index) => {
+                const update = (patch: Partial<typeof rule>) =>
+                  set({ returns: { ...value.returns, reasonRules: value.returns.reasonRules.map((item, i) => (i === index ? { ...item, ...patch } : item)) } });
+                return (
+                  <div key={index} className="space-y-1 rounded-lg border border-slate-200 p-2">
+                    <div className="flex gap-2">
+                      <input className={input} value={rule.label} onChange={(event) => update({ label: event.target.value })} />
+                      <button type="button" className="text-xs text-red-600" onClick={() => set({ returns: { ...value.returns, reasonRules: value.returns.reasonRules.filter((_, i) => i !== index) } })}>Remove</button>
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      {RETURN_EVIDENCE.map((kind) => (
+                        <label key={kind.id} className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={rule.require.includes(kind.id)}
+                            onChange={(event) => update({ require: event.target.checked ? [...rule.require, kind.id] : rule.require.filter((item) => item !== kind.id) })}
+                          />
+                          {kind.label}
+                        </label>
+                      ))}
+                      <label className="flex items-center gap-1 font-semibold">
+                        <input type="checkbox" checked={rule.replacement} onChange={(event) => update({ replacement: event.target.checked })} />
+                        Free replacement
+                      </label>
+                      <label className="flex items-center gap-1">
+                        Report within
+                        <input type="number" min={0} className="w-16 rounded border border-slate-300 px-1" value={rule.windowHours} onChange={(event) => update({ windowHours: Math.max(0, Number(event.target.value) || 0) })} />
+                        hours (0 = return window)
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+              <button type="button" className="text-xs font-semibold text-burgundy" onClick={() => set({ returns: { ...value.returns, reasonRules: [...value.returns.reasonRules, { label: "New reason", require: ["product"], replacement: false, windowHours: 0 }] } })}>+ Add reason</button>
+            </div>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Return reasons (one per line)</span>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Desk return reasons (one per line)</span>
               <textarea className={input} rows={4} value={value.returns.reasons.join("\n")} onChange={(event) => set({ returns: { ...value.returns, reasons: event.target.value.split("\n") } })} />
             </label>
           </div>
@@ -1332,28 +1874,32 @@ export function OrderSettingsDesk() {
             </label>
             <Text label="Processing time (business days)" type="number" value={value.refunds.processingDays} onChange={(days) => set({ refunds: { ...value.refunds, processingDays: Number(days) || 1 } })} />
             <Check label="Refund automatically when the return is picked up" checked={value.refunds.autoRefundOnReturnPickup} onChange={(autoRefundOnReturnPickup) => set({ refunds: { ...value.refunds, autoRefundOnReturnPickup } })} />
+            <Text label="Store credit expires after (days, 0 = never)" type="number" value={value.refunds.creditExpiryDays} onChange={(days) => set({ refunds: { ...value.refunds, creditExpiryDays: Math.max(0, Math.round(Number(days) || 0)) } })} />
+            <p className="text-xs text-slate-500">Each credit lapses on its own date, counted from when it was added. Spending uses the oldest credit first.</p>
           </div>
         </Card>
         <Card title="Cancellations">
           <div className="space-y-3">
-            <p className="text-xs text-slate-500">Customers cannot cancel. The desk cancels from the order and the customer sees cancellation tracking.</p>
-            <Check label="Customers can cancel" checked={false} onChange={() => set({ cancellation: { ...value.cancellation, enabled: false } })} />
+            <p className="text-xs text-slate-500">When ticked, customers cancel from their order page within the limits below, and the desk then sends the refund (amount paid less the cancellation fee and platform fee). The desk can always cancel from the order.</p>
+            <Check label="Customers can cancel" checked={value.cancellation.enabled} onChange={(enabled) => set({ cancellation: { ...value.cancellation, enabled } })} />
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Allowed until the order is</span>
-              <select className={input} value={value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
-                <option value="Ordered">Ordered (before packing)</option>
-                <option value="Packed">Packed (before courier pickup)</option>
-                <option value="Shipped">Shipped</option>
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Customers can cancel</span>
+              <select className={input} value={value.cancellation.allowedUntil === "Shipped" ? "Packed" : value.cancellation.allowedUntil} onChange={(event) => set({ cancellation: { ...value.cancellation, allowedUntil: event.target.value as OrderSettings["cancellation"]["allowedUntil"] } })}>
+                <option value="Ordered">Until packing (not once packed)</option>
+                <option value="Packed">Until shipped (not once the courier picks it up)</option>
               </select>
             </label>
             <Text label="Within hours of ordering (0 = any time)" type="number" value={value.cancellation.windowHours} onChange={(hours) => set({ cancellation: { ...value.cancellation, windowHours: Number(hours) || 0 } })} />
             <Text label="Cancellation fee (₹)" type="number" value={value.cancellation.fee} onChange={(fee) => set({ cancellation: { ...value.cancellation, fee: Number(fee) || 0 } })} />
+            <Text label="Delayed pre-order: customer may cancel for a full refund (incl. platform fee) this many days after the announced date (0 = off)" type="number" value={value.cancellation.delayDays} onChange={(days) => set({ cancellation: { ...value.cancellation, delayDays: Number(days) || 0 } })} />
+            <Check label="Refund the platform fee when the desk cancels an order (pre-ticked on the refund panel)" checked={value.cancellation.refundFeeOnDesk} onChange={(refundFeeOnDesk) => set({ cancellation: { ...value.cancellation, refundFeeOnDesk } })} />
+            <Text label="Store pickup: flag orders not collected after this many days (0 = off)" type="number" value={value.cancellation.pickupHoldDays} onChange={(days) => set({ cancellation: { ...value.cancellation, pickupHoldDays: Number(days) || 0 } })} />
           </div>
         </Card>
       </div>
       <Card title="Admin order actions">
         <p className="mb-3 text-sm text-slate-500">
-          Customers cannot cancel or return. From the admin order desk you can cancel, modify, refund (full or partial), open a return, or place a free replacement — including after delivery.
+          From the admin order desk you can cancel, modify, refund (full or partial), open a return, or place a free replacement — including after delivery.
         </p>
         <Check
           label="Admin can cancel, refund or replace even after delivery"
@@ -1558,5 +2104,30 @@ function FragmentRow({ item, open, onToggle }: { item: NotificationRecord; open:
         </tr>
       )}
     </>
+  );
+}
+
+function LinksField({ label, links, onChange }: { label: string; links?: SiteChromeLink[]; onChange: (links: SiteChromeLink[]) => void }) {
+  const [text, setText] = useState(() => (links ?? []).map((link) => `${link.label} | ${link.href}${link.newTab ? " | new tab" : ""}`).join("\n"));
+  return (
+    <label className="block text-sm text-slate-700">
+      {label} — one per line: Label | /path or https://… | new tab (optional)
+      <textarea
+        rows={4}
+        className="mt-1 w-full rounded-xl border border-border bg-white px-3 py-2 text-sm text-text-primary"
+        value={text}
+        placeholder={"Autism programme | /autism\nSeminar site | https://seminar.vaidyagogate.org | new tab"}
+        onChange={(event) => {
+          setText(event.target.value);
+          onChange(
+            event.target.value
+              .split("\n")
+              .map((row) => row.split("|").map((part) => part.trim()))
+              .filter(([name, href]) => name && href)
+              .map(([name, href, tab]) => ({ label: name, href, newTab: /new/i.test(tab ?? "") }))
+          );
+        }}
+      />
+    </label>
   );
 }

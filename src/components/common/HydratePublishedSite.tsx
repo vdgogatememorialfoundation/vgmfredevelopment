@@ -45,5 +45,21 @@ export function HydratePublishedSite({
       .catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void hydratePartnerFeed();
+      void hydratePublishedSite();
+      // Orders, payments and refunds the server updated (Razorpay links, refund ARN, courier scans) appear without a reload.
+      void syncCommerce();
+    };
+    const timer = window.setInterval(refresh, 30 * 1000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   return <>{children}</>;
 }

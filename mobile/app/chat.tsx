@@ -1,9 +1,11 @@
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, Linking, Pressable, Text, View } from "react-native";
-import { askChat, liveChatAction, listLiveChats, mediaUrl, str, type Row } from "../src/api";
+import { askChat, chatOn, liveChatAction, listLiveChats, mediaUrl, str, type Row } from "../src/api";
 import { useAuth } from "../src/auth";
+import { useFeed } from "../src/feed";
 import { useTheme } from "../src/theme";
-import { Banner, Button, Field, Kicker, Muted, PageHeader, Screen } from "../src/ui";
+import { Banner, Button, Empty, Field, Kicker, Muted, PageHeader, Screen } from "../src/ui";
 
 type Line = {
   id: string;
@@ -27,6 +29,18 @@ function asLines(thread?: Row | null): Line[] {
 }
 
 export default function ChatScreen() {
+  const { feed } = useFeed();
+  if (!chatOn(feed)) {
+    return (
+      <Screen>
+        <Empty icon="chatbubbles-outline" label="Chat is not available right now. You can raise a support ticket or use Contact instead." actionLabel="Contact the Foundation" onAction={() => router.replace("/contact")} />
+      </Screen>
+    );
+  }
+  return <ChatBody />;
+}
+
+function ChatBody() {
   const theme = useTheme();
   const { session } = useAuth();
   const [message, setMessage] = useState("");
@@ -99,7 +113,7 @@ export default function ChatScreen() {
             backgroundColor: theme.colors.paper,
             borderColor: theme.colors.border,
             borderWidth: 1,
-            borderRadius: 16,
+            borderRadius: 10,
             padding: 12,
             marginBottom: 10,
           }}
@@ -119,7 +133,7 @@ export default function ChatScreen() {
             backgroundColor: line.from === "you" ? theme.colors.primary : theme.colors.paper,
             borderColor: theme.colors.border,
             borderWidth: 1,
-            borderRadius: 16,
+            borderRadius: 10,
             padding: 12,
             marginBottom: 10,
           }}

@@ -1,27 +1,37 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import SiteLogo from "@/components/common/SiteLogo";
 import Link from "next/link";
 import SignupFlow from "@/components/account/SignupFlow";
 import SignInFlow from "@/components/account/SignInFlow";
+import GoogleSignIn from "@/components/account/GoogleSignIn";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { siteConfig } from "@/lib/constants";
 import { authClosedMessage, getAuthAccess } from "@/lib/auth-access";
 import { syncLocalAccounts } from "@/lib/account-api";
 
 export default function LoginView({
-  signInMode,
+  signInMode: initialSignIn,
   next,
 }: {
   signInMode: boolean;
   next?: string;
 }) {
   const { t } = useI18n();
+  // Switch tabs in the browser so Sign in / Create account open instantly, without a server round trip.
+  const [signInMode, setSignInMode] = useState(initialSignIn);
+  const switchTo = (signIn: boolean) => {
+    setSignInMode(signIn);
+    const params = new URLSearchParams();
+    if (signIn) params.set("mode", "signin");
+    if (next) params.set("next", next);
+    const query = params.toString();
+    window.history.replaceState(null, "", `/login${query ? `?${query}` : ""}`);
+  };
   useEffect(() => {
     syncLocalAccounts();
   }, []);
-  const nextQuery = next ? `&next=${encodeURIComponent(next)}` : "";
   const access = getAuthAccess();
   const closed = !access.loginEnabled && !access.signupEnabled;
   const showSignIn = signInMode || !access.signupEnabled;
@@ -64,23 +74,30 @@ export default function LoginView({
             ) : (
               <>
             <div className="mb-8 grid grid-cols-2 gap-2 rounded-xl border border-border bg-white p-1.5">
-              <Link
-                href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+              <button
+                type="button"
+                onClick={() => switchTo(false)}
+                disabled={!access.signupEnabled}
                 className={`rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
                   !effectiveSignIn ? "bg-burgundy text-white" : "text-text-muted hover:text-burgundy"
                 } ${!access.signupEnabled ? "pointer-events-none opacity-40" : ""}`}
               >
                 {t("login.create")}
-              </Link>
-              <Link
-                href={`/login?mode=signin${nextQuery}`}
+              </button>
+              <button
+                type="button"
+                onClick={() => switchTo(true)}
+                disabled={!access.loginEnabled}
                 className={`rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
                   effectiveSignIn ? "bg-burgundy text-white" : "text-text-muted hover:text-burgundy"
                 } ${!access.loginEnabled ? "pointer-events-none opacity-40" : ""}`}
               >
                 {t("login.signIn")}
-              </Link>
+              </button>
             </div>
+            <Suspense fallback={null}>
+              <GoogleSignIn next={next} />
+            </Suspense>
             {effectiveSignIn ? (
               <SignInFlow />
             ) : (

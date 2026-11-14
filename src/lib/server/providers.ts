@@ -1,5 +1,7 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+import { shipdayActivity, shipdayLookupIds, shipdayOrderRow, shipdayOrderState } from "@/lib/shipday-status";
 
 /**
  * Provider clients used by the API routes. Each call takes credentials from
@@ -46,9 +48,20 @@ async function call(url: string, init: RequestInit & { json?: unknown } = {}) {
 
 /* ---------------- Razorpay ---------------- */
 
+/** Keys saved from an admin browser, so a device without them (a phone) still uses the configured gateway. */
+function savedRazorpay() {
+  const saved = (savedAdminIntegrations().razorpay ?? {}) as Json;
+  const text = (key: string) => (typeof saved[key] === "string" ? String(saved[key]).trim() : "");
+  if (saved.mode === "live") return { keyId: text("liveKeyId"), keySecret: text("liveKeySecret") };
+  if (saved.mode === "test") return { keyId: text("testKeyId"), keySecret: text("testKeySecret") };
+  return { keyId: "", keySecret: "" };
+}
+
 export function razorpayCreds(input: Json) {
-  const keyId = pick(input.keyId, "RAZORPAY_KEY_ID");
-  const keySecret = pick(input.keySecret, "RAZORPAY_KEY_SECRET");
+  const sent = typeof input.keyId === "string" && input.keyId.trim() && typeof input.keySecret === "string" && input.keySecret.trim();
+  const saved = sent ? { keyId: "", keySecret: "" } : savedRazorpay();
+  const keyId = pick(sent ? input.keyId : saved.keyId, "RAZORPAY_KEY_ID");
+  const keySecret = pick(sent ? input.keySecret : saved.keySecret, "RAZORPAY_KEY_SECRET");
   return keyId && keySecret ? { keyId, keySecret } : null;
 }
 
@@ -81,9 +94,10 @@ export function razorpayVerify(keySecret: string, orderId: string, paymentId: st
 
 export async function razorpayLink(
   creds: { keyId: string; keySecret: string },
-  input: { amount: number; orderId: string; name: string; email?: string; phone?: string; description: string; callbackUrl?: string; expiryHours?: number }
+  input: { amount: number; orderId: string; name: string; email?: string; phone?: string; description: string; callbackUrl?: string; expiryHours?: number; expiryMinutes?: number }
 ) {
-  const expireBy = Math.floor(Date.now() / 1000) + Math.max(1, input.expiryHours ?? 72) * 3600;
+  const minutes = input.expiryMinutes ?? (input.expiryHours ?? 0.5) * 60;
+  const expireBy = Math.floor(Date.now() / 1000) + Math.max(16, Math.round(minutes)) * 60;
   const data = await call("https://api.razorpay.com/v1/payment_links", {
     method: "POST",
     headers: { authorization: razorpayAuth(creds) },
@@ -103,6 +117,15 @@ export async function razorpayLink(
   return { id: String(data.id), url: String(data.short_url), status: String(data.status) };
 }
 
+export async function razorpayLinkCancel(creds: { keyId: string; keySecret: string }, linkId: string) {
+  const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}/cancel`, {
+    method: "POST",
+    headers: { authorization: razorpayAuth(creds) },
+    json: {},
+  });
+  return { status: String(data.status) };
+}
+
 export async function razorpayLinkStatus(creds: { keyId: string; keySecret: string }, linkId: string) {
   const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}`, {
     headers: { authorization: razorpayAuth(creds) },
@@ -117,7 +140,30 @@ export async function razorpayRefund(creds: { keyId: string; keySecret: string }
     headers: { authorization: razorpayAuth(creds) },
     json: amountRupees ? { amount: Math.round(amountRupees * 100) } : {},
   });
-  return { refundId: String(data.id), status: String(data.status) };
+  return razorpayRefundView(data);
+}
+
+function razorpayRefundView(data: Json) {
+  const acquirer = (data.acquirer_data as Json) ?? {};
+  const text = (value: unknown) => (value === null || value === undefined ? "" : String(value));
+  return {
+    refundId: text(data.id),
+    status: text(data.status),
+    amount: Number(data.amount ?? 0) / 100,
+    rrn: text(acquirer.rrn),
+    arn: text(acquirer.arn),
+    utr: text(acquirer.utr),
+    speed: text(data.speed_processed || data.speed_requested),
+    createdAt: data.created_at ? new Date(Number(data.created_at) * 1000).toISOString() : "",
+  };
+}
+
+/** GET /v1/refunds/:id — status plus the bank's RRN/ARN/UTR once the refund is processed. */
+export async function razorpayRefundStatus(creds: { keyId: string; keySecret: string }, refundId: string) {
+  const data = await call(`https://api.razorpay.com/v1/refunds/${encodeURIComponent(refundId)}`, {
+    headers: { authorization: razorpayAuth(creds) },
+  });
+  return razorpayRefundView(data);
 }
 
 export async function razorpayDeviceActivity(
@@ -185,6 +231,22 @@ export async function razorpayDeviceActivityStatus(
   };
 }
 
+/** One payment by id, with the receipt of its Razorpay order (our order id) when it was paid through checkout. */
+export async function razorpayPayment(creds: { keyId: string; keySecret: string }, paymentId: string) {
+  const headers = { authorization: razorpayAuth(creds) };
+  const data = await call(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, { headers });
+  const orderId = data.order_id ? String(data.order_id) : "";
+  const order = orderId ? await call(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}`, { headers }).catch(() => null) : null;
+  return {
+    paymentId: String(data.id ?? paymentId),
+    status: String(data.status ?? ""),
+    amount: Number(data.amount ?? 0) / 100,
+    method: data.method ? String(data.method) : "",
+    orderId,
+    receipt: order?.receipt ? String(order.receipt) : "",
+  };
+}
+
 export async function razorpayOrderPayments(
   creds: { keyId: string; keySecret: string },
   orderId: string,
@@ -207,9 +269,10 @@ export async function razorpayOrderPayments(
 /* ---------------- Paytm EDC ---------------- */
 
 export function paytmCreds(input: Json) {
-  const mid = pick(input.mid, "PAYTM_MID");
-  const merchantKey = pick(input.merchantKey, "PAYTM_MERCHANT_KEY");
-  const tid = pick(input.tid, "PAYTM_TID");
+  const saved = (savedAdminIntegrations().paytm ?? {}) as Json;
+  const mid = pick(input.mid, "PAYTM_MID") || pick(saved.mid, "PAYTM_MID");
+  const merchantKey = pick(input.merchantKey, "PAYTM_MERCHANT_KEY") || pick(saved.merchantKey, "PAYTM_MERCHANT_KEY");
+  const tid = pick(input.tid, "PAYTM_TID") || pick(saved.tid, "PAYTM_TID");
   const channelId = pick(input.channelId, "PAYTM_CHANNEL_ID") || "WEB";
   const mode = pick(input.mode, "PAYTM_MODE") || "staging";
   return mid && merchantKey && tid ? { mid, merchantKey, tid, channelId, mode } : null;
@@ -524,7 +587,25 @@ export type RateOut = {
   etaDays: number;
   live: true;
   cod?: boolean;
+  /** The courier's own expected delivery date, when it gives one. */
+  deliverBy?: string;
+  rating?: number;
+  /** Weight the courier bills, as the aggregator reports it (kg). */
+  chargeWeightKg?: number;
+  /** A placeholder price, not a quote from the aggregator; never used to charge customers. */
+  estimate?: boolean;
+  /** Earliest pickup the aggregator offers, when it says. */
+  pickupBy?: string;
 };
+
+/** Chargeable weight from an aggregator row; values above 50 are grams. */
+function chargeKg(row: Json, ...keys: string[]) {
+  for (const key of keys) {
+    const value = Number(row[key]);
+    if (Number.isFinite(value) && value > 0) return Math.round((value > 50 ? value / 1000 : value) * 1000) / 1000;
+  }
+  return undefined;
+}
 
 type Parcel = {
   pickupPincode: string;
@@ -565,11 +646,32 @@ async function nimbusToken(input: Json) {
   return String(data.data);
 }
 
+const shiprocketOrigins = new Map<string, { pins: string[]; at: number }>();
+
+/** Rates must be asked from a pincode Shiprocket has as an active pickup address, or it returns far fewer couriers. */
+async function shiprocketOrigin(token: string, wanted: string) {
+  let cached = shiprocketOrigins.get(token);
+  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
+    try {
+      const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", { headers: { authorization: `Bearer ${token}` } });
+      const rows = ((data.data as Json)?.shipping_address as Json[]) ?? [];
+      const active = rows.filter((row) => Number(row.status ?? 1) === 1);
+      const primary = active.filter((row) => Number(row.is_primary_location ?? 0) === 1);
+      const pins = [...primary, ...active].map((row) => String(row.pin_code ?? row.pincode ?? "")).filter(Boolean);
+      cached = { pins: [...new Set(pins)], at: Date.now() };
+      shiprocketOrigins.set(token, cached);
+    } catch {
+      return wanted;
+    }
+  }
+  return !cached.pins.length || cached.pins.includes(wanted) ? wanted : cached.pins[0];
+}
+
 export async function shiprocketRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
   const params = new URLSearchParams({
-    pickup_postcode: parcel.pickupPincode,
+    pickup_postcode: await shiprocketOrigin(token, parcel.pickupPincode),
     delivery_postcode: parcel.deliveryPincode,
     weight: String(parcel.weightKg),
     cod: parcel.cod ? "1" : "0",
@@ -578,18 +680,36 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     breadth: String(parcel.breadth),
     height: String(parcel.height),
   });
-  const data = await call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  const list = ((data.data as Json)?.available_courier_companies as Json[]) ?? [];
+  // Without `mode` Shiprocket returns only its recommended subset, so ask for Surface and Air too and merge.
+  const replies = await Promise.allSettled(
+    ["", "Surface", "Air"].map((mode) =>
+      call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}${mode ? `&mode=${mode}` : ""}`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+    )
+  );
+  const ok = replies.filter((reply): reply is PromiseFulfilledResult<Json> => reply.status === "fulfilled");
+  if (!ok.length) throw (replies[0] as PromiseRejectedResult).reason;
+  const byId = new Map<string, Json>();
+  for (const reply of ok) {
+    for (const courier of ((reply.value.data as Json)?.available_courier_companies as Json[]) ?? []) {
+      const id = String(courier.courier_company_id);
+      if (!byId.has(id)) byId.set(id, courier);
+    }
+  }
+  const list = [...byId.values()];
   return list.map((courier) => ({
     provider: "shiprocket",
     courierId: String(courier.courier_company_id),
     courierName: String(courier.courier_name),
     rate: Number(courier.rate ?? courier.freight_charge ?? 0),
+    chargeWeightKg: chargeKg(courier, "charge_weight", "applicable_weight"),
+    pickupBy: typeof courier.suppress_date === "string" && courier.suppress_date ? String(courier.suppress_date) : undefined,
     etaDays: Number(courier.estimated_delivery_days ?? 5),
     cod: Boolean(courier.cod),
     live: true as const,
+    deliverBy: courier.etd ? String(courier.etd) : undefined,
+    rating: Number.isFinite(Number(courier.rating)) && Number(courier.rating) > 0 ? Math.round(Number(courier.rating) * 10) / 10 : undefined,
   }));
 }
 
@@ -616,6 +736,7 @@ export async function nimbusRates(input: Json, parcel: Parcel): Promise<RateOut[
     courierId: String(courier.id),
     courierName: String(courier.name),
     rate: Number(courier.total_charges ?? courier.freight_charges ?? 0),
+    chargeWeightKg: chargeKg(courier, "chargeable_weight", "charge_weight", "applicable_weight", "billable_weight"),
     etaDays: daysUntil(String(courier.edd ?? "")) ?? 5,
     live: true as const,
   }));
@@ -892,7 +1013,7 @@ function promisedFrom(payload: unknown, ...first: unknown[]) {
 }
 
 /** Agent name, phone, OTP and GPS when the courier portal sends them (Shiprocket hyperlocal, Porter, and the others). */
-function riderFrom(payload: unknown) {
+export function riderFrom(payload: unknown) {
   const found = { name: "", phone: "", otp: "", lat: undefined as number | undefined, lng: undefined as number | undefined };
   const walk = (value: unknown, depth: number) => {
     if (depth > 6 || value == null || typeof value !== "object") return;
@@ -905,9 +1026,9 @@ function riderFrom(payload: unknown) {
       if (typeof child === "string" || typeof child === "number") {
         const text = String(child).trim();
         if (!text || text === "null" || text === "undefined") continue;
-        if (!found.name && /(rider|agent|driver|delivery_boy|fe)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
-        if (!found.phone && /(rider|agent|driver|delivery_boy|fe)_?(phone|mobile|contact)$/.test(k)) found.phone = text;
-        if (!found.otp && /(delivery_otp|^otp$|door_code|verification_code)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
+        if (!found.name && /(rider|agent|driver|delivery_?boy|fe|executive|courier_?boy|associate|dispatcher)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
+        if (!found.phone && /(rider|agent|driver|delivery_?boy|fe|executive|courier_?boy|associate|dispatcher)_?(phone|mobile|contact|number|no)$/.test(k) && /\d{6,}/.test(text.replace(/\D/g, ""))) found.phone = text;
+        if (!found.otp && /(delivery_?otp|delivery_?pin|^otp$|^pin$|door_code|verification_code|secure_?pin)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
         if (found.lat == null && /(rider|agent|driver|fe)_?lat(itude)?$/.test(k)) {
           const n = Number(text);
           if (Math.abs(n) > 0.01) found.lat = n;
@@ -1146,7 +1267,7 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
   return {
     provider: "shipday",
     awb: String(data.orderId ?? order.orderId),
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Shipday",
     providerOrderId: String(data.orderId ?? ""),
   };
 }
@@ -1180,24 +1301,34 @@ function shipdayOrders(data: unknown): Json[] {
   return [];
 }
 
-export async function shipdayTrack(input: Json, orderId: string) {
+export async function shipdayTrack(input: Json, orderNumber: string, providerOrderId = "") {
   const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
   if (!apiKey) return null;
   let match: Json | null = null;
-  try {
-    const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(orderId)}`, { headers: shipdayAuth(apiKey) });
-    match = Array.isArray(one) ? (one[0] as Json) : (one as Json);
-  } catch {
-    const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
-    match =
-      shipdayOrders(data).find(
-        (order) => String(order.orderId) === orderId || String(order.orderNumber) === orderId || String(order.id) === orderId
-      ) ?? null;
+  for (const id of shipdayLookupIds(orderNumber, providerOrderId)) {
+    try {
+      const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(id)}`, { headers: shipdayAuth(apiKey) });
+      match = shipdayOrderRow(one) as Json | null;
+      if (match) break;
+    } catch {
+      /* the numeric Shipday id is not the lookup key; try the order number */
+    }
+  }
+  if (!match) {
+    try {
+      const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
+      const wanted = new Set(shipdayLookupIds(orderNumber, providerOrderId));
+      match =
+        shipdayOrders(data).find((order) => wanted.has(String(order.orderId)) || wanted.has(String(order.orderNumber)) || wanted.has(String(order.id))) ??
+        null;
+    } catch {
+      match = null;
+    }
   }
   if (!match) {
     return { status: "Not found", events: [] as { at: string; status: string; location: string }[] };
   }
-  const status = String(match.orderStatus ?? match.status ?? "");
+  const status = shipdayOrderState(match);
   const carrier = (match.assignedCarrier as Json | undefined) ?? (match.carrier as Json | undefined) ?? {};
   const carrierName = String(carrier.name ?? "");
   const lat = Number(match.carrierLatitude ?? match.latitude ?? carrier.latitude);
@@ -1206,16 +1337,16 @@ export async function shipdayTrack(input: Json, orderId: string) {
   const pickupLng = Number(match.pickupLongitude ?? match.restaurantLongitude ?? (match.restaurant as Json | undefined)?.longitude);
   const dropLat = Number(match.deliveryLatitude ?? match.customerLatitude ?? (match.delivery as Json | undefined)?.latitude);
   const dropLng = Number(match.deliveryLongitude ?? match.customerLongitude ?? (match.delivery as Json | undefined)?.longitude);
-  const feed = ((match.activityLog as Json[]) ?? (match.activityFeed as Json[]) ?? []).map((entry) => ({
-    at: String(entry.time ?? entry.createdAt ?? ""),
-    status: String(entry.description ?? entry.status ?? ""),
-    location: String(entry.location ?? ""),
-  }));
+  const feed = shipdayActivity(match).filter((entry) => entry.status);
+  if (status && !feed.some((entry) => entry.status.toLowerCase() === status.toLowerCase())) {
+    feed.push({ at: new Date().toISOString(), status, location: "" });
+  }
+  const delivered = /\b(already delivered|delivered|successful|completed)\b/.test(status.toLowerCase().replace(/[_-]+/g, " "));
   return {
     status,
-    courierName: "Gogate Products",
-    awb: orderId,
-    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: carrierName }],
+    courierName: "Gogate Products-Shipday",
+    awb: String(match.orderId ?? (providerOrderId || orderNumber)),
+    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: "" }],
     lat: Number.isFinite(lat) ? lat : undefined,
     lng: Number.isFinite(lng) ? lng : undefined,
     agentName: carrierName,
@@ -1225,7 +1356,7 @@ export async function shipdayTrack(input: Json, orderId: string) {
     dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
     dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
-    expectedBy: promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
+    expectedBy: delivered ? "" : promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.etaTime, match.deliveryTime, match.expected_delivery),
   };
 }
 
@@ -1255,6 +1386,14 @@ function tookanDatetime(from = new Date(), extraHours = 4) {
   const ist = new Date(when.getTime() + 330 * 60 * 1000);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())} ${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
+}
+
+/** Tookan's message, plus what to do when no hub covers the address. */
+function tookanError(data: Json, fallback: string) {
+  const message = String(data.message ?? fallback);
+  return /hub/i.test(message)
+    ? `${message}. No Tookan hub covers this address: in Tookan, open Hubs and add a hub (linked to your team) whose radius covers the pickup and delivery pincodes.`
+    : message;
 }
 
 const tookanStatusLabel: Record<number, string> = {
@@ -1302,6 +1441,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             job_pickup_name: order.pickup.contactName,
             job_pickup_phone: order.pickup.phone,
             order_id: order.orderId,
+            barcode: order.orderId,
           },
         ],
         deliveries: [
@@ -1314,16 +1454,17 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             customer_phone: order.customer.phone,
             customer_email: order.customer.email ?? "",
             order_id: order.orderId,
+            barcode: order.orderId,
           },
         ],
       },
     });
-    if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the parcel task."));
+    if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the parcel task."));
     const task = (data.data as Json) ?? {};
     return {
       provider: "tookan-parcel",
       awb: String(task.delivery_job_id ?? task.job_id ?? ""),
-      courierName: "Gogate Products",
+      courierName: "Gogate Products-Tookan",
       providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
       providerShipmentId: String(task.delivery_job_id ?? ""),
       trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1355,14 +1496,14 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
       timezone: -330,
     },
   });
-  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the hyperlocal task."));
+  if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the hyperlocal task."));
   const task = (data.data as Json) ?? {};
   const pickupId = String(task.pickup_job_id ?? task.job_id ?? "");
   const deliveryId = String(task.delivery_job_id ?? task.job_id ?? "");
   return {
     provider: "tookan",
     awb: deliveryId || pickupId,
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Tookan",
     providerOrderId: pickupId || deliveryId,
     providerShipmentId: deliveryId,
     trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1412,7 +1553,7 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
   return {
     status: currentLabel,
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Tookan",
     awb: String(delivery?.job.job_id ?? jobId),
     accepted,
     agentLeg: pickupOpen ? "pickup" : "delivery",
@@ -1539,6 +1680,7 @@ export async function ithinkRates(input: Json, parcel: Parcel): Promise<RateOut[
     courierId: String(courier.logistic_id ?? courier.id ?? courier.logistic_name ?? ""),
     courierName: String(courier.logistic_name ?? courier.name ?? "iThink courier"),
     rate: Number(courier.total_charges ?? courier.rate ?? courier.freight_charge ?? 0),
+    chargeWeightKg: chargeKg(courier, "chargeable_weight", "charge_weight", "applicable_weight", "billable_weight", "weight_slab"),
     etaDays: daysUntil(String(courier.edd ?? courier.estimated_delivery ?? "")) ?? Number(courier.tat ?? 5),
     live: true as const,
   }));
@@ -1727,9 +1869,21 @@ export async function shiprocketReturn(input: Json, order: BookInput): Promise<B
     json: { shipment_id: shipmentId, is_return: 1, courier_id: order.courierId || undefined },
   });
   const awbData = ((assigned.response as Json)?.data as Json) ?? {};
+  let labelUrl = "";
+  try {
+    const label = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
+      method: "POST",
+      headers: auth,
+      json: { shipment_id: [shipmentId] },
+    });
+    labelUrl = String(label.label_url ?? "");
+  } catch {
+    labelUrl = "";
+  }
   return {
     provider: "shiprocket",
     awb: String(awbData.awb_code ?? created.awb_code ?? ""),
+    labelUrl: labelUrl || undefined,
     courierName: String(awbData.courier_name ?? "Return courier"),
     providerOrderId: String(created.order_id ?? ""),
     providerShipmentId: shipmentId,
@@ -1830,6 +1984,7 @@ export async function shipyaariRates(input: Json, parcel: Parcel): Promise<RateO
         courierId: String(row.courier_id ?? row.id ?? "shipyaari"),
         courierName: String(row.courier_name ?? row.name ?? "Shipyaari"),
         rate: Number(row.total_charges ?? row.rate ?? row.freight ?? 0),
+        chargeWeightKg: chargeKg(row, "chargeable_weight", "applied_weight", "charge_weight", "billable_weight"),
         etaDays: Number(row.edd ?? row.tat ?? 4) || 4,
         live: true as const,
       }));
@@ -1843,6 +1998,7 @@ export async function shipyaariRates(input: Json, parcel: Parcel): Promise<RateO
       courierId: "shipyaari",
       courierName: "Shipyaari",
       rate: 79,
+      estimate: true,
       etaDays: 4,
       live: true as const,
     },
@@ -1999,3 +2155,211 @@ export async function sendMsg91Sms(
   return { id: String(data.message ?? data.request_id ?? "msg91") };
 }
 
+
+/* ---------------- GoSwift (app.goswift.in/api/docs) ---------------- */
+
+const GOSWIFT = "https://app.goswift.in";
+const goswiftTokens = new Map<string, { token: string; until: number }>();
+
+async function goswiftToken(input: Json) {
+  const clientId = pick(input.clientId, "GOSWIFT_CLIENT_ID");
+  const username = pick(input.username, "GOSWIFT_USERNAME");
+  const password = pick(input.password, "GOSWIFT_PASSWORD");
+  if (!clientId || !username || !password) return null;
+  const key = `${clientId}\0${username}`;
+  const cached = goswiftTokens.get(key);
+  if (cached && cached.until > Date.now()) return cached.token;
+  const data = await call(`${GOSWIFT}/integrations/v2/auth/token/${encodeURIComponent(clientId)}`, {
+    method: "POST",
+    json: { username, password },
+  });
+  const token = String(data.access_token ?? "");
+  if (!token) throw new ProviderError("GoSwift rejected the client ID, username or password.", 401);
+  const seconds = Number(data.expires_in) || 86400;
+  goswiftTokens.set(key, { token, until: Date.now() + Math.max(60, seconds - 300) * 1000 });
+  return token;
+}
+
+const goswiftAuth = (token: string) => ({ authorization: `Bearer ${token}` });
+const goswiftPhone = (phone: string) => Number(phone.replace(/\D/g, "").slice(-10)) || undefined;
+const goswiftTime = (ms: unknown) => (Number(ms) > 0 ? new Date(Number(ms)).toISOString() : "");
+
+export function goswiftTrackingUrl(id: string) {
+  return `${GOSWIFT}/track/${encodeURIComponent(id)}`;
+}
+
+/** GoSwift has no public rate API: serviceability decides, and the desk sets the charge shown at checkout. */
+export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${GOSWIFT}/api/v2/serviceability/${encodeURIComponent(parcel.deliveryPincode)}`, { headers: goswiftAuth(token) });
+  const details = (data.details as Json) ?? {};
+  if (data.status === false || details.forward_drop === false) return [];
+  if (parcel.cod && details.cod === false) return [];
+  return [
+    {
+      provider: "goswift",
+      courierId: "goswift",
+      courierName: "GoSwift",
+      rate: Number(input.rate) > 0 ? Number(input.rate) : 79,
+      estimate: true,
+      etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
+      live: true as const,
+      cod: details.cod !== false,
+    },
+  ];
+}
+
+export async function goswiftBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const place = (who: { name: string; phone: string; line1: string; line2?: string; city: string; state: string; pincode: string }) => ({
+    name: who.name,
+    phone: goswiftPhone(who.phone),
+    address: [who.line1, who.line2].filter(Boolean).join(", "),
+    city: who.city,
+    state: who.state,
+    country: "India",
+    pin: Number(who.pincode),
+  });
+  const alias = String(input.pickupAlias ?? "").trim();
+  const pickup = alias ? { name: alias } : place({ ...order.pickup, name: order.pickup.contactName });
+  const value = Math.max(1, Math.round(order.total));
+  const units = order.items.reduce((sum, item) => sum + item.units, 0) || 1;
+  const data = await call(`${GOSWIFT}/api/v1/package/create`, {
+    method: "PUT",
+    headers: goswiftAuth(token),
+    json: {
+      seller_name: order.pickup.contactName,
+      seller_address: [order.pickup.line1, order.pickup.line2, order.pickup.city, order.pickup.state, order.pickup.pincode].filter(Boolean).join(", "),
+      seller_gst_tin: "",
+      seller_gst_amount: 0,
+      consignee_gst_amount: 0,
+      integrated_gst_amount: 0,
+      tax_value: 0,
+      order_number: order.orderId,
+      invoice_number: order.orderId,
+      invoice_date: order.orderDate.slice(0, 10),
+      consignee_name: order.customer.name,
+      payment_mode: order.cod ? "COD" : "Prepaid",
+      category_of_goods: String(input.category ?? "").trim() || "Books",
+      products_desc: order.items.map((item) => `${item.name} x${item.units}`).join(", ").slice(0, 10000),
+      total_amount: value,
+      taxable_amount: value,
+      commodity_value: String(value),
+      cod_amount: order.cod ? value : 0,
+      return_reason: "",
+      quantity: units,
+      weight: Math.max(1, Math.round(order.weightKg * 1000)),
+      length: Math.max(1, Math.round(order.length)),
+      width: Math.max(1, Math.round(order.breadth)),
+      height: Math.max(1, Math.round(order.height)),
+      drop_location: place(order.customer),
+      pickup_location: pickup,
+      return_location: pickup,
+      service: String(input.service ?? "").trim() || "SURFACE",
+      items: order.items.map((item) => ({ product_name: item.name, sku: item.sku, quantity: item.units, taxable_value: Math.max(1, Math.round(item.price)) })),
+    },
+  });
+  const id = String(data.tracking_id ?? "");
+  if (data.status === false || !id) throw new ProviderError(String(data.remark ?? data.message ?? "GoSwift did not create the shipment."));
+  const barcodes = (data.barcodes as Json) ?? {};
+  return {
+    provider: "goswift",
+    awb: id,
+    courierName: String(data.vendor || "GoSwift"),
+    providerOrderId: id,
+    providerShipmentId: String(barcodes.wbn ?? ""),
+    trackingUrl: goswiftTrackingUrl(id),
+    labelUrl: `/api/shipping/goswift/label?awb=${encodeURIComponent(id)}`,
+  };
+}
+
+/** The label PDF as raw bytes (GoSwift replies with application/octet-stream). */
+export async function goswiftLabelPdf(input: Json, awb: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const response = await fetch(`${GOSWIFT}/api/v1/package/label`, {
+    method: "POST",
+    headers: { ...goswiftAuth(token), "content-type": "application/json" },
+    body: JSON.stringify({ ids: [awb] }),
+    signal: AbortSignal.timeout(30000),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new ProviderError(`GoSwift label failed (HTTP ${response.status}).`, response.status);
+  return response.arrayBuffer();
+}
+
+export async function goswiftTrack(_input: Json, awb: string) {
+  const data = await call(`${GOSWIFT}/api/v1/track/${encodeURIComponent(awb)}`);
+  const nested = (data.data as Json) ?? data;
+  const track = (nested.track as Json) ?? {};
+  const line = (row: Json) => {
+    const status = String(row.status ?? "").trim();
+    const extra = String(row.ndrStatus ?? "").trim() || String(row.desc ?? "").trim();
+    return extra && extra.toLowerCase() !== status.toLowerCase() ? `${status} – ${extra}` : status;
+  };
+  const details = (Array.isArray(track.details) ? (track.details as Json[]) : [])
+    .map((row) => ({ at: goswiftTime(row.ctime), status: line(row), location: String(row.location ?? "") }))
+    .filter((row) => row.status)
+    .sort((a, b) => Date.parse(a.at || "0") - Date.parse(b.at || "0"));
+  const status = line(track);
+  return {
+    status,
+    courierName: "",
+    awb,
+    events: details.length ? details : status ? [{ at: goswiftTime(track.ctime), status, location: String(track.location ?? "") }] : [],
+    trackingUrl: goswiftTrackingUrl(awb),
+    expectedBy: goswiftTime(nested.edd),
+  };
+}
+
+export async function goswiftCancel(input: Json, awb: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${GOSWIFT}/api/v1/package/cancel?tracking_id=${encodeURIComponent(awb)}`, { method: "DELETE", headers: goswiftAuth(token) });
+  if (data.status === false) throw new ProviderError(String(data.remark ?? "GoSwift did not cancel the shipment."));
+  return { cancelled: true };
+}
+
+/** Non-delivery action: ask the courier to re-attempt (on a date) or return the parcel to us. */
+export async function goswiftNdr(input: Json, awb: string, action: "Re-Attempt" | "RTO", extra: { date?: string; phone?: string; address?: string; instructions?: string } = {}) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const at = extra.date ? Date.parse(extra.date) : NaN;
+  const data = await call(`${GOSWIFT}/api/v2/package/ndr`, {
+    method: "POST",
+    headers: goswiftAuth(token),
+    json: {
+      action,
+      wbn: awb,
+      ...(Number.isFinite(at) ? { date: at } : {}),
+      ...(extra.phone ? { phone: extra.phone.replace(/\D/g, "").slice(-10) } : {}),
+      ...(extra.address ? { address: extra.address } : {}),
+      ...(extra.instructions ? { instructions: extra.instructions } : {}),
+    },
+  });
+  if (data.status === false) throw new ProviderError(String(data.remark ?? "GoSwift did not accept the request."));
+  return { message: String(data.remark ?? "Sent to GoSwift.") };
+}
+
+/** Subscribes this site to GoSwift track updates so undelivered, RTO and every other scan reaches the order at once. */
+export async function goswiftRegisterWebhook(input: Json, url: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const existing = await call(`${GOSWIFT}/api/v2/webhook`, { headers: goswiftAuth(token) }).catch(() => ({}) as Json);
+  const rows = (Array.isArray(existing) ? existing : []) as Json[];
+  const same = rows.find((row) => row.url === url);
+  const body = { url, secret: randomBytes(12).toString("hex"), topics: ["track_updated", "shipment_created", "shipment_recreated"], active: true };
+  const data = same
+    ? await call(`${GOSWIFT}/api/v2/webhook/${encodeURIComponent(String(same.id))}`, { method: "PUT", headers: goswiftAuth(token), json: body })
+    : await call(`${GOSWIFT}/api/v2/webhook`, { method: "POST", headers: goswiftAuth(token), json: body });
+  return { webhookId: String(data.id ?? same?.id ?? ""), message: `Live updates are connected to ${url}.` };
+}
+
+export async function goswiftTest(input: Json) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${GOSWIFT}/api/v2/serviceability/110001`, { headers: goswiftAuth(token) });
+  return { message: data.status === false ? "Connected. GoSwift says 110001 is not serviceable." : "Connected. GoSwift serves Delhi 110001." };
+}

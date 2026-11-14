@@ -4,6 +4,9 @@ import { addOrder, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, s
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
+import { checkPromo } from "@/lib/server/promotions";
+import { offerActive, promoDiscount } from "@/lib/promotions";
+import { appCourierEstimate, appPickupAllowed, feedPreorderable, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,12 +32,12 @@ function catalogItems(raw: unknown) {
     const id = String(row.id ?? "").trim();
     const book = books.find((item) => String(item.id) === id || String(item.slug) === id);
     if (!book || book.active === false) return { error: "A publication in your bag is not in the published catalogue." as const };
-    if (book.stockStatus === "out_of_stock") return { error: `${book.title} is currently out of stock.` as const };
+    if (book.stockStatus === "out_of_stock" && !feedPreorderable(book as never)) return { error: `${book.title} is currently out of stock.` as const };
     items.push({
       id: String(book.id),
       title: String(book.title),
-      quantity: Math.max(1, Math.min(20, Math.floor(Number(row.quantity) || 1))),
-      price: Math.max(0, Number(book.price) || 0),
+      quantity: Math.max(1, Math.min(100, Math.floor(Number(row.quantity) || 1))),
+      price: Math.max(0, offerActive(book as never) ? Number((book as { offer?: { price?: number } }).offer?.price) || 0 : Number(book.price) || 0),
     });
   }
   return { items };
@@ -44,6 +47,32 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const session = sessionOf(request, body);
   if (!session) return json({ ok: false, error: "Sign in to checkout." }, 401);
+
+  if (String(body?.action ?? "") === "balance") {
+    const orderId = String(body?.orderId ?? "");
+    const ready = await preparePreorderBalance(orderId, session.email);
+    if ("error" in ready) return json({ ok: false, error: ready.error }, 400);
+    const creds = razorpayCreds({});
+    if (!creds) return json({ ok: false, configured: false, error: "Razorpay is not configured on this server." }, 503);
+    try {
+      const created = await razorpayOrder(creds, ready.balance, `${orderId}-bal`.slice(0, 40));
+      return json({ ok: true, configured: true, order: ready.order, amount: ready.balance, keyId: created.keyId, razorpayOrderId: created.orderId });
+    } catch (error) {
+      return json({ ok: false, error: (error as Error).message || "Razorpay could not start the payment." }, 502);
+    }
+  }
+
+  if (String(body?.action ?? "") === "balance_verify") {
+    const creds = razorpayCreds({});
+    const paymentId = String(body?.paymentId ?? "");
+    const razorpayOrderId = String(body?.razorpayOrderId ?? "");
+    const signature = String(body?.signature ?? "");
+    if (!creds || !paymentId || !razorpayOrderId || !signature) return json({ ok: false, error: "Payment details are incomplete." }, 400);
+    if (!razorpayVerify(creds.keySecret, razorpayOrderId, paymentId, signature)) return json({ ok: false, error: "The payment could not be verified." }, 400);
+    const order = markPreorderBalancePaid(String(body?.orderId ?? ""), { paymentId, razorpayOrderId });
+    if (!order) return json({ ok: false, error: "This order was not found." }, 404);
+    return json({ ok: true, order });
+  }
 
   if (String(body?.action ?? "create") === "verify") {
     const order = findOrder(String(body?.orderId ?? ""), session.email);
@@ -62,14 +91,17 @@ export async function POST(request: NextRequest) {
       razorpayOrderId,
       method: "Razorpay",
     });
-    return json({ ok: true, order: paid, configured: Boolean(creds) });
+    const shopOrder = markAppOrderPaid(order.id, { paymentId, razorpayOrderId });
+    return json({ ok: true, order: shopOrder ?? paid, configured: Boolean(creds) });
   }
 
   const catalog = catalogItems(body?.items);
   if ("error" in catalog) return json({ ok: false, error: catalog.error }, 400);
   const countryCode = String(body?.countryCode ?? body?.country ?? "IN").trim().slice(0, 8);
+  const pickup = body?.pickup === true && appPickupAllowed();
   const address = {
     line1: String(body?.line1 ?? "").trim().slice(0, 160),
+    landmark: String(body?.landmark ?? "").trim().slice(0, 120),
     city: String(body?.city ?? "").trim().slice(0, 80),
     state: String(body?.state ?? "").trim().slice(0, 80),
     pincode: String(body?.pincode ?? "").trim().slice(0, 12),
@@ -78,7 +110,7 @@ export async function POST(request: NextRequest) {
   };
   const countryBlocked = countryRejection(countryCode, address.country);
   if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
-  if (!address.line1 || !address.city || !address.state || !isValidPostal(countryCode, address.pincode)) {
+  if (!pickup && (!address.line1 || !address.city || !address.state || !isValidPostal(countryCode, address.pincode))) {
     return json({ ok: false, error: "Enter your full delivery address and a valid postal code." }, 400);
   }
   const phone = String(body?.phone ?? "").trim();
@@ -94,20 +126,40 @@ export async function POST(request: NextRequest) {
     address,
   });
 
+  let promo: { code: string; kind: "coupon" | "gift"; amount: number; label: string } | undefined;
+  const promoCode = String(body?.promoCode ?? "").trim();
+  if (promoCode) {
+    const books = readMobileFeed().books ?? [];
+    const preorder = draft.items.some((item) => feedPreorderable(books.find((row) => String(row.id) === item.id) as never));
+    const checked = checkPromo(promoCode, preorder);
+    if (!checked.ok) return json({ ok: false, error: checked.error }, 400);
+    const amount = promoDiscount(checked.rule, draft.subtotal);
+    if (amount <= 0) return json({ ok: false, error: "This code doesn't apply to your bag." }, 400);
+    promo = { code: checked.rule.code, kind: checked.rule.kind, amount, label: checked.rule.label };
+  }
+
+  const feed = readMobileFeed();
+  const preorderBag = draft.items.some((item) => feedPreorderable((feed.books ?? []).find((row) => String(row.id) === item.id) as never));
+  const courierMode = ((feed.orderSettings ?? {}) as { shippingFeeMode?: string }).shippingFeeMode === "courier_rate";
+  const units = draft.items.reduce((sum, item) => sum + item.quantity, 0);
+  const courierFee = !pickup && !preorderBag && courierMode ? (await appCourierEstimate(draft.subtotal, units, address.pincode).catch(() => undefined)) ?? null : undefined;
+  const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup, promo, courierFee });
+
   const creds = razorpayCreds({});
   if (!creds) {
     return json({ ok: false, configured: false, error: "Razorpay is not configured on this server." }, 503);
   }
 
   try {
-    const created = await razorpayOrder(creds, draft.total, draft.id);
-    const order = attachRazorpayOrder(draft.id, created.orderId) ?? { ...draft, razorpayOrderId: created.orderId };
+    const payNow = shopOrder.preorderPayment?.advance ?? shopOrder.total;
+    const created = await razorpayOrder(creds, payNow, draft.id);
+    attachRazorpayOrder(draft.id, created.orderId);
     return json({
       ok: true,
       configured: true,
       partner: "razorpay",
-      order,
-      amount: order.total,
+      order: { ...shopOrder, razorpayOrderId: created.orderId },
+      amount: payNow,
       keyId: created.keyId,
       razorpayOrderId: created.orderId,
     });

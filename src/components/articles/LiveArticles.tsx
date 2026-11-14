@@ -11,6 +11,8 @@ import type { Article, CaptionedImage } from "@/types";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { articlePublicUrl, articleShareText, localizedArticle } from "@/lib/article-display";
 import { ShareBar } from "@/components/common/ShareBar";
+import { ArticleRichText } from "@/components/articles/ArticleRichText";
+import { ArticleAd, ArticleAdScript } from "@/components/articles/ArticleAd";
 
 function Figure({ image, alt }: { image: CaptionedImage; alt: string }) {
   return (
@@ -25,25 +27,20 @@ function ArticleBody({ article }: { article: Article }) {
   const { t } = useI18n();
   const images = article.images ?? [];
   const placed = new Set<number>();
-  const blocks = article.content.split(/\n\s*\n/).map((block, index) => {
-    const text = block.trim();
-    const token = text.match(/^\[\[image:(\d+)\]\]$/);
-    if (token) {
-      const position = Number(token[1]) - 1;
-      const image = images[position];
-      if (!image) return null;
-      placed.add(position);
-      return <Figure key={index} image={image} alt={article.title} />;
-    }
-    if (text.startsWith("## ")) {
-      return <h2 key={index} className="heading-3 mb-4 mt-8">{text.slice(3)}</h2>;
-    }
-    return <p key={index} className="text-body mb-6 whitespace-pre-line">{text}</p>;
-  });
+  const body = (
+    <ArticleRichText
+      content={article.content}
+      images={images}
+      title={article.title}
+      style={article.style}
+      placed={placed}
+      insert={{ afterParagraphs: 2, node: <ArticleAd placement="inline" /> }}
+    />
+  );
   const remaining = images.filter((_, index) => !placed.has(index));
   return (
     <>
-      {blocks}
+      {body}
       {remaining.length > 0 && (
         <div className="mt-10 border-t border-border pt-8">
           <h2 className="heading-3 mb-5">{t("article.gallery")}</h2>
@@ -112,10 +109,13 @@ export function ArticlesIndex() {
   );
 }
 
-export function ArticleView({ slug }: { slug: string }) {
+export function ArticleView({ slug, initial }: { slug: string; initial?: Article | null }) {
   const articles = useLiveArticles();
   const { t, locale } = useI18n();
-  const found = articles.find((item) => item.slug === slug);
+  const live = articles.find((item) => item.slug === slug);
+  const found = live && !live.content && initial?.slug === slug
+    ? { ...live, content: initial.content, translations: initial.translations ?? live.translations }
+    : live ?? initial ?? undefined;
   if (!found) {
     return (
       <main className="container py-20">
@@ -129,6 +129,7 @@ export function ArticleView({ slug }: { slug: string }) {
 
   return (
     <main>
+      <ArticleAdScript />
       <section className="border-b border-border bg-warm-cream">
         <div className="container py-10 sm:py-14">
           <nav aria-label="Breadcrumb" className="mb-5 text-sm text-text-muted">
@@ -141,7 +142,7 @@ export function ArticleView({ slug }: { slug: string }) {
             <time className="text-sm text-text-muted" dateTime={article.date}>{formatDate(article.date)}</time>
           </div>
           <h1 className="heading-1 mt-4 max-w-4xl">{article.title}</h1>
-          {article.author && <ArticleByline author={article.author} />}
+          {article.author && <ArticleByline author={/\badmin\b|^vgmf$/i.test(article.author.trim()) ? "Vaidya Gogate Memorial Foundation" : article.author} />}
           <div className="mt-6">
             <ShareBar url={articlePublicUrl(article)} title={article.title} text={articleShareText(article)} />
           </div>
@@ -153,6 +154,7 @@ export function ArticleView({ slug }: { slug: string }) {
             {article.coverImage && (
               <NaturalImage src={article.coverImage} alt={article.title} fit="hero" className="mb-8 rounded-2xl border border-border" />
             )}
+            <ArticleAd placement="top" className="mb-8" />
             <ArticleBody article={article} />
           </article>
           <aside className="space-y-6">

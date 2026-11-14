@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vaidya Gogate Memorial Foundation",
     "slug": "vgmf-foundation",
-    "version": "1.3.8",
+    "version": "3.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F7F3EA"
+      "backgroundColor": "#F6F4F0"
     },
     "ios": {
       "supportsTablet": true,
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "org.vaidyagogate.app",
-      "versionCode": 13,
+      "versionCode": 28,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#8F2D2D",
@@ -33,16 +33,16 @@
     },
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#F7F3EA",
+      "backgroundColor": "#F6F4F0",
       "translucent": false
     },
     "androidNavigationBar": {
       "barStyle": "dark-content",
       "backgroundColor": "#FFFDF8"
     },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "plugins": ["expo-router", "expo-secure-store", ["expo-notifications", { "color": "#8F2D2D" }]],
     "extra": {
-      "apiUrl": "https://staging.vaidyagogate.org",
+      "apiUrl": "https://vaidyagogate.org",
       "flavor": "customer",
       "router": {
         "origin": false

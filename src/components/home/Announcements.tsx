@@ -4,10 +4,11 @@ import Link from "next/link";
 import Badge from "@/components/common/Badge";
 import { useLiveAnnouncements } from "@/lib/use-cms";
 import { formatDate } from "@/lib/utils";
+import { isPublishedNow } from "@/lib/schedule";
 
 export default function AnnouncementsSection() {
   const shown = useLiveAnnouncements()
-    .filter((announcement) => announcement.priority === "high")
+    .filter((announcement) => announcement.priority === "high" && isPublishedNow(announcement))
     .slice(0, 3);
 
   if (shown.length === 0) return null;

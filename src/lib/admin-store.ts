@@ -2,6 +2,7 @@ import type {
   AccountStatus,
   DeliveryAddress,
   Order,
+  Book,
   OrderItem,
   OrderPlan,
   OutboxEmail,
@@ -10,23 +11,29 @@ import type {
   SupportMessage,
   SupportTicket,
   FAQItem,
-  User,
-} from "@/types";
+  User, RefundRecord } from "@/types";
+import { dropPortalAccount, pushPortalAccounts } from "@/lib/portal-accounts-sync";
+import { pickupInstructions } from "@/lib/fulfillment";
 import { siteConfig, storeConfig } from "@/lib/constants";
-import { generateOrderId, getOrders, pickupOtp, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
-import { formatDate } from "@/lib/utils";
+import { generateOrderId, getOrders, pickupOtp, pickupOtpReady, publishShipment, publishShopOrder, saveOrder, syncReplacementProgress } from "@/lib/store";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { ACCOUNT_EXISTS_MESSAGE, phoneDigits, samePhone } from "@/lib/account-identity";
-import { clearSession, findAccountByIdentifier, getSession, saveAccount, setSession } from "@/lib/auth";
-import { commitStockForOrder, getLiveBooks, releaseStockForOrder } from "@/lib/product-data";
+import { clearSession, findAccountByIdentifier, getSession, isPortalRole, saveAccount, setSession } from "@/lib/auth";
+import { commitPreorderStock, commitStockForOrder, getLiveBooks, preorderDeliveryDate, releaseStockForOrder } from "@/lib/product-data";
+import { matchesBarcode, matchesTag } from "@/lib/barcode";
+import QRCode from "qrcode";
+import { sameShipmentSlot } from "@/lib/shipment-slot";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
-import { commerceCharges, getOrderSettings, shippingFeeFor } from "@/lib/integrations";
+import { commerceCharges, getIntegrations, getOrderSettings, preorderAdvance, shippingFeeFor } from "@/lib/integrations";
 import { barcodeSvg } from "@/lib/barcode";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
+import { logAudit } from "@/lib/audit";
 import { emptySocial } from "@/lib/social";
-import { staffReplyTo } from "@/lib/account-mail";
+import { senderName, staffReplyTo } from "@/lib/account-mail";
+import { pushTicket } from "@/lib/ticket-sync";
 
 export type OrderStatus = Order["status"];
 
@@ -76,6 +83,7 @@ function defaultSettings(): SiteSettings {
     liveChatEnabled: false,
     liveChatOnline: false,
     tickerSeconds: 36,
+    productText: { cardTitle: 14, cardMeta: 12, cardLanguage: 20, cardPrice: 14, pageLanguage: 24 },
     processing: {
       daysToPack: 1,
       daysToPickup: 1,
@@ -104,13 +112,13 @@ function defaultSettings(): SiteSettings {
     fulfillmentLocations: [
       {
         id: "fl-001",
-        name: "Pune Fulfillment Hub",
+        name: "Vaidya Gogate Memorial Foundation Clinic",
         code: "PUN",
-        address: "Vaidya Gogate Memorial Foundation, FC Road, Shivaji Nagar",
+        address: "Vaidya Gogate Memorial Foundation, 102, Ramprasad Chamber, 368/1, Nanapeth, Near Kirad Hospital, Above Shraddha Medicals, Jawaharlal Nehru Road, Nana Peth",
         city: "Pune",
         state: "Maharashtra",
-        pincode: "411005",
-        phone: "+91 20 1234 5678",
+        pincode: "411002",
+        phone: "093737 92952",
         active: true,
       },
     ],
@@ -139,6 +147,7 @@ export function getSettings(): SiteSettings {
     liveChatEnabled: current.liveChatEnabled ?? defaults.liveChatEnabled,
     liveChatOnline: current.liveChatOnline ?? defaults.liveChatOnline,
     tickerSeconds: current.tickerSeconds || defaults.tickerSeconds,
+    productText: { ...defaults.productText, ...current.productText },
     pickupTimeslots: current.pickupTimeslots?.length ? current.pickupTimeslots : defaults.pickupTimeslots,
   };
 }
@@ -221,8 +230,8 @@ export function ensureAdminCredentials() {
 export function seedAccounts() {
   const admin: User = {
     id: "usr-admin-001",
-    firstName: "Admin",
-    lastName: "VGMF",
+    firstName: "Vaidya Gogate Memorial",
+    lastName: "Foundation",
     email: "admin@vaidyagogate.org",
     phone: "+91 90000 00001",
     whatsapp: "+91 90000 00001",
@@ -251,6 +260,7 @@ export function updateAccount(email: string, update: Partial<User>) {
   if (index === -1) return;
   accounts[index] = { ...accounts[index], ...update };
   writeJSON("vgmf_accounts", accounts);
+  if (accounts[index].role === "staff" || accounts[index].role === "coadmin") pushPortalAccounts();
   if (typeof window !== "undefined") {
     const session = getSession();
     if (session?.email.toLowerCase() === email.toLowerCase()) setSession({ ...session, ...update });
@@ -260,6 +270,7 @@ export function updateAccount(email: string, update: Partial<User>) {
 export function removeAccount(email: string) {
   recordActivity({ email, kind: "deleted", by: currentActorEmail() });
   writeJSON("vgmf_accounts", getAccounts().filter((account) => account.email.toLowerCase() !== email.toLowerCase()));
+  dropPortalAccount(email);
   const session = getSession();
   if (session?.email.toLowerCase() === email.toLowerCase()) clearSession();
   notifyCms();
@@ -411,7 +422,7 @@ export function sendAccountDetails(email: string, isNew = false) {
 
 /* ---------------- Store credit ---------------- */
 
-export type StoreCreditEntry = { id: string; email: string; amount: number; at: string; note: string; orderId?: string; by?: string };
+export type StoreCreditEntry = { id: string; email: string; amount: number; at: string; note: string; orderId?: string; by?: string; expiresAt?: string };
 
 const CREDIT_KEY = "vgmf_store_credit";
 
@@ -420,20 +431,99 @@ export function getStoreCreditLedger(email?: string) {
   return email ? all.filter((entry) => entry.email.toLowerCase() === email.toLowerCase()) : all;
 }
 
+const walletKey = (email: string) => `vgmf_wallet_${email.trim().toLowerCase()}`;
+
+/** The server balance when this browser has fetched it, otherwise the locally known one. */
 export function getStoreCredit(email?: string) {
+  if (!email) return 0;
+  const cached = typeof window === "undefined" ? null : window.localStorage.getItem(walletKey(email));
+  if (cached != null && Number.isFinite(Number(cached))) return Math.max(0, Number(cached));
   return Math.max(0, getAccountByEmail(email)?.storeCredit ?? 0);
+}
+
+export type WalletExpiry = { amount: number; at: string };
+
+/** The customer's 5-digit Store Credit ID, as last fetched from the server. */
+export function getStoreCreditId(email?: string) {
+  if (!email || typeof window === "undefined") return "";
+  return window.localStorage.getItem(`${walletKey(email)}_id`) || "";
+}
+
+/** Counter check of the Store Credit ID the customer reads out; the server never reveals the ID to staff. */
+export async function verifyStoreCreditId(email: string, walletId: string) {
+  const response = await fetch(`/api/shop/wallet?email=${encodeURIComponent(email.trim().toLowerCase())}&walletId=${encodeURIComponent(walletId.trim())}`, { cache: "no-store", credentials: "same-origin" });
+  if (!response.ok) throw new Error("Could not check the Store Credit ID.");
+  const data = (await response.json()) as { idMatches?: boolean };
+  return Boolean(data.idMatches);
+}
+
+/** The soonest-lapsing store credit, as last fetched from the server. */
+export function getStoreCreditExpiry(email?: string): WalletExpiry | null {
+  if (!email || typeof window === "undefined") return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(`${walletKey(email)}_exp`) || "null") as WalletExpiry | null;
+    return parsed?.at && Number(parsed.amount) > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Desk view: fetches a customer's wallet from the server (balance after expiry) and keeps it on this device. */
+export async function fetchCustomerWallet(email: string) {
+  const value = email.trim().toLowerCase();
+  const response = await fetch(`/api/shop/wallet?email=${encodeURIComponent(value)}`, { cache: "no-store", credentials: "same-origin" });
+  if (!response.ok) throw new Error("Could not load the wallet.");
+  const data = (await response.json()) as { balance?: number; entries?: StoreCreditEntry[]; expiring?: WalletExpiry };
+  const balance = Number(data.balance) || 0;
+  rememberWallet(value, balance, Array.isArray(data.entries) ? data.entries : [], data.expiring);
+  return { balance, expiring: data.expiring ?? null, entries: Array.isArray(data.entries) ? data.entries : [] };
+}
+
+/** Records the server's wallet for this customer on this device. */
+export function rememberWallet(email: string, balance: number, entries: StoreCreditEntry[], expiring?: WalletExpiry, walletId?: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(walletKey(email), String(balance));
+  if (walletId) window.localStorage.setItem(`${walletKey(email)}_id`, walletId);
+  if (expiring?.at) window.localStorage.setItem(`${walletKey(email)}_exp`, JSON.stringify(expiring));
+  else window.localStorage.removeItem(`${walletKey(email)}_exp`);
+  const value = email.toLowerCase();
+  const others = getStoreCreditLedger().filter((entry) => entry.email.toLowerCase() !== value);
+  writeJSON(CREDIT_KEY, [...entries, ...others]);
+  if (getAccountByEmail(email)) updateAccount(email, { storeCredit: balance });
+  notifyCms();
+}
+
+export function pushStoreCredit(entries: StoreCreditEntry[]) {
+  if (typeof window === "undefined" || !entries.length) return Promise.resolve();
+  return fetch("/api/shop/wallet", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ entries }),
+  })
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
 /** Positive amount adds credit, negative spends it. Returns the new balance. */
 export function adjustStoreCredit(email: string, amount: number, note: string, orderId?: string) {
-  const account = getAccountByEmail(email);
-  if (!account) throw new Error("Store credit needs a customer account with this email.");
-  const balance = Math.max(0, Math.round(((account.storeCredit ?? 0) + amount) * 100) / 100);
-  updateAccount(account.email, { storeCredit: balance });
-  writeJSON(CREDIT_KEY, [
-    { id: `SC${Date.now()}${Math.floor(Math.random() * 90 + 10)}`, email: account.email, amount, at: new Date().toISOString(), note, orderId, by: currentActor() },
-    ...getStoreCreditLedger(),
-  ]);
+  const value = email.trim().toLowerCase();
+  if (!value) throw new Error("Store credit needs a customer email.");
+  const account = getAccountByEmail(value);
+  const balance = Math.max(0, Math.round((getStoreCredit(value) + amount) * 100) / 100);
+  if (account) updateAccount(account.email, { storeCredit: balance });
+  if (typeof window !== "undefined") window.localStorage.setItem(walletKey(value), String(balance));
+  const entry: StoreCreditEntry = {
+    id: `SC${Date.now()}${Math.floor(Math.random() * 90 + 10)}`,
+    email: account?.email ?? value,
+    amount,
+    at: new Date().toISOString(),
+    note,
+    orderId,
+    by: currentActor(),
+  };
+  writeJSON(CREDIT_KEY, [entry, ...getStoreCreditLedger()]);
+  void pushStoreCredit([entry]);
   notifyCms();
   return balance;
 }
@@ -467,6 +557,7 @@ export function createUserAccount(input: {
     password,
   };
   saveAccount(account);
+  if (account.role === "staff" || account.role === "coadmin") pushPortalAccounts();
   recordActivity({ email: account.email, kind: "created", by: currentActorEmail(), detail: `${input.role} account created` });
   sendAccountDetails(account.email, true);
   return account;
@@ -533,12 +624,15 @@ export function createAdminOrder(input: {
         originalPrice: book.originalPrice,
         currency: book.currency,
         sku: book.sku,
+        batchNo: book.batchNo,
         preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
+        releaseDate: book.preorder?.enabled && book.stock <= 0 ? book.preorder?.releaseDate : undefined,
       };
     })
     .filter(Boolean) as OrderItem[];
 
   if (orderItems.length === 0) throw new Error("No valid items selected.");
+  const preorderBook = live.find((book) => orderItems.some((item) => item.preorder && item.bookId === book.id));
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = orderItems.reduce(
@@ -589,10 +683,11 @@ export function createAdminOrder(input: {
     },
   };
   order.plan = computeOrderPlan(order);
+  if (order.deliveryMode !== "store_pickup") order.eta = preorderBook ? preorderDeliveryDate(preorderBook) : formatDate(order.plan.deliveredBy);
   if (commitStockForOrder(order)) order.stockCommitted = true;
   saveOrder(order);
   sendEmail({
-    to: order.deliveryAddress?.email || input.userEmail || "",
+    to: "",
     phone: order.deliveryAddress?.phone,
     name: order.deliveryAddress?.fullName,
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`],
@@ -600,11 +695,48 @@ export function createAdminOrder(input: {
     template: "order-placed",
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\n${
       order.deliveryMode === "store_pickup"
-        ? `Pickup from ${siteConfig.name}.\n${siteConfig.address}\nPhone: ${siteConfig.phone}\nPickup OTP: ${pickupOtp(order.id)}\nShow this code at the clinic counter. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`
-        : `Expected delivery: ${formatDate(order.plan.deliveredBy)}`
+        ? pickupInstructions()
+        : `${preorderBook ? "Tentative delivery" : "Expected delivery"}: ${order.eta}`
     }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return order;
+}
+
+export const ORDER_ALERT_EMAILS = ["care@vaidyagogate.org", "vd.gogatememorialfoundation@gmail.com"];
+
+/** Every new order is mailed to the Foundation desk with the full details. */
+export function notifyStaffOfOrder(order: Order) {
+  const address = order.deliveryAddress;
+  const lines = order.items.map((item) => `- ${item.title}${item.sku ? ` (SKU ${item.sku})` : ""} × ${item.quantity} @ ₹${item.price} = ₹${item.price * item.quantity}`).join("\n");
+  const where = address ? [address.line1, address.landmark, address.city, address.state, address.pincode, address.country].filter(Boolean).join(", ") : "";
+  const body = [
+    `New order ${order.id} · ${formatDateTime(order.date)}`,
+    "",
+    `Customer: ${address?.fullName || "—"}`,
+    `Phone: ${address?.phone || "—"}`,
+    `Email: ${address?.email || order.accountEmail || "—"}`,
+    order.deliveryMode === "store_pickup" ? "Delivery: Pickup from store" : `Deliver to: ${where || "—"}`,
+    "",
+    "Items:",
+    lines,
+    "",
+    `Subtotal: ₹${order.subtotal}`,
+    order.discount ? `Discount: − ₹${order.discount}` : "",
+    order.gst ? `GST: ₹${order.gst}` : "",
+    order.platformFee ? `Platform fee: ₹${order.platformFee}` : "",
+    `Shipping: ${order.shipping ? `₹${order.shipping}` : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment ? "Calculated once packed" : "Free"}`,
+    `Total: ₹${order.total}`,
+    `Payment: ${order.paymentStatus}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}${order.razorpayPaymentId ? ` · ${order.razorpayPaymentId}` : ""}`,
+    order.preorderPayment ? `Pre-order: advance ₹${order.preorderPayment.advance ?? ""} · balance ₹${order.preorderPayment.balance ?? ""}` : "",
+    order.courierName ? `Courier: ${order.courierName}` : "",
+    "",
+    `Open in admin: ${typeof window === "undefined" ? "" : window.location.origin}/admin/orders`,
+  ]
+    .filter((line, index, all) => line !== "" || all[index - 1] !== "")
+    .join("\n");
+  for (const to of ORDER_ALERT_EMAILS) {
+    sendEmail({ to, subject: `New order ${order.id} · ₹${order.total} · ${address?.fullName || "Customer"}`, template: "staff-new-order", body });
+  }
 }
 
 export function updateOrderInStore(order: Order) {
@@ -625,7 +757,7 @@ export function getOrder(orderId: string) {
 
 export function deleteOrder(orderId: string) {
   const order = getOrder(orderId);
-  if (order?.stockCommitted) releaseStockForOrder(order);
+  if (order) releaseStockForOrder(order);
   writeJSON("vgmf_orders", getOrders().filter((item) => item.id !== orderId));
   removeOrderShipments(orderId);
   forgetShopOrder(orderId);
@@ -633,14 +765,15 @@ export function deleteOrder(orderId: string) {
 
 export function resaveOrder(
   orderId: string,
-  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"] }
+  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"]; shipping?: number }
 ) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   const items = update.items ?? order.items;
-  if (update.items && order.stockCommitted) {
+  if (update.items && (order.stockCommitted || order.preorderStockCommitted)) {
     releaseStockForOrder(order);
-    commitStockForOrder({ items, stockCommitted: false });
+    if (order.stockCommitted) commitStockForOrder({ items, stockCommitted: false });
+    if (order.preorderStockCommitted) commitPreorderStock({ items, preorderStockCommitted: false });
   }
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = items.reduce(
@@ -650,9 +783,31 @@ export function resaveOrder(
   const charges = commerceCharges(subtotal);
   const gst = charges.gst;
   const platformFee = charges.platformFee;
+  const shipping =
+    update.shipping !== undefined && Number.isFinite(update.shipping)
+      ? Math.max(0, Math.round(update.shipping * 100) / 100)
+      : order.shipping;
+  const total = subtotal + gst + platformFee + shipping - (order.storeCreditUsed ?? 0);
+  const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
+  const paidSoFar =
+    order.paymentStatus === "Paid"
+      ? order.total
+      : order.paymentStatus === "Partially Paid"
+        ? order.amountPaid ?? advance
+        : 0;
+  const owesMore = paidSoFar > 0 && total > paidSoFar + 0.005;
+  const paymentStatus: Order["paymentStatus"] =
+    paidSoFar <= 0 ? order.paymentStatus : owesMore ? "Partially Paid" : order.preorderPayment && !order.preorderPayment.balancePaidAt && order.paymentStatus === "Partially Paid" ? "Partially Paid" : "Paid";
+  const preorderPayment =
+    order.preorderPayment && !order.preorderPayment.balancePaidAt
+      ? { ...order.preorderPayment, balance: Math.max(0, Math.round((total - order.preorderPayment.advance) * 100) / 100) }
+      : order.preorderPayment;
   const next = withHistory(
     {
       ...order,
+      paymentStatus,
+      amountPaid: paidSoFar > 0 ? paidSoFar : order.amountPaid,
+      preorderPayment,
       items,
       deliveryAddress: update.deliveryAddress ?? order.deliveryAddress,
       deliveryMode: update.deliveryMode ?? order.deliveryMode,
@@ -660,40 +815,47 @@ export function resaveOrder(
       discount,
       gst,
       platformFee,
-      total: subtotal + gst + platformFee + order.shipping - (order.storeCreditUsed ?? 0),
+      shipping,
+      total,
       stockCommitted: order.stockCommitted,
     },
-    "Order edited"
+    "Order edited",
+    owesMore
+      ? `New total ₹${total.toLocaleString("en-IN")} · ₹${(Math.round((total - paidSoFar) * 100) / 100).toLocaleString("en-IN")} due from the customer`
+      : undefined
   );
   updateOrderInStore(next);
   return next;
 }
 
-/** Amount still refundable. The platform fee is kept unless the desk has allowed refunding it. */
-export function maxRefundable(order: Order) {
-  const settings = getOrderSettings();
-  const kept = settings.platformFee.enabled && !settings.platformFee.refundable ? Math.max(0, order.platformFee ?? 0) : 0;
-  return Math.max(0, order.total - kept - (order.refundAmount ?? 0));
+/** Amount still refundable. The platform fee is kept unless the desk ticks "also refund the platform fee" on that refund. */
+export function maxRefundable(order: Order, options: { withPlatformFee?: boolean } = {}) {
+  const kept = options.withPlatformFee ? 0 : Math.max(0, order.platformFee ?? 0);
+  const collected = order.preorderPayment && !order.preorderPayment.balancePaidAt ? order.preorderPayment.advance : order.total;
+  return Math.max(0, collected - kept - (order.refundAmount ?? 0));
 }
 
-export function refundToStoreCredit(orderId: string, amount?: number, note?: string) {
+export function refundToStoreCredit(orderId: string, amount?: number, note?: string, options: { withPlatformFee?: boolean } = {}) {
   const order = getOrder(orderId);
   if (!order) return;
   const email = order.deliveryAddress?.email;
   if (!email) throw new Error("This order has no customer email to credit.");
-  const cap = maxRefundable(order);
-  const refundAmount = Math.min(amount ?? cap, cap);
-  if (refundAmount <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
-  const balance = adjustStoreCredit(email, refundAmount, note ?? `Refund for order ${order.id}`, order.id);
+  const cap = maxRefundable(order, options);
+  if (amount != null && !(Number.isFinite(amount) && amount > 0)) throw new Error("Enter a refund amount above ₹0.");
+  if (amount != null && amount > cap + 0.001) throw new Error(`At most ₹${cap.toLocaleString("en-IN")} can still be refunded on this order.`);
+  const refundAmount = Math.round(Math.min(amount ?? cap, cap) * 100) / 100;
+  if (refundAmount <= 0) throw new Error("Nothing left to refund. The platform fee is kept unless you tick \"Also refund the platform fee\".");
+  const txn = `SC${String(Date.now()).slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
+  const balance = adjustStoreCredit(email, refundAmount, `${note ?? `Refund for order ${order.id}`} · Transaction ID ${txn}`, order.id);
   const next: Order = withHistory(
     {
       ...order,
-      paymentStatus: refundAmount >= order.total ? "Refunded" : "Partially Refunded",
+      paymentStatus: (order.refundAmount ?? 0) + refundAmount >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: `RF${Date.now()}`, at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", reference: txn, note, by: currentActor() }],
     },
     "Store credit issued",
-    `₹${refundAmount} · balance ₹${balance}`
+    `₹${refundAmount} · balance ₹${balance} · Transaction ID ${txn}`
   );
   updateOrderInStore(next);
   sendEmail({
@@ -708,55 +870,443 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
   return next;
 }
 
-export function exportOrdersCsv(orders: Order[]) {
-  const header = ["Order ID", "Date", "Customer", "Phone", "Email", "Status", "Payment", "Items", "Total", "Courier", "AWB"];
-  const rows = orders.map((order) => [
-    order.id,
-    order.date,
-    order.deliveryAddress?.fullName ?? "",
-    order.deliveryAddress?.phone ?? "",
-    order.deliveryAddress?.email ?? "",
-    order.status,
-    order.paymentStatus,
-    order.items.map((item) => `${item.quantity} x ${item.title}`).join("; "),
-    String(order.total),
-    order.courierName ?? "",
-    order.trackingId ?? "",
-  ]);
-  const csv = [header, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+/** Languages of the products in an order, from the catalogue. */
+export function orderLanguages(order: Pick<Order, "items">, books = getLiveBooks()) {
+  const byId = new Map(books.map((book) => [book.id, book.language?.trim()]));
+  return [...new Set(order.items.map((item) => byId.get(item.bookId) || "Unspecified"))];
+}
+
+export function exportOrdersCsv(orders: Order[], label?: string) {
+  const books = getLiveBooks();
+  const header = [
+    "Order ID", "Order type", "Date", "Channel", "Customer", "Phone", "Email", "Account email",
+    "Delivery mode", "Address", "Landmark", "City", "State", "Pincode", "Country",
+    "Items", "Languages", "Item count", "Total quantity", "SKUs",
+    "Subtotal", "Discount", "GST", "Platform fee", "Shipping", "Store credit used", "Total",
+    "Order status", "Payment status", "Payment method", "Payment ref", "Razorpay payment ID", "Razorpay order ID", "Paid at",
+    "Pre-order advance", "Pre-order balance", "Refunded",
+    "Courier", "AWB", "Expected delivery", "Return AWB", "Return charge", "Return charge paid by",
+  ];
+  const rows = orders.map((order) => {
+    const address = order.deliveryAddress;
+    const refunded = (order.refunds ?? []).reduce((sum, refund) => sum + (Number(refund.amount) || 0), 0);
+    return [
+      order.id,
+      order.preorderPayment || order.items.some((item) => item.preorder) ? "Pre-order" : "Normal",
+      formatDateTime(order.date),
+      order.channel ?? "online",
+      address?.fullName ?? "",
+      address?.phone ?? "",
+      address?.email ?? "",
+      order.accountEmail ?? "",
+      order.deliveryMode === "store_pickup" ? "Store pickup" : "Delivery",
+      address?.line1 ?? "",
+      address?.landmark ?? "",
+      address?.city ?? "",
+      address?.state ?? "",
+      address?.pincode ?? "",
+      address?.country ?? "India",
+      order.items.map((item) => `${item.title} x ${item.quantity} @ ${item.price}`).join("; "),
+      orderLanguages(order, books).join("; "),
+      order.items.length,
+      order.items.reduce((sum, item) => sum + item.quantity, 0),
+      order.items.map((item) => item.sku || item.bookId).join("; "),
+      order.subtotal,
+      order.discount,
+      order.gst,
+      order.platformFee ?? 0,
+      order.shipping,
+      order.storeCreditUsed ?? 0,
+      order.total,
+      order.status,
+      order.paymentStatus,
+      order.paymentMethod ?? "",
+      order.paymentRef ?? "",
+      order.razorpayPaymentId ?? "",
+      order.razorpayOrderId ?? "",
+      order.paidAt ? formatDateTime(order.paidAt) : "",
+      order.preorderPayment?.advance ?? "",
+      order.preorderPayment?.balance ?? "",
+      refunded || "",
+      order.courierName ?? "",
+      order.trackingId ?? "",
+      order.plan?.deliveredBy ? formatDate(order.plan.deliveredBy) : order.eta ?? "",
+      order.returnShipment?.awb ?? "",
+      order.returnShipment?.charge ?? "",
+      order.returnShipment?.chargePaidBy ?? "",
+    ];
+  });
+  const csv = "\ufeff" + [header, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `vgmf-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  const tag = label ? `-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : "";
+  link.download = `vgmf-orders${tag}-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
 
 export function printOrdersPdf(orders: Order[]) {
+  const money = (value: unknown) => `₹${(Number(value) || 0).toLocaleString("en-IN")}`;
+  const lines = (...values: unknown[]) => values.filter((value) => value !== undefined && value !== null && value !== "").map(esc).join("<br/>");
   const rows = orders
-    .map(
-      (order) =>
-        `<tr><td>${order.id}</td><td>${order.deliveryAddress?.fullName ?? ""}</td><td>${order.status}</td><td>${order.paymentStatus}</td><td>₹${order.total.toLocaleString("en-IN")}</td></tr>`
-    )
+    .map((order) => {
+      const address = order.deliveryAddress;
+      const refunded = (order.refunds ?? []).reduce((sum, refund) => sum + (Number(refund.amount) || 0), 0);
+      const preorder = Boolean(order.preorderPayment || order.items.some((item) => item.preorder));
+      const release = order.items.map((item) => item.releaseDate).filter(Boolean).sort()[0];
+      const items = order.items.map((item) => `${esc(item.title)} × ${item.quantity} @ ${money(item.price)}${item.sku || item.bookId ? ` <span class="muted">(${esc(item.sku || item.bookId)})</span>` : ""}`).join("<br/>");
+      return `<tr>
+        <td><b>${esc(order.id)}</b><br/><span class="tag ${preorder ? "pre" : ""}">${preorder ? "Pre-order" : "Normal"}</span><br/>${lines(formatDateTime(order.date), order.channel ?? "online")}</td>
+        <td>${lines(address?.fullName, address?.phone, address?.email, order.accountEmail && order.accountEmail !== address?.email ? `Account: ${order.accountEmail}` : "")}</td>
+        <td>${lines(order.deliveryMode === "store_pickup" ? "Store pickup" : "Delivery", address?.line1, address?.landmark, [address?.city, address?.state, address?.pincode].filter(Boolean).join(", "), address?.country ?? "India")}</td>
+        <td>${items}<br/><span class="muted">${order.items.length} item(s) · qty ${order.items.reduce((sum, item) => sum + item.quantity, 0)}</span></td>
+        <td>${lines(`Subtotal ${money(order.subtotal)}`, order.discount ? `Discount ${money(order.discount)}` : "", order.gst ? `GST ${money(order.gst)}` : "", order.platformFee ? `Platform fee ${money(order.platformFee)}` : "", `Shipping ${money(order.shipping)}`, order.storeCreditUsed ? `Store credit ${money(order.storeCreditUsed)}` : "")}<br/><b>Total ${money(order.total)}</b></td>
+        <td>${lines(order.status, `${order.paymentStatus}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}`, order.paymentRef ? `Ref ${order.paymentRef}` : "", order.razorpayPaymentId ? `Txn ${order.razorpayPaymentId}` : "", order.razorpayOrderId ? `RZP order ${order.razorpayOrderId}` : "", order.paidAt ? `Paid ${formatDateTime(order.paidAt)}` : "", order.preorderPayment ? `Pre-order: advance ${money(order.preorderPayment.advance)}, balance ${money(order.preorderPayment.balance)}` : "", refunded ? `Refunded ${money(refunded)}` : "")}</td>
+        <td>${lines(order.courierName, order.trackingId ? `AWB ${order.trackingId}` : "", preorder ? `Pre-order: ships after release${release ? ` (${formatDate(release)})` : ""}` : order.plan?.deliveredBy ? `Expected ${formatDate(order.plan.deliveredBy)}` : order.eta, order.returnShipment?.awb ? `Return AWB ${order.returnShipment.awb}` : "", order.returnShipment?.charge ? `Return charge ${money(order.returnShipment.charge)}${order.returnShipment.chargePaidBy ? ` (${order.returnShipment.chargePaidBy})` : ""}` : "")}</td>
+      </tr>`;
+    })
     .join("");
   printHtml(
     "Orders",
-    `<h1>Vaidya Gogate Memorial Foundation orders</h1><table><tr><th>ID</th><th>Customer</th><th>Status</th><th>Payment</th><th>Total</th></tr>${rows}</table>`
+    `<style>.orders{width:100%;border-collapse:collapse;font-size:9px;line-height:1.35}.orders th,.orders td{border:1px solid #d6d3d1;padding:4px;vertical-align:top;text-align:left}.orders th{background:#f5f5f4}.orders tr{page-break-inside:avoid}.muted{color:#78716c}.tag{display:inline-block;margin:2px 0;padding:0 5px;border-radius:8px;background:#e7e5e4;font-weight:600}.tag.pre{background:#fde68a;color:#78350f}</style>
+    <h1>Vaidya Gogate Memorial Foundation orders</h1><p class="muted">${orders.length} order(s) · ${orders.filter((order) => order.preorderPayment || order.items.some((item) => item.preorder)).length} pre-order(s) · printed ${esc(formatDateTime(new Date().toISOString()))}</p>
+    <table class="orders"><tr><th>Order · type</th><th>Customer</th><th>Address</th><th>Items ordered</th><th>Amounts</th><th>Status &amp; payment</th><th>Courier</th></tr>${rows}</table>`,
+    "A4 landscape"
   );
 }
 
+/* ---------------- Pick & pack ---------------- */
+
+export function assignPicker(orderId: string, assignee: string) {
+  const order = getOrder(orderId);
+  const email = assignee.trim().toLowerCase();
+  if (!order || !email) throw new Error("Pick a staff member to assign.");
+  updateOrderInStore(withHistory({ ...order, pick: { assignee: email, assignedAt: new Date().toISOString(), picked: {}, packScan: {} } }, "Picker assigned", email));
+}
+
+/** Hand picking (or packing, once picked) to the same or another staff member; their scanner rings. */
+export function reassignPickPack(orderId: string, assignee: string, stage: "pick" | "pack") {
+  const order = getOrder(orderId);
+  const email = assignee.trim().toLowerCase();
+  if (!order?.pick) throw new Error("Assign a picker first.");
+  if (!email) throw new Error("Pick a staff member.");
+  const at = new Date().toISOString();
+  const pick =
+    stage === "pick"
+      ? { ...order.pick, assignee: email, assignedAt: at, acceptedAt: undefined }
+      : { ...order.pick, packer: email, packerAssignedAt: at };
+  updateOrderInStore(withHistory({ ...order, pick }, stage === "pick" ? "Picker reassigned" : "Packer assigned", email));
+}
+
+export function acceptPick(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order?.pick) return;
+  updateOrderInStore(withHistory({ ...order, pick: { ...order.pick, acceptedAt: new Date().toISOString() } }, "Picking started", order.pick.assignee));
+}
+
+type ScanKind = "productCode" | "sku" | "isbn" | "any";
+const KIND_LABEL: Record<ScanKind, string> = { productCode: "product code", sku: "SKU", isbn: "ISBN", any: "barcode" };
+type PickItem = Order["items"][number];
+
+/** Code printed on the packaging slip that the packer scans first. */
+export function packingBoxCode(orderId: string) {
+  return `BOX-${orderId}`;
+}
+
+const plainCode = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+const isBoxCode = (order: Order, value: string) => plainCode(value) === plainCode(packingBoxCode(order.id));
+const isOrderCode = (order: Order, value: string) =>
+  !plainCode(value).startsWith("BOX") && (value.replace(/\D/g, "") === order.id.replace(/\D/g, "") || value.includes(order.id));
+
+/** Codes this product carries for the stage, and whether Settings makes each one required. */
+function stageKinds(stage: "pick" | "pack", item: PickItem, book?: Book) {
+  const rules = getOrderSettings().scanRules;
+  const sku = item.sku || book?.sku;
+  const rows: { kind: ScanKind; required: boolean }[] = [];
+  if (stage === "pick") {
+    if (book?.productCode || book?.barcode) rows.push({ kind: "productCode", required: rules.pick.productCode });
+    if (sku) rows.push({ kind: "sku", required: rules.pick.sku });
+  } else {
+    if (sku) rows.push({ kind: "sku", required: rules.pack.sku });
+    if (book?.isbn) rows.push({ kind: "isbn", required: rules.pack.isbn });
+  }
+  return rows;
+}
+
+/** Required codes; the first one counts copies. With none required, any of the product's codes counts a copy. */
+function requiredKinds(stage: "pick" | "pack", item: PickItem, book?: Book): ScanKind[] {
+  const kinds = stageKinds(stage, item, book).filter((row) => row.required).map((row) => row.kind);
+  return kinds.length ? kinds : ["any"];
+}
+
+function matchedKinds(item: PickItem, book: Book | undefined, value: string): ScanKind[] {
+  const kinds: ScanKind[] = [];
+  if ((book?.productCode || book?.barcode) && matchesBarcode({ productCode: book?.productCode, barcode: book?.barcode }, value)) kinds.push("productCode");
+  const sku = item.sku || book?.sku;
+  if (sku && matchesBarcode({ sku }, value)) kinds.push("sku");
+  if (book?.isbn && matchesBarcode({ isbn: book.isbn }, value)) kinds.push("isbn");
+  if (matchesBarcode({ ...(book ?? {}), id: item.bookId, sku, batchNo: item.batchNo || book?.batchNo }, value)) kinds.push("any");
+  return kinds;
+}
+
+function stageState(order: Order, stage: "pick" | "pack") {
+  const pick = order.pick;
+  return { counts: (stage === "pick" ? pick?.picked : pick?.packScan) ?? {}, seen: (stage === "pick" ? pick?.pickCodes : pick?.packCodes) ?? {} };
+}
+
+function itemMissing(stage: "pick" | "pack", item: PickItem, book: Book | undefined, counts: Record<string, number>, seen: Record<string, string[]>) {
+  const req = requiredKinds(stage, item, book);
+  const left = item.quantity - (counts[item.bookId] ?? 0);
+  const missing: string[] = [];
+  if (left > 0) missing.push(`${left} × ${KIND_LABEL[req[0]]}`);
+  for (const kind of req.slice(1)) if (!(seen[item.bookId] ?? []).includes(kind)) missing.push(KIND_LABEL[kind]);
+  return missing;
+}
+
+/** What is still to scan, item by item, e.g. "VGMF BOOK: 1 × product code, SKU". Empty when every item is done. */
+export function pickPackLeft(order: Order, stage: "pick" | "pack") {
+  const books = getLiveBooks();
+  const { counts, seen } = stageState(order, stage);
+  return order.items
+    .map((item) => {
+      const missing = itemMissing(stage, item, books.find((row) => row.id === item.bookId), counts, seen);
+      return missing.length ? `${item.title}: ${missing.join(", ")}` : "";
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Which order-level steps are satisfied: scanned, optional in Settings, or skipped by admin. */
+export function pickPackGates(order: Order) {
+  const pick = order.pick;
+  const rules = getOrderSettings().scanRules;
+  const skipped = pick?.bypassed ?? [];
+  return {
+    pickOrder: Boolean(pick?.pickOrderScannedAt) || !rules.pick.orderCode || skipped.includes("pickOrder"),
+    box: Boolean(pick?.boxScannedAt) || !rules.pack.boxCode || skipped.includes("box"),
+    packOrder: Boolean(pick?.orderScannedAt) || !rules.pack.orderCode || skipped.includes("packOrder"),
+    photos: Boolean(order.packPhotos?.length) || !rules.pack.photos || skipped.includes("photos"),
+    confirm: rules.pack.confirm,
+  };
+}
+
+/** Scanned / not scanned checklist for the picker or packer screen. */
+export function pickPackChecklist(order: Order) {
+  const pick = order.pick;
+  const rules = getOrderSettings().scanRules;
+  const skipped = pick?.bypassed ?? [];
+  const stage: "pick" | "pack" = pick?.pickedAt ? "pack" : "pick";
+  const books = getLiveBooks();
+  const { counts, seen } = stageState(order, stage);
+  const mark = (label: string, done: boolean, required: boolean, key?: string) => ({ label, done, optional: !required, bypassed: Boolean(key && skipped.includes(key)) });
+  const steps =
+    stage === "pick"
+      ? [mark("Order code", Boolean(pick?.pickOrderScannedAt), rules.pick.orderCode, "pickOrder")]
+      : [mark("Box code", Boolean(pick?.boxScannedAt), rules.pack.boxCode, "box"), mark("Order code", Boolean(pick?.orderScannedAt), rules.pack.orderCode, "packOrder")];
+  const items = order.items.map((item) => {
+    const book = books.find((row) => row.id === item.bookId);
+    const req = requiredKinds(stage, item, book);
+    const count = Math.min(item.quantity, counts[item.bookId] ?? 0);
+    const had = seen[item.bookId] ?? [];
+    const itemsKey = stage === "pick" ? "pickItems" : "packItems";
+    return {
+      id: item.bookId,
+      title: item.title,
+      codes: [
+        mark(`${KIND_LABEL[req[0]]} ${count}/${item.quantity}`, count >= item.quantity, true, itemsKey),
+        ...stageKinds(stage, item, book)
+          .filter((row) => row.kind !== req[0])
+          .map((row) => mark(KIND_LABEL[row.kind], had.includes(row.kind), row.required, itemsKey)),
+      ],
+    };
+  });
+  const finish =
+    stage === "pack"
+      ? [
+          mark(`Packing photos${order.packPhotos?.length ? ` (${order.packPhotos.length})` : ""}`, Boolean(order.packPhotos?.length), rules.pack.photos, "photos"),
+          mark("Items match description", Boolean(pick?.matchedAt), rules.pack.confirm),
+        ]
+      : [];
+  return { stage, steps, items, finish };
+}
+
+function finishPacked(order: Order, note: string) {
+  const pick = order.pick;
+  if (!pick) return "";
+  const now = new Date().toISOString();
+  updateOrderInStore(withHistory({ ...order, pick: { ...pick, matchedAt: pick.matchedAt ?? now, packedAt: now } }, "Packed", note));
+  setOrderStatus(order.id, order.deliveryMode === "store_pickup" ? "Packed" : "Ready to Ship");
+  return order.deliveryMode === "store_pickup" ? "Packed. Ready for store pickup (OTP unlocked)." : "Packed and ready for pickup. Admin assigns the courier from Orders.";
+}
+
+/** When Settings does not require the final check, pack as soon as every required step is done. */
+export function maybeFinishPack(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order?.pick?.pickedAt || order.pick.packedAt) return "";
+  const gates = pickPackGates(order);
+  if (gates.confirm || !gates.box || !gates.packOrder || !gates.photos || pickPackLeft(order, "pack")) return "";
+  return finishPacked(order, "All required scans done");
+}
+
+/** One scan in the store. Picker: order code, then each item's product code and SKU. Packer: box code, order code, then each item's SKU and ISBN. Settings can make any of these optional. */
+export function recordPickScan(orderId: string, code: string): string {
+  const order = getOrder(orderId);
+  const pick = order?.pick;
+  if (!order || !pick) throw new Error("This order has no picker assigned.");
+  const value = code.trim();
+  if (!value) throw new Error("Scan a code.");
+  const books = getLiveBooks();
+  const now = new Date().toISOString();
+  const gates = pickPackGates(order);
+  const bookOf = (item: PickItem) => books.find((row) => row.id === item.bookId);
+  const unit = /[\s-]?U\d{5}$/i.test(value) ? plainCode(value) : "";
+
+  const scanItem = (stage: "pick" | "pack") => {
+    const { counts, seen } = stageState(order, stage);
+    const unitsKey = stage === "pick" ? "pickUnits" : "packUnits";
+    const units = order.pick?.[unitsKey] ?? [];
+    if (unit) {
+      if (units.includes(unit)) throw new Error("This copy's label is already scanned for this order. Scan the next copy.");
+      const other = getOrders().find((row) => row.id !== order.id && row.status !== "Cancelled" && [...(row.pick?.pickUnits ?? []), ...(row.pick?.packUnits ?? [])].includes(unit));
+      if (other) throw new Error(`This copy is already assigned to order ${other.id}. Use another copy.`);
+    }
+    const open = order.items.filter((item) => itemMissing(stage, item, bookOf(item), counts, seen).length);
+    const rows = order.items.map((item) => {
+      const book = bookOf(item);
+      const req = requiredKinds(stage, item, book);
+      const kinds = matchedKinds(item, book, value);
+      const known = stageKinds(stage, item, book).map((row) => row.kind);
+      const useful = req[0] === "any" ? (kinds.length ? (["any"] as ScanKind[]) : []) : kinds.filter((kind) => req.includes(kind));
+      return { item, req, kinds, useful, extra: kinds.filter((kind) => known.includes(kind)), isOpen: open.includes(item) };
+    });
+    let hit = rows.find((row) => row.isOpen && row.useful.length);
+    if (!hit) {
+      const tagged = open.filter((item) => requiredKinds(stage, item, bookOf(item))[0] === "any" && matchesTag(bookOf(item) ?? {}, value));
+      if (tagged.length === 1) hit = rows.find((row) => row.item === tagged[0]);
+      if (hit) hit = { ...hit, useful: ["any"] };
+    }
+    // An optional code (e.g. SKU when only the product code is required) is still marked as scanned.
+    const optional = hit ? undefined : rows.find((row) => row.extra.some((kind) => !(seen[row.item.bookId] ?? []).includes(kind)));
+    if (!hit && optional) {
+      const nextSeen = { ...seen, [optional.item.bookId]: Array.from(new Set([...(seen[optional.item.bookId] ?? []), ...optional.extra])) };
+      return { nextCounts: counts, nextSeen, done: false, units: unit ? [...units, unit] : units, message: `${KIND_LABEL[optional.extra[0]]} of ${optional.item.title} scanned.` };
+    }
+    if (!hit) {
+      const wrongKind = rows.find((row) => row.isOpen && row.kinds.length);
+      if (wrongKind) throw new Error(`Wrong code for ${wrongKind.item.title}. Scan its ${wrongKind.req.map((kind) => KIND_LABEL[kind]).join(" and ")}.`);
+      const finished = rows.find((row) => row.kinds.length);
+      throw new Error(finished ? `${finished.item.title} is already fully scanned.` : "This code is not an item on this order.");
+    }
+    const { item, req, useful, extra } = hit;
+    const have = seen[item.bookId] ?? [];
+    const nextCounts = { ...counts };
+    const counted = useful.includes(req[0]) && (counts[item.bookId] ?? 0) < item.quantity;
+    if (counted) nextCounts[item.bookId] = (counts[item.bookId] ?? 0) + 1;
+    else if (!useful.some((kind) => !have.includes(kind))) {
+      throw new Error(`${KIND_LABEL[useful[0]]} of ${item.title} is already scanned. Still to scan: ${itemMissing(stage, item, bookOf(item), counts, seen).join(", ")}.`);
+    }
+    const nextSeen = { ...seen, [item.bookId]: Array.from(new Set([...have, ...useful, ...extra])) };
+    const done = order.items.every((row) => !itemMissing(stage, row, bookOf(row), nextCounts, nextSeen).length);
+    const leftHere = itemMissing(stage, item, bookOf(item), nextCounts, nextSeen);
+    return { nextCounts, nextSeen, done, units: unit ? [...units, unit] : units, message: `${KIND_LABEL[useful[0]]} of ${item.title} scanned.${leftHere.length ? ` Still for this item: ${leftHere.join(", ")}.` : ""}` };
+  };
+
+  if (!pick.pickedAt) {
+    if (!pick.pickOrderScannedAt && isOrderCode(order, value)) {
+      updateOrderInStore({ ...order, pick: { ...pick, acceptedAt: pick.acceptedAt ?? now, pickOrderScannedAt: now } });
+      return "Order matched. Now scan each item's product code and SKU.";
+    }
+    if (!gates.pickOrder) throw new Error("Step 1: scan the order code (barcode or QR) on the packaging slip first.");
+    if (isOrderCode(order, value) || isBoxCode(order, value)) throw new Error("The order is already matched. Now scan the items.");
+    const result = scanItem("pick");
+    const next = { ...order, pick: { ...pick, acceptedAt: pick.acceptedAt ?? now, picked: result.nextCounts, pickCodes: result.nextSeen, pickUnits: result.units, pickedAt: result.done ? now : undefined } };
+    updateOrderInStore(result.done ? withHistory(next, "Item picked", "All items picked from inventory") : next);
+    return result.done ? "All items picked. The order moves to the packer." : result.message;
+  }
+  if (pick.packedAt) return "Already packed and ready for pickup.";
+  if (!pick.boxScannedAt && isBoxCode(order, value)) {
+    updateOrderInStore({ ...order, pick: { ...pick, boxScannedAt: now } });
+    return "Box matched. Now scan the order code.";
+  }
+  if (!gates.box) throw new Error("Step 1: scan the box code (BOX-…) on the packaging slip first.");
+  if (!pick.orderScannedAt && isOrderCode(order, value)) {
+    updateOrderInStore({ ...order, pick: { ...pick, orderScannedAt: now } });
+    return "Order matched. Now scan each item's SKU, and ISBN for books, as it goes into the box.";
+  }
+  if (!gates.packOrder) throw new Error(isBoxCode(order, value) ? "The box is already scanned. Step 2: scan the order code." : "Step 2: scan the order code (barcode or QR) on the packaging slip.");
+  if (isOrderCode(order, value) || isBoxCode(order, value)) throw new Error("Box and order are already matched. Now scan the items.");
+  const result = scanItem("pack");
+  updateOrderInStore({ ...order, pick: { ...pick, packScan: result.nextCounts, packCodes: result.nextSeen, packUnits: result.units } });
+  if (!result.done) return result.message;
+  return maybeFinishPack(order.id) || "All items scanned. Add packing photos, then confirm the items match the description.";
+}
+
+/** Last packer step: every required scan done, packing photo (if required), items checked against the order description. */
+export function confirmPacked(orderId: string) {
+  const order = getOrder(orderId);
+  const pick = order?.pick;
+  if (!order || !pick?.pickedAt) throw new Error("Picking is not finished yet.");
+  if (pick.packedAt) return "Already packed.";
+  const gates = pickPackGates(order);
+  if (!gates.box) throw new Error("Scan the box code first.");
+  if (!gates.packOrder) throw new Error("Scan the order code first.");
+  const left = pickPackLeft(order, "pack");
+  if (left) throw new Error(`Still to scan: ${left}.`);
+  if (!gates.photos) throw new Error("Take at least one packing photo first.");
+  return finishPacked(order, "Items checked against the order description");
+}
+
+const SKIP_LABEL: Record<string, string> = { pickOrder: "Picker order code", pickItems: "Picker item scans", box: "Box code", packOrder: "Packer order code", packItems: "Packer item scans", photos: "Packing photos" };
+
+/** Admin skips the current step (or every remaining step) for an order. */
+export function bypassPickStep(orderId: string, all = false) {
+  const by = getSession()?.email ?? "admin";
+  let last = "";
+  for (let round = 0; round < 12; round += 1) {
+    const order = getOrder(orderId);
+    const pick = order?.pick;
+    if (!order || !pick) throw new Error("This order has no picker assigned.");
+    if (pick.packedAt) return last || "Already packed.";
+    const gates = pickPackGates(order);
+    const now = new Date().toISOString();
+    const full = Object.fromEntries(order.items.map((item) => [item.bookId, item.quantity]));
+    const skip = (key: string, patch: Partial<NonNullable<Order["pick"]>>) => {
+      updateOrderInStore(withHistory({ ...order, pick: { ...pick, ...patch, bypassed: [...(pick.bypassed ?? []), key] } }, "Scan step bypassed", `${SKIP_LABEL[key]} · ${by}`));
+      last = `${SKIP_LABEL[key]} skipped.`;
+    };
+    if (!pick.pickedAt) {
+      if (!gates.pickOrder) skip("pickOrder", { acceptedAt: pick.acceptedAt ?? now });
+      else skip("pickItems", { acceptedAt: pick.acceptedAt ?? now, picked: full, pickedAt: now });
+    } else if (!gates.box) skip("box", {});
+    else if (!gates.packOrder) skip("packOrder", {});
+    else if (pickPackLeft(order, "pack")) skip("packItems", { packScan: full });
+    else if (!gates.photos) skip("photos", {});
+    else return finishPacked(order, `Packed · steps bypassed by ${by}`);
+    if (!all) return last;
+  }
+  return last;
+}
+
+const PACKED_OR_LATER = new Set<OrderStatus>(["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered"]);
+
 export function setOrderStatus(orderId: string, status: OrderStatus) {
+  logAudit("Order status changed", orderId, status);
   const order = getOrder(orderId);
   if (!order) return;
   const next: Order = withHistory({ ...order, status }, status);
   if (status === "Delivered" && order.paymentMethod === "Cash on delivery") {
     next.paymentStatus = "Paid";
   }
-  if (status === "Cancelled" && order.stockCommitted) {
+  if (!pickupOtpReady(order) && pickupOtpReady(next)) sendPickupOtp(next);
+  if (status === "Cancelled" && (order.stockCommitted || order.preorderStockCommitted)) {
     releaseStockForOrder(order);
     next.stockCommitted = false;
+    next.preorderStockCommitted = false;
   }
+  // Picker/packer assignment leaves pre-order stock alone; it is taken once the order is packed.
+  if (PACKED_OR_LATER.has(status) && commitPreorderStock(order)) next.preorderStockCommitted = true;
   updateOrderInStore(next);
   sendOrderStatusEmail(next, status);
   syncReplacementProgress(next);
@@ -765,9 +1315,9 @@ export function setOrderStatus(orderId: string, status: OrderStatus) {
 export function cancelOrder(orderId: string, reason?: string) {
   const order = getOrder(orderId);
   if (!order) return;
-  if (order.stockCommitted) releaseStockForOrder(order);
+  releaseStockForOrder(order);
   const next: Order = withHistory(
-    { ...order, status: "Cancelled", cancelReason: reason, stockCommitted: false },
+    { ...order, status: "Cancelled", cancelReason: reason, stockCommitted: false, preorderStockCommitted: false },
     "Cancelled",
     reason
   );
@@ -776,10 +1326,10 @@ export function cancelOrder(orderId: string, reason?: string) {
   sendOrderStatusEmail(next, "Cancelled");
 }
 
-export function refundOrder(orderId: string, amount?: number, note?: string) {
+export function refundOrder(orderId: string, amount?: number, note?: string, extra?: Partial<RefundRecord>, options: { withPlatformFee?: boolean } = {}) {
   const order = getOrder(orderId);
   if (!order) return;
-  const cap = maxRefundable(order);
+  const cap = maxRefundable(order, options);
   const refundAmount = Math.min(amount ?? cap, cap);
   if (refundAmount <= 0) return;
   const next: Order = withHistory(
@@ -787,7 +1337,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
       ...order,
       paymentStatus: refundAmount + (order.refundAmount ?? 0) >= order.total ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: `RF${Date.now()}`, at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor(), ...extra }],
     },
     "Refunded",
     note ?? `₹${refundAmount}`
@@ -803,6 +1353,84 @@ export function refundOrder(orderId: string, amount?: number, note?: string) {
     template: "refund",
     body: `Dear Guest,\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nA refund of ₹${refundAmount.toLocaleString("en-IN")} has been initiated for order ${order.id} to your original payment method. It reflects within ${days} business days.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
+}
+
+/** Gateway status update for one refund (status, bank RRN/ARN). Earlier refund entries stay as recorded. */
+export function updateRefund(orderId: string, refundId: string, patch: Partial<RefundRecord>) {
+  const order = getOrder(orderId);
+  const current = order?.refunds?.find((refund) => refund.id === refundId);
+  if (!order || !current) return;
+  const changed = patch.status && patch.status !== current.status;
+  const merged = { ...order, refunds: order.refunds!.map((refund) => (refund.id === refundId ? { ...refund, ...patch } : refund)) };
+  const next = changed ? withHistory(merged, `Refund ${patch.status}`, [`₹${current.amount}`, patch.rrn && `RRN ${patch.rrn}`, patch.arn && `ARN ${patch.arn}`].filter(Boolean).join(" · ")) : merged;
+  updateOrderInStore(next);
+  return next;
+}
+
+/** Sends the store-pickup OTP; only once the seller has processed the order. */
+export function sendPickupOtp(order: Order) {
+  if (!pickupOtpReady(order)) return false;
+  sendOtpCode({
+    email: order.deliveryAddress?.email,
+    phone: order.deliveryAddress?.phone,
+    name: order.deliveryAddress?.fullName,
+    code: pickupOtp(order.id),
+    purpose: `store pickup for order ${order.id}`,
+  });
+  return true;
+}
+
+/** Customer paid only the courier charge for a store-pickup order: it becomes a courier delivery, ready to book. */
+export function recordCourierPayment(orderId: string, input: { method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  const upgrade = order?.courierUpgrade;
+  if (!order || !upgrade || upgrade.paidAt) return;
+  const next = withHistory(
+    {
+      ...order,
+      deliveryMode: "delivery",
+      shipping: (order.shipping ?? 0) + upgrade.amount,
+      total: order.total + upgrade.amount,
+      courierChoice: upgrade.rate,
+      courierName: upgrade.rate.courierName,
+      courierUpgrade: { ...upgrade, paidAt: new Date().toISOString(), paymentRef: input.reference },
+    },
+    "Courier charge paid",
+    `Switched from store pickup to ${upgrade.rate.courierName} · ₹${upgrade.amount} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
+}
+
+export function recordReturnChargePayment(orderId: string, input: { method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  const back = order?.returnShipment;
+  if (!order || !back || back.chargePaidAt) return;
+  const next = withHistory(
+    { ...order, returnShipment: { ...back, chargePaidAt: new Date().toISOString(), chargeRef: input.reference } },
+    "Return courier charge paid",
+    `₹${back.charge ?? 0} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
+}
+
+export function recordBalancePayment(orderId: string, input: { method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan || plan.balancePaidAt) return;
+  const next = withHistory(
+    {
+      ...order,
+      paymentStatus: "Paid",
+      paidAt: order.paidAt ?? new Date().toISOString(),
+      preorderPayment: { ...plan, balancePaidAt: new Date().toISOString(), balanceRef: input.reference },
+    },
+    "Balance paid",
+    `Pre-order balance ₹${plan.balance} · ${input.method}${input.reference ? ` · ${input.reference}` : ""}`
+  );
+  updateOrderInStore(next);
+  return next;
 }
 
 export function setPaymentStatus(orderId: string, paymentStatus: Order["paymentStatus"]) {
@@ -829,6 +1457,118 @@ export function recordPayment(orderId: string, input: { method: string; referenc
   );
   updateOrderInStore(next);
   return next;
+}
+
+/** Desk switches a courier order (not yet booked) to collection at the clinic: courier charge comes off the total. */
+export function convertToStorePickup(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order || order.deliveryMode !== "delivery") return "This order is already a store pickup.";
+  if (["Shipped", "Out for Delivery", "Delivered", "Cancelled"].includes(order.status)) return "This order has already left or is closed.";
+  const shipping = order.shipping || 0;
+  const total = Math.round((order.total - shipping) * 100) / 100;
+  const next = withHistory(
+    {
+      ...order,
+      deliveryMode: "store_pickup",
+      shipping: 0,
+      total,
+      courierName: undefined,
+      courierChoice: undefined,
+      preorderPayment: order.preorderPayment
+        ? { ...order.preorderPayment, shippingDue: undefined, balance: Math.max(0, Math.round((total - order.preorderPayment.advance) * 100) / 100) }
+        : undefined,
+    },
+    order.status,
+    `Changed to store pickup by the desk${shipping ? `; courier charge ₹${shipping} removed` : ""}.`
+  );
+  updateOrderInStore(next);
+  const paidFull = order.paymentStatus === "Paid" && shipping > 0;
+  return paidFull
+    ? `Changed to store pickup. The customer paid ₹${shipping} courier charge; refund it from Refunds if needed.`
+    : "Changed to store pickup.";
+}
+
+/** Adds a charge the customer still owes (e.g. courier shown as free by mistake); what they already paid stays recorded, so only the difference is due. */
+/** Shipping shown free by mistake: the customer sees "calculated once packed" until the desk adds the courier charge. */
+export function markShippingDue(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.deliveryMode !== "delivery") return "This is a store pickup order.";
+  if (order.shipping > 0 || order.shippingDue || order.preorderPayment?.shippingDue) return "Shipping is already charged or due.";
+  if (["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status)) return "This order is already sent or closed.";
+  updateOrderInStore(withHistory({ ...order, shippingDue: true }, order.status, "Shipping changed from free to calculated once packed; the courier charge will be added then."));
+  return "Shipping now shows as \"Calculated once packed\". After packing, add the courier charge under Payment → Add extra charge → Courier charge and send the payment link.";
+}
+
+export function addExtraCharge(orderId: string, input: { amount: number; reason: string; kind: "shipping" | "other" }) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.status === "Cancelled") return "This order is cancelled.";
+  const amount = Math.round(Number(input.amount) * 100) / 100;
+  if (!(amount > 0)) return "Enter an amount above ₹0.";
+  const reason = input.reason.trim();
+  if (!reason) return "Enter the reason the customer will see.";
+  const round = (value: number) => Math.round(value * 100) / 100;
+  const total = round(order.total + amount);
+  const plan = order.preorderPayment;
+  const paidSoFar =
+    order.paymentStatus === "Paid"
+      ? order.amountPaid ?? order.total
+      : order.paymentStatus === "Partially Paid"
+        ? order.amountPaid ?? (plan?.advancePaidAt ? plan.advance : 0)
+        : undefined;
+  const next = withHistory(
+    {
+      ...order,
+      total,
+      shipping: input.kind === "shipping" ? round((order.shipping ?? 0) + amount) : order.shipping,
+      shippingDue: input.kind === "shipping" ? undefined : order.shippingDue,
+      extraCharges: [...(order.extraCharges ?? []), { amount, reason, kind: input.kind, at: new Date().toISOString(), by: currentActor() }],
+      paymentStatus: paidSoFar !== undefined && paidSoFar > 0 ? "Partially Paid" : order.paymentStatus,
+      amountPaid: paidSoFar !== undefined && paidSoFar > 0 ? round(paidSoFar) : order.amountPaid,
+      preorderPayment: plan && !plan.balancePaidAt ? { ...plan, balance: round(plan.balance + amount) } : plan,
+    },
+    order.status,
+    `Extra ${input.kind === "shipping" ? "courier charge" : "charge"} ₹${amount} added by the desk: ${reason}.`
+  );
+  updateOrderInStore(next);
+  return paidSoFar
+    ? `Added ₹${amount}. The customer has paid ₹${round(paidSoFar)}, so ₹${round(total - paidSoFar)} is now due; send them the payment link below.`
+    : `Added ₹${amount}. The order total is now ₹${total}.`;
+}
+
+/** Turns a normal order into a pre-order: books not in stock yet are held and the order is not booked with a courier until the desk packs it. */
+export function convertToPreorder(orderId: string, releaseDate?: string) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.preorderPayment || order.items.every((item) => item.preorder)) return "This order is already a pre-order.";
+  if (["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status)) return "This order is already packed, sent or closed.";
+  const items = order.items.map((item) => ({ ...item, preorder: true, releaseDate: releaseDate || item.releaseDate }));
+  const round = (value: number) => Math.round(value * 100) / 100;
+  const settings = getOrderSettings();
+  const balanceWhen = settings.preorderPayment.balanceWhen;
+  const now = new Date().toISOString();
+  let preorderPayment: Order["preorderPayment"] = order.preorderPayment;
+  let money = "already paid in full, nothing more to collect";
+  if (order.paymentStatus === "Partially Paid" && order.amountPaid !== undefined) {
+    const advance = round(order.amountPaid);
+    preorderPayment = { advance, balance: Math.max(0, round(order.total - advance)), balanceWhen, advancePaidAt: order.paidAt || now };
+    money = `₹${advance} already paid is the advance; balance ₹${preorderPayment.balance}`;
+  } else if (order.paymentStatus === "Pending" && order.deliveryMode === "delivery") {
+    const copies = order.items.reduce((sum, item) => sum + item.quantity, 0);
+    const advance = preorderAdvance(order.total, settings, { copies, platformFee: order.platformFee });
+    preorderPayment = { advance, balance: round(order.total - advance), balanceWhen };
+    money = `advance ₹${advance} to pay, then balance ₹${preorderPayment.balance}`;
+  } else if (order.paymentStatus !== "Paid") {
+    money = "payment unchanged";
+  }
+  const next = withHistory(
+    { ...order, items, preorderPayment },
+    order.status,
+    `Changed to a pre-order by the desk${releaseDate ? `; expected ${formatDate(releaseDate)}` : ""}; ${money}.`
+  );
+  updateOrderInStore(next);
+  return `Changed to a pre-order (${money}). It won't be booked with a courier until you pack it.`;
 }
 
 export function patchOrder(orderId: string, update: Partial<Order>, note?: string) {
@@ -895,7 +1635,7 @@ export function createShipment(input: {
   if (!order || order.deliveryMode !== "delivery") return;
 
   const shipment: ShipmentRecord = {
-    id: `SHP${Date.now()}`,
+    id: String(Date.now()),
     orderId: order.id,
     courier: input.courier,
     awb: generateAWB(input.courier),
@@ -922,7 +1662,7 @@ export function createShipment(input: {
 }
 
 export function saveShipmentRecord(shipment: ShipmentRecord) {
-  const list = getShipments().filter((item) => item.id !== shipment.id && item.orderId !== shipment.orderId);
+  const list = getShipments().filter((item) => item.id !== shipment.id && !sameShipmentSlot(item, shipment));
   list.push(shipment);
   writeJSON(SHIPMENTS_KEY, list);
   publishShipment(shipment);
@@ -1006,14 +1746,45 @@ function rupees(value: number) {
   return `₹${Math.round(value).toLocaleString("en-IN")}`;
 }
 
+function logoSrc() {
+  const url = getSettings().logoUrl || "/uploads/site-logo.png";
+  if (/^(https?:|data:)/.test(url) || typeof window === "undefined") return url;
+  return `${window.location.origin}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+function logoImg(cls = "logo") {
+  return `<img class="${cls}" src="${esc(logoSrc())}" alt="" onerror="this.style.display='none'"/>`;
+}
+
+export type LabelSize = "printer" | "4x6" | "a4" | "a5" | "roll";
+const LABEL_SIZE_KEY = "vgmf-label-size";
+export const LABEL_SIZES: { id: LabelSize; label: string }[] = [
+  { id: "printer", label: "Choose paper in print dialog" },
+  { id: "4x6", label: "4×6 in tag (thermal)" },
+  { id: "roll", label: "Paper roll 80 mm" },
+  { id: "a5", label: "A5 sheet" },
+  { id: "a4", label: "A4 sheet" },
+];
+
+export function getLabelSize(): LabelSize {
+  const fallback = (getIntegrations().shipping.labelSize || "4x6") as LabelSize;
+  if (typeof window === "undefined") return fallback;
+  const saved = window.localStorage.getItem(LABEL_SIZE_KEY) as LabelSize | null;
+  return LABEL_SIZES.some((item) => item.id === saved) ? (saved as LabelSize) : fallback;
+}
+
+export function setLabelSize(size: LabelSize) {
+  if (typeof window !== "undefined") window.localStorage.setItem(LABEL_SIZE_KEY, size);
+}
+
 function letterhead() {
   return `<header class="head">
-    <div>
+    <div class="head-brand">${logoImg()}<div>
       <p class="brand">${esc(siteConfig.name)}</p>
       <p class="addr">${esc(siteConfig.address)}</p>
       <p class="addr">Phone ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}</p>
       <p class="addr">Clinic hours: Monday to Thursday, 6:00 PM – 10:00 PM</p>
-    </div>
+    </div></div>
     <div class="mark">VGMF</div>
   </header>`;
 }
@@ -1026,15 +1797,29 @@ function addressBlock(address?: { fullName?: string; phone?: string; line1?: str
 
 function printHtml(title: string, html: string, page = "A4") {
   if (typeof window === "undefined") return;
-  const win = window.open("", "_blank");
+  // A real page of this site, so the browser's print header shows the site address instead of "about:blank".
+  const win = window.open("/print.html", "_blank");
   if (!win) return;
-  const margin = page === "A4" ? "12mm" : "4mm";
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
+  const margin = page === "A4" || page === "A5" || page === "auto" ? "10mm" : "3mm";
+  const pageRule = page === "auto" ? `@page { margin: ${margin}; }` : `@page { size: ${page}; margin: ${margin}; }`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
   <style>
-    @page { size: ${page}; margin: ${margin}; }
+    ${pageRule}
     * { box-sizing: border-box; }
     body { font-family: "Segoe UI", Arial, sans-serif; color: #1c1917; margin: 0; }
     .head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #8F2D2D; padding-bottom: 12px; }
+    .head-brand { display: flex; gap: 12px; align-items: center; }
+    .logo { height: 56px; width: auto; max-width: 160px; object-fit: contain; }
+    .label-logo { height: 34px; width: auto; max-width: 110px; object-fit: contain; background: #fff; border-radius: 6px; padding: 3px; }
+    .label-brand { display: flex; gap: 8px; align-items: center; }
+    .size-a4 .label-sheet { width: 150mm; margin: 0 auto; }
+    .size-a5 .label-sheet { width: 128mm; margin: 0 auto; }
+    .size-printer .label-sheet { max-width: 150mm; margin: 0 auto; }
+    .size-roll { font-size: 11px; }
+    .size-roll .grid { display: block; }
+    .size-roll .box { margin-top: 8px; min-width: 0; }
+    .size-roll .awb { font-size: 18px; }
+    .size-roll svg { max-width: 100%; height: auto; }
     .brand { font-size: 18px; font-weight: 700; color: #6A1F1F; margin: 0; }
     .addr { margin: 2px 0; font-size: 11px; color: #44403c; line-height: 1.45; }
     .mark { font-weight: 800; letter-spacing: 0.14em; color: #8F2D2D; font-size: 13px; }
@@ -1061,60 +1846,251 @@ function printHtml(title: string, html: string, page = "A4") {
     .route b { font-size: 18px; letter-spacing: 0.04em; }
     .meta { font-size: 11px; color: #44403c; margin: 6px 0 0; }
     .check { font-size: 16px; }
-  </style></head><body>${html}</body></html>`);
-  win.document.close();
-  win.focus();
-  win.print();
+    .label-sheet { page-break-inside: avoid; break-inside: avoid; }
+    .size-4x6 { font-size: 10px; line-height: 1.3; }
+    .size-4x6 .label-band { padding: 6px 8px; }
+    .size-4x6 .label-logo { height: 30px; }
+    .size-4x6 .label-body { padding: 6px 8px; }
+    .size-4x6 .awb { font-size: 17px; }
+    .size-4x6 .grid { gap: 6px; margin-top: 6px; }
+    .size-4x6 .box { padding: 5px 7px; min-width: 0; flex: 1 1 0; }
+    .size-4x6 .box.to { flex: 1.35 1 0; font-size: 11px; }
+    .size-4x6 .route { margin-top: 5px; padding: 4px 8px; }
+    .size-4x6 .route b { font-size: 15px; }
+    .size-4x6 table { margin-top: 6px; }
+    .size-4x6 td, .size-4x6 th { padding: 3px 5px; font-size: 10px; }
+    .size-4x6 .foot { margin-top: 6px; padding-top: 4px; font-size: 9px; line-height: 1.35; }
+    .size-4x6 svg { max-width: 100%; height: 44px; }
+    .agg { border: 2px solid #000; }
+    .agg-row { display: flex; border-bottom: 1.5px solid #000; }
+    .agg-row.center { text-align: center; }
+    .agg-row.center svg { margin: 0 auto; }
+    .agg-cell { flex: 1 1 0; padding: 6px 8px; border-right: 1.5px solid #000; font-size: 11px; line-height: 1.4; }
+    .agg-cell:last-child { border-right: none; }
+    .agg-cell.grow { flex: 2 1 0; }
+    .agg-cell.side { flex: 1.1 1 0; }
+    .agg .to-name { font-size: 14px; }
+    .agg .pin { font-size: 14px; letter-spacing: 0.04em; }
+    .agg .courier { font-size: 14px; }
+    .agg .routing { font-size: 18px; letter-spacing: 0.06em; }
+    .agg .pay-mode { font-size: 18px; letter-spacing: 0.08em; }
+    .agg table { margin-top: 0; }
+    .agg td, .agg th { border-bottom: 1px solid #000; }
+    .agg .qr { display: block; margin-top: 4px; }
+    .agg-foot { display: flex; gap: 8px; align-items: center; padding: 6px 8px; font-size: 9px; line-height: 1.35; }
+    .size-4x6 .agg-cell { padding: 4px 6px; font-size: 10px; }
+    .size-4x6 .agg .pay-mode, .size-4x6 .agg .routing { font-size: 15px; }
+    .mono .label-sheet, .mono .label-sheet * { color: #000 !important; }
+    .mono .label-sheet { border: 2px solid #fff; background: #fff; }
+    .mono .label-sheet .label-band { background: #fff; border-bottom: 1.5px solid #000; }
+    .mono .label-sheet .label-band span { opacity: 1; }
+    .mono .label-sheet .label-logo { filter: grayscale(1) contrast(1.4); background: #fff; }
+    .mono .label-sheet .route { border: 1px solid #fff; border-top: 1px solid #000; border-bottom: 1px solid #000; border-radius: 0; }
+    .mono .label-sheet .box { border: 1px solid #fff; border-radius: 0; padding-left: 0; }
+    .mono .label-sheet th { background: #fff; border-bottom: 1px solid #000; }
+    .mono .label-sheet td { border-bottom: 1px solid #fff; }
+    .mono .label-sheet .foot { border-top: 1px solid #000; }
+    .mono .label-sheet .label { color: #000; font-weight: 700; }
+    .label-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .label-head > div { flex: 1; min-width: 0; }
+    .label-sheet svg.qr { width: 64px !important; height: 64px !important; flex: none; }
+    .label-sheet .pay { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; padding: 6px 0; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; }
+    .label-sheet .pay b { font-size: 18px; letter-spacing: 0.08em; }
+    .label-sheet .pay span { font-size: 13px; font-weight: 700; text-align: right; }
+  </style></head><body>${html}<script>
+    (function () {
+      var printed = false;
+      function fit() {
+        var sheet = document.querySelector(".label-sheet");
+        var pageMm = ${JSON.stringify(labelPageMm(page))};
+        if (!sheet || !pageMm) return;
+        var px = 96 / 25.4;
+        var room = pageMm[1] * px - 2;
+        var width = pageMm[0] * px;
+        sheet.style.width = width + "px";
+        var height = sheet.getBoundingClientRect().height;
+        if (height > room) sheet.style.zoom = String(Math.floor((room / height) * 1000) / 1000);
+      }
+      function go() {
+        if (printed) return;
+        printed = true;
+        fit();
+        window.focus();
+        window.print();
+      }
+      var images = Array.prototype.slice.call(document.images);
+      var pending = images.filter(function (img) { return !img.complete; });
+      if (!pending.length) return setTimeout(go, 50);
+      var left = pending.length;
+      pending.forEach(function (img) {
+        var done = function () { left -= 1; if (left <= 0) go(); };
+        img.addEventListener("load", done);
+        img.addEventListener("error", done);
+      });
+      setTimeout(go, 3000);
+    })();
+  </script></body></html>`;
+  writeWhenReady(win, doc, title);
+}
+
+/** Waits for /print.html to load in the new window, then puts the printable page into it. */
+function writeWhenReady(win: Window, doc: string, title: string) {
+  const started = Date.now();
+  const write = () => {
+    let ready = false;
+    try {
+      ready = win.location.pathname === "/print.html" && win.document.readyState === "complete";
+    } catch {
+      ready = false;
+    }
+    if (!ready && Date.now() - started < 6000) {
+      window.setTimeout(write, 60);
+      return;
+    }
+    const parsed = new DOMParser().parseFromString(doc, "text/html");
+    win.document.title = title;
+    win.document.head.innerHTML = parsed.head.innerHTML;
+    win.document.body.innerHTML = parsed.body.innerHTML;
+    parsed.body.querySelectorAll("script").forEach((source) => {
+      const script = win.document.createElement("script");
+      script.textContent = source.textContent;
+      win.document.body.appendChild(script);
+    });
+  };
+  write();
+}
+
+export type LabelColour = "bw" | "colour";
+const LABEL_COLOUR_KEY = "vgmf_label_colour";
+
+export function getLabelColour(): LabelColour {
+  if (typeof window === "undefined") return "bw";
+  return window.localStorage.getItem(LABEL_COLOUR_KEY) === "colour" ? "colour" : "bw";
+}
+
+export function setLabelColour(value: LabelColour) {
+  if (typeof window !== "undefined") window.localStorage.setItem(LABEL_COLOUR_KEY, value);
+}
+
+function qrSvg(text: string, px = 68) {
+  try {
+    const qr = QRCode.create(text, { errorCorrectionLevel: "M" });
+    const size = qr.modules.size;
+    let path = "";
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) if (qr.modules.get(y, x)) path += `M${x + 2} ${y + 2}h1v1h-1z`;
+    }
+    return `<svg class="qr" xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${size + 4} ${size + 4}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+  } catch {
+    return "";
+  }
+}
+
+function labelPageMm(page: string): [number, number] | null {
+  const margin = page === "A4" || page === "A5" ? 10 : 3;
+  const sizes: Record<string, [number, number]> = { "100mm 150mm": [100, 150], "80mm 240mm": [80, 240] };
+  const size = sizes[page];
+  return size ? [size[0] - margin * 2, size[1] - margin * 2] : null;
 }
 
 export function printShippingLabel(
   shipment: ShipmentRecord,
-  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string }
+  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string },
+  size: LabelSize = getLabelSize(),
+  colour: LabelColour = getLabelColour()
 ) {
   const to = shipment.toAddress;
+  // Booked through an aggregator: the pickup address registered with it is the sender and return address.
+  const pickup = getIntegrations().shipping.pickup;
+  const viaAggregator = Boolean(shipment.provider && !["manual", "self"].includes(String(shipment.provider)) && pickup?.line1);
+  const fromName = viaAggregator ? pickup.contactName || pickup.nickname || siteConfig.name : siteConfig.name;
+  const fromAddress = viaAggregator ? [pickup.line1, pickup.line2, pickup.city, pickup.state, pickup.pincode].filter(Boolean).join(", ") : siteConfig.address;
+  const fromPhone = viaAggregator ? pickup.phone || siteConfig.phone : siteConfig.phone;
   const awb = details?.awb || shipment.awb;
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";
   const hub = details?.destination || shipment.destinationHub || "";
-  const html = `<div class="label-sheet">
-    <div class="label-band">
-      <div>
-        <b>VGMF</b>
-        <div>${esc(siteConfig.name)}</div>
+  const order = getOrder(shipment.orderId);
+  const cod = Boolean(order && order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid");
+  const collect = cod && order ? Math.max(0, order.total - (order.storeCreditUsed ?? 0)) : 0;
+  // Laid out like the Shiprocket / Nimbuspost / GoSwift 4x6 labels: Ship to, courier + AWB, parcel, shipped by, order, items.
+  const shipping = getIntegrations().shipping;
+  const box = order?.parcel ?? shipping.packageCm;
+  const weight = order?.weightKg || shipping.defaultWeightKg;
+  const priced = shipment.items.map((item) => {
+    const line = order?.items.find((row) => (item.sku && row.sku === item.sku) || row.bookId === item.sku || row.title === item.title);
+    return { ...item, price: line?.price ?? 0, batch: line?.batchNo ?? "" };
+  });
+  const value = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
+    <div class="agg-row">
+      <div class="agg-cell grow to">
+        <p class="label">Ship to</p>
+        <strong class="to-name">${esc(to.fullName)}</strong><br/>
+        ${esc([to.line1, to.landmark].filter(Boolean).join(", "))}<br/>
+        ${esc([to.city, to.state].filter(Boolean).join(", "))}<br/>
+        <b class="pin">PIN ${esc(to.pincode)}</b><br/>
+        Mobile: ${esc(to.phone)}
       </div>
-      <span>Shipping label</span>
-    </div>
-    <div class="label-body">
-      <p class="label">${esc(courier)}</p>
-      <p class="awb">${esc(awb)}</p>
-      ${barcodeSvg(awb, { height: 56, module: 1.6 })}
-      <p class="meta">Order ${esc(shipment.orderId)} · ${esc(formatDate(shipment.generatedAt))}</p>
-      ${
-        routing || hub
-          ? `<div class="route"><div><p class="label">Routing</p><b>${esc(routing || "—")}</b></div><div><p class="label">Hub</p><b>${esc(hub || "—")}</b></div></div>`
-          : ""
-      }
-      <div class="grid">
-        <div class="box">
-          <p class="label">From</p>
-          <strong>${esc(siteConfig.name)}</strong><br/>
-          ${esc(siteConfig.address)}<br/>
-          ${esc(siteConfig.phone)}
-        </div>
-        <div class="box">
-          <p class="label">Deliver to</p>
-          <strong>${esc(to.fullName)}</strong><br/>
-          ${esc([to.line1, to.landmark, to.city, to.state, to.pincode].filter(Boolean).join(", "))}<br/>
-          ${esc(to.phone)}
-        </div>
+      <div class="agg-cell side">
+        <p class="label">Courier</p>
+        <b class="courier">${esc(courier)}</b>
+        ${routing ? `<p class="label" style="margin-top:6px">Routing code</p><b class="routing">${esc(routing)}</b>` : ""}
+        ${hub ? `<p class="meta">Hub ${esc(hub)}</p>` : ""}
       </div>
-      <table><tr><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
-      ${shipment.items.map((item) => `<tr><td>${esc(item.sku)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`).join("")}
-      </table>
-      <p class="foot">If undelivered, return to the clinic address above. Handle books with care. Do not bend.</p>
     </div>
-  </div>`;
-  printHtml(`Label ${awb}`, html, "100mm 150mm");
+    <div class="agg-row center">
+      <div class="agg-cell grow">
+        <p class="label">AWB no.</p>
+        ${barcodeSvg(awb, { height: 56, module: 1.6, format: "code128" })}
+        <p class="awb">${esc(awb)}</p>
+      </div>
+    </div>
+    <div class="agg-row">
+      <div class="agg-cell"><p class="label">Dimensions (cm)</p><b>${esc(`${box.length} × ${box.breadth} × ${box.height}`)}</b></div>
+      <div class="agg-cell"><p class="label">Weight</p><b>${esc(weight)} kg</b></div>
+      <div class="agg-cell pay-cell"><p class="label">Payment</p><b class="pay-mode">${cod ? "COD" : "PREPAID"}</b><br/>${cod ? `Collect ${esc(rupees(collect))}` : "Do not collect cash"}</div>
+    </div>
+    <div class="agg-row">
+      <div class="agg-cell grow">
+        <p class="label">Shipped by (if undelivered, return to)</p>
+        <strong>${esc(fromName)}</strong><br/>
+        ${esc(fromAddress)}<br/>
+        ${esc(fromPhone)}
+      </div>
+      <div class="agg-cell side">
+        <p class="label">Order no.</p>
+        <b>${esc(shipment.orderId)}</b>
+        <p class="meta">Order date ${esc(formatDate(order?.date || shipment.generatedAt))}</p>
+        <p class="meta">Invoice value ${esc(rupees(value || order?.total || 0))}</p>
+      </div>
+    </div>
+    <div class="agg-row center">
+      <div class="agg-cell grow"><p class="label">Order barcode</p>${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
+      <div class="agg-cell side" style="text-align:center"><p class="label">Order QR</p>${qrSvg(shipment.orderId, 100)}</div>
+    </div>
+    <table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr>
+    ${priced
+      .map(
+        (item) =>
+          `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(item.sku)}</td><td class="right">${esc(item.quantity)}</td><td class="right">${esc(rupees(item.price))}</td><td class="right">${esc(rupees(item.price * item.quantity))}</td></tr>`
+      )
+      .join("")}
+    <tr><td colspan="4" class="right"><b>Total</b></td><td class="right"><b>${esc(rupees(value))}</b></td></tr>
+    </table>
+    <div class="agg-foot">
+      <span>${logoImg("label-logo")}</span>
+      <span>${esc(siteConfig.name)} · ${esc(siteConfig.phone)} · Handle books with care. Do not bend.<br/>This is a computer-generated label and does not need a signature.</span>
+    </div>
+  </div></div>`;
+  const page = size === "printer" ? "auto" : size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
+  printHtml(`Label ${awb}`, html, page);
+}
+
+/** Item value before discount, chosen so subtotal − discount + charges always equals what the order charged. */
+function invoiceSubtotal(order: Order) {
+  const extras = (order.extraCharges ?? []).filter((extra) => extra.kind === "other").reduce((sum, extra) => sum + extra.amount, 0);
+  return Math.round((order.total + (order.discount || 0) - (order.gst || 0) - (order.platformFee || 0) - (order.shipping || 0) + (order.storeCreditUsed || 0) - extras) * 100) / 100;
 }
 
 export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
@@ -1130,7 +2106,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     )
     .join("");
   const html = `${letterhead()}
-  <h1>Tax invoice</h1>
+  <h1>Invoice</h1>
   <p class="sub">Invoice ${esc(order.id)} · ${esc(formatDate(order.date))} · Payment ${esc(order.paymentStatus)}${order.paymentMethod ? ` · ${esc(order.paymentMethod)}` : ""}</p>
   <div class="grid">
     <div class="box"><p class="label">Bill to</p>${addressBlock(order.deliveryAddress)}</div>
@@ -1138,7 +2114,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
       <p class="label">${order.deliveryMode === "store_pickup" ? "Store pickup" : "Shipment"}</p>
       ${
         order.deliveryMode === "store_pickup"
-          ? `Collect from the clinic.<br/>Pickup OTP ${esc(pickupOtp(order.id))}`
+          ? `Collect from the clinic.${pickupOtpReady(order) && order.status !== "Delivered" ? `<br/>Pickup OTP ${esc(pickupOtp(order.id))}` : ""}`
           : shipment
             ? `${esc(shipment.courier)}<br/>AWB ${esc(shipment.awb)}`
             : "Packed at the clinic. AWB is printed after the courier is booked."
@@ -1150,10 +2126,12 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     ${itemsHtml}
   </table>
   <table class="totals">
-    <tr><td>Subtotal</td><td class="right">${rupees(order.subtotal)}</td></tr>
-    <tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>
-    <tr><td>GST</td><td class="right">${rupees(order.gst)}</td></tr>
-    <tr><td>Shipping</td><td class="right">${rupees(order.shipping)}</td></tr>
+    <tr><td>Subtotal</td><td class="right">${rupees(invoiceSubtotal(order))}</td></tr>
+    ${(order.extraCharges ?? []).filter((extra) => extra.kind === "other").map((extra) => `<tr><td>${esc(extra.reason)}</td><td class="right">${rupees(extra.amount)}</td></tr>`).join("")}
+    ${order.discount ? `<tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>` : ""}
+    ${order.gst ? `<tr><td>GST</td><td class="right">${rupees(order.gst)}</td></tr>` : ""}
+    ${order.platformFee ? `<tr><td>Platform fee</td><td class="right">${rupees(order.platformFee)}</td></tr>` : ""}
+    <tr><td>Shipping</td><td class="right">${order.shipping ? rupees(order.shipping) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</td></tr>
     ${order.storeCreditUsed ? `<tr><td>Store credit</td><td class="right">−${rupees(order.storeCreditUsed)}</td></tr>` : ""}
     <tr class="grand"><td>Total</td><td class="right">${rupees(order.total)}</td></tr>
   </table>
@@ -1182,27 +2160,103 @@ export function printPosReceipt(order: Order) {
 }
 
 export function printPackagingSlip(order: Order) {
-  const title = `Packaging slip ${order.id}`;
-  const html = `${letterhead()}
-  <h1>Packaging slip</h1>
-  <p class="sub">Order ${esc(order.id)} · ${esc(formatDate(order.date))} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
+  printHtml(`Packaging slip ${order.id}`, `${pagedFooterStyle()}${packagingSlipHtml(order)}`);
+}
+
+/** Foundation footer and "Page X of Y" on every printed page (Chrome page margin boxes). */
+function pagedFooterStyle() {
+  const foot = `${siteConfig.name} · ${siteConfig.address} · ${siteConfig.phone} · ${siteConfig.email}`.replace(/["\\]/g, "");
+  return `<style>
+    @page { margin: 12mm 10mm 16mm;
+      @bottom-left { content: "${foot}"; font-size: 8px; color: #57534e; }
+      @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #1c1917; }
+    }
+    .plist { width: 100%; border-collapse: collapse; margin-top: 0; }
+    .plist thead { display: table-header-group; }
+    .plist tfoot { display: table-footer-group; }
+    .plist tr { page-break-inside: avoid; break-inside: avoid; }
+    .plist .hd td { border: none; padding: 0 0 10px; }
+    .plist .ft td { border: none; padding: 10px 0 0; font-size: 10px; color: #57534e; border-top: 1px solid #e7e5e4; }
+    .tag-pre { display: inline-block; background: #fde68a; color: #78350f; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 4px; }
+  </style>`;
+}
+
+/** One table of every chosen order, like a student list: Foundation header and footer repeat on each page. */
+function packingListHtml(orders: Order[]) {
+  const qty = orders.reduce((sum, order) => sum + order.items.reduce((count, item) => count + item.quantity, 0), 0);
+  const rows = orders
+    .map((order, index) => {
+      const address = order.deliveryAddress;
+      const place = order.deliveryMode === "store_pickup" ? "Store pickup" : [address?.city, address?.state, address?.pincode].filter(Boolean).join(", ");
+      const items = order.items.map((item) => `${esc(item.title)} × ${esc(item.quantity)}${item.sku ? ` <span class="sub">(${esc(item.sku)})</span>` : ""}`).join("<br/>");
+      const type = order.preorderPayment ? `<span class="tag-pre">PRE-ORDER</span>` : "Normal";
+      return `<tr><td>${index + 1}</td><td><strong>${esc(order.id)}</strong><br/><span class="sub">${esc(formatDate(order.date))}</span><br/>${type}</td><td>${esc(address?.fullName || "Customer")}<br/><span class="sub">${esc(address?.phone || "")}</span></td><td>${esc(place)}</td><td>${items}</td><td class="right">${order.items.reduce((count, item) => count + item.quantity, 0)}</td><td class="check">☐</td></tr>`;
+    })
+    .join("");
+  return `<table class="plist">
+    <thead>
+      <tr class="hd"><td colspan="7">${letterhead()}<h1>Packing list</h1><p class="sub">${orders.length} order${orders.length === 1 ? "" : "s"} · ${qty} item${qty === 1 ? "" : "s"} · printed ${esc(formatDate(new Date().toISOString()))}</p></td></tr>
+      <tr><th>#</th><th>Order</th><th>Customer</th><th>Deliver to</th><th>Items</th><th class="right">Qty</th><th>Packed</th></tr>
+    </thead>
+    <tfoot><tr class="ft"><td colspan="7">${esc(siteConfig.name)} · ${esc(siteConfig.address)} · ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}<br/>Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________</td></tr></tfoot>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+/** The chosen orders as a packing list first, then each order's packaging slip on its own page. */
+/** "individual" = one slip per order, "bulk" = the combined packing list, "both" = list then slips. */
+export function printPackagingSlips(orders: Order[], mode: "individual" | "bulk" | "both" = "both") {
+  if (orders.length === 0) return;
+  const list = mode === "individual" ? "" : `<section>${packingListHtml(orders)}</section>`;
+  const slips =
+    mode === "bulk"
+      ? ""
+      : orders
+          .map((order, index) => `<section style="${list || index > 0 ? "page-break-before:always;break-before:page" : ""}">${packagingSlipHtml(order)}</section>`)
+          .join("");
+  const title = mode === "bulk" ? "Packing list" : "Packaging slips";
+  printHtml(`${title} (${orders.length})`, `${pagedFooterStyle()}${list}${slips}`);
+}
+
+function packagingSlipHtml(order: Order) {
+  const slipBooks = getLiveBooks();
+  const orderBooks = order.items.map((item) => slipBooks.find((row) => row.id === item.bookId));
+  const packIn = Array.from(new Set(orderBooks.map((book) => book?.packIn?.trim()).filter((value): value is string => Boolean(value)))).join(" + ");
+  const packingNotes = Array.from(new Set(orderBooks.map((book) => book?.packingNote?.trim()).filter((value): value is string => Boolean(value))));
+  return `${letterhead()}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+    <div>
+      <h1>Packaging slip</h1>
+      <p class="sub">Order ${esc(order.id)} · ${esc(formatDate(order.date))} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</p>
+      <p class="sub"><strong>Picker:</strong> order code, then each item's product code and SKU. <strong>Packer:</strong> box code, order code, each item's SKU (and ISBN for books), packing photos, then confirm the items match.</p>
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin:8px 0">
+    <div style="text-align:center"><p class="label">Box code (packer step 1)</p>${barcodeSvg(packingBoxCode(order.id), { height: 64, module: 1.5, format: "code128" })}</div>
+    <div style="text-align:center"><p class="label">Order code (picker step 1 · packer step 2)</p>${barcodeSvg(order.id, { height: 64, module: 1.6, format: "code128" })}</div>
+    <div style="text-align:center"><p class="label">Order QR</p>${qrSvg(order.id, 110)}</div>
+  </div>
   <div class="grid">
     <div class="box"><p class="label">Customer</p>${addressBlock(order.deliveryAddress)}</div>
     <div class="box">
       <p class="label">Pack in</p>
-      <strong>${esc(order.plan?.packagingLabel ?? "Standard cardboard box")}</strong>
-      <p class="sub">Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside.</p>
+      <strong>${esc(packIn || order.plan?.packagingLabel || "Standard cardboard box")}</strong>
+      ${packingNotes.length ? packingNotes.map((note) => `<p class="sub">${esc(note)}</p>`).join("") : `<p class="sub">Tick each line as you pack it. Seal the parcel and attach the shipping label on the outside.</p>`}
     </div>
   </div>
-  <table><tr><th></th><th>SKU</th><th>Title</th><th class="right">Qty</th></tr>
+  <table><tr><th></th><th>Scan this barcode</th><th>Title / codes</th><th class="right">Qty</th></tr>
   ${order.items
-    .map(
-      (item) =>
-        `<tr><td class="check">☐</td><td>${esc(item.sku || item.bookId)}</td><td>${esc(item.title)}</td><td class="right">${esc(item.quantity)}</td></tr>`
-    )
+    .map((item) => {
+      const book = slipBooks.find((row) => row.id === item.bookId);
+      const sku = item.sku || book?.sku || "";
+      const product = book?.barcode || book?.productCode || "";
+      const bars = [product && ["Product code", product], sku && ["SKU", sku], book?.isbn && book.isbn !== product && ["ISBN", book.isbn]].filter(Boolean) as string[][];
+      const scanCell = (bars.length ? bars : [["Code", item.bookId]]).map(([label, value]) => `<div style="margin-bottom:4px"><span class="sub">${esc(label)}</span>${barcodeSvg(value, { height: 46, module: 1.3, format: label === "SKU" || label === "Code" ? "code128" : undefined })}</div>`).join("");
+      const codes = [sku && `SKU ${sku}`, book?.isbn && `ISBN ${book.isbn}`, book?.barcode && `Barcode ${book.barcode}`, book?.productCode && `Code ${book.productCode}`, (item.batchNo || book?.batchNo) && `Batch ${item.batchNo || book?.batchNo}`].filter(Boolean).join(" · ");
+      return `<tr><td class="check">☐</td><td>${scanCell}</td><td><strong>${esc(item.title)}</strong><br/><span class="sub">${esc(codes)}</span></td><td class="right">${esc(item.quantity)}</td></tr>`;
+    })
     .join("")}</table>
   <p class="foot">Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________<br/>Pack, seal, and attach the shipping label. Then book the courier pickup, or hold the parcel for store pickup.</p>`;
-  printHtml(title, html);
 }
 
 /* ---------------- Notifications ---------------- */
@@ -1210,6 +2264,9 @@ export function printPackagingSlip(order: Order) {
 export function getOutbox(): OutboxEmail[] {
   return getNotifications();
 }
+
+/** Automatic customer mails that a desk change must not trigger; links, labels and replies the desk sends on purpose still go. */
+const DESK_SILENT_TEMPLATES = new Set(["order-status", "order-placed", "store-credit", "refund", "shipment-booked"]);
 
 export function sendEmail(input: {
   to: string;
@@ -1220,7 +2277,9 @@ export function sendEmail(input: {
   name?: string;
   params?: string[];
   replyTo?: string;
+  fromName?: string;
 }) {
+  if (DESK_SILENT_TEMPLATES.has(input.template) && isPortalRole(getSession()?.role)) return;
   return queueNotification({
     ...input,
     replyTo: input.replyTo || staffReplyTo(),
@@ -1251,6 +2310,7 @@ export function sendPeopleEmail(recipients: User[], subject: string, body: strin
   const title = subject.trim();
   if (!title || !text || recipients.length === 0) return 0;
   const replyTo = staffReplyTo();
+  const fromName = senderName();
   for (const account of recipients) {
     const name = displayName(account, true) || account.firstName || "there";
     sendEmail({
@@ -1261,6 +2321,7 @@ export function sendPeopleEmail(recipients: User[], subject: string, body: strin
       template: "custom",
       body: text.split("{name}").join(name),
       replyTo,
+      fromName,
     });
   }
   return recipients.length;
@@ -1271,8 +2332,9 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
   const phone = order.deliveryAddress?.phone;
   if (!to && !phone) return;
   const name = order.deliveryAddress?.fullName ?? "Customer";
+  // The server emails each stage with full order and payment details (order-stage-mail).
   sendEmail({
-    to,
+    to: "",
     phone,
     name,
     params: [name, order.id, status],
@@ -1280,7 +2342,7 @@ export function sendOrderStatusEmail(order: Order, status: OrderStatus) {
     template: "order-status",
     body: `Dear ${name},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\n${order.replacementOf ? `Your replacement for order ${order.replacementOf} (${order.id}) is now ${status}.` : `Your order ${order.id} is now ${status}.`}${order.trackingId ? `\nTracking: ${order.courierName ?? ""} ${order.trackingId}` : ""}\n\nFollow each step in My Orders.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
-  const ordersHref = order.replacementOf ? `/account/orders#${order.replacementOf}` : "/account/orders";
+  const ordersHref = order.replacementOf ? `/account/orders/${encodeURIComponent(order.replacementOf)}` : "/account/orders";
   if (to) {
     pushInbox({
       audience: "customer",
@@ -1481,6 +2543,7 @@ export function addTicket(input: {
   const list = getTickets();
   list.push(ticket);
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
   sendEmail({
     to: ticket.email,
     phone: ticket.phone,
@@ -1516,6 +2579,7 @@ export function assignTicket(id: string, assignedTo: string) {
   ticket.updatedAt = new Date().toISOString();
   if (ticket.status === "Open" && assignedTo) ticket.status = "In Progress";
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
   return ticket;
 }
 
@@ -1527,6 +2591,7 @@ export function respondToTicket(id: string, from: string, text: string) {
   if (ticket.status === "Open") ticket.status = "In Progress";
   ticket.updatedAt = new Date().toISOString();
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
   sendEmail({
     to: ticket.email,
     subject: `Update on your ticket ${ticket.id}`,
@@ -1543,6 +2608,19 @@ export function respondToTicket(id: string, from: string, text: string) {
   });
 }
 
+/** A customer's follow-up on their own ticket; reopens it if it was resolved. */
+export function customerReplyToTicket(id: string, from: string, text: string) {
+  const list = getTickets();
+  const ticket = list.find((t) => t.id === id);
+  if (!ticket || !text.trim()) return;
+  const at = new Date().toISOString();
+  ticket.responses.push({ at, from, text: text.trim() });
+  if (ticket.status === "Resolved" || ticket.status === "Closed") ticket.status = "Open";
+  ticket.updatedAt = at;
+  writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
+}
+
 export function updateTicketStatus(id: string, status: SupportTicket["status"]) {
   const list = getTickets();
   const ticket = list.find((t) => t.id === id);
@@ -1550,6 +2628,7 @@ export function updateTicketStatus(id: string, status: SupportTicket["status"]) 
   ticket.status = status;
   ticket.updatedAt = new Date().toISOString();
   writeJSON(TICKETS_KEY, list);
+  pushTicket(ticket);
 }
 
 export function getFaqs(): FAQItem[] {

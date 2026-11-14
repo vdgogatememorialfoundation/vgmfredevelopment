@@ -1,5 +1,7 @@
 "use client";
 
+import { checkPromoCode, promoDiscount, type PromoRule } from "@/lib/promotions";
+import BulkOrderNote from "@/components/store/BulkOrderNote";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -18,19 +20,21 @@ import {
   getEstimatedDeliveryDate,
   generateOrderId,
   getOrders,
-  pickupOtp,
   saveOrder,
   clearCart,
 } from "@/lib/store";
 import { storeConfig } from "@/lib/constants";
-import { checkCart, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
-import { shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
-import { fetchCourierRates } from "@/lib/shipping-client";
+import { canPreorder, preorderDeliveryDate } from "@/lib/product-data";
+import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
+import { customerOrderPolicyCopy, preorderAdvance, preorderDatesHidden, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
+import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
+import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
 import { printGstInvoice } from "@/lib/gst-invoice";
-import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, sendEmail } from "@/lib/admin-store";
+import { adjustStoreCredit, ensureCustomerAccount, getStoreCredit, notifyStaffOfOrder, sendEmail } from "@/lib/admin-store";
 import { commitStockForOrder } from "@/lib/product-data";
 import { useLiveBooks, useOrderSettings } from "@/lib/use-cms";
+import { beep } from "@/lib/scan-beep";
 import type { CourierRate, DeliveryAddress, Order, OrderItem } from "@/types";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import Glyph from "@/components/store/Glyph";
@@ -41,8 +45,17 @@ import { SavedCardTiles } from "@/components/account/SavedCards";
 import { saveAddress, useSavedAddresses, useSavedCards, brandLabel } from "@/lib/account-wallet";
 import { formatAddressLine, isIndia, isValidPhone, isValidPostal } from "@/lib/geo";
 import { getPlatformCountries, isCountryEnabled } from "@/lib/platform-countries";
+import { customerCourierRates } from "@/lib/checkout-couriers";
 
-type CourierOption = CourierRate & { key: string; deliverBy: string };
+const CHECKOUT_MINUTES = 10;
+
+type CourierOption = CourierRate & { key: string; deliverBy: string; dayLabel?: string; express: boolean };
+
+/** The courier's own delivery date, shown like our estimates (e.g. 8 Nov 2026). */
+function courierDate(value?: string) {
+  const at = value ? Date.parse(value) : NaN;
+  return Number.isNaN(at) ? "" : new Date(at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+}
 
 type Step = "address" | "review" | "payment" | "success";
 
@@ -69,7 +82,7 @@ export default function CheckoutClient() {
     : !orderSettings.pickupEnabled
       ? "delivery"
       : chosenMode;
-  const [payMethod, setPayMethod] = useState<"online" | "cod" | ReadyGateway["id"]>("online");
+  const [payMethod, setPayMethod] = useState<"online" | "cod" | "store" | ReadyGateway["id"]>("online");
   const [hostedGateways, setHostedGateways] = useState<ReadyGateway[]>([]);
   const [liveRates, setLiveRates] = useState<{ pincode: string; rates: CourierRate[] } | null>(null);
   const [loadingRates, setLoadingRates] = useState(false);
@@ -78,13 +91,64 @@ export default function CheckoutClient() {
     fullName: user ? `${user.firstName} ${user.lastName}`.trim() : "",
     email: user?.email ?? "",
   });
-  const [courierId, setCourierId] = useState("");
+  const [courierId] = useState("");
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const processingRef = useRef(false);
+  useEffect(() => {
+    processingRef.current = processing;
+  }, [processing]);
+  useEffect(() => {
+    const key = "vgmf_checkout_deadline";
+    if (step === "success") {
+      window.sessionStorage.removeItem(key);
+      beep("delivered");
+      return;
+    }
+    const fresh = () => window.sessionStorage.setItem(key, String(Date.now() + CHECKOUT_MINUTES * 60_000));
+    if (Number(window.sessionStorage.getItem(key) || 0) <= Date.now()) fresh();
+    const tick = () => {
+      const left = Math.round((Number(window.sessionStorage.getItem(key) || 0) - Date.now()) / 1000);
+      if (left <= 0 && !processingRef.current && !new URLSearchParams(window.location.search).get("orderId")) {
+        window.clearInterval(timer);
+        window.sessionStorage.removeItem(key);
+        let pendingId = "";
+        try {
+          pendingId = (JSON.parse(window.sessionStorage.getItem(PENDING_CHECKOUT) || "null") as Order | null)?.id || "";
+        } catch {}
+        window.sessionStorage.removeItem(PENDING_CHECKOUT);
+        if (pendingId) {
+          void fetch("/api/payments/hosted", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "expire", orderId: pendingId }),
+            keepalive: true,
+          }).catch(() => {});
+        }
+        window.sessionStorage.setItem("vgmf_checkout_expired", "1");
+        window.location.assign("/cart");
+        return;
+      }
+      setSecondsLeft(Math.max(0, left));
+    };
+    const first = window.setTimeout(tick, 0);
+    const timer = window.setInterval(tick, 1000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
+  }, [step]);
   const [holdingNote, setHoldingNote] = useState("");
   const [razorpayHold, setRazorpayHold] = useState("");
   const [orderId, setOrderId] = useState("");
+  const [placedEta, setPlacedEta] = useState("");
   const [useCredit, setUseCredit] = useState(false);
+  const [promo, setPromo] = useState<PromoRule | null>(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoNote, setPromoNote] = useState("");
+  const [promoBusy, setPromoBusy] = useState(false);
   const seededRef = useRef(false);
   const addressSeeded = useRef(false);
   const paymentReturn = useRef("");
@@ -239,22 +303,26 @@ export default function CheckoutClient() {
   const cartKey = rows.map(({ item }) => `${item.bookId}x${item.quantity}`).join(",");
   const cartValue = rows.reduce((sum, { item, book }) => sum + book.price * item.quantity, 0);
   const cartUnits = rows.reduce((sum, { item }) => sum + item.quantity, 0);
+  const preorderBook = rows.find(({ book }) => canPreorder(book))?.book;
+  const hasPreorder = Boolean(preorderBook);
 
   useEffect(() => {
-    if (deliveryMode !== "delivery" || !pincodeValid || !domestic || !orderSettings.showCourierChoice) return;
+    if (deliveryMode !== "delivery" || !pincodeValid || !domestic || !orderSettings.showCourierChoice || hasPreorder) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setLoadingRates(true);
       try {
         const result = await fetchCourierRates({
           deliveryPincode: address.pincode,
-          weightKg: Math.max(0.5, cartUnits * 0.5),
+          weightKg: orderWeightKg({
+            items: cartKey.split(",").map((part) => ({ bookId: part.split("x")[0], quantity: Number(part.split("x")[1]) || 1 })) as Order["items"],
+          }),
           declaredValue: cartValue,
           bookIds: cartKey.split(",").map((part) => part.split("x")[0]),
         });
         if (!cancelled) setLiveRates({ pincode: address.pincode, rates: result.rates });
       } catch {
-        if (!cancelled) setLiveRates(null);
+        if (!cancelled) setLiveRates({ pincode: address.pincode, rates: [] });
       } finally {
         if (!cancelled) setLoadingRates(false);
       }
@@ -263,21 +331,27 @@ export default function CheckoutClient() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, cartKey, cartValue, cartUnits]);
+  }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, hasPreorder, cartKey, cartValue, cartUnits]);
 
   const courierOptions: CourierOption[] =
     liveRates && liveRates.pincode === address.pincode
-      ? liveRates.rates.map((rate) => ({
-          ...rate,
-          key: `${rate.provider}:${rate.courierId}`,
-          deliverBy: getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
-        }))
+      ? customerCourierRates(liveRates.rates, orderSettings)
+        .map((rate) => {
+          const samePincode = address.pincode.replace(/\D/g, "") === getOriginPincode();
+          const promise = promiseFor(rate, rate.deliverBy ? Date.parse(rate.deliverBy) : NaN, samePincode, orderSettings.processingHours, orderSettings.dispatchCutoff);
+          return {
+            ...rate,
+            key: `${rate.provider}:${rate.courierId}`,
+            deliverBy: promise.deliverBy || courierDate(rate.deliverBy) || getEstimatedDeliveryDate(Math.max(1, rate.etaDays + 1)),
+            dayLabel: promise.dayLabel,
+            express: isExpressCourier(rate),
+          };
+        })
       : [];
   const selectedCourier =
     courierOptions.find((option) => option.key === courierId) ?? courierOptions[0];
-  const activeCourierId = selectedCourier?.key ?? "";
   const selectedOffer = selectedCourier
-    ? { name: selectedCourier.courierName, deliverBy: selectedCourier.deliverBy }
+    ? { name: selectedCourier.courierName, deliverBy: selectedCourier.dayLabel ? `${selectedCourier.dayLabel}, ${selectedCourier.deliverBy}` : selectedCourier.deliverBy }
     : undefined;
   const pickupLocation = getPickupLocation();
 
@@ -288,24 +362,30 @@ export default function CheckoutClient() {
     price: book.price,
     originalPrice: book.originalPrice,
     currency: "INR",
+    preorder: canPreorder(book),
+    releaseDate: canPreorder(book) ? book.preorder?.releaseDate || undefined : undefined,
   }));
 
   const priced = computeTotals(orderItems);
   const itemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
-  const codSelected = payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery";
+  const cashAtStoreSelected = payMethod === "store" && orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup" && !hasPreorder;
+  const codSelected = (payMethod === "cod" && orderSettings.codEnabled && deliveryMode === "delivery" && !hasPreorder) || cashAtStoreSelected;
   const hostedSelected = payMethod === "payu" || payMethod === "easebuzz" || payMethod === "cashfree" || payMethod === "phonepe" ? payMethod : "";
-  const codFee = codSelected ? orderSettings.codFee : 0;
+  const codFee = codSelected && !cashAtStoreSelected ? orderSettings.codFee : 0;
+  const courierLater =
+    deliveryMode === "delivery" && !hasPreorder && orderItems.length > 0 && orderSettings.shippingFeeMode === "courier_rate" && !loadingRates && liveRates?.pincode === address.pincode && !selectedCourier;
   const shipping =
-    deliveryMode === "store_pickup" || orderItems.length === 0
+    deliveryMode === "store_pickup" || orderItems.length === 0 || hasPreorder || courierLater
       ? 0
       : shippingFeeFor(priced.subtotal, itemCount, selectedCourier?.rate, orderSettings);
   const storeCredit = user?.email ? getStoreCredit(user.email) : 0;
-  const creditApplied = useCredit ? Math.min(storeCredit, Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee)) : 0;
+  const promoAmount = promo ? promoDiscount(promo, priced.subtotal) : 0;
+  const creditApplied = useCredit ? Math.min(storeCredit, Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee - promoAmount)) : 0;
   const totals = {
     ...priced,
     shipping: shipping + codFee,
     storeCredit: creditApplied,
-    total: Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee - creditApplied),
+    total: Math.max(0, priced.subtotal + priced.gst + priced.platformFee + shipping + codFee - creditApplied - promoAmount),
   };
 
   const validateAddress = () => {
@@ -333,7 +413,26 @@ export default function CheckoutClient() {
     return "";
   };
 
+  /** Guests are not asked to sign up; the order is linked to the email and phone given here. */
+  const guestContactProblem = () => {
+    if (user) return "";
+    if (!address.fullName.trim()) return "Please fill in your full name.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((address.email || "").trim())) return "Please enter a valid email address. Your order is linked to it.";
+    if (!isValidPhone(address.phone)) return "Please enter a valid phone number, including country code.";
+    return "";
+  };
+
+  const preorderBalanceLater = orderItems.some((item) => item.preorder) && !codSelected && !cashAtStoreSelected;
+  const payNow = preorderBalanceLater
+    ? preorderAdvance(totals.total, orderSettings, { copies: orderItems.reduce((sum, item) => sum + item.quantity, 0), platformFee: totals.platformFee })
+    : totals.total;
+  const preorderShippingLater = hasPreorder && deliveryMode === "delivery";
+
   const placeOrder = async () => {
+    if (!agreed) {
+      setError("Please read and accept the terms and policies before placing the order.");
+      return;
+    }
     const over = rows.find(({ item, book }) => item.quantity > quantityCap(book.id) || (book.stock <= 0 && !book.preorder?.enabled));
     if (over) {
       setError(`${over.book.title}: that quantity is not available. Lower the quantity or save it for later.`);
@@ -345,19 +444,119 @@ export default function CheckoutClient() {
     let payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean };
     let awaitingGateway = false;
     const hosted = hostedSelected;
-    if (codSelected) {
+    const deliveryAddress =
+      deliveryMode === "delivery"
+        ? { ...address, fullName: address.fullName.trim() }
+        : { ...address, fullName: address.fullName.trim() || "Store pickup" };
+    const buildOrder = (payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean }): Order => {
+      const courierName = selectedCourier?.courierName;
+      const now = new Date().toISOString();
+      const account =
+        user ??
+        ensureCustomerAccount({
+          name: deliveryAddress.fullName,
+          email: deliveryAddress.email,
+          phone: deliveryAddress.phone,
+        });
+      const firstStatus: Order["status"] =
+        orderSettings.confirmMode !== "manual" && orderItems.every((item) => !item.preorder) && rows.every(({ item, book }) => book.stock >= item.quantity) ? "Ordered" : "Awaiting Confirmation";
+      const order: Order = {
+        id,
+        userId: account?.id ?? user?.id ?? "guest",
+        date: now,
+        items: orderItems,
+        subtotal: totals.subtotal,
+        discount: totals.discount,
+        gst: totals.gst,
+        platformFee: totals.platformFee,
+        shipping: totals.shipping,
+        shippingDue: courierLater || undefined,
+        total: totals.total,
+        currency: "INR",
+        paymentStatus: payment.paid ? (payNow < totals.total || preorderShippingLater ? "Partially Paid" : "Paid") : "Pending",
+        paymentMethod: payment.method,
+        paidAt: payment.paid ? now : undefined,
+        razorpayPaymentId: payment.paymentId,
+        razorpayOrderId: payment.razorpayOrderId,
+        status: firstStatus,
+        channel: "online",
+        storeCreditUsed: creditApplied || undefined,
+        promo: promo && promoAmount ? { code: promo.code, kind: promo.kind, amount: promoAmount, label: promo.label } : undefined,
+        preorderPayment:
+          payNow < totals.total || preorderShippingLater
+            ? {
+                advance: payNow,
+                balance: Math.round((totals.total - payNow) * 100) / 100,
+                balanceWhen: orderSettings.preorderPayment.balanceWhen,
+                advancePaidAt: payment.paid ? now : undefined,
+                shippingDue: preorderShippingLater || undefined,
+              }
+            : undefined,
+        stockCommitted: false,
+        deliveryMode,
+        deliveryAddress,
+        eta:
+          deliveryMode === "store_pickup"
+            ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
+            : hasPreorder && preorderBook
+              ? preorderDeliveryDate(preorderBook)
+              : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
+        pickupHoldUntil: deliveryMode === "store_pickup" ? quote?.pickupHoldUntil : undefined,
+        courierName: deliveryMode === "delivery" ? courierName : undefined,
+                courierChoice:
+          deliveryMode === "delivery" && selectedCourier
+            ? {
+                provider: selectedCourier.provider,
+                courierId: selectedCourier.courierId,
+                courierName: selectedCourier.courierName,
+                rate: selectedCourier.rate,
+                etaDays: selectedCourier.etaDays,
+                live: selectedCourier.live,
+                lastMile: selectedCourier.lastMile,
+              }
+            : undefined,
+        returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
+        accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
+        createdBy: user?.email ?? "guest checkout",
+        history: [
+          { at: now, status: firstStatus, note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
+        ],
+      };
+      return order;
+    };
+    if (payNow <= 0 && creditApplied > 0 && !codSelected && !cashAtStoreSelected) {
+      payment = { method: "Store credit", paid: true };
+    } else if (cashAtStoreSelected) {
+      payment = { method: "Cash at Store", paid: false };
+    } else if (codSelected) {
       payment = { method: "Cash on delivery", paid: false };
     } else if (hosted) {
       payment = { method: GATEWAY_LABEL[hosted], paid: false };
     } else {
       try {
         const outcome = await payWithRazorpay({
-          amount: totals.total,
+          amount: payNow,
           receipt: id,
           name: address.fullName || (user ? `${user.firstName} ${user.lastName}` : "Customer"),
           email: address.email || user?.email,
           phone: address.phone,
-          description: `VGMF order ${id}`,
+          description: `Vaidya Gogate Memorial Foundation order ${id}`,
+          onCreated: (razorpayOrderId) => {
+            void fetch("/api/payments/hosted", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              keepalive: true,
+              body: JSON.stringify({
+                action: "hold",
+                gateway: "razorpay",
+                orderId: id,
+                amount: payNow,
+                kind: "order",
+                reference: razorpayOrderId,
+                order: buildOrder({ method: "Online", paid: true, razorpayOrderId }),
+              }),
+            }).catch(() => undefined);
+          },
         });
         if (outcome.kind === "holding") {
           awaitingGateway = true;
@@ -381,69 +580,10 @@ export default function CheckoutClient() {
         return;
       }
     }
-    const courierName = selectedCourier?.courierName;
-    const now = new Date().toISOString();
-    const deliveryAddress =
-      deliveryMode === "delivery"
-        ? { ...address, fullName: address.fullName.trim() }
-        : { ...address, fullName: address.fullName.trim() || "Store pickup" };
+    const order = buildOrder(payment);
     if (creditApplied > 0 && user?.email && !hosted && !awaitingGateway) {
       adjustStoreCredit(user.email, -creditApplied, `Used on order ${id}`, id);
     }
-    const account =
-      user ??
-      ensureCustomerAccount({
-        name: deliveryAddress.fullName,
-        email: deliveryAddress.email,
-        phone: deliveryAddress.phone,
-      });
-    const order: Order = {
-      id,
-      userId: account?.id ?? user?.id ?? "guest",
-      date: now,
-      items: orderItems,
-      subtotal: totals.subtotal,
-      discount: totals.discount,
-      gst: totals.gst,
-      platformFee: totals.platformFee,
-      shipping: totals.shipping,
-      total: totals.total,
-      currency: "INR",
-      paymentStatus: payment.paid ? "Paid" : "Pending",
-      paymentMethod: payment.method,
-      paidAt: payment.paid ? now : undefined,
-      razorpayPaymentId: payment.paymentId,
-      razorpayOrderId: payment.razorpayOrderId,
-      status: "Ordered",
-      channel: "online",
-      storeCreditUsed: creditApplied || undefined,
-      stockCommitted: false,
-      deliveryMode,
-      deliveryAddress,
-      eta:
-        deliveryMode === "store_pickup"
-          ? quote?.pickupReadyBy || getEstimatedDeliveryDate(3)
-          : selectedOffer?.deliverBy || quote?.deliverBy || getEstimatedDeliveryDate(6),
-      courierName: deliveryMode === "delivery" ? courierName : undefined,
-              courierChoice:
-        deliveryMode === "delivery" && selectedCourier
-          ? {
-              provider: selectedCourier.provider,
-              courierId: selectedCourier.courierId,
-              courierName: selectedCourier.courierName,
-              rate: selectedCourier.rate,
-              etaDays: selectedCourier.etaDays,
-              live: selectedCourier.live,
-              lastMile: selectedCourier.lastMile,
-            }
-          : undefined,
-      returnableDays: orderSettings.returns.enabled ? orderSettings.returns.windowDays : 0,
-      accountEmail: (user?.email || deliveryAddress.email || "").trim().toLowerCase() || undefined,
-      createdBy: user?.email ?? "guest checkout",
-      history: [
-        { at: now, status: "Ordered", note: payment.paid ? `${payment.method} ${payment.paymentId ?? ""}`.trim() : payment.method, by: user?.email ?? "customer" },
-      ],
-    };
     if (hosted || awaitingGateway) {
       window.sessionStorage.setItem(PENDING_CHECKOUT, JSON.stringify(order));
       await fetch("/api/payments/hosted", {
@@ -453,7 +593,7 @@ export default function CheckoutClient() {
           action: "hold",
           gateway: hosted || "razorpay",
           orderId: id,
-          amount: totals.total,
+          amount: payNow,
           kind: "order",
           reference: payment.razorpayOrderId || "",
         }),
@@ -469,7 +609,7 @@ export default function CheckoutClient() {
       try {
         await openHostedCheckout({
           gateway: hosted,
-          amount: totals.total,
+          amount: payNow,
           orderId: id,
           name: deliveryAddress.fullName,
           email: deliveryAddress.email,
@@ -484,13 +624,14 @@ export default function CheckoutClient() {
     }
     if (commitStockForOrder(order)) order.stockCommitted = true;
     saveOrder(order);
+    notifyStaffOfOrder(order);
     if (deliveryAddress.email || deliveryAddress.phone) {
       const pickupNote =
         deliveryMode === "delivery"
-          ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}${courierName ? ` via ${courierName}` : ""}.`
-          : `Pickup from ${pickupLocation.name}.\n${pickupLocation.address}\nPhone: ${pickupLocation.phone}\nPickup OTP: ${pickupOtp(id)}\nShow this code at the clinic counter. The desk can resend it. Hours: Monday to Thursday, 6:00 PM – 10:00 PM.`;
+          ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}.`
+          : pickupInstructions();
       sendEmail({
-        to: deliveryAddress.email || "",
+        to: "",
         phone: deliveryAddress.phone,
         name: deliveryAddress.fullName,
         params: [deliveryAddress.fullName, id, `₹${totals.total}`],
@@ -500,6 +641,7 @@ export default function CheckoutClient() {
       });
     }
     setOrderId(id);
+    setPlacedEta(order.eta ?? "");
     markCartRecovered();
     clearCart();
     setStep("success");
@@ -512,36 +654,46 @@ export default function CheckoutClient() {
     <div className="container grid max-w-6xl gap-10 py-10 sm:py-14 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         {/* Step indicator */}
-        <ol className="flex items-center gap-2 text-xs font-semibold">
+        <ol className="relative grid grid-cols-3 text-xs font-semibold sm:text-sm" aria-label="Checkout steps">
+          <span className="absolute left-[16.66%] right-[16.66%] top-4 h-1 rounded-full bg-border" aria-hidden="true" />
+          <span
+            className="absolute left-[16.66%] top-4 h-1 rounded-full bg-emerald-600 transition-[width] duration-700 ease-out"
+            style={{ width: `${(Math.min(step === "success" ? 2 : stepIndex(step), 2) / 2) * 66.68}%` }}
+            aria-hidden="true"
+          />
           {(["address", "review", "payment"] as Step[]).map((s, index) => {
             const current = step === s;
             const done = step === "success" || index < stepIndex(step);
             return (
-              <li key={s} className="flex items-center gap-2">
+              <li key={s} className="relative flex flex-col items-center gap-1.5 text-center" aria-current={current ? "step" : undefined}>
                 <span
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] ${
-                    current
-                      ? "bg-burgundy text-white"
-                      : done
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-warm-cream text-text-muted"
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors ${
+                    done
+                      ? "border-emerald-600 bg-emerald-600 text-white"
+                      : current
+                        ? "border-emerald-600 bg-white text-emerald-700 ring-4 ring-emerald-100"
+                        : "border-border bg-white text-text-muted"
                   }`}
                 >
                   {done ? "✓" : index + 1}
                 </span>
-                <span className={`inline-flex items-center gap-1 ${current ? "text-text-primary" : "text-text-muted"}`}>
-                  <Glyph name={s === "address" ? "pin" : s === "review" ? "package" : "card"} className="h-3.5 w-3.5" />
+                <span className={done || current ? "text-text-primary" : "text-text-muted"}>
                   {s === "address" ? "Address" : s === "review" ? "Review" : "Payment"}
                 </span>
-                {index < 2 && (
-                  <span className="mx-1 h-px w-6 bg-border" aria-hidden="true" />
-                )}
               </li>
             );
           })}
         </ol>
 
         {/* 1. Address */}
+        {secondsLeft !== null && step !== "success" ? (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900" role="timer">
+            <span>Complete your order within {CHECKOUT_MINUTES} minutes</span>
+            <b className="text-base tabular-nums">
+              {String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:{String(secondsLeft % 60).padStart(2, "0")}
+            </b>
+          </div>
+        ) : null}
         {step === "address" && (
           <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
             <h2 className="heading-3 mb-5">Delivery Details</h2>
@@ -562,7 +714,7 @@ export default function CheckoutClient() {
                   Home delivery
                 </p>
                 <p className="mt-1 text-xs text-text-muted">
-                  {shippingFeeSummary(orderSettings)}
+                  {hasPreorder ? "Courier charge is added when you pay the balance" : shippingFeeSummary(orderSettings)}
                 </p>
               </button>
               )}
@@ -584,12 +736,21 @@ export default function CheckoutClient() {
                 <p className="mt-1 text-xs text-text-muted">
                   Free
                   {quote?.pickupAvailable
-                    ? ` · ready ${quote.pickupReadyBy}`
+                    ? (hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock)
+                      ? ` · ready ${quote.pickupReadyBy}`
+                      : " · we'll tell you when it's ready to collect"
                     : " · unavailable for this cart"}
                 </p>
               </button>
               )}
             </div>
+
+            {!user && (
+              <p className="mb-4 rounded-xl border border-border bg-warm-cream px-4 py-3 text-sm text-text-primary">
+                No sign-up needed. Your order is linked to the email and phone you enter here, and you can track it with the order ID.{" "}
+                <Link href="/login?mode=signin&next=/checkout" className="font-semibold text-burgundy underline">Sign in</Link> to use saved addresses.
+              </p>
+            )}
 
             {deliveryMode === "delivery" && (
               <>
@@ -610,7 +771,7 @@ export default function CheckoutClient() {
                         </span>
                         <span>
                           <span className="block text-sm font-semibold text-ink">{item.place === "office" ? "Office" : "Home"}{item.isDefault ? " · default" : ""}</span>
-                          <span className="block text-xs text-text-muted">{item.line1}, {formatAddressLine(item)}</span>
+                          <span className="block text-xs text-text-muted">{formatAddressLine(item)}</span>
                         </span>
                       </button>
                     ))}
@@ -635,7 +796,7 @@ export default function CheckoutClient() {
                       <Glyph name="pin" className="h-4 w-4 text-burgundy" />
                       {address.fullName} · {address.phone}
                     </p>
-                    <p className="mt-1 text-text-muted">{address.line1}{address.landmark ? `, ${address.landmark}` : ""}, {formatAddressLine(address)}</p>
+                    <p className="mt-1 text-text-muted">{formatAddressLine(address)}</p>
                   </div>
                 )}
                 {user && (
@@ -651,55 +812,15 @@ export default function CheckoutClient() {
                   </p>
                 ) : null}
 
-                {domestic && orderSettings.showCourierChoice && courierOptions.length > 0 && (
-                  <fieldset className="mt-5">
-                    <legend className="mb-2 text-sm font-semibold text-text-primary">
-                      Choose your delivery partner {loadingRates && <span className="text-xs font-normal text-text-muted">· checking live rates…</span>}
-                    </legend>
-                    <p className="mb-3 text-xs text-text-muted">
-                      Shiprocket, Nimbuspost and iThink Logistics. Same-city orders can use their Porter, Shadowfax Flash or Flash last-mile.
-                    </p>
-                    <div className="grid gap-2">
-                      {courierOptions.map((offer) => (
-                        <label
-                          key={offer.key}
-                          className={`flex cursor-pointer items-start justify-between gap-3 rounded-xl border px-3 py-3 text-sm ${
-                            activeCourierId === offer.key
-                              ? "border-burgundy bg-burgundy/5"
-                              : "border-border"
-                          }`}
-                        >
-                          <span className="flex items-start gap-2">
-                            <input
-                              type="radio"
-                              name="courier"
-                              className="mt-1 accent-burgundy"
-                              checked={activeCourierId === offer.key}
-                              onChange={() => setCourierId(offer.key)}
-                            />
-                            <span>
-                              <span className="font-semibold text-text-primary">{offer.courierName}</span>
-                              <span className="mt-0.5 block text-xs text-text-muted">
-                                {offer.provider === "tookan" || offer.provider === "shipday" || offer.courierName === "Gogate Products"
-                                  ? "The rider's name appears after allotment, once delivery has started"
-                                  : offer.lastMile || offer.provider === "tookan-parcel"
-                                    ? "Live rider, phone and location from the courier, on our map, after delivery starts"
-                                    : offer.etaDays === 0
-                                      ? "Same day after dispatch"
-                                      : `${offer.etaDays} business day transit`}
-                              </span>
-                            </span>
-                          </span>
-                          <span className="text-right text-xs">
-                            <span className="block font-semibold text-emerald-700">by {offer.deliverBy}</span>
-                            {orderSettings.shippingFeeMode === "courier_rate" && (
-                              <span className="block font-semibold text-text-primary">{formatPrice(Math.round(offer.rate))}</span>
-                            )}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
+                {domestic && preorderBook && !preorderDatesHidden(orderSettings) && (
+                  <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <b>Tentative delivery by</b> {preorderDeliveryDate(preorderBook)}
+                  </p>
+                )}
+                {domestic && !hasPreorder && !orderSettings.hideDeliveryDates && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
+                  <p className="mt-5 rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary">
+                    <b>Expected delivery by</b> {selectedOffer ? selectedOffer.deliverBy : <span className="text-text-muted">checking…</span>}
+                  </p>
                 )}
                 {domestic && quote && !quote.serviceable && pincodeValid && (
                   <p className="mt-3 text-sm text-red-700">{quote.note}</p>
@@ -707,13 +828,36 @@ export default function CheckoutClient() {
               </>
             )}
 
+            {deliveryMode === "store_pickup" && !user && (
+              <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                <label className="text-sm font-medium text-text-primary">
+                  Full name
+                  <input className="input-field mt-1" value={address.fullName} onChange={(event) => setAddress({ ...address, fullName: event.target.value })} autoComplete="name" />
+                </label>
+                <label className="text-sm font-medium text-text-primary">
+                  Phone
+                  <input className="input-field mt-1" type="tel" value={address.phone} onChange={(event) => setAddress({ ...address, phone: event.target.value })} autoComplete="tel" placeholder="+91 98765 43210" />
+                </label>
+                <label className="text-sm font-medium text-text-primary">
+                  Email
+                  <input className="input-field mt-1" type="email" value={address.email ?? ""} onChange={(event) => setAddress({ ...address, email: event.target.value })} autoComplete="email" />
+                </label>
+              </div>
+            )}
+
             {deliveryMode === "store_pickup" && (
               <div className="rounded-xl border border-gold/40 bg-warm-cream p-5 text-sm">
                 <p className="font-semibold text-text-primary">Pickup from store</p>
                 <p className="mt-1 text-text-primary">{pickupLocation.name}</p>
                 <p className="mt-1 text-text-muted">{pickupLocation.address}</p>
-                <p className="mt-1 text-text-muted">{pickupLocation.phone}</p>
-                {quote?.pickupAvailable && (
+                <p className="mt-1 text-text-muted">
+                  Point of contact: {[pickupLocation.contactName, pickupLocation.contactPhone].filter(Boolean).join(" · ")}
+                </p>
+                <p className="mt-1 text-text-muted">Pickup timings: {pickupLocation.hours}</p>
+                <a href={pickupLocation.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 font-semibold text-burgundy underline">
+                  <Glyph name="pin" className="h-3.5 w-3.5" /> Open in Google Maps
+                </a>
+                {quote?.pickupAvailable && (hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock) && (
                   <p className="mt-2 font-medium text-emerald-700">
                     Ready {quote.pickupReadyBy} · held until {quote.pickupHoldUntil}
                   </p>
@@ -731,8 +875,7 @@ export default function CheckoutClient() {
               type="button"
               disabled={!canReview}
               onClick={() => {
-                const problem =
-                  deliveryMode === "delivery" ? validateAddress() : "";
+                const problem = (deliveryMode === "delivery" ? validateAddress() : "") || guestContactProblem();
                 if (problem) {
                   setError(problem);
                   return;
@@ -768,9 +911,10 @@ export default function CheckoutClient() {
                     key={item.bookId}
                     className="flex flex-col gap-4 border-b border-border pb-5 last:border-0 last:pb-0 sm:flex-row sm:items-center"
                   >
-                    <Link href={`/shop/${book.slug}`} className="shrink-0">
+                    <Link href={`/shop/${book.slug}`} className="w-20 shrink-0">
                       <MediaPlaceholder
                         variant="book"
+                        src={book.coverImage}
                         label={book.title}
                         aspectClassName="aspect-[3/4] rounded-xl"
                       />
@@ -785,22 +929,36 @@ export default function CheckoutClient() {
                       <p className="mt-1 text-xs text-text-muted">
                         Published by {book.publisher?.name ?? storeConfig.publisherName}
                       </p>
+                      {book.language ? (
+                        <p className="mt-1 text-sm font-semibold text-burgundy">Language: {book.language}</p>
+                      ) : null}
                       <p className="mt-2 text-sm">
-                        <span className="font-bold text-text-primary">
+                        <span className="text-base font-bold text-text-primary">
                           {formatPrice(book.price * item.quantity)}
                         </span>
-                        {book.originalPrice && book.originalPrice > book.price && (
-                          <span className="ml-2 text-text-muted line-through">
-                            {formatPrice(book.originalPrice * item.quantity)}
+                        {book.originalPrice != null && book.originalPrice > book.price ? (
+                          <span className="ml-2 text-xs text-text-muted">
+                            MRP <span className="line-through">{formatPrice(book.originalPrice * item.quantity)}</span>{" "}
+                            <b className="text-emerald-700">{Math.round((1 - book.price / book.originalPrice) * 100)}% off</b>
                           </span>
-                        )}
+                        ) : null}
                       </p>
-                      <p className="mt-1 text-xs text-emerald-700">
-                        Expected delivery{" "}
-                        {getEstimatedDeliveryDate(6)}
+                      {orderSettings.hideDeliveryDates ? null : (
+                      <p className="mt-1 text-xs font-semibold text-emerald-700">
+                        {deliveryMode === "store_pickup"
+                          ? (hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock)
+                            ? `Ready for pickup ${quote?.pickupReadyBy || ""}`.trim()
+                            : "We'll tell you when it's ready to collect"
+                          : canPreorder(book)
+                            ? preorderDatesHidden(orderSettings)
+                              ? "We'll share the delivery date once it is dispatched"
+                              : `Tentative delivery by ${preorderDeliveryDate(book)}`
+                            : `Expected delivery ${selectedOffer?.deliverBy || quote?.deliverBy || "shown once you enter the delivery pincode"}`}
                       </p>
+                      )}
 
                       <p className="mt-1 text-xs text-text-muted">Qty {item.quantity} · {formatPrice(book.price)} each</p>
+                      <BulkOrderNote quantity={item.quantity} />
                       <div className="mt-3 flex flex-wrap items-center gap-3">
                         <QtyControl value={item.quantity} max={quantityCap(book.id)} onChange={(quantity) => setCartQuantity(item.bookId, quantity)} />
                         <button type="button" onClick={() => saveForLater(item.bookId)} className="text-xs font-semibold text-text-muted hover:text-burgundy">
@@ -843,23 +1001,27 @@ export default function CheckoutClient() {
                   <div className="flex justify-between gap-4">
                     <dt className="text-text-muted">Address</dt>
                     <dd className="text-right font-medium text-text-primary">
-                      {address.line1}
-                      {address.landmark ? `, ${address.landmark}` : ""},{" "}
                       {formatAddressLine(address)}
                     </dd>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-text-muted">Expected delivery</dt>
-                    <dd className="text-right font-medium text-emerald-700">
-                      {selectedOffer?.deliverBy || quote?.deliverBy
-                        ? `${selectedOffer?.deliverBy ?? quote?.deliverBy}${selectedOffer?.name || quote?.courier ? ` via ${selectedOffer?.name ?? quote?.courier}` : ""}`
-                        : "Confirmed after a courier is booked"}
-                    </dd>
-                  </div>
+                  {orderSettings.hideDeliveryDates || (preorderBook && preorderDatesHidden(orderSettings)) ? null : deliveryMode === "delivery" && preorderBook ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-text-muted">Tentative delivery by</dt>
+                      <dd className="text-right font-medium text-emerald-700">{preorderDeliveryDate(preorderBook)}</dd>
+                    </div>
+                  ) : selectedOffer?.deliverBy || quote?.deliverBy ? (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-text-muted">Expected delivery</dt>
+                      <dd className="text-right font-medium text-emerald-700">
+                        {selectedOffer?.deliverBy ?? quote?.deliverBy}
+                      </dd>
+                    </div>
+                  ) : null}
                 </dl>
               ) : (
                 <p className="text-sm text-text-muted">
-                  Pickup from store at {pickupLocation.name}. Ready {quote?.pickupReadyBy}. We will
+                  Pickup from store at {pickupLocation.name}.
+                  {(hasPreorder ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock) && quote?.pickupReadyBy ? ` Ready ${quote.pickupReadyBy}.` : ""} We will
                   notify you when the order can be collected.
                 </p>
               )}
@@ -867,10 +1029,10 @@ export default function CheckoutClient() {
 
             <div className="rounded-2xl border border-border bg-white p-6 text-xs text-text-muted">
               <p className="font-semibold text-text-primary">
-                Replacements
+                {customerOrderPolicyCopy(orderSettings).title}
               </p>
-              <p className="mt-1">
-                Orders cannot be cancelled or returned from your account. If an item arrives damaged, share photos from My Orders. The Foundation desk accepts or rejects the request, and an accepted request is fulfilled with a new free order.
+              <p className="mt-1 whitespace-pre-line">
+                {customerOrderPolicyCopy(orderSettings).body}
               </p>
             </div>
 
@@ -918,15 +1080,58 @@ export default function CheckoutClient() {
 
             <div className="mt-5 flex items-center justify-between rounded-xl border border-border bg-warm-cream p-5">
               <div>
-                <p className="text-sm text-text-muted">Amount payable</p>
+                <p className="text-sm text-text-muted">{payNow < totals.total ? "Advance payable now" : "Amount payable"}</p>
                 <p className="mt-1 text-2xl font-bold text-burgundy">
-                  {formatPrice(totals.total)}
+                  {formatPrice(payNow)}
                 </p>
+                {payNow < totals.total ? (
+                  <p className="mt-1 text-xs text-text-muted">
+                    Pre-order: balance {formatPrice(totals.total - payNow)} of {formatPrice(totals.total)}{" "}
+                    {orderSettings.preorderPayment.balanceWhen === "on_ready" ? "when the item is ready" : "before dispatch"}. We send you a payment link.
+                  </p>
+                ) : null}
+                {preorderShippingLater ? (
+                  <p className="mt-1 text-xs text-text-muted">
+                    Pre-order: the courier charge is worked out when your order is ready and added to the balance you pay then.
+                  </p>
+                ) : null}
               </div>
               <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-text-muted">
                 INR
               </span>
             </div>
+
+            {(orderSettings.promoCodes.coupons || orderSettings.promoCodes.giftCards || promo) && (
+            <div className="mt-5 rounded-xl border border-border px-4 py-3 text-sm">
+              <p className="font-semibold text-text-primary">{orderSettings.promoCodes.coupons && orderSettings.promoCodes.giftCards ? "Coupon or gift card" : orderSettings.promoCodes.giftCards ? "Gift card" : "Coupon"}</p>
+              {promo ? (
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-emerald-700">
+                    {promo.kind === "gift" ? "Gift card" : promo.label} <b>{promo.code}</b>{" "}
+                    {promoAmount ? `· − ${formatPrice(promoAmount)}` : promo.kind === "coupon" && promo.minOrder ? `· needs items worth ${formatPrice(promo.minOrder)}` : ""}
+                  </span>
+                  <button type="button" className="text-xs font-semibold text-burgundy underline" onClick={() => { setPromo(null); setPromoNote(""); }}>Remove</button>
+                </div>
+              ) : (
+                <form
+                  className="mt-2 flex gap-2"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    if (!promoCode.trim()) return;
+                    setPromoBusy(true);
+                    const result = await checkPromoCode(promoCode, hasPreorder);
+                    setPromoBusy(false);
+                    if (result.ok) { setPromo(result.rule); setPromoNote(""); setPromoCode(""); }
+                    else setPromoNote(result.error);
+                  }}
+                >
+                  <input value={promoCode} onChange={(event) => setPromoCode(event.target.value)} placeholder="Enter code" aria-label="Coupon or gift card code" className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2 uppercase" />
+                  <button type="submit" disabled={promoBusy} className="rounded-lg bg-burgundy px-4 py-2 font-semibold text-white disabled:opacity-60">{promoBusy ? "Checking…" : "Apply"}</button>
+                </form>
+              )}
+              {promoNote ? <p className="mt-2 text-xs text-red-700">{promoNote}</p> : null}
+            </div>
+            )}
 
             {storeCredit > 0 && (
               <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-border px-4 py-3 text-sm">
@@ -955,7 +1160,7 @@ export default function CheckoutClient() {
                   </span>
                 </label>
               ))}
-              {orderSettings.codEnabled && deliveryMode === "delivery" && (
+              {orderSettings.codEnabled && deliveryMode === "delivery" && !hasPreorder && (
                 <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${codSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
                   <input type="radio" name="payment-method" checked={codSelected} onChange={() => setPayMethod("cod")} className="mt-1 accent-burgundy" />
                   <span>
@@ -964,16 +1169,51 @@ export default function CheckoutClient() {
                   </span>
                 </label>
               )}
+              {orderSettings.cashAtStoreEnabled && deliveryMode === "store_pickup" && !hasPreorder && (
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm ${cashAtStoreSelected ? "border-burgundy bg-burgundy/5" : "border-border"}`}>
+                  <input type="radio" name="payment-method" checked={cashAtStoreSelected} onChange={() => setPayMethod("store")} className="mt-1 accent-burgundy" />
+                  <span>
+                    <span className="flex items-center gap-2 font-semibold text-text-primary"><Glyph name="package" className="h-4 w-4 text-burgundy" /> Cash at Store</span>
+                    <span className="block text-xs text-text-muted">Pay at the clinic counter when you collect the order</span>
+                  </span>
+                </label>
+              )}
             </div>
 
             {holdingNote && (
               <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{holdingNote}</p>
+            )}
+            {!codSelected && (
+              <p className="mt-3 text-xs leading-5 text-text-muted">
+                If money is taken from your account but your order is not confirmed, the payment is held while we check with Razorpay. If it cannot be matched to an order, it may be refunded automatically to the same account, usually within 5–7 working days.
+              </p>
             )}
             {error && (
               <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
                 {error}
               </p>
             )}
+
+            <label className="mt-6 flex items-start gap-2 rounded-lg border border-border bg-warm-cream p-3 text-sm text-text-muted">
+              <input type="checkbox" className="mt-1" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
+              <span>
+                I have read and agree to the{" "}
+                {([
+                  ["/terms", "Terms & Conditions"],
+                  ["/privacy", "Privacy Policy"],
+                  ["/shipping-policy", "Shipping Policy"],
+                  ["/return-policy", "Return Policy"],
+                  ["/refund-policy", "Refund Policy"],
+                  ["/cancellation-policy", "Cancellation Policy"],
+                ] as const).map(([href, label], index, all) => (
+                  <span key={href}>
+                    <Link href={href} target="_blank" className="font-semibold text-burgundy underline">{label}</Link>
+                    {index < all.length - 2 ? ", " : index === all.length - 2 ? " and " : "."}
+                  </span>
+                ))}{" "}
+                I have checked my delivery address and phone number; once the courier picks up a parcel sent to a wrong address, the Foundation is not responsible.
+              </span>
+            </label>
 
             <button
               type="button"
@@ -983,7 +1223,7 @@ export default function CheckoutClient() {
             >
               {processing
                 ? codSelected ? "Placing order…" : "Processing payment…"
-                : codSelected ? `Place order · pay ${formatPrice(totals.total)} on delivery` : `Pay ${formatPrice(totals.total)}`}
+                : codSelected ? `Place order · pay ${formatPrice(totals.total)} ${cashAtStoreSelected ? "at the store" : "on delivery"}` : `Pay ${formatPrice(payNow)}`}
             </button>
 
             {paymentNotice() && !codSelected && (
@@ -1001,7 +1241,9 @@ export default function CheckoutClient() {
         )}
 
         {/* 4. Success */}
-        {step === "success" && (
+        {step === "success" && (() => {
+          const placedOrder = getOrders().find((order) => order.id === orderId);
+          return (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 text-white">
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1011,7 +1253,7 @@ export default function CheckoutClient() {
             </div>
             <h2 className="heading-2 mt-5">Order placed successfully!</h2>
             <p className="mt-2 text-sm text-text-muted">
-              {codSelected ? "Pay in cash when the order arrives." : "Your payment was received."} Track your order anytime from My Orders.
+              {cashAtStoreSelected ? "Pay at the clinic counter when you collect the order." : codSelected ? "Pay in cash when the order arrives." : "Your payment was received."} {user ? "Track your order anytime from My Orders." : `We linked this order to ${placedOrder?.deliveryAddress?.email || address.email}. Sign in with an OTP to that email or phone to see it under My Orders.`}
             </p>
             <div className="mx-auto mt-6 inline-flex flex-col items-center rounded-2xl border border-emerald-200 bg-white px-8 py-5">
               <p className="text-xs uppercase tracking-[0.14em] text-text-muted">
@@ -1021,10 +1263,34 @@ export default function CheckoutClient() {
                 {orderId}
               </p>
             </div>
-            <p className="mt-3 text-xs text-text-muted">
-              Estimated delivery: {getEstimatedDeliveryDate(6)} ·
-              Live courier tracking on My Orders
-            </p>
+            {placedOrder?.deliveryMode === "store_pickup" ? (
+              <div className="mx-auto mt-6 max-w-xl rounded-xl border border-gold/40 bg-warm-cream p-5 text-left text-sm">
+                <p className="font-semibold text-text-primary">Pickup from store</p>
+                <p className="mt-1 text-text-primary">{pickupLocation.name}</p>
+                <p className="mt-1 text-text-muted">{pickupLocation.address}</p>
+                {pickupLocation.contactName || pickupLocation.contactPhone ? (
+                  <p className="mt-1 text-text-muted">
+                    Point of contact: {[pickupLocation.contactName, pickupLocation.contactPhone].filter(Boolean).join(" · ")}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-text-muted">Pickup timings: {pickupLocation.hours}</p>
+                <a href={pickupLocation.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 font-semibold text-burgundy underline">
+                  <Glyph name="pin" className="h-3.5 w-3.5" /> Open in Google Maps
+                </a>
+                {placedOrder.eta && (placedOrder.preorderPayment ? orderSettings.pickupDates.preorder : orderSettings.pickupDates.inStock) ? (
+                  <p className="mt-2 font-medium text-emerald-700">
+                    Ready {placedOrder.eta}{placedOrder.pickupHoldUntil ? ` · held until ${placedOrder.pickupHoldUntil}` : ""}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-text-muted">
+                {placedEta && !orderSettings.hideDeliveryDates && !(placedOrder?.items.some((item) => item.preorder) && preorderDatesHidden(orderSettings))
+                  ? `${placedOrder?.items.some((item) => item.preorder) ? "Tentative delivery by" : "Estimated delivery:"} ${placedEta} · `
+                  : ""}
+                Live courier tracking on My Orders
+              </p>
+            )}
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
               {orderSettings.gst.invoiceEnabled && (
                 <button
@@ -1038,7 +1304,7 @@ export default function CheckoutClient() {
                   GST invoice
                 </button>
               )}
-              <Link href="/account/orders" className="btn-primary">
+              <Link href={user ? "/account/orders" : `/track?order=${encodeURIComponent(orderId)}`} className="btn-primary">
                 Track Your Order
               </Link>
               <Link href="/shop" className="btn-outline">
@@ -1046,7 +1312,8 @@ export default function CheckoutClient() {
               </Link>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Order summary */}
@@ -1058,9 +1325,10 @@ export default function CheckoutClient() {
             </h2>
             <dl className="mt-5 space-y-3 text-sm">
               <div className="flex justify-between">
-                <dt className="text-text-muted">Books</dt>
+                <dt className="text-text-muted">Items</dt>
                 <dd className="font-medium text-text-primary">{itemCount}</dd>
               </div>
+              {totals.discount > 0 ? (<>
               <div className="flex justify-between">
                 <dt className="text-text-muted">MRP</dt>
                 <dd className="font-medium text-text-primary">
@@ -1073,6 +1341,7 @@ export default function CheckoutClient() {
                   − {formatPrice(totals.discount)}
                 </dd>
               </div>
+              </>) : null}
               <div className="flex justify-between">
                 <dt className="text-text-muted">Subtotal</dt>
                 <dd className="font-medium text-text-primary">
@@ -1087,7 +1356,7 @@ export default function CheckoutClient() {
               )}
               {orderSettings.platformFee.enabled && (
                 <div className="flex justify-between">
-                  <dt className="text-text-muted">Platform fee{orderSettings.platformFee.refundable ? "" : " (kept on refund)"}</dt>
+                  <dt className="text-text-muted">Platform fee (non-refundable)</dt>
                   <dd className="font-medium text-text-primary">{formatPrice(totals.platformFee)}</dd>
                 </div>
               )}
@@ -1096,13 +1365,29 @@ export default function CheckoutClient() {
                   Shipping
                 </dt>
                 <dd className="font-medium text-text-primary">
-                  {deliveryMode === "store_pickup" || shipping === 0 ? "FREE" : formatPrice(shipping)}
+                  {deliveryMode === "store_pickup"
+                    ? "Store pickup · no charge"
+                    : hasPreorder
+                      ? "Added when you pay the balance"
+                      : courierLater
+                      ? "Calculated once packed · payment link sent"
+                      : shipping > 0
+                      ? formatPrice(shipping)
+                      : shippingIsFree(priced.subtotal, orderSettings)
+                        ? "FREE"
+                        : "Choose a courier"}
                 </dd>
               </div>
               {codFee > 0 && (
                 <div className="flex justify-between">
                   <dt className="text-text-muted">Cash on delivery</dt>
                   <dd className="font-medium text-text-primary">{formatPrice(codFee)}</dd>
+                </div>
+              )}
+              {promoAmount > 0 && promo && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">{promo.kind === "gift" ? "Gift card" : "Coupon"} {promo.code}</dt>
+                  <dd className="font-medium text-emerald-700">− {formatPrice(promoAmount)}</dd>
                 </div>
               )}
               {creditApplied > 0 && (
@@ -1117,6 +1402,18 @@ export default function CheckoutClient() {
                   {formatPrice(totals.total)}
                 </dd>
               </div>
+              {preorderBalanceLater && (
+                <>
+                  <div className="flex justify-between rounded-lg bg-burgundy/5 px-2 py-1.5">
+                    <dt className="font-semibold text-burgundy">Pay now (pre-order advance)</dt>
+                    <dd className="font-bold text-burgundy">{formatPrice(payNow)}</dd>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <dt className="text-text-muted">Balance later + courier charge</dt>
+                    <dd className="font-medium text-text-primary">{formatPrice(Math.max(0, totals.total - payNow))}</dd>
+                  </div>
+                </>
+              )}
             </dl>
 
             {deliveryMode === "delivery" && step === "review" && orderSettings.shippingFeeMode === "free_above" && totals.subtotal < orderSettings.freeAbove && totals.shipping > 0 && (

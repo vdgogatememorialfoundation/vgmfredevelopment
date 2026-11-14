@@ -7,7 +7,7 @@ export const SITE = {
   purpose:
     "This platform shares Vd. Ramchandra Ballal Gogate’s work and carries forward his vision — knowledge for all.",
   email: "care@vaidyagogate.org",
-  phone: "+91 20 1234 5678",
+  phone: "093737 92952",
   address: "Vaidya Gogate Memorial Foundation, Pune, Maharashtra, India",
   nativeName: "वैद्य गोगटे स्मृती प्रतिष्ठान",
   greeting: "नमस्ते",
@@ -23,6 +23,27 @@ export const STORE = {
   returnDays: 7,
   courier: "Standard post",
   publisher: "Vaidya Gogate Memorial Foundation Publications",
+};
+
+export const QUICK_ACTIONS = [
+  { id: "shop", href: "/shop", label: "Shop", icon: "bag-handle-outline" as const },
+  { id: "events", href: "/events", label: "Events", icon: "calendar-outline" as const },
+  { id: "articles", href: "/articles", label: "Articles", icon: "newspaper-outline" as const },
+  { id: "clinics", href: "/clinics", label: "Clinics", icon: "medkit-outline" as const },
+  { id: "certificates", href: "/certificates", label: "Certificates", icon: "ribbon-outline" as const },
+  { id: "about", href: "/about", label: "Legacy", icon: "library-outline" as const },
+  { id: "videos", href: "/videos", label: "Videos", icon: "play-circle-outline" as const },
+  { id: "gallery", href: "/gallery", label: "Gallery", icon: "images-outline" as const },
+];
+
+export const CLINIC = {
+  name: "Vaidya Gogate Memorial Foundation Clinic",
+  area: "New Nana Peth, Pune",
+  hours: "Monday – Thursday · 6:00 PM – 10:00 PM",
+  phone: "09373792952",
+  phoneLabel: "093737 92952",
+  email: "care@vaidyagogate.org",
+  maps: "https://www.google.com/maps/search/?api=1&query=Vaidya+Gogate+Memorial+Foundation+New+Nana+Peth+Pune",
 };
 
 export const EXPLORE = [

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Linking } from "react-native";
+import { Pipeline } from "../../src/tracker";
+import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { findRow, formatDate, getApiBase, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
+import { fetchWallet, findRow, formatDate, getApiBase, listInbox, listOrders, listPartnerRecords, listTickets, money, str, type Row } from "../../src/api";
 import { ACCOUNT_SECTIONS, accountSection } from "../../src/account-nav";
 import { useAuth } from "../../src/auth";
 import { useFeed } from "../../src/feed";
@@ -27,6 +28,7 @@ function SectionBody({ id, title, subtitle }: { id: string; title: string; subti
   if (id === "wishlist") return <WishlistSection title={title} subtitle={subtitle} />;
   if (id === "profile") return <ProfileSection title={title} subtitle={subtitle} />;
   if (id === "loyalty") return <LoyaltySection title={title} subtitle={subtitle} />;
+  if (id === "wallet") return <WalletSection title={title} subtitle={subtitle} />;
   if (id === "registrations" || id === "applications") return <PartnerSection title={title} subtitle={subtitle} kind="tickets" empty={emptyCopy(id)} />;
   if (id === "payments" || id === "receipts") return <PartnerSection title={title} subtitle={subtitle} kind="payments" empty={emptyCopy(id)} />;
   if (id === "notifications") return <InboxSection title={title} subtitle={subtitle} />;
@@ -107,17 +109,13 @@ function OrdersSection({ title, subtitle }: { title: string; subtitle: string })
       {orders.map((item) => {
         const replacement = item.replacementRequest as { status?: string; replacementOrderId?: string } | undefined;
         return (
-          <Card key={str(item.id)}>
+          <Card key={str(item.id)} onPress={() => router.push(`/order/${str(item.id)}`)}>
             <Heading>Order {str(item.id)}</Heading>
             <Muted>
               {[str(item.paymentStatus, "Unpaid"), str(item.status, "Recorded"), money(item.total)].filter(Boolean).join(" · ")}
             </Muted>
             {replacement?.status ? <Muted>Replacement {replacement.status}{replacement.replacementOrderId ? ` · ${replacement.replacementOrderId}` : ""}</Muted> : null}
-            <Button
-              kind="ghost"
-              label="Request replacement with photos"
-              onPress={() => void Linking.openURL(`${getApiBase()}/account/orders`)}
-            />
+            <Button kind="ghost" icon="navigate-outline" label="Order details & tracking" onPress={() => router.push(`/order/${str(item.id)}`)} />
           </Card>
         );
       })}
@@ -159,11 +157,12 @@ function TicketsSection({ title, subtitle }: { title: string; subtitle: string }
       <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
       <Banner text={note} tone="error" />
       {tickets.map((item) => (
-        <Card key={str(item.id)}>
+        <Card key={str(item.id)} onPress={() => router.push(`/ticket/${str(item.id)}`)}>
           <Heading>{str(item.subject)}</Heading>
           <Muted>
-            {str(item.status)} · {str(item.id)}
+            {str(item.status)} · {str(item.id)} · {Array.isArray(item.responses) ? item.responses.length : 0} replies
           </Muted>
+          <Muted>Tap to open the conversation and reply</Muted>
         </Card>
       ))}
       {!tickets.length ? <Empty icon="help-buoy-outline" label="No support tickets on this account yet." /> : null}
@@ -211,6 +210,51 @@ function ProfileSection({ title, subtitle }: { title: string; subtitle: string }
   );
 }
 
+function WalletSection({ title, subtitle }: { title: string; subtitle: string }) {
+  const [wallet, setWallet] = useState<{ balance: number; walletId: string; entries: Row[] } | null>(null);
+  const [error, setError] = useState("");
+  const load = () => {
+    fetchWallet()
+      .then((value) => {
+        setWallet(value);
+        setError("");
+      })
+      .catch((problem: Error) => setError(problem.message));
+  };
+  useEffect(load, []);
+  if (!wallet && !error) return <Loading label="Opening your wallet…" />;
+  const entries = [...(wallet?.entries ?? [])].sort((a, b) => str(b.at).localeCompare(str(a.at)));
+  return (
+    <Screen onRefresh={load}>
+      <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
+      <Banner text={error} tone="error" />
+      <Card featured>
+        <Muted>Available balance</Muted>
+        <Heading>{money(wallet?.balance ?? 0)}</Heading>
+        {wallet?.walletId ? <Muted>Store Credit ID: {wallet.walletId} · give it at the Foundation counter to pay with store credit.</Muted> : null}
+        <Muted>Use it at checkout on the website. Refunds sent to store credit appear here.</Muted>
+      </Card>
+      {entries.length ? (
+        <Card>
+          <Heading>Activity</Heading>
+          {entries.map((entry) => (
+            <View key={str(entry.id)} style={{ marginTop: 8 }}>
+              <Muted>
+                {Number(entry.amount) > 0 ? "+" : "−"}
+                {money(Math.abs(Number(entry.amount) || 0))} · {str(entry.note, "Wallet")} · {formatDate(entry.at)}
+                {Number(entry.amount) > 0 && str(entry.expiresAt) ? ` · valid till ${formatDate(str(entry.expiresAt))}` : ""}
+                {str(entry.orderId) ? ` · Order ${str(entry.orderId)}` : ""}
+              </Muted>
+            </View>
+          ))}
+        </Card>
+      ) : (
+        <Empty icon="wallet-outline" label="No wallet activity yet." />
+      )}
+    </Screen>
+  );
+}
+
 function LoyaltySection({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <Screen>
@@ -230,6 +274,12 @@ function portalLabel(value: unknown) {
   if (id === "autism") return "Autism Portal";
   if (id === "fellowship") return "Fellowship Portal";
   return str(value, "Foundation programme");
+}
+
+function pipelineOf(item: Row) {
+  const value = item.pipeline as { steps?: string[]; current?: number; rejected?: boolean } | null | undefined;
+  if (!value || !Array.isArray(value.steps) || !value.steps.length) return null;
+  return { steps: value.steps.map(String), current: Number(value.current) || 0, rejected: Boolean(value.rejected) };
 }
 
 function PartnerSection({
@@ -289,6 +339,20 @@ function PartnerSection({
                 .filter(Boolean)
                 .join(" · ")}
             </Muted>
+            {kind === "tickets" && pipelineOf(item) ? (
+              <View style={{ marginTop: 12 }}>
+                <Pipeline
+                  stages={pipelineOf(item)!.steps.map((label, index) => ({
+                    id: label,
+                    label,
+                    reached: index <= pipelineOf(item)!.current,
+                    events: index === 0 && (item.issuedAt || item.at) ? [{ title: "Application received", when: formatDate(item.issuedAt || item.at) }] : [],
+                  }))}
+                  current={pipelineOf(item)!.current}
+                  failed={pipelineOf(item)!.rejected}
+                />
+              </View>
+            ) : null}
             {href ? <Button kind="ghost" label="Open on portal" onPress={() => void Linking.openURL(href)} /> : null}
           </Card>
         );

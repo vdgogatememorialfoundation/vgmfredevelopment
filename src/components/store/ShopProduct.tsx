@@ -5,15 +5,23 @@ import { useEffect, useState } from "react";
 import Badge from "@/components/common/Badge";
 import BookCard from "@/components/books/BookCard";
 import ProductBuyBox from "@/components/store/ProductBuyBox";
+import ProductShare from "@/components/store/ProductShare";
 import MediaGallery from "@/components/store/MediaGallery";
 import ProductReviews from "@/components/store/ProductReviews";
+import BookDetails from "@/components/store/BookDetails";
 import Stars from "@/components/store/Stars";
 import { averageRating, useProductReviews } from "@/lib/reviews";
-import { useLiveBooks } from "@/lib/use-cms";
+import { useLiveBooks, useOrderSettings, useSiteSettings } from "@/lib/use-cms";
 import { storeConfig } from "@/lib/constants";
 import { getDiscountPercent } from "@/lib/store";
-import { browserHasProductEdits } from "@/components/store/ShopCatalogue";
+import { browserHasProductEdits, freshCatalogue } from "@/components/store/ShopCatalogue";
 import type { Book } from "@/types";
+
+const POLICY_ICONS = {
+  Return: "M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11",
+  Replacement: "M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3",
+  Cancellation: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM15 9l-6 6M9 9l6 6"
+};
 
 export default function ShopProduct({
   slug,
@@ -29,9 +37,11 @@ export default function ShopProduct({
   useEffect(() => {
     if (browserHasProductEdits()) setUseLocal(true);
   }, [live]);
-  const catalogue = useLocal && live.length ? live : initialBooks;
-  const book = catalogue.find((item) => item.slug === slug) ?? (useLocal ? null : initialBook);
+  const catalogue = useLocal && live.length ? freshCatalogue(initialBooks, live) : initialBooks;
+  const book = catalogue.find((item) => item.slug === slug) ?? initialBook;
   const purchaseReviews = useProductReviews(book?.id ?? "");
+  const shopRules = useOrderSettings();
+  const languageSize = useSiteSettings()?.productText?.pageLanguage || 24;
 
   if (!book) {
     return (
@@ -49,6 +59,18 @@ export default function ShopProduct({
   const discount = getDiscountPercent(book);
   const rating = purchaseReviews.length ? averageRating(purchaseReviews) : book.rating ?? 0;
   const reviewCount = purchaseReviews.length || book.reviewCount || 0;
+  const writtenReviews = purchaseReviews.length
+    ? purchaseReviews.filter((review) => String((review as { comment?: string; text?: string; body?: string }).comment ?? (review as { text?: string }).text ?? (review as { body?: string }).body ?? "").trim()).length
+    : book.reviews?.length ?? 0;
+  const canReturn = book.policy?.returns ?? shopRules.returns.enabled;
+  const canReplace = book.policy?.replacement ?? (shopRules.returns.enabled && shopRules.returns.replacementAllowed);
+  const canCancel = book.policy?.cancellation ?? shopRules.cancellation.enabled;
+  const until = shopRules.cancellation.allowedUntil === "Ordered" ? "packing" : shopRules.cancellation.allowedUntil === "Packed" ? "dispatch" : "delivery";
+  const policyLines = [
+    { label: "Return", ok: canReturn, text: canReturn ? `${shopRules.returns.windowDays}-day return after delivery` : "Not returnable" },
+    { label: "Replacement", ok: canReplace, text: canReplace ? "Damaged or wrong items can be replaced after photos are reviewed" : "No replacement" },
+    { label: "Cancellation", ok: canCancel, text: canCancel ? `Can be cancelled before ${until}` : "Cannot be cancelled once ordered" },
+  ];
   const publisher = book.publisher?.name ?? storeConfig.publisherName;
 
   return (
@@ -92,15 +114,48 @@ export default function ShopProduct({
               <p className="mt-3 text-sm text-text-muted">
                 By <span className="font-medium text-burgundy">{book.author}</span>
                 {" · "}Published by <span className="font-medium text-text-primary">{publisher}</span>
+                {book.language ? (
+                  <>
+                    {" · "}Language: <span className="rounded bg-burgundy/10 px-2 py-0.5 align-middle font-extrabold text-burgundy" style={{ fontSize: languageSize }}>{book.language}</span>
+                  </>
+                ) : null}
               </p>
-              {reviewCount > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Stars rating={rating} />
-                  <a href="#reviews" className="text-sm font-medium text-burgundy hover:underline">{rating.toFixed(1)}</a>
-                  <span className="text-sm text-text-muted">({reviewCount} ratings)</span>
-                </div>
-              )}
+              <ProductShare slug={book.slug} title={book.title} price={book.price} />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {reviewCount > 0 ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-0.5 text-sm font-bold text-white">{rating.toFixed(1)} ★</span>
+                    <Stars rating={rating} />
+                    <a href="#reviews" className="text-sm font-medium text-burgundy hover:underline">
+                      {reviewCount} rating{reviewCount === 1 ? "" : "s"} & {writtenReviews} review{writtenReviews === 1 ? "" : "s"}
+                    </a>
+                  </>
+                ) : (
+                  <a href="#reviews" className="text-sm text-text-muted hover:underline">No ratings yet · be the first to review</a>
+                )}
+              </div>
+              {book.offerLabel ? (
+                <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800">
+                  {book.offerLabel}{book.offer?.endsAt ? ` · ends ${new Date(book.offer.endsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}
+                </p>
+              ) : null}
               <ProductBuyBox book={book} />
+              <ul className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                {policyLines.map((line) => (
+                  <li key={line.label} className={`rounded-lg border px-3 py-2 ${line.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-border bg-slate-50 text-text-muted"}`}>
+                    <span className="flex items-start gap-2">
+                      <svg aria-hidden="true" viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d={POLICY_ICONS[line.label as keyof typeof POLICY_ICONS]} />
+                      </svg>
+                      <span>
+                        <b className="block">{line.label}</b>
+                        {line.text}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {book.policy?.note ? <p className="mt-2 text-xs text-text-muted">{book.policy.note}</p> : null}
             </div>
           </div>
         </div>
@@ -109,34 +164,13 @@ export default function ShopProduct({
       <section className="section bg-background">
         <div className="container mx-auto max-w-3xl">
           <h2 className="heading-3 mb-5">Product information</h2>
-          <p className="text-body">{book.description}</p>
-          {(book.specifications?.length ?? 0) > 0 && (
-            <div className="mt-10">
-              <h2 className="heading-3 mb-5">Specifications</h2>
-              <div className="overflow-hidden rounded-2xl border border-border bg-white">
-                <dl>
-                  {(book.specifications ?? []).map((spec, index) => (
-                    <div key={spec.label} className={`grid grid-cols-3 gap-4 px-5 py-3.5 text-sm ${index % 2 === 1 ? "bg-warm-cream/60" : ""}`}>
-                      <dt className="font-medium text-text-muted">{spec.label}</dt>
-                      <dd className="col-span-2 text-text-primary">{spec.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-          )}
+          <BookDetails book={book} />
           <div className="mt-10 grid gap-4 sm:grid-cols-3">
             {publisher && (
               <div className="rounded-xl border border-border bg-white p-4">
                 <dt className="text-xs text-text-muted">Publisher</dt>
                 <dd className="mt-1 text-sm font-semibold text-text-primary">{publisher}</dd>
                 {book.publisher?.address && <p className="mt-1 text-xs text-text-muted">{book.publisher.address}</p>}
-              </div>
-            )}
-            {book.isbn && (
-              <div className="rounded-xl border border-border bg-white p-4">
-                <dt className="text-xs text-text-muted">ISBN</dt>
-                <dd className="mt-1 text-sm font-semibold text-text-primary">{book.isbn}</dd>
               </div>
             )}
             {book.countryOfOrigin && (

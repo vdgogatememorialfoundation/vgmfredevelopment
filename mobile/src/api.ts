@@ -14,6 +14,7 @@ export type Feed = {
     phone: string;
     address: string;
     social?: Record<string, string>;
+    liveChat?: { enabled?: boolean; online?: boolean };
   };
   flags: { supportUs?: boolean; supportUsTitle?: string; supportUsText?: string; supportUsHref?: string };
   visibility: Record<string, boolean>;
@@ -44,6 +45,12 @@ export type Feed = {
   about: Row | null;
   policies: Record<string, { title?: string; description?: string; sections?: { title: string; body: string }[] }>;
   faqs: Array<{ question?: string; answer?: string }>;
+  productReviews?: Row[];
+  seminarReviews?: Row[];
+  banners?: Row[];
+  awards?: Row[];
+  pages?: Row[];
+  orderSettings?: Row;
   appearance?: Record<string, unknown> | null;
 };
 
@@ -367,6 +374,18 @@ export async function createTicket(input: { name: string; email: string; phone?:
   return data.ticket as Row;
 }
 
+export async function replyTicket(id: string, body: string) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/mobile/tickets`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ action: "reply", id, body }),
+    })
+  );
+  if (!data.ok) throw new Error(String(data.error || "Could not send the reply."));
+  return data.ticket as Row;
+}
+
 export async function listOrders() {
   const data = await parse(await fetch(`${getApiBase()}/api/mobile/orders`, { headers: headers(false) }));
   if (!data.ok) throw new Error(String(data.error || "Could not load orders."));
@@ -434,6 +453,9 @@ export async function createCheckout(input: {
   pincode: string;
   country?: string;
   countryCode?: string;
+  landmark?: string;
+  pickup?: boolean;
+  promoCode?: string;
   items: { id: string; quantity: number }[];
 }) {
   const data = await parse(
@@ -543,9 +565,185 @@ export function isRegistrationClosed(item: Row | null | undefined) {
   return isPastDate(item.endDate || item.startDate || item.registrationEnd);
 }
 
+export function datesHidden(feed: Feed | null, preorder = false) {
+  const rules = (feed?.orderSettings ?? {}) as { hideDeliveryDates?: boolean; showPreorderStepDates?: boolean };
+  return Boolean(rules.hideDeliveryDates) || (preorder && !rules.showPreorderStepDates);
+}
+
+export function chatOn(feed: Feed | null) {
+  return moduleOn(feed, "chat") && feed?.site?.liveChat?.enabled !== false;
+}
+
+const HREF_MODULE: Record<string, string> = {
+  "/events": "events",
+  "/gallery": "gallery",
+  "/videos": "videos",
+  "/articles": "articles",
+  "/notices": "notices",
+  "/announcements": "notices",
+  "/shop": "shop",
+  "/clinics": "clinics",
+  "/certificates": "certificates",
+  "/about": "about",
+};
+
+export function hrefOn(feed: Feed | null, href: string) {
+  if (href === "/chat") return chatOn(feed);
+  const id = HREF_MODULE[href];
+  return id ? moduleOn(feed, id) : true;
+}
+
 export function moduleOn(feed: Feed | null, id: string) {
   if (!feed) return true;
   if (feed.visibility?.[id] === false) return false;
   if (feed.mobile?.modules?.[id] === false) return false;
   return true;
+}
+
+export type RegistrationField = { key?: string; type?: string; label?: string; required?: boolean; enabled?: boolean; options?: ({ value?: string; label?: string } | string)[] };
+
+export async function fetchRegistrationForm(portal: string, seminarId: number, phase: "pre" | "main") {
+  const response = await fetch(`${getApiBase()}/api/partners/registrations?portal=${encodeURIComponent(portal)}&seminarId=${seminarId}&phase=${phase}`, { headers: headers(false) });
+  const data = (await response.json().catch(() => null)) as { error?: string; form?: { fields?: RegistrationField[] } } | null;
+  if (!response.ok) throw new Error(data?.error || "The registration form is not available.");
+  return (data?.form?.fields ?? []).filter((field) => field.enabled !== false && field.key);
+}
+
+export async function submitRegistration(input: { portal: string; seminarId: number; phase: "pre" | "main"; values: Record<string, string> }) {
+  const body = new FormData();
+  body.append("portal", input.portal);
+  body.append("seminarId", String(input.seminarId));
+  body.append("phase", input.phase);
+  body.append("formData", JSON.stringify(input.values));
+  const auth = headers(false);
+  const response = await fetch(`${getApiBase()}/api/partners/registrations`, { method: "POST", headers: { accept: "application/json", ...(auth.authorization ? { authorization: auth.authorization } : {}) }, body });
+  const data = (await response.json().catch(() => null)) as { error?: string; message?: string; applicationNo?: string } | null;
+  if (!response.ok) throw new Error(data?.error || "Could not register.");
+  return data?.applicationNo ? `${data.message || "Registered."} Application ${data.applicationNo}.` : data?.message || "Registered.";
+}
+
+export async function fetchWallet() {
+  const data = await parse(await fetch(`${getApiBase()}/api/shop/wallet`, { headers: headers(false) }));
+  return { balance: Number(data.balance) || 0, walletId: String(data.walletId || ""), entries: (Array.isArray(data.entries) ? data.entries : []) as Row[] };
+}
+
+export async function startBalancePayment(orderId: string) {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/checkout`, { method: "POST", headers: headers(), body: JSON.stringify({ action: "balance", orderId }) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not start the payment."));
+  return data as { ok: true; order?: Row; amount?: number; keyId?: string; razorpayOrderId?: string };
+}
+
+export async function verifyBalancePayment(input: { orderId: string; paymentId?: string; razorpayOrderId?: string; signature?: string }) {
+  const data = await parse(await fetch(`${getApiBase()}/api/mobile/checkout`, { method: "POST", headers: headers(), body: JSON.stringify({ action: "balance_verify", ...input }) }));
+  if (!data.ok) throw new Error(String(data.error || "Could not confirm payment."));
+  return data as { ok: true; order?: Row };
+}
+
+export function preorderable(book?: Row | null) {
+  if (!book) return false;
+  const plan = book.preorder as { enabled?: boolean } | boolean | undefined;
+  const enabled = typeof plan === "object" ? Boolean(plan?.enabled) : Boolean(plan);
+  return enabled && (str(book.stockStatus) === "out_of_stock" || Number(book.stock ?? 0) <= 0);
+}
+
+export function orderable(book?: Row | null) {
+  if (!book || book.active === false) return false;
+  return preorderable(book) || (str(book.stockStatus) !== "out_of_stock" && Number(book.stock ?? 1) > 0);
+}
+
+export function preorderDeliveryDate(book?: Row | null, now = new Date()) {
+  const plan = (book?.preorder ?? {}) as { releaseDate?: string };
+  const release = plan.releaseDate ? new Date(`${plan.releaseDate}T00:00:00+05:30`) : null;
+  const start = release && !Number.isNaN(release.getTime()) && release > now ? release : now;
+  return formatDate(new Date(start.getTime() + 10 * 24 * 60 * 60 * 1000).toISOString());
+}
+
+export function plainText(value: unknown) {
+  return str(value)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Offer price while the product's offer runs, otherwise the regular price. */
+export function offerPrice(book?: Row | null, now = Date.now()) {
+  const price = Number(book?.price) || 0;
+  const offer = (book?.offer ?? null) as { price?: number; label?: string; startsAt?: string; endsAt?: string } | null;
+  if (!offer || !(Number(offer.price) > 0) || Number(offer.price) >= price) return price;
+  if (offer.startsAt && Date.parse(offer.startsAt) > now) return price;
+  if (offer.endsAt && Date.parse(offer.endsAt) < now) return price;
+  return Number(offer.price);
+}
+
+export function offerLabel(book?: Row | null) {
+  if (!book || offerPrice(book) >= (Number(book.price) || 0)) return "";
+  return str((book.offer as { label?: string } | undefined)?.label, "Special offer");
+}
+
+export type PromoRule =
+  | { kind: "coupon"; code: string; label: string; type: "percent" | "flat"; value: number; minOrder: number; maxDiscount: number }
+  | { kind: "gift"; code: string; label: string; balance: number };
+
+export function promoAmount(rule: PromoRule | null, subtotal: number) {
+  if (!rule || subtotal <= 0) return 0;
+  if (rule.kind === "gift") return Math.min(subtotal, Math.max(0, rule.balance));
+  if (subtotal < rule.minOrder) return 0;
+  let off = rule.type === "percent" ? (subtotal * rule.value) / 100 : rule.value;
+  if (rule.maxDiscount > 0) off = Math.min(off, rule.maxDiscount);
+  return Math.round(Math.min(subtotal, Math.max(0, off)) * 100) / 100;
+}
+
+export async function checkPromo(code: string, preorder: boolean) {
+  const data = await parse(
+    await fetch(`${getApiBase()}/api/shop/promotions`, { method: "POST", headers: headers(), body: JSON.stringify({ action: "check", code, preorder }) })
+  );
+  if (!data.ok) throw new Error(String(data.error || "That code isn't valid."));
+  return data.rule as PromoRule;
+}
+
+/** Overall star rating and counts from the published buyer reviews (falls back to the product's own rating). */
+export function productRating(feed: Feed | null, book: Row) {
+  const reviews = (feed?.productReviews ?? []).filter((row) => str(row.bookId || row.productId) === str(book.id));
+  const scores = reviews.map((row) => Number(row.rating) || 0).filter((value) => value > 0);
+  const rating = scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : Number(book.rating) || 0;
+  const ratings = scores.length || Number(book.reviewCount) || 0;
+  const written = reviews.filter((row) => str(row.comment || row.text || row.body).trim()).length;
+  return { rating: Math.round(rating * 10) / 10, ratings, written };
+}
+
+/** Return / replacement / cancellation for this product: its own setting, else the shop rules. */
+export function productPolicy(feed: Feed | null, book: Row) {
+  const rules = (feed?.orderSettings ?? {}) as { returns?: { enabled?: boolean; replacementAllowed?: boolean; windowDays?: number }; cancellation?: { enabled?: boolean } };
+  const own = (book.policy ?? {}) as { returns?: boolean; replacement?: boolean; cancellation?: boolean };
+  const returns = own.returns ?? rules.returns?.enabled !== false;
+  return {
+    returns,
+    replacement: own.replacement ?? (returns && rules.returns?.replacementAllowed !== false),
+    cancellation: own.cancellation ?? rules.cancellation?.enabled === true,
+    windowDays: Number(rules.returns?.windowDays) || 7,
+  };
+}
+
+/** Public shipment lookup by order number + mobile number, same as the website's Track a shipment page. */
+export async function trackOrder(id: string, phone: string) {
+  const response = await fetch(`${getApiBase()}/api/shop/orders?id=${encodeURIComponent(id.trim())}&phone=${encodeURIComponent(phone.trim())}`, { headers: headers(false) });
+  const data = (await response.json().catch(() => ({}))) as { orders?: Row[] };
+  return data.orders?.[0] ?? null;
+}
+
+export async function registerPushToken(token: string, platform: string) {
+  const response = await fetch(`${getApiBase()}/api/push/register`, { method: "POST", headers: headers(), body: JSON.stringify({ token, platform }) });
+  return response.ok;
+}
+
+export type TrackedApplication = { id?: string; portal?: string; eventName?: string; status?: string; paymentStatus?: string; amount?: number; issuedAt?: string; applicationNo?: string };
+
+/** Seminar, Autism and Fellowship application lookup, the same one the website's Application status page uses. */
+export async function trackApplication(id: string) {
+  const response = await fetch(`${getApiBase()}/api/partners/track?id=${encodeURIComponent(id.trim())}`, { headers: headers(false) });
+  const data = (await response.json().catch(() => null)) as { found?: boolean; ticket?: TrackedApplication | null; error?: string } | null;
+  if (!response.ok) throw new Error(data?.error || "The application could not be looked up.");
+  return data?.found && data.ticket ? data.ticket : null;
 }

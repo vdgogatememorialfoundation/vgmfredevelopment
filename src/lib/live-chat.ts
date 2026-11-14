@@ -1,3 +1,4 @@
+import { publicStaffName } from "@/lib/public-name";
 import { addTicket, ensureCustomerAccount } from "@/lib/admin-store";
 
 export const CHAT_UNANSWERED_MS = 45_000;
@@ -37,7 +38,45 @@ export type LiveChatThread = {
   status?: "open" | "closed";
   department?: string;
   closedAt?: string;
+  ref?: string;
+  participants?: { email: string; name: string; joinedAt: string }[];
+  firstJoinedAt?: string;
 };
+
+export type SupportDepartment = { name: string; agents: string[] };
+
+export async function fetchDepartments(): Promise<SupportDepartment[]> {
+  try {
+    const response = await fetch("/api/mobile/live-chat", { credentials: "same-origin", cache: "no-store" });
+    const data = (await response.json()) as { departmentRows?: SupportDepartment[] };
+    return data.departmentRows ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveDepartments(departments: SupportDepartment[]): Promise<SupportDepartment[]> {
+  const response = await fetch("/api/mobile/live-chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "departments", departments }),
+  });
+  const data = (await response.json()) as { ok?: boolean; error?: string; departmentRows?: SupportDepartment[] };
+  if (!data.ok) throw new Error(data.error || "Could not save departments.");
+  return data.departmentRows ?? [];
+}
+
+/** Adds another agent to the chat; the current agent stays on it. */
+export async function inviteAgent(threadId: string, inviteEmail: string, inviteName: string, agentName: string) {
+  await fetch("/api/mobile/live-chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "invite", threadId, inviteEmail, inviteName, agentName }),
+  }).catch(() => undefined);
+  await pullServerChats();
+}
 
 const SETTINGS_KEY = "vgmf_live_chat_settings";
 const THREADS_KEY = "vgmf_live_chat_threads";
@@ -225,7 +264,8 @@ export async function pullServerChats() {
   }
 }
 
-export function takeChat(threadId: string, agentEmail: string, agentName: string) {
+export function takeChat(threadId: string, agentEmail: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const threads = getChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (!thread) return;
@@ -248,7 +288,8 @@ export function takeChat(threadId: string, agentEmail: string, agentName: string
   return thread;
 }
 
-export function closeChat(threadId: string, agentName: string) {
+export function closeChat(threadId: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const threads = getChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (!thread) return;
@@ -270,7 +311,7 @@ export function closeChat(threadId: string, agentName: string) {
   return thread;
 }
 
-export function raiseTicketOnBehalf(threadId: string, agentName: string) {
+export function raiseTicketOnBehalf(threadId: string, agentName: string, details?: { subject: string; description: string }) {
   const threads = getChatThreads();
   const thread = threads.find((item) => item.id === threadId);
   if (!thread || !thread.email) return null;
@@ -278,8 +319,8 @@ export function raiseTicketOnBehalf(threadId: string, agentName: string) {
     name: thread.name,
     email: thread.email,
     phone: thread.phone,
-    subject: `Chat with ${thread.name}`,
-    body: visitorTranscript(thread),
+    subject: details?.subject.trim() || `Chat with ${thread.name}`,
+    body: details?.description.trim() ? `${details.description.trim()}\n\nChat transcript:\n${visitorTranscript(thread)}` : visitorTranscript(thread),
     portal: "public",
     chatThreadId: thread.id,
   });
@@ -295,7 +336,7 @@ export function raiseTicketOnBehalf(threadId: string, agentName: string) {
     kind: "text",
   });
   saveThreads(threads);
-  syncServer("ticket", { threadId, agentName, customerName: thread.name, customerEmail: thread.email, customerPhone: thread.phone });
+  syncServer("ticket", { threadId, agentName, customerName: thread.name, customerEmail: thread.email, customerPhone: thread.phone, subject: details?.subject, description: details?.description });
   return ticket;
 }
 

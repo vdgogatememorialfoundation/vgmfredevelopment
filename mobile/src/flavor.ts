@@ -14,7 +14,7 @@ function flavorIdFromPackage(pkg: string): FlavorId {
 
 export type FlavorId = "customer" | "admin" | "staff" | "support";
 
-export type TabId = "home" | "events" | "shop" | "clinics" | "account" | "support" | "certificates";
+export type TabId = "home" | "articles" | "events" | "shop" | "clinics" | "account" | "support" | "certificates";
 
 export type Flavor = {
   id: FlavorId;
@@ -30,9 +30,9 @@ const ALL: Record<FlavorId, Flavor> = {
     accent: colors.secondary,
     tabs: [
       { id: "home", title: "Home", icon: "home" },
-      { id: "events", title: "Events", icon: "calendar" },
       { id: "shop", title: "Shop", icon: "bag-handle" },
-      { id: "clinics", title: "Clinics", icon: "medical" },
+      { id: "events", title: "Events", icon: "calendar" },
+      { id: "clinics", title: "Clinics", icon: "medkit" },
       { id: "account", title: "Account", icon: "person" },
     ],
   },

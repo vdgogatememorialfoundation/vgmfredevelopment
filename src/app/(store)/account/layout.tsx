@@ -10,6 +10,7 @@ import { LoginStamp } from "@/components/layout/LoginStamp";
 import { visibleAccountNav } from "@/lib/site-visibility";
 import { InboxBell } from "@/components/notifications/InboxBell";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import { ScrollRow } from "@/components/layout/ScrollRow";
 
 export default function AccountLayout({
   children,
@@ -35,9 +36,9 @@ function AccountShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="border-t border-border bg-background">
       <div className="container py-10 lg:py-14">
-        <div className="grid gap-8 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
           {/* Sidebar */}
-          <aside className="lg:col-span-1">
+          <aside className="min-w-0 lg:col-span-1">
             <div className="rounded-2xl border border-border bg-white p-6">
               {user && (
                 <div className="flex items-center gap-4 border-b border-border pb-5">
@@ -70,7 +71,24 @@ function AccountShell({ children }: { children: React.ReactNode }) {
                 <InboxBell href="/account/notifications" />
               </div>
 
-              <nav aria-label="Account sidebar" className="mt-4 space-y-1">
+              <ScrollRow label="Account sections" className="mt-4 lg:hidden">
+                {items.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={pathname === item.href ? "page" : undefined}
+                    className={classNames(
+                      "flex shrink-0 items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold",
+                      pathname === item.href ? "border-burgundy bg-burgundy/5 text-burgundy" : "border-border text-text-primary"
+                    )}
+                  >
+                    <AccountIcon name={item.icon} />
+                    {item.name}
+                  </Link>
+                ))}
+              </ScrollRow>
+
+              <nav aria-label="Account sidebar" className="mt-4 hidden space-y-1 lg:block">
                 {items.map((item) => {
                   const active = pathname === item.href;
                   return (
@@ -97,7 +115,7 @@ function AccountShell({ children }: { children: React.ReactNode }) {
           </aside>
 
           {/* Content */}
-          <div className="lg:col-span-3">{children}</div>
+          <div className="min-w-0 break-words lg:col-span-3">{children}</div>
         </div>
       </div>
     </div>
@@ -188,10 +206,8 @@ function AccountIcon({ name }: { name: string }) {
     case "addresses":
       return (
         <svg {...common}>
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <path d="M12 22V10" />
-          <path d="m12 10 5 3" />
-          <path d="m12 10-5 3" />
+          <path d="M12 22s-8-6.6-8-12.5a8 8 0 0 1 16 0C20 15.4 12 22 12 22z" />
+          <path d="M8.5 11 12 8l3.5 3v3.5h-7z" />
         </svg>
       );
     case "profile":
@@ -199,6 +215,14 @@ function AccountIcon({ name }: { name: string }) {
         <svg {...common}>
           <circle cx="12" cy="8" r="4" />
           <path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7" />
+        </svg>
+      );
+    case "wallet":
+      return (
+        <svg {...common}>
+          <path d="M3 7a2 2 0 0 1 2-2h13v4" />
+          <path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2Z" />
+          <circle cx="16" cy="14.5" r="1.2" />
         </svg>
       );
     case "loyalty":

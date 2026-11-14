@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SectionHeader from "@/components/account/SectionHeader";
 import { useAuth } from "@/components/auth/AuthContext";
-import { addTicket, ticketsVisibleTo } from "@/lib/admin-store";
+import { addTicket, customerReplyToTicket, ticketsVisibleTo } from "@/lib/admin-store";
+import { pullTickets } from "@/lib/ticket-sync";
 import { formatDateTime } from "@/lib/utils";
 import type { SupportTicket } from "@/types";
 
@@ -20,8 +21,22 @@ export default function TicketsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ subject: "", body: "" });
   const [error, setError] = useState("");
+  const [openId, setOpenId] = useState("");
+  const [reply, setReply] = useState("");
+  const name = user ? `${user.firstName} ${user.lastName}`.trim() : "Guest";
 
   const refresh = () => setTickets(ticketsVisibleTo(user));
+
+  useEffect(() => {
+    let alive = true;
+    const sync = () => void pullTickets().then(() => alive && setTickets(ticketsVisibleTo(user)));
+    sync();
+    const timer = window.setInterval(sync, 15000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [user]);
 
   const submit = () => {
     if (!form.subject.trim() || !form.body.trim()) {
@@ -29,7 +44,7 @@ export default function TicketsPage() {
       return;
     }
     addTicket({
-      name: user ? `${user.firstName} ${user.lastName}`.trim() : "Guest",
+      name,
       email: user?.email ?? "",
       phone: user?.phone,
       subject: form.subject,
@@ -41,75 +56,97 @@ export default function TicketsPage() {
     refresh();
   };
 
-  const mine = tickets;
+  const sendReply = (ticket: SupportTicket) => {
+    if (!reply.trim()) return;
+    customerReplyToTicket(ticket.id, name, reply);
+    setReply("");
+    refresh();
+  };
 
   return (
     <div>
-      <SectionHeader
-        title="Support Tickets"
-        description="This is the only place to raise a Foundation support ticket. Track replies here."
-      />
+      <SectionHeader title="Support Tickets" description="This is the only place to raise a Foundation support ticket. Tap a ticket to read the conversation and reply." />
       <button type="button" onClick={() => setShowForm((v) => !v)} className="btn-primary">
         {showForm ? "Close" : "New ticket"}
       </button>
 
       {showForm && (
         <div className="mt-5 space-y-4 rounded-2xl border border-border bg-warm-cream/40 p-5">
-          <input
-            className="input-field"
-            placeholder="Subject"
-            value={form.subject}
-            onChange={(e) => setForm({ ...form, subject: e.target.value })}
-          />
-          <textarea
-            className="input-field resize-y"
-            rows={4}
-            placeholder="How can we help?"
-            value={form.body}
-            onChange={(e) => setForm({ ...form, body: e.target.value })}
-          />
+          <input className="input-field" placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+          <textarea className="input-field resize-y" rows={4} placeholder="How can we help?" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
           <div className="flex items-center gap-3">
-            <button type="button" onClick={submit} className="btn-primary">Submit ticket</button>
+            <button type="button" onClick={submit} className="btn-primary">
+              Submit ticket
+            </button>
             {error && <span className="text-sm text-red-600">{error}</span>}
           </div>
         </div>
       )}
 
       <div className="mt-6 space-y-3">
-        {mine.length === 0 ? (
+        {tickets.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-text-muted">
-            No support tickets yet. Raise one above and our team will respond
-            here and by email.
+            No support tickets yet. Raise one above and our team will respond here and by email.
           </div>
         ) : (
-          mine.map((ticket) => (
-            <div key={ticket.id} className="rounded-2xl border border-border bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-text-primary">
-                    #{ticket.id} — {ticket.subject}
-                  </p>
-                  <p className="text-xs text-text-muted">
-                    Created {formatDateTime(ticket.createdAt)}
-                  </p>
-                </div>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE[ticket.status] ?? ""}`}>
-                  {ticket.status}
-                </span>
+          tickets.map((ticket) => {
+            const open = openId === ticket.id;
+            return (
+              <div key={ticket.id} className="rounded-2xl border border-border bg-white shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenId(open ? "" : ticket.id);
+                    setReply("");
+                  }}
+                  className="flex w-full flex-wrap items-center justify-between gap-2 p-4 text-left"
+                  aria-expanded={open}
+                >
+                  <div>
+                    <p className="font-semibold text-text-primary">
+                      <span className="text-burgundy underline-offset-2 hover:underline">#{ticket.id}</span> — {ticket.subject}
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      Created {formatDateTime(ticket.createdAt)} · {ticket.responses.length} {ticket.responses.length === 1 ? "reply" : "replies"}
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${TONE[ticket.status] ?? ""}`}>{ticket.status}</span>
+                </button>
+                {open && (
+                  <div className="space-y-2 border-t border-border p-4">
+                    <Bubble mine from="You" at={ticket.createdAt} text={ticket.body} />
+                    {ticket.responses.map((r, index) => {
+                      const mine = r.from === name || r.from === ticket.name;
+                      return <Bubble key={`${r.at}-${index}`} mine={mine} from={mine ? "You" : r.from} at={r.at} text={r.text} />;
+                    })}
+                    <div className="pt-2">
+                      <textarea className="input-field resize-y" rows={3} placeholder="Write a reply to the Foundation team" value={reply} onChange={(e) => setReply(e.target.value)} />
+                      <div className="mt-2 flex items-center gap-3">
+                        <button type="button" className="btn-primary" disabled={!reply.trim()} onClick={() => sendReply(ticket)}>
+                          Send reply
+                        </button>
+                        {(ticket.status === "Resolved" || ticket.status === "Closed") && <span className="text-xs text-text-muted">Replying reopens this ticket.</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <p className="mt-2 text-sm text-text-primary">{ticket.body}</p>
-              {ticket.responses.map((r, index) => (
-                <p key={index} className="mt-2 rounded-lg bg-warm-cream p-3 text-xs text-text-muted">
-                  <span className="font-semibold text-text-primary">{r.from}</span>
-                  {" · "}
-                  {formatDateTime(r.at)}
-                  <br />
-                  {r.text}
-                </p>
-              ))}
-            </div>
-          ))
+            );
+          })
         )}
+      </div>
+    </div>
+  );
+}
+
+function Bubble({ mine, from, at, text }: { mine: boolean; from: string; at: string; text: string }) {
+  return (
+    <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+      <div className={`max-w-[85%] whitespace-pre-wrap rounded-2xl border px-3 py-2 text-sm ${mine ? "border-blue-100 bg-blue-50 text-text-primary" : "border-gold/30 bg-warm-cream text-text-primary"}`}>
+        <p className="mb-1 text-[11px] font-semibold text-text-muted">
+          {from} · {formatDateTime(at)}
+        </p>
+        {text}
       </div>
     </div>
   );

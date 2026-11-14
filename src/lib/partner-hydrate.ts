@@ -168,18 +168,22 @@ export async function hydratePartnerFeed(opts?: { full?: boolean; force?: boolea
   const email = session?.email?.trim().toLowerCase() || "";
   const last = Number(window.sessionStorage.getItem("vgmf_partner_hydrated_at") || 0);
   const lastEmail = window.sessionStorage.getItem("vgmf_partner_hydrated_email") || "";
+  const lastFeed = Number(window.sessionStorage.getItem("vgmf_partner_feed_at") || 0);
+  if (opts?.force || !lastFeed || Date.now() - lastFeed >= 30 * 1000) {
+    window.sessionStorage.setItem("vgmf_partner_feed_at", String(Date.now()));
+    try {
+      const feedRes = await fetch("/api/partners/feed", { cache: "no-store", credentials: "same-origin" });
+      if (feedRes.ok) {
+        const feed = (await feedRes.json()) as PartnerFeed & { ok?: boolean };
+        applyPartnerFeed(feed);
+      }
+    } catch {
+      /* public site still works without partner data */
+    }
+  }
   if (!opts?.force && last && lastEmail === email && Date.now() - last < 5 * 60 * 1000) return;
   window.sessionStorage.setItem("vgmf_partner_hydrated_at", String(Date.now()));
   window.sessionStorage.setItem("vgmf_partner_hydrated_email", email);
-  try {
-    const feedRes = await fetch("/api/partners/feed", { cache: "no-store", credentials: "same-origin" });
-    if (feedRes.ok) {
-      const feed = (await feedRes.json()) as PartnerFeed & { ok?: boolean };
-      applyPartnerFeed(feed);
-    }
-  } catch {
-    /* public site still works without partner data */
-  }
   if (signedOut) return;
   if (email) {
     await lookupPartnerAccount({ email, phone: session?.phone, identifier: email });

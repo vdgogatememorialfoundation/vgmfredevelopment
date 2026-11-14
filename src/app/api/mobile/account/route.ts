@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isValidPhone } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { corsHeaders } from "@/lib/server/mobile-feed";
-import { sendMobileEmail } from "@/lib/server/mobile-mail";
+import { sendMobileEmail, sendMobileSmsOtp } from "@/lib/server/mobile-mail";
 import {
   accountExists,
   createAccount,
@@ -11,6 +11,8 @@ import {
   publicAccount,
   setAccountPassword,
   upsertAccount,
+  cleanBirthDate,
+  cleanExtra,
 } from "@/lib/server/accounts";
 import { lookupPartnerIdentity } from "@/lib/server/partner-portals";
 import {
@@ -22,6 +24,8 @@ import {
   sessionFromToken,
   verifyMobileOtp,
 } from "@/lib/server/mobile-store";
+import { consumeGoogleTicket, readGoogleTicket } from "@/lib/server/google-auth";
+import { recordSignupForm } from "@/lib/server/signup-forms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,20 +73,22 @@ async function resolveAccount(identifier: string) {
   });
 }
 
-async function sendCode(email: string, name: string, subject: string) {
+async function sendCode(email: string, name: string, subject: string, phone = "") {
   const issued = issueMobileOtp(email);
   if (issued.error) return { error: issued.error, status: 429 as const };
+  const texted = await sendMobileSmsOtp(phone, issued.code);
   try {
     const sent = await sendMobileEmail(
       email,
       subject,
-      `Hi ${name},\n\nYour VGMF verification code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
+      `Hi ${name},\n\nYour Vaidya Gogate Memorial Foundation verification code is ${issued.code}. It expires in 10 minutes.\n\n– Vaidya Gogate Memorial Foundation`
     );
-    if (!sent) {
+    if (!sent && !texted) {
       clearMobileOtp(email);
       return { error: "offline" as const, status: 502 as const };
     }
   } catch (error) {
+    if (texted) return { ok: true as const };
     clearMobileOtp(email);
     return { error: (error as Error).message || "Could not send the email code.", status: 502 as const };
   }
@@ -114,7 +120,7 @@ export async function POST(request: NextRequest) {
     if (accountExists(email, phone) || (await resolveAccount(email)) || (await resolveAccount(phone))) {
       return json({ ok: false, error: "An account with this email or phone is already created. Please login." }, 409);
     }
-    const mailed = await sendCode(email, firstName, "VGMF account verification");
+    const mailed = await sendCode(email, firstName, "Vaidya Gogate Memorial Foundation account verification", phone);
     if ("error" in mailed) {
       return json({ ok: false, error: mailed.error === "offline" ? "Email is not configured. Ask Admin to connect ZeptoMail, then try again." : mailed.error }, mailed.status);
     }
@@ -129,6 +135,8 @@ export async function POST(request: NextRequest) {
         phone,
         whatsapp: String(body?.whatsapp ?? phone),
         alternatePhone: String(body?.alternatePhone ?? phone),
+        birthDate: cleanBirthDate(body?.birthDate) ?? "",
+        extraFields: JSON.stringify(cleanExtra(body?.extraFields) ?? {}),
       },
       message: `A code was sent to ${email}.`,
     });
@@ -148,8 +156,11 @@ export async function POST(request: NextRequest) {
         phone: String(body?.phone ?? ""),
         whatsapp: String(body?.whatsapp ?? ""),
         alternatePhone: String(body?.alternatePhone ?? ""),
+        birthDate: cleanBirthDate(body?.birthDate),
+        extraFields: cleanExtra(body?.extraFields),
         password: String(body?.password ?? "") || undefined,
       });
+      recordSignupForm(account, request, "email", String(body?.country ?? ""));
       const name = [account.firstName, account.lastName].filter(Boolean).join(" ");
       return json({ ...sessionPayload(account.email, name, account.accountId), message: `Your Account ID is ${account.accountId}.` });
     } catch (error) {
@@ -175,7 +186,7 @@ export async function POST(request: NextRequest) {
         return json({ ok: false, error: "Incorrect password. Use Forgot password if you need a reset." }, 401);
       }
     }
-    const mailed = await sendCode(account.email, account.firstName, "VGMF sign-in code");
+    const mailed = await sendCode(account.email, account.firstName, "Vaidya Gogate Memorial Foundation sign-in code", account.phone ?? "");
     if ("error" in mailed) {
       if (mailed.error === "offline") {
         return json({ ...sessionPayload(account.email, publicAccount(account).name, account.accountId), message: "Signed in." });
@@ -183,6 +194,39 @@ export async function POST(request: NextRequest) {
       return json({ ok: false, error: mailed.error }, mailed.status);
     }
     return json({ ok: true, otpRequired: true, email: account.email, name: publicAccount(account).name, message: `A code was sent to ${account.email}.` });
+  }
+
+  if (action === "google") {
+    const ticket = String(body?.ticket ?? "");
+    const identity = readGoogleTicket(ticket);
+    if (!identity) return json({ ok: false, error: "Google sign-in expired. Please try Continue with Google again." }, 400);
+    const existing = await resolveAccount(identity.email);
+    if (existing) {
+      consumeGoogleTicket(ticket);
+      return json(sessionPayload(existing.email, publicAccount(existing).name, existing.accountId));
+    }
+    const phone = String(body?.phone ?? "").trim();
+    const firstName = String(body?.firstName ?? identity.firstName).trim();
+    const lastName = String(body?.lastName ?? identity.lastName).trim();
+    if (!phone) {
+      return json({ ok: true, needsDetails: true, email: identity.email, firstName: identity.firstName, lastName: identity.lastName });
+    }
+    const countryBlocked = countryRejection(String(body?.countryCode ?? ""), String(body?.country ?? ""));
+    if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
+    if (!firstName || !lastName || !isValidPhone(phone)) {
+      return json({ ok: false, error: "Enter your first name, last name and a valid international phone number, including the country code." }, 400);
+    }
+    if (findAccount(phone) || (await resolveAccount(phone))) {
+      return json({ ok: false, error: "This phone number is already used by another account. Sign in with that account instead." }, 409);
+    }
+    try {
+      const account = createAccount({ salutation: String(body?.salutation ?? "Dr."), firstName, lastName, email: identity.email, phone });
+      recordSignupForm(account, request, "google", String(body?.country ?? ""));
+      consumeGoogleTicket(ticket);
+      return json({ ...sessionPayload(account.email, publicAccount(account).name, account.accountId), message: `Your Account ID is ${account.accountId}.` });
+    } catch (error) {
+      return json({ ok: false, error: (error as Error).message }, 409);
+    }
   }
 
   if (action === "verify-login") {
@@ -198,7 +242,7 @@ export async function POST(request: NextRequest) {
     const identifier = String(body?.identifier ?? "").trim();
     const account = await resolveAccount(identifier);
     if (!account) return json({ ok: false, error: "No account found with these details." }, 404);
-    const mailed = await sendCode(account.email, account.firstName, "VGMF password reset");
+    const mailed = await sendCode(account.email, account.firstName, "Vaidya Gogate Memorial Foundation password reset", account.phone ?? "");
     if ("error" in mailed) return json({ ok: false, error: mailed.error === "offline" ? "Email is not configured. Ask Admin to connect ZeptoMail, then try again." : mailed.error }, mailed.status);
     return json({ ok: true, email: account.email, message: `A reset code was sent to ${account.email}.` });
   }

@@ -9,9 +9,10 @@ const AGGREGATOR_NAMES: Record<string, string> = {
   nimbuspost: "Nimbuspost",
   ithink: "iThink Logistics",
   shipyaari: "Shipyaari",
+  goswift: "GoSwift",
 };
 
-const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari)(\s+(surface|air|express|courier|driver))?$/i;
+const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari|goswift|swift)(\s+(surface|air|express|courier|driver))?$/i;
 
 export function isOwnFleet(provider?: string) {
   return OWN_FLEET.has((provider ?? "").toLowerCase());
@@ -21,11 +22,33 @@ export function aggregatorName(provider?: string) {
   return AGGREGATOR_NAMES[(provider ?? "").toLowerCase()] ?? "";
 }
 
-/** Gogate Products for our fleet. Ekart (or whoever the aggregator assigned) otherwise. */
+/** Admin only: the aggregator or desk a courier is booked through. */
+export function bookedViaLabel(provider?: string) {
+  const id = (provider ?? "").toLowerCase();
+  if (!id) return "";
+  if (id === "local") return "Own estimate";
+  if (id === "tookan" || id === "tookan-parcel") return "via Tookan";
+  if (id === "shipday") return "via Shipday";
+  return `via ${aggregatorName(id) || provider}`;
+}
+
+/** The in-house name plus the desk that is carrying the order. */
+export function fleetCourierLabel(provider?: string) {
+  const id = (provider ?? "").toLowerCase();
+  if (id === "tookan" || id === "tookan-parcel") return "Gogate Products-Tookan";
+  if (id === "shipday") return "Gogate Products-Shipday";
+  return "";
+}
+
+/** Gogate Products-Tookan or Gogate Products-Shipday for our fleet. Ekart (or whoever the aggregator assigned) otherwise. */
 export function customerCourierLabel(input: { provider?: string; courier?: string }) {
   const provider = (input.provider ?? "").toLowerCase();
   const raw = (input.courier ?? "").trim();
-  if (isOwnFleet(provider) || /tookan|shipday/i.test(raw)) return GOGATE_COURIER;
+  const fleet = fleetCourierLabel(provider);
+  if (fleet) return fleet;
+  if (/tookan/i.test(raw)) return "Gogate Products-Tookan";
+  if (/shipday/i.test(raw)) return "Gogate Products-Shipday";
+  if (/^ekart$/i.test(raw)) return "Ekart Logistics";
   if (raw && !AGGREGATOR_ONLY.test(raw)) return raw;
   return aggregatorName(provider) || raw || "Courier";
 }

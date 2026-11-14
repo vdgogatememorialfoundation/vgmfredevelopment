@@ -1,15 +1,20 @@
 import { useRef, useState } from "react";
 import { Dimensions, Image, Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { formatDate, isPastDate, isRegistrationClosed, mediaUrl, moduleOn, money, str, type Row } from "../../src/api";
+import { Ionicons } from "@expo/vector-icons";
+import { isPastDate, mediaUrl, moduleOn, str, type Row } from "../../src/api";
 import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { EXPLORE, SITE, resolvedAbout } from "../../src/site-content";
+import { QUICK_ACTIONS, resolvedAbout } from "../../src/site-content";
 import { useTheme } from "../../src/theme";
-import { Banner, Button, Card, Cover, Heading, IconTile, Kicker, LinkRow, Loading, Muted, Portrait, Price, Screen, SearchBar, SectionHeader, SiteFooter, StatusChip } from "../../src/ui";
+import { Banner, Card, Heading, Hero, IconTile, Kicker, LinkRow, Loading, Muted, Portrait, Screen, SearchBar, SectionHeader, SiteFooter } from "../../src/ui";
+import { EventCard } from "../../src/event-card";
+import { ArticleCard } from "./articles";
+import { ProductGrid } from "./shop";
 
 export default function HomeScreen() {
-  const { feed, loading, error, refresh } = useFeed();
+  const { feed, notices, loading, error, refresh } = useFeed();
+  const voices = ((feed?.seminarReviews ?? []) as Row[]).filter((row) => row.published !== false && str(row.text)).slice(0, 12);
   const theme = useTheme();
   const about = resolvedAbout(feed?.about);
   const [query, setQuery] = useState("");
@@ -17,7 +22,7 @@ export default function HomeScreen() {
   const [hero, setHero] = useState(0);
   const width = Dimensions.get("window").width - 40;
   const scroller = useRef<ScrollView>(null);
-  const flyers = (feed?.flyers ?? []).filter((item) => str(item.image));
+  const flyers = [...(feed?.banners ?? []), ...(feed?.flyers ?? [])].filter((item) => str(item.image));
   const events = feed?.events ?? [];
   const books = feed?.books ?? [];
   const featured = events.find((item) => !isPastDate(item.endDate || item.startDate)) || events[0];
@@ -25,22 +30,14 @@ export default function HomeScreen() {
 
   if (loading && !feed) return <Loading />;
 
+  const articles = (feed?.articles ?? []).slice(0, 3);
+  const upcoming = events.filter((item) => !isPastDate(item.endDate || item.startDate)).slice(0, 2);
+  const eventList = upcoming.length ? upcoming : featured ? [featured] : [];
+
   return (
     <View style={{ flex: 1 }}>
     <Screen refreshing={loading} onRefresh={refresh}>
       <TopBar bag={enabled("shop")} />
-      <Kicker>Preserving Ayurveda</Kicker>
-      <Text style={{ fontSize: 30, lineHeight: 36, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily, letterSpacing: -0.5, marginBottom: 8 }}>
-        {str(feed?.site.tagline, SITE.tagline)}
-      </Text>
-      <Muted>{SITE.purpose}</Muted>
-      <View style={{ height: 16 }} />
-      <SearchBar
-        value={query}
-        onChange={setQuery}
-        placeholder="Search articles, publications, events, clinics…"
-        onSubmit={() => router.push({ pathname: "/search", params: { q: query } })}
-      />
       <Banner text={error} tone="error" />
 
       {flyers.length ? (
@@ -58,7 +55,7 @@ export default function HomeScreen() {
                   accessibilityLabel={str(item.title, "Foundation flyer")}
                   source={{ uri: mediaUrl(item.image) }}
                   resizeMode="cover"
-                  style={{ width, height: Math.round(width * 0.52), borderRadius: 16, backgroundColor: theme.colors.paper }}
+                  style={{ width, height: Math.round(width * 0.52), borderRadius: 10, backgroundColor: theme.colors.paper }}
                 />
               </Pressable>
             ))}
@@ -66,35 +63,77 @@ export default function HomeScreen() {
           {flyers.length > 1 ? (
             <View style={{ position: "absolute", bottom: 10, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 6 }}>
               {flyers.map((item, index) => (
-                <View key={str(item.id)} style={{ width: index === hero ? 16 : 6, height: 6, borderRadius: 3, backgroundColor: index === hero ? theme.colors.primary : theme.colors.border }} />
+                <View key={str(item.id)} style={{ width: index === hero ? 18 : 6, height: 6, borderRadius: 3, backgroundColor: index === hero ? theme.colors.paper : "rgba(255,255,255,0.6)" }} />
               ))}
             </View>
           ) : null}
         </View>
       ) : null}
 
-      <SectionHeader title="Explore" subtitle="Pages of the Foundation" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 8 }}>
-        {EXPLORE.filter((item) => enabled(item.id) || ["certificates", "chat", "contact", "notices"].includes(item.id)).map((item) => (
+      <View style={{ backgroundColor: theme.colors.paper, borderRadius: 18, paddingVertical: 10, paddingHorizontal: 6, marginBottom: 20, flexDirection: "row", flexWrap: "wrap", elevation: 2, shadowColor: "#3B2A14", shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 } }}>
+        {QUICK_ACTIONS.filter((item) => enabled(item.id) || ["certificates", "about"].includes(item.id)).map((item) => (
           <IconTile key={item.id} label={item.label} icon={item.icon} onPress={() => router.push(item.href as never)} />
         ))}
       </View>
 
-      {featured ? (
-        <Card onPress={() => router.push(`/event/${str(featured.id)}`)}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-            <Kicker>{str(featured.eventType, "Foundation event")}</Kicker>
-            <StatusChip label={[str(featured.city), str(featured.mode)].filter(Boolean).join(" · ") || str(featured.venue)} />
+      {notices.length ? (
+        <>
+          <SectionHeader title="Notice board" subtitle="From the Foundation office" actionLabel="All notices" onAction={() => router.push("/notices")} />
+          <View style={{ backgroundColor: theme.colors.paper, borderRadius: 18, borderLeftWidth: 4, borderLeftColor: theme.colors.accent, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 20 }}>
+            {notices.slice(0, 3).map((item, index) => (
+              <Pressable key={str(item.id, String(index))} onPress={() => router.push("/notices")} style={{ paddingVertical: 10, borderTopWidth: index ? 1 : 0, borderTopColor: theme.colors.border }}>
+                <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "700", fontSize: 14 }}>{str(item.title)}</Text>
+                {str(item.date, str(item.publishedAt)) ? <Text style={{ color: theme.colors.muted, fontSize: 11, marginTop: 3 }}>{str(item.date, str(item.publishedAt)).slice(0, 10)}</Text> : null}
+              </Pressable>
+            ))}
           </View>
-          <Heading>{str(featured.name)}</Heading>
-          <Muted>{str(featured.shortDescription)}</Muted>
-          <Muted>{[str(featured.venue), formatDate(featured.startDate)].filter(Boolean).join(" · ")}</Muted>
-          {isRegistrationClosed(featured) ? (
-            <Button kind="ghost" label="Registration closed" disabled onPress={() => undefined} />
-          ) : (
-            <Button label="Register now" onPress={() => openPublishedHref(str(featured.registrationUrl) || SITE.eventsUrl)} />
-          )}
-        </Card>
+        </>
+      ) : null}
+
+      {enabled("shop") && books.length ? (
+        <>
+          <SectionHeader title="Shop & publications" subtitle="Order in the app · delivery or store pickup" actionLabel="View all" onAction={() => router.push("/shop")} />
+          <ProductGrid items={books.slice(0, 4)} />
+        </>
+      ) : null}
+
+      {eventList.length ? (
+        <>
+          <SectionHeader title={upcoming.length ? "Upcoming events" : "Events"} subtitle="Seminars, workshops and programmes" actionLabel="All events" onAction={() => router.push("/events")} />
+          {eventList.map((item) => (
+            <EventCard key={str(item.id)} item={item} />
+          ))}
+        </>
+      ) : null}
+
+      {articles.length ? (
+        <>
+          <SectionHeader title="Latest articles" subtitle="From the Foundation library" actionLabel="All articles" onAction={() => router.push("/articles")} />
+          {articles.map((item) => (
+            <ArticleCard key={str(item.id)} item={item} />
+          ))}
+        </>
+      ) : null}
+
+      {voices.length ? (
+        <>
+          <SectionHeader title="Seminar voices" subtitle="What participants say" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={292} decelerationRate="fast" contentContainerStyle={{ gap: 12, paddingRight: 20 }} style={{ marginBottom: 20, marginHorizontal: -20, paddingLeft: 20 }}>
+            {voices.map((row, index) => (
+              <View key={str(row.id, String(index))} style={{ width: 280, backgroundColor: theme.colors.paper, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: theme.colors.border }}>
+                <Ionicons name="chatbox-ellipses-outline" size={22} color={theme.colors.accent} />
+                <Text numberOfLines={5} style={{ color: theme.colors.text, fontSize: 14, lineHeight: 21, marginTop: 8, fontStyle: "italic" }}>{str(row.text).replace(/^[“"]|[”"]$/g, "")}</Text>
+                <View style={{ flexDirection: "row", marginTop: 10 }}>
+                  {Array.from({ length: 5 }, (_, star) => (
+                    <Ionicons key={star} name={star < (Number(row.rating) || 5) ? "star" : "star-outline"} size={13} color={theme.colors.accent} />
+                  ))}
+                </View>
+                <Text style={{ color: theme.colors.text, fontWeight: "800", fontSize: 13, marginTop: 6 }} numberOfLines={1}>{str(row.name)}</Text>
+                {str(row.event) ? <Text style={{ color: theme.colors.muted, fontSize: 12 }} numberOfLines={1}>{str(row.event)}</Text> : null}
+              </View>
+            ))}
+          </ScrollView>
+        </>
       ) : null}
 
       <SectionHeader title="Foundation pillars & legacy" actionLabel="About" onAction={() => router.push("/about")} />
@@ -115,21 +154,7 @@ export default function HomeScreen() {
         onPress={() => router.push("/about")}
       />
 
-      <SectionHeader title="Publications" subtitle="From the Foundation shop" actionLabel="Shop" onAction={() => router.push("/shop")} />
-      {books.length ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-          {books.slice(0, 4).map((item) => (
-            <HomeBook key={str(item.id)} item={item} />
-          ))}
-        </View>
-      ) : (
-        <Card>
-          <Muted>No titles are in the shop yet. Open Shop after Admin publishes the catalogue.</Muted>
-          <Button kind="ghost" label="Open shop" onPress={() => router.push("/shop")} />
-        </Card>
-      )}
-
-      <Card>
+      <Card featured>
         <Kicker>Certificate verification</Kicker>
         <Heading>Verify a Foundation certificate</Heading>
         <Muted>Look up workshop, fellowship or seminar credentials issued by the Foundation.</Muted>
@@ -140,11 +165,11 @@ export default function HomeScreen() {
             placeholder="e.g. VGMF-2025-PN-034"
             placeholderTextColor={theme.colors.muted}
             accessibilityLabel="Certificate number"
-            style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, paddingHorizontal: 12, minHeight: 48, backgroundColor: theme.colors.background, color: theme.colors.text }}
+            style={{ flex: 1, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, paddingHorizontal: 12, minHeight: 48, backgroundColor: theme.colors.background, color: theme.colors.text }}
           />
           <Pressable
             onPress={() => router.push({ pathname: "/certificates", params: { q: cert } })}
-            style={{ backgroundColor: theme.colors.primary, borderRadius: 12, paddingHorizontal: 16, minHeight: 48, justifyContent: "center" }}
+            style={{ backgroundColor: theme.colors.secondary, borderRadius: 8, paddingHorizontal: 16, minHeight: 48, justifyContent: "center" }}
           >
             <Text style={{ color: theme.colors.onPrimary, fontWeight: "800", fontSize: 12 }}>Verify</Text>
           </Pressable>
@@ -175,23 +200,6 @@ function PortraitCard({ uri, title, role, body, onPress, fallback }: { uri?: str
   );
 }
 
-function HomeBook({ item }: { item: Row }) {
-  const theme = useTheme();
-  const price = Number(item.price) || 0;
-  const original = Number(item.originalPrice) || 0;
-  return (
-    <Pressable
-      onPress={() => router.push(`/book/${str(item.id)}`)}
-      style={{ width: "48%", backgroundColor: theme.colors.paper, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 16, padding: 10, marginBottom: 8 }}
-    >
-      <Cover uri={mediaUrl(item.coverImage) || undefined} ratio="square" />
-      <Heading>{str(item.title)}</Heading>
-      <Muted>{str(item.author)}</Muted>
-      <Price value={money(price)} original={original > price ? money(original) : undefined} />
-    </Pressable>
-  );
-}
-
 export function openPublishedHref(href: string) {
   if (!href) return;
   if (/^\/notices(\/|$)/.test(href)) return;
@@ -204,7 +212,7 @@ export function openPublishedHref(href: string) {
     [/^\/articles\/([^/?#]+)/, "/article/"],
     [/^\/shop\/([^/?#]+)/, "/book/"],
     [/^\/clinics\/([^/?#]+)/, "/clinic/"],
-    [/^\/p\//, ""],
+    [/^\/p\/([^/?#]+)/, "/page/"],
   ];
   for (const [pattern, prefix] of routes) {
     const match = href.match(pattern);
@@ -213,9 +221,5 @@ export function openPublishedHref(href: string) {
     router.push(`${prefix}${match[1]}` as never);
     return;
   }
-  if (href.startsWith("/") && !href.startsWith("//")) {
-    const origin = str((globalThis as { location?: { origin?: string } }).location?.origin);
-    void Linking.openURL(`https://staging.vaidyagogate.org${href}`);
-    void origin;
-  }
+  if (href.startsWith("/") && !href.startsWith("//")) router.push({ pathname: "/web", params: { path: href } });
 }

@@ -261,3 +261,23 @@ iframe {
     display: none !important;
   }
 }
+
+/* Current stage on the small order tracker pulses like a live beacon. */
+@keyframes vgmf-dot-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.55); }
+  100% { box-shadow: 0 0 0 9px rgba(5, 150, 105, 0); }
+}
+.vgmf-dot-pulse { animation: vgmf-dot-pulse 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .vgmf-dot-pulse { animation: none; box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.2); }
+}
+
+h1,
+h2,
+h3,
+.heading-1,
+.heading-2,
+.heading-3,
+.heading-4 {
+  zoom: var(--heading-scale, 1);
+}
