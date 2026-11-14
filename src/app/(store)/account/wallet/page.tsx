@@ -16,10 +16,17 @@ const REFUND_STATE: Record<string, string> = {
   failed: "Failed — the desk will retry",
 };
 
+async function resendCreditId(email?: string) {
+  const response = await fetch("/api/shop/wallet", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ resendId: true, email }) });
+  const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; sentTo?: string };
+  return data.ok ? `Store Credit ID sent to ${data.sentTo}.` : data.error || "Could not send the ID.";
+}
+
 export default function WalletPage() {
   const { user } = useAuth();
   const { ready, version } = useCommerceMirror();
   const [mounted, setMounted] = useState(false);
+  const [resendNote, setResendNote] = useState("");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setMounted(true));
@@ -57,6 +64,10 @@ export default function WalletPage() {
           <p className="mt-3 text-sm text-text-primary">
             Store Credit ID <span className="ml-1 rounded-md bg-white px-2 py-0.5 font-mono text-base font-bold tracking-[0.2em] text-burgundy">{walletId}</span>
             <span className="mt-1 block text-xs text-text-muted">Give this ID at the Foundation counter to pay with store credit. Keep it to yourself.</span>
+            <button type="button" className="mt-1 text-xs font-semibold text-burgundy underline" onClick={async () => setResendNote(await resendCreditId())}>
+              Email me this ID
+            </button>
+            {resendNote && <span className="block text-xs text-text-muted">{resendNote}</span>}
           </p>
         )}
         <p className="mt-2 text-sm text-text-muted">Use it on any shop order. Store credit cannot be withdrawn to a bank account.</p>

@@ -590,7 +590,22 @@ export type RateOut = {
   /** The courier's own expected delivery date, when it gives one. */
   deliverBy?: string;
   rating?: number;
+  /** Weight the courier bills, as the aggregator reports it (kg). */
+  chargeWeightKg?: number;
+  /** A placeholder price, not a quote from the aggregator; never used to charge customers. */
+  estimate?: boolean;
+  /** Earliest pickup the aggregator offers, when it says. */
+  pickupBy?: string;
 };
+
+/** Chargeable weight from an aggregator row; values above 50 are grams. */
+function chargeKg(row: Json, ...keys: string[]) {
+  for (const key of keys) {
+    const value = Number(row[key]);
+    if (Number.isFinite(value) && value > 0) return Math.round((value > 50 ? value / 1000 : value) * 1000) / 1000;
+  }
+  return undefined;
+}
 
 type Parcel = {
   pickupPincode: string;
@@ -688,6 +703,8 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     courierId: String(courier.courier_company_id),
     courierName: String(courier.courier_name),
     rate: Number(courier.rate ?? courier.freight_charge ?? 0),
+    chargeWeightKg: chargeKg(courier, "charge_weight", "applicable_weight"),
+    pickupBy: typeof courier.suppress_date === "string" && courier.suppress_date ? String(courier.suppress_date) : undefined,
     etaDays: Number(courier.estimated_delivery_days ?? 5),
     cod: Boolean(courier.cod),
     live: true as const,
@@ -719,6 +736,7 @@ export async function nimbusRates(input: Json, parcel: Parcel): Promise<RateOut[
     courierId: String(courier.id),
     courierName: String(courier.name),
     rate: Number(courier.total_charges ?? courier.freight_charges ?? 0),
+    chargeWeightKg: chargeKg(courier, "chargeable_weight", "charge_weight", "applicable_weight", "billable_weight"),
     etaDays: daysUntil(String(courier.edd ?? "")) ?? 5,
     live: true as const,
   }));
@@ -1662,6 +1680,7 @@ export async function ithinkRates(input: Json, parcel: Parcel): Promise<RateOut[
     courierId: String(courier.logistic_id ?? courier.id ?? courier.logistic_name ?? ""),
     courierName: String(courier.logistic_name ?? courier.name ?? "iThink courier"),
     rate: Number(courier.total_charges ?? courier.rate ?? courier.freight_charge ?? 0),
+    chargeWeightKg: chargeKg(courier, "chargeable_weight", "charge_weight", "applicable_weight", "billable_weight", "weight_slab"),
     etaDays: daysUntil(String(courier.edd ?? courier.estimated_delivery ?? "")) ?? Number(courier.tat ?? 5),
     live: true as const,
   }));
@@ -1965,6 +1984,7 @@ export async function shipyaariRates(input: Json, parcel: Parcel): Promise<RateO
         courierId: String(row.courier_id ?? row.id ?? "shipyaari"),
         courierName: String(row.courier_name ?? row.name ?? "Shipyaari"),
         rate: Number(row.total_charges ?? row.rate ?? row.freight ?? 0),
+        chargeWeightKg: chargeKg(row, "chargeable_weight", "applied_weight", "charge_weight", "billable_weight"),
         etaDays: Number(row.edd ?? row.tat ?? 4) || 4,
         live: true as const,
       }));
@@ -1978,6 +1998,7 @@ export async function shipyaariRates(input: Json, parcel: Parcel): Promise<RateO
       courierId: "shipyaari",
       courierName: "Shipyaari",
       rate: 79,
+      estimate: true,
       etaDays: 4,
       live: true as const,
     },
@@ -2181,6 +2202,7 @@ export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut
       courierId: "goswift",
       courierName: "GoSwift",
       rate: Number(input.rate) > 0 ? Number(input.rate) : 79,
+      estimate: true,
       etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
       live: true as const,
       cod: details.cod !== false,

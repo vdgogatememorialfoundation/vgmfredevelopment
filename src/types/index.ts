@@ -643,6 +643,8 @@ export interface Order {
   razorpayPaymentId?: string;
   paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string };
   courierChoice?: CourierRate;
+  /** Pre-order: the courier amount charged from the highest valid quote, and the package it was quoted for. */
+  courierQuote?: { at: string; charged: number; highest: number; weightKg: number; parcel?: { length: number; breadth: number; height: number }; couriers: number };
   /** Amounts the desk added after ordering, e.g. a charge wrongly shown as free. */
   /** Shipping was left at ₹0; the courier charge is added once the parcel is packed and weighed. */
   shippingDue?: boolean;
@@ -767,6 +769,18 @@ export interface CourierRate {
   rating?: number;
   /** The courier's own charge when the site shows a buffered rate to customers. */
   providerRate?: number;
+  /** Packed weight sent to the aggregator (kg). */
+  actualKg?: number;
+  /** L×B×H ÷ this aggregator's divisor (kg). */
+  volumetricKg?: number;
+  volumetricDivisor?: number;
+  /** Weight the courier bills, as the aggregator reports it (kg). */
+  chargeWeightKg?: number;
+  /** Billed slab differs from what the packed weight and size suggest; check before booking. */
+  weightFlag?: string;
+  /** A placeholder price, not a live quote; never used to charge customers. */
+  estimate?: boolean;
+  pickupBy?: string;
 }
 
 export type ReturnKind = "return" | "replacement";

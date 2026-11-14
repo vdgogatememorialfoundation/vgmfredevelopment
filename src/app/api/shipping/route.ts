@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           ok: true,
           providers: results.map((result) => ({ provider: result.provider, configured: result.rates !== null, error: result.error })),
-          rates: results.flatMap((result) => result.rates ?? []).sort((a, b) => a.rate - b.rate),
+          rates: results.flatMap((result) => (result.rates ?? []).map((rate) => withWeights(rate, parcel, stored as Record<string, unknown>))).sort((a, b) => a.rate - b.rate),
         });
       }
       case "book": {
@@ -364,3 +364,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, configured: true, error: (error as Error).message });
   }
 }
+
+/** Divisors the aggregators publish for surface parcels; an admin value saved as volumetricDivisor in that aggregator's keys wins. Used only when the aggregator does not report the billed weight. */
+const VOLUMETRIC_DIVISOR: Record<string, number> = { shiprocket: 5000, nimbuspost: 5000, ithink: 5000, shipyaari: 5000, goswift: 5000 };
+
+function withWeights(rate: RateOut, parcel: { weightKg: number; length: number; breadth: number; height: number }, stored: Record<string, unknown>) {
+  const saved = Number((stored[rate.provider] as Record<string, unknown> | undefined)?.volumetricDivisor);
+  const divisor = saved > 0 ? saved : VOLUMETRIC_DIVISOR[rate.provider] ?? 5000;
+  const actualKg = Math.round(Number(parcel.weightKg) * 1000) / 1000;
+  const volumetricKg = Math.round(((Number(parcel.length) * Number(parcel.breadth) * Number(parcel.height)) / divisor) * 1000) / 1000;
+  const expected = Math.max(actualKg, volumetricKg);
+  const billed = rate.chargeWeightKg;
+  const weightFlag =
+    billed && billed > Math.ceil(expected * 2) / 2 + 0.5
+      ? `Billed at ${billed} kg, but the packed parcel works out to ${Math.ceil(expected * 2) / 2} kg. Check the weight and size before booking.`
+      : undefined;
+  return { ...rate, actualKg, volumetricKg, volumetricDivisor: divisor, weightFlag };
+}
+

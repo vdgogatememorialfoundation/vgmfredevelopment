@@ -1584,10 +1584,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {order.preorderPayment && !order.preorderPayment.balancePaidAt ? (
                     <>
                       <Button
-                        disabled={busy === "preorder-courier" || picked === undefined || !quote}
-                        onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, picked !== undefined ? quote?.rates[picked] : undefined, undefined, quote?.rates ?? []))}
+                        disabled={busy === "preorder-courier" || !quote}
+                        onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, undefined, undefined, quote?.rates ?? []))}
                       >
-                        {picked !== undefined && quote ? `Select ${quote.rates[picked]?.courierName} & send balance link` : "Pick a courier from the rates"}
+                        {quote ? "Charge highest quote & send balance link" : "Click Show couriers & rates first"}
                       </Button>
                       <div className="flex items-center gap-2">
                         <TextInput className="w-32" inputMode="decimal" placeholder="Charge ₹" value={typedCharge} onChange={(event) => setTypedCharge(event.target.value)} />
@@ -1595,7 +1595,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                           Add charge & send link
                         </Button>
                       </div>
-                      <p className="w-full text-xs text-text-muted">Pre-order: the courier charge is added only when you select the courier. The shipment is created automatically once the customer pays the balance.</p>
+                      <p className="w-full text-xs text-text-muted">Pre-order: no courier is picked now. The customer is charged the highest live quote from all enabled aggregators for this package (+ markup, up to the maximum in Settings → Orders), plus packing. Once the balance is paid, book any courier within that quote. Nothing is booked automatically.</p>
                     </>
                   ) : (
                   <Button

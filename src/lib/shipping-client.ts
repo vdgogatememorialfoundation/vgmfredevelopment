@@ -324,7 +324,16 @@ async function bookShipmentOnce(
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
   const unpaidPlan = order.preorderPayment;
   if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
-    throw new Error("The pre-order balance is not paid yet. Select the courier first: its charge is added to the balance and the payment link is sent. Book the courier from the order once it is paid.");
+    throw new Error("The pre-order balance is not paid yet. Click Charge highest quote & send balance link, then book the courier once it is paid.");
+  }
+  const quoted = order.courierQuote;
+  if (unpaidPlan && quoted && override && !split) {
+    const sameParcel =
+      Math.abs(quoted.weightKg - orderWeightKg(order)) < 0.001 &&
+      JSON.stringify(quoted.parcel ?? null) === JSON.stringify(order.parcel ? { length: order.parcel.length, breadth: order.parcel.breadth, height: order.parcel.height } : null);
+    if (!sameParcel) throw new Error("The package weight or size changed after the customer was charged. Check the package matches the packed box, or add the difference as an extra charge, before booking.");
+    const actual = override.providerRate ?? override.rate;
+    if (actual > quoted.highest + 0.5) throw new Error(`${override.courierName} costs ₹${actual}, more than the ₹${quoted.highest} quote the customer paid for. Pick a courier within that amount.`);
   }
   if (!unpaidPlan && order.shippingDue) {
     throw new Error("The courier charge is not on this order yet. Add it under Payment → Add extra charge (Courier charge) and send the payment link, then book the courier once it is paid.");
@@ -461,9 +470,39 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
   if (!order || !plan) throw new Error("This order has no pre-order balance.");
   if (plan.balancePaidAt) throw new Error("The balance is already paid.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders have no courier charge.");
-  if (!choice && !(typedFee !== undefined && Number.isFinite(typedFee) && typedFee >= 0)) throw new Error("Pick a courier from the rates, or type the courier charge.");
+  const valid = allRates.filter((rate) => !rate.estimate && rate.rate > 0 && rate.provider !== "local");
+  if (!choice && !valid.length && !(typedFee !== undefined && Number.isFinite(typedFee) && typedFee >= 0)) throw new Error("No live courier quote for this package. Type the courier charge.");
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
   const settings = getOrderSettings();
+  if (!choice && valid.length && typedFee === undefined) {
+    // No courier is picked: the customer pays the highest valid quote across every enabled aggregator (+ markup, up to the maximum).
+    const shown = customerCourierRates(valid, { ...settings, courierMarkup: { ...settings.courierMarkup, chargeHighest: true } });
+    const charged = Math.max(...shown.map((rate) => rate.rate));
+    const fee = shippingFeeFor(order.subtotal, units, charged, settings);
+    const previous = plan.shippingDue ? 0 : plan.shipping ?? 0;
+    const round = (value: number) => Math.round(value * 100) / 100;
+    patchOrder(
+      order.id,
+      {
+        shipping: round((order.shipping || 0) - previous + fee),
+        total: round(order.total - previous + fee),
+        courierQuote: {
+          at: new Date().toISOString(),
+          charged,
+          highest: Math.max(...valid.map((rate) => rate.providerRate ?? rate.rate)),
+          weightKg: orderWeightKg(order),
+          parcel: order.parcel ? { length: order.parcel.length, breadth: order.parcel.breadth, height: order.parcel.height } : undefined,
+          couriers: valid.length,
+        },
+        preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
+      },
+      `Courier charge ₹${fee} from the highest of ${valid.length} courier quotes added to the pre-order balance`
+    );
+    if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return `Courier charge ₹${fee} added. Nothing is left to pay.`;
+    const { createBalancePaymentLink } = await import("@/lib/payments-client");
+    const link = await createBalancePaymentLink(order.id);
+    return `Courier charge ₹${fee} (highest of ${valid.length} quotes) added. Balance payment link sent: ${link.url}`;
+  }
   // Same rule as checkout: courier markup, and the highest rate among the couriers when "charge highest" is on.
   const charged = choice
     ? customerCourierRates(allRates.some((rate) => rate.courierId === choice.courierId) ? allRates : [choice], settings).find(

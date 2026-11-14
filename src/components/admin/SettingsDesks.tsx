@@ -1589,7 +1589,14 @@ export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick
                 {onPick && <input type="radio" checked={picked === index} onChange={() => onPick(index)} />}
                 <span>
                   <span className="block font-medium text-slate-800">{rate.courierName}</span>
-                  <span className="block text-xs text-slate-500">{bookedViaLabel(rate.provider)}</span>
+                  <span className="block text-xs text-slate-500">{bookedViaLabel(rate.provider)}{rate.estimate ? " · placeholder, not a live quote" : ""}</span>
+                  {rate.actualKg !== undefined && (
+                    <span className="block text-xs text-slate-500">
+                      Actual {rate.actualKg} kg · volumetric {rate.volumetricKg} kg (÷{rate.volumetricDivisor}) · billed {rate.chargeWeightKg ? `${rate.chargeWeightKg} kg` : "not reported"}
+                      {rate.pickupBy ? ` · pickup ${rate.pickupBy}` : ""}
+                    </span>
+                  )}
+                  {rate.weightFlag && <span className="block text-xs font-medium text-amber-700">{rate.weightFlag}</span>}
                 </span>
               </label>
               <span className="text-right text-slate-600">
@@ -1655,6 +1662,7 @@ export function OrderSettingsDesk() {
           <Text label="Courier charge buffer shown to customers (%)" type="number" value={value.courierMarkup.percent} onChange={(percent) => set({ courierMarkup: { ...value.courierMarkup, percent: Math.max(0, Number(percent) || 0) } })} />
           <Text label="Courier charge buffer shown to customers (₹ added)" type="number" value={value.courierMarkup.rupees} onChange={(rupees) => set({ courierMarkup: { ...value.courierMarkup, rupees: Math.max(0, Number(rupees) || 0) } })} />
           <Check label="Charge the highest courier rate" hint="Normal orders: customers pay the highest rate among the available couriers for their pincode (packing included), so you can book any courier if the cheaper one doesn't pick up. Pre-orders keep the rate of the courier you select." checked={value.courierMarkup.chargeHighest} onChange={(chargeHighest) => set({ courierMarkup: { ...value.courierMarkup, chargeHighest } })} />
+          <Text label="Maximum courier charge to customers (₹, 0 = no limit)" type="number" value={value.courierMarkup.maxCharge ?? 0} onChange={(maxCharge) => set({ courierMarkup: { ...value.courierMarkup, maxCharge: Math.max(0, Number(maxCharge) || 0) } })} />
           <Text label="Minimum courier charge shown (₹)" type="number" value={value.courierMarkup.minimum} onChange={(minimum) => set({ courierMarkup: { ...value.courierMarkup, minimum: Math.max(0, Number(minimum) || 0) } })} />
           <Check label="Confirm in-stock orders automatically (off: every order waits as Awaiting confirmation for the desk)" checked={value.confirmMode !== "manual"} onChange={(auto) => set({ confirmMode: auto ? "auto" : "manual" })} />
           <Check label="Cash on delivery" checked={value.codEnabled} onChange={(codEnabled) => set({ codEnabled })} />

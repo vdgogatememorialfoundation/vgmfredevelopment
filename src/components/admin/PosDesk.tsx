@@ -43,6 +43,12 @@ const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN"
 
 type Line = { bookId: string; quantity: number };
 
+async function resendCreditId(email?: string) {
+  const response = await fetch("/api/shop/wallet", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ resendId: true, email }) });
+  const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; sentTo?: string };
+  return data.ok ? `Store Credit ID sent to ${data.sentTo}.` : data.error || "Could not send the ID.";
+}
+
 export function PosDesk() {
   const books = useLiveBooks().filter((book) => book.active !== false);
   const customers = getAccounts().filter((account) => !account.role || account.role === "customer");
@@ -525,6 +531,9 @@ export function PosDesk() {
                     }}
                   >
                     Verify ID
+                  </Button>
+                  <Button variant="outline" onClick={async () => setCreditIdNote(await resendCreditId(account.email))}>
+                    Resend ID
                   </Button>
                 </div>
                 <p className="text-xs text-text-muted">{creditIdNote || "Ask the customer for the 5-digit Store Credit ID shown in their wallet."}</p>
