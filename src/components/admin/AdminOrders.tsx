@@ -600,6 +600,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const [reference, setReference] = useState("");
   const [partAmount, setPartAmount] = useState("");
   const [partLink, setPartLink] = useState(true);
+  const [kind, setKind] = useState<"normal" | "preorder">("normal");
   const [shippingOverride, setShippingOverride] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -714,7 +715,41 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
         paymentRef: payment === "paid" ? reference : undefined,
         courierChoice: mode === "delivery" ? choice : undefined,
         shippingOverride: shippingOverride !== "" ? Number(shippingOverride) : undefined,
+        preorder: kind === "preorder",
       });
+      if (kind === "preorder") {
+        // Pre-order: what was received is the advance; the rest (and the courier charge, if not set) is collected by the balance link once the book is ready.
+        const received = payment === "paid" ? order.total : payment === "partial" ? Math.min(order.total, Number(partAmount)) : 0;
+        const shippingLater = mode === "delivery" && shippingOverride === "";
+        const balance = Math.max(0, Math.round((order.total - received) * 100) / 100);
+        const now = new Date().toISOString();
+        patchStoredOrder(
+          order.id,
+          {
+            preorderPayment: {
+              advance: received,
+              balance,
+              balanceWhen: orderSettings.preorderPayment.balanceWhen,
+              advancePaidAt: received > 0 ? now : undefined,
+              shippingDue: shippingLater || undefined,
+            },
+            ...(received > 0
+              ? {
+                  paymentStatus: balance > 0 || shippingLater ? "Partially Paid" : "Paid",
+                  amountPaid: received,
+                  paymentMethod: method,
+                  paymentRef: reference.trim() || undefined,
+                  paidAt: now,
+                  status: "Ordered",
+                }
+              : {}),
+          },
+          `Pre-order created by the desk · received ${rupees(received)}${balance > 0 ? ` · balance ${rupees(balance)}` : ""}${shippingLater ? " · courier charge added when packed" : ""}`
+        );
+        if (payment === "link") await createPaymentLink(order.id);
+        onDone(order.id);
+        return;
+      }
       if (payment === "link") await createPaymentLink(order.id);
       if (payment === "partial") {
         const note = recordPartialPayment(order.id, { amount: Number(partAmount), method, reference });
@@ -847,6 +882,25 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
             </div>
           )}
           <div>
+            <p className="mb-2 text-sm font-semibold text-text-primary">Order type</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {([
+                ["normal", "Normal order", "Ships once fully paid"],
+                ["preorder", "Pre-order", "Amount received is the advance; balance + courier charge by link when ready"],
+              ] as ["normal" | "preorder", string, string][]).map(([id, label, hint]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setKind(id)}
+                  className={classNames("rounded-xl border p-3 text-left text-sm", kind === id ? "border-burgundy bg-burgundy/5" : "border-border")}
+                >
+                  <span className="block font-semibold text-text-primary">{label}</span>
+                  <span className="block text-xs text-text-muted">{hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
             <p className="mb-2 text-sm font-semibold text-text-primary">Payment</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {([
@@ -869,15 +923,15 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
             </div>
             {payment === "partial" && (
               <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <TextInput inputMode="decimal" placeholder="Amount paid (₹)" value={partAmount} onChange={(event) => setPartAmount(event.target.value.replace(/[^\d.]/g, ""))} />
+                <TextInput inputMode="decimal" placeholder="Total amount received (₹)" value={partAmount} onChange={(event) => setPartAmount(event.target.value.replace(/[^\d.]/g, ""))} />
                 <SelectInput value={method} onChange={(event) => setMethod(event.target.value)}>
                   {PAYMENT_METHODS.map((item) => <option key={item}>{item}</option>)}
                 </SelectInput>
                 <TextInput placeholder="Reference / UTR / receipt no." value={reference} onChange={(event) => setReference(event.target.value)} />
-                <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-3">
+                {kind === "normal" && <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-3">
                   <input type="checkbox" checked={partLink} onChange={(event) => setPartLink(event.target.checked)} />
                   Send a payment link for the balance now (otherwise send it later from the order&apos;s Payment section)
-                </label>
+                </label>}
               </div>
             )}
             {payment === "paid" && (

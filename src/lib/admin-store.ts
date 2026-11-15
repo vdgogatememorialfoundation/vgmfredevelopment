@@ -611,6 +611,8 @@ export function createAdminOrder(input: {
   courierChoice?: Order["courierChoice"];
   shippingOverride?: number;
   channel?: Order["channel"];
+  /** Desk marked the whole order as a pre-order (even if the book is in stock). */
+  preorder?: boolean;
 }) {
   const live = getLiveBooks();
   const orderItems: OrderItem[] = input.items
@@ -626,14 +628,14 @@ export function createAdminOrder(input: {
         currency: book.currency,
         sku: book.sku,
         batchNo: book.batchNo,
-        preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
+        preorder: Boolean(input.preorder || (book.preorder?.enabled && book.stock <= 0)),
         releaseDate: book.preorder?.enabled && book.stock <= 0 ? book.preorder?.releaseDate : undefined,
       };
     })
     .filter(Boolean) as OrderItem[];
 
   if (orderItems.length === 0) throw new Error("No valid items selected.");
-  const preorderBook = live.find((book) => orderItems.some((item) => item.preorder && item.bookId === book.id));
+  const preorderBook = live.find((book) => book.preorder?.enabled && orderItems.some((item) => item.preorder && item.bookId === book.id));
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = orderItems.reduce(
@@ -648,7 +650,9 @@ export function createAdminOrder(input: {
   const shipping =
     input.deliveryMode === "store_pickup"
       ? 0
-      : input.shippingOverride ?? shippingFeeFor(subtotal, itemCount, input.courierChoice?.rate, settings);
+      : input.preorder && input.shippingOverride === undefined
+        ? 0
+        : input.shippingOverride ?? shippingFeeFor(subtotal, itemCount, input.courierChoice?.rate, settings);
   const cod = input.payment === "cod";
   const codFee = cod && settings.codEnabled ? settings.codFee : 0;
   const paid = input.payment === "paid";

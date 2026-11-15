@@ -59,6 +59,7 @@ export function PosDesk() {
   const [method, setMethod] = useState<MethodId>("cash");
   const [reference, setReference] = useState("");
   const [partNow, setPartNow] = useState("");
+  const [asPreorder, setAsPreorder] = useState(false);
   const [useCredit, setUseCredit] = useState(false);
   const [creditId, setCreditId] = useState("");
   const [creditIdFor, setCreditIdFor] = useState("");
@@ -109,8 +110,8 @@ export function PosDesk() {
     .filter(Boolean) as { line: Line; book: Book }[];
   const settings = getOrderSettings();
   const isPreorderBook = (book: Book) => Boolean(book.preorder?.enabled && book.stock <= 0);
-  const hasPreorder = rows.some((row) => isPreorderBook(row.book));
-  const mixed = hasPreorder && rows.some((row) => !isPreorderBook(row.book));
+  const hasPreorder = asPreorder || rows.some((row) => isPreorderBook(row.book));
+  const mixed = !asPreorder && rows.some((row) => isPreorderBook(row.book)) && rows.some((row) => !isPreorderBook(row.book));
   const subtotal = rows.reduce((sum, row) => sum + row.book.price * row.line.quantity, 0);
   const { gst, platformFee } = rows.length ? commerceCharges(subtotal, settings) : { gst: 0, platformFee: 0 };
   const charge = fulfil === "delivery" ? Math.max(0, Math.round(Number(deliveryCharge) || 0)) : 0;
@@ -124,8 +125,10 @@ export function PosDesk() {
   const payAdvance = hasPreorder && (preorderPay === "advance" || shippingLater);
   const total = payAdvance ? advance : orderTotal;
   const partAmount = Math.round((Number(partNow) || 0) * 100) / 100;
-  const partial = partAmount > 0 && partAmount < total;
-  const payNow = partial ? partAmount : total;
+  // "Total amount received": below the full amount it is a part payment; for a pre-order it may be anything up to the order total.
+  const receivedCap = hasPreorder ? orderTotal : total;
+  const partial = partAmount > 0 && partAmount < receivedCap;
+  const payNow = partAmount > 0 && partAmount <= receivedCap ? partAmount : total;
   const balanceLater = Math.max(0, Math.round((orderTotal - payNow) * 100) / 100);
 
   const addByCode = (code: string) => {
@@ -293,6 +296,7 @@ export function PosDesk() {
         razorpayPaymentId,
         channel: "pos",
         shippingOverride: charge,
+        preorder: asPreorder,
       });
       if (creditApplied > 0 && payNow > 0) paymentMethod = `Store credit ${rupees(creditApplied)} + ${paymentMethod}`;
       // Pre-orders are not handed over at the counter: they wait in Orders until the book arrives.
@@ -492,6 +496,18 @@ export function PosDesk() {
               </ul>
             )}
             <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-text-primary">Order type</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant={!asPreorder ? "primary" : "outline"} onClick={() => setAsPreorder(false)}>Normal</Button>
+                <Button variant={asPreorder ? "primary" : "outline"} onClick={() => setAsPreorder(true)}>Pre-order</Button>
+              </div>
+              <p className="mt-1 text-xs text-text-muted">
+                {hasPreorder
+                  ? "Pre-order: the amount received is the advance. The balance (and courier charge) is sent as a link when the book is ready."
+                  : "Normal: collect the full amount, or enter the total received below if the customer pays part now."}
+              </p>
+            </div>
+            <div className="mt-4">
               <p className="mb-2 text-sm font-semibold text-text-primary">Handover</p>
               <div className="flex flex-wrap gap-2">
                 <Button variant={fulfil === "counter" ? "primary" : "outline"} onClick={() => setFulfil("counter")}>Take away now</Button>
@@ -582,7 +598,7 @@ export function PosDesk() {
               )}
               <TextInput
                 inputMode="decimal"
-                placeholder={`Partly paid now? Amount (₹, less than ${rupees(total)})`}
+                placeholder={`Total amount received (₹, up to ${rupees(receivedCap)})`}
                 value={partNow}
                 onChange={(event) => setPartNow(event.target.value.replace(/[^\d.]/g, ""))}
                 disabled={busy}
