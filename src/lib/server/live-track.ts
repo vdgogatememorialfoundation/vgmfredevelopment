@@ -90,7 +90,7 @@ function orderStatusFor(stage: string, hyperlocal: boolean): Order["status"] | u
   if (stage === "delivered") return "Delivered";
   if (stage === "out" || (hyperlocal && stage === "shipped")) return "Out for Delivery";
   if (stage === "shipped") return "Shipped";
-  if (stage === "packed") return "Packed";
+  if (stage === "packed") return "To Ship";
   return undefined;
 }
 
@@ -169,7 +169,7 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   const order = orderForLeg;
   if (order) {
     const target = stage ? orderStatusFor(stage, hyperlocal) : undefined;
-    const rank: Record<string, number> = { Packed: 1, Shipped: 2, "Out for Delivery": 3, Delivered: 4, Failed: 5 };
+    const rank: Record<string, number> = { Packed: 1, "Ready to Ship": 1, "To Ship": 1, Shipped: 2, "Out for Delivery": 3, Delivered: 4, Failed: 5 };
     const wrongDelivered =
       order.status === "Delivered" &&
       stage !== "delivered" &&

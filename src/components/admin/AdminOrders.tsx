@@ -102,7 +102,7 @@ const PACKED_STATUSES = ["Packed", "Ready to Ship", "To Ship"];
 const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
   "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) },
-  "group:to-ship": { label: "To Ship (packed + fully paid, courier not booked)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
+  "group:to-ship": { label: "To Ship (fully paid · book courier / waiting for pickup)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
   "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => order.status === "Shipped" || order.status === "Out for Delivery" },
 };
 /** Store pickup has its own steps; the stored status stays canonical. */

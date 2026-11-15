@@ -288,9 +288,9 @@ function bookingPayload(order: Order, choice: CourierRate, settings: Integration
 
 export type BookingResult = { shipment: ShipmentRecord; live: boolean; message: string };
 
+/** Booked but not yet collected: "To Ship". The order turns Shipped only when the courier's tracking shows the pickup. */
 function statusAfterBooking(status: Order["status"]): Order["status"] {
-  if (status === "Ready to Ship") return "Ready to Ship";
-  if (status === "Ordered" || status === "Pending" || status === "Processing" || status === "Accepted") return "Packed";
+  if (["Ordered", "Pending", "Processing", "Accepted", "Packed", "Ready to Ship"].includes(status)) return "To Ship";
   return status;
 }
 
@@ -1133,7 +1133,7 @@ function syncOrderFromShipment(orderId: string, status: ShipmentRecord["status"]
         : status === "Out for Delivery"
           ? "Out for Delivery"
           : status === "Booked"
-            ? "Packed"
+            ? "To Ship"
             : "Shipped";
   if (order.status !== target) patchOrder(orderId, { status: target }, target);
 }
