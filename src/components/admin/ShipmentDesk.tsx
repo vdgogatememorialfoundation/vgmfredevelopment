@@ -83,10 +83,10 @@ function ReadyOrder({ order }: { order: Order }) {
             {busy === "rates" ? "Checking…" : "Show couriers & rates"}
           </Button>
           <Button
-            disabled={busy === "book"}
+            disabled={busy === "book" || picked === undefined || !quote}
             onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
           >
-            {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Book customer's courier"}
+            {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pick a courier to book"}
           </Button>
         </div>
       </div>

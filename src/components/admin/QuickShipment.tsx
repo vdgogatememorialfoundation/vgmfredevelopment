@@ -120,7 +120,7 @@ export function QuickShipment() {
     try {
       const result = await fetchCourierRates({ deliveryPincode: to.pincode, pickupPincode: pickup?.pincode, weightKg, declaredValue: declared, cod: codAmount > 0, dims: parcel });
       setQuote(result);
-      setPicked(result.rates.length ? 0 : undefined);
+      setPicked(undefined);
       if (!result.rates.length) setError("No courier returned a rate for this pincode.");
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not load rates.");

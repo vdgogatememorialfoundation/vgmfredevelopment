@@ -640,7 +640,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
       bookIds: items.map((row) => row.bookId),
     });
     setQuote(result);
-    setPicked(result.rates.length ? 0 : undefined);
+    setPicked(undefined);
     setLoadingRates(false);
   };
 
@@ -1044,9 +1044,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         dims: order.parcel,
       });
       setQuote(result);
-      const rates = result.rates.filter((rate) => !skipAggregators.includes(rate.provider));
-      const current = order.courierChoice ? rates.findIndex((rate) => rate.courierId === order.courierChoice?.courierId && rate.provider === order.courierChoice?.provider) : -1;
-      setPicked(current >= 0 ? current : rates.length ? 0 : undefined);
+      setPicked(undefined);
     });
 
   const paid = order.paymentStatus === "Paid";
@@ -1608,10 +1606,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     </>
                   ) : (
                   <Button
-                    disabled={busy === "book"}
+                    disabled={busy === "book" || picked === undefined || !quote}
                     onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined, pickupOverride(pickupChoices.find((row) => row.nickname === pickupNick)))).message)}
                   >
-                    {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pack & book courier"}
+                    {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Show rates and pick a courier to book"}
                   </Button>
                   )}
                 </div>
@@ -1699,7 +1697,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       });
                       if (!quote) {
                         setQuote(quoteResult);
-                        setPicked(0);
+                        setPicked(undefined);
                         return "Rates loaded. Pick a courier, then click Reallocate again.";
                       }
                       const choice = picked !== undefined ? quote.rates[picked] : undefined;
