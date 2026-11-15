@@ -40,7 +40,7 @@ import {
   shiprocketLabelSheet,
   shiprocketManifest,
   shiprocketPickup,
-  shiprocketPickupLocations,
+  shiprocketPickupLocations, ekartAddresses, goswiftAddresses,
   shiprocketRates,
   shiprocketReturn,
   shiprocketTrack,
@@ -276,9 +276,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "pickup-locations": {
-        if (provider !== "shiprocket") return unsupported(provider);
-        const result = await shiprocketPickupLocations(own);
-        if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shiprocket credentials are not configured." });
+        if (provider !== "shiprocket" && provider !== "ekart" && provider !== "goswift") return unsupported(provider);
+        const result = provider === "ekart" ? await ekartAddresses(own) : provider === "goswift" ? await goswiftAddresses(own) : await shiprocketPickupLocations(own);
+        if (!result) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "invoice": {

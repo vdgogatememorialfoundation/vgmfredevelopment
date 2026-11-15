@@ -652,6 +652,8 @@ export interface Order {
   razorpayPaymentId?: string;
   paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string };
   courierChoice?: CourierRate;
+  /** Pickup address picked for this order on each aggregator's panel (Shiprocket nickname, Ekart/GoSwift alias). */
+  shipFrom?: { shiprocket?: string; ekart?: string; goswift?: string };
   /** Pre-order: the courier amount charged from the highest valid quote, and the package it was quoted for. */
   courierQuote?: { at: string; charged: number; highest: number; weightKg: number; parcel?: { length: number; breadth: number; height: number }; couriers: number };
   /** Amounts the desk added after ordering, e.g. a charge wrongly shown as free. */

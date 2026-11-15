@@ -23,9 +23,22 @@ import { logAudit } from "@/lib/audit";
 
 type ShippingCreds = Record<string, Record<string, unknown>>;
 
-function credsFrom(settings: IntegrationSettings): ShippingCreds {
+/** Pickup chosen on one order, per aggregator: the address name saved on that aggregator's panel. */
+export type ShipFrom = NonNullable<Order["shipFrom"]>;
+
+function credsFrom(settings: IntegrationSettings, shipFrom?: ShipFrom): ShippingCreds {
   const { shiprocket, nimbuspost, ithink, shipyaari, goswift, ekart, tookan, shipday, tracker } = settings.shipping;
-  return { shiprocket, nimbuspost, ithink, shipyaari, goswift: goswift ?? {}, ekart: ekart ?? {}, tookan, shipday, tracker: tracker ?? {} };
+  return {
+    shiprocket: shipFrom?.shiprocket ? { ...shiprocket, pickupLocation: shipFrom.shiprocket } : shiprocket,
+    nimbuspost,
+    ithink,
+    shipyaari,
+    goswift: { ...(goswift ?? {}), ...(shipFrom?.goswift ? { pickupAlias: shipFrom.goswift } : {}) },
+    ekart: { ...(ekart ?? {}), ...(shipFrom?.ekart ? { pickupAlias: shipFrom.ekart } : {}) },
+    tookan,
+    shipday,
+    tracker: tracker ?? {},
+  };
 }
 
 /** Couriers without an API account: read scans from the courier's own site (or the saved tracking service). */
@@ -175,6 +188,7 @@ export async function fetchCourierRates(input: {
   bookIds?: string[];
   pickupPincode?: string;
   dims?: { length: number; breadth: number; height: number };
+  shipFrom?: ShipFrom;
 }): Promise<RateQuote> {
   const settings = getIntegrations();
   const { shipping } = settings;
@@ -187,7 +201,7 @@ export async function fetchCourierRates(input: {
       const result = await post<{ rates: Omit<CourierRate, "provider">[] & { provider: string }[]; providers: { provider: string; configured: boolean; error?: string }[] }>({
         action: "rates",
         providers: wanted,
-        creds: credsFrom(settings),
+        creds: credsFrom(settings, input.shipFrom),
         parcel: {
           pickupPincode: input.pickupPincode || shipping.pickup.pincode,
           deliveryPincode: input.deliveryPincode,
@@ -414,7 +428,7 @@ async function bookShipmentOnce(
   }>({
     action: "book",
     provider: choice.provider,
-    creds: credsFrom(settings),
+    creds: credsFrom(settings, order.shipFrom),
     order: bookingPayload(shipOrder, choice, settings, pickup),
     schedulePickup: settings.shipping.autoSchedulePickup,
     // Courier pickup goes on the next day the store is working (weekly offs and holidays skipped).
@@ -1216,10 +1230,10 @@ export async function addPickupLocation(pickup: PickupAddress) {
   });
 }
 
-export async function listPickupLocations() {
+export async function listPickupLocations(provider: "shiprocket" | "ekart" | "goswift" = "shiprocket") {
   return post<{ locations: { nickname: string; city: string; pincode: string; phone?: string; address?: string }[] }>({
     action: "pickup-locations",
-    provider: "shiprocket",
+    provider,
     creds: credsFrom(getIntegrations()),
   });
 }

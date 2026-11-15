@@ -23,6 +23,13 @@ function offerLive(book: Book, now: number) {
   return offer;
 }
 
+/** Google needs availability_date on every pre-order: the release date, else the usual pre-order lead time (10 days). */
+function availableFrom(book: Book, now: number) {
+  const release = book.preorder?.releaseDate ? Date.parse(`${book.preorder.releaseDate.slice(0, 10)}T00:00:00+05:30`) : NaN;
+  const when = Number.isFinite(release) && release > now ? release : now + 10 * 24 * 60 * 60 * 1000;
+  return new Date(when).toISOString().replace(/\.\d{3}Z$/, "+00:00");
+}
+
 /** One product in Google Merchant / Meta catalogue attribute names. */
 function row(book: Book, now: number): Row {
   const preorder = Boolean(book.preorder?.enabled);
@@ -38,7 +45,7 @@ function row(book: Book, now: number): Row {
     link: absoluteUrl(`/shop/${book.slug}`),
     image_link: book.coverImage ? absoluteUrl(book.coverImage) : "",
     availability: preorder ? "preorder" : inStock ? "in_stock" : "out_of_stock",
-    availability_date: preorder && book.preorder?.releaseDate ? new Date(book.preorder.releaseDate).toISOString() : "",
+    availability_date: preorder ? availableFrom(book, now) : "",
     price: money(book.originalPrice && book.originalPrice > book.price ? book.originalPrice : book.price),
     sale_price: offer ? money(offer.price) : book.originalPrice && book.originalPrice > book.price ? money(book.price) : "",
     sale_price_effective_date: offer?.startsAt && offer.endsAt ? `${new Date(offer.startsAt).toISOString()}/${new Date(offer.endsAt).toISOString()}` : "",
@@ -50,6 +57,9 @@ function row(book: Book, now: number): Row {
     google_product_category: isBook ? "784" : "",
     product_type: [isBook ? "Books" : "Products", book.category, book.language].filter(Boolean).join(" > "),
     custom_label_0: book.language ?? "",
+    ships_from_country: "IN",
+    min_handling_time: "1",
+    max_handling_time: "3",
     custom_label_1: book.trending ? "Trending" : book.isNew ? "New" : book.ribbon ?? "",
   };
 }
@@ -57,7 +67,7 @@ function row(book: Book, now: number): Row {
 const COLUMNS = [
   "id", "title", "description", "link", "image_link", "availability", "availability_date", "price", "sale_price",
   "sale_price_effective_date", "condition", "brand", "gtin", "mpn", "identifier_exists", "google_product_category",
-  "product_type", "custom_label_0", "custom_label_1",
+  "product_type", "ships_from_country", "min_handling_time", "max_handling_time", "custom_label_0", "custom_label_1",
 ];
 
 const xmlEscape = (value: string) =>

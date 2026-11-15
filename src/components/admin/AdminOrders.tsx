@@ -936,8 +936,6 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState<Order["status"]>(order.status);
   const [extraId, setExtraId] = useState("");
-  const [pickupChoices, setPickupChoices] = useState<{ nickname: string; city: string; pincode: string; phone?: string; address?: string }[]>([]);
-  const [pickupNick, setPickupNick] = useState("");
   const extraStatuses = getOrderSettings().customStatuses.filter((row) => row.label.trim());
   const [method, setMethod] = useState("UPI");
   const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
@@ -1053,12 +1051,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
   const loadRates = () =>
     run("rates", async () => {
-      const locations = pickupChoices.length ? { locations: pickupChoices } : await listPickupLocations().catch(() => ({ locations: [] }));
-      setPickupChoices(locations.locations ?? []);
-      const from = (locations.locations ?? []).find((row) => row.nickname === pickupNick);
       const result = await fetchCourierRates({
         deliveryPincode: order.deliveryAddress?.pincode ?? "",
-        pickupPincode: from?.pincode,
+        shipFrom: getStoredOrder(order.id)?.shipFrom ?? order.shipFrom,
         weightKg: orderWeightKg(order),
         declaredValue: order.total,
         cod: order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid",
@@ -1614,15 +1609,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ? <>Customer chose <b className="text-text-primary">{order.courierChoice.courierName}</b> <span className="text-xs">{bookedViaLabel(order.courierChoice.provider)}</span> ({rupees(order.courierChoice.rate)}, {order.courierChoice.etaDays} days).</>
                     : "No courier chosen yet. The cheapest or fastest is picked by the rule in Shipping APIs."}
                 </p>
-                {pickupChoices.length > 0 && (
-                  <div className="mt-3 max-w-md">
-                    <SelectInput value={pickupNick} onChange={(event) => { setPickupNick(event.target.value); setQuote(null); setPicked(undefined); }}>
-                      <option value="">Pickup from: default address in Shipping settings</option>
-                      {pickupChoices.map((row) => <option key={row.nickname} value={row.nickname}>Pickup from: {row.nickname} · {[row.city, row.pincode].filter(Boolean).join(" ")}</option>)}
-                    </SelectInput>
-                    {!quote && <p className="mt-1 text-xs text-text-muted">Click Show couriers & rates again for rates from this pickup.</p>}
-                  </div>
-                )}
+                <ShipFromPicker order={order} onChange={() => { setQuote(null); setPicked(undefined); setMessage("Ship-from address saved for this order. Click Show couriers & rates for rates from it."); }} />
                 <ParcelEditor key={`${order.id}:${order.weightKg ?? ""}:${order.parcel ? JSON.stringify(order.parcel) : ""}`} order={order} onSaved={() => { setQuote(null); setPicked(undefined); setMessage("Package saved. Click Show couriers & rates for rates with this package."); }} />
                 {rawQuote && <AggregatorPicks rates={rawQuote.rates} skipped={skipAggregators} onChange={(next) => { setSkipAggregators(next); setPicked(undefined); }} />}
                 {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
@@ -1646,7 +1633,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   ) : (
                   <Button
                     disabled={busy === "book" || picked === undefined || !quote}
-                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined, pickupOverride(pickupChoices.find((row) => row.nickname === pickupNick)))).message)}
+                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
                   >
                     {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Show rates and pick a courier to book"}
                   </Button>
@@ -1655,7 +1642,6 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <SplitShipments
                   order={order}
                   rate={picked !== undefined ? quote?.rates[picked] : undefined}
-                  pickup={pickupOverride(pickupChoices.find((row) => row.nickname === pickupNick))}
                   onDone={(text) => { setMessage(text); onChanged(); }}
                 />
                 <p className="mt-2 text-xs text-text-muted">
@@ -2144,9 +2130,77 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   );
 }
 
-function pickupOverride(row?: { nickname: string; city: string; pincode: string; phone?: string; address?: string }) {
-  if (!row) return undefined;
-  return { nickname: row.nickname, city: row.city, pincode: row.pincode, ...(row.address ? { line1: row.address } : {}), ...(row.phone ? { phone: row.phone } : {}) };
+type PickupRow = { nickname: string; city: string; pincode: string; address?: string };
+const SHIP_FROM_PROVIDERS = [
+  { id: "shiprocket", label: "Shiprocket", setting: "Pickup location in Shipping APIs → Shiprocket" },
+  { id: "ekart", label: "Ekart Elite", setting: "Pickup address alias in Shipping APIs → Ekart" },
+  { id: "goswift", label: "GoSwift", setting: "Pickup address alias in Shipping APIs → GoSwift" },
+] as const;
+
+/** Per-order pickup: one address saved on each aggregator's own panel. Rates and the booking for that aggregator use it. */
+function ShipFromPicker({ order, onChange }: { order: Order; onChange: () => void }) {
+  const shipping = getIntegrations().shipping;
+  const enabled = SHIP_FROM_PROVIDERS.filter((row) => (shipping[row.id] as { enabled?: boolean } | undefined)?.enabled !== false);
+  const [lists, setLists] = useState<Partial<Record<(typeof SHIP_FROM_PROVIDERS)[number]["id"], { rows: PickupRow[]; error?: string }>>>({});
+  const [chosen, setChosen] = useState<NonNullable<Order["shipFrom"]>>(order.shipFrom ?? {});
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const results = await Promise.all(
+      enabled.map(async (row) => {
+        try {
+          return [row.id, { rows: (await listPickupLocations(row.id)).locations ?? [] }] as const;
+        } catch (error) {
+          return [row.id, { rows: [], error: (error as Error).message }] as const;
+        }
+      })
+    );
+    setLists(Object.fromEntries(results));
+    setLoading(false);
+  };
+
+  const pick = (id: keyof NonNullable<Order["shipFrom"]>, value: string) => {
+    const next = { ...chosen, [id]: value || undefined };
+    setChosen(next);
+    const label = SHIP_FROM_PROVIDERS.find((row) => row.id === id)?.label ?? id;
+    patchStoredOrder(order.id, { shipFrom: next }, `Ship from on ${label}: ${value || "Shipping settings default"}`);
+    onChange();
+  };
+
+  if (!enabled.length) return null;
+  const loaded = Object.keys(lists).length > 0;
+  return (
+    <div className="mt-3 rounded-lg border border-border-light p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-text-primary">Ship from (this order)</p>
+        <Button variant="outline" disabled={loading} onClick={load}>{loading ? "Loading…" : loaded ? "Reload saved addresses" : "Load saved pickup addresses"}</Button>
+      </div>
+      <p className="mt-1 text-xs text-text-muted">Pick the address saved on each aggregator&apos;s panel. That aggregator&apos;s rates and booking for this order use it. Other aggregators use the Pickup address in Shipping settings.</p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {enabled.map((row) => {
+          const list = lists[row.id];
+          const current = chosen[row.id] ?? "";
+          const options = list?.rows ?? [];
+          return (
+            <Field key={row.id} label={row.label}>
+              <SelectInput value={current} disabled={!loaded} onChange={(event) => pick(row.id, event.target.value)}>
+                <option value="">Default ({row.setting})</option>
+                {current && !options.some((item) => item.nickname === current) && <option value={current}>{current}</option>}
+                {options.map((item) => (
+                  <option key={item.nickname} value={item.nickname}>
+                    {item.nickname} · {[item.city, item.pincode].filter(Boolean).join(" ")}
+                  </option>
+                ))}
+              </SelectInput>
+              {list?.error && <p className="mt-1 text-xs text-red-600">{list.error}</p>}
+              {current && options.find((item) => item.nickname === current)?.address && <p className="mt-1 text-xs text-text-muted">{options.find((item) => item.nickname === current)?.address}</p>}
+            </Field>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /** Box size, weight and count for this shipment; rates and the booking sent to the aggregator use these. */
@@ -2216,7 +2270,7 @@ function SplitShipments({
 }: {
   order: Order;
   rate?: CourierRate;
-  pickup?: ReturnType<typeof pickupOverride>;
+  pickup?: Parameters<typeof bookShipment>[2];
   onDone: (message: string) => void;
 }) {
   const parts = getShipments().filter((item) => item.orderId === order.id && item.part && item.note !== "Cancelled");

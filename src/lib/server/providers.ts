@@ -2262,6 +2262,9 @@ async function swiftPickup(input: Json, token: string) {
     .then((data) => (Array.isArray(data) ? (data as Json[]) : []))
     .catch(() => [] as Json[]);
   const row = rows.find((item) => String(item.alias ?? "").trim().toLowerCase() === wanted.toLowerCase()) ?? (wanted ? undefined : rows[0]);
+  if (wanted && !row && rows.length) {
+    throw new Error(`No pickup address named "${wanted}" on ${isEkart(input) ? "Ekart Elite" : "GoSwift"} (saved: ${rows.map((item) => String(item.alias ?? "")).filter(Boolean).join(", ")}). Nothing was sent to the courier.`);
+  }
   const address = row
     ? [row.address_line1 ?? row.address, row.address_line2, row.city, row.state, row.pincode].map((part) => String(part ?? "").trim()).filter(Boolean).join(", ")
     : "";
@@ -2269,6 +2272,23 @@ async function swiftPickup(input: Json, token: string) {
   swiftPickups.set(key, found);
   return found;
 }
+
+/** Pickup addresses saved on the GoSwift / Ekart Elite panel, for the per-order "Ship from" choice. */
+export async function goswiftAddresses(input: Json) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const rows = await call(`${swiftBase(input)}/api/v2/addresses`, { headers: goswiftAuth(token) }).then((data) => (Array.isArray(data) ? (data as Json[]) : []));
+  return {
+    locations: rows.map((row) => ({
+      nickname: String(row.alias ?? "").trim(),
+      city: String(row.city ?? ""),
+      pincode: String(row.pincode ?? ""),
+      address: [row.address_line1 ?? row.address, row.address_line2].map((part) => String(part ?? "").trim()).filter(Boolean).join(", "),
+    })).filter((row) => row.nickname),
+  };
+}
+
+export const ekartAddresses = (input: Json) => goswiftAddresses(ekartInput(input));
 
 export function goswiftTrackingUrl(id: string) {
   return `${GOSWIFT}/track/${encodeURIComponent(id)}`;
