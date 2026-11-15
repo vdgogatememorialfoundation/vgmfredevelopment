@@ -362,12 +362,12 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
       </Panel>
 
       {lead && mode !== "pack" ? (
-        <Panel title="Assign pickers" description="Confirmed orders waiting for a picker. The assigned person's scanner rings.">
+        <Panel title={`Assign pickers (${unassigned.length})`} description="Every open order waiting for a picker (cancelled, shipped and delivered orders are left out). The assigned person's scanner rings.">
           {unassigned.length === 0 ? (
             <p className="text-sm text-slate-500">Every open order has a picker.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {unassigned.slice(0, 50).map((order) => (
+              {unassigned.map((order) => (
                 <li key={order.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                   <span>Order {order.id} · {order.items.reduce((sum, item) => sum + item.quantity, 0)} item(s) · {order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier"}</span>
                   <span className="flex flex-wrap gap-2">
