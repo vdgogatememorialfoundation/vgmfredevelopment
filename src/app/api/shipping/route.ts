@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  ekartBook,
+  ekartCancel,
+  ekartNdr,
+  ekartRates,
+  ekartTest,
+  ekartTrack,
   goswiftBook,
   goswiftCancel,
   goswiftNdr,
@@ -76,6 +82,8 @@ export async function POST(request: NextRequest) {
   if (Object.keys(creds).length) mergeShippingCreds(creds);
   const provider = String(body.provider ?? "");
   const own = creds[provider] ?? creds[provider.replace("-parcel", "")] ?? {};
+  // Ekart keys are saved on this host; the desk browser may not hold them.
+  const ekartKeys = { ...((readShippingCreds().ekart as Record<string, unknown>) ?? {}), ...Object.fromEntries(Object.entries(creds.ekart ?? {}).filter(([, value]) => value !== "" && value != null)) };
 
   try {
     switch (body.action) {
@@ -83,7 +91,7 @@ export async function POST(request: NextRequest) {
         const parcel = body.parcel as Parameters<typeof shiprocketRates>[1];
         const wanted = Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift"];
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart"];
         // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
         const stored = readShippingCreds() as typeof creds;
         const keys = (id: keyof typeof creds) => ({ ...(stored[id] ?? {}), ...Object.fromEntries(Object.entries(creds[id] ?? {}).filter(([, value]) => value !== "" && value != null)) });
@@ -94,6 +102,7 @@ export async function POST(request: NextRequest) {
             if (id === "ithink") return { provider: id, rates: await ithinkRates(keys("ithink"), parcel) };
             if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(keys("shipyaari"), parcel) };
             if (id === "goswift") return { provider: id, rates: await goswiftRates(keys("goswift"), parcel) };
+            if (id === "ekart") return { provider: id, rates: await ekartRates(keys("ekart"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -125,7 +134,9 @@ export async function POST(request: NextRequest) {
                         ? await shipyaariBook(creds.shipyaari ?? own, order)
                         : provider === "goswift"
                           ? await goswiftBook(creds.goswift ?? own, order)
-                          : undefined;
+                          : provider === "ekart"
+                            ? await ekartBook(ekartKeys, order)
+                            : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -183,9 +194,9 @@ export async function POST(request: NextRequest) {
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipyaari credentials are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
-        if (provider === "goswift") {
+        if (provider === "goswift" || provider === "ekart") {
           const awb = String(body.awb ?? "");
-          return NextResponse.json({ ok: true, configured: true, awb, labelUrl: `/api/shipping/goswift/label?awb=${encodeURIComponent(awb)}` });
+          return NextResponse.json({ ok: true, configured: true, awb, labelUrl: `/api/shipping/${provider}/label?awb=${encodeURIComponent(awb)}` });
         }
         if (provider !== "shiprocket") return unsupported(provider);
         const result = await shiprocketLabelSheet(own, String(body.shipmentId ?? ""), String(body.awb ?? ""));
@@ -226,7 +237,9 @@ export async function POST(request: NextRequest) {
                       ? await shipyaariTrack(creds.shipyaari ?? own, awb)
                       : provider === "goswift"
                         ? await goswiftTrack(creds.goswift ?? own, awb)
-                        : undefined;
+                        : provider === "ekart"
+                          ? await ekartTrack(ekartKeys, awb)
+                          : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -247,7 +260,9 @@ export async function POST(request: NextRequest) {
                       ? await shipyaariCancel(creds.shipyaari ?? own, String(body.awb ?? ""))
                       : provider === "goswift"
                         ? await goswiftCancel(creds.goswift ?? own, String(body.awb ?? ""))
-                        : undefined;
+                        : provider === "ekart"
+                          ? await ekartCancel(ekartKeys, String(body.awb ?? ""))
+                          : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -287,15 +302,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "ndr": {
-        if (provider !== "goswift") return unsupported(provider);
+        if (provider !== "goswift" && provider !== "ekart") return unsupported(provider);
         const action = body.ndrAction === "RTO" ? "RTO" : "Re-Attempt";
-        const result = await goswiftNdr(creds.goswift ?? own, String(body.awb ?? ""), action, {
+        const result = await (provider === "ekart" ? ekartNdr : goswiftNdr)(provider === "ekart" ? ekartKeys : creds.goswift ?? own, String(body.awb ?? ""), action, {
           date: body.date ? String(body.date) : undefined,
           phone: body.phone ? String(body.phone) : undefined,
           address: body.address ? String(body.address) : undefined,
           instructions: body.instructions ? String(body.instructions) : undefined,
         });
-        if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift credentials are not configured." });
+        if (!result) return NextResponse.json({ ok: false, configured: false, error: `${provider === "ekart" ? "Ekart" : "GoSwift"} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "webhook-register": {
@@ -335,6 +350,11 @@ export async function POST(request: NextRequest) {
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipday API key is not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
+        if (provider === "ekart") {
+          const result = await ekartTest(ekartKeys);
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "Ekart client ID, username and password are not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
         if (provider === "goswift") {
           const result = await goswiftTest(creds.goswift ?? own);
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift client ID, username and password are not configured." });
@@ -366,7 +386,7 @@ export async function POST(request: NextRequest) {
 }
 
 /** Divisors the aggregators publish for surface parcels; an admin value saved as volumetricDivisor in that aggregator's keys wins. Used only when the aggregator does not report the billed weight. */
-const VOLUMETRIC_DIVISOR: Record<string, number> = { shiprocket: 5000, nimbuspost: 5000, ithink: 5000, shipyaari: 5000, goswift: 5000 };
+const VOLUMETRIC_DIVISOR: Record<string, number> = { shiprocket: 5000, nimbuspost: 5000, ithink: 5000, shipyaari: 5000, goswift: 5000, ekart: 5000 };
 
 function withWeights(rate: RateOut, parcel: { weightKg: number; length: number; breadth: number; height: number }, stored: Record<string, unknown>) {
   const saved = Number((stored[rate.provider] as Record<string, unknown> | undefined)?.volumetricDivisor);

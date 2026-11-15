@@ -1433,6 +1433,16 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "shipyaari"} onClick={() => test("shipyaari")}>{busy === "shipyaari" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="Ekart Logistics" text="app.elite.ekartlogistics.in — client ID plus the Ekart Elite login. Gives live Ekart rates and billed weight, books shipments, prints labels and tracks every scan. The pickup address is the one saved on the Ekart panel." badge={<ProviderStatus id="ekart" />}>
+          <div className="space-y-3">
+            <Text label="Client ID" value={value.ekart.clientId} onChange={(clientId) => set({ ekart: { ...value.ekart, clientId } })} hint="Leave blank to use the keys already saved on the server." />
+            <Text label="Username (email)" value={value.ekart.username} onChange={(username) => set({ ekart: { ...value.ekart, username } })} />
+            <Secret label="Password" value={value.ekart.password} onChange={(password) => set({ ekart: { ...value.ekart, password } })} />
+            <Text label="Pickup address alias" value={value.ekart.pickupAlias} onChange={(pickupAlias) => set({ ekart: { ...value.ekart, pickupAlias } })} hint="As saved on the Ekart panel. Leave blank to use the first pickup address there." />
+            <Text label="Service" value={value.ekart.service} onChange={(service) => set({ ekart: { ...value.ekart, service: service.toUpperCase() } })} hint="SURFACE or EXPRESS" />
+            <button type="button" className={primary} disabled={busy === "ekart"} onClick={() => test("ekart")}>{busy === "ekart" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
         <Card title="GoSwift" text="app.goswift.in/api/docs — client ID from Swift onboarding plus the API username and password. Books shipments, prints labels, tracks every scan and sends re-attempt or RTO requests for undelivered parcels. Swift has no rate API, so set the charge shown at checkout." badge={<ProviderStatus id="goswift" />} right={<Check label="Use" checked={value.goswift.enabled} onChange={(enabled) => set({ goswift: { ...value.goswift, enabled } })} />}>
           <div className="space-y-3">
             <Text label="Client ID" value={value.goswift.clientId} onChange={(clientId) => set({ goswift: { ...value.goswift, clientId } })} />

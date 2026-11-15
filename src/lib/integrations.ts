@@ -28,7 +28,7 @@ export type CustomMessageTemplate = MessageCopy & {
 };
 export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
 export type SmsProvider = "none" | "msg91";
-export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift";
+export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart";
 export type HyperlocalId = "tookan" | "shipday";
 export type ShippingProviderId = AggregatorId | HyperlocalId;
 export type ShippingConnection = { status: "success" | "failed" | "untested"; message: string; at: string };
@@ -168,6 +168,8 @@ export interface IntegrationSettings {
     shipyaari: { email: string; password: string; apiKey: string; enabled: boolean };
     /** GoSwift: client ID + API username/password. No rate API, so the desk sets the checkout charge and days. */
     goswift: { clientId: string; username: string; password: string; pickupAlias: string; rate: string; etaDays: string; service: string; enabled: boolean };
+    /** Ekart Elite: client ID + login. Same API style as GoSwift; pickup address comes from the Ekart panel. */
+    ekart: { clientId: string; username: string; password: string; pickupAlias: string; service: string; enabled: boolean };
     tookan: { apiKey: string; teamId: string; hyperlocal: boolean; parcel: boolean };
     shipday: { apiKey: string; enabled: boolean };
     /** Fallback tracking service for couriers without an API account (their own site is read first). */
@@ -385,6 +387,7 @@ export const defaultIntegrations: IntegrationSettings = {
     ithink: { accessToken: "", secretKey: "", pickupAddressId: "", host: "https://my.ithinklogistics.com/api_v3/", enabled: false },
     shipyaari: { email: "", password: "", apiKey: "", enabled: false },
     goswift: { clientId: "", username: "", password: "", pickupAlias: "", rate: "", etaDays: "", service: "SURFACE", enabled: false },
+    ekart: { clientId: "", username: "", password: "", pickupAlias: "", service: "SURFACE", enabled: true },
     tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
     shipday: { apiKey: "", enabled: true },
     tracker: { service: "aftership", apiKey: "", enabled: true },
@@ -521,7 +524,7 @@ function merge<T extends object>(base: T, saved: Partial<T> | null | undefined):
 
 export function shippingProviderId(id: string): ShippingProviderId | null {
   if (id === "tookan-parcel") return "tookan";
-  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "shipyaari" || id === "goswift" || id === "tookan" || id === "shipday") return id;
+  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "shipyaari" || id === "goswift" || id === "ekart" || id === "tookan" || id === "shipday") return id;
   return null;
 }
 
@@ -531,6 +534,7 @@ function credentialFingerprint(shipping: IntegrationSettings["shipping"], provid
   if (provider === "ithink") return `${shipping.ithink.accessToken}\0${shipping.ithink.secretKey}\0${shipping.ithink.host}`;
   if (provider === "shipyaari") return `${shipping.shipyaari.email}\0${shipping.shipyaari.password}\0${shipping.shipyaari.apiKey}`;
   if (provider === "goswift") return `${shipping.goswift.clientId}\0${shipping.goswift.username}\0${shipping.goswift.password}`;
+  if (provider === "ekart") return `${shipping.ekart.clientId}\0${shipping.ekart.username}\0${shipping.ekart.password}`;
   if (provider === "tookan") return `${shipping.tookan.apiKey}\0${shipping.tookan.teamId}`;
   return shipping.shipday.apiKey;
 }
@@ -542,6 +546,7 @@ export function hasShippingCredentials(provider: ShippingProviderId, settings = 
   if (provider === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
   if (provider === "shipyaari") return Boolean(shipping.shipyaari.apiKey || (shipping.shipyaari.email && shipping.shipyaari.password));
   if (provider === "goswift") return Boolean(shipping.goswift.clientId && shipping.goswift.username && shipping.goswift.password);
+  if (provider === "ekart") return Boolean(shipping.ekart.clientId && shipping.ekart.username && shipping.ekart.password);
   if (provider === "tookan") return Boolean(shipping.tookan.apiKey);
   if (provider === "shipday") return Boolean(shipping.shipday.apiKey);
   return false;
@@ -614,7 +619,7 @@ function persistMailStatus(settings: IntegrationSettings) {
 export function saveIntegrations(settings: IntegrationSettings) {
   const previous = getIntegrations();
   const next = merge(defaultIntegrations, settings);
-  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "tookan", "shipday"];
+  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "tookan", "shipday"];
   const connection = { ...next.shipping.connection, ...previous.shipping.connection };
   for (const provider of providers) {
     if (credentialFingerprint(previous.shipping, provider) !== credentialFingerprint(next.shipping, provider)) {

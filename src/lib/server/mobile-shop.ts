@@ -5,7 +5,7 @@ import { redeemPromo } from "@/lib/server/promotions";
 import { packingChargeFor, preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import type { MobileOrder } from "@/lib/server/mobile-store";
-import { goswiftRates, ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
+import { ekartRates, goswiftRates, ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 
@@ -200,6 +200,7 @@ export async function appCourierEstimate(subtotal: number, units: number, delive
     ithinkRates(keys("ithink"), parcel).catch(() => null),
     shipyaariRates(keys("shipyaari"), parcel).catch(() => null),
     goswiftRates(keys("goswift"), parcel).catch(() => null),
+    ekartRates(keys("ekart"), parcel).catch(() => null),
   ]);
   const rates = results.flatMap((list) => list ?? []).filter((rate) => Number(rate.rate) > 0) as unknown as CourierRate[];
   const settings = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined);

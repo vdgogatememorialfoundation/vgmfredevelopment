@@ -23,8 +23,8 @@ import { logAudit } from "@/lib/audit";
 type ShippingCreds = Record<string, Record<string, unknown>>;
 
 function credsFrom(settings: IntegrationSettings): ShippingCreds {
-  const { shiprocket, nimbuspost, ithink, shipyaari, goswift, tookan, shipday, tracker } = settings.shipping;
-  return { shiprocket, nimbuspost, ithink, shipyaari, goswift: goswift ?? {}, tookan, shipday, tracker: tracker ?? {} };
+  const { shiprocket, nimbuspost, ithink, shipyaari, goswift, ekart, tookan, shipday, tracker } = settings.shipping;
+  return { shiprocket, nimbuspost, ithink, shipyaari, goswift: goswift ?? {}, ekart: ekart ?? {}, tookan, shipday, tracker: tracker ?? {} };
 }
 
 /** Couriers without an API account: read scans from the courier's own site (or the saved tracking service). */
@@ -41,7 +41,7 @@ async function trackDirect(shipment: ShipmentRecord) {
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
-export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift"] as const;
+export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart"] as const;
 
 export function lastMileLabel(provider?: string, lastMile?: string, courier?: string) {
   const partner = customerCourierLabel({ provider, courier });
@@ -51,7 +51,7 @@ export function lastMileLabel(provider?: string, lastMile?: string, courier?: st
   return partner;
 }
 
-const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "tookan", "tookan-parcel", "shipday"]);
+const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "tookan", "tookan-parcel", "shipday"]);
 
 export function checkoutCourierRates(rates: CourierRate[]) {
   return rates.filter((rate) => REAL_CHECKOUT.has(rate.provider) && rate.live !== false);
@@ -94,6 +94,7 @@ export function publicTrackingUrl(shipment: Pick<ShipmentRecord, "awb" | "provid
   if (shipment.provider === "ithink") return `https://www.ithinklogistics.com/track-order?awb=${awb}`;
   if (shipment.provider === "shipyaari") return `https://shipyaari.com/track/${awb}`;
   if (shipment.provider === "goswift") return `https://app.goswift.in/track/${awb}`;
+  if (shipment.provider === "ekart") return `https://ekartlogistics.com/shipmenttrack/${awb}`;
   return "";
 }
 
@@ -577,6 +578,7 @@ export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "t
   { id: "ithink", label: "iThink Logistics" },
   { id: "shipyaari", label: "Shipyaari" },
   { id: "goswift", label: "GoSwift" },
+  { id: "ekart", label: "Ekart Logistics" },
   { id: "tookan", label: "Gogate Products (Tookan)" },
   { id: "shipday", label: "Gogate Products (Shipday)" },
 ];
@@ -704,7 +706,7 @@ export async function downloadLabel(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
   const provider = shipment.provider;
-  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari", "goswift"]);
+  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari", "goswift", "ekart"]);
   let details: LabelFetch = {
     labelUrl: shipment.labelUrl,
     routingCode: shipment.routingCode,
@@ -1169,7 +1171,7 @@ export async function cancelShipment(shipmentId: string) {
 export async function testShippingProvider(provider: string) {
   const result = await post<{ message?: string }>({ action: "test", provider, creds: credsFrom(getIntegrations()) });
   const id = (provider === "tookan-parcel" ? "tookan" : provider) as ShippingProviderId;
-  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "tookan", "shipday"].includes(id)) {
+  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "tookan", "shipday"].includes(id)) {
     recordShippingConnection(
       id,
       result.ok ? "success" : "failed",
@@ -1188,14 +1190,14 @@ export async function connectGoswiftUpdates() {
 export async function goswiftNdrRequest(shipmentId: string, ndrAction: "Re-Attempt" | "RTO", extra: { date?: string; instructions?: string } = {}) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment?.awb) throw new Error("Shipment not found.");
-  const result = await post<{ message?: string }>({ action: "ndr", provider: "goswift", awb: shipment.awb, ndrAction, ...extra, creds: credsFrom(getIntegrations()) });
+  const result = await post<{ message?: string }>({ action: "ndr", provider: shipment.provider === "ekart" ? "ekart" : "goswift", awb: shipment.awb, ndrAction, ...extra, creds: credsFrom(getIntegrations()) });
   if (!result.ok) throw new Error(result.error ?? "GoSwift did not accept the request.");
   return result.message || "Sent to GoSwift.";
 }
 
 export async function testConfiguredShippingProviders() {
   const settings = getIntegrations();
-  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari", "goswift"] as const).filter((id) => hasShippingCredentials(id, settings));
+  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari", "goswift", "ekart"] as const).filter((id) => hasShippingCredentials(id, settings));
   const results: { id: string; ok: boolean; message?: string; error?: string }[] = [];
   for (const id of wanted) {
     const result = await testShippingProvider(id);

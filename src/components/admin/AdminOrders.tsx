@@ -1691,7 +1691,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>Track</Button>
-                    {shipment.provider === "goswift" && shipment.live && shipment.status !== "Delivered" && (
+                    {(shipment.provider === "goswift" || shipment.provider === "ekart") && shipment.live && shipment.status !== "Delivered" && (
                       <>
                         <Button variant="outline" onClick={() => run("ndr-reattempt", () => goswiftNdrRequest(shipment.id, "Re-Attempt", { date: new Date(Date.now() + 864e5).toISOString() }))}>Ask GoSwift to re-attempt</Button>
                         <Button variant="outline" onClick={() => run("ndr-rto", () => goswiftNdrRequest(shipment.id, "RTO"))}>Return to us (RTO)</Button>

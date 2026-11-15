@@ -2180,22 +2180,28 @@ export async function sendMsg91Sms(
 /* ---------------- GoSwift (app.goswift.in/api/docs) ---------------- */
 
 const GOSWIFT = "https://app.goswift.in";
+const EKART = "https://app.elite.ekartlogistics.in";
 const goswiftTokens = new Map<string, { token: string; until: number }>();
+/** Ekart Elite runs the same API as GoSwift on its own host and login. */
+const isEkart = (input: Json) => input.__ekart === true;
+const swiftBase = (input: Json) => (isEkart(input) ? EKART : GOSWIFT);
+const swiftName = (input: Json) => (isEkart(input) ? "Ekart" : "GoSwift");
 
 async function goswiftToken(input: Json) {
-  const clientId = pick(input.clientId, "GOSWIFT_CLIENT_ID");
-  const username = pick(input.username, "GOSWIFT_USERNAME");
-  const password = pick(input.password, "GOSWIFT_PASSWORD");
+  const prefix = isEkart(input) ? "EKART" : "GOSWIFT";
+  const clientId = pick(input.clientId, `${prefix}_CLIENT_ID`);
+  const username = pick(input.username, `${prefix}_USERNAME`);
+  const password = pick(input.password, `${prefix}_PASSWORD`);
   if (!clientId || !username || !password) return null;
-  const key = `${clientId}\0${username}`;
+  const key = `${swiftBase(input)}\0${clientId}\0${username}`;
   const cached = goswiftTokens.get(key);
   if (cached && cached.until > Date.now()) return cached.token;
-  const data = await call(`${GOSWIFT}/integrations/v2/auth/token/${encodeURIComponent(clientId)}`, {
+  const data = await call(`${swiftBase(input)}/integrations/v2/auth/token/${encodeURIComponent(clientId)}`, {
     method: "POST",
     json: { username, password },
   });
   const token = String(data.access_token ?? "");
-  if (!token) throw new ProviderError("GoSwift rejected the client ID, username or password.", 401);
+  if (!token) throw new ProviderError(`${swiftName(input)} rejected the client ID, username or password.`, 401);
   const seconds = Number(data.expires_in) || 86400;
   goswiftTokens.set(key, { token, until: Date.now() + Math.max(60, seconds - 300) * 1000 });
   return token;
@@ -2205,6 +2211,23 @@ const goswiftAuth = (token: string) => ({ authorization: `Bearer ${token}` });
 const goswiftPhone = (phone: string) => Number(phone.replace(/\D/g, "").slice(-10)) || undefined;
 const goswiftTime = (ms: unknown) => (Number(ms) > 0 ? new Date(Number(ms)).toISOString() : "");
 
+const swiftPickups = new Map<string, { alias: string; pincode: string; at: number }>();
+
+/** The pickup address saved on the aggregator's panel: the alias set in Settings, else the first one listed. */
+async function swiftPickup(input: Json, token: string) {
+  const wanted = String(input.pickupAlias ?? "").trim();
+  const key = `${swiftBase(input)}\0${token.slice(-12)}\0${wanted}`;
+  const cached = swiftPickups.get(key);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached;
+  const rows = await call(`${swiftBase(input)}/api/v2/addresses`, { headers: goswiftAuth(token) })
+    .then((data) => (Array.isArray(data) ? (data as Json[]) : []))
+    .catch(() => [] as Json[]);
+  const row = rows.find((item) => String(item.alias ?? "").trim().toLowerCase() === wanted.toLowerCase()) ?? (wanted ? undefined : rows[0]);
+  const found = { alias: row ? String(row.alias ?? "") : wanted, pincode: row ? String(row.pincode ?? "") : "", at: Date.now() };
+  swiftPickups.set(key, found);
+  return found;
+}
+
 export function goswiftTrackingUrl(id: string) {
   return `${GOSWIFT}/track/${encodeURIComponent(id)}`;
 }
@@ -2213,25 +2236,33 @@ export function goswiftTrackingUrl(id: string) {
 export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const token = await goswiftToken(input);
   if (!token) return null;
-  const data = await call(`${GOSWIFT}/api/v2/serviceability/${encodeURIComponent(parcel.deliveryPincode)}`, { headers: goswiftAuth(token) });
+  const data = await call(`${swiftBase(input)}/api/v2/serviceability/${encodeURIComponent(parcel.deliveryPincode)}`, { headers: goswiftAuth(token) });
   const details = (data.details as Json) ?? {};
   if (data.status === false || details.forward_drop === false) return [];
   if (parcel.cod && details.cod === false) return [];
-  // Serviceability V3 names each courier group with its price once GoSwift has set a rate card on the account.
-  const groups = await call(`${GOSWIFT}/data/v3/serviceability`, {
+  const origin = (await swiftPickup(input, token)).pincode || parcel.pickupPincode;
+  const shipment = {
+    pickupPincode: origin,
+    dropPincode: parcel.deliveryPincode,
+    length: Math.max(1, Math.round(parcel.length)),
+    width: Math.max(1, Math.round(parcel.breadth)),
+    height: Math.max(1, Math.round(parcel.height)),
+    weight: Math.max(1, Math.round(parcel.weightKg * 1000)),
+    paymentType: parcel.cod ? "COD" : "Prepaid",
+    invoiceAmount: Math.round(parcel.declaredValue),
+    codAmount: parcel.cod ? Math.round(parcel.declaredValue) : 0,
+    serviceType: String(input.service ?? "").trim().toUpperCase() || "SURFACE",
+    shippingDirection: "FORWARD",
+    billingClientType: "EXISTING_CLIENT",
+  };
+  // The billed (chargeable) weight as the aggregator works it out for this parcel; grams in the reply.
+  const estimate = await call(`${swiftBase(input)}/data/pricing/estimate`, { method: "POST", headers: goswiftAuth(token), json: shipment }).catch(() => ({}) as Json);
+  const billedKg = Number(estimate.billingWeight) > 0 ? Number(estimate.billingWeight) / 1000 : undefined;
+  // Serviceability V3 names each courier group with its price once the aggregator has a rate card on the account.
+  const groups = await call(`${swiftBase(input)}/data/v3/serviceability`, {
     method: "POST",
     headers: goswiftAuth(token),
-    json: {
-      pickupPincode: parcel.pickupPincode,
-      dropPincode: parcel.deliveryPincode,
-      length: String(Math.max(1, Math.round(parcel.length))),
-      width: String(Math.max(1, Math.round(parcel.breadth))),
-      height: String(Math.max(1, Math.round(parcel.height))),
-      weight: String(Math.max(1, Math.round(parcel.weightKg * 1000))),
-      paymentType: parcel.cod ? "COD" : "Prepaid",
-      ...(parcel.cod ? { codAmount: String(Math.round(parcel.declaredValue)) } : {}),
-      invoiceAmount: String(Math.round(parcel.declaredValue)),
-    },
+    json: shipment,
   }).catch(() => null);
   const rows = Array.isArray(groups) ? (groups as Json[]) : [];
   const priced = rows
@@ -2244,6 +2275,7 @@ export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut
         courierId: name || "goswift",
         courierName: name || "GoSwift",
         rate: Number(charges.totalForwardDeliveredEstimate) || 0,
+        chargeWeightKg: billedKg,
         etaDays: Number(tat.max) || Number(tat.min) || 4,
         live: true as const,
         cod: details.cod !== false,
@@ -2277,11 +2309,11 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
     country: "India",
     pin: Number(who.pincode),
   });
-  const alias = String(input.pickupAlias ?? "").trim();
+  const alias = (await swiftPickup(input, token)).alias;
   const pickup = alias ? { name: alias } : place({ ...order.pickup, name: order.pickup.contactName });
   const value = Math.max(1, Math.round(order.total));
   const units = order.items.reduce((sum, item) => sum + item.units, 0) || 1;
-  const data = await call(`${GOSWIFT}/api/v1/package/create`, {
+  const data = await call(`${swiftBase(input)}/api/v1/package/create`, {
     method: "PUT",
     headers: goswiftAuth(token),
     json: {
@@ -2317,7 +2349,7 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
     },
   });
   const id = String(data.tracking_id ?? "");
-  if (data.status === false || !id) throw new ProviderError(String(data.remark ?? data.message ?? "GoSwift did not create the shipment."));
+  if (data.status === false || !id) throw new ProviderError(String(data.remark ?? data.message ?? `${swiftName(input)} did not create the shipment.`));
   const barcodes = (data.barcodes as Json) ?? {};
   return {
     provider: "goswift",
@@ -2334,19 +2366,19 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
 export async function goswiftLabelPdf(input: Json, awb: string) {
   const token = await goswiftToken(input);
   if (!token) return null;
-  const response = await fetch(`${GOSWIFT}/api/v1/package/label`, {
+  const response = await fetch(`${swiftBase(input)}/api/v1/package/label`, {
     method: "POST",
     headers: { ...goswiftAuth(token), "content-type": "application/json" },
     body: JSON.stringify({ ids: [awb] }),
     signal: AbortSignal.timeout(30000),
     cache: "no-store",
   });
-  if (!response.ok) throw new ProviderError(`GoSwift label failed (HTTP ${response.status}).`, response.status);
+  if (!response.ok) throw new ProviderError(`${swiftName(input)} label failed (HTTP ${response.status}).`, response.status);
   return response.arrayBuffer();
 }
 
-export async function goswiftTrack(_input: Json, awb: string) {
-  const data = await call(`${GOSWIFT}/api/v1/track/${encodeURIComponent(awb)}`);
+export async function goswiftTrack(input: Json, awb: string) {
+  const data = await call(`${swiftBase(input)}/api/v1/track/${encodeURIComponent(awb)}`);
   const nested = (data.data as Json) ?? data;
   const track = (nested.track as Json) ?? {};
   const line = (row: Json) => {
@@ -2372,8 +2404,8 @@ export async function goswiftTrack(_input: Json, awb: string) {
 export async function goswiftCancel(input: Json, awb: string) {
   const token = await goswiftToken(input);
   if (!token) return null;
-  const data = await call(`${GOSWIFT}/api/v1/package/cancel?tracking_id=${encodeURIComponent(awb)}`, { method: "DELETE", headers: goswiftAuth(token) });
-  if (data.status === false) throw new ProviderError(String(data.remark ?? "GoSwift did not cancel the shipment."));
+  const data = await call(`${swiftBase(input)}/api/v1/package/cancel?tracking_id=${encodeURIComponent(awb)}`, { method: "DELETE", headers: goswiftAuth(token) });
+  if (data.status === false) throw new ProviderError(String(data.remark ?? `${swiftName(input)} did not cancel the shipment.`));
   return { cancelled: true };
 }
 
@@ -2382,7 +2414,7 @@ export async function goswiftNdr(input: Json, awb: string, action: "Re-Attempt" 
   const token = await goswiftToken(input);
   if (!token) return null;
   const at = extra.date ? Date.parse(extra.date) : NaN;
-  const data = await call(`${GOSWIFT}/api/v2/package/ndr`, {
+  const data = await call(`${swiftBase(input)}/api/v2/package/ndr`, {
     method: "POST",
     headers: goswiftAuth(token),
     json: {
@@ -2394,27 +2426,75 @@ export async function goswiftNdr(input: Json, awb: string, action: "Re-Attempt" 
       ...(extra.instructions ? { instructions: extra.instructions } : {}),
     },
   });
-  if (data.status === false) throw new ProviderError(String(data.remark ?? "GoSwift did not accept the request."));
-  return { message: String(data.remark ?? "Sent to GoSwift.") };
+  if (data.status === false) throw new ProviderError(String(data.remark ?? `${swiftName(input)} did not accept the request.`));
+  return { message: String(data.remark ?? `Sent to ${swiftName(input)}.`) };
 }
 
 /** Subscribes this site to GoSwift track updates so undelivered, RTO and every other scan reaches the order at once. */
 export async function goswiftRegisterWebhook(input: Json, url: string) {
   const token = await goswiftToken(input);
   if (!token) return null;
-  const existing = await call(`${GOSWIFT}/api/v2/webhook`, { headers: goswiftAuth(token) }).catch(() => ({}) as Json);
+  const existing = await call(`${swiftBase(input)}/api/v2/webhook`, { headers: goswiftAuth(token) }).catch(() => ({}) as Json);
   const rows = (Array.isArray(existing) ? existing : []) as Json[];
   const same = rows.find((row) => row.url === url);
   const body = { url, secret: randomBytes(12).toString("hex"), topics: ["track_updated", "shipment_created", "shipment_recreated"], active: true };
   const data = same
-    ? await call(`${GOSWIFT}/api/v2/webhook/${encodeURIComponent(String(same.id))}`, { method: "PUT", headers: goswiftAuth(token), json: body })
-    : await call(`${GOSWIFT}/api/v2/webhook`, { method: "POST", headers: goswiftAuth(token), json: body });
+    ? await call(`${swiftBase(input)}/api/v2/webhook/${encodeURIComponent(String(same.id))}`, { method: "PUT", headers: goswiftAuth(token), json: body })
+    : await call(`${swiftBase(input)}/api/v2/webhook`, { method: "POST", headers: goswiftAuth(token), json: body });
   return { webhookId: String(data.id ?? same?.id ?? ""), message: `Live updates are connected to ${url}.` };
 }
 
 export async function goswiftTest(input: Json) {
   const token = await goswiftToken(input);
   if (!token) return null;
-  const data = await call(`${GOSWIFT}/api/v2/serviceability/110001`, { headers: goswiftAuth(token) });
+  const data = await call(`${swiftBase(input)}/api/v2/serviceability/110001`, { headers: goswiftAuth(token) });
   return { message: data.status === false ? "Connected. GoSwift says 110001 is not serviceable." : "Connected. GoSwift serves Delhi 110001." };
+}
+
+/* ---------------- Ekart Elite (app.elite.ekartlogistics.in/api/docs): GoSwift's API on Ekart's host ---------------- */
+
+const ekartInput = (input: Json): Json => ({ ...input, __ekart: true });
+const EKART_NAME = "Ekart Logistics";
+
+export function ekartTrackingUrl(id: string) {
+  return `https://ekartlogistics.com/shipmenttrack/${encodeURIComponent(id)}`;
+}
+
+/** Only real Ekart quotes: no placeholder rate is ever returned for Ekart. */
+export async function ekartRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const rows = await goswiftRates(ekartInput(input), parcel);
+  return rows ? rows.filter((row) => !row.estimate).map((row) => ({ ...row, provider: "ekart", courierId: "ekart", courierName: EKART_NAME })) : null;
+}
+
+export async function ekartBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const booked = await goswiftBook(ekartInput(input), order);
+  if (!booked) return null;
+  return {
+    ...booked,
+    provider: "ekart",
+    courierName: EKART_NAME,
+    trackingUrl: ekartTrackingUrl(booked.awb),
+    labelUrl: `/api/shipping/ekart/label?awb=${encodeURIComponent(booked.awb)}`,
+  };
+}
+
+export const ekartLabelPdf = (input: Json, awb: string) => goswiftLabelPdf(ekartInput(input), awb);
+
+export async function ekartTrack(input: Json, awb: string) {
+  const result = await goswiftTrack(ekartInput(input), awb);
+  return { ...result, courierName: EKART_NAME, trackingUrl: ekartTrackingUrl(awb) };
+}
+
+export const ekartCancel = (input: Json, awb: string) => goswiftCancel(ekartInput(input), awb);
+
+export const ekartNdr = (input: Json, awb: string, action: "Re-Attempt" | "RTO", extra: Parameters<typeof goswiftNdr>[3] = {}) =>
+  goswiftNdr(ekartInput(input), awb, action, extra);
+
+export async function ekartTest(input: Json) {
+  const token = await goswiftToken(ekartInput(input));
+  if (!token) return null;
+  const pickup = await swiftPickup(ekartInput(input), token);
+  const data = await call(`${EKART}/api/v2/serviceability/110001`, { headers: goswiftAuth(token) });
+  const where = pickup.alias ? ` Pickup address on Ekart: ${pickup.alias}${pickup.pincode ? ` (${pickup.pincode})` : ""}.` : " No pickup address saved on the Ekart panel yet.";
+  return { message: `${data.status === false ? "Connected. Ekart says 110001 is not serviceable." : "Connected. Ekart serves Delhi 110001."}${where}` };
 }
