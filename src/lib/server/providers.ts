@@ -126,6 +126,17 @@ export async function razorpayLinkCancel(creds: { keyId: string; keySecret: stri
   return { status: String(data.status) };
 }
 
+export async function razorpayLinkExpiry(creds: { keyId: string; keySecret: string }, linkId: string, expiresAt: string) {
+  const expireBy = Math.floor(Date.parse(expiresAt) / 1000);
+  if (!Number.isFinite(expireBy) || expireBy < Math.floor(Date.now() / 1000) + 15 * 60) throw new Error("Pick a time at least 15 minutes from now.");
+  const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}`, {
+    method: "PATCH",
+    headers: { authorization: razorpayAuth(creds) },
+    json: { expire_by: expireBy },
+  });
+  return { status: String(data.status), expiresAt: new Date(Number(data.expire_by) * 1000).toISOString() };
+}
+
 export async function razorpayLinkStatus(creds: { keyId: string; keySecret: string }, linkId: string) {
   const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}`, {
     headers: { authorization: razorpayAuth(creds) },

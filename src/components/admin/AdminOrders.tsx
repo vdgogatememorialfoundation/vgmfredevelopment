@@ -57,7 +57,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
+import { changeBalanceLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -1517,6 +1517,13 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </span>
               </p>
             )}
+            {!order.preorderPayment.balancePaidAt && order.preorderPayment.link && (
+              <LinkExpiryEditor
+                current={order.preorderPayment.link.expiresAt}
+                busy={busy === "balance-expiry"}
+                onSave={(value) => run("balance-expiry", () => changeBalanceLinkExpiry(order.id, value))}
+              />
+            )}
             {!order.preorderPayment.balancePaidAt && (
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button disabled={busy === "balance-link"} onClick={() => run("balance-link", async () => {
@@ -2304,6 +2311,24 @@ function AggregatorPicks({ rates, skipped, onChange }: { rates: CourierRate[]; s
           </label>
         );
       })}
+    </div>
+  );
+}
+
+/** Admin moves the expiry of an open payment link to any date and time (IST). */
+function LinkExpiryEditor({ current, busy, onSave }: { current?: string; busy: boolean; onSave: (iso: string) => void }) {
+  const toLocal = (iso?: string) => {
+    const ms = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(ms) ? new Date(ms + 5.5 * 3600_000).toISOString().slice(0, 16) : "";
+  };
+  const [value, setValue] = useState(toLocal(current));
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-text-muted">Link valid till (IST)</span>
+      <input type="datetime-local" className="rounded-lg border border-border bg-white px-2 py-1" value={value} onChange={(event) => setValue(event.target.value)} />
+      <Button variant="outline" disabled={busy || !value} onClick={() => onSave(new Date(`${value}:00+05:30`).toISOString())}>
+        {busy ? "Saving…" : "Change expiry"}
+      </Button>
     </div>
   );
 }

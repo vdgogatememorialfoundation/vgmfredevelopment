@@ -86,6 +86,8 @@ export interface IntegrationSettings {
     linkExpiryHours: number;
     /** Minutes a payment link stays valid (Razorpay needs at least 15). */
     linkExpiryMinutes: number;
+    /** Days a pre-order balance link stays valid. */
+    balanceLinkDays?: number;
     posDeviceId: string;
     posDeviceMode: "wired" | "wireless";
   };
@@ -317,6 +319,7 @@ export const defaultIntegrations: IntegrationSettings = {
     webhookSecret: "",
     linkExpiryHours: 72,
     linkExpiryMinutes: 30,
+    balanceLinkDays: 2,
     posDeviceId: "",
     posDeviceMode: "wireless",
   },

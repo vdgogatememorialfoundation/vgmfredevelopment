@@ -5,7 +5,7 @@ import {
   razorpayDeviceActivity,
   razorpayDeviceActivityStatus,
   razorpayLink,
-  razorpayLinkStatus,
+  razorpayLinkStatus, razorpayLinkExpiry,
   razorpayLinkCancel,
   razorpayOrder,
   razorpayOrderPayments,
@@ -71,6 +71,8 @@ export async function POST(request: NextRequest) {
       }
       case "link-cancel":
         return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkCancel(creds, String(body.linkId))) });
+      case "link-expiry":
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkExpiry(creds, String(body.linkId), String(body.expiresAt))) });
       case "link-status":
         return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkStatus(creds, String(body.linkId))) });
       case "refund":

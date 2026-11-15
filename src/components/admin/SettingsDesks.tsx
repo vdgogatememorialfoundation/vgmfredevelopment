@@ -547,6 +547,7 @@ export function PaymentSettingsDesk() {
       <Card title="Payment links & webhooks">
         <div className="grid gap-3 sm:grid-cols-2">
           <Text label="Payment link valid for (minutes, 15 or more)" type="number" value={value.linkExpiryMinutes ?? 30} onChange={(minutes) => set({ linkExpiryMinutes: Math.max(15, Number(minutes) || 30) })} />
+          <Text label="Pre-order balance link valid for (days, up to 30)" type="number" value={value.balanceLinkDays ?? 2} onChange={(days) => set({ balanceLinkDays: Math.min(30, Math.max(0.5, Number(days) || 2)) })} />
           <Secret label="Webhook secret" value={value.webhookSecret} onChange={(webhookSecret) => set({ webhookSecret })} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
