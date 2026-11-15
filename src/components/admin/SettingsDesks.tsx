@@ -548,6 +548,12 @@ export function PaymentSettingsDesk() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Text label="Payment link valid for (minutes, 15 or more)" type="number" value={value.linkExpiryMinutes ?? 30} onChange={(minutes) => set({ linkExpiryMinutes: Math.max(15, Number(minutes) || 30) })} />
           <Text label="Pre-order balance link valid for (days, up to 30)" type="number" value={value.balanceLinkDays ?? 2} onChange={(days) => set({ balanceLinkDays: Math.min(30, Math.max(0.5, Number(days) || 2)) })} />
+          <Text label="Remind part-paid customers every (days)" type="number" value={value.reminderEveryDays ?? 1} onChange={(days) => set({ reminderEveryDays: Math.min(30, Math.max(0.5, Number(days) || 1)) })} />
+          <Text label="Reminders per order (max)" type="number" value={value.reminderMax ?? 3} onChange={(count) => set({ reminderMax: Math.min(10, Math.max(1, Math.round(Number(count) || 3))) })} />
+          <label className="flex items-center gap-2 text-sm text-text-primary sm:col-span-2">
+            <input type="checkbox" checked={value.balanceReminders !== false} onChange={(event) => set({ balanceReminders: event.target.checked })} />
+            Email automatic payment reminders for part-paid orders (9 am – 8 pm IST, with the payment link while it is valid)
+          </label>
           <Secret label="Webhook secret" value={value.webhookSecret} onChange={(webhookSecret) => set({ webhookSecret })} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">

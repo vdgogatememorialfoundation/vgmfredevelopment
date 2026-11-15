@@ -4,4 +4,6 @@ export async function register() {
   startShipmentSync();
   const { startBirthdayMail } = await import("@/lib/server/birthday-mail");
   startBirthdayMail();
+  const { startPaymentReminders } = await import("@/lib/server/payment-reminders");
+  startPaymentReminders();
 }

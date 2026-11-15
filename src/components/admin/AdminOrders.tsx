@@ -582,7 +582,7 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
   );
 }
 
-type PaymentChoice = "link" | "collect" | "paid" | "cod";
+type PaymentChoice = "link" | "collect" | "paid" | "partial" | "cod";
 
 function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const books = getLiveBooks();
@@ -598,6 +598,8 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const [payment, setPayment] = useState<PaymentChoice>("link");
   const [method, setMethod] = useState("UPI");
   const [reference, setReference] = useState("");
+  const [partAmount, setPartAmount] = useState("");
+  const [partLink, setPartLink] = useState(true);
   const [shippingOverride, setShippingOverride] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -693,6 +695,10 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
       setError("Add at least one valid item.");
       return;
     }
+    if (payment === "partial" && !(Number(partAmount) > 0)) {
+      setError("Enter the amount the customer has already paid.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -703,13 +709,20 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
         deliverTo: customer,
         items,
         deliveryMode: mode,
-        payment,
+        payment: payment === "partial" ? "collect" : payment,
         paymentMethod: payment === "paid" ? method : undefined,
         paymentRef: payment === "paid" ? reference : undefined,
         courierChoice: mode === "delivery" ? choice : undefined,
         shippingOverride: shippingOverride !== "" ? Number(shippingOverride) : undefined,
       });
       if (payment === "link") await createPaymentLink(order.id);
+      if (payment === "partial") {
+        const note = recordPartialPayment(order.id, { amount: Number(partAmount), method, reference });
+        const saved = getStoredOrder(order.id);
+        const due = saved ? remainingDue(saved) : 0;
+        if (partLink && due > 0) await createPaymentLink(order.id, due);
+        else if (!saved || saved.paymentStatus === "Pending") throw new Error(note);
+      }
       onDone(order.id);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not create the order.");
@@ -839,6 +852,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
               {([
                 ["link", "Send payment link", paymentMode() === "demo" ? "Demo link on this site" : "Razorpay payment link"],
                 ["paid", "Already paid", "Record UPI, cash, bank transfer…"],
+                ["partial", "Partly paid", "Record what was paid; the rest stays due"],
                 ["collect", "Collect later", "Order waits as Pending"],
                 ...(orderSettings.codEnabled ? [["cod", "Cash on delivery", `COD fee ₹${orderSettings.codFee}`]] : []),
               ] as [PaymentChoice, string, string][]).map(([id, label, hint]) => (
@@ -853,6 +867,19 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
                 </button>
               ))}
             </div>
+            {payment === "partial" && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <TextInput inputMode="decimal" placeholder="Amount paid (₹)" value={partAmount} onChange={(event) => setPartAmount(event.target.value.replace(/[^\d.]/g, ""))} />
+                <SelectInput value={method} onChange={(event) => setMethod(event.target.value)}>
+                  {PAYMENT_METHODS.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
+                <TextInput placeholder="Reference / UTR / receipt no." value={reference} onChange={(event) => setReference(event.target.value)} />
+                <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-3">
+                  <input type="checkbox" checked={partLink} onChange={(event) => setPartLink(event.target.checked)} />
+                  Send a payment link for the balance now (otherwise send it later from the order&apos;s Payment section)
+                </label>
+              </div>
+            )}
             {payment === "paid" && (
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 <SelectInput value={method} onChange={(event) => setMethod(event.target.value)}>

@@ -58,6 +58,7 @@ export function PosDesk() {
   const [walkIn, setWalkIn] = useState({ name: "", phone: "", email: "" });
   const [method, setMethod] = useState<MethodId>("cash");
   const [reference, setReference] = useState("");
+  const [partNow, setPartNow] = useState("");
   const [useCredit, setUseCredit] = useState(false);
   const [creditId, setCreditId] = useState("");
   const [creditIdFor, setCreditIdFor] = useState("");
@@ -122,7 +123,10 @@ export function PosDesk() {
   const advance = hasPreorder && orderTotal > 0 ? preorderAdvance(orderTotal, settings, { copies, platformFee: Math.max(0, platformFee - creditApplied) }) : orderTotal;
   const payAdvance = hasPreorder && (preorderPay === "advance" || shippingLater);
   const total = payAdvance ? advance : orderTotal;
-  const balanceLater = Math.max(0, Math.round((orderTotal - total) * 100) / 100);
+  const partAmount = Math.round((Number(partNow) || 0) * 100) / 100;
+  const partial = partAmount > 0 && partAmount < total;
+  const payNow = partial ? partAmount : total;
+  const balanceLater = Math.max(0, Math.round((orderTotal - payNow) * 100) / 100);
 
   const addByCode = (code: string) => {
     const book = getProductByCode(code) || books.find((item) => matchesBarcode(item, code));
@@ -180,16 +184,16 @@ export function PosDesk() {
     try {
       const saleId = generateOrderId();
       const methodLabel = METHODS.find((item) => item.id === method)?.label ?? "Cash";
-      let paymentMethod: string = total > 0 ? methodLabel : creditApplied > 0 ? "Store credit" : methodLabel;
+      let paymentMethod: string = payNow > 0 ? methodLabel : creditApplied > 0 ? "Store credit" : methodLabel;
       let paymentRef = reference.trim() || undefined;
       let razorpayOrderId: string | undefined;
       let razorpayPaymentId: string | undefined;
 
-      if (total > 0 && method !== "cash") {
+      if (payNow > 0 && method !== "cash") {
         if (method === "upi") {
           setMessage("Opening Razorpay UPI…");
           const outcome = await payWithRazorpay({
-            amount: total,
+            amount: payNow,
             receipt: saleId,
             name,
             email: account?.email || walkIn.email,
@@ -219,7 +223,7 @@ export function PosDesk() {
         } else if (method === "razorpay-edc") {
           setMessage("Sending the amount to the Razorpay EDC. Complete the payment on the machine.");
           const outcome = await payOnRazorpayEdc({
-            amount: total,
+            amount: payNow,
             receipt: saleId,
             name,
             email: account?.email || walkIn.email,
@@ -233,7 +237,7 @@ export function PosDesk() {
         } else {
           setMessage("Sending the amount to the Paytm EDC. Complete the payment on the machine.");
           const outcome = await payOnPaytmEdc({
-            amount: total,
+            amount: payNow,
             receipt: saleId,
             description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
           });
@@ -290,22 +294,26 @@ export function PosDesk() {
         channel: "pos",
         shippingOverride: charge,
       });
-      if (creditApplied > 0 && total > 0) paymentMethod = `Store credit ${rupees(creditApplied)} + ${paymentMethod}`;
+      if (creditApplied > 0 && payNow > 0) paymentMethod = `Store credit ${rupees(creditApplied)} + ${paymentMethod}`;
       // Pre-orders are not handed over at the counter: they wait in Orders until the book arrives.
       const updates: Partial<Order> = fulfil === "delivery" || hasPreorder ? {} : { status: "Delivered" };
       if (hasPreorder && (balanceLater > 0 || shippingLater)) {
         updates.paymentStatus = balanceLater > 0 ? "Partially Paid" : "Paid";
         updates.preorderPayment = {
-          advance: total + creditApplied,
+          advance: payNow + creditApplied,
           balance: balanceLater,
           balanceWhen: settings.preorderPayment.balanceWhen,
           advancePaidAt: new Date().toISOString(),
           shippingDue: shippingLater || undefined,
         };
       }
+      if (partial) {
+        updates.paymentStatus = "Partially Paid";
+        updates.amountPaid = payNow;
+      }
       updates.paymentMethod = paymentMethod;
       const notes = [
-        hasPreorder ? `Pre-order at counter · paid ${rupees(total + creditApplied)}${balanceLater > 0 ? ` · balance ${rupees(balanceLater)} by payment link when ready` : ""}${shippingLater ? " · courier charge added later" : ""}` : fulfil === "delivery" ? "Paid at counter · home delivery" : "Collected at counter",
+        hasPreorder ? `Pre-order at counter · paid ${rupees(payNow + creditApplied)}${balanceLater > 0 ? ` · balance ${rupees(balanceLater)} by payment link when ready` : ""}${shippingLater ? " · courier charge added later" : ""}` : fulfil === "delivery" ? "Paid at counter · home delivery" : "Collected at counter",
       ];
       if (creditApplied > 0 && account) {
         const left = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
@@ -319,16 +327,17 @@ export function PosDesk() {
       setLastOrder(paid);
       setCart([]);
       setReference("");
+      setPartNow("");
       setUseCredit(false);
       setCreditId("");
       setCreditIdFor("");
       setCreditIdNote("");
       setMessage(
         hasPreorder
-          ? `Pre-order ${paid.id} recorded · ${rupees(total + creditApplied)} paid · ${paymentMethod}.${balanceLater > 0 ? ` Balance ${rupees(balanceLater)} is sent as a payment link when the book is ready.` : ""} It waits in Orders until the book arrives; stock is taken then.`
+          ? `Pre-order ${paid.id} recorded · ${rupees(payNow + creditApplied)} paid · ${paymentMethod}.${balanceLater > 0 ? ` Balance ${rupees(balanceLater)} is sent as a payment link when the book is ready.` : ""} It waits in Orders until the book arrives; stock is taken then.`
           : fulfil === "delivery"
-            ? `Sale ${paid.id} recorded · ${rupees(total + creditApplied)} · ${paymentMethod}. Home delivery: it is in Orders for picking, packing and courier booking.`
-            : `Sale ${paid.id} recorded · ${rupees(total + creditApplied)} · ${paymentMethod}.`
+            ? `Sale ${paid.id} recorded · ${rupees(payNow + creditApplied)} · ${paymentMethod}. Home delivery: it is in Orders for picking, packing and courier booking.`
+            : `Sale ${paid.id} recorded · ${rupees(payNow + creditApplied)} · ${paymentMethod}.`
       );
       printPosReceipt(paid);
     } catch (problem) {
@@ -571,6 +580,18 @@ export function PosDesk() {
                       : "Pushes the amount to the Paytm EDC machine."}
                 </p>
               )}
+              <TextInput
+                inputMode="decimal"
+                placeholder={`Partly paid now? Amount (₹, less than ${rupees(total)})`}
+                value={partNow}
+                onChange={(event) => setPartNow(event.target.value.replace(/[^\d.]/g, ""))}
+                disabled={busy}
+              />
+              <p className="self-center text-xs text-text-muted">
+                {partial
+                  ? `Collect ${rupees(payNow)} now · ${rupees(balanceLater)} stays due (Partially Paid; send a link from Orders → Payment).`
+                  : "Leave blank to collect the full amount."}
+              </p>
             </div>
             )}
             <div className="mt-4 flex gap-2">

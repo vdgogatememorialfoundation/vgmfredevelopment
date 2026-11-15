@@ -88,6 +88,10 @@ export interface IntegrationSettings {
     linkExpiryMinutes: number;
     /** Days a pre-order balance link stays valid. */
     balanceLinkDays?: number;
+    /** Automatic email reminders for part-paid orders. */
+    balanceReminders?: boolean;
+    reminderEveryDays?: number;
+    reminderMax?: number;
     posDeviceId: string;
     posDeviceMode: "wired" | "wireless";
   };
