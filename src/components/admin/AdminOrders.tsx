@@ -98,12 +98,13 @@ const ALL_STATUSES: Order["status"][] = [
   "Cancelled",
 ];
 /** Summary tiles count several statuses; clicking a tile filters to the same set. */
-const STATUS_GROUPS: Record<string, string[]> = {
-  "group:to-pack": ["Ordered", "Accepted"],
-  "group:to-ship": ["Packed", "Ready to Ship", "To Ship"],
-  "group:in-transit": ["Shipped", "Out for Delivery"],
+const PACKED_STATUSES = ["Packed", "Ready to Ship", "To Ship"];
+const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
+  "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
+  "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) },
+  "group:to-ship": { label: "To Ship (packed + fully paid, courier not booked)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
+  "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => order.status === "Shipped" || order.status === "Out for Delivery" },
 };
-const GROUP_LABELS: Record<string, string> = { "group:to-pack": "To pack (Ordered + Accepted)", "group:to-ship": "Packed · courier not booked (Packed + Ready to Ship + To Ship)", "group:in-transit": "In transit (Shipped + Out for Delivery)" };
 /** Store pickup has its own steps; the stored status stays canonical. */
 const PICKUP_STATUSES: { status: Order["status"]; label: string }[] = [
   { status: "Awaiting Confirmation", label: "Awaiting Confirmation" },
@@ -175,7 +176,7 @@ export function OrdersDashboard() {
   const languagesOf = (order: Order) => orderLanguages(order, catalogue);
   const languages = [...new Set(orders.flatMap(languagesOf))].sort();
   const filtered = orders
-    .filter((order) => statusFilter === "All" || (STATUS_GROUPS[statusFilter]?.includes(order.status) ?? order.status === statusFilter))
+    .filter((order) => statusFilter === "All" || (STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter))
     .filter((order) => languageFilter === "All" || languagesOf(order).includes(languageFilter))
     .filter((order) => productFilter === "All" || order.items.some((item) => (catalogue.find((book) => book.id === item.bookId)?.productType === "other" ? "Other" : "Books") === productFilter))
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
@@ -196,12 +197,13 @@ export function OrdersDashboard() {
   const selected = selectedId ? getOrderByAdmin(selectedId) : null;
 
   const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
-  const toPack = orders.filter((order) => STATUS_GROUPS["group:to-pack"].includes(order.status)).length;
+  const toPack = orders.filter(STATUS_GROUPS["group:to-pack"].test).length;
+  const packedPaymentDue = orders.filter(STATUS_GROUPS["group:payment-due"].test).length;
   const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery" && order.paymentMethod !== "Cash at Store").length;
-  const toShip = orders.filter((order) => STATUS_GROUPS["group:to-ship"].includes(order.status)).length;
+  const toShip = orders.filter(STATUS_GROUPS["group:to-ship"].test).length;
   const outForDelivery = orders.filter((order) => order.status === "Out for Delivery").length;
   const delivered = orders.filter((order) => order.status === "Delivered").length;
-  const inTransit = orders.filter((order) => STATUS_GROUPS["group:in-transit"].includes(order.status)).length;
+  const inTransit = orders.filter(STATUS_GROUPS["group:in-transit"].test).length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
   const openPreorders = orders.filter((order) => isPreorderOrder(order) && !["Delivered", "Cancelled"].includes(order.status));
   const preordersOn = openPreorders.length > 0 || getLiveBooks().some((book) => book.preorder?.enabled);
@@ -291,10 +293,11 @@ export function OrdersDashboard() {
         </div>
       </div>
 
-      <div className={classNames("grid gap-3 sm:grid-cols-2 lg:grid-cols-4", preordersOn ? "xl:grid-cols-8" : "xl:grid-cols-7")}>
+      <div className={classNames("grid gap-3 sm:grid-cols-2 lg:grid-cols-4", preordersOn ? "xl:grid-cols-9" : "xl:grid-cols-8")}>
         {[
           ["To pack", toPack, "group:to-pack"],
-          ["Packed · courier not booked", toShip, "group:to-ship"],
+          ["Packed · payment due", packedPaymentDue, "group:payment-due"],
+          ["To Ship", toShip, "group:to-ship"],
           ["Out for Delivery", outForDelivery, "Out for Delivery"],
           ["Delivered", delivered, "Delivered"],
           ["Awaiting payment", awaitingPayment, "Pending"],
@@ -465,7 +468,7 @@ export function OrdersDashboard() {
               <TextInput placeholder="Search id, name, phone, AWB" value={query} onChange={(event) => setQuery(event.target.value)} />
               <SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option>All</option>
-                {Object.entries(GROUP_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                {Object.entries(STATUS_GROUPS).map(([value, group]) => <option key={value} value={value}>{group.label}</option>)}
                 {ALL_STATUSES.map((status) => <option key={status}>{status}</option>)}
               </SelectInput>
               <SelectInput value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
