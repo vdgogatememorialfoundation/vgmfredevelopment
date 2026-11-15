@@ -214,6 +214,8 @@ export function decodeSummary(value: string) {
 }
 
 const linkMinutes = () => Math.max(15, Number(getIntegrations().razorpay.linkExpiryMinutes) || 30);
+/** Pre-order balance links stay open for 2 days. */
+const BALANCE_LINK_MINUTES = 2 * 24 * 60;
 const linkExpiry = () => new Date(Date.now() + linkMinutes() * 60_000).toISOString();
 
 /** Amount still to collect on an order: the total less any advance already paid. */
@@ -437,6 +439,16 @@ export async function createBalancePaymentLink(orderId: string) {
   const address = order.deliveryAddress;
   const amount = Math.round(plan.balance * 100) / 100;
   const settings = getIntegrations();
+  const previous = plan.link;
+  if (previous?.provider === "razorpay" && previous.id) {
+    // A resend replaces the old link; cancel it so only one balance link can be paid.
+    const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: previous.id });
+    if (current.ok && current.status === "paid") {
+      recordBalancePayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+      throw new Error("The customer has already paid the earlier link. The balance is now marked paid.");
+    }
+    await api({ action: "link-cancel", linkId: previous.id }).catch(() => undefined);
+  }
   let link: NonNullable<NonNullable<Order["preorderPayment"]>["link"]>;
   if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
     link = { url: `${window.location.origin}/pay/${order.id}?part=balance&d=${encodeSummary(order, amount, ["Pre-order balance"])}`, provider: "demo", createdAt: new Date().toISOString() };
@@ -444,13 +456,13 @@ export async function createBalancePaymentLink(orderId: string) {
     const result = await api<{ id: string; url: string }>({
       action: "link",
       amount,
-      orderId: `${order.id}-B`,
+      orderId: previous ? `${order.id}-B${Date.now().toString(36).slice(-5)}` : `${order.id}-B`,
       name: address?.fullName || "Customer",
       email: address?.email,
       phone: address?.phone,
       description: `Balance for Vaidya Gogate Memorial Foundation pre-order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?part=balance&done=1`,
-      expiryMinutes: linkMinutes(),
+      expiryMinutes: BALANCE_LINK_MINUTES,
     });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
     link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };

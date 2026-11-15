@@ -1513,7 +1513,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   const link = await createBalancePaymentLink(order.id);
                   return `Balance payment link sent: ${link.url}`;
                 })}>
-                  {busy === "balance-link" ? "Creating…" : `Send link to pay ${rupees(order.preorderPayment.balance)}`}
+                  {busy === "balance-link" ? "Creating…" : `${order.preorderPayment.link ? "Resend new 2-day link" : "Send link"} to pay ${rupees(order.preorderPayment.balance)}`}
                 </Button>
                 {order.preorderPayment.link && (
                   <>
