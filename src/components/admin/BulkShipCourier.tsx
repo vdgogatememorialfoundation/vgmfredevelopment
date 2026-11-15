@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { Button, SelectInput } from "@/components/admin/AdminUI";
-import { bookShipment, fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
+import { bookShipment, fetchCourierRates, orderDims, orderWeightKg } from "@/lib/shipping-client";
 import { getOrder } from "@/lib/admin-store";
 import type { CourierRate, Order } from "@/types";
 
@@ -35,7 +35,7 @@ export function BulkShipCourier({ orderIds, onClose, onDone }: { orderIds: strin
           declaredValue: order.total,
           cod: order.paymentMethod === "Cash on delivery",
           bookIds: order.items.map((item) => item.bookId),
-          dims: order.parcel,
+          dims: orderDims(order),
         }).catch(() => ({ rates: [] as CourierRate[], notes: ["Rates could not be fetched"] }));
         rows.push({ order, rates: quote.rates, note: quote.rates.length ? undefined : quote.notes[0] });
       }

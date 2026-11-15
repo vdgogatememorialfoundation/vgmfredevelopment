@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
   const preorderBag = draft.items.some((item) => feedPreorderable((feed.books ?? []).find((row) => String(row.id) === item.id) as never));
   const courierMode = ((feed.orderSettings ?? {}) as { shippingFeeMode?: string }).shippingFeeMode === "courier_rate";
   const units = draft.items.reduce((sum, item) => sum + item.quantity, 0);
-  const courierFee = !pickup && !preorderBag && courierMode ? (await appCourierEstimate(draft.subtotal, units, address.pincode).catch(() => undefined)) ?? null : undefined;
+  const courierFee = !pickup && !preorderBag && courierMode ? (await appCourierEstimate(draft.subtotal, units, address.pincode, draft.items.map((item) => ({ bookId: String(item.id), quantity: item.quantity }))).catch(() => undefined)) ?? null : undefined;
   const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup, promo, courierFee });
 
   const creds = razorpayCreds({});

@@ -6,7 +6,7 @@ import { RatesTable } from "@/components/admin/SettingsDesks";
 import { getShipments } from "@/lib/admin-store";
 import { getOrders } from "@/lib/store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { bookShipment, fetchCourierRates, orderWeightKg, type RateQuote } from "@/lib/shipping-client";
+import { bookShipment, fetchCourierRates, orderDims, orderWeightKg, type RateQuote } from "@/lib/shipping-client";
 import { formatDate } from "@/lib/utils";
 import type { Order } from "@/types";
 
@@ -72,7 +72,7 @@ function ReadyOrder({ order }: { order: Order }) {
                   declaredValue: order.total,
                   cod: order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid",
                   bookIds: order.items.map((item) => item.bookId),
-                  dims: order.parcel,
+                  dims: orderDims(order),
                 });
                 setQuote(result);
                 setPicked(undefined);

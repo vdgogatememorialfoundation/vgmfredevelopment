@@ -17,7 +17,7 @@ import {
 } from "@/lib/store";
 import { addStockAlert, canOrder, canPreorder, isPurchasable, preorderDeliveryDate } from "@/lib/product-data";
 import { checkPincode, getOriginPincode, getPickupLocation, type DeliveryQuote } from "@/lib/fulfillment";
-import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
+import { fetchCourierRates, orderDims, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { useOrderSettings } from "@/lib/use-cms";
 import { useSavedAddresses } from "@/lib/account-wallet";
@@ -94,6 +94,7 @@ export default function ProductBuyBox({ book }: { book: Book }) {
       fetchCourierRates({
         deliveryPincode: code,
         weightKg: orderWeightKg({ items: [{ bookId: book.id, title: book.title, quantity, price: book.price, currency: "INR" }] }),
+        dims: orderDims({ items: [{ bookId: book.id, title: book.title, quantity, price: book.price, currency: "INR" }] }),
         declaredValue: book.price * quantity,
         bookIds: [book.id],
       })

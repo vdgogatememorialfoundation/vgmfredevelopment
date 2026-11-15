@@ -18,6 +18,7 @@ import {
   sendEmail,
 } from "@/lib/admin-store";
 import { getLiveBooks } from "@/lib/product-data";
+import { itemsParcel } from "@/lib/item-parcel";
 import { logAudit } from "@/lib/audit";
 
 type ShippingCreds = Record<string, Record<string, unknown>>;
@@ -143,10 +144,20 @@ async function post<T>(body: Record<string, unknown>): Promise<T & { ok: boolean
   return response.json();
 }
 
+function productParcel(items: Pick<Order["items"][number], "bookId" | "quantity">[], settings = getIntegrations()) {
+  const books = getLiveBooks();
+  return itemsParcel(items, (id) => books.find((book) => book.id === id), settings.shipping.defaultWeightKg);
+}
+
+/** Packed weight once entered on the order; until then the sum of each product's own weight. */
 export function orderWeightKg(order: Pick<Order, "items" | "weightKg">, settings = getIntegrations()) {
   if (order.weightKg) return order.weightKg;
-  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  return Math.max(settings.shipping.defaultWeightKg, Math.round(units * settings.shipping.defaultWeightKg * 100) / 100);
+  return productParcel(order.items, settings).weightKg;
+}
+
+/** Packed size once entered on the order; until then worked out from each product's size (undefined if any product has none). */
+export function orderDims(order: Pick<Order, "items"> & { parcel?: Order["parcel"] }, settings = getIntegrations()) {
+  return order.parcel ?? productParcel(order.items, settings).dims;
 }
 
 export type RateQuote = {
@@ -360,7 +371,7 @@ async function bookShipmentOnce(
       weightKg: orderWeightKg(shipOrder, settings),
       declaredValue: shipOrder.total,
       bookIds: shipOrder.items.map((item) => item.bookId),
-      dims: shipOrder.parcel,
+      dims: orderDims(shipOrder, settings),
     });
     choice = pickRate(quote.rates);
   }

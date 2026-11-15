@@ -322,6 +322,8 @@ export interface Book {
   /** ISBN aside: other licences / registrations such as copyright no., FSSAI, AYUSH licence. */
   licenses?: { label: string; value: string }[];
   weightKg?: number;
+  /** Tentative packed size of one copy (cm); quotes use it until the packed parcel is entered on the order. */
+  packCm?: { length: number; breadth: number; height: number };
   active?: boolean;
   /** ISO datetime — hidden on the public site until this time. */
   publishAt?: string;

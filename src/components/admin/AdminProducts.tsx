@@ -490,7 +490,25 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             </Field>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Weight (kg)"><TextInput type="number" step="0.1" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
+            <Field label="Weight per copy (kg)"><TextInput type="number" step="0.01" value={form.weightKg ?? 0.5} onChange={(event) => set({ weightKg: Number(event.target.value) })} /></Field>
+            <div>
+              <p className="mb-1 text-sm font-medium text-text-primary">Packed size per copy (cm) L × B × H</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(["length", "breadth", "height"] as const).map((side) => (
+                  <TextInput
+                    key={side}
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    placeholder={side === "length" ? "L" : side === "breadth" ? "B" : "H"}
+                    aria-label={`Packed ${side} (cm)`}
+                    value={form.packCm?.[side] || ""}
+                    onChange={(event) => set({ packCm: { length: 0, breadth: 0, height: 0, ...form.packCm, [side]: Number(event.target.value) || 0 } })}
+                  />
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-text-muted">Checkout quotes use this weight and size (copies stacked) until the packed parcel is entered on the order.</p>
+            </div>
           </div>
           <div className="rounded-xl border border-border bg-warm-cream/30 p-3">
             <p className="text-sm font-semibold text-text-primary">Return, replacement and cancellation</p>

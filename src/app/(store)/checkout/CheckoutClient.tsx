@@ -27,7 +27,7 @@ import { storeConfig } from "@/lib/constants";
 import { canPreorder, preorderDeliveryDate } from "@/lib/product-data";
 import { checkCart, getOriginPincode, getPickupLocation, pickupInstructions, type DeliveryQuote } from "@/lib/fulfillment";
 import { customerOrderPolicyCopy, preorderAdvance, preorderDatesHidden, shippingFeeFor, shippingFeeSummary, shippingIsFree } from "@/lib/integrations";
-import { fetchCourierRates, orderWeightKg } from "@/lib/shipping-client";
+import { fetchCourierRates, orderDims, orderWeightKg } from "@/lib/shipping-client";
 import { isExpressCourier, promiseFor } from "@/lib/delivery-promise";
 import { openHostedCheckout, payWithRazorpay, paymentNotice, pollRazorpayOrder, readyHostedGateways, type ReadyGateway } from "@/lib/payments-client";
 import { printGstInvoice } from "@/lib/gst-invoice";
@@ -312,11 +312,11 @@ export default function CheckoutClient() {
     const timer = window.setTimeout(async () => {
       setLoadingRates(true);
       try {
+        const cartItems = cartKey.split(",").map((part) => ({ bookId: part.split("x")[0], quantity: Number(part.split("x")[1]) || 1 })) as Order["items"];
         const result = await fetchCourierRates({
           deliveryPincode: address.pincode,
-          weightKg: orderWeightKg({
-            items: cartKey.split(",").map((part) => ({ bookId: part.split("x")[0], quantity: Number(part.split("x")[1]) || 1 })) as Order["items"],
-          }),
+          weightKg: orderWeightKg({ items: cartItems }),
+          dims: orderDims({ items: cartItems }),
           declaredValue: cartValue,
           bookIds: cartKey.split(",").map((part) => part.split("x")[0]),
         });

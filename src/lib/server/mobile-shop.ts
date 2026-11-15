@@ -1,4 +1,4 @@
-import type { CourierRate, Order } from "@/types";
+import type { Book, CourierRate, Order } from "@/types";
 import { customerCourierRates, highestCourierRate } from "@/lib/checkout-couriers";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { redeemPromo } from "@/lib/server/promotions";
@@ -7,6 +7,7 @@ import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "
 import type { MobileOrder } from "@/lib/server/mobile-store";
 import { ekartRates, goswiftRates, ithinkRates, nimbusRates, shipyaariRates, shiprocketRates } from "@/lib/server/providers";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
+import { itemsParcel } from "@/lib/item-parcel";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 
 type FeedBook = { id?: string; sku?: string; batchNo?: string; stock?: number; stockStatus?: string; preorder?: boolean | { enabled?: boolean } };
@@ -184,15 +185,29 @@ async function preorderCourierOnly(order: Order) {
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
   if (fees.shippingFeeMode !== "courier_rate") return appShipping(order.subtotal, units, false);
   const flat = Math.max(0, Number(fees.flatFee) || 0);
-  return (await appCourierEstimate(order.subtotal, units, order.deliveryAddress?.pincode ?? "")) ?? flat;
+  return (await appCourierEstimate(order.subtotal, units, order.deliveryAddress?.pincode ?? "", order.items)) ?? flat;
 }
 
 /** What checkout charges for the courier: the highest rate among the couriers for the pincode, with the admin's markup. Undefined when no courier quotes. */
-export async function appCourierEstimate(subtotal: number, units: number, deliveryPincode: string) {
+export async function appCourierEstimate(subtotal: number, units: number, deliveryPincode: string, items: { bookId: string; quantity: number }[] = []) {
   const stored = readShippingCreds() as Record<string, Record<string, unknown> | undefined> & { pickup?: { pincode?: string } };
   const pickupPincode = String(stored.pickup?.pincode ?? "");
   if (!/^\d{6}$/.test(pickupPincode) || !/^\d{6}$/.test(deliveryPincode)) return undefined;
-  const parcel = { pickupPincode, deliveryPincode, weightKg: Math.max(0.5, units * 0.5), cod: false, declaredValue: subtotal, length: 25, breadth: 18, height: Math.max(3, units * 3) };
+  const shippingDefaults = stored as { defaultWeightKg?: number; packageCm?: { length?: number; breadth?: number; height?: number } };
+  const perCopy = Number(shippingDefaults.defaultWeightKg) > 0 ? Number(shippingDefaults.defaultWeightKg) : 0.5;
+  const books = (readMobileFeed().books ?? []) as unknown as Book[];
+  const product = items.length ? itemsParcel(items, (id) => books.find((book) => String(book.id) === id), perCopy) : { weightKg: Math.max(perCopy, units * perCopy), dims: undefined };
+  const box = shippingDefaults.packageCm ?? {};
+  const parcel = {
+    pickupPincode,
+    deliveryPincode,
+    weightKg: product.weightKg,
+    cod: false,
+    declaredValue: subtotal,
+    length: product.dims?.length ?? (Number(box.length) || 25),
+    breadth: product.dims?.breadth ?? (Number(box.breadth) || 20),
+    height: product.dims?.height ?? (Number(box.height) || 5),
+  };
   const keys = (id: string) => (stored[id] ?? {}) as Record<string, string>;
   const results = await Promise.all([
     shiprocketRates(keys("shiprocket"), parcel).catch(() => null),

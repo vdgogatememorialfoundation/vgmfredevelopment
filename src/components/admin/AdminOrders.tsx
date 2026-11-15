@@ -49,6 +49,7 @@ import {
   downloadManifest,
   fetchCourierRates,
   selectPreorderCourier,
+  orderDims,
   orderWeightKg,
   reallocateCourier,
   schedulePickup,
@@ -643,7 +644,8 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
     const units = itemCount;
     const result = await fetchCourierRates({
       deliveryPincode: customer.pincode,
-      weightKg: Math.max(getIntegrations().shipping.defaultWeightKg, units * getIntegrations().shipping.defaultWeightKg),
+      weightKg: orderWeightKg({ items: items.map((row) => ({ ...row, quantity: row.quantity })) as Order["items"] }),
+      dims: orderDims({ items: items as Order["items"] }),
       declaredValue: subtotal,
       cod: payment === "cod",
       bookIds: items.map((row) => row.bookId),
@@ -1050,7 +1052,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         declaredValue: order.total,
         cod: order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid",
         bookIds: order.items.map((item) => item.bookId),
-        dims: order.parcel,
+        dims: orderDims(order),
       });
       setQuote(result);
       setPicked(undefined);
@@ -1703,6 +1705,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                         weightKg: orderWeightKg(order),
                         declaredValue: order.total,
                         bookIds: order.items.map((item) => item.bookId),
+                        dims: orderDims(order),
                       });
                       if (!quote) {
                         setQuote(quoteResult);
