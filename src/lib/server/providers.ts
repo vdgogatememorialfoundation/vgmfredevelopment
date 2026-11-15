@@ -667,6 +667,26 @@ async function shiprocketOrigin(token: string, wanted: string) {
   return !cached.pins.length || cached.pins.includes(wanted) ? wanted : cached.pins[0];
 }
 
+const shiprocketActive = new Map<string, { ids: Set<string>; at: number }>();
+
+/** Courier ids switched on in the Shiprocket panel; serviceability still lists ones the account turned off. */
+async function shiprocketActiveCouriers(token: string) {
+  const cached = shiprocketActive.get(token);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.ids;
+  try {
+    const data = await call("https://apiv2.shiprocket.in/v1/external/courier/courierListWithCounts", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const ids = new Set(
+      ((data.courier_data as Json[]) ?? []).filter((row) => Number(row.status) === 1).map((row) => String(row.id))
+    );
+    shiprocketActive.set(token, { ids, at: Date.now() });
+    return ids;
+  } catch {
+    return cached?.ids ?? new Set<string>();
+  }
+}
+
 export async function shiprocketRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
@@ -697,7 +717,8 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
       if (!byId.has(id)) byId.set(id, courier);
     }
   }
-  const list = [...byId.values()];
+  const active = await shiprocketActiveCouriers(token);
+  const list = [...byId.values()].filter((courier) => !active.size || active.has(String(courier.courier_company_id)));
   return list.map((courier) => ({
     provider: "shiprocket",
     courierId: String(courier.courier_company_id),
@@ -2196,6 +2217,40 @@ export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut
   const details = (data.details as Json) ?? {};
   if (data.status === false || details.forward_drop === false) return [];
   if (parcel.cod && details.cod === false) return [];
+  // Serviceability V3 names each courier group with its price once GoSwift has set a rate card on the account.
+  const groups = await call(`${GOSWIFT}/data/v3/serviceability`, {
+    method: "POST",
+    headers: goswiftAuth(token),
+    json: {
+      pickupPincode: parcel.pickupPincode,
+      dropPincode: parcel.deliveryPincode,
+      length: String(Math.max(1, Math.round(parcel.length))),
+      width: String(Math.max(1, Math.round(parcel.breadth))),
+      height: String(Math.max(1, Math.round(parcel.height))),
+      weight: String(Math.max(1, Math.round(parcel.weightKg * 1000))),
+      paymentType: parcel.cod ? "COD" : "Prepaid",
+      ...(parcel.cod ? { codAmount: String(Math.round(parcel.declaredValue)) } : {}),
+      invoiceAmount: String(Math.round(parcel.declaredValue)),
+    },
+  }).catch(() => null);
+  const rows = Array.isArray(groups) ? (groups as Json[]) : [];
+  const priced = rows
+    .map((row) => {
+      const charges = (row.forwardDeliveredCharges as Json) ?? {};
+      const tat = (row.tat as Json) ?? {};
+      const name = String(row.courierGroup ?? "").trim();
+      return {
+        provider: "goswift",
+        courierId: name || "goswift",
+        courierName: name || "GoSwift",
+        rate: Number(charges.totalForwardDeliveredEstimate) || 0,
+        etaDays: Number(tat.max) || Number(tat.min) || 4,
+        live: true as const,
+        cod: details.cod !== false,
+      };
+    })
+    .filter((row) => row.rate > 0);
+  if (priced.length) return priced;
   return [
     {
       provider: "goswift",
