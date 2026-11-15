@@ -6,7 +6,7 @@ import { appOrdersFor } from "@/lib/server/mobile-shop";
 import { listShopShipments } from "@/lib/server/shop-shipments";
 import { forCustomer } from "@/lib/server/shop-orders";
 import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
-import { buildTrackingStages, shipmentScans } from "@/lib/order-pipeline";
+import { buildTrackingStages, customerOrderStatus, shipmentScans } from "@/lib/order-pipeline";
 import { agreedDelivery, deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
 import { customerCourierLabel } from "@/lib/courier-label";
 import type { Order, ShipmentRecord } from "@/types";
@@ -93,7 +93,12 @@ export async function GET(request: NextRequest) {
   const shipments = listShopShipments().filter((item) => item.note !== "Cancelled");
   const shop = appOrdersFor(session.email).map((order) => {
     const own = shipments.filter((item) => item.orderId === order.id);
-    return { ...forCustomer(order as Order), shipments: own, tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
+    const shown = forCustomer(order as Order);
+    return {
+      ...shown,
+      status: customerOrderStatus(shown.status),
+      history: shown.history?.map((step) => ({ ...step, status: customerOrderStatus(step.status) })),
+      shipments: own, tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
   });
   const ids = new Set(shop.map((order) => order.id));
   const legacy = listOrders(session.email).filter((order) => !ids.has(order.id));

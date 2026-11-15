@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { getShipments } from "@/lib/admin-store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
-import { buildTrackingStages, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
+import { buildTrackingStages, customerOrderStatus, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
 import { agreedDelivery, clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
 import type { Order, ShipmentRecord } from "@/types";
 import { REFUND_CREDIT_NOTE, refundExpectedCredit, refundExpectedCreditLabel } from "@/components/store/RefundDetails";
@@ -70,7 +70,7 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   const currentIdx = partialIdx !== -1 ? partialIdx : Math.max(0, reachedIdx);
   const current = stages[currentIdx];
   const fromStage = current ? STAGE_STATUS[current.id] : undefined;
-  const status: Order["status"] = FINAL.has(order.status) ? order.status : fromStage ?? order.status;
+  const status: Order["status"] = customerOrderStatus(FINAL.has(order.status) ? order.status : fromStage ?? order.status);
   const terminal = FINAL.has(status);
   const country = order.deliveryAddress?.country;
   const pickup = order.deliveryMode === "store_pickup";
@@ -126,8 +126,6 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   } else if (status === "Cancelled") {
     const cancelledOn = dayLabel(stages.find((stage) => stage.id === "cancelled")?.events.at(-1)?.at, country);
     headline = `Order cancelled${cancelledOn ? ` on ${cancelledOn}` : ""}`;
-  } else if (status === "Awaiting Confirmation") {
-    headline = "Awaiting confirmation from the Foundation desk";
   } else if (pickup && current?.id === "ready") {
     headline = "Ready for pickup at the Foundation office";
   } else {

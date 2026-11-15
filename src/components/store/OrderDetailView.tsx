@@ -13,7 +13,7 @@ import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
 import { currentProductTitle, orderItemBatch } from "@/lib/product-data";
 import { orderStatusText, shippingIsFree } from "@/lib/integrations";
-import { isHyperlocalProvider } from "@/lib/order-pipeline";
+import { customerOrderStatus, isHyperlocalProvider } from "@/lib/order-pipeline";
 import OrderFeedback from "@/components/store/OrderFeedback";
 import { agreedDelivery, customerAddressLine, deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
 import { getShipments } from "@/lib/admin-store";
@@ -48,7 +48,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
         <>
           <h1 className="mt-4 text-xl font-semibold text-text-primary">Order {order.id}</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Placed {formatDate(order.date)} · {orderStatusText(order.status)}
+            Placed {formatDate(order.date)} · {orderStatusText(customerOrderStatus(order.status))}
           </p>
           {order.preorderPayment && !order.preorderPayment.balancePaidAt && order.status !== "Cancelled" ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">

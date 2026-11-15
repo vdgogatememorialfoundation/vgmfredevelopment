@@ -223,6 +223,8 @@ export function useSiteSettings(): SiteSettings | null {
         queryMessage: hasLocal ? local.queryMessage : published?.queryMessage ?? local.queryMessage,
         chrome: hasLocal ? local.chrome : published?.chrome ?? local.chrome,
         social: liveSocial(local.social, published?.social),
+        supportPhone: published?.phone || local.supportPhone,
+        supportEmail: published?.email || local.supportEmail,
       };
       return settingsValue;
     },
@@ -244,6 +246,8 @@ export function useSiteSettings(): SiteSettings | null {
         logoUrl: published.logoUrl || "",
         logoText: published.logoText || local.logoText,
         faviconUrl: published.faviconUrl || "",
+        supportPhone: published.phone || local.supportPhone,
+        supportEmail: published.email || local.supportEmail,
       };
     }
   );

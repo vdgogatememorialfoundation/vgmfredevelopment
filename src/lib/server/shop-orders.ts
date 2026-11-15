@@ -57,7 +57,7 @@ export function forCustomer(order: Order): Order {
   return copy;
 }
 
-/** `quiet`: a desk edit, so the customer gets no stage email or push for it. */
+/** `quiet`: a desk edit; the customer is told only about a status change (e.g. the desk marks it Shipped). */
 export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {}) {
   if (!order?.id) return;
   // A browser with an old cached copy must not bring back an order the desk deleted.
@@ -69,7 +69,7 @@ export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {})
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
   orders.unshift(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken });
   writeAll(orders);
-  if (!options.quiet) void notifyOrderStage(prev, orders[0]).catch(() => undefined);
+  void notifyOrderStage(prev, orders[0], { statusOnly: options.quiet }).catch(() => undefined);
   return orders[0];
 }
 

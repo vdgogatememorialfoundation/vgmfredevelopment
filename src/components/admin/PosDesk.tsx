@@ -545,6 +545,9 @@ export function PosDesk() {
                 Apply store credit ({rupees(credit)})
               </label>
             )}
+            {total === 0 && creditApplied > 0 ? (
+              <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Paid in full by store credit · {rupees(creditApplied)}</p>
+            ) : (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <SelectInput
                 value={method}
@@ -569,13 +572,16 @@ export function PosDesk() {
                 </p>
               )}
             </div>
+            )}
             <div className="mt-4 flex gap-2">
               <Button onClick={() => void checkout()} disabled={busy || rows.length === 0}>
                 {busy
                   ? method === "cash"
                     ? "Saving…"
                     : "Waiting for payment…"
-                  : method === "cash"
+                  : total === 0 && creditApplied > 0
+                    ? "Complete with store credit"
+                    : method === "cash"
                     ? `Collect ${rupees(total)}`
                     : `Charge ${rupees(total)}`}
               </Button>

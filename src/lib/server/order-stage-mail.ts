@@ -201,10 +201,11 @@ function details(order: Order) {
 }
 
 /** Emails the customer at each main stage of an order, once per stage. */
-export async function notifyOrderStage(prev: Order | undefined, next: Order) {
+export async function notifyOrderStage(prev: Order | undefined, next: Order, options: { statusOnly?: boolean } = {}) {
   const to = next.deliveryAddress?.email || next.accountEmail || "";
   const sent = new Set(readSent()[next.id] ?? []);
   for (const stage of stagesFor(prev, next)) {
+    if (options.statusOnly && !stage.key.startsWith("status:")) continue;
     if (sent.has(stage.key)) continue;
     markSent(next.id, stage.key);
     const name = next.deliveryAddress?.fullName || "Reader";

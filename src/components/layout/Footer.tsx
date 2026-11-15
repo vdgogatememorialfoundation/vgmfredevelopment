@@ -90,16 +90,16 @@ export default function Footer() {
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <a
-                  href={`mailto:${siteConfig.email}`}
+                  href={`mailto:${(settings?.supportEmail || siteConfig.email)}`}
                   className="rounded-full border border-gold/50 bg-gold/20 px-4 py-2 text-xs font-semibold tracking-wide text-burgundy transition hover:bg-gold/40"
                 >
-                  {siteConfig.email}
+                  {(settings?.supportEmail || siteConfig.email)}
                 </a>
                 <a
-                  href={`tel:${siteConfig.phone.replace(/\s/g, "")}`}
+                  href={`tel:${(settings?.supportPhone || siteConfig.phone).replace(/\s/g, "")}`}
                   className="rounded-full border border-gold/40 bg-white px-4 py-2 text-xs font-semibold tracking-wide text-burgundy transition hover:border-gold hover:bg-gold/15"
                 >
-                  {siteConfig.phone}
+                  {(settings?.supportPhone || siteConfig.phone)}
                 </a>
               </div>
             </div>

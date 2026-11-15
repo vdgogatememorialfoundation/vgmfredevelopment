@@ -483,8 +483,8 @@ export default function Header() {
                       className="flex h-10 items-center gap-1.5 text-ink transition hover:text-burgundy"
                     >
                       <UserIcon />
-                      <span className="max-w-[90px] truncate text-sm font-medium">
-                        {user.firstName || initials}
+                      <span className="max-w-[130px] truncate text-sm font-medium">
+                        {user.firstName ? `Hi, ${user.firstName}` : initials}
                       </span>
                     </button>
 

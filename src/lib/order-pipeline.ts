@@ -136,6 +136,26 @@ const STAGE_RANK: Record<CourierStage, number> = {
   failed: 5,
 };
 
+/** Customers see an order the desk has not accepted yet (e.g. a pre-order) simply as Ordered. */
+export function customerOrderStatus<T extends string>(status: T): T {
+  return (status === "Awaiting Confirmation" ? "Ordered" : status) as T;
+}
+
+export function courierStageRank(stage: CourierStage) {
+  return STAGE_RANK[stage];
+}
+
+/** Classifies scans in time order; once the courier has collected the parcel, later hub routing scans count as in transit. */
+export function classifyScanSequence(statuses: string[]): (CourierStage | null)[] {
+  let collected = false;
+  return statuses.map((status) => {
+    let mapped = classifyCourierScan(status);
+    if (mapped === "packed" && collected && /dispatch|hub|manifest|bag|forward/i.test(status)) mapped = "shipped";
+    if (mapped && mapped !== "failed" && mapped !== "cancelled" && STAGE_RANK[mapped] >= STAGE_RANK.shipped) collected = true;
+    return mapped;
+  });
+}
+
 function destLabel(order: Order) {
   const city = order.deliveryAddress?.city || "Pune";
   const state = order.deliveryAddress?.state || "Maharashtra";
@@ -438,8 +458,9 @@ export function buildTrackingStages(
     });
   }
 
+  const scanStages = classifyScanSequence(liveScans.map((scan) => scan.status));
   const shippedEvents = liveScans
-    .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
+    .map((scan, index) => ({ scan, mapped: scanStages[index], index }))
     .filter((item) => item.mapped === "shipped")
     .map((item) =>
       scanEvent(
@@ -462,7 +483,7 @@ export function buildTrackingStages(
   }
 
   const outEvents = liveScans
-    .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
+    .map((scan, index) => ({ scan, mapped: scanStages[index], index }))
     .filter((item) => item.mapped === "out" || (hyperlocal && item.mapped === "shipped"))
     .map((item) =>
       isFailedAttempt(item.scan.status)

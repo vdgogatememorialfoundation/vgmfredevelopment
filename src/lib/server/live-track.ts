@@ -1,5 +1,5 @@
 import { customerCourierLabel } from "@/lib/courier-label";
-import { classifyCourierScan, cleanScanText, isCourierInfoLine, isHyperlocalProvider, usableScan } from "@/lib/order-pipeline";
+import { classifyCourierScan, classifyScanSequence, cleanScanText, courierStageRank, isCourierInfoLine, isHyperlocalProvider, usableScan } from "@/lib/order-pipeline";
 import {
   ithinkTrack,
   nimbusTrack,
@@ -125,9 +125,17 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   );
   const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
-  const latestStatus =
-    [cleanScanText(hit.status ?? ""), ...[...events].reverse().map((event) => event.status)].find((text) => text && classifyCourierScan(text)) || cleanScanText(hit.status ?? "");
-  const stage = classifyCourierScan(latestStatus);
+  // The latest scan in context wins ("Dispatched to <hub>" after pickup is in transit); the courier's headline status only if it is further along.
+  const sequence = classifyScanSequence(events.map((event) => event.status));
+  const lastIndex = sequence.findLastIndex((mapped) => Boolean(mapped));
+  const headline = cleanScanText(hit.status ?? "");
+  const headlineStage = headline ? classifyCourierScan(headline) : null;
+  let stage = lastIndex >= 0 ? sequence[lastIndex] : null;
+  let latestStatus = lastIndex >= 0 ? events[lastIndex].status : headline;
+  if (headlineStage && (!stage || courierStageRank(headlineStage) > courierStageRank(stage))) {
+    stage = headlineStage;
+    latestStatus = headline;
+  }
   const orderForLeg = findShopOrder(orderId);
   const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile, hit.courierName || shipment.courier || orderForLeg?.courierName);
   const shipmentStatus = stage ? shipmentStatusFor(stage) : undefined;
