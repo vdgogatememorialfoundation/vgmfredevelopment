@@ -406,9 +406,15 @@ export function PosDesk() {
                       <span className="text-sm font-bold">{rupees(book.price)}</span>
                       {(() => {
                         const inCart = cart.find((row) => row.bookId === book.id)?.quantity ?? 0;
-                        return (
-                          <Button variant={inCart ? "primary" : "outline"} disabled={!canOrder(book)} onClick={() => add(book)}>
-                            {inCart ? `Added ✓ ${inCart} · +1` : "Add"}
+                        return inCart ? (
+                          <div className="flex items-center gap-1" aria-label={`${inCart} in cart`}>
+                            <Button variant="outline" onClick={() => setQty(book.id, inCart - 1)} aria-label="One less">−</Button>
+                            <span className="min-w-[2.5rem] text-center text-sm font-bold text-burgundy">{inCart}</span>
+                            <Button variant="outline" onClick={() => add(book)} aria-label="One more">+</Button>
+                          </div>
+                        ) : (
+                          <Button variant="outline" disabled={!canOrder(book)} onClick={() => add(book)}>
+                            Add
                           </Button>
                         );
                       })()}
