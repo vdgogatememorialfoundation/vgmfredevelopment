@@ -409,7 +409,7 @@ export const defaultIntegrations: IntegrationSettings = {
     },
     defaultWeightKg: 0.5,
     packageCm: { length: 25, breadth: 20, height: 5 },
-    autoBookOnPack: true,
+    autoBookOnPack: false,
     autoSchedulePickup: true,
     rateChoice: "customer",
     labelSource: "aggregator",

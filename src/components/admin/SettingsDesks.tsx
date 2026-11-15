@@ -1553,7 +1553,6 @@ export function ShippingApisDesk() {
           <Text label="Height (cm)" type="number" value={value.packageCm.height} onChange={(height) => set({ packageCm: { ...value.packageCm, height: Number(height) || 1 } })} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <Check label="Book the courier when an order is packed" hint="Uses the courier the customer chose, or the rule below." checked={value.autoBookOnPack} onChange={(autoBookOnPack) => set({ autoBookOnPack })} />
           <Check label="Schedule pickup automatically" hint="Shiprocket gets a pickup request right after the AWB." checked={value.autoSchedulePickup} onChange={(autoSchedulePickup) => set({ autoSchedulePickup })} />
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">

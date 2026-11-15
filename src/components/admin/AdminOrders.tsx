@@ -201,7 +201,7 @@ export function OrdersDashboard() {
   const preorderDue = openPreorders.reduce((sum, order) => sum + remainingDue(order), 0);
   const preorderReceived = openPreorders.reduce((sum, order) => sum + order.total, 0) - preorderDue;
 
-  /** Store-pickup orders become ready at the counter (OTP unlocks); courier orders are packed and booked, one shipment each. */
+  /** Store-pickup orders become ready at the counter (OTP unlocks); courier orders are marked Ready to Ship; Admin books each courier manually. */
   const readyForPickup = async () => {
     if (selectedIds.length === 0) return;
     setBulkBusy("Ready to pickup");
@@ -222,7 +222,6 @@ export function OrdersDashboard() {
             failed.push(`${id}: pre-order packed; create its shipment from the order`);
             continue;
           }
-          await bookShipment(id);
           booked += 1;
         }
       } catch (error) {
@@ -230,7 +229,7 @@ export function OrdersDashboard() {
       }
     }
     setBulkNote(
-      [`${counter} store-pickup order${counter === 1 ? "" : "s"} ready at the counter`, `${booked} courier shipment${booked === 1 ? "" : "s"} booked for pickup`, ...failed].join(" · ")
+      [`${counter} store-pickup order${counter === 1 ? "" : "s"} ready at the counter`, `${booked} courier order${booked === 1 ? "" : "s"} ready to ship (book each courier from its order once fully paid)`, ...failed].join(" · ")
     );
     setPicked({});
     refresh();

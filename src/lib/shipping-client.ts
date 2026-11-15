@@ -369,17 +369,7 @@ async function bookShipmentOnce(
 
   const settings = getIntegrations();
   const pickup = { ...settings.shipping.pickup, ...pickupOverride };
-  let choice = override ?? order.courierChoice;
-  if (!choice) {
-    const quote = await fetchCourierRates({
-      deliveryPincode: order.deliveryAddress?.pincode ?? "",
-      weightKg: orderWeightKg(shipOrder, settings),
-      declaredValue: shipOrder.total,
-      bookIds: shipOrder.items.map((item) => item.bookId),
-      dims: orderDims(shipOrder, settings),
-    });
-    choice = pickRate(quote.rates);
-  }
+  const choice: CourierRate = override;
   if (!choice) throw new Error("No courier services this pincode. Check Delivery Partners or the shipping API settings.");
   if (choice.provider !== "local") {
     await checkCourierWallet(choice.provider === "tookan-parcel" ? "tookan" : choice.provider, choice.rate);
@@ -543,24 +533,6 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
   const { createBalancePaymentLink } = await import("@/lib/payments-client");
   const link = await createBalancePaymentLink(order.id);
   return `Courier charge ₹${fee} added. Balance payment link sent: ${link.url}`;
-}
-
-const autoBooking = new Set<string>();
-
-/** Paid pre-orders with a selected courier get their shipment created automatically. */
-export async function bookPaidPreorders(orders: Order[]) {
-  for (const order of orders) {
-    const plan = order.preorderPayment;
-    if (!plan?.balancePaidAt || order.deliveryMode !== "delivery" || !order.courierChoice || order.shipmentId || order.trackingId) continue;
-    if (["Cancelled", "Delivered", "Failed"].includes(order.status) || autoBooking.has(order.id)) continue;
-    if (getShipments().some((shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled")) continue;
-    autoBooking.add(order.id);
-    try {
-      await bookShipment(order.id, order.courierChoice);
-    } catch {
-      /* the desk can book it from the order */
-    }
-  }
 }
 
 /** Pre-order courier charge: added to the balance once a courier is booked, then the customer gets a link for the rest. */
