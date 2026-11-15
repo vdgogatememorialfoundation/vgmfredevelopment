@@ -148,7 +148,7 @@ export function PosDesk() {
     setCart((list) => {
       const existing = list.find((row) => row.bookId === book.id);
       const nextQty = (existing?.quantity ?? 0) + 1;
-      if (isPurchasable(book) && nextQty > book.stock) return list;
+      if (!asPreorder && isPurchasable(book) && nextQty > book.stock) return list;
       if (existing) return list.map((row) => (row.bookId === book.id ? { ...row, quantity: nextQty } : row));
       return [...list, { bookId: book.id, quantity: 1 }];
     });
@@ -366,7 +366,7 @@ export function PosDesk() {
       )}
       <div>
         <h1 className="text-2xl font-bold text-text-primary">In-store POS</h1>
-        <p className="text-sm text-text-muted">Sell from the counter. Stock is deducted immediately and a receipt is printed.</p>
+        <p className="text-sm text-text-muted">Sell from the counter and print a receipt. Normal sales take stock off immediately; pre-orders never touch stock (it stays as it is, e.g. 0) until the book arrives and the order is packed.</p>
       </div>
 
       {message && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
@@ -399,7 +399,7 @@ export function PosDesk() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-text-primary">{book.title}</p>
                       <p className="text-xs text-text-muted">
-                        {book.sku} · {isPurchasable(book) ? `${book.stock} in stock` : book.preorder?.enabled ? "Pre-order" : "Out of stock"}
+                        {book.sku} · {isPurchasable(book) ? `${book.stock} in stock` : book.preorder?.enabled ? `Pre-order · ${Math.max(0, book.stock)} in stock` : "Out of stock"}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
