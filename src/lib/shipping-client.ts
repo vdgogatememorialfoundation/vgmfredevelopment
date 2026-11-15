@@ -359,6 +359,11 @@ async function bookShipmentOnce(
       `₹${owed} is still due on this order (extra charge). Send the payment link${override ? ` (${override.courierName} is saved on the order)` : ""}, then book the courier once the customer has paid.`
     );
   }
+  // Final gate for every order: the full amount (items, shipping, packing, extras) must be paid, and Admin must have picked the courier.
+  if (order.paymentStatus !== "Paid" || order.shippingDue) {
+    throw new Error("This order is not fully paid yet (including shipping). Nothing was sent to the courier. Book it once the payment shows Paid.");
+  }
+  if (!override) throw new Error("Pick a courier from the rate list, then click Book. Nothing was sent to the courier.");
   const shipOrder = split ? splitOrder(order, split) : order;
   if (!shipOrder.items.length) throw new Error(`Shipment ${split?.part ?? ""} has no items. Set the quantities first.`);
 
