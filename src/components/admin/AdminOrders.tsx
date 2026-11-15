@@ -933,7 +933,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [cancelReason, setCancelReason] = useState("");
   const [approvalKind, setApprovalKind] = useState<ApprovalRequest["kind"]>("cancellation");
   const [approvalNote, setApprovalNote] = useState("");
-  const [quote, setQuote] = useState<RateQuote | null>(null);
+  const [rawQuote, setQuote] = useState<RateQuote | null>(null);
+  const [skipAggregators, setSkipAggregators] = useState<string[]>([]);
+  const quote = rawQuote && { ...rawQuote, rates: rawQuote.rates.filter((rate) => !skipAggregators.includes(rate.provider)) };
   const [picked, setPicked] = useState<number | undefined>();
   const [typedCharge, setTypedCharge] = useState("");
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
@@ -1042,8 +1044,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         dims: order.parcel,
       });
       setQuote(result);
-      const current = order.courierChoice ? result.rates.findIndex((rate) => rate.courierId === order.courierChoice?.courierId && rate.provider === order.courierChoice?.provider) : -1;
-      setPicked(current >= 0 ? current : result.rates.length ? 0 : undefined);
+      const rates = result.rates.filter((rate) => !skipAggregators.includes(rate.provider));
+      const current = order.courierChoice ? rates.findIndex((rate) => rate.courierId === order.courierChoice?.courierId && rate.provider === order.courierChoice?.provider) : -1;
+      setPicked(current >= 0 ? current : rates.length ? 0 : undefined);
     });
 
   const paid = order.paymentStatus === "Paid";
@@ -1440,6 +1443,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             <p className="text-sm text-text-muted">
               If the customer cannot come to the store, send a link to pay only the courier charge. Once paid, the order becomes a courier delivery and can be booked.
             </p>
+            {rawQuote && <AggregatorPicks rates={rawQuote.rates} skipped={skipAggregators} onChange={(next) => { setSkipAggregators(next); setPicked(undefined); }} />}
             {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button
@@ -1583,6 +1587,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </div>
                 )}
                 <ParcelEditor key={`${order.id}:${order.weightKg ?? ""}:${order.parcel ? JSON.stringify(order.parcel) : ""}`} order={order} onSaved={() => { setQuote(null); setPicked(undefined); setMessage("Package saved. Click Show couriers & rates for rates with this package."); }} />
+                {rawQuote && <AggregatorPicks rates={rawQuote.rates} skipped={skipAggregators} onChange={(next) => { setSkipAggregators(next); setPicked(undefined); }} />}
                 {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
                 <div className="mt-3 flex flex-wrap gap-2">
                   {order.preorderPayment && !order.preorderPayment.balancePaidAt ? (
@@ -1599,7 +1604,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                           Add charge & send link
                         </Button>
                       </div>
-                      <p className="w-full text-xs text-text-muted">Pre-order: no courier is picked now. The customer is charged the highest live quote from all enabled aggregators for this package (+ markup, up to the maximum in Settings → Orders), plus packing. Once the balance is paid, book any courier within that quote. Nothing is booked automatically.</p>
+                      <p className="w-full text-xs text-text-muted">Pre-order: no courier is picked now. The customer is charged the highest live quote from the aggregators ticked above for this package (+ markup, up to the maximum in Settings → Orders), plus packing. Once the balance is paid, book any courier within that quote. Nothing is booked automatically.</p>
                     </>
                   ) : (
                   <Button
@@ -2250,4 +2255,28 @@ function SplitShipments({
 /** Placed from the Android/iOS app (mobile checkout stamps createdBy "Android app"). */
 function isAppOrder(order: { createdBy?: string }) {
   return /\bapp\b/i.test(order.createdBy ?? "");
+}
+
+/** Admin ticks which aggregators to quote from; the highest valid quote is taken only among those. */
+function AggregatorPicks({ rates, skipped, onChange }: { rates: CourierRate[]; skipped: string[]; onChange: (next: string[]) => void }) {
+  const providers = [...new Set(rates.map((rate) => rate.provider))];
+  if (providers.length < 2) return null;
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-white p-3 text-sm">
+      <span className="font-semibold text-text-primary">Quote from:</span>
+      {providers.map((provider) => {
+        const count = rates.filter((rate) => rate.provider === provider).length;
+        return (
+          <label key={provider} className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={!skipped.includes(provider)}
+              onChange={(event) => onChange(event.target.checked ? skipped.filter((row) => row !== provider) : [...skipped, provider])}
+            />
+            {bookedViaLabel(provider).replace(/^via /, "")} <span className="text-xs text-text-muted">({count})</span>
+          </label>
+        );
+      })}
+    </div>
+  );
 }
