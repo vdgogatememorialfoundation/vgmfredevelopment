@@ -260,10 +260,10 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
         <p className="mt-5 text-center text-xs text-text-muted">
           Need help with a damaged item?{" "}
           <Link
-            href="/contact"
+            href={`/account/tickets?order=${encodeURIComponent(order.id)}`}
             className="font-semibold text-burgundy hover:underline"
           >
-            Contact support
+            Raise a support ticket
           </Link>{" "}
           with your Order ID {order.id}.
         </p>

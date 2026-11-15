@@ -20,6 +20,7 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>(() => ticketsVisibleTo(user));
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ subject: "", body: "" });
+  const [orderId, setOrderId] = useState("");
   const [error, setError] = useState("");
   const [openId, setOpenId] = useState("");
   const [reply, setReply] = useState("");
@@ -38,6 +39,17 @@ export default function TicketsPage() {
     };
   }, [user]);
 
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("order")?.trim();
+    if (!id) return;
+    const frame = window.requestAnimationFrame(() => {
+      setOrderId(id);
+      setForm((current) => (current.subject ? current : { ...current, subject: `Help with order ${id}` }));
+      setShowForm(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   const submit = () => {
     if (!form.subject.trim() || !form.body.trim()) {
       setError("Please add a subject and a message.");
@@ -50,8 +62,10 @@ export default function TicketsPage() {
       subject: form.subject,
       body: form.body,
       portal: user?.role === "staff" || user?.role === "coadmin" ? "staff" : "customer",
+      orderId: orderId || undefined,
     });
     setForm({ subject: "", body: "" });
+    setOrderId("");
     setShowForm(false);
     refresh();
   };

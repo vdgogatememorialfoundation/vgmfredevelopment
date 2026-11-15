@@ -22,7 +22,7 @@ import {
   saveFaq,
   maxRefundable,
 } from "@/lib/admin-store";
-import { getOrdersForAccount } from "@/lib/store";
+import { getOrders, getOrdersForAccount } from "@/lib/store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { refundThroughGateway } from "@/lib/payments-client";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -276,6 +276,53 @@ function CustomerOrders({ email, phone }: { email?: string; phone?: string }) {
   );
 }
 
+function TicketOrder({ orderId }: { orderId: string }) {
+  useCommerceMirror();
+  const order = getOrders().find((row) => row.id === orderId);
+  if (!order) return <p className="mt-3 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800">Order {orderId} is not loaded on this device yet.</p>;
+  const address = order.deliveryAddress;
+  const latest = [...(order.history ?? [])].reverse().slice(0, 5);
+  return (
+    <div className="mt-3 rounded-xl border border-burgundy/30 bg-white p-3 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold uppercase tracking-wide text-text-muted">
+          Ticket order{" "}
+          <Link href={`/admin/commerce/orders?order=${encodeURIComponent(order.id)}`} className="font-mono text-burgundy underline">{order.id}</Link>
+        </p>
+        <span className="font-semibold text-text-primary">{order.status} · {order.paymentStatus} · ₹{order.total}</span>
+      </div>
+      <p className="mt-1 text-text-muted">Placed {formatDateTime(order.date)}{order.paymentMethod ? ` · ${order.paymentMethod}` : ""}{order.paymentRef ? ` · Ref ${order.paymentRef}` : ""}</p>
+      <ul className="mt-2 space-y-0.5 text-text-primary">
+        {order.items.map((item, index) => (
+          <li key={`${item.bookId}-${index}`}>{item.title} × {item.quantity} · ₹{item.price}</li>
+        ))}
+      </ul>
+      {order.deliveryMode === "store_pickup" ? (
+        <p className="mt-2 text-text-primary"><b>Store pickup</b>{order.pickupHoldUntil ? ` · held till ${formatDateTime(order.pickupHoldUntil)}` : ""}</p>
+      ) : (
+        <div className="mt-2 grid gap-1 text-text-primary sm:grid-cols-2">
+          <p><b>Ship to:</b> {address ? [address.fullName, address.line1, address.landmark, address.city, address.state, address.pincode].filter(Boolean).join(", ") : "—"}{address?.phone ? ` · ${address.phone}` : ""}</p>
+          <p>
+            <b>Courier:</b> {order.courierName || "Not booked yet"}
+            {order.trackingId ? ` · AWB ${order.trackingId}` : ""}
+            {order.eta ? ` · expected ${formatDateTime(order.eta)}` : ""}
+            {order.trackToken ? <> · <Link href={`/track/${order.trackToken}`} target="_blank" className="text-burgundy underline">Live tracking</Link></> : null}
+          </p>
+        </div>
+      )}
+      {order.returnRequest ? <p className="mt-1 text-text-primary"><b>Return:</b> {order.returnRequest.status}</p> : null}
+      {order.refunds?.length ? <p className="mt-1 text-text-primary"><b>Refunds:</b> {order.refunds.map((refund) => `₹${refund.amount} (${refund.destination === "store_credit" ? "store credit" : "original payment"})`).join(", ")}</p> : null}
+      {latest.length ? (
+        <ul className="mt-2 space-y-0.5 text-text-muted">
+          {latest.map((step, index) => (
+            <li key={index}>{formatDateTime(step.at)} · <b className="text-text-primary">{step.status}</b>{step.note ? ` · ${step.note}` : ""}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: () => void }) {
   const [response, setResponse] = useState("");
   const agents = listSupportAgents();
@@ -302,6 +349,7 @@ function TicketCard({ ticket, onChanged }: { ticket: SupportTicket; onChanged: (
         </div>
       </div>
       <p className="mt-2 whitespace-pre-line text-sm text-text-primary">{ticket.body}</p>
+      {ticket.orderId ? <TicketOrder orderId={ticket.orderId} /> : null}
       <CustomerOrders email={ticket.email} phone={ticket.phone} />
       {ticket.responses.length > 0 && (
         <div className="mt-3 space-y-2">

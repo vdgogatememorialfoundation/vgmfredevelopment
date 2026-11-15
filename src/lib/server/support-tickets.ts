@@ -38,6 +38,7 @@ export function normalizeTicket(ticket: Partial<SupportTicket>): SupportTicket {
     assignedTo: cut(ticket.assignedTo, 160) || undefined,
     userId: cut(ticket.userId, 80) || undefined,
     chatThreadId: cut(ticket.chatThreadId, 80) || undefined,
+    orderId: cut(ticket.orderId, 40) || undefined,
     responses: (Array.isArray(ticket.responses) ? ticket.responses : [])
       .slice(-300)
       .map((reply) => ({ at: cut(reply?.at, 40) || now, from: cut(reply?.from, 80) || "Customer", text: cut(reply?.text, 5000) }))

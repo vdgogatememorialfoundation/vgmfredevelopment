@@ -2536,6 +2536,7 @@ export function addTicket(input: {
   assignedTo?: string;
   chatThreadId?: string;
   userId?: string;
+  orderId?: string;
 }) {
   const account = ensureCustomerAccount({ name: input.name, email: input.email, phone: input.phone });
   const now = new Date().toISOString();
@@ -2553,6 +2554,7 @@ export function addTicket(input: {
     assignedTo: input.assignedTo,
     userId: input.userId || account?.id,
     chatThreadId: input.chatThreadId,
+    orderId: input.orderId?.trim() || undefined,
     responses: [],
   };
   const list = getTickets();

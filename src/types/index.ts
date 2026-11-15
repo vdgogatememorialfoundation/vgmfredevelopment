@@ -1078,6 +1078,8 @@ export interface SupportTicket {
   assignedTo?: string;
   userId?: string;
   chatThreadId?: string;
+  /** Order the customer raised the ticket about; support sees its live status and shipping. */
+  orderId?: string;
   responses: { at: string; from: string; text: string }[];
 }
 
