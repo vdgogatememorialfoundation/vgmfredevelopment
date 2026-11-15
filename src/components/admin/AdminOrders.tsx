@@ -74,7 +74,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
 import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
 import { itemTotals } from "@/lib/order-item-totals";
-import { assignPicker, getOrder as getStoredOrder, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack } from "@/lib/admin-store";
+import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
@@ -217,9 +217,13 @@ export function OrdersDashboard() {
           setOrderStatus(id, "Packed");
           counter += 1;
         } else {
-          setOrderStatus(id, isPreorderOrder(order) ? "Packed" : "Ready to Ship");
+          setOrderStatus(id, isPreorderOrder(order) || !orderFullyPaid(order) ? "Packed" : "Ready to Ship");
           if (isPreorderOrder(order)) {
             failed.push(`${id}: pre-order packed; create its shipment from the order`);
+            continue;
+          }
+          if (!orderFullyPaid(order)) {
+            failed.push(`${id}: packed; stays Packed until the full amount (with shipping) is paid`);
             continue;
           }
           booked += 1;

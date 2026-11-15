@@ -1146,13 +1146,29 @@ export function pickPackChecklist(order: Order) {
   return { stage, steps, items, finish };
 }
 
+/** True only when the whole order, including shipping and any pre-order balance, is paid. */
+export function orderFullyPaid(order: Order) {
+  const plan = order.preorderPayment;
+  if (plan && !plan.balancePaidAt && (plan.shippingDue || plan.balance > 0)) return false;
+  if (order.shippingDue && !(plan && plan.shippingDue === false)) return false;
+  return order.paymentStatus === "Paid";
+}
+
 function finishPacked(order: Order, note: string) {
   const pick = order.pick;
   if (!pick) return "";
   const now = new Date().toISOString();
   updateOrderInStore(withHistory({ ...order, pick: { ...pick, matchedAt: pick.matchedAt ?? now, packedAt: now } }, "Packed", note));
-  setOrderStatus(order.id, order.deliveryMode === "store_pickup" ? "Packed" : "Ready to Ship");
-  return order.deliveryMode === "store_pickup" ? "Packed. Ready for store pickup (OTP unlocked)." : "Packed and ready for pickup. Admin assigns the courier from Orders.";
+  if (order.deliveryMode === "store_pickup") {
+    setOrderStatus(order.id, "Packed");
+    return "Packed. Ready for store pickup (OTP unlocked).";
+  }
+  if (!orderFullyPaid(order)) {
+    setOrderStatus(order.id, "Packed");
+    return "Packed. It stays Packed until the full amount (with shipping) is paid; then Admin books the courier from Orders.";
+  }
+  setOrderStatus(order.id, "Ready to Ship");
+  return "Packed and ready for pickup. Admin assigns the courier from Orders.";
 }
 
 /** When Settings does not require the final check, pack as soon as every required step is done. */
