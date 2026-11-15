@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       case "settings":
         return NextResponse.json({ ok: true, settings: saveInvoiceSettings((body.settings ?? {}) as Record<string, never>) }, { headers: noStore });
       case "create": {
-        const kind = (["order", "platform-fee", "custom"].includes(String(body.kind)) ? body.kind : "order") as InvoiceKind;
+        const kind = (["order", "platform-fee", "custom", "credit-note", "debit-note"].includes(String(body.kind)) ? body.kind : "order") as InvoiceKind;
         const invoice = createInvoice({ ...((body.invoice ?? {}) as object), kind, orderId: String(body.orderId ?? "") });
         return NextResponse.json({ ok: true, invoice }, { headers: noStore });
       }

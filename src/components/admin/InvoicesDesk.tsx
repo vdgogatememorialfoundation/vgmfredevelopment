@@ -9,7 +9,7 @@ type Invoice = {
   key: string;
   number: string;
   issuedAt: string;
-  kind: "order" | "platform-fee" | "custom";
+  kind: "order" | "platform-fee" | "custom" | "credit-note" | "debit-note";
   orderId?: string;
   title: string;
   customer: string;
@@ -194,13 +194,15 @@ export function InvoicesDesk() {
         </Panel>
       ) : null}
 
-      <Panel title="Create an invoice" description="From an order (items, address, courier and AWB are filled in from the order), a platform-fee invoice for an order, or a custom invoice.">
+      <Panel title="Create an invoice" description="From an order (items, address, courier and AWB are filled in from the order), a platform-fee invoice, a custom invoice, or a credit/debit note. Notes fill in the order's refunds or extra charges unless you enter lines.">
         <div className="space-y-3">
           <div className="flex flex-wrap gap-3">
             <SelectInput value={createKind} onChange={(event) => setCreateKind(event.target.value as Invoice["kind"])}>
               <option value="order">Order invoice</option>
               <option value="platform-fee">Platform fee invoice</option>
               <option value="custom">Custom invoice</option>
+              <option value="credit-note">Credit note (refund)</option>
+              <option value="debit-note">Debit note (extra charge)</option>
             </SelectInput>
             {createKind !== "custom" ? <TextInput placeholder="Order ID" value={createOrder} onChange={(event) => setCreateOrder(event.target.value)} /> : null}
           </div>

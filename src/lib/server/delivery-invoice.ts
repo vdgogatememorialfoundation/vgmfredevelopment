@@ -7,7 +7,8 @@ import { listShopShipments } from "@/lib/server/shop-shipments";
 import { siteConfig } from "@/lib/constants";
 import type { Order } from "@/types";
 
-export type InvoiceKind = "order" | "platform-fee" | "custom";
+export type InvoiceKind = "order" | "platform-fee" | "custom" | "credit-note" | "debit-note";
+const isNote = (kind?: InvoiceKind) => kind === "credit-note" || kind === "debit-note";
 export type InvoiceLine = { title: string; quantity: number; price: number; batchNo?: string };
 export type InvoiceParty = { name?: string; address?: string; phone?: string; email?: string };
 
@@ -83,11 +84,11 @@ export function saveInvoiceSettings(input: Partial<InvoiceSettings>) {
 }
 
 const keyOf = (kind: InvoiceKind, orderId: string, number = "") =>
-  kind === "order" ? orderId : kind === "platform-fee" ? `${orderId}:pf` : `custom:${number}`;
+  kind === "order" ? orderId : kind === "platform-fee" ? `${orderId}:pf` : kind === "credit-note" ? `cn:${number}` : kind === "debit-note" ? `dn:${number}` : `custom:${number}`;
 
 function normalized(key: string, invoice: IssuedInvoice): IssuedInvoice {
-  const kind = invoice.kind ?? (key.startsWith("custom:") ? "custom" : key.endsWith(":pf") ? "platform-fee" : "order");
-  const orderId = invoice.orderId ?? (kind === "custom" ? "" : key.replace(/:pf$/, ""));
+  const kind = invoice.kind ?? (key.startsWith("custom:") ? "custom" : key.startsWith("cn:") ? "credit-note" : key.startsWith("dn:") ? "debit-note" : key.endsWith(":pf") ? "platform-fee" : "order");
+  const orderId = invoice.orderId ?? (kind === "custom" || isNote(kind) ? "" : key.replace(/:pf$/, ""));
   return { ...invoice, kind, orderId };
 }
 
@@ -137,6 +138,19 @@ function shipmentFacts(order: Order) {
   };
 }
 
+/** Default note lines: refunds on the order for a credit note, extra charges for a debit note. */
+function noteLines(kind: InvoiceKind, order?: Order): InvoiceLine[] {
+  if (!order) return [];
+  if (kind === "credit-note") {
+    return (order.refunds ?? []).map((refund) => ({
+      title: `Refund for order ${order.id} · ${refund.destination === "store_credit" ? "store credit" : "original payment"}${refund.reference || refund.gatewayRefundId ? ` · Ref ${refund.reference || refund.gatewayRefundId}` : ""}`,
+      quantity: 1,
+      price: refund.amount,
+    }));
+  }
+  return (order.extraCharges ?? []).map((extra) => ({ title: `${extra.kind === "shipping" ? "Courier charge" : "Extra charge"} for order ${order.id} · ${extra.reason}`, quantity: 1, price: extra.amount }));
+}
+
 type Resolved = {
   invoice: IssuedInvoice;
   order?: Order;
@@ -175,6 +189,12 @@ function resolve(invoice: IssuedInvoice, settings = readInvoiceSettings()): Reso
     transport: invoice.transport ?? facts.transport,
     awb: invoice.awb ?? facts.awb,
   };
+  if (isNote(invoice.kind)) {
+    const credit = invoice.kind === "credit-note";
+    const lines = invoice.lines?.length ? invoice.lines : noteLines(invoice.kind!, order);
+    const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
+    return { invoice, order, title: credit ? "Credit note" : "Debit note", to, lines, discount: 0, platformFee: 0, shipping: 0, total, ...shipped };
+  }
   if (invoice.kind === "platform-fee") {
     const fee = invoice.lines?.length ? 0 : Number(order?.platformFee) || 0;
     const lines = invoice.lines?.length ? invoice.lines : [{ title: `Platform fee for order ${invoice.orderId}`, quantity: 1, price: fee }];
@@ -240,7 +260,7 @@ td{border-bottom:1px solid #eee7da;padding:8px}.r{text-align:right}
 </style></head><body><div class="page">
 <div class="head"><div style="display:flex;gap:12px;align-items:center"><img src="${siteUrl()}/uploads/site-logo.png" alt="" style="height:56px;width:auto;max-width:160px;object-fit:contain" onerror="this.style.display='none'"/><div><h1>${esc(siteConfig.name)}</h1><p class="muted">Pune, Maharashtra, India</p></div></div>
 <div style="text-align:right"><p style="margin:0;font-size:18px"><b>${esc(view.title)}</b></p>
-<p class="muted">Invoice no. ${esc(invoice.number)}<br>Invoice date ${esc(day(invoice.issuedAt))}${order ? `<br>Order no. ${esc(order.id)}<br>Order date ${esc(day(order.date))}` : ""}</p></div></div>
+<p class="muted">${esc(isNote(invoice.kind) ? view.title : "Invoice")} no. ${esc(invoice.number)}<br>${esc(isNote(invoice.kind) ? view.title : "Invoice")} date ${esc(day(invoice.issuedAt))}${order ? `<br>Order no. ${esc(order.id)}<br>Order date ${esc(day(order.date))}` : ""}</p></div></div>
 <div class="grid"><div><b>From</b><br>${esc(siteConfig.name)}<br>${esc(siteConfig.address)}<br>Phone ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}</div>
 <div style="text-align:right"><b>To</b><br>${esc(to.name)}<br>${esc(to.address)}${to.phone ? `<br>Phone ${esc(to.phone)}` : ""}${to.email ? `<br>${esc(to.email)}` : ""}</div></div>
 ${ship ? `<div class="ship">${ship}</div>` : ""}
@@ -269,6 +289,18 @@ export function listInvoices() {
     .sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
 }
 
+/** Credit and debit notes issued for one order, for the customer's order page. */
+export function orderNotes(orderId: string) {
+  return Object.entries(readAll())
+    .map(([key, raw]) => normalized(key, raw))
+    .filter((invoice) => isNote(invoice.kind) && invoice.orderId === orderId)
+    .map((invoice) => {
+      const view = resolve(invoice);
+      return { number: invoice.number, title: view.title, total: view.total, issuedAt: invoice.issuedAt, link: invoice.token ? `/api/invoice/${invoice.token}` : "" };
+    })
+    .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt));
+}
+
 export function findInvoice(key: string) {
   const found = readAll()[key];
   return found ? normalized(key, found) : undefined;
@@ -282,6 +314,8 @@ export function findInvoiceByToken(token: string) {
 function newNumber(kind: InvoiceKind, orderId: string, at: string) {
   if (kind === "order") return `${at.slice(0, 4)}${orderId}`;
   if (kind === "platform-fee") return `PF${at.slice(0, 4)}${orderId}`;
+  if (kind === "credit-note") return `CN${at.slice(2, 4)}${Date.now().toString().slice(-7)}`;
+  if (kind === "debit-note") return `DN${at.slice(2, 4)}${Date.now().toString().slice(-7)}`;
   return `INV${at.slice(2, 4)}${Date.now().toString().slice(-7)}`;
 }
 
@@ -289,7 +323,13 @@ function newNumber(kind: InvoiceKind, orderId: string, at: string) {
 export function createInvoice(input: { kind: InvoiceKind; orderId?: string } & Partial<IssuedInvoice>) {
   const all = readAll();
   const orderId = String(input.orderId ?? "").trim();
-  if (input.kind !== "custom") {
+  if (isNote(input.kind)) {
+    const order = orderId ? findShopOrder(orderId) : undefined;
+    if (orderId && !order) throw new Error("Order not found.");
+    if (!input.lines?.length && !noteLines(input.kind, order).length) {
+      throw new Error(input.kind === "credit-note" ? "This order has no refunds. Enter the credit note lines." : "This order has no extra charges. Enter the debit note lines.");
+    }
+  } else if (input.kind !== "custom") {
     const order = orderId ? findShopOrder(orderId) : undefined;
     if (!order) throw new Error("Order not found.");
     if (input.kind === "platform-fee" && !(Number(order.platformFee) > 0) && !input.lines?.length) throw new Error("This order has no platform fee.");

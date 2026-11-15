@@ -184,6 +184,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                 Invoice
               </button>
             )}
+            {order.trackToken ? <AdjustmentNotes token={order.trackToken} /> : null}
             {order.status === "Delivered" && order.trackToken ? (
               <a
                 className="btn-outline mt-4 ml-2 inline-block"
@@ -271,5 +272,37 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
         </>
       )}
     </div>
+  );
+}
+
+type AdjustmentNote = { number: string; title: string; total: number; issuedAt: string; link: string };
+
+/** Credit notes (refunds) and debit notes (extra charges) issued for this order. */
+function AdjustmentNotes({ token }: { token: string }) {
+  const [notes, setNotes] = useState<AdjustmentNote[]>([]);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/shop/invoice/${encodeURIComponent(token)}?notes=1`, { cache: "no-store" })
+      .then((response) => response.json() as Promise<{ notes?: AdjustmentNote[] }>)
+      .then((data) => {
+        if (live) setNotes(data.notes ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [token]);
+  if (!notes.length) return null;
+  return (
+    <ul className="mt-4 space-y-1 text-sm">
+      {notes.map((note) => (
+        <li key={note.number}>
+          <a href={note.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-burgundy underline">
+            {note.title} {note.number}
+          </a>{" "}
+          · {formatPrice(note.total)} · {formatDate(note.issuedAt)}
+        </li>
+      ))}
+    </ul>
   );
 }

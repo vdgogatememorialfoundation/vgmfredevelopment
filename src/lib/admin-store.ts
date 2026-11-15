@@ -828,6 +828,18 @@ export function resaveOrder(
   return next;
 }
 
+/** Issues a credit or debit note on the server and emails it to the customer. The desk can also issue one from Invoices. */
+function issueAdjustmentNote(kind: "credit-note" | "debit-note", orderId: string, title: string, amount: number) {
+  if (typeof window === "undefined" || !(amount > 0)) return;
+  const post = (body: object) =>
+    fetch("/api/admin/invoices", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then(
+      (response) => response.json() as Promise<{ ok?: boolean; invoice?: { key?: string } }>
+    );
+  void post({ action: "create", kind, orderId, invoice: { lines: [{ title, quantity: 1, price: amount }] } })
+    .then((created) => (created.ok && created.invoice?.key ? post({ action: "email", key: created.invoice.key }) : undefined))
+    .catch(() => undefined);
+}
+
 /** Amount still refundable. The platform fee is kept unless the desk ticks "also refund the platform fee" on that refund. */
 export function maxRefundable(order: Order, options: { withPlatformFee?: boolean } = {}) {
   const kept = options.withPlatformFee ? 0 : Math.max(0, order.platformFee ?? 0);
@@ -850,7 +862,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
   const next: Order = withHistory(
     {
       ...order,
-      paymentStatus: (order.refundAmount ?? 0) + refundAmount >= order.total ? "Refunded" : "Partially Refunded",
+      paymentStatus: refundAmount >= cap - 0.001 ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
       refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", reference: txn, note, by: currentActor() }],
     },
@@ -858,6 +870,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
     `₹${refundAmount} · balance ₹${balance} · Transaction ID ${txn}`
   );
   updateOrderInStore(next);
+  issueAdjustmentNote("credit-note", order.id, `Refund to store credit for order ${order.id} · Transaction ID ${txn}`, refundAmount);
   sendEmail({
     to: email,
     phone: order.deliveryAddress?.phone,
@@ -1335,7 +1348,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string, ext
   const next: Order = withHistory(
     {
       ...order,
-      paymentStatus: refundAmount + (order.refundAmount ?? 0) >= order.total ? "Refunded" : "Partially Refunded",
+      paymentStatus: refundAmount >= cap - 0.001 ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
       refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor(), ...extra }],
     },
@@ -1343,6 +1356,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string, ext
     note ?? `₹${refundAmount}`
   );
   updateOrderInStore(next);
+  issueAdjustmentNote("credit-note", order.id, `Refund to the original payment for order ${order.id}${extra?.gatewayRefundId ? ` · Refund ID ${extra.gatewayRefundId}` : ""}`, refundAmount);
   const days = getOrderSettings().refunds.processingDays;
   sendEmail({
     to: order.deliveryAddress?.email || "",
@@ -1532,6 +1546,7 @@ export function addExtraCharge(orderId: string, input: { amount: number; reason:
     `Extra ${input.kind === "shipping" ? "courier charge" : "charge"} ₹${amount} added by the desk: ${reason}.`
   );
   updateOrderInStore(next);
+  issueAdjustmentNote("debit-note", order.id, `${input.kind === "shipping" ? "Courier charge" : "Extra charge"} for order ${order.id} · ${reason}`, amount);
   return paidSoFar
     ? `Added ₹${amount}. The customer has paid ₹${round(paidSoFar)}, so ₹${round(total - paidSoFar)} is now due; send them the payment link below.`
     : `Added ₹${amount}. The order total is now ₹${total}.`;

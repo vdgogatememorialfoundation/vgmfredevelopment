@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deliveryInvoiceHtml, issueDeliveryInvoice, issuedInvoice, type InvoiceKind } from "@/lib/server/delivery-invoice";
+import { deliveryInvoiceHtml, issueDeliveryInvoice, issuedInvoice, orderNotes, type InvoiceKind } from "@/lib/server/delivery-invoice";
 import { findShopOrderByToken } from "@/lib/server/shop-orders";
 
 export const runtime = "nodejs";
@@ -12,6 +12,7 @@ export async function GET(request: Request, context: Params) {
   const kind: InvoiceKind = new URL(request.url).searchParams.get("kind") === "platform-fee" ? "platform-fee" : "order";
   const order = findShopOrderByToken(token);
   if (!order) return NextResponse.json({ ok: false, error: "This invoice link is not valid." }, { status: 404 });
+  if (new URL(request.url).searchParams.get("notes")) return NextResponse.json({ ok: true, notes: orderNotes(order.id) }, { headers: { "cache-control": "no-store" } });
   if (order.status === "Delivered" && !issuedInvoice(order.id)) await issueDeliveryInvoice(order.id);
   const invoice = issuedInvoice(order.id, kind);
   if (!invoice) return NextResponse.json({ ok: false, error: "The invoice is issued once the order is delivered." }, { status: 404 });

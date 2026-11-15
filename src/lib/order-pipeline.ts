@@ -301,7 +301,11 @@ export function buildTrackingStages(
         makeStage(
           "refunded",
           refunded ? "Refund initiated" : "Refund pending",
-          refunded ? "Refund to the original payment method" : "Refund will be issued by the desk",
+          refunded
+            ? order.refunds?.at(-1)?.destination === "store_credit"
+              ? `Added to store credit${order.refunds.at(-1)?.reference ? ` · Transaction ID ${order.refunds.at(-1)?.reference}` : ""}`
+              : `Refund to the original payment method${order.refunds?.at(-1)?.gatewayRefundId ? ` · Refund ID ${order.refunds.at(-1)?.gatewayRefundId}` : ""}`
+            : "Refund will be issued by the desk",
           [
             {
               id: "cancel-refund",
