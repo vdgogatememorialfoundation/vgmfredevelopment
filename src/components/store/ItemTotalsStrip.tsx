@@ -6,6 +6,7 @@ export default function ItemTotalsStrip({ totals, label = "Items" }: { totals: I
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3 text-sm">
       <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">{label}</span>
       <span className="rounded-full bg-burgundy/10 px-3 py-1 font-bold text-burgundy">{totals.total} items</span>
+      <span className="text-xs text-text-muted">in {totals.orders} {totals.orders === 1 ? "order" : "orders"} (cancelled not counted)</span>
       {totals.books > 0 && <span className="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-800">{totals.books} books</span>}
       {totals.languages.map(([language, count]) => (
         <span key={language} className="rounded-full border border-border px-3 py-1 text-text-primary">

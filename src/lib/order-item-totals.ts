@@ -10,8 +10,12 @@ export type ItemTotals = {
 
 const byCount = (map: Map<string, number>) => [...map.entries()].sort((a, b) => b[1] - a[1]);
 
-/** Units across orders (cancelled ones left out): books split by language, other products listed apart. */
-export function itemTotals(orders: Order[], findBook: (id: string) => Book | undefined): ItemTotals {
+/** Units across orders (cancelled ones left out): books split by language, other products listed apart. `keep` limits which items count. */
+export function itemTotals(
+  orders: Order[],
+  findBook: (id: string) => Book | undefined,
+  keep: (book: Book | undefined) => boolean = () => true
+): ItemTotals {
   let total = 0;
   let books = 0;
   let counted = 0;
@@ -21,15 +25,16 @@ export function itemTotals(orders: Order[], findBook: (id: string) => Book | und
     if (order.status === "Cancelled") continue;
     counted += 1;
     for (const item of order.items) {
+      const book = findBook(item.bookId);
+      if (!keep(book)) continue;
       const quantity = Number(item.quantity) || 0;
       total += quantity;
-      const book = findBook(item.bookId);
       if (book?.productType === "other") {
         others.set(item.title, (others.get(item.title) ?? 0) + quantity);
         continue;
       }
       books += quantity;
-      const language = book?.language?.trim() || "Language not set";
+      const language = book?.language?.trim() || "Unspecified";
       languages.set(language, (languages.get(language) ?? 0) + quantity);
     }
   }

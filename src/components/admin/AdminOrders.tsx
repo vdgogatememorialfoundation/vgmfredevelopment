@@ -310,7 +310,16 @@ export function OrdersDashboard() {
         )}
       </div>
 
-      <ItemTotalsStrip label="Items in these orders" totals={itemTotals(filtered, (id) => catalogue.find((book) => book.id === id))} />
+      <ItemTotalsStrip
+        label="Items in these orders"
+        totals={itemTotals(
+          filtered,
+          (id) => catalogue.find((book) => book.id === id),
+          (book) =>
+            (languageFilter === "All" || (book?.language?.trim() || "Unspecified") === languageFilter) &&
+            (productFilter === "All" || (book?.productType === "other" ? "Other" : "Books") === productFilter)
+        )}
+      />
 
       {shipOne && (
         <BulkShipCourier
