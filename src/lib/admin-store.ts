@@ -1813,6 +1813,17 @@ export function setLabelSize(size: LabelSize) {
   if (typeof window !== "undefined") window.localStorage.setItem(LABEL_SIZE_KEY, size);
 }
 
+const LABEL_HIDE_PHONE_KEY = "vgmf-label-hide-phone";
+
+/** Leaves the customer's mobile number off the Foundation shipping label (saved on this device). */
+export function getLabelHidePhone() {
+  return typeof window !== "undefined" && window.localStorage.getItem(LABEL_HIDE_PHONE_KEY) === "1";
+}
+
+export function setLabelHidePhone(hide: boolean) {
+  if (typeof window !== "undefined") window.localStorage.setItem(LABEL_HIDE_PHONE_KEY, hide ? "1" : "0");
+}
+
 function letterhead() {
   return `<header class="head">
     <div class="head-brand">${logoImg()}<div>
@@ -2065,8 +2076,8 @@ export function printShippingLabel(
         <strong class="to-name">${esc(to.fullName)}</strong><br/>
         ${esc([to.line1, to.landmark].filter(Boolean).join(", "))}<br/>
         ${esc([to.city, to.state].filter(Boolean).join(", "))}<br/>
-        <b class="pin">PIN ${esc(to.pincode)}</b><br/>
-        Mobile: ${esc(to.phone)}
+        <b class="pin">PIN ${esc(to.pincode)}</b>${getLabelHidePhone() ? "" : `<br/>
+        Mobile: ${esc(to.phone)}`}
       </div>
       <div class="agg-cell side">
         <p class="label">Courier</p>
@@ -2102,8 +2113,8 @@ export function printShippingLabel(
       </div>
     </div>
     <div class="agg-row center">
-      <div class="agg-cell grow"><p class="label">Order barcode</p>${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
-      <div class="agg-cell side" style="text-align:center"><p class="label">Order QR</p>${qrSvg(shipment.orderId, 100)}</div>
+      <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
+      <div class="agg-cell side" style="text-align:center">${qrSvg(shipment.orderId, 100)}</div>
     </div>
     <table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr>
     ${priced

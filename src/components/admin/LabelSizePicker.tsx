@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { LABEL_SIZES, getLabelColour, getLabelSize, setLabelColour, setLabelSize, type LabelColour, type LabelSize } from "@/lib/admin-store";
+import { LABEL_SIZES, getLabelColour, getLabelHidePhone, getLabelSize, setLabelColour, setLabelHidePhone, setLabelSize, type LabelColour, type LabelSize } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
 
 /** Paper and ink for the Foundation-designed label on this device. Aggregator labels keep the size set in their panel. */
 export default function LabelSizePicker() {
   const [size, setSize] = useState<LabelSize>(() => getLabelSize());
   const [colour, setColour] = useState<LabelColour>(() => getLabelColour());
+  const [hidePhone, setHidePhone] = useState(() => getLabelHidePhone());
   const aggregator = getIntegrations().shipping.labelSource !== "foundation";
   return (
     <>
@@ -39,6 +40,17 @@ export default function LabelSizePicker() {
         <option value="bw">Black &amp; white</option>
         <option value="colour">Colour</option>
       </select>
+      <label className="flex items-center gap-1.5 text-sm" title="Leaves the customer's mobile number off the label">
+        <input
+          type="checkbox"
+          checked={hidePhone}
+          onChange={(event) => {
+            setHidePhone(event.target.checked);
+            setLabelHidePhone(event.target.checked);
+          }}
+        />
+        Hide phone no.
+      </label>
     </>
   );
 }
