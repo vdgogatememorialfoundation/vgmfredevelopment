@@ -1107,6 +1107,39 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     });
   const editSubtotal = editItems.reduce((sum, item) => sum + item.price * Math.max(0, item.quantity), 0);
 
+  // An open Razorpay link (order, pre-order balance or courier charge) is checked when the order is open and every minute, so a payment shows without pressing "Check status".
+  const openLink =
+    order.preorderPayment?.link?.provider === "razorpay" && order.preorderPayment.link.id && !order.preorderPayment.balancePaidAt
+      ? "balance"
+      : order.courierUpgrade?.link?.provider === "razorpay" && order.courierUpgrade.link.id && !order.courierUpgrade.paidAt
+        ? "courier"
+        : order.paymentLink?.provider === "razorpay" && order.paymentLink.id && order.paymentStatus !== "Paid"
+          ? "order"
+          : "";
+  useEffect(() => {
+    if (!openLink) return;
+    let stopped = false;
+    const check = async () => {
+      try {
+        const result =
+          openLink === "balance" ? await refreshBalancePaymentLink(order.id) : openLink === "courier" ? await refreshCourierPaymentLink(order.id) : await refreshPaymentLink(order.id);
+        if (!stopped && result && !result.startsWith("Razorpay link status") && !result.startsWith("Demo")) {
+          setMessage(result);
+          onChanged();
+        }
+      } catch {
+        /* the server also checks open links every minute */
+      }
+    };
+    void check();
+    const timer = setInterval(() => void check(), 60_000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.id, openLink]);
+
   const run = async (label: string, task: () => Promise<string | void> | string | void) => {
     setBusy(label);
     setProblem("");

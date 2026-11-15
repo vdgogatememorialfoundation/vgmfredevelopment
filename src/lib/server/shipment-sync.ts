@@ -6,6 +6,7 @@ import { razorpayCreds, razorpayLinkStatus, razorpayOrderPayments, razorpayRefun
 import type { Order, RefundRecord } from "@/types";
 
 const EVERY_MS = 3 * 60 * 1000;
+const LINK_EVERY_MS = 60 * 1000;
 const DONE = new Set(["Delivered", "Failed", "Cancelled", "RTO Delivered"]);
 
 let started = false;
@@ -79,9 +80,20 @@ const LINK_WINDOW_MS = 48 * 60 * 60 * 1000;
 const recent = (createdAt?: string) => Date.now() - (Date.parse(createdAt || "") || 0) < LINK_WINDOW_MS;
 
 /** Marks orders paid when the customer pays a Razorpay link (order link or pre-order balance link), even if no one opens the order. */
+let linksRunning = false;
+
 export async function syncOpenPaymentLinks() {
   const creds = razorpayCreds({});
-  if (!creds) return;
+  if (!creds || linksRunning) return;
+  linksRunning = true;
+  try {
+    await checkOpenPaymentLinks(creds);
+  } finally {
+    linksRunning = false;
+  }
+}
+
+async function checkOpenPaymentLinks(creds: { keyId: string; keySecret: string }) {
   for (const order of listShopOrders()) {
     if (order.status === "Cancelled") continue;
     const plan = order.preorderPayment;
@@ -207,9 +219,11 @@ export function startShipmentSync() {
   const tick = () => {
     void syncOpenShipments();
     void syncOpenRefunds();
-    void syncOpenPaymentLinks();
     void syncRazorpayHolds();
   };
   setTimeout(tick, 20_000).unref?.();
   setInterval(tick, EVERY_MS).unref?.();
+  // Paid links mark the order Paid within a minute, so nobody has to press "Check status".
+  setTimeout(() => void syncOpenPaymentLinks(), 25_000).unref?.();
+  setInterval(() => void syncOpenPaymentLinks(), LINK_EVERY_MS).unref?.();
 }
