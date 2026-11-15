@@ -351,6 +351,42 @@ export function GeneralSettingsDesk() {
             Product page · language · {settings.productText?.pageLanguage || 24}px
             <input type="range" min={10} max={32} step={1} className="mt-2 w-full" value={settings.productText?.pageLanguage || 24} onChange={(event) => set({ productText: { ...settings.productText, pageLanguage: Number(event.target.value) } })} />
           </label>
+          <label className="block text-sm text-slate-700">
+            Shop grid · products per row (computer)
+            <select className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5" value={settings.productText?.gridColumns || 5} onChange={(event) => set({ productText: { ...settings.productText, gridColumns: Number(event.target.value) } })}>
+              {[3, 4, 5, 6].map((count) => <option key={count} value={count}>{count}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm text-slate-700">
+            Shop grid · products per row (phone)
+            <select className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5" value={settings.productText?.mobileColumns || 2} onChange={(event) => set({ productText: { ...settings.productText, mobileColumns: Number(event.target.value) } })}>
+              {[1, 2].map((count) => <option key={count} value={count}>{count}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · style
+            <select className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5" value={settings.productText?.cardStyle || "bordered"} onChange={(event) => set({ productText: { ...settings.productText, cardStyle: event.target.value as "bordered" | "shadow" | "minimal" } })}>
+              <option value="bordered">Bordered</option>
+              <option value="shadow">Raised (shadow)</option>
+              <option value="minimal">Minimal (no border)</option>
+            </select>
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · image size
+            <select className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5" value={settings.productText?.cardImage || "medium"} onChange={(event) => set({ productText: { ...settings.productText, cardImage: event.target.value as "small" | "medium" | "large" | "full" } })}>
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+              <option value="full">Full width</option>
+            </select>
+          </label>
+          <label className="block text-sm text-slate-700">
+            Product card · text alignment
+            <select className="mt-2 w-full rounded-lg border border-slate-300 px-2 py-1.5" value={settings.productText?.cardAlign || "left"} onChange={(event) => set({ productText: { ...settings.productText, cardAlign: event.target.value as "left" | "center" } })}>
+              <option value="left">Left</option>
+              <option value="center">Centre</option>
+            </select>
+          </label>
         </div>
       </Card>
 
@@ -1748,7 +1784,7 @@ export function OrderSettingsDesk() {
             <div key={index} className="flex flex-wrap items-end gap-2">
               <div className="w-40"><Text label="Courier (optional)" placeholder="e.g. Ekart" value={row.courier} onChange={(courier) => set({ scanTitles: (value.scanTitles ?? []).map((item, at) => (at === index ? { ...item, courier } : item)) })} /></div>
               <div className="min-w-48 flex-1"><Text label="Scan contains" placeholder="e.g. Dispatched to" value={row.match} onChange={(match) => set({ scanTitles: (value.scanTitles ?? []).map((item, at) => (at === index ? { ...item, match } : item)) })} /></div>
-              <div className="min-w-48 flex-1"><Text label="Customer sees" placeholder="e.g. Item left Courier Facility - {city}" value={row.title} onChange={(title) => set({ scanTitles: (value.scanTitles ?? []).map((item, at) => (at === index ? { ...item, title } : item)) })} /></div>
+              <div className="min-w-48 flex-1"><Text label="Customer sees" placeholder="e.g. Shipment left Courier Facility - {city}" value={row.title} onChange={(title) => set({ scanTitles: (value.scanTitles ?? []).map((item, at) => (at === index ? { ...item, title } : item)) })} /></div>
               <button type="button" className="px-2 py-2 text-sm font-semibold text-red-600" onClick={() => set({ scanTitles: (value.scanTitles ?? []).filter((_, at) => at !== index) })}>Remove</button>
             </div>
           ))}

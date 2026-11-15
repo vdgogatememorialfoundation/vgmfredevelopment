@@ -527,6 +527,15 @@ function ProductEditor({ book, isNew, onDone }: { book: Book; isNew: boolean; on
             </div>
             <p className="mt-1 text-xs text-text-muted">Must be lower than the selling price. The selling price shows struck through while the offer runs.</p>
           </div>
+          <div className="rounded-xl border border-border bg-white p-3">
+            <p className="mb-2 text-sm font-semibold text-text-primary">Ribbons on the product card</p>
+            <div className="flex flex-wrap items-end gap-4">
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(form.trending)} onChange={(event) => set({ trending: event.target.checked })} /> <span className="rounded-r-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold uppercase text-white">Trending</span></label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(form.isNew)} onChange={(event) => set({ isNew: event.target.checked })} /> <span className="rounded-r-full bg-burgundy px-2 py-0.5 text-[11px] font-bold uppercase text-white">New</span></label>
+              <Field label="Show New until (optional)"><TextInput type="date" value={form.newUntil ?? ""} onChange={(event) => set({ newUntil: event.target.value || undefined })} /></Field>
+              <Field label="Other ribbon text (optional)"><TextInput value={form.ribbon ?? ""} placeholder="e.g. Bestseller" onChange={(event) => set({ ribbon: event.target.value || undefined })} /></Field>
+            </div>
+          </div>
           {form.productType !== "other" && <BookSpecFields form={form} set={set} />}
           <Field label="Description">
             <TextArea rows={5} value={form.description} onChange={(event) => set({ description: event.target.value })} />

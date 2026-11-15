@@ -197,7 +197,7 @@ export function courierEventTitle(status: string, location?: string, courier = "
     return `Shipment arrived at courier facility${place}`;
   }
   if (/left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|departed|\bdispatched\b|outscan|forwarded|in transit|shipment shipped|connected to/.test(value) && !/out for delivery/.test(value)) {
-    return `Item left Courier Facility${place}`;
+    return `Shipment left Courier Facility${place}`;
   }
   return status;
 }

@@ -15,6 +15,7 @@ import { useSiteSettings } from "@/lib/use-cms";
 import CartStepper from "@/components/store/CartStepper";
 import { useOrderSettings } from "@/lib/use-cms";
 import { formatCurrency } from "@/lib/utils";
+import { CARD_IMAGE, CARD_STYLES, productRibbons } from "@/lib/product-ribbons";
 
 export default function BookCard({ book }: { book: Book }) {
   const router = useRouter();
@@ -47,8 +48,9 @@ export default function BookCard({ book }: { book: Book }) {
   };
 
   return (
-    <article className="card flex flex-col overflow-hidden">
-      <Link href={`/shop/${book.slug}`} className="mx-auto block w-full max-w-36 bg-white">
+    <article className={`card relative flex flex-col overflow-hidden ${CARD_STYLES[sizes?.cardStyle ?? "bordered"] ?? ""} ${sizes?.cardAlign === "center" ? "text-center [&_.flex-wrap]:justify-center" : ""}`}>
+      <Ribbons book={book} />
+      <Link href={`/shop/${book.slug}`} className={`mx-auto block w-full bg-white ${CARD_IMAGE[sizes?.cardImage ?? "medium"] ?? "max-w-36"}`}>
         <MediaPlaceholder
           variant="book"
           label={book.title}
@@ -102,6 +104,20 @@ export default function BookCard({ book }: { book: Book }) {
         </div>
       </div>
     </article>
+  );
+}
+
+function Ribbons({ book }: { book: Book }) {
+  const ribbons = productRibbons(book);
+  if (!ribbons.length) return null;
+  return (
+    <div className="pointer-events-none absolute left-0 top-2 z-10 flex flex-col items-start gap-1">
+      {ribbons.map((ribbon) => (
+        <span key={ribbon.text} className={`rounded-r-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide shadow ${ribbon.className}`}>
+          {ribbon.text}
+        </span>
+      ))}
+    </div>
   );
 }
 

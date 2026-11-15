@@ -307,6 +307,13 @@ export interface Book {
   offer?: { price: number; label?: string; startsAt?: string; endsAt?: string };
   /** Set on the shop copy while an offer runs. */
   offerLabel?: string;
+  /** Green "Trending" strip on the product card. */
+  trending?: boolean;
+  /** "New" strip, shown until `newUntil` (YYYY-MM-DD) when set. */
+  isNew?: boolean;
+  newUntil?: string;
+  /** Any other strip text the desk wants, e.g. "Bestseller". */
+  ribbon?: string;
   /** Per-product override of the shop rules shown on the product page. */
   policy?: { returns?: boolean; replacement?: boolean; cancellation?: boolean; note?: string };
   edition?: string;
@@ -921,6 +928,12 @@ export interface ProductTextSizes {
   cardLanguage?: number;
   cardPrice?: number;
   pageLanguage?: number;
+  /** Shop grid: products per row on large screens (3–6) and on phones (1–2). */
+  gridColumns?: number;
+  mobileColumns?: number;
+  cardStyle?: "bordered" | "shadow" | "minimal";
+  cardImage?: "small" | "medium" | "large" | "full";
+  cardAlign?: "left" | "center";
 }
 
 export interface SiteSettings {

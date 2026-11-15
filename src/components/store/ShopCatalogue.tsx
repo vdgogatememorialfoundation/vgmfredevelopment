@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/common/PageHeader";
 import BookCard from "@/components/books/BookCard";
-import { useLiveBooks } from "@/lib/use-cms";
+import { useLiveBooks, useSiteSettings } from "@/lib/use-cms";
+import { GRID_COLUMNS } from "@/lib/product-ribbons";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import type { Book } from "@/types";
 
@@ -32,6 +33,7 @@ export function freshCatalogue(server: Book[], local: Book[]) {
 
 export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }) {
   const live = useLiveBooks();
+  const gridText = useSiteSettings()?.productText;
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -119,7 +121,7 @@ export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }
               {books.length === 0 ? t("shop.empty") : "No publications match these filters."}
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className={`grid gap-3 sm:grid-cols-3 ${gridText?.mobileColumns === 1 ? "grid-cols-1" : "grid-cols-2"} ${GRID_COLUMNS[gridText?.gridColumns ?? 5] ?? GRID_COLUMNS[5]}`}>
               {shown.map((book) => (
                 <BookCard key={book.id} book={book} />
               ))}

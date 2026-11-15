@@ -1,5 +1,6 @@
 "use client";
 
+import { productRibbons } from "@/lib/product-ribbons";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Badge from "@/components/common/Badge";
@@ -134,6 +135,13 @@ export default function ShopProduct({
                   <a href="#reviews" className="text-sm text-text-muted hover:underline">No ratings yet · be the first to review</a>
                 )}
               </div>
+              {productRibbons(book).length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {productRibbons(book).map((ribbon) => (
+                    <span key={ribbon.text} className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${ribbon.className}`}>{ribbon.text}</span>
+                  ))}
+                </div>
+              ) : null}
               {book.offerLabel ? (
                 <p className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800">
                   {book.offerLabel}{book.offer?.endsAt ? ` · ends ${new Date(book.offer.endsAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}

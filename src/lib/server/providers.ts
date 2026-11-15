@@ -667,11 +667,11 @@ async function shiprocketOrigin(token: string, wanted: string) {
   return !cached.pins.length || cached.pins.includes(wanted) ? wanted : cached.pins[0];
 }
 
-const shiprocketActive = new Map<string, { ids: Set<string>; at: number }>();
+const shiprocketInactive = new Map<string, { ids: Set<string>; at: number }>();
 
-/** Courier ids switched on in the Shiprocket panel; serviceability still lists ones the account turned off. */
-async function shiprocketActiveCouriers(token: string) {
-  const cached = shiprocketActive.get(token);
+/** Courier ids switched off in the Shiprocket panel (`status` 1 there; 0 is active); serviceability still lists them. */
+async function shiprocketInactiveCouriers(token: string) {
+  const cached = shiprocketInactive.get(token);
   if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.ids;
   try {
     const data = await call("https://apiv2.shiprocket.in/v1/external/courier/courierListWithCounts", {
@@ -680,7 +680,7 @@ async function shiprocketActiveCouriers(token: string) {
     const ids = new Set(
       ((data.courier_data as Json[]) ?? []).filter((row) => Number(row.status) === 1).map((row) => String(row.id))
     );
-    shiprocketActive.set(token, { ids, at: Date.now() });
+    shiprocketInactive.set(token, { ids, at: Date.now() });
     return ids;
   } catch {
     return cached?.ids ?? new Set<string>();
@@ -717,8 +717,8 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
       if (!byId.has(id)) byId.set(id, courier);
     }
   }
-  const active = await shiprocketActiveCouriers(token);
-  const list = [...byId.values()].filter((courier) => !active.size || active.has(String(courier.courier_company_id)));
+  const inactive = await shiprocketInactiveCouriers(token);
+  const list = [...byId.values()].filter((courier) => !inactive.has(String(courier.courier_company_id)));
   return list.map((courier) => ({
     provider: "shiprocket",
     courierId: String(courier.courier_company_id),
