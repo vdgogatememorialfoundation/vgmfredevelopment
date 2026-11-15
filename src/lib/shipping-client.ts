@@ -1002,7 +1002,8 @@ function dedupeScans(events: { at: string; status: string; location?: string }[]
   const out: { at: string; status: string; location?: string }[] = [];
   for (const event of events) {
     const prev = out[out.length - 1];
-    if (prev && prev.status === event.status && (prev.location ?? "") === (event.location ?? "")) continue;
+    const town = (value?: string) => (value ?? "").split(",")[0].trim().toLowerCase();
+    if (prev && prev.status.toLowerCase() === event.status.toLowerCase() && town(prev.location) === town(event.location)) continue;
     out.push(event);
   }
   return out;

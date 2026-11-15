@@ -62,6 +62,7 @@ import {
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
 import { mergeShippingCreds, readShippingCreds } from "@/lib/server/shipping-vault";
 import { listWebhooks } from "@/lib/server/webhooks";
+import { withScanPlaces } from "@/lib/server/place-lookup";
 
 type Body = Record<string, unknown> & {
   action?: string;
@@ -242,7 +243,8 @@ export async function POST(request: NextRequest) {
                           : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
-        return NextResponse.json({ ok: true, configured: true, ...result });
+        const events = "events" in result && Array.isArray(result.events) ? await withScanPlaces(result.events as { location?: string }[]) : undefined;
+        return NextResponse.json({ ok: true, configured: true, ...result, ...(events ? { events } : {}) });
       }
       case "cancel": {
         const result =

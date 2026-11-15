@@ -17,6 +17,10 @@ import { findShopShipment, replaceShopShipment } from "@/lib/server/shop-shipmen
 import { readShippingCreds } from "@/lib/server/shipping-vault";
 import type { Order, ShipmentRecord } from "@/types";
 import { inviteOrderFeedback } from "@/lib/server/forms";
+import { withScanPlaces } from "@/lib/server/place-lookup";
+
+/** Same scan when the text and town match, whatever the case ("PUNE" and "Pune, Maharashtra, India"). */
+const placeKey = (location?: string) => (location ?? "").split(",")[0].trim().toLowerCase();
 
 type TrackHit = {
   status?: string;
@@ -44,7 +48,7 @@ function dedupe(events: { at: string; status: string; location?: string }[]) {
     if (!usableScan(raw)) continue;
     const event = { ...raw, status: cleanScanText(raw.status) };
     const prev = out[out.length - 1];
-    if (prev && prev.status === event.status && (prev.location ?? "") === (event.location ?? "")) continue;
+    if (prev && prev.status.toLowerCase() === event.status.toLowerCase() && placeKey(prev.location) === placeKey(event.location)) continue;
     out.push(event);
   }
   return out;
@@ -108,12 +112,13 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     return { ok: true as const, live: false as const, shipment };
   }
   if (!hit) return { ok: true as const, live: false as const, shipment };
+  hit.events = await withScanPlaces(hit.events ?? []).catch(() => hit?.events ?? []);
 
   // Courier tracking pages show only the latest scans, so keep earlier ones; drop anything dated in the future.
   const latestOk = Date.now() + 10 * 60_000;
   const fresh = hit.events ?? [];
   const sameScan = (x: { status: string; location?: string }, y: { status: string; location?: string }) =>
-    x.status.trim().toLowerCase() === y.status.trim().toLowerCase() && (x.location ?? "") === (y.location ?? "");
+    x.status.trim().toLowerCase() === y.status.trim().toLowerCase() && placeKey(x.location) === placeKey(y.location);
   // A re-read scan replaces the stored copy, so an earlier wrong timestamp is corrected rather than duplicated.
   const merged = direct
     ? [...(shipment.tracking ?? []).filter((old) => !fresh.some((event) => sameScan(event, old))), ...fresh]
