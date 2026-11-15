@@ -1010,7 +1010,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     try {
       const result = await task();
       if (result) setMessage(result);
-      onChanged();
+      // Loading rates changes nothing on the order; refreshing would reopen the panel and wipe the rate list.
+      if (label !== "rates") onChanged();
     } catch (error) {
       setProblem(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
