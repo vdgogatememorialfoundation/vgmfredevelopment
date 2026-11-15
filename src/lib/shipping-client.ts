@@ -360,7 +360,7 @@ async function bookShipmentOnce(
     );
   }
   // Final gate for every order: the full amount (items, shipping, packing, extras) must be paid, and Admin must have picked the courier.
-  if (order.paymentStatus !== "Paid" || order.shippingDue) {
+  if (order.paymentStatus !== "Paid" || (order.shippingDue && !(unpaidPlan && unpaidPlan.shippingDue === false)) || (unpaidPlan && !unpaidPlan.balancePaidAt && unpaidPlan.balance > 0)) {
     throw new Error("This order is not fully paid yet (including shipping). Nothing was sent to the courier. Book it once the payment shows Paid.");
   }
   if (!override) throw new Error("Pick a courier from the rate list, then click Book. Nothing was sent to the courier.");
@@ -501,6 +501,7 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
           parcel: order.parcel ? { length: order.parcel.length, breadth: order.parcel.breadth, height: order.parcel.height } : undefined,
           couriers: valid.length,
         },
+        shippingDue: undefined,
         preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
       },
       `Courier charge ₹${fee} from the highest of ${valid.length} courier quotes added to the pre-order balance`
@@ -525,7 +526,8 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
       shipping: round((order.shipping || 0) - previous + fee),
       total: round(order.total - previous + fee),
       courierChoice: choice ?? order.courierChoice,
-      preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
+      shippingDue: undefined,
+        preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
     },
     `Courier ${choice ? `${choice.courierName} ` : ""}selected · charge ₹${fee} added to the pre-order balance`
   );
