@@ -1381,6 +1381,7 @@ export function ShippingApisDesk() {
             <Text label="API user email" value={value.shiprocket.email} onChange={(email) => set({ shiprocket: { ...value.shiprocket, email } })} />
             <Secret label="API user password" value={value.shiprocket.password} onChange={(password) => set({ shiprocket: { ...value.shiprocket, password } })} />
             <Text label="Channel ID (optional)" value={value.shiprocket.channelId} onChange={(channelId) => set({ shiprocket: { ...value.shiprocket, channelId } })} />
+            <Text label="Pickup location (nickname on Shiprocket)" value={value.shiprocket.pickupLocation ?? ""} onChange={(pickupLocation) => set({ shiprocket: { ...value.shiprocket, pickupLocation } })} hint={`Shiprocket quotes and bookings use this address. Leave blank to use the default pickup nickname${pickup.nickname ? ` (${pickup.nickname})` : ""}. Use List locations below to see the names.`} />
             <button type="button" className={primary} disabled={busy === "shiprocket"} onClick={() => test("shiprocket")}>{busy === "shiprocket" ? "Checking live…" : "Save & test"}</button>
             <p className="text-xs text-slate-500">
               Webhook URL for Shiprocket Settings → API → Webhooks:{" "}
@@ -1439,7 +1440,7 @@ export function ShippingApisDesk() {
             <Text label="Client ID" value={value.ekart.clientId} onChange={(clientId) => set({ ekart: { ...value.ekart, clientId } })} hint="Leave blank to use the keys already saved on the server." />
             <Text label="Username (email)" value={value.ekart.username} onChange={(username) => set({ ekart: { ...value.ekart, username } })} />
             <Secret label="Password" value={value.ekart.password} onChange={(password) => set({ ekart: { ...value.ekart, password } })} />
-            <Text label="Pickup address alias" value={value.ekart.pickupAlias} onChange={(pickupAlias) => set({ ekart: { ...value.ekart, pickupAlias } })} hint="As saved on the Ekart panel. Leave blank to use the first pickup address there." />
+            <Text label="Pickup address alias" value={value.ekart.pickupAlias} onChange={(pickupAlias) => set({ ekart: { ...value.ekart, pickupAlias } })} hint="As saved on the Ekart panel. Ekart quotes and bookings use this address. Leave blank to use the first pickup address there." />
             <Text label="Service" value={value.ekart.service} onChange={(service) => set({ ekart: { ...value.ekart, service: service.toUpperCase() } })} hint="SURFACE or EXPRESS" />
             <button type="button" className={primary} disabled={busy === "ekart"} onClick={() => test("ekart")}>{busy === "ekart" ? "Checking live…" : "Save & test"}</button>
           </div>
@@ -1476,7 +1477,7 @@ export function ShippingApisDesk() {
 
       <Card
         title="Pickup address"
-        text="Couriers collect parcels here. The nickname must match the pickup location name in Shiprocket."
+        text="Default pickup. Ekart and GoSwift use the pickup alias set in their own cards, Shiprocket uses its Pickup location (or this nickname if that is blank), and the other couriers collect from this address."
         right={
           <div className="flex flex-wrap gap-2">
             <button
@@ -1640,6 +1641,7 @@ export function RatesTable({ quote, onPick, picked }: { quote: RateQuote; onPick
                     <span className="block text-xs text-slate-500">
                       Actual {rate.actualKg} kg · volumetric {rate.volumetricKg} kg (÷{rate.volumetricDivisor}) · billed {rate.chargeWeightKg ? `${rate.chargeWeightKg} kg` : "not reported"}
                       {rate.pickupBy ? ` · pickup ${rate.pickupBy}` : ""}
+                      {rate.pickupFrom ? ` · from ${rate.pickupFrom}` : ""}
                     </span>
                   )}
                   {rate.weightFlag && <span className="block text-xs font-medium text-amber-700">{rate.weightFlag}</span>}

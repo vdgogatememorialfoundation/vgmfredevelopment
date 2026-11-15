@@ -607,6 +607,8 @@ export type RateOut = {
   estimate?: boolean;
   /** Earliest pickup the aggregator offers, when it says. */
   pickupBy?: string;
+  /** The aggregator's own pickup address this quote is from (Admin only). */
+  pickupFrom?: string;
 };
 
 /** Chargeable weight from an aggregator row; values above 50 are grams. */
@@ -658,6 +660,25 @@ async function nimbusToken(input: Json) {
 }
 
 const shiprocketOrigins = new Map<string, { pins: string[]; at: number }>();
+const shiprocketPickupRows = new Map<string, { rows: { nickname: string; pincode: string; active: boolean }[]; at: number }>();
+
+/** The Shiprocket pickup location to use: Settings → Shiprocket → Pickup location, else the default pickup nickname. Undefined when neither is on the panel. */
+async function shiprocketPickupLocation(token: string, input: Json, fallbackNickname = "") {
+  let cached = shiprocketPickupRows.get(token);
+  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
+    const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", { headers: { authorization: `Bearer ${token}` } });
+    const rows = (((data.data as Json)?.shipping_address as Json[]) ?? []).map((row) => ({
+      nickname: String(row.pickup_location ?? "").trim(),
+      pincode: String(row.pin_code ?? row.pincode ?? ""),
+      active: Number(row.status ?? 1) === 1,
+    }));
+    cached = { rows, at: Date.now() };
+    shiprocketPickupRows.set(token, cached);
+  }
+  const rows = cached.rows;
+  const find = (name: string) => (name.trim() ? rows.find((row) => row.nickname.toLowerCase() === name.trim().toLowerCase()) : undefined);
+  return find(String(input.pickupLocation ?? "")) ?? find(fallbackNickname);
+}
 
 /** Rates must be asked from a pincode Shiprocket has as an active pickup address, or it returns far fewer couriers. */
 async function shiprocketOrigin(token: string, wanted: string) {
@@ -701,8 +722,9 @@ async function shiprocketActiveCouriers(token: string) {
 export async function shiprocketRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
+  const chosen = String(input.pickupLocation ?? "").trim() ? await shiprocketPickupLocation(token, input).catch(() => undefined) : undefined;
   const params = new URLSearchParams({
-    pickup_postcode: await shiprocketOrigin(token, parcel.pickupPincode),
+    pickup_postcode: chosen?.pincode || (await shiprocketOrigin(token, parcel.pickupPincode)),
     delivery_postcode: parcel.deliveryPincode,
     weight: String(parcel.weightKg),
     cod: parcel.cod ? "1" : "0",
@@ -742,6 +764,7 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     live: true as const,
     deliverBy: courier.etd ? String(courier.etd) : undefined,
     rating: Number.isFinite(Number(courier.rating)) && Number(courier.rating) > 0 ? Math.round(Number(courier.rating) * 10) / 10 : undefined,
+    pickupFrom: `${chosen?.nickname ?? "Shiprocket"} (${params.get("pickup_postcode")})`,
   }));
 }
 
@@ -816,6 +839,11 @@ export async function shiprocketBook(input: Json, order: BookInput): Promise<Boo
   const token = await shiprocketToken(input);
   if (!token) return null;
   const auth = { authorization: `Bearer ${token}` };
+  const location = await shiprocketPickupLocation(token, input, order.pickup.nickname);
+  if (!location) {
+    const asked = String(input.pickupLocation ?? "").trim() || order.pickup.nickname;
+    throw new ProviderError(`Shiprocket has no pickup location named "${asked}". Choose one in Settings → Shipping APIs → Shiprocket → Pickup location. Nothing was booked.`, 400);
+  }
   const [firstName, ...rest] = order.customer.name.split(" ");
   const created = await call("https://apiv2.shiprocket.in/v1/external/orders/create/adhoc", {
     method: "POST",
@@ -823,7 +851,7 @@ export async function shiprocketBook(input: Json, order: BookInput): Promise<Boo
     json: {
       order_id: order.orderId,
       order_date: order.orderDate.slice(0, 16).replace("T", " "),
-      pickup_location: order.pickup.nickname,
+      pickup_location: location.nickname,
       channel_id: typeof input.channelId === "string" && input.channelId ? input.channelId : undefined,
       billing_customer_name: firstName || order.customer.name,
       billing_last_name: rest.join(" ") || ".",
@@ -2222,7 +2250,7 @@ const goswiftAuth = (token: string) => ({ authorization: `Bearer ${token}` });
 const goswiftPhone = (phone: string) => Number(phone.replace(/\D/g, "").slice(-10)) || undefined;
 const goswiftTime = (ms: unknown) => (Number(ms) > 0 ? new Date(Number(ms)).toISOString() : "");
 
-const swiftPickups = new Map<string, { alias: string; pincode: string; at: number }>();
+const swiftPickups = new Map<string, { alias: string; pincode: string; address: string; at: number }>();
 
 /** The pickup address saved on the aggregator's panel: the alias set in Settings, else the first one listed. */
 async function swiftPickup(input: Json, token: string) {
@@ -2234,7 +2262,10 @@ async function swiftPickup(input: Json, token: string) {
     .then((data) => (Array.isArray(data) ? (data as Json[]) : []))
     .catch(() => [] as Json[]);
   const row = rows.find((item) => String(item.alias ?? "").trim().toLowerCase() === wanted.toLowerCase()) ?? (wanted ? undefined : rows[0]);
-  const found = { alias: row ? String(row.alias ?? "") : wanted, pincode: row ? String(row.pincode ?? "") : "", at: Date.now() };
+  const address = row
+    ? [row.address_line1 ?? row.address, row.address_line2, row.city, row.state, row.pincode].map((part) => String(part ?? "").trim()).filter(Boolean).join(", ")
+    : "";
+  const found = { alias: row ? String(row.alias ?? "") : wanted, pincode: row ? String(row.pincode ?? "") : "", address, at: Date.now() };
   swiftPickups.set(key, found);
   return found;
 }
@@ -2251,7 +2282,9 @@ export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut
   const details = (data.details as Json) ?? {};
   if (data.status === false || details.forward_drop === false) return [];
   if (parcel.cod && details.cod === false) return [];
-  const origin = (await swiftPickup(input, token)).pincode || parcel.pickupPincode;
+  const from = await swiftPickup(input, token);
+  const origin = from.pincode || parcel.pickupPincode;
+  const pickupFrom = `${from.alias || "default pickup"} (${origin})`;
   const shipment = {
     pickupPincode: origin,
     dropPincode: parcel.deliveryPincode,
@@ -2290,6 +2323,7 @@ export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut
         etaDays: Number(tat.max) || Number(tat.min) || 4,
         live: true as const,
         cod: details.cod !== false,
+        pickupFrom,
       };
     })
     .filter((row) => row.rate > 0);
@@ -2320,7 +2354,8 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
     country: "India",
     pin: Number(who.pincode),
   });
-  const alias = (await swiftPickup(input, token)).alias;
+  const from = await swiftPickup(input, token);
+  const alias = from.alias;
   const pickup = alias ? { name: alias } : place({ ...order.pickup, name: order.pickup.contactName });
   const value = Math.max(1, Math.round(order.total));
   const units = order.items.reduce((sum, item) => sum + item.units, 0) || 1;
@@ -2329,7 +2364,7 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
     headers: goswiftAuth(token),
     json: {
       seller_name: order.pickup.contactName,
-      seller_address: [order.pickup.line1, order.pickup.line2, order.pickup.city, order.pickup.state, order.pickup.pincode].filter(Boolean).join(", "),
+      seller_address: (alias && from.address) || [order.pickup.line1, order.pickup.line2, order.pickup.city, order.pickup.state, order.pickup.pincode].filter(Boolean).join(", "),
       seller_gst_tin: "",
       seller_gst_amount: 0,
       consignee_gst_amount: 0,

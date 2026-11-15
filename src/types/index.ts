@@ -790,6 +790,8 @@ export interface CourierRate {
   /** A placeholder price, not a live quote; never used to charge customers. */
   estimate?: boolean;
   pickupBy?: string;
+  /** The aggregator's pickup address this quote is from (Admin only). */
+  pickupFrom?: string;
 }
 
 export type ReturnKind = "return" | "replacement";

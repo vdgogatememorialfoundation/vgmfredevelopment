@@ -164,7 +164,8 @@ export interface IntegrationSettings {
     iosConfig: string;
   };
   shipping: {
-    shiprocket: { email: string; password: string; channelId: string; enabled: boolean };
+    /** pickupLocation: the pickup nickname on the Shiprocket panel; blank uses the default pickup nickname. */
+    shiprocket: { email: string; password: string; channelId: string; pickupLocation?: string; enabled: boolean };
     nimbuspost: { email: string; password: string; enabled: boolean };
     ithink: { accessToken: string; secretKey: string; pickupAddressId: string; host: string; enabled: boolean };
     shipyaari: { email: string; password: string; apiKey: string; enabled: boolean };
