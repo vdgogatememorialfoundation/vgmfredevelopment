@@ -357,13 +357,9 @@ export function OrdersDashboard() {
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
             setOrderStatus(id, "Packed");
-            const order = getOrderByAdmin(id);
-            if (order?.deliveryMode === "delivery" && !isPreorderOrder(order) && getIntegrations().shipping.autoBookOnPack) await bookShipment(id);
           })}>Pack</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("To Ship", async (id) => {
             setOrderStatus(id, "To Ship");
-            const order = getOrderByAdmin(id);
-            if (order?.deliveryMode === "delivery" && !isPreorderOrder(order)) await bookShipment(id);
           })}>To Ship</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => void readyForPickup()}>Ready to pickup</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => setShipOne(true)}>Ship with one courier</Button>
@@ -820,7 +816,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
                 <Button variant="outline" onClick={loadRates} disabled={loadingRates}>{loadingRates ? "Checking…" : "Show couriers & rates"}</Button>
               </div>
               {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
-              <p className="mt-2 text-xs text-text-muted">{shippingFeeSummary(orderSettings)}. The courier is booked automatically when the order is packed{getIntegrations().shipping.autoBookOnPack ? "" : " (turn on auto-booking in Shipping APIs)"}.</p>
+              <p className="mt-2 text-xs text-text-muted">{shippingFeeSummary(orderSettings)}. Admin books the courier manually after payment.</p>
             </div>
           )}
           <div>
@@ -1045,13 +1041,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       if ((status === "Packed" || status === "Ready to Ship") && order.deliveryMode === "delivery" && !shipment && isPreorderOrder(order)) {
         return `Status set to ${status}. This is a pre-order: create the shipment below once it is packed.`;
       }
-      if (status === "Packed" && order.deliveryMode === "delivery" && !shipment && integrations.shipping.autoBookOnPack) {
-        const booking = await bookShipment(order.id);
-        return `Status set to Packed. ${booking.message}`;
-      }
-      if (status === "Ready to Ship" && order.deliveryMode === "delivery") {
-        const booking = await bookShipment(order.id);
-        return `Ready to ship. ${booking.message}`;
+      // Couriers are never booked from a status change: Admin picks a courier and clicks Book.
+      if ((status === "Packed" || status === "Ready to Ship") && order.deliveryMode === "delivery" && !shipment) {
+        return `Status set to ${status}. Show couriers & rates below, pick one and click Book.`;
       }
       return `Status set to ${status}. The customer is notified.`;
     });
@@ -1337,7 +1329,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             <div className="mt-2"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
           )}
           {status === "Packed" && order.deliveryMode === "delivery" && !shipment && (
-            <p className="mt-2 text-xs text-text-muted">{integrations.shipping.autoBookOnPack ? "Setting Packed books the courier automatically." : "Auto-booking on Packed is off. Book the courier below."}</p>
+            <p className="mt-2 text-xs text-text-muted">Couriers are never booked automatically. Pick a courier below and click Book.</p>
           )}
           {status === "Ready to Ship" && order.deliveryMode === "delivery" && (
             <p className="mt-2 text-xs text-text-muted">Ready to Ship books the courier and requests pickup on Shiprocket, Nimbuspost or iThink Logistics, including Porter / Shadowfax / Flash last-mile.</p>
