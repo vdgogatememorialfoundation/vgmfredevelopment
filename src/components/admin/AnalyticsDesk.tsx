@@ -13,7 +13,8 @@ import {
 } from "@/lib/analytics";
 import { getLiveArticles } from "@/lib/cms";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getOrders } from "@/lib/store";
+import { getBookById, getOrders } from "@/lib/store";
+import { itemTotals } from "@/lib/order-item-totals";
 
 function snapshot() {
   return `${window.localStorage.getItem("vgmf_analytics_hits") ?? ""}|${window.localStorage.getItem("vgmf_analytics_live") ?? ""}`;
@@ -183,6 +184,25 @@ export function AnalyticsDesk({ focus = "overview" }: { focus?: "overview" | "us
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [orders]);
 
+  const sales = useMemo(() => {
+    const live = orders.filter((order) => order.status !== "Cancelled");
+    const months = new Map<string, number>();
+    const states = new Map<string, number>();
+    for (const order of live) {
+      const month = new Date(order.date).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+      months.set(month, (months.get(month) ?? 0) + 1);
+      const state = order.deliveryAddress?.state?.trim() || "Not given";
+      states.set(state, (states.get(state) ?? 0) + 1);
+    }
+    const trend = [...months.entries()].sort((a, b) => Date.parse(`1 ${a[0]}`) - Date.parse(`1 ${b[0]}`));
+    return {
+      totals: itemTotals(orders, getBookById),
+      cancelled: orders.length - live.length,
+      trend,
+      states: [...states.entries()].sort((a, b) => b[1] - a[1]),
+    };
+  }, [orders]);
+
   const blogRows = useMemo(() => {
     const byPath = countBy(articleHits(hits), "path");
     return byPath.map(([path, count]) => {
@@ -321,6 +341,25 @@ export function AnalyticsDesk({ focus = "overview" }: { focus?: "overview" | "us
             empty="No customer activity yet."
           />
         </article>
+      )}
+
+      {focus === "overview" && (
+        <section className="space-y-4">
+          <h2 className="font-semibold text-slate-900">Orders and sales</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Stat label="Orders" value={sales.totals.orders} hint={sales.cancelled ? `${sales.cancelled} cancelled not counted` : undefined} />
+            <Stat label="Items sold" value={sales.totals.total} />
+            <Stat label="Books sold" value={sales.totals.books} />
+            <Stat label="Languages" value={sales.totals.languages.length} />
+            <Stat label="States" value={sales.states.filter(([state]) => state !== "Not given").length} />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <RankTable title="Orders by month (trend)" rows={sales.trend} />
+            <RankTable title="Books sold by language" rows={sales.totals.languages} />
+            <RankTable title="Orders by state" rows={sales.states} />
+            <RankTable title="Other products sold" rows={sales.totals.others} />
+          </div>
+        </section>
       )}
 
       {focus === "overview" && <div className="grid gap-4 lg:grid-cols-2">

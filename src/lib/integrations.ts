@@ -239,6 +239,8 @@ export interface OrderSettings {
   promoCodes: { coupons: boolean; giftCards: boolean };
   /** Customer-facing names for statuses and tracking steps, keyed by the built-in name. */
   statusLabels: Record<string, string>;
+  /** Desk wording for courier scans the customer sees: when a scan contains `match` (and the courier name contains `courier`, if set), show `title`; `{city}` is the scan's city. */
+  scanTitles?: { courier: string; match: string; title: string }[];
   /** Extra tracking updates the desk can add to an order; each shows inside one tracking step. */
   customStatuses: { id: string; label: string; stage: string }[];
   /** Pre-orders: pay in full, or an advance at order time and the balance later. */
@@ -751,6 +753,11 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
         ? [...new Set(merged.workingDays.holidays.map((day) => String(day ?? "").trim()).filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day)))].sort()
         : [],
     },
+    scanTitles: Array.isArray(merged.scanTitles)
+      ? merged.scanTitles
+          .filter((row) => row && typeof row.match === "string" && typeof row.title === "string")
+          .map((row) => ({ courier: String(row.courier ?? ""), match: row.match, title: row.title }))
+      : [],
     statusLabels: Object.fromEntries(
       Object.entries(merged.statusLabels && typeof merged.statusLabels === "object" ? merged.statusLabels : {})
         .map(([key, text]) => [key, String(text ?? "").trim()])

@@ -1742,6 +1742,19 @@ export function OrderSettingsDesk() {
           ))}
         </div>
         <div className="mt-5 space-y-2">
+          <p className="text-sm font-semibold text-slate-800">Courier scan wording</p>
+          <p className="text-xs text-slate-500">When a courier scan contains the text, customers see your wording instead. Leave Courier blank to apply to every courier. Write {"{city}"} where the scan&apos;s city should go.</p>
+          {(value.scanTitles ?? []).map((row, index) => (
+            <div key={index} className="flex flex-wrap items-end gap-2">
+              <div className="w-40"><Text label="Courier (optional)" placeholder="e.g. Ekart" value={row.courier} onChange={(courier) => set({ scanTitles: (value.scanTitles ?? []).map((item, at) => (at === index ? { ...item, courier } : item)) })} /></div>
+              <div className="min-w-48 flex-1"><Text label="Scan contains" placeholder="e.g. Dispatched to" value={row.match} onChange={(match) => set({ scanTitles: (value.scanTitles ?? []).map((item, at) => (at === index ? { ...item, match } : item)) })} /></div>
+              <div className="min-w-48 flex-1"><Text label="Customer sees" placeholder="e.g. Item left Courier Facility - {city}" value={row.title} onChange={(title) => set({ scanTitles: (value.scanTitles ?? []).map((item, at) => (at === index ? { ...item, title } : item)) })} /></div>
+              <button type="button" className="px-2 py-2 text-sm font-semibold text-red-600" onClick={() => set({ scanTitles: (value.scanTitles ?? []).filter((_, at) => at !== index) })}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className="text-sm font-semibold text-burgundy" onClick={() => set({ scanTitles: [...(value.scanTitles ?? []), { courier: "", match: "", title: "" }] })}>+ Add scan wording</button>
+        </div>
+        <div className="mt-5 space-y-2">
           {value.customStatuses.map((row, index) => (
             <div key={row.id} className="flex flex-wrap items-end gap-2">
               <div className="min-w-56 flex-1">

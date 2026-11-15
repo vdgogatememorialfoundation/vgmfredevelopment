@@ -71,6 +71,8 @@ import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
+import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
+import { itemTotals } from "@/lib/order-item-totals";
 import { getOrder as getStoredOrder, orderLanguages, patchOrder as patchStoredOrder } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
@@ -307,6 +309,8 @@ export function OrdersDashboard() {
           </div>
         )}
       </div>
+
+      <ItemTotalsStrip label="Items in these orders" totals={itemTotals(filtered, (id) => catalogue.find((book) => book.id === id))} />
 
       {shipOne && (
         <BulkShipCourier

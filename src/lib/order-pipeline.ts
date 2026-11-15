@@ -176,20 +176,28 @@ export function isDeskScan(scan: { status: string; location?: string }) {
   return !scan.location && /^(handed to [^·]+|tracking id added\b.*)$/i.test(scan.status.trim());
 }
 
-export function courierEventTitle(status: string, location?: string) {
+export function courierEventTitle(status: string, location?: string, courier = "") {
   const value = status.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   const city = cityName(location) || cityName(status.split(/[-–]/).slice(1).join(" "));
   const place = city ? ` - ${city}` : "";
+  const rule = (getOrderSettings().scanTitles ?? []).find(
+    (row) =>
+      row.match.trim() &&
+      row.title.trim() &&
+      value.includes(row.match.toLowerCase().replace(/[_-]+/g, " ").trim()) &&
+      (!row.courier.trim() || courier.toLowerCase().includes(row.courier.trim().toLowerCase()))
+  );
+  if (rule) return rule.title.replace(/\s*[-–]?\s*\{city\}/i, place).trim();
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
     return "Pickup scheduled";
   }
   if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at/.test(value)) return `Picked up by the courier${place}`;
-  if (classifyCourierScan(status) === "packed") return status;
+  if (classifyCourierScan(status) === "packed" && !/\bdispatch/.test(value)) return status;
   if (/arrived at|reached at|received at|inward|bag received|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
     return `Shipment arrived at courier facility${place}`;
   }
   if (/left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|departed|\bdispatched\b|outscan|forwarded|in transit|shipment shipped|connected to/.test(value) && !/out for delivery/.test(value)) {
-    return `Shipment left courier facility${place}`;
+    return `Item left Courier Facility${place}`;
   }
   return status;
 }
@@ -467,7 +475,7 @@ export function buildTrackingStages(
         item.scan,
         item.index,
         shippedReached,
-        hyperlocal ? item.scan.status : courierEventTitle(item.scan.status, item.scan.location)
+        hyperlocal ? item.scan.status : courierEventTitle(item.scan.status, item.scan.location, courier)
       )
     );
 
