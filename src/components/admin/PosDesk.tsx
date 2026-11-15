@@ -404,9 +404,14 @@ export function PosDesk() {
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="text-sm font-bold">{rupees(book.price)}</span>
-                      <Button variant="outline" disabled={!canOrder(book)} onClick={() => add(book)}>
-                        Add
-                      </Button>
+                      {(() => {
+                        const inCart = cart.find((row) => row.bookId === book.id)?.quantity ?? 0;
+                        return (
+                          <Button variant={inCart ? "primary" : "outline"} disabled={!canOrder(book)} onClick={() => add(book)}>
+                            {inCart ? `Added ✓ ${inCart} · +1` : "Add"}
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </li>
                 ))}
@@ -473,7 +478,7 @@ export function PosDesk() {
             </div>
           </Panel>
 
-          <Panel title="Cart" description={`${rows.length} line${rows.length === 1 ? "" : "s"}`}>
+          <Panel title="Cart" description={`${rows.length} line${rows.length === 1 ? "" : "s"} · ${copies} item${copies === 1 ? "" : "s"}`}>
             {rows.length === 0 ? (
               <EmptyState text="Scan or add products." />
             ) : mixed ? (
@@ -487,10 +492,17 @@ export function PosDesk() {
                       {book.title}
                       {isPreorderBook(book) && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">Pre-order</span>}
                     </span>
-                    <div className="w-16">
-                      <TextInput type="number" min={1} value={line.quantity} onChange={(event) => setQty(book.id, Number(event.target.value))} />
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" onClick={() => setQty(book.id, line.quantity - 1)} aria-label="One less">−</Button>
+                      <div className="w-14">
+                        <TextInput type="number" min={1} value={line.quantity} onChange={(event) => setQty(book.id, Number(event.target.value))} />
+                      </div>
+                      <Button variant="outline" onClick={() => add(book)} aria-label="One more">+</Button>
                     </div>
-                    <span className="w-16 text-right font-medium">{rupees(book.price * line.quantity)}</span>
+                    <span className="w-28 text-right text-xs text-text-muted">
+                      {line.quantity} × {rupees(book.price)}
+                      <span className="block text-sm font-medium text-text-primary">{rupees(book.price * line.quantity)}</span>
+                    </span>
                   </li>
                 ))}
               </ul>
