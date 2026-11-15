@@ -451,7 +451,7 @@ export async function createBalancePaymentLink(orderId: string) {
   }
   let link: NonNullable<NonNullable<Order["preorderPayment"]>["link"]>;
   if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
-    link = { url: `${window.location.origin}/pay/${order.id}?part=balance&d=${encodeSummary(order, amount, ["Pre-order balance"])}`, provider: "demo", createdAt: new Date().toISOString() };
+    link = { url: `${window.location.origin}/pay/${order.id}?part=balance&d=${encodeSummary(order, amount, ["Pre-order balance"])}`, provider: "demo", createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + BALANCE_LINK_MINUTES * 60_000).toISOString() };
   } else {
     const result = await api<{ id: string; url: string }>({
       action: "link",
@@ -465,7 +465,7 @@ export async function createBalancePaymentLink(orderId: string) {
       expiryMinutes: BALANCE_LINK_MINUTES,
     });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
-    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + BALANCE_LINK_MINUTES * 60_000).toISOString() };
   }
   patchOrder(order.id, { preorderPayment: { ...plan, link } }, `Balance payment link created · ₹${amount}`);
   sendEmail({

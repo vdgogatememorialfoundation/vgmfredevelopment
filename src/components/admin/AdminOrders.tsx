@@ -1507,6 +1507,16 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 ? `paid ${formatDateTime(order.preorderPayment.balancePaidAt)}${order.preorderPayment.balanceRef ? ` · ${order.preorderPayment.balanceRef}` : ""}`
                 : `due ${order.preorderPayment.balanceWhen === "on_ready" ? "when the item is ready" : "before dispatch"}`}
             </p>
+            {!order.preorderPayment.balancePaidAt && order.preorderPayment.link && (
+              <p className="mt-2 break-all text-sm">
+                Payment link:{" "}
+                <a href={order.preorderPayment.link.url} target="_blank" rel="noreferrer" className="font-semibold text-primary underline">{order.preorderPayment.link.url}</a>
+                <span className="text-text-muted">
+                  {" "}· sent {formatDateTime(order.preorderPayment.link.createdAt)}
+                  {order.preorderPayment.link.expiresAt ? ` · valid till ${formatDateTime(order.preorderPayment.link.expiresAt)}` : ""}
+                </span>
+              </p>
+            )}
             {!order.preorderPayment.balancePaidAt && (
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button disabled={busy === "balance-link"} onClick={() => run("balance-link", async () => {

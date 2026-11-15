@@ -678,7 +678,7 @@ export interface Order {
     shippingDue?: boolean;
     /** Courier charge added to the balance. */
     shipping?: number;
-    link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string };
+    link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; expiresAt?: string };
   };
   /** Warehouse pick & pack: who picks, and what has been scanned. */
   pick?: {
