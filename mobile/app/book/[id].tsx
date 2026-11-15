@@ -7,7 +7,7 @@ import { useFeed } from "../../src/feed";
 import { useTheme } from "../../src/theme";
 import { useWishlist } from "../../src/wishlist";
 import { Banner, Body, Button, CoverArt, Empty, InfoRow, Kicker, Loading, Muted, Panel, Price, QtyStepper, Screen, StickyBar, Tag } from "../../src/ui";
-import { productBadge } from "../(tabs)/shop";
+import { productBadge, productRibbons } from "../(tabs)/shop";
 
 export default function BookDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -83,7 +83,14 @@ export default function BookDetail() {
         {str(item.priceNote).trim() ? <Muted>{`${money(price)} per copy · ${str(item.priceNote).trim()}`}</Muted> : null}
         <Text style={{ color: theme.colors.muted, fontSize: 11, marginTop: 2 }}>Inclusive of all taxes</Text>
         <View style={{ marginTop: 10 }}>
-          <Tag {...productBadge(item)} />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {productRibbons(item).map((ribbon) => (
+              <Text key={ribbon.label} style={{ backgroundColor: ribbon.color, color: "#FFFFFF", fontSize: 11, fontWeight: "800", textTransform: "uppercase", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, overflow: "hidden" }}>
+                {ribbon.label}
+              </Text>
+            ))}
+            <Tag {...productBadge(item)} />
+          </View>
         </View>
         <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
           <Button

@@ -12,6 +12,16 @@ export function productBadge(item: Row) {
   return { label: "In stock", tone: "green" as const };
 }
 
+/** Trending / New / custom strips set in Admin → Products, same as the website. */
+export function productRibbons(item: Row) {
+  const out: { label: string; color: string }[] = [];
+  if (item.trending) out.push({ label: "Trending", color: "#059669" });
+  const until = str(item.newUntil);
+  if (item.isNew && (!until || Date.parse(`${until}T23:59:59`) >= Date.now())) out.push({ label: "New", color: "#7A1F2B" });
+  if (str(item.ribbon).trim()) out.push({ label: str(item.ribbon).trim(), color: "#F59E0B" });
+  return out;
+}
+
 export function productLine(item: Row, hidePreorderDate = false) {
   if (preorderable(item)) return hidePreorderDate ? "" : `Tentative delivery by ${preorderDeliveryDate(item)}`;
   if (!orderable(item)) return "";
@@ -35,6 +45,7 @@ export function ProductGrid({ items }: { items: Row[] }) {
             price={money(price)}
             original={original > price ? money(original) : undefined}
             badge={productBadge(item)}
+            ribbons={productRibbons(item)}
             line={productLine(item, hidePreorderDate)}
             onPress={() => router.push(`/book/${str(item.id)}`)}
           />

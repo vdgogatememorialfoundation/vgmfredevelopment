@@ -4,10 +4,13 @@ import Link from "next/link";
 import SectionHeading from "@/components/common/SectionHeading";
 import BookCard from "@/components/books/BookCard";
 import { useLiveBooks } from "@/lib/use-cms";
+import { freshCatalogue } from "@/components/store/ShopCatalogue";
+import type { Book } from "@/types";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
-export default function FeaturedBooks() {
-  const featured = useLiveBooks().filter((book) => book.active !== false).slice(0, 4);
+export default function FeaturedBooks({ initialBooks = [] }: { initialBooks?: Book[] }) {
+  const live = useLiveBooks();
+  const featured = (initialBooks.length ? freshCatalogue(initialBooks, live) : live).filter((book) => book.active !== false).slice(0, 4);
   const { t } = useI18n();
 
   return (

@@ -7,6 +7,7 @@ import { useLiveBooks, useSiteSettings } from "@/lib/use-cms";
 import { GRID_COLUMNS } from "@/lib/product-ribbons";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import type { Book } from "@/types";
+import { pendingProductIds } from "@/lib/product-data";
 
 type SortId = "title" | "price-asc" | "price-desc" | "newest";
 
@@ -16,11 +17,12 @@ export function browserHasProductEdits() {
   return PRODUCT_KEYS.some((key) => window.localStorage.getItem(key));
 }
 
-/** Server list first (always current on every device); a local copy wins only when it was saved later. */
+/** Server list first (always current on every device); a local copy wins only for an edit this device has not published yet. */
 export function freshCatalogue(server: Book[], local: Book[]) {
   if (!local.length) return server;
   if (!server.length) return local;
-  const localById = new Map(local.map((book) => [book.id, book]));
+  const pending = new Set(pendingProductIds());
+  const localById = new Map(local.filter((book) => pending.has(book.id)).map((book) => [book.id, book]));
   const serverIds = new Set(server.map((book) => book.id));
   const newestServer = server.reduce((max, book) => ((book.updatedAt ?? "") > max ? book.updatedAt ?? "" : max), "");
   const merged = server.map((book) => {

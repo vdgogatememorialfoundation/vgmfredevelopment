@@ -679,7 +679,7 @@ export function Hero({ kicker, title, subtitle, children }: { kicker?: string; t
   );
 }
 
-export function ProductTile({ title, author, price, original, uri, badge, line, onPress }: { title: string; author?: string; price: string; original?: string; uri?: string; badge?: { label: string; tone: "gold" | "green" | "red" | "ink" }; line?: string; onPress: () => void }) {
+export function ProductTile({ title, author, price, original, uri, badge, line, onPress, ribbons = [] }: { ribbons?: { label: string; color: string }[]; title: string; author?: string; price: string; original?: string; uri?: string; badge?: { label: string; tone: "gold" | "green" | "red" | "ink" }; line?: string; onPress: () => void }) {
   const theme = useTheme();
   return (
     <Pressable
@@ -704,7 +704,18 @@ export function ProductTile({ title, author, price, original, uri, badge, line, 
         },
       ]}
     >
-      <CoverArt uri={uri} title={title} ratio={0.78} />
+      <View style={{ position: "relative" }}>
+        <CoverArt uri={uri} title={title} ratio={0.78} />
+        {ribbons.length ? (
+          <View style={{ position: "absolute", left: -10, top: 8, gap: 4, alignItems: "flex-start" }}>
+            {ribbons.map((ribbon) => (
+              <Text key={ribbon.label} style={{ backgroundColor: ribbon.color, color: "#FFFFFF", fontSize: 10, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase", paddingHorizontal: 8, paddingVertical: 2, borderTopRightRadius: 999, borderBottomRightRadius: 999, overflow: "hidden" }}>
+                {ribbon.label}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
       <View style={{ marginTop: 10, gap: 4 }}>
         {badge ? <Tag label={badge.label} tone={badge.tone} /> : null}
         <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "600", fontSize: 15, fontFamily: theme.fontFamily, marginTop: 2 }}>{title}</Text>

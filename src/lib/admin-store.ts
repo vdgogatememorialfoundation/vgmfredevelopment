@@ -12,6 +12,7 @@ import type {
   SupportTicket,
   FAQItem,
   User, RefundRecord } from "@/types";
+import { itemTotals } from "@/lib/order-item-totals";
 import { dropPortalAccount, pushPortalAccounts } from "@/lib/portal-accounts-sync";
 import { pickupInstructions } from "@/lib/fulfillment";
 import { siteConfig, storeConfig } from "@/lib/constants";
@@ -2199,6 +2200,13 @@ function pagedFooterStyle() {
 /** One table of every chosen order, like a student list: Foundation header and footer repeat on each page. */
 function packingListHtml(orders: Order[]) {
   const qty = orders.reduce((sum, order) => sum + order.items.reduce((count, item) => count + item.quantity, 0), 0);
+  const listBooks = getLiveBooks();
+  const totals = itemTotals(orders, (id) => listBooks.find((book) => book.id === id));
+  const split = [
+    totals.books ? `${totals.books} book${totals.books === 1 ? "" : "s"}` : "",
+    ...totals.languages.map(([language, count]) => `${language} ${count}`),
+    ...totals.others.map(([title, count]) => `${title} ${count}`),
+  ].filter(Boolean).join(" · ");
   const rows = orders
     .map((order, index) => {
       const address = order.deliveryAddress;
@@ -2210,7 +2218,7 @@ function packingListHtml(orders: Order[]) {
     .join("");
   return `<table class="plist">
     <thead>
-      <tr class="hd"><td colspan="7">${letterhead()}<h1>Packing list</h1><p class="sub">${orders.length} order${orders.length === 1 ? "" : "s"} · ${qty} item${qty === 1 ? "" : "s"} · printed ${esc(formatDate(new Date().toISOString()))}</p></td></tr>
+      <tr class="hd"><td colspan="7">${letterhead()}<h1>Packing list</h1><p class="sub">${orders.length} order${orders.length === 1 ? "" : "s"} · ${qty} item${qty === 1 ? "" : "s"} · printed ${esc(formatDate(new Date().toISOString()))}</p>${split ? `<p class="sub">${esc(split)}</p>` : ""}</td></tr>
       <tr><th>#</th><th>Order</th><th>Customer</th><th>Deliver to</th><th>Items</th><th class="right">Qty</th><th>Packed</th></tr>
     </thead>
     <tfoot><tr class="ft"><td colspan="7">${esc(siteConfig.name)} · ${esc(siteConfig.address)} · ${esc(siteConfig.phone)} · ${esc(siteConfig.email)}<br/>Packed by ______________ &nbsp; Checked by ______________ &nbsp; Date ______________</td></tr></tfoot>
@@ -2220,7 +2228,9 @@ function packingListHtml(orders: Order[]) {
 
 /** The chosen orders as a packing list first, then each order's packaging slip on its own page. */
 /** "individual" = one slip per order, "bulk" = the combined packing list, "both" = list then slips. */
-export function printPackagingSlips(orders: Order[], mode: "individual" | "bulk" | "both" = "both") {
+export function printPackagingSlips(chosen: Order[], mode: "individual" | "bulk" | "both" = "both") {
+  // Cancelled orders are never packed, and the Orders totals leave them out too.
+  const orders = chosen.filter((order) => order.status !== "Cancelled");
   if (orders.length === 0) return;
   const list = mode === "individual" ? "" : `<section>${packingListHtml(orders)}</section>`;
   const slips =
