@@ -71,8 +71,13 @@ export async function placeWithState(location?: string) {
   }
   const town = townOf(raw);
   if (town.replace(/[^a-z]/gi, "").length < 3) return raw;
-  const state = await stateFor(town).catch(() => "");
-  return state ? `${titleCase(town)}, ${state}, India` : raw;
+  // "SAI THANE" (hub code + town): try the whole name, then each word from the right.
+  const words = town.split(" ").filter((word) => word.length >= 4).reverse();
+  for (const name of [town, ...words.filter((word) => word !== town)]) {
+    const state = await stateFor(name).catch(() => "");
+    if (state) return `${titleCase(name)}, ${state}, India`;
+  }
+  return raw;
 }
 
 /** Adds state and country to every scan location (one lookup per town, cached on disk). */
