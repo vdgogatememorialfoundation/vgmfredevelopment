@@ -74,7 +74,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
 import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
 import { itemTotals } from "@/lib/order-item-totals";
-import { getOrder as getStoredOrder, orderLanguages, patchOrder as patchStoredOrder } from "@/lib/admin-store";
+import { assignPicker, getOrder as getStoredOrder, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
@@ -136,6 +136,7 @@ export function OrdersDashboard() {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [bulkBusy, setBulkBusy] = useState("");
+  const [pickStaff, setPickStaff] = useState("");
   const [bulkNote, setBulkNote] = useState("");
 
   const orders = getOrders();
@@ -338,6 +339,20 @@ export function OrdersDashboard() {
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">{selectedIds.length} selected</span>
+          <SelectInput className="w-48" value={pickStaff} onChange={(event) => setPickStaff(event.target.value)} aria-label="Picker or packer">
+            <option value="">Picker / packer…</option>
+            {getAccounts().filter((account) => account.role === "staff" || account.role === "admin" || account.role === "coadmin").map((account) => (
+              <option key={account.email} value={account.email}>{account.email}</option>
+            ))}
+          </SelectInput>
+          <Button variant="outline" disabled={Boolean(bulkBusy) || !pickStaff} onClick={() => bulk("Picker assigned", (id) => {
+            if (getStoredOrder(id)?.pick) reassignPickPack(id, pickStaff, "pick");
+            else assignPicker(id, pickStaff);
+          })}>Assign picker</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy) || !pickStaff} onClick={() => bulk("Packer assigned", (id) => {
+            if (!getStoredOrder(id)?.pick) assignPicker(id, pickStaff);
+            reassignPickPack(id, pickStaff, "pack");
+          })}>Assign packer</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ordered", (id) => setOrderStatus(id, "Ordered"))}>Confirm</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
@@ -1632,7 +1647,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   onDone={(text) => { setMessage(text); onChanged(); }}
                 />
                 <p className="mt-2 text-xs text-text-muted">
-                  Pack & book sends the order to the courier account the customer chose. Tookan, Shipday, Shiprocket, Nimbuspost, iThink and Shipyaari are booked for real when their API key is saved.
+                  Click a courier row, then Book: the shipment goes at once to that row's aggregator (Shiprocket, Ekart Elite, GoSwift, Nimbuspost, iThink, Shipyaari, Tookan or Shipday), which creates the AWB and charges its wallet. Nothing is sent before you click Book, and booking stays blocked until the order is fully paid.
                 </p>
                 <div className="mt-4 rounded-xl border border-border p-3">
                   <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>

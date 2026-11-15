@@ -12,8 +12,6 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getBookById, getOrdersForAccount, purgeSampleOrders } from "@/lib/store";
 import { formatDate } from "@/lib/utils";
-import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
-import { itemTotals } from "@/lib/order-item-totals";
 
 export default function OrdersPage() {
   const { user } = useAuth();
@@ -52,7 +50,6 @@ export default function OrdersPage() {
         />
       ) : (
         <div className="space-y-4">
-          <ItemTotalsStrip label="Your items" totals={itemTotals(orders, getBookById)} />
           {orders.map((order) => {
             const first = order.items[0];
             const extraItems = Math.max(0, order.items.length - 1);
