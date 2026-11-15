@@ -122,7 +122,7 @@ export function PosDesk() {
   const orderTotal = Math.max(0, Math.round((grand - creditApplied) * 100) / 100);
   const copies = rows.reduce((sum, row) => sum + row.line.quantity, 0);
   const advance = hasPreorder && orderTotal > 0 ? preorderAdvance(orderTotal, settings, { copies, platformFee: Math.max(0, platformFee - creditApplied) }) : orderTotal;
-  const payAdvance = hasPreorder && (preorderPay === "advance" || shippingLater);
+  const payAdvance = hasPreorder && preorderPay === "advance";
   const total = payAdvance ? advance : orderTotal;
   const partAmount = Math.round((Number(partNow) || 0) * 100) / 100;
   // "Total amount received": below the full amount it is a part payment; for a pre-order it may be anything up to the order total.
@@ -518,6 +518,19 @@ export function PosDesk() {
                   ? "Pre-order: the amount received is the advance. The balance (and courier charge) is sent as a link when the book is ready."
                   : "Normal: collect the full amount, or enter the total received below if the customer pays part now."}
               </p>
+              {hasPreorder && orderTotal > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button variant={preorderPay === "advance" ? "primary" : "outline"} onClick={() => setPreorderPay("advance")}>
+                    Advance {rupees(advance)}
+                  </Button>
+                  <Button variant={preorderPay === "full" ? "primary" : "outline"} onClick={() => setPreorderPay("full")}>
+                    Full amount {rupees(orderTotal)}
+                  </Button>
+                </div>
+              )}
+              {hasPreorder && preorderPay === "full" && shippingLater && (
+                <p className="mt-1 text-xs text-text-muted">The courier charge is still added later and sent as a link, as it isn&apos;t known yet.</p>
+              )}
             </div>
             <div className="mt-4">
               <p className="mb-2 text-sm font-semibold text-text-primary">Handover</p>
@@ -618,7 +631,7 @@ export function PosDesk() {
               <p className="self-center text-xs text-text-muted">
                 {partial
                   ? `Collect ${rupees(payNow)} now · ${rupees(balanceLater)} stays due (Partially Paid; send a link from Orders → Payment).`
-                  : "Leave blank to collect the full amount."}
+                  : `Leave blank to collect ${rupees(total)}.`}
               </p>
             </div>
             )}
