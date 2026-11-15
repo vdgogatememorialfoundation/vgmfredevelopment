@@ -278,7 +278,7 @@ export default function VerticalPipeline({
                 {stage.caption && state !== "upcoming" ? <div className="vgmf-ship-msg">{stage.caption}</div> : null}
                 {nextHint && state === "upcoming" ? <div className="vgmf-ship-next">{nextHint}</div> : null}
                 {stage.expected && state !== "done" && !(nextHint && state === "upcoming") ? (
-                  <span className="vgmf-ship-expect">{stage.expected}</span>
+                  <span className="vgmf-ship-expect is-date">{stage.expected}</span>
                 ) : null}
                 {stage.courierNote && state !== "upcoming" ? (
                   <div className="vgmf-ship-courier">

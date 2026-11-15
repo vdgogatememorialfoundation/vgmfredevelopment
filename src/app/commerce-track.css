@@ -157,6 +157,12 @@
   align-items: center;
   gap: 8px;
 }
+.vgmf-ship-expect.is-date {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-weight: 700;
+}
 .vgmf-ship-expect.is-inline {
   margin: 0;
 }
