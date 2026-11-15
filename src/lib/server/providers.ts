@@ -667,20 +667,20 @@ async function shiprocketOrigin(token: string, wanted: string) {
   return !cached.pins.length || cached.pins.includes(wanted) ? wanted : cached.pins[0];
 }
 
-const shiprocketInactive = new Map<string, { ids: Set<string>; at: number }>();
+const shiprocketActive = new Map<string, { ids: Set<string>; at: number }>();
 
-/** Courier ids switched off in the Shiprocket panel (`status` 1 there; 0 is active); serviceability still lists them. */
-async function shiprocketInactiveCouriers(token: string) {
-  const cached = shiprocketInactive.get(token);
+/** Courier ids active in the Shiprocket panel (documented `type=active` filter); serviceability can still list others. */
+async function shiprocketActiveCouriers(token: string) {
+  const cached = shiprocketActive.get(token);
   if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.ids;
   try {
-    const data = await call("https://apiv2.shiprocket.in/v1/external/courier/courierListWithCounts", {
+    const data = await call("https://apiv2.shiprocket.in/v1/external/courier/courierListWithCounts?type=active", {
       headers: { authorization: `Bearer ${token}` },
     });
     const ids = new Set(
-      ((data.courier_data as Json[]) ?? []).filter((row) => Number(row.status) === 1).map((row) => String(row.id))
+      ((data.courier_data as Json[]) ?? []).map((row) => String(row.id))
     );
-    shiprocketInactive.set(token, { ids, at: Date.now() });
+    shiprocketActive.set(token, { ids, at: Date.now() });
     return ids;
   } catch {
     return cached?.ids ?? new Set<string>();
@@ -717,8 +717,8 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
       if (!byId.has(id)) byId.set(id, courier);
     }
   }
-  const inactive = await shiprocketInactiveCouriers(token);
-  const list = [...byId.values()].filter((courier) => !inactive.has(String(courier.courier_company_id)));
+  const active = await shiprocketActiveCouriers(token);
+  const list = [...byId.values()].filter((courier) => !active.size || active.has(String(courier.courier_company_id)));
   return list.map((courier) => ({
     provider: "shiprocket",
     courierId: String(courier.courier_company_id),
