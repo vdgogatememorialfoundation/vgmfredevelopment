@@ -103,7 +103,7 @@ const STATUS_GROUPS: Record<string, string[]> = {
   "group:to-ship": ["Packed", "Ready to Ship", "To Ship"],
   "group:in-transit": ["Shipped", "Out for Delivery"],
 };
-const GROUP_LABELS: Record<string, string> = { "group:to-pack": "To pack (Ordered + Accepted)", "group:to-ship": "To ship (Packed + Ready to Ship + To Ship)", "group:in-transit": "In transit (Shipped + Out for Delivery)" };
+const GROUP_LABELS: Record<string, string> = { "group:to-pack": "To pack (Ordered + Accepted)", "group:to-ship": "Packed · courier not booked (Packed + Ready to Ship + To Ship)", "group:in-transit": "In transit (Shipped + Out for Delivery)" };
 /** Store pickup has its own steps; the stored status stays canonical. */
 const PICKUP_STATUSES: { status: Order["status"]; label: string }[] = [
   { status: "Awaiting Confirmation", label: "Awaiting Confirmation" },
@@ -294,7 +294,7 @@ export function OrdersDashboard() {
       <div className={classNames("grid gap-3 sm:grid-cols-2 lg:grid-cols-4", preordersOn ? "xl:grid-cols-8" : "xl:grid-cols-7")}>
         {[
           ["To pack", toPack, "group:to-pack"],
-          ["To Ship", toShip, "group:to-ship"],
+          ["Packed · courier not booked", toShip, "group:to-ship"],
           ["Out for Delivery", outForDelivery, "Out for Delivery"],
           ["Delivered", delivered, "Delivered"],
           ["Awaiting payment", awaitingPayment, "Pending"],
