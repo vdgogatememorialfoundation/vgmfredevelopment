@@ -2558,9 +2558,11 @@ function AwbPhotos({ order, awb }: { order: Order; awb: string }) {
     setBusy(true);
     setError("");
     try {
-      const by = getSession()?.email ?? "admin";
+      const session = getSession();
+      const by = session?.email ?? "admin";
+      const byName = session ? `${session.firstName ?? ""} ${session.lastName ?? ""}`.trim() || undefined : undefined;
       const added: NonNullable<Order["awbPhotos"]> = [];
-      for (const file of Array.from(files)) added.push({ url: await uploadMediaFile(file), at: new Date().toISOString(), by, awb });
+      for (const file of Array.from(files)) added.push({ url: await uploadMediaFile(file), at: new Date().toISOString(), by, byName, awb });
       patchStoredOrder(order.id, { awbPhotos: [...(getStoredOrder(order.id)?.awbPhotos ?? []), ...added] }, `${added.length} AWB / parcel photo${added.length === 1 ? "" : "s"} added`);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not upload the photo.");
@@ -2579,12 +2581,20 @@ function AwbPhotos({ order, awb }: { order: Order; awb: string }) {
       </div>
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
       {photos.length ? (
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {photos.map((photo) => (
-            <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer" title={`${photo.by} · ${formatDateTime(photo.at)}${photo.awb ? ` · AWB ${photo.awb}` : ""}`}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photo.url} alt="AWB label or parcel" className="h-20 w-20 rounded-lg border border-border object-cover" />
-            </a>
+            <figure key={photo.url} className="min-w-0 rounded-lg border border-border bg-white p-1.5">
+              <a href={photo.url} target="_blank" rel="noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt="AWB label or parcel" className="aspect-square w-full rounded-md object-cover" />
+              </a>
+              <figcaption className="mt-1 space-y-0.5 text-[11px] leading-4 text-text-muted">
+                <p className="truncate font-semibold text-ink">Taken by {photo.byName || photo.by}</p>
+                {photo.byName && photo.by ? <p className="truncate">{photo.by}</p> : null}
+                <p>{formatDateTime(photo.at)}</p>
+                {photo.awb ? <p className="truncate">AWB {photo.awb}</p> : null}
+              </figcaption>
+            </figure>
           ))}
         </div>
       ) : null}
