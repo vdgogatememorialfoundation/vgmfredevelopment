@@ -74,8 +74,8 @@ export function isCourierInfoLine(text: string) {
 }
 
 const FAILED_ATTEMPT =
-  /\b(undeliver(ed|able)?|not delivered|delivery failed|failed delivery|failed attempt|delivery attempt(ed)?|attempt(ed)? (failed|unsuccessful)|unsuccessful|(consignee|customer|receiver) (not available|unavailable|not reachable|not responding)|door locked|premises closed|address (incomplete|not found|issue)|re ?attempt|ndr|reschedul(e|ed))\b/;
-const FINAL_FAILURE = /\b(rto|return to origin|returned to (origin|seller|shipper)|lost|destroyed|damaged)\b/;
+  /\b(undeliver(ed|able)?|not delivered|delivery failed|failed delivery|failed attempt|delivery attempt(ed)?|attempt(ed)? (failed|unsuccessful)|unsuccessful|(consignee|customer|receiver) (not available|unavailable|not reachable|not responding|not contactable)|not contactable|unreachable|not accessible|will collect|self collect|door locked|premises closed|address (incomplete|not found|issue)|re ?attempt|ndr|reschedul(e|ed))\b/;
+const FINAL_FAILURE = /\b(rto|rts|dto|return to (origin|seller|shipper)|returned|lost|destroyed|damaged)\b/;
 
 /** A missed delivery the courier will try again (NDR), as opposed to a return to origin. */
 export function isFailedAttempt(text: string) {
@@ -87,6 +87,10 @@ export function isFailedAttempt(text: string) {
 const PICKED_UP =
   /\b(picked up|pickup done|pickup complete(d)?|pickup successful|pick ?up from (the )?(seller|shipper|merchant|vendor|warehouse|customer)|picked (from|by)|shipment picked|collected from (the )?(seller|shipper|merchant|vendor)|received at (the )?(mother ?hub|origin)|in ?scan(ned)? (at|to|in)|inscan|shipment received|received by (the )?carrier|^picked)\b/;
 const PICKUP_PENDING = /scheduled|awaited|pending|request|out for pickup|assigned|generated|failed|cancel|reattempt|not picked/;
+
+/** Courier is yet to collect the parcel (Blue Dart "out to P/U", Shadowfax "ofp", Xpressbees "Pending Pickup", …). */
+const AWAITING_PICKUP =
+  /pickup scheduled|pickup awaited|pickup pending|pending pickup|pickup generated|awaiting pickup|pickup request|out for pickup|out to p\/?u\b|^ofp$|ready for pickup|pickup assigned|assigned for (seller )?pickup/;
 
 /** A real pickup scan from the courier (not "pickup scheduled"). */
 export function isPickupScan(text: string) {
@@ -109,7 +113,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
   }
   // A failed attempt keeps the order out for delivery; only RTO / lost ends it as failed.
   if (FAILED_ATTEMPT.test(value) && !FINAL_FAILURE.test(value)) return "out";
-  if (/\b(rto|return to origin|reached back at (the )?(seller|origin)|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|damaged|failed|declined|incomplete)\b/.test(value)) {
+  if (/\b(rto|rts|dto|return to (origin|seller|shipper)|returned|reached back at (the )?(seller|origin)|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|damaged|failed|declined|incomplete)\b/.test(value)) {
     return "failed";
   }
   if (/\bcancel/.test(value)) return "cancelled";
@@ -117,16 +121,16 @@ export function classifyCourierScan(text: string): CourierStage | null {
   if (/^(task |job |order |delivery |drop )?(successful|success|completed|complete)$|\balready delivered\b/.test(value)) {
     return "delivered";
   }
-  if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
+  if (AWAITING_PICKUP.test(value)) {
     return "packed";
   }
   if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value)) return "shipped";
   // Ekart and others route a new booking to the mother hub before the parcel is collected.
-  if (/mother ?hub|shipment created|manifest(ed)? (created|completed|generated)|^manifested$|manifest generated|soft data|order (information|info) received/.test(value) && !/picked|collected|arrived|received at|reached/.test(value)) {
+  if (/mother ?hub|shipment created|manifest(ed)? (created|completed|generated)|^manifested$|manifest generated|soft ?data|shipment uploaded|order (information|info) received/.test(value) && !/picked|collected|arrived|received at|reached/.test(value)) {
     return "packed";
   }
   if (
-    /\b(in transit|shipment arrived|trip arrived|vehicle arrived|bag arrived|shipped|dispatch(ed)?|despatch(ed)?|departed|outscan(ned)?|in ?scan(ned)?|item received|has left|added to connection|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|handed (over )?to|misrouted)\b/.test(
+    /\b(in transit|shipment arrived|trip arrived|vehicle arrived|bag arrived|shipped|dispatch(ed)?|despatch(ed)?|departed|outscan(ned)?|in ?scan(ned)?|item received|has left|added to connection|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|handed (over )?to|misrouted|redirected|held at|on hold at|recd at|bag added|bagging|left (the )?courier facility|assigned for delivery)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)
@@ -137,7 +141,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
   if (/\b(out for delivery|ofd|agent out|started|in progress|on the way|en route|ready to deliver|reached drop|reached customer|arrived)\b/.test(value)) {
     return "out";
   }
-  if (/\bdeliver/.test(value) && !/\b(attempt|failed|undeliver)\b/.test(value)) return "delivered";
+  if (/\bdelivered\b|\bdelivery (successful|success|completed?|done)\b/.test(value) && !/\b(attempt|failed|undeliver)\b/.test(value)) return "delivered";
   if (/\b(pack|booked|label generated|awb generated|ready to ship|handover|assigned|accepted|acknowledged|unassigned|not assigned|task created)\b/.test(value)) {
     return "packed";
   }
@@ -207,7 +211,7 @@ export function courierEventTitle(status: string, location?: string, courier = "
       (!row.courier.trim() || courier.toLowerCase().includes(row.courier.trim().toLowerCase()))
   );
   if (rule) return rule.title.replace(/\s*[-–]?\s*\{city\}/i, place).trim();
-  if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
+  if (AWAITING_PICKUP.test(value)) {
     return "Pickup scheduled";
   }
   if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at|in ?scan/.test(value)) return PICKUP_TITLE;
