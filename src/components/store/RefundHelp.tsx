@@ -40,7 +40,7 @@ export default function RefundHelp({ refund, orderId }: { refund: RefundRecord; 
               <li>The refund is processed within 3–5 working days. This page updates by itself, and we email you the bank reference (RRN/ARN) when the bank issues it.</li>
               <li>Open your bank statement, and look for a credit of ₹{refund.amount.toLocaleString("en-IN")}.</li>
               <li>It is usually credited within 5–7 working days after processing.</li>
-              <li>If it is not there by then, call your bank and quote the bank reference (RRN/ARN){bankRef ? ` ${bankRef}` : ""}. Banks trace refunds with this number.</li>
+              <li>If it is not there by then, call your bank or card issuer and quote the bank reference (RRN/ARN){bankRef ? ` ${bankRef}` : ""}. Banks trace refunds with this number.</li>
               <li>Still not found? Write to {siteConfig.email || "care@vaidyagogate.org"} with your order ID and VGMF transaction ID.</li>
             </ol>
             <button type="button" onClick={() => setOpen(false)} className="mt-4 w-full rounded-lg bg-burgundy px-3 py-2 text-sm font-semibold text-white">
