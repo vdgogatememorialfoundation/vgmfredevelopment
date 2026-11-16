@@ -63,6 +63,8 @@ export function isSampleOrder(order: Pick<Order, "id" | "paymentLink" | "payment
   return false;
 }
 
+const PICKUP_TITLE = "Your item has been picked up by delivery partner.";
+
 export type CourierStage = "ordered" | "packed" | "shipped" | "out" | "delivered" | "failed" | "cancelled";
 
 /** Summary lines on courier pages ("Expected Date of Delivery", "Pickup Date") that are not scans. */
@@ -107,7 +109,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "failed";
   }
   if (/\bcancel/.test(value)) return "cancelled";
-  if (/\b(successful|success|completed|complete|already delivered|task successful)\b/.test(value) && !/\b(attempt|fail|undeliver)\b/.test(value)) {
+  if (/\b(successful|success|completed|complete|already delivered|task successful)\b/.test(value) && !/\b(attempt|fail|undeliver|pick ?up|picked)\b/.test(value)) {
     return "delivered";
   }
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
@@ -203,7 +205,7 @@ export function courierEventTitle(status: string, location?: string, courier = "
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
     return "Pickup scheduled";
   }
-  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at|in ?scan/.test(value)) return "Your item has been picked up by delivery partner.";
+  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at|in ?scan/.test(value)) return PICKUP_TITLE;
   if (classifyCourierScan(status) === "packed" && !/\bdispatch/.test(value)) return status;
   if (/arrived at|reached at|received at|inward|bag received|in ?scan|item received|trip arrived|vehicle arrived|^shipment arrived$|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
     return `Shipment arrived at courier facility${place}`;
@@ -515,12 +517,14 @@ export function buildTrackingStages(
     .map((item) => {
       const scan = hyperlocal ? item.scan : leftFrom(item.index);
       return scanEvent(scan, item.index, shippedReached, hyperlocal ? scan.status : courierEventTitle(scan.status, scan.location, courier));
-    });
+    })
+    // Couriers often log one pickup as several scans ("Pickup From Seller", "Picked Up"); show it once.
+    .filter((event, index, list) => event.title !== PICKUP_TITLE || list.findIndex((other) => other.title === PICKUP_TITLE) === index);
 
   if (shippedReached && shippedEvents.length === 0) {
     shippedEvents.push({
       id: "shipped",
-      title: "Your item has been picked up by delivery partner.",
+      title: PICKUP_TITLE,
       at: fromScans.at || packedAt || order.date,
       location: origin,
       detail: shippedReached && trackingId ? `Courier: ${courier} · Tracking id: ${trackingId}` : `Courier: ${courier}`,
