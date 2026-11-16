@@ -702,7 +702,9 @@ export function createAdminOrder(input: {
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and thank you for ordering from Vaidya Gogate Memorial Foundation.\n\nYour order ${order.id} is ${order.paymentStatus === "Paid" ? "confirmed" : "created and awaiting payment"}.\n\nTotal: ₹${order.total.toLocaleString("en-IN")}\n${
       order.deliveryMode === "store_pickup"
         ? pickupInstructions()
-        : `${preorderBook ? "Tentative delivery" : "Expected delivery"}: ${order.eta}`
+        : preorderBook || order.items.some((item) => item.preorder)
+          ? "We will write again when your pre-order is ready to ship."
+          : `Expected delivery: ${order.eta}`
     }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return order;

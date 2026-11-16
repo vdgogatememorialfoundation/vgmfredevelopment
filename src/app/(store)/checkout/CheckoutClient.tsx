@@ -628,7 +628,9 @@ export default function CheckoutClient() {
     if (deliveryAddress.email || deliveryAddress.phone) {
       const pickupNote =
         deliveryMode === "delivery"
-          ? `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}.`
+          ? hasPreorder
+            ? "We will write again when your pre-order is ready to ship."
+            : `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}.`
           : pickupInstructions();
       sendEmail({
         to: "",
