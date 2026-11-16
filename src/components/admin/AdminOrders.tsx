@@ -2291,6 +2291,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         }}>Delete order</Button>
       </div>
 
+      <div className="mt-4">
+        <OrderEmails orderId={order.id} />
+      </div>
+
       {order.history && order.history.length > 0 && (
         <div className="mt-4">
           <Section title="History">
@@ -2647,6 +2651,61 @@ type GatewaySummary = {
 };
 
 /** Payments and refunds as the gateway records them, so the Orders tab matches the Razorpay dashboard. */
+type OrderEmailRow = { at: string; to: string; subject: string; ok: boolean; error?: string };
+
+/** Emails the server sent about this order: what, to whom, when, and whether it went out. */
+function OrderEmails({ orderId }: { orderId: string }) {
+  const [data, setData] = useState<{ emails: OrderEmailRow[]; earlier: { label: string }[] } | null>(null);
+  const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/admin/order-emails?orderId=${encodeURIComponent(orderId)}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((body) => {
+        if (!live) return;
+        if (body?.ok) {
+          setData({ emails: body.emails ?? [], earlier: body.earlier ?? [] });
+          setError("");
+        } else setError(body?.error || "Could not load the emails.");
+      })
+      .catch(() => live && setError("Could not reach the server."));
+    return () => {
+      live = false;
+    };
+  }, [orderId, tick]);
+  const emails = data?.emails ?? [];
+  const earlier = data?.earlier ?? [];
+  return (
+    <Section title={`Emails sent${data ? ` (${emails.length})` : ""}`} action={<button type="button" className="text-xs font-medium text-primary" onClick={() => setTick((value) => value + 1)}>Refresh</button>}>
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {!data && !error ? <p className="text-xs text-text-muted">Loading…</p> : null}
+      {data && emails.length === 0 && earlier.length === 0 ? <p className="text-xs text-text-muted">No emails sent for this order yet.</p> : null}
+      {emails.length > 0 && (
+        <ol className="space-y-1.5 text-xs">
+          {emails.map((entry, index) => (
+            <li key={index} className="flex gap-3">
+              <span className="w-36 shrink-0 text-text-muted">{formatDateTime(entry.at)}</span>
+              <span>
+                <b>{entry.subject}</b> · {entry.to}{" "}
+                {entry.ok ? <span className="text-green-700">· Sent</span> : <span className="text-red-600">· Not sent{entry.error ? `: ${entry.error}` : ""}</span>}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {earlier.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sent before this list started (no time recorded)</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-text-muted">
+            {earlier.map((item, index) => <li key={index}>{item.label}</li>)}
+          </ul>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function GatewaySummaryCard() {
   const [days, setDays] = useState(7);
   const [summary, setSummary] = useState<GatewaySummary | null>(null);

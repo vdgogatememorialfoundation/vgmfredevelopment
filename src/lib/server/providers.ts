@@ -1,6 +1,7 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+import { logEmail } from "@/lib/server/email-log";
 import { shipdayActivity, shipdayLookupIds, shipdayOrderRow, shipdayOrderState } from "@/lib/shipday-status";
 
 /**
@@ -435,6 +436,17 @@ export async function sendZeptoMail(input: Json, mail: { to: string; subject: st
 }
 
 export async function sendTransactionalEmail(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
+  try {
+    const sent = await sendTransactionalEmailOnce(input, mail);
+    logEmail(mail, sent ? { ok: true, provider: sent.provider } : { ok: false, error: "No email provider is set up." });
+    return sent;
+  } catch (error) {
+    logEmail(mail, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+}
+
+async function sendTransactionalEmailOnce(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
   const provider = String(input.provider || "cpaas");
   if (provider === "zoho") {
     const zoho = await sendZohoMail(input, mail);
