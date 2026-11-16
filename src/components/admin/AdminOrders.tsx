@@ -1,6 +1,8 @@
 "use client";
 
 import { siteConfig } from "@/lib/constants";
+import { uploadMediaFile } from "@/lib/media-client";
+import { getSession } from "@/lib/auth";
 import OrderFeedback from "@/components/store/OrderFeedback";
 import { DIRECT_COURIERS } from "@/lib/couriers";
 import { isDeskScan } from "@/lib/order-pipeline";
@@ -1832,6 +1834,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <p className="font-semibold text-text-primary">{shipment.courier} <span className="block text-xs font-normal text-text-muted">{bookedViaLabel(shipment.provider) || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
+                  {shipment.awb ? <AwbPhotos order={order} awb={shipment.awb} /> : null}
                   <p className="text-xs text-text-muted">Delivery date: {deliveryDatePhrase(shipment.expectedBy) || "Waiting for the courier"}</p>
                   {shipment.pickupScheduledFor && <p className="text-xs text-text-muted">Pickup: {formatDate(shipment.pickupScheduledFor)}{shipment.pickupSlot ? `, ${shipment.pickupSlot}` : ""}{shipment.pickupReference ? ` · ref ${shipment.pickupReference}` : ""}</p>}
                   {shipment.note && <p className="text-xs text-text-muted">{shipment.note}</p>}
@@ -2532,6 +2535,49 @@ function LinkExpiryEditor({ current, busy, onSave }: { current?: string; busy: b
       <Button variant="outline" disabled={busy || !value} onClick={() => onSave(new Date(`${value}:00+05:30`).toISOString())}>
         {busy ? "Saving…" : "Change expiry"}
       </Button>
+    </div>
+  );
+}
+
+function AwbPhotos({ order, awb }: { order: Order; awb: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const photos = order.awbPhotos ?? [];
+  const add = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy(true);
+    setError("");
+    try {
+      const by = getSession()?.email ?? "admin";
+      const added: NonNullable<Order["awbPhotos"]> = [];
+      for (const file of Array.from(files)) added.push({ url: await uploadMediaFile(file), at: new Date().toISOString(), by, awb });
+      patchStoredOrder(order.id, { awbPhotos: [...(getStoredOrder(order.id)?.awbPhotos ?? []), ...added] }, `${added.length} AWB / parcel photo${added.length === 1 ? "" : "s"} added`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not upload the photo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-2 rounded-lg border border-border p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800">
+          {busy ? "Uploading…" : `Take AWB label / parcel photos${photos.length ? ` (${photos.length})` : ""}`}
+          <input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={busy} onChange={(event) => { void add(event.target.files); event.target.value = ""; }} />
+        </label>
+        <span className="text-[11px] text-text-muted">Proof of the label and sealed parcel. Customers never see these.</span>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+      {photos.length ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {photos.map((photo) => (
+            <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer" title={`${photo.by} · ${formatDateTime(photo.at)}${photo.awb ? ` · AWB ${photo.awb}` : ""}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photo.url} alt="AWB label or parcel" className="h-20 w-20 rounded-lg border border-border object-cover" />
+            </a>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
