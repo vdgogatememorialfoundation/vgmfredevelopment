@@ -3,6 +3,7 @@ import type { HostedGatewayId, HostedGatewaySettings } from "@/lib/integrations"
 import { PaymentError, pollHostedPayment, startHostedPayment } from "@/lib/server/hosted-payments";
 import { readHold, saveHold, type PaymentHold } from "@/lib/server/payment-holds";
 import type { Order } from "@/types";
+import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { listReadyGateways, readVault, writePaymentVault, type PaymentVault } from "@/lib/server/payment-vault";
 
 export const runtime = "nodejs";
@@ -68,6 +69,22 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  if (body.action === "verify-items") {
+    // The live catalogue decides pre-order vs in stock, not the customer's possibly stale browser copy.
+    const items = Array.isArray(body.items) ? (body.items as { bookId?: unknown; preorder?: unknown }[]) : [];
+    const books = readMobileFeed().books ?? [];
+    for (const item of items) {
+      const book = books.find((row) => row.id === item.bookId);
+      const inStock = book ? book.stockStatus !== "out_of_stock" && book.stock > 0 : true;
+      if (book && !item.preorder && !inStock && book.preorder?.enabled) {
+        return NextResponse.json(
+          { ok: false, error: `${book.title} is on pre-order now. Please refresh the page and check out again.` },
+          { status: 409 }
+        );
+      }
+    }
+    return NextResponse.json({ ok: true });
+  }
   if (body.action === "hold") {
     const gateway = String(body.gateway || "") as PaymentHold["gateway"];
     const id = String(body.orderId || "");

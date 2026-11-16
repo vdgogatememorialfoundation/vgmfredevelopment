@@ -438,6 +438,17 @@ export default function CheckoutClient() {
       setError(`${over.book.title}: that quantity is not available. Lower the quantity or save it for later.`);
       return;
     }
+    const live = (await fetch("/api/payments/hosted", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "verify-items", items: orderItems.map((item) => ({ bookId: item.bookId, preorder: Boolean(item.preorder) })) }),
+    })
+      .then((response) => response.json())
+      .catch(() => ({ ok: true }))) as { ok?: boolean; error?: string };
+    if (live.ok === false) {
+      setError(live.error || "Some items changed. Please refresh the page and check out again.");
+      return;
+    }
     setProcessing(true);
     setError("");
     const id = generateOrderId();

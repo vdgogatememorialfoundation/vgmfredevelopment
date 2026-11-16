@@ -270,7 +270,13 @@ function readProducts() {
       productLive = published.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
       return;
     }
-    productAll = getAllProducts();
+    // Shoppers always get the live stock and pre-order state; only desk pages keep their local copy.
+    const desk = /^\/(admin|staff|support|portal|scanner|pos)(\/|$)/.test(window.location.pathname);
+    const fresh = new Map((desk ? [] : published ?? []).map((book) => [book.id, book]));
+    productAll = getAllProducts().map((book) => {
+      const live = fresh.get(book.id);
+      return live ? { ...book, stock: live.stock, stockStatus: live.stockStatus, preorder: live.preorder } : book;
+    });
     productLive = productAll.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
   }
 }
