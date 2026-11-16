@@ -603,7 +603,8 @@ export function createAdminOrder(input: {
   userEmail?: string;
   userId?: string;
   deliverTo: DeliveryAddress;
-  items: { bookId: string; quantity: number }[];
+  /** `price`: the desk's own price per copy for this order; left out = the catalogue price. */
+  items: { bookId: string; quantity: number; price?: number }[];
   deliveryMode?: "delivery" | "store_pickup";
   payment?: "collect" | "link" | "cod" | "paid";
   paymentMethod?: string;
@@ -621,12 +622,14 @@ export function createAdminOrder(input: {
     .map((entry) => {
       const book = live.find((b) => b.id === entry.bookId);
       if (!book) return null;
+      const custom = entry.price !== undefined && Number.isFinite(entry.price) && entry.price >= 0 ? Math.round(entry.price * 100) / 100 : undefined;
+      const price = custom ?? book.price;
       return {
         bookId: book.id,
         title: book.title,
         quantity: entry.quantity,
-        price: book.price,
-        originalPrice: book.originalPrice,
+        price,
+        originalPrice: price < book.price ? Math.max(book.price, book.originalPrice ?? 0) : book.originalPrice,
         currency: book.currency,
         sku: book.sku,
         batchNo: book.batchNo,

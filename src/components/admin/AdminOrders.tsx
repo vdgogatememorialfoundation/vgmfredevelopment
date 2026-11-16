@@ -616,7 +616,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const orderSettings = getOrderSettings();
   const customers = getAccounts().filter((account) => !account.role || account.role === "customer");
   const [accountEmail, setAccountEmail] = useState("");
-  const [items, setItems] = useState<{ bookId: string; quantity: number }[]>([{ bookId: books[0]?.id ?? "", quantity: 1 }]);
+  const [items, setItems] = useState<{ bookId: string; quantity: number; price?: number }[]>([{ bookId: books[0]?.id ?? "", quantity: 1 }]);
   const [customer, setCustomer] = useState<DeliveryAddress>({ fullName: "", phone: "", email: "", line1: "", landmark: "", city: "", state: "Maharashtra", pincode: "", country: "India", countryCode: "IN" });
   const [mode, setMode] = useState<Order["deliveryMode"]>(orderSettings.deliveryEnabled ? "delivery" : "store_pickup");
   const [quote, setQuote] = useState<RateQuote | null>(null);
@@ -672,7 +672,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
     return () => window.clearTimeout(timer);
   }, [customer.countryCode, customer.pincode]);
 
-  const setRow = (index: number, patch: Partial<{ bookId: string; quantity: number }>) =>
+  const setRow = (index: number, patch: Partial<{ bookId: string; quantity: number; price?: number }>) =>
     setItems((list) => list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
   const pickAccount = (account: User | null) => {
@@ -680,7 +680,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
     if (account) setCustomer((current) => accountToDelivery(account, current));
   };
 
-  const subtotal = items.reduce((sum, row) => sum + (books.find((book) => book.id === row.bookId)?.price ?? 0) * row.quantity, 0);
+  const subtotal = items.reduce((sum, row) => sum + (row.price ?? books.find((book) => book.id === row.bookId)?.price ?? 0) * row.quantity, 0);
   const itemCount = items.reduce((sum, row) => sum + row.quantity, 0);
   const choice: CourierRate | undefined = picked !== undefined ? quote?.rates[picked] : undefined;
   const shippingFee = mode === "store_pickup" ? 0 : shippingOverride !== "" ? Number(shippingOverride) : shippingFeeFor(subtotal, itemCount, choice?.rate, orderSettings);
@@ -880,17 +880,28 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
             {items.map((row, index) => (
               <div key={index} className="mb-2 flex items-center gap-2">
                 <div className="flex-1">
-                  <SelectInput value={row.bookId} onChange={(event) => setRow(index, { bookId: event.target.value })}>
+                  <SelectInput value={row.bookId} onChange={(event) => setRow(index, { bookId: event.target.value, price: undefined })}>
                     {books.map((book) => (
                       <option key={book.id} value={book.id}>{book.title} — ₹{book.price}</option>
                     ))}
                   </SelectInput>
                 </div>
                 <div className="w-20"><TextInput type="number" min={1} value={row.quantity} onChange={(event) => setRow(index, { quantity: Number(event.target.value) })} /></div>
+                <div className="w-24">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    aria-label="Price per copy (₹)"
+                    title="Price per copy for this order. Leave as is to keep the normal price."
+                    value={row.price ?? books.find((book) => book.id === row.bookId)?.price ?? ""}
+                    onChange={(event) => setRow(index, { price: event.target.value === "" ? undefined : Math.max(0, Number(event.target.value)) })}
+                  />
+                </div>
                 {items.length > 1 && <Button variant="ghost" onClick={() => setItems(items.filter((_, i) => i !== index))}>×</Button>}
               </div>
             ))}
             <Button variant="outline" onClick={() => setItems([...items, { bookId: books[0]?.id ?? "", quantity: 1 }])}>+ Add item</Button>
+            <p className="mt-1 text-xs text-text-muted">Qty and price per copy (₹). The price starts at the normal price; change it only for this order.</p>
           </div>
         </div>
 

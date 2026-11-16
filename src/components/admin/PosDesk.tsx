@@ -42,7 +42,8 @@ type MethodId = (typeof METHODS)[number]["id"];
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
-type Line = { bookId: string; quantity: number };
+/** `price`: the desk's price per copy for this sale; left out = the catalogue price. */
+type Line = { bookId: string; quantity: number; price?: number };
 
 async function resendCreditId(email?: string) {
   const response = await fetch("/api/shop/wallet", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ resendId: true, email }) });
@@ -113,7 +114,8 @@ export function PosDesk() {
   const isPreorderBook = (book: Book) => Boolean(book.preorder?.enabled && book.stock <= 0);
   const hasPreorder = asPreorder || rows.some((row) => isPreorderBook(row.book));
   const mixed = !asPreorder && rows.some((row) => isPreorderBook(row.book)) && rows.some((row) => !isPreorderBook(row.book));
-  const subtotal = rows.reduce((sum, row) => sum + row.book.price * row.line.quantity, 0);
+  const unit = (row: { line: Line; book: Book }) => row.line.price ?? row.book.price;
+  const subtotal = rows.reduce((sum, row) => sum + unit(row) * row.line.quantity, 0);
   const { gst, platformFee } = rows.length ? commerceCharges(subtotal, settings) : { gst: 0, platformFee: 0 };
   const charge = fulfil === "delivery" ? Math.max(0, Math.round(Number(deliveryCharge) || 0)) : 0;
   // A pre-order sent by courier with no charge typed gets its courier charge added to the balance later, as on the website.
@@ -155,6 +157,8 @@ export function PosDesk() {
     });
   };
 
+  const setPrice = (bookId: string, value: string) =>
+    setCart((list) => list.map((row) => (row.bookId === bookId ? { ...row, price: value === "" ? undefined : Math.max(0, Number(value) || 0) } : row)));
   const setQty = (bookId: string, quantity: number) => {
     if (quantity < 1) {
       setCart((list) => list.filter((row) => row.bookId !== bookId));
@@ -511,9 +515,13 @@ export function PosDesk() {
                       </div>
                       <Button variant="outline" onClick={() => add(book)} aria-label="One more">+</Button>
                     </div>
-                    <span className="w-28 text-right text-xs text-text-muted">
-                      {line.quantity} × {rupees(book.price)}
-                      <span className="block text-sm font-medium text-text-primary">{rupees(book.price * line.quantity)}</span>
+                    <div className="w-20" title="Price per copy for this sale. Leave as is to keep the normal price.">
+                      <TextInput type="number" min={0} aria-label="Price per copy (₹)" value={line.price ?? book.price} onChange={(event) => setPrice(book.id, event.target.value)} />
+                    </div>
+                    <span className="w-24 text-right text-xs text-text-muted">
+                      {line.quantity} × {rupees(line.price ?? book.price)}
+                      {line.price !== undefined && line.price !== book.price && <span className="block text-[10px] line-through">{rupees(book.price)}</span>}
+                      <span className="block text-sm font-medium text-text-primary">{rupees((line.price ?? book.price) * line.quantity)}</span>
                     </span>
                   </li>
                 ))}
