@@ -35,6 +35,7 @@ import { subscribeCms } from "@/lib/cms";
 import { useSiteSettings } from "@/lib/use-cms";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import { DeliverTo } from "@/components/layout/DeliverTo";
+import { SiteTranslate } from "@/components/layout/SiteTranslate";
 import { navDropdown, navHasMenu } from "@/lib/nav-menus";
 
 function canHover() {
@@ -447,6 +448,7 @@ export default function Header() {
 
               {/* Actions */}
               <div className="hidden items-center gap-3 lg:flex">
+                <SiteTranslate />
                 <form action="/search" role="search" className="relative">
                   <input
                     type="search"
@@ -635,6 +637,7 @@ export default function Header() {
               <div className="min-w-0 shrink">
                 <DeliverTo />
               </div>
+              <SiteTranslate className="h-8 max-w-[5.5rem] shrink-0" />
               <form
                 action="/search"
                 role="search"

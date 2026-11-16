@@ -281,3 +281,18 @@ h3,
 .heading-4 {
   zoom: var(--heading-scale, 1);
 }
+
+/* Google Translate: keep the site layout, hide Google's own bar and hover tips. */
+iframe.skiptranslate,
+.goog-te-banner-frame,
+#goog-gt-tt,
+.goog-te-balloon-frame {
+  display: none !important;
+}
+body {
+  top: 0 !important;
+}
+.goog-text-highlight {
+  background: none !important;
+  box-shadow: none !important;
+}
