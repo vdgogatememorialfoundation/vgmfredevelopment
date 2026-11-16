@@ -35,11 +35,14 @@ export function AddressFields({
   onChange,
   idPrefix = "addr",
   showEmail = false,
+  fallbackEmail = "",
 }: {
   value: DeliveryAddress;
   onChange: (next: DeliveryAddress) => void;
   idPrefix?: string;
   showEmail?: boolean;
+  /** Desk only: an address the counter can use when the customer has no email. */
+  fallbackEmail?: string;
 }) {
   const { countries } = usePlatformCountries();
   const countryCode = value.countryCode || countries[0]?.code || DEFAULT_COUNTRY;
@@ -148,6 +151,19 @@ export function AddressFields({
             placeholder={`${country.dial} 98765 43210`}
           />
         </div>
+        <div>
+          <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${idPrefix}-alt-phone`}>
+            Alternative phone (optional)
+          </label>
+          <input
+            id={`${idPrefix}-alt-phone`}
+            type="tel"
+            className="input-field"
+            value={value.altPhone ?? ""}
+            onChange={(event) => set({ altPhone: event.target.value })}
+            placeholder={`${country.dial} 98765 43210`}
+          />
+        </div>
       </div>
 
       {showEmail ? (
@@ -162,6 +178,11 @@ export function AddressFields({
             value={value.email ?? ""}
             onChange={(event) => set({ email: event.target.value })}
           />
+          {fallbackEmail && !value.email ? (
+            <button type="button" className="mt-1 text-xs font-semibold text-primary underline" onClick={() => set({ email: fallbackEmail })}>
+              No email? Use {fallbackEmail} with the customer&apos;s phone
+            </button>
+          ) : null}
         </div>
       ) : null}
 

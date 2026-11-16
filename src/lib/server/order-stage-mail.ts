@@ -270,7 +270,7 @@ function details(order: Order) {
     order.deliveryMode === "store_pickup"
       ? `Pickup from store: ${siteConfig.address}`
       : `Deliver to: ${[address?.fullName, address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ")}`,
-    address?.phone ? `Phone: ${address.phone}` : "",
+    address?.phone ? `Phone: ${[address.phone, address.altPhone].filter(Boolean).join(" / ")}` : "",
     order.trackingId ? `Courier: ${order.courierName || "Courier"} · AWB ${order.trackingId}` : "",
     // Pre-order dispatch depends on the book's arrival, so no date is promised by email.
     order.eta && order.status !== "Delivered" && !isPreorder(order) ? `Expected delivery: ${order.eta}` : "",

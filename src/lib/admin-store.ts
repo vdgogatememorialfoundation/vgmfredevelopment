@@ -719,7 +719,7 @@ export function notifyStaffOfOrder(order: Order) {
     `New order ${order.id} · ${formatDateTime(order.date)}`,
     "",
     `Customer: ${address?.fullName || "—"}`,
-    `Phone: ${address?.phone || "—"}`,
+    `Phone: ${[address?.phone, address?.altPhone].filter(Boolean).join(" / ") || "—"}`,
     `Email: ${address?.email || order.accountEmail || "—"}`,
     order.deliveryMode === "store_pickup" ? "Delivery: Pickup from store" : `Deliver to: ${where || "—"}`,
     "",
@@ -1855,10 +1855,10 @@ function letterhead() {
   </header>`;
 }
 
-function addressBlock(address?: { fullName?: string; phone?: string; line1?: string; landmark?: string; city?: string; state?: string; pincode?: string; email?: string }) {
+function addressBlock(address?: { fullName?: string; phone?: string; altPhone?: string; line1?: string; landmark?: string; city?: string; state?: string; pincode?: string; email?: string }) {
   if (!address) return "—";
   const line = [address.line1, address.landmark, address.city, address.state, address.pincode].filter(Boolean).join(", ");
-  return `${esc(address.fullName || "Customer")}<br/>${esc(line)}<br/>${esc(address.phone || "")}${address.email ? `<br/>${esc(address.email)}` : ""}`;
+  return `${esc(address.fullName || "Customer")}<br/>${esc(line)}<br/>${esc([address.phone, address.altPhone].filter(Boolean).join(" / "))}${address.email ? `<br/>${esc(address.email)}` : ""}`;
 }
 
 function printHtml(title: string, html: string, page = "A4") {
@@ -2103,7 +2103,7 @@ export function printShippingLabel(
         ${esc([to.line1, to.landmark].filter(Boolean).join(", "))}<br/>
         ${esc([to.city, to.state].filter(Boolean).join(", "))}<br/>
         <b class="pin">PIN ${esc(to.pincode)}</b>${getLabelHidePhone() ? "" : `<br/>
-        Mobile: ${esc(to.phone)}`}
+        Mobile: ${esc([to.phone, to.altPhone].filter(Boolean).join(" / "))}`}
       </div>
       <div class="agg-cell side">
         <p class="label">Courier</p>

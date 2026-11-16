@@ -1,5 +1,6 @@
 "use client";
 
+import { siteConfig } from "@/lib/constants";
 import OrderFeedback from "@/components/store/OrderFeedback";
 import { DIRECT_COURIERS } from "@/lib/couriers";
 import { isDeskScan } from "@/lib/order-pipeline";
@@ -782,7 +783,15 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name"><TextInput value={customer.fullName} onChange={(event) => setCustomer({ ...customer, fullName: event.target.value })} /></Field>
             <Field label="Phone (international)"><TextInput value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} placeholder={`${countryByCode(customer.countryCode).dial} 98765 43210`} /></Field>
-            <Field label="Email"><TextInput value={customer.email ?? ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} /></Field>
+            <Field label="Alternative phone (optional)"><TextInput value={customer.altPhone ?? ""} onChange={(event) => setCustomer({ ...customer, altPhone: event.target.value })} placeholder={`${countryByCode(customer.countryCode).dial} 98765 43210`} /></Field>
+            <Field label="Email">
+              <TextInput value={customer.email ?? ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} />
+              {!customer.email ? (
+                <button type="button" className="mt-1 text-xs font-semibold text-primary underline" onClick={() => setCustomer({ ...customer, email: siteConfig.email })}>
+                  No email? Use {siteConfig.email} with the customer&apos;s phone
+                </button>
+              ) : null}
+            </Field>
             <Field label={isIndia(customer.countryCode) ? "Pincode" : "Postal code"}>
               <TextInput
                 value={customer.pincode}
@@ -1331,6 +1340,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             <div className="grid gap-2 sm:grid-cols-2">
               <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Name" />
               <TextInput value={editAddress.phone} onChange={(event) => setEditAddress({ ...editAddress, phone: event.target.value })} placeholder="Phone" />
+              <TextInput value={editAddress.altPhone ?? ""} onChange={(event) => setEditAddress({ ...editAddress, altPhone: event.target.value })} placeholder="Alternative phone" />
               <TextInput value={editAddress.email ?? ""} onChange={(event) => setEditAddress({ ...editAddress, email: event.target.value })} placeholder="Email" />
               <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="Postal code" />
               <TextInput value={editAddress.line1} onChange={(event) => setEditAddress({ ...editAddress, line1: event.target.value })} placeholder="Address" />

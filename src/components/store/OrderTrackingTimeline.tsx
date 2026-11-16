@@ -348,7 +348,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
         return link ? (
           <p className="vgmf-trk-note font-bold">
             Payment due ·{" "}
-            <a href={link.url} className="font-semibold text-burgundy underline">pay now</a>
+            <a href={link.url} className="font-semibold text-burgundy underline">click here to pay</a>
           </p>
         ) : null;
       })()}

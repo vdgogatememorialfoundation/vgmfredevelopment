@@ -554,6 +554,8 @@ export interface OrderItem {
 export interface DeliveryAddress {
   fullName: string;
   phone: string;
+  /** Second number the courier can call if the main one is unreachable. */
+  altPhone?: string;
   email?: string;
   line1: string;
   landmark?: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { siteConfig } from "@/lib/constants";
 import { useEffect, useMemo, useState } from "react";
 import {
   adjustStoreCredit,
@@ -459,6 +460,11 @@ export function PosDesk() {
                 <TextInput placeholder="Name" value={walkIn.name} onChange={(event) => setWalkIn({ ...walkIn, name: event.target.value })} />
                 <TextInput placeholder="Phone" value={walkIn.phone} onChange={(event) => setWalkIn({ ...walkIn, phone: event.target.value })} />
                 <TextInput placeholder="Email (optional)" value={walkIn.email} onChange={(event) => setWalkIn({ ...walkIn, email: event.target.value })} />
+                {!walkIn.email ? (
+                  <button type="button" className="text-left text-xs font-semibold text-primary underline" onClick={() => setWalkIn({ ...walkIn, email: siteConfig.email })}>
+                    No email? Use {siteConfig.email} with the customer&apos;s phone
+                  </button>
+                ) : null}
               </div>
             )}
             {account && (
