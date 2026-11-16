@@ -656,6 +656,8 @@ export interface Order {
   courierChoice?: CourierRate;
   /** Pickup address picked for this order on each aggregator's panel (Shiprocket nickname, Ekart/GoSwift alias). */
   shipFrom?: { shiprocket?: string; ekart?: string; goswift?: string };
+  /** Full address of each picked Ship from location, printed as the label's sender / return address. */
+  shipFromAddress?: Partial<Record<"shiprocket" | "ekart" | "goswift", { name?: string; address: string; phone?: string }>>;
   /** Pre-order: the courier amount charged from the highest valid quote, and the package it was quoted for. */
   courierQuote?: { at: string; charged: number; highest: number; weightKg: number; parcel?: { length: number; breadth: number; height: number }; couriers: number };
   /** Amounts the desk added after ordering, e.g. a charge wrongly shown as free. */
@@ -1045,6 +1047,8 @@ export interface ShipmentRecord {
   status: "Booked" | "Picked Up" | "In Transit" | "Out for Delivery" | "Delivered" | "Failed";
   generatedAt: string;
   pickedUpAt?: string;
+  /** Sender / return address this parcel was booked from (the order's Ship from). */
+  fromAddress?: { name?: string; address: string; phone?: string };
   provider?: CourierRate["provider"];
   live?: boolean;
   /** Set when the parcel went with a courier outside the connected APIs (see src/lib/couriers.ts). */

@@ -403,6 +403,7 @@ async function bookShipmentOnce(
     provider: choice.provider,
     courierCost: choice.rate,
     customerPaid: shipOrder.shipping,
+    fromAddress: order.shipFromAddress?.[choice.provider as keyof NonNullable<Order["shipFromAddress"]>],
     tracking: [{ at: new Date().toISOString(), status: "Shipment booked" }],
   };
 
@@ -1196,8 +1197,9 @@ export async function goswiftNdrRequest(shipmentId: string, ndrAction: "Re-Attem
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment?.awb) throw new Error("Shipment not found.");
   const result = await post<{ message?: string }>({ action: "ndr", provider: shipment.provider === "ekart" ? "ekart" : "goswift", awb: shipment.awb, ndrAction, ...extra, creds: credsFrom(getIntegrations()) });
-  if (!result.ok) throw new Error(result.error ?? "GoSwift did not accept the request.");
-  return result.message || "Sent to GoSwift.";
+  const name = shipment.provider === "ekart" ? "Ekart" : "GoSwift";
+  if (!result.ok) throw new Error(result.error ?? `${name} did not accept the request.`);
+  return result.message || `Sent to ${name}.`;
 }
 
 export async function testConfiguredShippingProviders() {

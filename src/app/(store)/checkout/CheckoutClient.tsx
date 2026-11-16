@@ -629,7 +629,7 @@ export default function CheckoutClient() {
       const pickupNote =
         deliveryMode === "delivery"
           ? hasPreorder
-            ? "We will write again when your pre-order is ready to ship."
+            ? "Delivery date: calculated once shipped."
             : `Delivery by ${selectedOffer?.deliverBy ?? quote?.deliverBy ?? ""}.`
           : pickupInstructions();
       sendEmail({
@@ -953,7 +953,7 @@ export default function CheckoutClient() {
                             : "We'll tell you when it's ready to collect"
                           : canPreorder(book)
                             ? preorderDatesHidden(orderSettings)
-                              ? "We'll share the delivery date once it is dispatched"
+                              ? "Delivery date: calculated once shipped"
                               : `Tentative delivery by ${preorderDeliveryDate(book)}`
                             : `Expected delivery ${selectedOffer?.deliverBy || quote?.deliverBy || "shown once you enter the delivery pincode"}`}
                       </p>

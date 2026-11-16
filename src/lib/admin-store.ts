@@ -703,7 +703,7 @@ export function createAdminOrder(input: {
       order.deliveryMode === "store_pickup"
         ? pickupInstructions()
         : preorderBook || order.items.some((item) => item.preorder)
-          ? "We will write again when your pre-order is ready to ship."
+          ? "Delivery date: calculated once shipped."
           : `Expected delivery: ${order.eta}`
     }\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
@@ -2074,13 +2074,18 @@ export function printShippingLabel(
   const fromName = viaAggregator ? pickup.contactName || pickup.nickname || siteConfig.name : siteConfig.name;
   // A pickup line that already holds the full address (with its PIN) is printed as is, never with a second area or PIN.
   const pickupLine = String(pickup?.line1 ?? "").trim().replace(/\s*,\s*/g, ", ");
-  const fromAddress = viaAggregator
+  const shipFrom =
+    shipment.fromAddress ??
+    getOrders().find((order) => order.id === shipment.orderId)?.shipFromAddress?.[shipment.provider as keyof NonNullable<Order["shipFromAddress"]>];
+  const fromAddress = shipFrom?.address
+    ? shipFrom.address
+    : viaAggregator
     ? /\b\d{6}\b/.test(pickupLine)
       ? pickupLine
       : [pickupLine, pickup.line2, pickup.city, pickup.state, pickup.pincode].filter(Boolean).join(", ")
     : siteConfig.address;
   const hideStorePhone = getLabelHideStorePhone();
-  const fromPhone = hideStorePhone ? "" : viaAggregator ? pickup.phone || siteConfig.phone : siteConfig.phone;
+  const fromPhone = hideStorePhone ? "" : shipFrom?.phone || (viaAggregator ? pickup.phone || siteConfig.phone : siteConfig.phone);
   const awb = details?.awb || shipment.awb;
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";

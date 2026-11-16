@@ -5,7 +5,7 @@ import { uploadMediaFile } from "@/lib/media-client";
 import { getSession } from "@/lib/auth";
 import OrderFeedback from "@/components/store/OrderFeedback";
 import { DIRECT_COURIERS } from "@/lib/couriers";
-import { isDeskScan } from "@/lib/order-pipeline";
+import { isDeskScan, isFailedAttempt } from "@/lib/order-pipeline";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelOrder,
@@ -1855,10 +1855,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>Track</Button>
-                    {(shipment.provider === "goswift" || shipment.provider === "ekart") && shipment.live && shipment.status !== "Delivered" && (
+                    {(shipment.provider === "goswift" || shipment.provider === "ekart") && shipment.live && shipment.status !== "Delivered" && shipment.status !== "Booked" && (
                       <>
-                        <Button variant="outline" onClick={() => run("ndr-reattempt", () => goswiftNdrRequest(shipment.id, "Re-Attempt", { date: new Date(Date.now() + 864e5).toISOString() }))}>Ask GoSwift to re-attempt</Button>
-                        <Button variant="outline" onClick={() => run("ndr-rto", () => goswiftNdrRequest(shipment.id, "RTO"))}>Return to us (RTO)</Button>
+                        {(shipment.status === "Failed" || (shipment.tracking ?? []).some((scan) => isFailedAttempt(scan.status))) && (
+                          <Button variant="outline" onClick={() => run("ndr-reattempt", () => goswiftNdrRequest(shipment.id, "Re-Attempt", { date: new Date(Date.now() + 864e5).toISOString() }))}>
+                            Ask {shipment.provider === "ekart" ? "Ekart" : "GoSwift"} to re-attempt
+                          </Button>
+                        )}
+                        <Button variant="outline" onClick={() => run("ndr-rto", () => goswiftNdrRequest(shipment.id, "RTO"))}>Return to us via {shipment.provider === "ekart" ? "Ekart" : "GoSwift"} (RTO)</Button>
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("realloc", async () => {
@@ -2278,7 +2282,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   );
 }
 
-type PickupRow = { nickname: string; city: string; pincode: string; address?: string };
+type PickupRow = { nickname: string; city: string; pincode: string; address?: string; phone?: string };
 const SHIP_FROM_PROVIDERS = [
   { id: "shiprocket", label: "Shiprocket", setting: "Pickup location in Shipping APIs → Shiprocket" },
   { id: "ekart", label: "Ekart Elite", setting: "Pickup address alias in Shipping APIs → Ekart" },
@@ -2312,7 +2316,13 @@ function ShipFromPicker({ order, onChange }: { order: Order; onChange: () => voi
     const next = { ...chosen, [id]: value || undefined };
     setChosen(next);
     const label = SHIP_FROM_PROVIDERS.find((row) => row.id === id)?.label ?? id;
-    patchStoredOrder(order.id, { shipFrom: next }, `Ship from on ${label}: ${value || "Shipping settings default"}`);
+    const row = lists[id]?.rows.find((item) => item.nickname === value);
+    const line = String(row?.address ?? "").trim();
+    const full = row ? [line, ...[row.city, row.pincode].filter((part) => part && !line.toLowerCase().includes(part.toLowerCase()))].filter(Boolean).join(", ") : "";
+    const addresses = { ...(getStoredOrder(order.id)?.shipFromAddress ?? order.shipFromAddress ?? {}) };
+    if (full) addresses[id] = { address: full, phone: row?.phone || undefined };
+    else delete addresses[id];
+    patchStoredOrder(order.id, { shipFrom: next, shipFromAddress: addresses }, `Ship from on ${label}: ${value ? full || value : "Shipping settings default"}`);
     onChange();
   };
 

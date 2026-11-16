@@ -5,6 +5,7 @@ import { sendMobileEmail } from "@/lib/server/mobile-mail";
 import { pushToCustomer } from "@/lib/server/fcm";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { readKv } from "@/lib/server/db";
+import { findShopShipment } from "@/lib/server/shop-shipments";
 import { applyTemplateVars, defaultMessageCopy } from "@/lib/message-templates";
 import type { NotificationEventId } from "@/lib/integrations";
 import type { Order, RefundRecord } from "@/types";
@@ -236,6 +237,12 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
   return stages;
 }
 
+/** Pre-order dispatch depends on the book's arrival: the courier's date is shared only once it has picked the parcel up. */
+function preorderDateLine(order: Order) {
+  const courierDate = ["Shipped", "Out for Delivery"].includes(order.status) ? findShopShipment(order.id)?.expectedBy : "";
+  return courierDate ? `Expected delivery: ${when(courierDate)}` : "Delivery date: calculated once shipped";
+}
+
 function details(order: Order) {
   const address = order.deliveryAddress;
   const pre = order.preorderPayment;
@@ -272,8 +279,7 @@ function details(order: Order) {
       : `Deliver to: ${[address?.fullName, address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ")}`,
     address?.phone ? `Phone: ${[address.phone, address.altPhone].filter(Boolean).join(" / ")}` : "",
     order.trackingId ? `Courier: ${order.courierName || "Courier"} · AWB ${order.trackingId}` : "",
-    // Pre-order dispatch depends on the book's arrival, so no date is promised by email.
-    order.eta && order.status !== "Delivered" && !isPreorder(order) ? `Expected delivery: ${order.eta}` : "",
+    order.status === "Delivered" ? "" : !isPreorder(order) ? (order.eta ? `Expected delivery: ${order.eta}` : "") : preorderDateLine(order),
   ];
   return lines.filter((line, index, all) => line !== "" || (all[index - 1] !== "" && index > 0)).join("\n");
 }
