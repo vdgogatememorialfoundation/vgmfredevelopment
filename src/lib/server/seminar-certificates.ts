@@ -7,7 +7,10 @@ let pool: Pool | null = null;
 function seminarDb() {
   const url = (process.env.SEMINAR_DATABASE_URL || "").trim();
   if (!url) return null;
-  if (!pool) pool = new Pool({ connectionString: url, max: 2, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 8_000 });
+  if (!pool) {
+    pool = new Pool({ connectionString: url, max: 2, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 8_000 });
+    pool.on("error", () => undefined);
+  }
   return pool;
 }
 

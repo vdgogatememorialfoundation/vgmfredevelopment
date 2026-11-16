@@ -109,6 +109,7 @@ function poolFor(portal: PartnerPortalId) {
   const existing = pools.get(portal);
   if (existing) return existing;
   const pool = new Pool({ connectionString: url, max: 2, idleTimeoutMillis: 10_000 });
+  pool.on("error", () => undefined);
   pools.set(portal, pool);
   return pool;
 }
