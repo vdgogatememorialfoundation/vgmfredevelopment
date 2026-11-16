@@ -1,3 +1,4 @@
+import { normalizePickup } from "@/lib/pickup-address";
 import type { Order, ReturnEvidenceKind } from "@/types";
 import { requiresLiveCommerce } from "@/lib/platform";
 
@@ -584,6 +585,7 @@ export function getIntegrations(): IntegrationSettings {
     /* keep an explicit off; empty key stays available to turn on */
   }
   if (!merged.shipping.connection) merged.shipping.connection = {};
+  merged.shipping.pickup = normalizePickup(merged.shipping.pickup);
   return merged;
 }
 
