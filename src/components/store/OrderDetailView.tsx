@@ -163,7 +163,9 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                   <dd className="font-medium text-text-primary">
                     {order.deliveryMode === "store_pickup"
                       ? "Store pickup · no charge"
-                      : shippingSplit(order).courier > 0
+                      : order.preorderPayment?.shippingDue && !order.preorderPayment.balancePaidAt
+                        ? "Calculated once packed"
+                        : shippingSplit(order).courier > 0
                         ? formatPrice(shippingSplit(order).courier)
                         : order.shippingDue || order.preorderPayment?.shippingDue
                           ? "Calculated once packed"
