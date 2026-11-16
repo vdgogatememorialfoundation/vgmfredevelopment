@@ -11,6 +11,7 @@ const AGGREGATOR_NAMES: Record<string, string> = {
   shipyaari: "Shipyaari",
   goswift: "GoSwift",
   ekart: "Ekart Elite",
+  shadowfax: "Shadowfax",
 };
 
 const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari|goswift|swift)(\s+(surface|air|express|courier|driver))?$/i;

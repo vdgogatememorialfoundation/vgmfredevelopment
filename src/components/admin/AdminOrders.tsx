@@ -1882,14 +1882,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>Track</Button>
-                    {(shipment.provider === "goswift" || shipment.provider === "ekart") && shipment.live && shipment.status !== "Delivered" && shipment.status !== "Booked" && (
+                    {(shipment.provider === "goswift" || shipment.provider === "ekart" || shipment.provider === "shadowfax") && shipment.live && shipment.status !== "Delivered" && shipment.status !== "Booked" && (
                       <>
                         {(shipment.status === "Failed" || (shipment.tracking ?? []).some((scan) => isFailedAttempt(scan.status))) && (
                           <Button variant="outline" onClick={() => run("ndr-reattempt", () => goswiftNdrRequest(shipment.id, "Re-Attempt", { date: new Date(Date.now() + 864e5).toISOString() }))}>
-                            Ask {shipment.provider === "ekart" ? "Ekart" : "GoSwift"} to re-attempt
+                            Ask {shipment.provider === "ekart" ? "Ekart" : shipment.provider === "shadowfax" ? "Shadowfax" : "GoSwift"} to re-attempt
                           </Button>
                         )}
-                        <Button variant="outline" onClick={() => run("ndr-rto", () => goswiftNdrRequest(shipment.id, "RTO"))}>Return to us via {shipment.provider === "ekart" ? "Ekart" : "GoSwift"} (RTO)</Button>
+                        <Button variant="outline" onClick={() => run("ndr-rto", () => goswiftNdrRequest(shipment.id, "RTO"))}>Return to us via {shipment.provider === "ekart" ? "Ekart" : shipment.provider === "shadowfax" ? "Shadowfax" : "GoSwift"} (RTO)</Button>
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("realloc", async () => {

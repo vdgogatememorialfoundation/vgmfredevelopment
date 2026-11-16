@@ -52,7 +52,7 @@ const REGULAR_COURIER = /blue\s*dart|dtdc|delhivery|ekart|fedex|india\s*post|spe
 /** Rider map / live rider details only for local riders; never for a regular courier, whatever was booked earlier. */
 export function isHyperlocalProvider(provider?: string, lastMile?: string, courier?: string) {
   if (REGULAR_COURIER.test(`${courier ?? ""} ${provider ?? ""}`)) return false;
-  return Boolean(lastMile) || provider === "porter" || provider === "shadowfax" || provider === "flash" || provider === "tookan" || provider === "shipday";
+  return Boolean(lastMile) || provider === "porter" || provider === "flash" || provider === "tookan" || provider === "shipday";
 }
 
 export function isSampleOrder(order: Pick<Order, "id" | "paymentLink" | "paymentRef" | "courierName">) {
@@ -74,7 +74,7 @@ export function isCourierInfoLine(text: string) {
 }
 
 const FAILED_ATTEMPT =
-  /\b(undeliver(ed|able)?|not delivered|delivery failed|failed delivery|failed attempt|delivery attempt(ed)?|attempt(ed)? (failed|unsuccessful)|unsuccessful|(consignee|customer|receiver) (not available|unavailable|not reachable|not responding|not contactable)|not contactable|unreachable|not accessible|will collect|self collect|door locked|premises closed|address (incomplete|not found|issue)|re ?attempt|ndr|reschedul(e|ed))\b/;
+  /\b(undeliver(ed|able)?|not delivered|delivery failed|failed delivery|failed attempt|delivery attempt(ed)?|attempt(ed)? (failed|unsuccessful)|unsuccessful|(consignee|customer|receiver) (not available|unavailable|not reachable|not responding|not contactable)|not contactable|unreachable|not accessible|will collect|self collect|door locked|premises closed|address (incomplete|not found|issue)|re ?attempt|ndr|not attempted|customer initiated delay|\bcid\b|reschedul(e|ed))\b/;
 const FINAL_FAILURE = /\b(rto|rts|dto|return to (origin|seller|shipper)|returned|lost|destroyed|damaged)\b/;
 
 /** A missed delivery the courier will try again (NDR), as opposed to a return to origin. */
@@ -130,7 +130,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "packed";
   }
   if (
-    /\b(in transit|shipment arrived|trip arrived|vehicle arrived|bag arrived|shipped|dispatch(ed)?|despatch(ed)?|departed|outscan(ned)?|in ?scan(ned)?|item received|has left|added to connection|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|handed (over )?to|misrouted|redirected|held at|on hold at|recd at|bag added|bagging|left (the )?courier facility|assigned for delivery)\b/.test(
+    /\b(in transit|shipment arrived|trip arrived|vehicle arrived|bag arrived|shipped|dispatch(ed)?|despatch(ed)?|departed|outscan(ned)?|in ?scan(ned)?|item received|has left|added to connection|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete|handed (over )?to|misrouted|redirected|held at|on hold( at)?|recd at|bag added|bagging|left (the )?courier facility|assigned for delivery)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)

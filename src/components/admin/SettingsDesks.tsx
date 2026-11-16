@@ -1479,6 +1479,19 @@ export function ShippingApisDesk() {
             </div>
           </div>
         </Card>
+        <Card title="Shadowfax" text="developer.shadowfax.in — API token from your Shadowfax account manager. Forward parcels: live rates, manual booking, labels (before pickup), tracking, cancel, re-attempt or return (RTO), and customer return pickups. Ask Shadowfax to point status callbacks at https://vaidyagogate.org/api/shipping/shadowfax/webhook. Hyperlocal and Quick Commerce need separate onboarding by Shadowfax." badge={<ProviderStatus id="shadowfax" />} right={<Check label="Use" checked={value.shadowfax?.enabled ?? false} onChange={(enabled) => set({ shadowfax: { ...value.shadowfax, enabled } })} />}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Secret label="API token" value={value.shadowfax?.apiToken ?? ""} onChange={(apiToken) => set({ shadowfax: { ...value.shadowfax, apiToken } })} />
+            <Text label="Environment" value={value.shadowfax?.environment ?? "live"} onChange={(environment) => set({ shadowfax: { ...value.shadowfax, environment: environment.toLowerCase() } })} hint="live or staging" />
+            <Text label="Pickup pincode" value={value.shadowfax?.pickupPincode ?? ""} onChange={(pickupPincode) => set({ shadowfax: { ...value.shadowfax, pickupPincode } })} hint="Leave blank to use the pickup address below" />
+            <Text label="Service" value={value.shadowfax?.service ?? "Regular"} onChange={(service) => set({ shadowfax: { ...value.shadowfax, service } })} hint="Regular, or as agreed with Shadowfax" />
+            <Text label="Fallback charge at checkout (₹)" value={value.shadowfax?.rate ?? ""} onChange={(rate) => set({ shadowfax: { ...value.shadowfax, rate } })} hint="Only used when the rate API gives no price" />
+            <Text label="Delivery days shown" value={value.shadowfax?.etaDays ?? ""} onChange={(etaDays) => set({ shadowfax: { ...value.shadowfax, etaDays } })} hint="Default 4" />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={primary} disabled={busy === "shadowfax"} onClick={() => test("shadowfax")}>{busy === "shadowfax" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
       </div>
 
       <Card

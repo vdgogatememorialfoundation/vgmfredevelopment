@@ -27,7 +27,7 @@ type ShippingCreds = Record<string, Record<string, unknown>>;
 export type ShipFrom = NonNullable<Order["shipFrom"]>;
 
 function credsFrom(settings: IntegrationSettings, shipFrom?: ShipFrom): ShippingCreds {
-  const { shiprocket, nimbuspost, ithink, shipyaari, goswift, ekart, tookan, shipday, tracker } = settings.shipping;
+  const { shiprocket, nimbuspost, ithink, shipyaari, goswift, ekart, shadowfax, tookan, shipday, tracker } = settings.shipping;
   return {
     shiprocket: shipFrom?.shiprocket ? { ...shiprocket, pickupLocation: shipFrom.shiprocket } : shiprocket,
     nimbuspost,
@@ -35,6 +35,7 @@ function credsFrom(settings: IntegrationSettings, shipFrom?: ShipFrom): Shipping
     shipyaari,
     goswift: { ...(goswift ?? {}), ...(shipFrom?.goswift ? { pickupAlias: shipFrom.goswift } : {}) },
     ekart: { ...(ekart ?? {}), ...(shipFrom?.ekart ? { pickupAlias: shipFrom.ekart } : {}) },
+    shadowfax: shadowfax ?? {},
     tookan,
     shipday,
     tracker: tracker ?? {},
@@ -55,7 +56,7 @@ async function trackDirect(shipment: ShipmentRecord) {
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
-export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart"] as const;
+export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax"] as const;
 
 export function lastMileLabel(provider?: string, lastMile?: string, courier?: string) {
   const partner = customerCourierLabel({ provider, courier });
@@ -65,7 +66,7 @@ export function lastMileLabel(provider?: string, lastMile?: string, courier?: st
   return partner;
 }
 
-const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "tookan", "tookan-parcel", "shipday"]);
+const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "tookan", "tookan-parcel", "shipday"]);
 
 export function checkoutCourierRates(rates: CourierRate[]) {
   return rates.filter((rate) => REAL_CHECKOUT.has(rate.provider) && rate.live !== false);
@@ -109,6 +110,7 @@ export function publicTrackingUrl(shipment: Pick<ShipmentRecord, "awb" | "provid
   if (shipment.provider === "shipyaari") return `https://shipyaari.com/track/${awb}`;
   if (shipment.provider === "goswift") return `https://app.goswift.in/track/${awb}`;
   if (shipment.provider === "ekart") return `https://ekartlogistics.com/shipmenttrack/${awb}`;
+  if (shipment.provider === "shadowfax") return `https://tracker.shadowfax.in/#/track/${awb}`;
   return "";
 }
 
@@ -585,6 +587,7 @@ export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "t
   { id: "shipyaari", label: "Shipyaari" },
   { id: "goswift", label: "GoSwift" },
   { id: "ekart", label: "Ekart Logistics" },
+  { id: "shadowfax", label: "Shadowfax" },
   { id: "tookan", label: "Gogate Products (Tookan)" },
   { id: "shipday", label: "Gogate Products (Shipday)" },
 ];
@@ -1178,7 +1181,7 @@ export async function cancelShipment(shipmentId: string) {
 export async function testShippingProvider(provider: string) {
   const result = await post<{ message?: string }>({ action: "test", provider, creds: credsFrom(getIntegrations()) });
   const id = (provider === "tookan-parcel" ? "tookan" : provider) as ShippingProviderId;
-  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "tookan", "shipday"].includes(id)) {
+  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "tookan", "shipday"].includes(id)) {
     recordShippingConnection(
       id,
       result.ok ? "success" : "failed",
@@ -1197,15 +1200,15 @@ export async function connectGoswiftUpdates() {
 export async function goswiftNdrRequest(shipmentId: string, ndrAction: "Re-Attempt" | "RTO", extra: { date?: string; instructions?: string } = {}) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment?.awb) throw new Error("Shipment not found.");
-  const result = await post<{ message?: string }>({ action: "ndr", provider: shipment.provider === "ekart" ? "ekart" : "goswift", awb: shipment.awb, ndrAction, ...extra, creds: credsFrom(getIntegrations()) });
-  const name = shipment.provider === "ekart" ? "Ekart" : "GoSwift";
+  const result = await post<{ message?: string }>({ action: "ndr", provider: shipment.provider === "ekart" || shipment.provider === "shadowfax" ? shipment.provider : "goswift", awb: shipment.awb, ndrAction, ...extra, creds: credsFrom(getIntegrations()) });
+  const name = shipment.provider === "ekart" ? "Ekart" : shipment.provider === "shadowfax" ? "Shadowfax" : "GoSwift";
   if (!result.ok) throw new Error(result.error ?? `${name} did not accept the request.`);
   return result.message || `Sent to ${name}.`;
 }
 
 export async function testConfiguredShippingProviders() {
   const settings = getIntegrations();
-  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari", "goswift", "ekart"] as const).filter((id) => hasShippingCredentials(id, settings));
+  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari", "goswift", "ekart", "shadowfax"] as const).filter((id) => hasShippingCredentials(id, settings));
   const results: { id: string; ok: boolean; message?: string; error?: string }[] = [];
   for (const id of wanted) {
     const result = await testShippingProvider(id);

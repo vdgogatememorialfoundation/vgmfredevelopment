@@ -12,6 +12,13 @@ import {
   goswiftRates,
   goswiftRegisterWebhook,
   goswiftTest,
+  shadowfaxBook,
+  shadowfaxCancel,
+  shadowfaxNdr,
+  shadowfaxRates,
+  shadowfaxReturnPickup,
+  shadowfaxTest,
+  shadowfaxTrack,
   goswiftTrack,
   ithinkBook,
   ithinkCancel,
@@ -92,7 +99,7 @@ export async function POST(request: NextRequest) {
         const parcel = body.parcel as Parameters<typeof shiprocketRates>[1];
         const wanted = Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart"];
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax"];
         // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
         const stored = readShippingCreds() as typeof creds;
         const keys = (id: keyof typeof creds) => ({ ...(stored[id] ?? {}), ...Object.fromEntries(Object.entries(creds[id] ?? {}).filter(([, value]) => value !== "" && value != null)) });
@@ -104,6 +111,7 @@ export async function POST(request: NextRequest) {
             if (id === "shipyaari") return { provider: id, rates: await shipyaariRates(keys("shipyaari"), parcel) };
             if (id === "goswift") return { provider: id, rates: await goswiftRates(keys("goswift"), parcel) };
             if (id === "ekart") return { provider: id, rates: await ekartRates(keys("ekart"), parcel) };
+            if (id === "shadowfax") return { provider: id, rates: await shadowfaxRates(keys("shadowfax"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -137,7 +145,9 @@ export async function POST(request: NextRequest) {
                           ? await goswiftBook(creds.goswift ?? own, order)
                           : provider === "ekart"
                             ? await ekartBook(ekartKeys, order)
-                            : undefined;
+                            : provider === "shadowfax"
+                              ? await shadowfaxBook(creds.shadowfax ?? own, order)
+                              : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -195,7 +205,7 @@ export async function POST(request: NextRequest) {
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shipyaari credentials are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
-        if (provider === "goswift" || provider === "ekart") {
+        if (provider === "goswift" || provider === "ekart" || provider === "shadowfax") {
           const awb = String(body.awb ?? "");
           return NextResponse.json({ ok: true, configured: true, awb, labelUrl: `/api/shipping/${provider}/label?awb=${encodeURIComponent(awb)}` });
         }
@@ -240,7 +250,9 @@ export async function POST(request: NextRequest) {
                         ? await goswiftTrack(creds.goswift ?? own, awb)
                         : provider === "ekart"
                           ? await ekartTrack(ekartKeys, awb)
-                          : undefined;
+                          : provider === "shadowfax"
+                            ? await shadowfaxTrack(creds.shadowfax ?? own, awb, body.providerShipmentId === "reverse")
+                            : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         const events = "events" in result && Array.isArray(result.events) ? await withScanPlaces(result.events as { location?: string }[]) : undefined;
@@ -264,7 +276,9 @@ export async function POST(request: NextRequest) {
                         ? await goswiftCancel(creds.goswift ?? own, String(body.awb ?? ""))
                         : provider === "ekart"
                           ? await ekartCancel(ekartKeys, String(body.awb ?? ""))
-                          : undefined;
+                          : provider === "shadowfax"
+                            ? await shadowfaxCancel(creds.shadowfax ?? own, String(body.awb ?? ""))
+                            : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -304,8 +318,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "ndr": {
-        if (provider !== "goswift" && provider !== "ekart") return unsupported(provider);
+        if (provider !== "goswift" && provider !== "ekart" && provider !== "shadowfax") return unsupported(provider);
         const action = body.ndrAction === "RTO" ? "RTO" : "Re-Attempt";
+        if (provider === "shadowfax") {
+          const result = await shadowfaxNdr(creds.shadowfax ?? own, String(body.awb ?? ""), action, { phone: body.phone ? String(body.phone) : undefined, address: body.address ? String(body.address) : undefined });
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shadowfax API token is not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
         const result = await (provider === "ekart" ? ekartNdr : goswiftNdr)(provider === "ekart" ? ekartKeys : creds.goswift ?? own, String(body.awb ?? ""), action, {
           date: body.date ? String(body.date) : undefined,
           phone: body.phone ? String(body.phone) : undefined,
@@ -320,6 +339,12 @@ export async function POST(request: NextRequest) {
         const url = `${request.nextUrl.origin}/api/shipping/goswift/webhook`;
         const result = await goswiftRegisterWebhook(creds.goswift ?? own, url);
         if (!result) return NextResponse.json({ ok: false, configured: false, error: "GoSwift credentials are not configured." });
+        return NextResponse.json({ ok: true, configured: true, ...result });
+      }
+      case "return-pickup": {
+        if (provider !== "shadowfax") return unsupported(provider);
+        const result = await shadowfaxReturnPickup(creds.shadowfax ?? own, body.order as Parameters<typeof shadowfaxReturnPickup>[1]);
+        if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shadowfax API token is not configured." });
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "webhook-events": {
@@ -356,6 +381,11 @@ export async function POST(request: NextRequest) {
           const result = await ekartTest(ekartKeys);
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Ekart client ID, username and password are not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
+        }
+        if (provider === "shadowfax") {
+          const sfx = await shadowfaxTest(creds.shadowfax ?? own);
+          if (!sfx) return NextResponse.json({ ok: false, configured: false, error: "Shadowfax API token is not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...sfx });
         }
         if (provider === "goswift") {
           const result = await goswiftTest(creds.goswift ?? own);

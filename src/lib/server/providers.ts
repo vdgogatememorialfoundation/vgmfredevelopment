@@ -2589,3 +2589,222 @@ export async function ekartTest(input: Json) {
   const where = pickup.alias ? ` Pickup address on Ekart: ${pickup.alias}${pickup.pincode ? ` (${pickup.pincode})` : ""}.` : " No pickup address saved on the Ekart panel yet.";
   return { message: `${data.status === false ? "Connected. Ekart says 110001 is not serviceable." : "Connected. Ekart serves Delhi 110001."}${where}` };
 }
+
+/* ---------------- Shadowfax (developer.shadowfax.in) ---------------- */
+
+const shadowfaxBase = (input: Json) =>
+  String(input.environment ?? "").toLowerCase() === "staging" ? "https://dale.staging.shadowfax.in/api" : "https://dale.shadowfax.in/api";
+
+function shadowfaxAuth(input: Json) {
+  const token = pick(input.apiToken, "SHADOWFAX_API_TOKEN");
+  return token ? { authorization: `Token ${token}` } : null;
+}
+
+export function shadowfaxTrackingUrl(awb: string) {
+  return `https://tracker.shadowfax.in/#/track/${encodeURIComponent(awb)}`;
+}
+
+/** Shadowfax answers HTTP 200 with message "Failure" for rejected requests, so the message is what counts. */
+function shadowfaxFailed(data: Json) {
+  return String(data.message ?? "").toLowerCase() !== "success";
+}
+
+function shadowfaxError(data: Json, fallback: string) {
+  const errors = data.errors;
+  const text = typeof errors === "string" ? errors : errors ? JSON.stringify(errors) : "";
+  return new ProviderError(text || String(data.message ?? "") || fallback);
+}
+
+export async function shadowfaxRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const origin = String(input.pickupPincode ?? "").trim() || parcel.pickupPincode;
+  const served = await call(`${shadowfaxBase(input)}/v1/clients/serviceability/?service=customer_delivery&pincodes=${encodeURIComponent(parcel.deliveryPincode)}`, { headers });
+  const rows = Array.isArray(served) ? (served as Json[]) : [];
+  if (!rows.some((row) => String(row.code) === String(Number(parcel.deliveryPincode)))) return [];
+  const data = await call(`${shadowfaxBase(input)}/v1/clients/rate_calculator/`, {
+    method: "POST",
+    headers,
+    json: { origin_pincode: Number(origin), destination_pincode: Number(parcel.deliveryPincode), weight: Math.max(0.1, parcel.weightKg), service: "forward" },
+  });
+  const rate = Number(data.shipping_rate) + Number(data.gst ?? 0);
+  if (shadowfaxFailed(data) || !(rate > 0)) {
+    return Number(input.rate) > 0
+      ? [{ provider: "shadowfax", courierId: "shadowfax", courierName: "Shadowfax", rate: Number(input.rate), estimate: true, etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4, live: true as const, cod: true }]
+      : [];
+  }
+  return [
+    {
+      provider: "shadowfax",
+      courierId: "shadowfax",
+      courierName: "Shadowfax",
+      rate: Math.round(rate * 100) / 100,
+      etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
+      live: true as const,
+      cod: true,
+      pickupFrom: `Pickup pincode ${origin}`,
+    },
+  ];
+}
+
+export async function shadowfaxBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const phone = (value: string) => value.replace(/\D/g, "").slice(-10);
+  const seller = {
+    name: order.pickup.contactName,
+    contact: phone(order.pickup.phone),
+    address_line_1: [order.pickup.line1, order.pickup.line2].filter(Boolean).join(", "),
+    city: order.pickup.city,
+    state: order.pickup.state,
+    pincode: Number(order.pickup.pincode),
+  };
+  const value = Math.max(1, Math.round(order.total));
+  const data = await call(`${shadowfaxBase(input)}/v3/clients/orders/`, {
+    method: "POST",
+    headers,
+    json: {
+      customer_details: {
+        name: order.customer.name,
+        contact: phone(order.customer.phone),
+        address_line_1: order.customer.line1,
+        ...(order.customer.line2 ? { address2: order.customer.line2 } : {}),
+        city: order.customer.city,
+        state: order.customer.state,
+        pincode: Number(order.customer.pincode),
+      },
+      order_details: {
+        client_order_id: order.orderId,
+        product_value: value,
+        total_amount: value,
+        payment_mode: order.cod ? "cod" : "prepaid",
+        cod_amount: order.cod ? value : 0,
+        order_service: String(input.service ?? "").trim() || "Regular",
+        actual_weight: Math.max(1, Math.round(order.weightKg * 1000)),
+        volumetric_weight: Math.max(1, Math.round((order.length * order.breadth * order.height) / 5)),
+      },
+      pickup_details: { pickup_type: "seller", ...seller },
+      return_details: { return_type: "seller", ...seller, ...(order.pickup.email ? { email: order.pickup.email } : {}) },
+      product_details: order.items.map((item) => ({
+        sku_name: item.name,
+        sku_id: item.sku,
+        price: Math.max(1, Math.round(item.price)),
+        category: String(input.category ?? "").trim() || "Books",
+        additional_details: { quantity: item.units },
+        invoice_no: order.orderId,
+      })),
+    },
+  });
+  const details = (data.data as Json) ?? {};
+  const awb = String(details.awb_number ?? data.awb_number ?? "");
+  if (shadowfaxFailed(data) || !awb) throw shadowfaxError(data, "Shadowfax did not create the shipment.");
+  return {
+    provider: "shadowfax",
+    awb,
+    courierName: "Shadowfax",
+    providerOrderId: order.orderId,
+    trackingUrl: shadowfaxTrackingUrl(awb),
+    labelUrl: `/api/shipping/shadowfax/label?awb=${encodeURIComponent(awb)}`,
+  };
+}
+
+/** A label link valid for 2 days; Shadowfax only issues it before pickup. */
+export async function shadowfaxLabelUrl(input: Json, awb: string) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const data = await call(`${shadowfaxBase(input)}/client/generate_label/`, { method: "POST", headers, json: { awb_number: awb, file_type: "pdf" } });
+  const url = String(((data.data as Json) ?? {}).label_url ?? "");
+  if (shadowfaxFailed(data) || !url) throw shadowfaxError(data, "Shadowfax gives a label only before the parcel is picked up.");
+  return url;
+}
+
+export async function shadowfaxTrack(input: Json, awb: string, reverse = false) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const path = reverse ? `/v4/clients/requests/${encodeURIComponent(awb)}` : `/v4/clients/orders/${encodeURIComponent(awb)}/track/`;
+  const data = await call(`${shadowfaxBase(input)}${path}`, { headers });
+  const details = ((data.order_details ?? data.request_details) as Json) ?? {};
+  const rows = (Array.isArray(data.tracking_details) ? data.tracking_details : Array.isArray(data.tracking) ? data.tracking : []) as Json[];
+  const events = rows
+    .map((row) => {
+      const status = String(row.status ?? row.status_id ?? "").trim();
+      const remarks = String(row.remarks ?? "").trim();
+      return {
+        at: String(row.created ?? row.updated ?? ""),
+        status: remarks && remarks.toLowerCase() !== status.toLowerCase() ? `${status} – ${remarks}` : status,
+        location: String(row.location ?? ""),
+      };
+    })
+    .filter((event) => event.status);
+  return {
+    status: String(details.status_display ?? details.status ?? ""),
+    awb,
+    courierName: "Shadowfax",
+    events,
+    trackingUrl: shadowfaxTrackingUrl(awb),
+    expectedBy: String(details.promised_delivery_date ?? details.estimatedDeliveryDate ?? ""),
+  };
+}
+
+export async function shadowfaxCancel(input: Json, awb: string) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const data = await call(`${shadowfaxBase(input)}/v3/clients/orders/cancel/`, { method: "POST", headers, json: { request_id: awb, cancel_remarks: "Cancelled by seller" } });
+  if (shadowfaxFailed(data)) throw shadowfaxError(data, "Shadowfax did not cancel the shipment.");
+  return { cancelled: true };
+}
+
+/** After a failed delivery: another attempt (reopen_ndr, optionally with a new phone/address) or return to us (rts). */
+export async function shadowfaxNdr(input: Json, awb: string, action: "Re-Attempt" | "RTO", extra: { phone?: string; address?: string } = {}) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const delivery = {
+    ...(extra.phone ? { contact: extra.phone.replace(/\D/g, "").slice(-10) } : {}),
+    ...(extra.address ? { customer_address: extra.address } : {}),
+  };
+  const data = await call(`${shadowfaxBase(input)}/v3/clients/order_update/`, {
+    method: "POST",
+    headers,
+    json: { awb_number: awb, ...(Object.keys(delivery).length ? { delivery_details: delivery } : {}), status_update: { status: action === "RTO" ? "rts" : "reopen_ndr" } },
+  });
+  if (shadowfaxFailed(data)) throw shadowfaxError(data, "Shadowfax did not accept the request.");
+  return { message: action === "RTO" ? "Shadowfax will return the parcel to us." : "Shadowfax will try the delivery again." };
+}
+
+/** Customer return pickup (Reverse Logistics). */
+export async function shadowfaxReturnPickup(input: Json, order: BookInput & { reason?: string }) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const data = await call(`${shadowfaxBase(input)}/v1/clients/pickup/orders/`, {
+    method: "POST",
+    headers,
+    json: {
+      customer_details: {
+        name: order.customer.name,
+        contact: order.customer.phone.replace(/\D/g, "").slice(-10),
+        address: [order.customer.line1, order.customer.line2].filter(Boolean).join(", "),
+        city: order.customer.city,
+        pincode: Number(order.customer.pincode),
+      },
+      return_details: {
+        return_type: "origin",
+        name: order.pickup.contactName,
+        contact: order.pickup.phone.replace(/\D/g, "").slice(-10),
+        address: [order.pickup.line1, order.pickup.line2, order.pickup.city].filter(Boolean).join(", "),
+        pincode: Number(order.pickup.pincode),
+      },
+      order_details: { client_order_id: `${order.orderId}-R` },
+      sku_details: order.items.map((item) => ({ sku_name: item.name, sku_id: item.sku, price: Math.max(1, Math.round(item.price)), return_reason: order.reason || "Return" })),
+    },
+  });
+  const awb = String(((data.data as Json) ?? {}).awb_number ?? data.awb_number ?? "");
+  if (!awb) throw shadowfaxError(data, "Shadowfax did not create the return pickup.");
+  return { provider: "shadowfax", awb, courierName: "Shadowfax", trackingUrl: shadowfaxTrackingUrl(awb) };
+}
+
+export async function shadowfaxTest(input: Json) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const served = await call(`${shadowfaxBase(input)}/v1/clients/serviceability/?service=customer_delivery&pincodes=411005`, { headers });
+  return { message: `Shadowfax connected (${String(input.environment ?? "").toLowerCase() === "staging" ? "staging" : "live"}). Pune 411005 ${Array.isArray(served) && served.length ? "is" : "is not"} serviceable.` };
+}
