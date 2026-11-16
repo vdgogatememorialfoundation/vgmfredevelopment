@@ -167,7 +167,7 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
               `Bank reference (RRN/ARN): ${bankRef}`,
               refund.vgmfId ? `VGMF transaction ID: ${refund.vgmfId}` : "",
               refund.gatewayRefundId ? `Refund ID: ${refund.gatewayRefundId}` : "",
-              "Look for this credit in your bank or UPI app. If it has not arrived within 5–7 working days, quote this reference to your bank.",
+              "Open your bank statement, and look for this credit. If it has not arrived within 5–7 working days, quote this reference to your bank.",
             ].filter(Boolean),
             vars: { amount: rupees(refund.amount), bankRef, vgmfId: refund.vgmfId || "", refundId: refund.gatewayRefundId || "" },
           });
