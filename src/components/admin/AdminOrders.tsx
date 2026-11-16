@@ -1819,12 +1819,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   onDone={(text) => { setMessage(text); onChanged(); }}
                 />
                 <p className="mt-2 text-xs text-text-muted">
-                  Click a courier row, then Book: the shipment goes at once to that row's aggregator (Shiprocket, Ekart Elite, GoSwift, Nimbuspost, iThink, Shipyaari, Tookan or Shipday), which creates the AWB and charges its wallet. Nothing is sent before you click Book, and booking stays blocked until the order is fully paid.
+                  Click a courier row, then Book: the shipment goes at once to that row&apos;s aggregator (Shiprocket, Ekart Elite, GoSwift, Nimbuspost, iThink, Shipyaari, Tookan or Shipday), which creates the AWB and charges its wallet. Nothing is sent before you click Book, and booking stays blocked until the order is fully paid.
                 </p>
                 <div className="mt-4 rounded-xl border border-border p-3">
                   <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    Choose the courier and paste its tracking id. Status is fetched from the courier's own tracking site (or the tracking service in Shipping APIs); connected portals also send the delivery date.
+                    Choose the courier and paste its tracking id. Status is fetched from the courier&apos;s own tracking site (or the tracking service in Shipping APIs); connected portals also send the delivery date.
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
                     <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value)}>

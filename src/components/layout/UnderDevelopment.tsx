@@ -1,3 +1,4 @@
+import Link from "next/link";
 export function UnderDevelopment({ title = "Under development" }: { title?: string }) {
   return (
     <div className="container py-16">
@@ -7,9 +8,9 @@ export function UnderDevelopment({ title = "Under development" }: { title?: stri
         <p className="mt-3 text-sm leading-6 text-text-muted">
           This section is under development. It will appear here when the Foundation publishes it.
         </p>
-        <a href="/" className="btn-primary mt-6 inline-flex">
+        <Link href="/" className="btn-primary mt-6 inline-flex">
           Back to home
-        </a>
+        </Link>
       </div>
     </div>
   );
