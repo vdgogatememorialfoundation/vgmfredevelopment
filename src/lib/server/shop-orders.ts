@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
 import { notifyOrderStage } from "@/lib/server/order-stage-mail";
@@ -32,16 +32,23 @@ function file() {
 }
 
 function readAll(): Order[] {
+  let text: string;
   try {
-    const parsed = JSON.parse(readFileSync(file(), "utf8")) as Order[];
-    return Array.isArray(parsed) ? parsed : [];
+    text = readFileSync(file(), "utf8");
   } catch {
     return [];
   }
+  // A half-written or damaged file must never read as "no orders", or the next save would wipe every order.
+  const parsed = JSON.parse(text) as Order[];
+  if (!Array.isArray(parsed)) throw new Error("shop-orders.json is not a list.");
+  return parsed;
 }
 
 function writeAll(orders: Order[]) {
-  writeFileSync(file(), JSON.stringify(orders.slice(0, 2000)));
+  const target = file();
+  const temp = `${target}.${process.pid}.tmp`;
+  writeFileSync(temp, JSON.stringify(orders.slice(0, 2000)));
+  renameSync(temp, target);
 }
 
 export function listShopOrders() {
