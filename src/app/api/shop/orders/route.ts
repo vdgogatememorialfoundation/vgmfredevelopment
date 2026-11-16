@@ -87,7 +87,10 @@ export async function POST(request: NextRequest) {
   if (!order || typeof order.id !== "string" || !Array.isArray(order.items)) {
     return NextResponse.json({ ok: false, error: "Send the order." }, { status: 400 });
   }
-  const isNew = !findShopOrder(order.id);
+  const existing = findShopOrder(order.id);
+  // An old open page re-sending its copy must not undo updates the server already has.
+  if (existing && staleCopy(existing, order)) return NextResponse.json({ ok: true, stale: true });
+  const isNew = !existing;
   upsertShopOrder(order, { quiet: commerceViewer(request).portal });
   if (isNew && !commerceViewer(request).portal && (!order.userId || order.userId === "guest")) void ensureGuestAccount(order);
   if (order.promo?.code && order.paymentStatus !== "Pending") redeemPromo(order);
@@ -96,4 +99,10 @@ export async function POST(request: NextRequest) {
     void inviteOrderFeedback(order.id);
   }
   return NextResponse.json({ ok: true });
+}
+
+function staleCopy(server: Order, sent: Order) {
+  const known = server.history ?? [];
+  const mine = sent.history ?? [];
+  return mine.length < known.length && mine.every((entry, index) => known[index]?.at === entry.at && known[index]?.status === entry.status);
 }
