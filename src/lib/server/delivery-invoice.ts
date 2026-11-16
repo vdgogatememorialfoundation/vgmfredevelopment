@@ -1,3 +1,4 @@
+import { shippingSplit } from "@/lib/order-charges";
 import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dataFile } from "@/lib/server/paths";
@@ -160,6 +161,7 @@ type Resolved = {
   discount: number;
   platformFee: number;
   shipping: number;
+  packing: number;
   total: number;
   courier: string;
   transport: string;
@@ -193,13 +195,13 @@ function resolve(invoice: IssuedInvoice, settings = readInvoiceSettings()): Reso
     const credit = invoice.kind === "credit-note";
     const lines = invoice.lines?.length ? invoice.lines : noteLines(invoice.kind!, order);
     const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
-    return { invoice, order, title: credit ? "Credit note" : "Debit note", to, lines, discount: 0, platformFee: 0, shipping: 0, total, ...shipped };
+    return { invoice, order, title: credit ? "Credit note" : "Debit note", to, lines, discount: 0, platformFee: 0, shipping: 0, packing: 0, total, ...shipped };
   }
   if (invoice.kind === "platform-fee") {
     const fee = invoice.lines?.length ? 0 : Number(order?.platformFee) || 0;
     const lines = invoice.lines?.length ? invoice.lines : [{ title: `Platform fee for order ${invoice.orderId}`, quantity: 1, price: fee }];
     const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
-    return { invoice, order, title: "Platform fee invoice", to, lines, discount: 0, platformFee: 0, shipping: 0, total, ...shipped };
+    return { invoice, order, title: "Platform fee invoice", to, lines, discount: 0, platformFee: 0, shipping: 0, packing: 0, total, ...shipped };
   }
   const orderLines = !invoice.lines?.length;
   const lines = !orderLines
@@ -215,7 +217,8 @@ function resolve(invoice: IssuedInvoice, settings = readInvoiceSettings()): Reso
   const shipping = invoice.shipping ?? order?.shipping ?? 0;
   const platformFee = invoice.kind === "order" && !settings.separatePlatformFee ? Number(order?.platformFee) || 0 : 0;
   const total = lines.reduce((sum, line) => sum + line.price * line.quantity, 0) - discount + shipping + platformFee;
-  return { invoice, order, title: "Invoice", to, lines, discount, platformFee, shipping, total, ...shipped };
+  const packing = invoice.shipping === undefined && order ? shippingSplit(order).packing : 0;
+  return { invoice, order, title: "Invoice", to, lines, discount, platformFee, shipping, packing, total, ...shipped };
 }
 
 /** Printable invoice. The Foundation is not GST-registered, so no tax lines. */
@@ -266,7 +269,7 @@ td{border-bottom:1px solid #eee7da;padding:8px}.r{text-align:right}
 ${ship ? `<div class="ship">${ship}</div>` : ""}
 ${order ? `<p class="muted" style="margin-top:12px">Payment: ${esc(order.paymentStatus)}${order.paymentMethod ? ` · ${esc(order.paymentMethod)}` : ""}</p>` : ""}
 <table><thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-<table class="totals">${line("Subtotal", subtotal)}${view.discount ? line("Discount", -view.discount) : ""}${view.platformFee ? line("Platform fee", view.platformFee) : ""}${view.shipping ? line("Shipping", view.shipping) : ""}${line("Total", view.total, true)}</table>
+<table class="totals">${line("Subtotal", subtotal)}${view.discount ? line("Discount", -view.discount) : ""}${view.platformFee ? line("Platform fee", view.platformFee) : ""}${view.shipping - view.packing ? line("Shipping", view.shipping - view.packing) : ""}${view.packing ? line("Packing charge", view.packing) : ""}${line("Total", view.total, true)}</table>
 ${invoice.notes ? `<p class="muted" style="margin-top:16px">${esc(invoice.notes)}</p>` : ""}
 ${signature}
 <p class="foot">${signature ? "" : "This is a computer-generated invoice and needs no signature.<br>"}Thank you for supporting the ${esc(siteConfig.name)}.</p>

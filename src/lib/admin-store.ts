@@ -1,3 +1,4 @@
+import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import type {
   AccountStatus,
   DeliveryAddress,
@@ -732,7 +733,8 @@ export function notifyStaffOfOrder(order: Order) {
     order.discount ? `Discount: − ₹${order.discount}` : "",
     order.gst ? `GST: ₹${order.gst}` : "",
     order.platformFee ? `Platform fee: ₹${order.platformFee}` : "",
-    `Shipping: ${order.shipping ? `₹${order.shipping}` : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment ? "Calculated once packed" : "Free"}`,
+    hideShipping(order) ? "" : `Shipping: ${shippingSplit(order).courier ? `₹${shippingSplit(order).courier}` : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment ? "Calculated once packed" : "Free"}`,
+    shippingSplit(order).packing ? `Packing charge: ₹${shippingSplit(order).packing}` : "",
     `Total: ₹${order.total}`,
     `Payment: ${order.paymentStatus}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}${order.razorpayPaymentId ? ` · ${order.razorpayPaymentId}` : ""}`,
     order.preorderPayment ? `Pre-order: advance ₹${order.preorderPayment.advance ?? ""} · balance ₹${order.preorderPayment.balance ?? ""}` : "",
@@ -773,7 +775,7 @@ export function deleteOrder(orderId: string) {
 
 export function resaveOrder(
   orderId: string,
-  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"]; shipping?: number }
+  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"]; shipping?: number; packing?: number }
 ) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
@@ -795,6 +797,10 @@ export function resaveOrder(
     update.shipping !== undefined && Number.isFinite(update.shipping)
       ? Math.max(0, Math.round(update.shipping * 100) / 100)
       : order.shipping;
+  const packing = Math.min(
+    shipping,
+    Math.max(0, Math.round(((update.packing !== undefined && Number.isFinite(update.packing) ? update.packing : order.packing) ?? 0) * 100) / 100)
+  );
   const total = subtotal + gst + platformFee + shipping - (order.storeCreditUsed ?? 0);
   const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
   const paidSoFar =
@@ -824,6 +830,7 @@ export function resaveOrder(
       gst,
       platformFee,
       shipping,
+      packing: packing || undefined,
       total,
       stockCommitted: order.stockCommitted,
     },
@@ -983,7 +990,7 @@ export function printOrdersPdf(orders: Order[]) {
         <td>${lines(address?.fullName, address?.phone, address?.email, order.accountEmail && order.accountEmail !== address?.email ? `Account: ${order.accountEmail}` : "")}</td>
         <td>${lines(order.deliveryMode === "store_pickup" ? "Store pickup" : "Delivery", address?.line1, address?.landmark, [address?.city, address?.state, address?.pincode].filter(Boolean).join(", "), address?.country ?? "India")}</td>
         <td>${items}<br/><span class="muted">${order.items.length} item(s) · qty ${order.items.reduce((sum, item) => sum + item.quantity, 0)}</span></td>
-        <td>${lines(`Subtotal ${money(order.subtotal)}`, order.discount ? `Discount ${money(order.discount)}` : "", order.gst ? `GST ${money(order.gst)}` : "", order.platformFee ? `Platform fee ${money(order.platformFee)}` : "", `Shipping ${money(order.shipping)}`, order.storeCreditUsed ? `Store credit ${money(order.storeCreditUsed)}` : "")}<br/><b>Total ${money(order.total)}</b></td>
+        <td>${lines(`Subtotal ${money(order.subtotal)}`, order.discount ? `Discount ${money(order.discount)}` : "", order.gst ? `GST ${money(order.gst)}` : "", order.platformFee ? `Platform fee ${money(order.platformFee)}` : "", hideShipping(order) ? "" : `Shipping ${money(shippingSplit(order).courier)}`, shippingSplit(order).packing ? `Packing charge ${money(shippingSplit(order).packing)}` : "", order.storeCreditUsed ? `Store credit ${money(order.storeCreditUsed)}` : "")}<br/><b>Total ${money(order.total)}</b></td>
         <td>${lines(order.status, `${order.paymentStatus}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}`, order.paymentRef ? `Ref ${order.paymentRef}` : "", order.razorpayPaymentId ? `Txn ${order.razorpayPaymentId}` : "", order.razorpayOrderId ? `RZP order ${order.razorpayOrderId}` : "", order.paidAt ? `Paid ${formatDateTime(order.paidAt)}` : "", order.preorderPayment ? `Pre-order: advance ${money(order.preorderPayment.advance)}, balance ${money(order.preorderPayment.balance)}` : "", refunded ? `Refunded ${money(refunded)}` : "")}</td>
         <td>${lines(order.courierName, order.trackingId ? `AWB ${order.trackingId}` : "", preorder ? `Pre-order: ships after release${release ? ` (${formatDate(release)})` : ""}` : order.plan?.deliveredBy ? `Expected ${formatDate(order.plan.deliveredBy)}` : order.eta, order.returnShipment?.awb ? `Return AWB ${order.returnShipment.awb}` : "", order.returnShipment?.charge ? `Return charge ${money(order.returnShipment.charge)}${order.returnShipment.chargePaidBy ? ` (${order.returnShipment.chargePaidBy})` : ""}` : "")}</td>
       </tr>`;
@@ -2231,7 +2238,8 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     ${order.discount ? `<tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>` : ""}
     ${order.gst ? `<tr><td>GST</td><td class="right">${rupees(order.gst)}</td></tr>` : ""}
     ${order.platformFee ? `<tr><td>Platform fee</td><td class="right">${rupees(order.platformFee)}</td></tr>` : ""}
-    <tr><td>Shipping</td><td class="right">${order.shipping ? rupees(order.shipping) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</td></tr>
+    ${hideShipping(order) ? "" : `<tr><td>Shipping</td><td class="right">${shippingSplit(order).courier ? rupees(shippingSplit(order).courier) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</td></tr>`}
+    ${shippingSplit(order).packing ? `<tr><td>Packing charge</td><td class="right">${rupees(shippingSplit(order).packing)}</td></tr>` : ""}
     ${order.storeCreditUsed ? `<tr><td>Store credit</td><td class="right">−${rupees(order.storeCreditUsed)}</td></tr>` : ""}
     <tr class="grand"><td>Total</td><td class="right">${rupees(order.total)}</td></tr>
   </table>

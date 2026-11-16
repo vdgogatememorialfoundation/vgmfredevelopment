@@ -1,5 +1,6 @@
 "use client";
 
+import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
@@ -156,20 +157,28 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                   <dd className="font-medium text-text-primary">{formatPrice(order.platformFee || 0)}</dd>
                 </div>
               )}
-              <div className="flex justify-between">
-                <dt className="text-text-muted">Shipping</dt>
-                <dd className="font-medium text-text-primary">
-                  {order.deliveryMode === "store_pickup"
-                    ? "Store pickup · no charge"
-                    : order.shipping > 0
-                      ? formatPrice(order.shipping)
-                      : order.shippingDue || order.preorderPayment?.shippingDue
-                        ? "Calculated once packed"
-                        : !shippingIsFree(order.subtotal)
-                          ? formatPrice(order.shipping)
-                          : "FREE"}
-                </dd>
-              </div>
+              {!hideShipping(order) && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">Shipping</dt>
+                  <dd className="font-medium text-text-primary">
+                    {order.deliveryMode === "store_pickup"
+                      ? "Store pickup · no charge"
+                      : shippingSplit(order).courier > 0
+                        ? formatPrice(shippingSplit(order).courier)
+                        : order.shippingDue || order.preorderPayment?.shippingDue
+                          ? "Calculated once packed"
+                          : !shippingIsFree(order.subtotal) && !order.packing
+                            ? formatPrice(order.shipping)
+                            : "FREE"}
+                  </dd>
+                </div>
+              )}
+              {shippingSplit(order).packing > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-text-muted">Packing charge</dt>
+                  <dd className="font-medium text-text-primary">{formatPrice(shippingSplit(order).packing)}</dd>
+                </div>
+              )}
               <div className="flex justify-between border-t border-border pt-2 text-sm">
                 <dt className="font-semibold text-text-primary">
                   Order total

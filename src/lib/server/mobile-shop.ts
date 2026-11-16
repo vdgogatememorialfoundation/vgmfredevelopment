@@ -1,3 +1,4 @@
+import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import type { Book, CourierRate, Order } from "@/types";
 import { customerCourierRates, highestCourierRate } from "@/lib/checkout-couriers";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
@@ -155,10 +156,13 @@ async function mailDeskNewOrder(order: Order, paymentId: string) {
     ...order.items.map((item) => `- ${item.title}${item.sku ? ` (SKU ${item.sku})` : ""} × ${item.quantity} @ ₹${item.price} = ₹${item.price * item.quantity}`),
     "",
     `Subtotal: ₹${order.subtotal}`,
-    `Shipping: ${order.shipping ? `₹${order.shipping}` : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment ? "Calculated once packed" : "Free"}`,
+    hideShipping(order) ? "" : `Shipping: ${shippingSplit(order).courier ? `₹${shippingSplit(order).courier}` : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment ? "Calculated once packed" : "Free"}`,
+    shippingSplit(order).packing ? `Packing charge: ₹${shippingSplit(order).packing}` : "",
     `Total: ₹${order.total}`,
     `Payment: Razorpay · ${paymentId}`,
-  ].join("\n");
+  ]
+    .filter((line, index, all) => line !== "" || all[index - 1] !== "")
+    .join("\n");
   for (const to of DESK_EMAILS) {
     try {
       await sendMobileEmail(to, `New order ${order.id} · ₹${order.total} · ${address?.fullName || "Customer"}`, body);

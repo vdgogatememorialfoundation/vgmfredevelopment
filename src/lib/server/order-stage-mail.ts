@@ -1,3 +1,4 @@
+import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import { readFileSync, writeFileSync } from "node:fs";
 import { siteConfig } from "@/lib/constants";
 import { dataFile } from "@/lib/server/paths";
@@ -261,7 +262,8 @@ function details(order: Order) {
     order.discount ? `Discount: − ${rupees(order.discount)}` : "",
     order.gst ? `GST: ${rupees(order.gst)}` : "",
     order.platformFee ? `Platform fee: ${rupees(order.platformFee)}` : "",
-    `Shipping: ${order.shipping ? rupees(order.shipping) : pre?.shippingDue ? "added to the balance" : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || pre ? "calculated once packed" : "Free"}`,
+    hideShipping(order) ? "" : `Shipping: ${shippingSplit(order).courier ? rupees(shippingSplit(order).courier) : pre?.shippingDue ? "added to the balance" : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || pre ? "calculated once packed" : "Free"}`,
+    shippingSplit(order).packing ? `Packing charge: ${rupees(shippingSplit(order).packing)}` : "",
     order.storeCreditUsed ? `Store credit used: − ${rupees(order.storeCreditUsed)}` : "",
     `Order total: ${rupees(order.total)}`,
     "",

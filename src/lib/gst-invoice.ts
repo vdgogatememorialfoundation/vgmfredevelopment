@@ -1,3 +1,4 @@
+import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import type { OrderSettings } from "@/lib/integrations";
 import { getOrderSettings } from "@/lib/integrations";
 import { siteConfig } from "@/lib/constants";
@@ -58,7 +59,8 @@ export function printGstInvoice(order: Order, settings: OrderSettings = getOrder
       ${order.discount ? `<tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>` : ""}
       ${gst ? `<tr><td>GST ${esc(settings.gst.ratePercent)}%</td><td class="right">${rupees(order.gst)}</td></tr>` : ""}
       ${(order.platformFee || 0) > 0 ? `<tr><td>Platform fee</td><td class="right">${rupees(order.platformFee || 0)}</td></tr>` : ""}
-      <tr><td>Shipping</td><td class="right">${rupees(order.shipping)}</td></tr>
+      ${hideShipping(order) ? "" : `<tr><td>Shipping</td><td class="right">${rupees(shippingSplit(order).courier)}</td></tr>`}
+      ${shippingSplit(order).packing ? `<tr><td>Packing charge</td><td class="right">${rupees(shippingSplit(order).packing)}</td></tr>` : ""}
       <tr><td><b>Total</b></td><td class="right"><b>${rupees(order.total)}</b></td></tr>
     </table>
     </body></html>`;

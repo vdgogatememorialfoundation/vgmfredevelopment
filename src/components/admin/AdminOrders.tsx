@@ -1,5 +1,6 @@
 "use client";
 
+import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import { siteConfig } from "@/lib/constants";
 import { uploadMediaFile } from "@/lib/media-client";
 import { getSession } from "@/lib/auth";
@@ -1080,6 +1081,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [addBookId, setAddBookId] = useState("");
   const [addQty, setAddQty] = useState(1);
   const [editShipping, setEditShipping] = useState(String(order.shipping ?? 0));
+  const [editPacking, setEditPacking] = useState(String(order.packing ?? 0));
   const catalogue = editing ? getLiveBooks().filter((book) => book.active !== false) : [];
   const addProduct = () => {
     const book = catalogue.find((row) => row.id === addBookId);
@@ -1111,7 +1113,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       if (!items.length) throw new Error("Keep at least one product in the order.");
       const shipping = Number(editShipping);
       if (!Number.isFinite(shipping) || shipping < 0) throw new Error("Enter a shipping charge of ₹0 or more.");
-      const next = resaveOrder(order.id, { items, deliveryAddress: editAddress, shipping });
+      const packing = Number(editPacking || 0);
+      if (!Number.isFinite(packing) || packing < 0 || packing > shipping) throw new Error("The packing charge must be between ₹0 and the shipping charge.");
+      const next = resaveOrder(order.id, { items, deliveryAddress: editAddress, shipping, packing });
       setEditing(false);
       const due = remainingDue(next);
       return next.paymentStatus === "Partially Paid" && due > 0
@@ -1233,6 +1237,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 setEditItems(order.items.map((item) => ({ ...item })));
               } else {
                 setEditShipping(String(order.shipping ?? 0));
+                setEditPacking(String(order.packing ?? 0));
                 setEditing(true);
               }
             }}
@@ -1319,6 +1324,13 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </span>
                 <span className="font-normal text-text-muted">was {order.shipping === 0 ? "Free" : rupees(order.shipping)}. Raise it if the courier costs more.</span>
               </label>
+              <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-text-primary">
+                Of which packing charge ₹
+                <span className="w-28">
+                  <TextInput type="number" min={0} step="0.01" value={editPacking} onChange={(event) => setEditPacking(event.target.value)} />
+                </span>
+                <span className="font-normal text-text-muted">This part shows to the customer as &quot;Packing charge&quot; instead of shipping (order page, invoice, emails). The total does not change.</span>
+              </label>
               <p className="text-xs text-text-muted">
                 New items subtotal {rupees(editSubtotal)} (was {rupees(order.subtotal)}). GST and fees are worked out again when you save. If the new total is more than the customer paid, the difference shows as Remaining for a payment link.
               </p>
@@ -1332,7 +1344,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             {order.discount ? <div className="flex justify-between text-emerald-700"><dt>Discount</dt><dd>−{rupees(order.discount)}</dd></div> : null}
             {order.gst ? <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div> : null}
             {order.platformFee ? <div className="flex justify-between"><dt className="text-text-muted">Platform fee</dt><dd>{rupees(order.platformFee)}</dd></div> : null}
-            <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{order.shipping > 0 ? rupees(order.shipping) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</dd></div>
+            {!hideShipping(order) && <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{shippingSplit(order).courier > 0 ? rupees(shippingSplit(order).courier) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</dd></div>}
+            {shippingSplit(order).packing > 0 && <div className="flex justify-between"><dt className="text-text-muted">Packing charge</dt><dd>{rupees(shippingSplit(order).packing)}</dd></div>}
             {order.storeCreditUsed ? <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(order.storeCreditUsed)}</dd></div> : null}
             <div className="flex justify-between text-sm font-bold"><dt>Total</dt><dd className="text-burgundy">{rupees(order.total)}</dd></div>
             {order.refundAmount ? <div className="flex justify-between text-red-600"><dt>Refunded</dt><dd>−{rupees(order.refundAmount)}</dd></div> : null}
