@@ -279,7 +279,7 @@ export async function syncCancellationRefunds(onlyOrderId = "", waitMs = 2 * 60_
       patchShopOrder(order.id, {
         refunds: [...(order.refunds ?? []), ...refunds],
         refundAmount: total,
-        paymentStatus: sent ? (total >= collected - 0.001 ? "Refunded" : "Partially Refunded") : order.paymentStatus,
+        paymentStatus: sent ? (total >= collected - Math.max(0, order.platformFee ?? 0) - 0.001 ? "Refunded" : "Partially Refunded") : order.paymentStatus,
         autoRefund: { ...plan, status: error || !sent ? "failed" : "done", ...(error ? { error } : {}) },
         history: [...(order.history ?? []), { at: now, status: order.status, note, by: "Automatic refund" }],
       });
