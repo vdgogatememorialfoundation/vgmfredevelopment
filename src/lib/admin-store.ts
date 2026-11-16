@@ -1484,6 +1484,19 @@ export function setPaymentStatus(orderId: string, paymentStatus: Order["paymentS
   updateOrderInStore(withHistory({ ...order, paymentStatus }, `Payment ${paymentStatus}`));
 }
 
+/** The desk marks a Paid order as only partly paid (e.g. taken as a normal order by mistake); the rest becomes due and can go out as a link. */
+export function markPartiallyPaid(orderId: string, amountReceived: number) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.paymentStatus !== "Paid") return "Only a Paid order can be marked partially paid here.";
+  const amount = Math.round(Number(amountReceived) * 100) / 100;
+  if (!(amount > 0)) return "Enter the amount the customer has actually paid.";
+  if (amount >= order.total) return `That is the full total (₹${order.total}). Add the courier or extra charge first, or enter less than the total.`;
+  const due = Math.round((order.total - amount) * 100) / 100;
+  updateOrderInStore(withHistory({ ...order, paymentStatus: "Partially Paid", amountPaid: amount }, order.status, `Marked partially paid by the desk: ₹${amount} received, ₹${due} due.`));
+  return `Marked partially paid: ₹${amount} received, ₹${due} due. Send the payment link below for the rest.`;
+}
+
 export function recordPayment(orderId: string, input: { method: string; reference?: string; razorpayPaymentId?: string }) {
   const order = getOrder(orderId);
   if (!order) return;

@@ -31,6 +31,7 @@ import {
   recordCourierPayment,
   convertToStorePickup,
   convertToPreorder,
+  markPartiallyPaid,
   markShippingDue,
   addExtraCharge,
 } from "@/lib/admin-store";
@@ -1509,6 +1510,17 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   return result;
                 });
               }}>Add extra charge</Button>
+            </div>
+          )}
+
+          {order.paymentStatus === "Paid" && order.status !== "Cancelled" && (
+            <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[1fr_auto]">
+              <TextInput type="number" min={1} aria-label="Amount actually received" placeholder={`Amount actually received (total ${rupees(order.total)})`} value={partAmount} onChange={(event) => setPartAmount(event.target.value)} />
+              <Button variant="outline" disabled={!partAmount} onClick={() => {
+                if (!window.confirm(`Mark this order partially paid with ₹${partAmount} received?`)) return;
+                run("mark-partial", () => { const note = markPartiallyPaid(order.id, Number(partAmount)); if (note.startsWith("Marked")) setPartAmount(""); return note; });
+              }}>Mark as partially paid</Button>
+              <p className="text-[11px] text-text-muted sm:col-span-2">For an order taken as fully paid by mistake. To charge courier on top, use Add extra charge above instead; it turns the order Partially Paid by itself.</p>
             </div>
           )}
 
