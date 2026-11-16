@@ -2149,17 +2149,13 @@ export function printShippingLabel(
       <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
       <div class="agg-cell side" style="text-align:center">${qrSvg(shipment.orderId, 100)}</div>
     </div>
-    <table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th><th class="right">Price</th><th class="right">Total</th></tr>
+    <table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th></tr>
     ${priced
       .map(
         (item) =>
-          `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(item.sku)}</td><td class="right">${esc(item.quantity)}</td><td class="right">${esc(rupees(item.price))}</td><td class="right">${esc(rupees(item.price * item.quantity))}</td></tr>`
+          `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(item.sku)}</td><td class="right">${esc(item.quantity)}</td></tr>`
       )
       .join("")}
-    ${order && (order.shipping ?? 0) > 0 ? `<tr><td colspan="4" class="right">Courier &amp; packing</td><td class="right">${esc(rupees(order.shipping))}</td></tr>` : ""}
-    ${order && (order.platformFee ?? 0) > 0 ? `<tr><td colspan="4" class="right">Platform fee</td><td class="right">${esc(rupees(order.platformFee ?? 0))}</td></tr>` : ""}
-    ${order && (order.gst ?? 0) > 0 ? `<tr><td colspan="4" class="right">GST</td><td class="right">${esc(rupees(order.gst))}</td></tr>` : ""}
-    <tr><td colspan="4" class="right"><b>Total</b></td><td class="right"><b>${esc(rupees(order?.total || value))}</b></td></tr>
     </table>
     <div class="agg-foot">
       <span>${logoImg("label-logo")}</span>
