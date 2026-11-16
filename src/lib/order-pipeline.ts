@@ -83,7 +83,7 @@ export function isFailedAttempt(text: string) {
 
 /** Courier pickup scans, worded differently by each courier (Ekart "Pickup from seller", Delhivery "Picked up", …). */
 const PICKED_UP =
-  /\b(picked up|pickup done|pickup complete(d)?|pickup successful|pick ?up from (the )?(seller|shipper|merchant|vendor|warehouse|customer)|picked (from|by)|shipment picked|collected from (the )?(seller|shipper|merchant|vendor)|received at (the )?(mother ?hub|origin)|in ?scan(ned)? (at|to|in)|inscan|shipment received)\b/;
+  /\b(picked up|pickup done|pickup complete(d)?|pickup successful|pick ?up from (the )?(seller|shipper|merchant|vendor|warehouse|customer)|picked (from|by)|shipment picked|collected from (the )?(seller|shipper|merchant|vendor)|received at (the )?(mother ?hub|origin)|in ?scan(ned)? (at|to|in)|inscan|shipment received|received by (the )?carrier|^picked)\b/;
 const PICKUP_PENDING = /scheduled|awaited|pending|request|out for pickup|assigned|generated|failed|cancel|reattempt|not picked/;
 
 /** A real pickup scan from the courier (not "pickup scheduled"). */
@@ -103,7 +103,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
   if (!value || isCourierInfoLine(value)) return null;
   // A failed attempt keeps the order out for delivery; only RTO / lost ends it as failed.
   if (FAILED_ATTEMPT.test(value) && !FINAL_FAILURE.test(value)) return "out";
-  if (/\b(rto|return to origin|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|damaged|failed|declined|incomplete)\b/.test(value)) {
+  if (/\b(rto|return to origin|reached back at (the )?(seller|origin)|undeliver|not delivered|delivery failed|failed delivery|consignee refused|lost|destroyed|damaged|failed|declined|incomplete)\b/.test(value)) {
     return "failed";
   }
   if (/\bcancel/.test(value)) return "cancelled";
@@ -119,7 +119,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "packed";
   }
   if (
-    /\b(in transit|shipment arrived|shipped|dispatch(ed)?|departed|outscan|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete)\b/.test(
+    /\b(in transit|shipment arrived|trip arrived|vehicle arrived|bag arrived|shipped|dispatch(ed)?|despatch(ed)?|departed|outscan(ned)?|in ?scan(ned)?|item received|has left|added to connection|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)
@@ -203,12 +203,12 @@ export function courierEventTitle(status: string, location?: string, courier = "
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
     return "Pickup scheduled";
   }
-  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at/.test(value)) return "Your item has been picked up by delivery partner.";
+  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at|in ?scan/.test(value)) return "Your item has been picked up by delivery partner.";
   if (classifyCourierScan(status) === "packed" && !/\bdispatch/.test(value)) return status;
-  if (/arrived at|reached at|received at|inward|bag received|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
+  if (/arrived at|reached at|received at|inward|bag received|in ?scan|item received|trip arrived|vehicle arrived|^shipment arrived$|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
     return `Shipment arrived at courier facility${place}`;
   }
-  if (/left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|departed|\bdispatched\b|outscan|forwarded|in transit|shipment shipped|connected to/.test(value) && !/out for delivery/.test(value)) {
+  if (/left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|departed|\bdispatched\b|\bdespatched\b|outscan|forwarded|in transit|shipment shipped|connected to|further connected|has left|added to connection/.test(value) && !/out for delivery/.test(value)) {
     return `Shipment left Courier Facility${place}`;
   }
   return status;
@@ -496,7 +496,12 @@ export function buildTrackingStages(
     });
   }
 
-  const scanStages = classifyScanSequence(liveScans.map((scan) => scan.status));
+  const scanStages = classifyScanSequence(liveScans.map((scan) => scan.status)).map((mapped, index, all) => {
+    // A scan no rule recognises (delays, misroutes, holds…) still shows, under the stage the parcel is already in.
+    if (mapped || isDeskScan(liveScans[index]) || isCourierInfoLine(liveScans[index].status)) return mapped;
+    const before = all.slice(0, index).reverse().find((stage) => stage && stage !== "failed" && stage !== "cancelled");
+    return before === "shipped" || before === "out" ? before : null;
+  });
   // Ekart logs "Dispatched to <next hub>" at the next hub's city; the parcel left the facility it last reached.
   const leftFrom = (index: number) => {
     const scan = liveScans[index];
