@@ -2181,7 +2181,7 @@ export function printShippingLabel(
     ${priced
       .map(
         (item) =>
-          `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(item.sku)}</td><td class="right">${esc(item.quantity)}</td></tr>`
+          `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td><td class="right">${esc(item.quantity)}</td></tr>`
       )
       .join("")}
     </table>
@@ -2205,7 +2205,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     .map(
       (item) => `<tr>
         <td>${esc(item.title)}</td>
-        <td>${esc(item.sku || item.bookId)}</td>
+        <td>${esc((item.sku || item.bookId).replace(/^bks-/i, ""))}</td>
         <td class="right">${esc(item.quantity)}</td>
         <td class="right">${rupees(item.price)}</td>
         <td class="right">${rupees(item.price * item.quantity)}</td>
