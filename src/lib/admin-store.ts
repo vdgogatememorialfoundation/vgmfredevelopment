@@ -1555,6 +1555,32 @@ export function convertToStorePickup(orderId: string) {
     : "Changed to store pickup.";
 }
 
+/** Desk switches a store-pickup order to courier delivery: the address is saved and the courier charge is added after packing as a balance due. */
+export function convertToShipping(orderId: string, address: DeliveryAddress) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.deliveryMode !== "store_pickup") return "This order is already a courier delivery.";
+  if (["Delivered", "Cancelled", "Failed"].includes(order.status)) return "This order is already closed.";
+  const clean = { ...address, fullName: address.fullName.trim(), phone: address.phone.trim(), line1: address.line1.trim(), city: address.city.trim(), state: address.state.trim(), pincode: address.pincode.trim() };
+  if (!clean.fullName || !clean.phone || !clean.line1 || !clean.city || !clean.state || !clean.pincode) return "Enter name, phone, address, city, state and postal code first.";
+  const plan = order.preorderPayment;
+  const next = withHistory(
+    {
+      ...order,
+      deliveryMode: "delivery",
+      deliveryAddress: clean,
+      shippingDue: plan && !plan.balancePaidAt ? undefined : true,
+      preorderPayment: plan && !plan.balancePaidAt ? { ...plan, shippingDue: true } : plan,
+    },
+    order.status,
+    "Changed from store pickup to courier delivery by the desk; the courier charge will be added as a balance due once packed."
+  );
+  updateOrderInStore(next);
+  return plan && !plan.balancePaidAt
+    ? "Changed to courier delivery. Pick the courier in Pre-order balance; its charge joins the balance and the payment link goes out."
+    : "Changed to courier delivery. After packing, add the courier charge under Payment → Add extra charge → Courier charge and send the payment link.";
+}
+
 /** Adds a charge the customer still owes (e.g. courier shown as free by mistake); what they already paid stays recorded, so only the difference is due. */
 /** Shipping shown free by mistake: the customer sees "calculated once packed" until the desk adds the courier charge. */
 export function markShippingDue(orderId: string) {

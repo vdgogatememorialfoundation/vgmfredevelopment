@@ -31,6 +31,7 @@ import {
   recordBalancePayment,
   recordCourierPayment,
   convertToStorePickup,
+  convertToShipping,
   convertToPreorder,
   markPartiallyPaid,
   markShippingDue,
@@ -181,7 +182,11 @@ export function OrdersDashboard() {
   const languagesOf = (order: Order) => orderLanguages(order, catalogue);
   const languages = [...new Set(orders.flatMap(languagesOf))].sort();
   const filtered = orders
-    .filter((order) => statusFilter === "All" || (STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter))
+    .filter((order) =>
+      statusFilter === "All"
+        ? order.status !== "Cancelled" || Boolean(query.trim()) || paymentFilter === "Refunded" || paymentFilter === "Partially Refunded"
+        : STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter
+    )
     .filter((order) => languageFilter === "All" || languagesOf(order).includes(languageFilter))
     .filter((order) => productFilter === "All" || order.items.some((item) => (catalogue.find((book) => book.id === item.bookId)?.productType === "other" ? "Other" : "Books") === productFilter))
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
@@ -202,6 +207,7 @@ export function OrdersDashboard() {
   const selected = selectedId ? getOrderByAdmin(selectedId) : null;
 
   const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
+  const cancelledCount = orders.filter((order) => order.status === "Cancelled").length;
   const toPack = orders.filter(STATUS_GROUPS["group:to-pack"].test).length;
   const packedPaymentDue = orders.filter(STATUS_GROUPS["group:payment-due"].test).length;
   const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery" && order.paymentMethod !== "Cash at Store").length;
@@ -460,9 +466,9 @@ export function OrdersDashboard() {
           >
             <div className="mb-2 flex flex-wrap gap-2">
               {([
-                ["All", () => { setStatusFilter("All"); setPaymentFilter("All"); }, statusFilter === "All" && paymentFilter === "All"],
+                ["Confirmed orders", () => { setStatusFilter("All"); setPaymentFilter("All"); }, statusFilter === "All" && paymentFilter === "All"],
                 ["Paid", () => { setStatusFilter("All"); setPaymentFilter("Paid"); }, paymentFilter === "Paid"],
-                ["Cancelled", () => { setPaymentFilter("All"); setStatusFilter("Cancelled"); }, statusFilter === "Cancelled" && paymentFilter === "All"],
+                [`Cancelled (${cancelledCount})`, () => { setPaymentFilter("All"); setStatusFilter("Cancelled"); }, statusFilter === "Cancelled" && paymentFilter === "All"],
                 ["Refunded", () => { setStatusFilter("All"); setPaymentFilter("Refunded"); }, paymentFilter === "Refunded"],
                 ["Part refunded", () => { setStatusFilter("All"); setPaymentFilter("Partially Refunded"); }, paymentFilter === "Partially Refunded"],
               ] as [string, () => void, boolean][]).map(([label, apply, on]) => (
@@ -1630,8 +1636,27 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             action={<Button variant="outline" onClick={loadRates} disabled={busy === "rates"}>{busy === "rates" ? "Checking…" : "Show couriers & rates"}</Button>}
           >
             <p className="text-sm text-text-muted">
-              If the customer cannot come to the store, send a link to pay only the courier charge. Once paid, the order becomes a courier delivery and can be booked.
+              If the customer cannot come to the store, convert it to shipping now: enter the address, and the courier charge is added after packing as a balance due. Or send a link to pay only the courier charge first.
             </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Name" />
+              <TextInput value={editAddress.phone} onChange={(event) => setEditAddress({ ...editAddress, phone: event.target.value })} placeholder="Phone" />
+              <TextInput value={editAddress.line1} onChange={(event) => setEditAddress({ ...editAddress, line1: event.target.value })} placeholder="Address" />
+              <TextInput value={editAddress.city} onChange={(event) => setEditAddress({ ...editAddress, city: event.target.value })} placeholder="City" />
+              <TextInput value={editAddress.state} onChange={(event) => setEditAddress({ ...editAddress, state: event.target.value })} placeholder="State" />
+              <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="Postal code" />
+            </div>
+            <div className="mt-2">
+              <Button
+                disabled={busy === "to-shipping"}
+                onClick={() => {
+                  if (!window.confirm("Convert this store-pickup order to courier delivery? The courier charge will be due as a balance after packing.")) return;
+                  run("to-shipping", () => convertToShipping(order.id, editAddress));
+                }}
+              >
+                {busy === "to-shipping" ? "Converting…" : "Convert to shipping"}
+              </Button>
+            </div>
             {rawQuote && <AggregatorPicks rates={rawQuote.rates} skipped={skipAggregators} onChange={(next) => { setSkipAggregators(next); setPicked(undefined); }} />}
             {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
             <div className="mt-3 flex flex-wrap gap-2">
