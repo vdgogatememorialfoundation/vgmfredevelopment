@@ -109,7 +109,8 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "failed";
   }
   if (/\bcancel/.test(value)) return "cancelled";
-  if (/\b(successful|success|completed|complete|already delivered|task successful)\b/.test(value) && !/\b(attempt|fail|undeliver|pick ?up|picked)\b/.test(value)) {
+  // Bare "Successful"/"Completed" is how hyperlocal apps (Tookan etc.) report delivery; any other "... complete" scan (pickup, manifest, bagging) is not.
+  if (/^(task |job |order |delivery |drop )?(successful|success|completed|complete)$|\balready delivered\b/.test(value)) {
     return "delivered";
   }
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
