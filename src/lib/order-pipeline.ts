@@ -86,6 +86,18 @@ const PICKED_UP =
   /\b(picked up|pickup done|pickup complete(d)?|pickup successful|pick ?up from (the )?(seller|shipper|merchant|vendor|warehouse|customer)|picked (from|by)|shipment picked|collected from (the )?(seller|shipper|merchant|vendor)|received at (the )?(mother ?hub|origin)|in ?scan(ned)? (at|to|in)|inscan|shipment received)\b/;
 const PICKUP_PENDING = /scheduled|awaited|pending|request|out for pickup|assigned|generated|failed|cancel|reattempt|not picked/;
 
+/** A real pickup scan from the courier (not "pickup scheduled"). */
+export function isPickupScan(text: string) {
+  const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at/.test(value);
+}
+
+/** Ekart routes a parcel ("Dispatched to MotherHub_PUNE") the moment it is booked; that alone is not a pickup. */
+export function onlyRoutingScans(statuses: string[]) {
+  const shipped = statuses.filter((status) => classifyCourierScan(status) === "shipped");
+  return shipped.length > 0 && !statuses.some(isPickupScan) && shipped.every((status) => /\bdispatched to\b/i.test(status));
+}
+
 export function classifyCourierScan(text: string): CourierStage | null {
   const value = text.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   if (!value || isCourierInfoLine(value)) return null;
@@ -191,7 +203,7 @@ export function courierEventTitle(status: string, location?: string, courier = "
   if (/pickup scheduled|pickup awaited|pickup pending|pickup generated|awaiting pickup|pickup request|out for pickup|ready for pickup|pickup assigned/.test(value)) {
     return "Pickup scheduled";
   }
-  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at/.test(value)) return `Picked up by the courier${place}`;
+  if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at/.test(value)) return "Your item has been picked up by delivery partner.";
   if (classifyCourierScan(status) === "packed" && !/\bdispatch/.test(value)) return status;
   if (/arrived at|reached at|received at|inward|bag received|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
     return `Shipment arrived at courier facility${place}`;
@@ -286,8 +298,11 @@ export function buildTrackingStages(
   const trackingId = order.trackingId ?? shipment?.awb ?? "";
   const liveScans = (scans.length ? scans : shipment?.tracking ?? []).filter((scan) => !isDeskScan(scan));
   const fromScans = highestScanStage(liveScans);
+  // The day it was actually packed: the last "Packed" step, else the courier booking (not notes that mention packing).
   const packedAt =
-    order.history?.find((item) => /pack|book/i.test(`${item.status} ${item.note ?? ""}`))?.at ||
+    [...(order.history ?? [])].reverse().find((item) => /^packed$/i.test(item.status.trim()))?.at ||
+    order.pick?.packedAt ||
+    order.history?.find((item) => /^courier booked/i.test(item.status))?.at ||
     shipment?.generatedAt ||
     "";
 
@@ -430,11 +445,12 @@ export function buildTrackingStages(
     shipment && ["Picked Up", "In Transit", "Out for Delivery", "Delivered"].includes(shipment.status ?? "")
   );
   const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
+  const routingOnly = onlyRoutingScans(liveScans.map((scan) => scan.status)) && !["Shipped", "Out for Delivery", "Delivered"].includes(order.status);
   let shippedReached =
-    collected ||
+    (collected && !routingOnly) ||
     shipmentLeft ||
     ["Shipped", "Out for Delivery", "Delivered"].includes(order.status) ||
-    STAGE_RANK[progress] >= STAGE_RANK.shipped;
+    (STAGE_RANK[progress] >= STAGE_RANK.shipped && !routingOnly);
   const outReached = STAGE_RANK[progress] >= STAGE_RANK.out || (hyperlocal && shippedReached);
   if (hyperlocal) shippedReached = false;
   const courierDelivered = order.status === "Delivered" || shipment?.status === "Delivered";
@@ -444,10 +460,24 @@ export function buildTrackingStages(
   if (packedReached) {
     packedEvents.push({
       id: "packed",
-      title: "Packed and ready for handover",
+      title: "We have processed your order.",
       at: packedAt || order.date,
       location: origin,
       reached: true,
+    });
+    if (shipmentBooked && !hyperlocal && !shippedReached) {
+      packedEvents.push({
+        id: "awaiting-pickup",
+        title: "Item waiting to be Picked up by Courier Partner",
+        at: shipment?.generatedAt || packedAt || order.date,
+        location: origin,
+        reached: true,
+      });
+    }
+  }
+  if (routingOnly && !hyperlocal) {
+    liveScans.forEach((scan, index) => {
+      if (classifyCourierScan(scan.status) === "shipped") packedEvents.push(scanEvent(scan, index, true, courierEventTitle(scan.status, scan.location, courier)));
     });
   }
   if (!hyperlocal) {
@@ -469,7 +499,7 @@ export function buildTrackingStages(
   const scanStages = classifyScanSequence(liveScans.map((scan) => scan.status));
   const shippedEvents = liveScans
     .map((scan, index) => ({ scan, mapped: scanStages[index], index }))
-    .filter((item) => item.mapped === "shipped")
+    .filter((item) => item.mapped === "shipped" && !routingOnly)
     .map((item) =>
       scanEvent(
         item.scan,
@@ -482,7 +512,7 @@ export function buildTrackingStages(
   if (shippedReached && shippedEvents.length === 0) {
     shippedEvents.push({
       id: "shipped",
-      title: "Collected by the courier",
+      title: "Your item has been picked up by delivery partner.",
       at: fromScans.at || packedAt || order.date,
       location: origin,
       detail: shippedReached && trackingId ? `Courier: ${courier} · Tracking id: ${trackingId}` : `Courier: ${courier}`,

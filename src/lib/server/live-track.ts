@@ -1,5 +1,5 @@
 import { customerCourierLabel } from "@/lib/courier-label";
-import { classifyCourierScan, classifyScanSequence, cleanScanText, courierStageRank, isCourierInfoLine, isHyperlocalProvider, usableScan } from "@/lib/order-pipeline";
+import { classifyCourierScan, classifyScanSequence, cleanScanText, courierStageRank, isCourierInfoLine, isHyperlocalProvider, onlyRoutingScans, usableScan } from "@/lib/order-pipeline";
 import {
   ithinkTrack,
   nimbusTrack,
@@ -112,6 +112,11 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     return { ok: true as const, live: false as const, shipment };
   }
   if (!hit) return { ok: true as const, live: false as const, shipment };
+  // The Ekart Elite API lags behind ekartlogistics.com (hub scans show there first), so read both.
+  if (!direct && provider === "ekart" && shipment.awb) {
+    const site = await courierWebTrack("ekart", shipment.awb, (creds.tracker ?? {}) as TrackerCreds).catch(() => null);
+    if (site?.events?.length) hit = { ...hit, events: [...(hit.events ?? []), ...site.events] };
+  }
   hit.events = await withScanPlaces(hit.events ?? []).catch(() => hit?.events ?? []);
 
   // Courier tracking pages show only the latest scans, so keep earlier ones; drop anything dated in the future.
@@ -120,7 +125,7 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   const sameScan = (x: { status: string; location?: string }, y: { status: string; location?: string }) =>
     x.status.trim().toLowerCase() === y.status.trim().toLowerCase() && placeKey(x.location) === placeKey(y.location);
   // A re-read scan replaces the stored copy, so an earlier wrong timestamp is corrected rather than duplicated.
-  const merged = direct
+  const merged = direct || provider === "ekart"
     ? [...(shipment.tracking ?? []).filter((old) => !fresh.some((event) => sameScan(event, old))), ...fresh]
     : fresh.length
       ? fresh
@@ -143,6 +148,7 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     stage = headlineStage;
     latestStatus = headline;
   }
+  if (stage === "shipped" && onlyRoutingScans([...events.map((event) => event.status), headline].filter(Boolean))) stage = "packed";
   const orderForLeg = findShopOrder(orderId);
   const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile, hit.courierName || shipment.courier || orderForLeg?.courierName);
   const shipmentStatus = stage ? shipmentStatusFor(stage) : undefined;

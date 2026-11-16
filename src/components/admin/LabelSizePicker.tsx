@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LABEL_SIZES, getLabelColour, getLabelHidePhone, getLabelSize, setLabelColour, setLabelHidePhone, setLabelSize, type LabelColour, type LabelSize } from "@/lib/admin-store";
+import { LABEL_SIZES, getLabelColour, getLabelHidePhone, getLabelHideStorePhone, getLabelSize, setLabelColour, setLabelHidePhone, setLabelHideStorePhone, setLabelSize, type LabelColour, type LabelSize } from "@/lib/admin-store";
 import { getIntegrations } from "@/lib/integrations";
 
 /** Paper and ink for the Foundation-designed label on this device. Aggregator labels keep the size set in their panel. */
@@ -9,6 +9,7 @@ export default function LabelSizePicker() {
   const [size, setSize] = useState<LabelSize>(() => getLabelSize());
   const [colour, setColour] = useState<LabelColour>(() => getLabelColour());
   const [hidePhone, setHidePhone] = useState(() => getLabelHidePhone());
+  const [hideStorePhone, setHideStorePhone] = useState(() => getLabelHideStorePhone());
   const aggregator = getIntegrations().shipping.labelSource !== "foundation";
   return (
     <>
@@ -49,7 +50,18 @@ export default function LabelSizePicker() {
             setLabelHidePhone(event.target.checked);
           }}
         />
-        Hide phone no.
+        Hide customer ph.
+      </label>
+      <label className="flex items-center gap-1.5 text-sm" title="Leaves the store / sender phone off the label">
+        <input
+          type="checkbox"
+          checked={hideStorePhone}
+          onChange={(event) => {
+            setHideStorePhone(event.target.checked);
+            setLabelHideStorePhone(event.target.checked);
+          }}
+        />
+        Hide store ph.
       </label>
     </>
   );

@@ -1824,6 +1824,17 @@ export function setLabelHidePhone(hide: boolean) {
   if (typeof window !== "undefined") window.localStorage.setItem(LABEL_HIDE_PHONE_KEY, hide ? "1" : "0");
 }
 
+const LABEL_HIDE_STORE_PHONE_KEY = "vgmf-label-hide-store-phone";
+
+/** Leaves the store / sender phone off the Foundation shipping label (saved on this device). */
+export function getLabelHideStorePhone() {
+  return typeof window !== "undefined" && window.localStorage.getItem(LABEL_HIDE_STORE_PHONE_KEY) === "1";
+}
+
+export function setLabelHideStorePhone(hide: boolean) {
+  if (typeof window !== "undefined") window.localStorage.setItem(LABEL_HIDE_STORE_PHONE_KEY, hide ? "1" : "0");
+}
+
 function letterhead() {
   return `<header class="head">
     <div class="head-brand">${logoImg()}<div>
@@ -2051,8 +2062,15 @@ export function printShippingLabel(
   const pickup = getIntegrations().shipping.pickup;
   const viaAggregator = Boolean(shipment.provider && !["manual", "self"].includes(String(shipment.provider)) && pickup?.line1);
   const fromName = viaAggregator ? pickup.contactName || pickup.nickname || siteConfig.name : siteConfig.name;
-  const fromAddress = viaAggregator ? [pickup.line1, pickup.line2, pickup.city, pickup.state, pickup.pincode].filter(Boolean).join(", ") : siteConfig.address;
-  const fromPhone = viaAggregator ? pickup.phone || siteConfig.phone : siteConfig.phone;
+  // A pickup line that already holds the full address (with its PIN) is printed as is, never with a second area or PIN.
+  const pickupLine = String(pickup?.line1 ?? "").trim().replace(/\s*,\s*/g, ", ");
+  const fromAddress = viaAggregator
+    ? /\b\d{6}\b/.test(pickupLine)
+      ? pickupLine
+      : [pickupLine, pickup.line2, pickup.city, pickup.state, pickup.pincode].filter(Boolean).join(", ")
+    : siteConfig.address;
+  const hideStorePhone = getLabelHideStorePhone();
+  const fromPhone = hideStorePhone ? "" : viaAggregator ? pickup.phone || siteConfig.phone : siteConfig.phone;
   const awb = details?.awb || shipment.awb;
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";
@@ -2102,14 +2120,14 @@ export function printShippingLabel(
       <div class="agg-cell grow">
         <p class="label">Shipped by (if undelivered, return to)</p>
         <strong>${esc(fromName)}</strong><br/>
-        ${esc(fromAddress)}<br/>
-        ${esc(fromPhone)}
+        ${esc(fromAddress)}${fromPhone ? `<br/>
+        ${esc(fromPhone)}` : ""}
       </div>
       <div class="agg-cell side">
         <p class="label">Order no.</p>
         <b>${esc(shipment.orderId)}</b>
         <p class="meta">Order date ${esc(formatDate(order?.date || shipment.generatedAt))}</p>
-        <p class="meta">Invoice value ${esc(rupees(value || order?.total || 0))}</p>
+        <p class="meta">Invoice value ${esc(rupees(order?.total || value || 0))}</p>
       </div>
     </div>
     <div class="agg-row center">
@@ -2123,11 +2141,14 @@ export function printShippingLabel(
           `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(item.sku)}</td><td class="right">${esc(item.quantity)}</td><td class="right">${esc(rupees(item.price))}</td><td class="right">${esc(rupees(item.price * item.quantity))}</td></tr>`
       )
       .join("")}
-    <tr><td colspan="4" class="right"><b>Total</b></td><td class="right"><b>${esc(rupees(value))}</b></td></tr>
+    ${order && (order.shipping ?? 0) > 0 ? `<tr><td colspan="4" class="right">Courier &amp; packing</td><td class="right">${esc(rupees(order.shipping))}</td></tr>` : ""}
+    ${order && (order.platformFee ?? 0) > 0 ? `<tr><td colspan="4" class="right">Platform fee</td><td class="right">${esc(rupees(order.platformFee ?? 0))}</td></tr>` : ""}
+    ${order && (order.gst ?? 0) > 0 ? `<tr><td colspan="4" class="right">GST</td><td class="right">${esc(rupees(order.gst))}</td></tr>` : ""}
+    <tr><td colspan="4" class="right"><b>Total</b></td><td class="right"><b>${esc(rupees(order?.total || value))}</b></td></tr>
     </table>
     <div class="agg-foot">
       <span>${logoImg("label-logo")}</span>
-      <span>${esc(siteConfig.name)} · ${esc(siteConfig.phone)} · Handle books with care. Do not bend.<br/>This is a computer-generated label and does not need a signature.</span>
+      <span>${esc(siteConfig.name)}${hideStorePhone ? "" : ` · ${esc(siteConfig.phone)}`} · Handle books with care. Do not bend.<br/>This is a computer-generated label and does not need a signature.</span>
     </div>
   </div></div>`;
   const page = size === "printer" ? "auto" : size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";

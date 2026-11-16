@@ -338,38 +338,20 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
           <b>Expected delivery by</b> {expectedText ? deliveryDatePhrase(expectedText) : "— shown once the courier confirms the booking"}
         </p>
       ) : null}
-      {order.preorderPayment ? (
-        <p className="vgmf-trk-note font-bold">
-          Pre-order · advance ₹{order.preorderPayment.advance.toLocaleString("en-IN")} {order.preorderPayment.advancePaidAt ? "paid" : "pending"} · balance ₹
-          {order.preorderPayment.balance.toLocaleString("en-IN")}{" "}
-          {order.preorderPayment.balancePaidAt
-            ? "paid"
-            : order.preorderPayment.link
-              ? (
-                  <a href={order.preorderPayment.link.url} className="font-semibold text-burgundy underline">
-                    pay now
-                  </a>
-                )
-              : `${order.preorderPayment.shippingDue ? "+ courier charge (added once we select the courier) " : ""}${
-                  order.preorderPayment.balanceWhen === "on_ready" ? "due when the item is ready" : "due before dispatch"
-                } — we will send a payment link`}
-        </p>
-      ) : null}
-      {order.extraCharges?.length && order.status !== "Cancelled" ? (
-        <p className="vgmf-trk-note font-bold">
-          {order.extraCharges.map((charge) => `Extra ${charge.kind === "shipping" ? "courier charge" : "charge"} ₹${charge.amount.toLocaleString("en-IN")} (${charge.reason})`).join(" · ")}
-          {" · "}
-          {order.paymentStatus === "Paid" || order.preorderPayment
-            ? order.paymentStatus === "Paid" ? "paid" : "added to the balance"
-            : order.paymentLink
-              ? (
-                  <a href={order.paymentLink.url} className="font-semibold text-burgundy underline">
-                    pay now
-                  </a>
-                )
-              : "we will send a payment link"}
-        </p>
-      ) : null}
+      {(() => {
+        // Tracking is public: no amounts, only whether it is paid (or a link to pay what is due).
+        if (order.status === "Cancelled") return null;
+        const plan = order.preorderPayment;
+        const link = plan && !plan.balancePaidAt ? plan.link : order.paymentStatus !== "Paid" ? order.paymentLink : undefined;
+        const paid = order.paymentStatus === "Paid" && (!plan || Boolean(plan.balancePaidAt) || !plan.balance);
+        if (paid) return <p className="vgmf-trk-note font-bold" style={{ color: "#15803d" }}><span aria-hidden="true">✔</span> Paid</p>;
+        return link ? (
+          <p className="vgmf-trk-note font-bold">
+            Payment due ·{" "}
+            <a href={link.url} className="font-semibold text-burgundy underline">pay now</a>
+          </p>
+        ) : null;
+      })()}
       <RefundDetails order={order} />
       {returnActive && returnRequest && returnPipeline ? (
         <div>
