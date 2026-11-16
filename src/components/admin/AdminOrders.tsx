@@ -32,6 +32,7 @@ import {
   recordCourierPayment,
   convertToStorePickup,
   convertToShipping,
+  setPickupWindow,
   convertToPreorder,
   markPartiallyPaid,
   markShippingDue,
@@ -84,6 +85,7 @@ import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguage
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
+import { ResendEmailButton } from "@/components/admin/EmailLogDesk";
 import { beep } from "@/lib/scan-beep";
 import { APPROVAL_LABELS, requestApproval } from "@/lib/approvals";
 import type { ApprovalRequest } from "@/types";
@@ -1644,6 +1646,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
       {order.deliveryMode === "store_pickup" && order.status !== "Cancelled" && order.status !== "Delivered" && (
         <div className="mt-4">
+          <PickupWindowSection order={order} busy={busy} run={run} />
+        </div>
+      )}
+
+      {order.deliveryMode === "store_pickup" && order.status !== "Cancelled" && order.status !== "Delivered" && (
+        <div className="mt-4">
           <Section
             title="Switch to courier delivery"
             action={<Button variant="outline" onClick={loadRates} disabled={busy === "rates"}>{busy === "rates" ? "Checking…" : "Show couriers & rates"}</Button>}
@@ -2681,7 +2689,7 @@ type GatewaySummary = {
 };
 
 /** Payments and refunds as the gateway records them, so the Orders tab matches the Razorpay dashboard. */
-type OrderEmailRow = { at: string; to: string; subject: string; ok: boolean; error?: string };
+type OrderEmailRow = { id?: string; at: string; to: string; subject: string; ok: boolean; error?: string; resendable?: boolean };
 
 /** Emails the server sent about this order: what, to whom, when, and whether it went out. */
 function OrderEmails({ orderId }: { orderId: string }) {
@@ -2718,7 +2726,8 @@ function OrderEmails({ orderId }: { orderId: string }) {
               <span className="w-36 shrink-0 text-text-muted">{formatDateTime(entry.at)}</span>
               <span>
                 <b>{entry.subject}</b> · {entry.to}{" "}
-                {entry.ok ? <span className="text-green-700">· Sent</span> : <span className="text-red-600">· Not sent{entry.error ? `: ${entry.error}` : ""}</span>}
+                {entry.ok ? <span className="text-green-700">· Sent</span> : <span className="text-red-600">· Not sent{entry.error ? `: ${entry.error}` : ""}</span>}{" "}
+                {entry.resendable && <ResendEmailButton id={entry.id} to={entry.to} onSent={() => setTick((value) => value + 1)} />}
               </span>
             </li>
           ))}
@@ -2732,6 +2741,34 @@ function OrderEmails({ orderId }: { orderId: string }) {
           </ul>
         </div>
       )}
+    </Section>
+  );
+}
+
+function PickupWindowSection({ order, busy, run }: { order: Order; busy: string; run: (label: string, task: () => Promise<string | void> | string | void) => Promise<void> }) {
+  const slots = getOrderSettings().pickupSlots;
+  const [date, setDate] = useState(order.pickupWindow?.date ?? "");
+  const [slot, setSlot] = useState(order.pickupWindow?.slot ?? slots[0] ?? "");
+  const saved = order.pickupWindow;
+  const same = saved && saved.date === date && saved.slot === slot;
+  return (
+    <Section title="Pickup slot">
+      <p className="mb-2 text-xs text-text-muted">
+        Give the customer a date and time to collect the order. Saving emails and notifies them; the slot shows in their order. Edit the slot list in Settings → Order settings.
+      </p>
+      {saved && <p className="mb-2 text-xs font-medium text-text-primary">Current: {saved.date} · {saved.slot} · email sent {formatDateTime(saved.at)}</p>}
+      <div className="flex flex-wrap gap-2">
+        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="rounded-lg border border-border px-3 py-2 text-sm" aria-label="Pickup date" />
+        <div className="min-w-44 flex-1">
+          <SelectInput value={slot} onChange={(event) => setSlot(event.target.value)} aria-label="Pickup time slot">
+            {slot && !slots.includes(slot) && <option value={slot}>{slot}</option>}
+            {slots.map((item) => <option key={item} value={item}>{item}</option>)}
+          </SelectInput>
+        </div>
+        <Button disabled={!date || !slot || busy === "pickup-window"} onClick={() => run("pickup-window", () => setPickupWindow(order.id, date, slot))}>
+          {busy === "pickup-window" ? "Sending…" : same ? "Resend pickup email" : "Save slot & email customer"}
+        </Button>
+      </div>
     </Section>
   );
 }

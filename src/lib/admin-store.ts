@@ -1561,6 +1561,22 @@ export function convertToStorePickup(orderId: string) {
     : "Changed to store pickup.";
 }
 
+/** Desk gives a store-pickup order its collection date and time slot; saving again re-sends the pickup email. */
+export function setPickupWindow(orderId: string, date: string, slot: string) {
+  const order = getOrder(orderId);
+  if (!order || order.deliveryMode !== "store_pickup") return "Only store-pickup orders have a pickup slot.";
+  if (["Delivered", "Cancelled", "Failed"].includes(order.status)) return "This order is already closed.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !slot.trim()) return "Pick a date and a time slot.";
+  const resend = order.pickupWindow?.date === date && order.pickupWindow.slot === slot.trim();
+  const next = withHistory(
+    { ...order, pickupWindow: { date, slot: slot.trim(), at: new Date().toISOString() } },
+    order.status,
+    resend ? `Pickup email re-sent (${date}, ${slot.trim()}).` : `Pickup slot set: ${date}, ${slot.trim()}; the customer was emailed.`
+  );
+  updateOrderInStore(next);
+  return resend ? "Pickup email sent again." : "Pickup slot saved. The customer gets an email and app notification.";
+}
+
 /** Desk switches a store-pickup order to courier delivery: the customer is asked to add the address; the courier charge is added after packing as a balance due. */
 export function convertToShipping(orderId: string) {
   const order = getOrder(orderId);

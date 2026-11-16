@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { denyUnlessPortal } from "@/lib/server/portal-auth";
-import { emailsForOrder } from "@/lib/server/email-log";
+import { emailsForOrder, loggedEmail } from "@/lib/server/email-log";
 import { dataFile } from "@/lib/server/paths";
 
 export const runtime = "nodejs";
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   const orderId = String(request.nextUrl.searchParams.get("orderId") ?? "").trim();
   if (!/^\d{6,20}$/.test(orderId)) return NextResponse.json({ ok: false, error: "Send the order id." }, { status: 400 });
-  const logged = emailsForOrder(orderId);
+  const logged = emailsForOrder(orderId).map((entry) => ({ ...entry, resendable: Boolean(entry.id && loggedEmail(entry.id)) }));
   const stages = readJson<Record<string, string[]>>("order-stage-mail.json", {})[orderId] ?? [];
   const invoice = readJson<Record<string, { emailedTo?: string; emailedAt?: string }>>("delivery-invoices.json", {})[orderId];
   const earlier: { label: string; at?: string }[] = stages.map((key) => ({ label: stageLabel(key) }));

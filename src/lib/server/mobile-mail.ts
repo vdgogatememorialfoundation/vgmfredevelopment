@@ -62,6 +62,13 @@ export async function sendMobileSmsOtp(phone: string, code?: string) {
   }
 }
 
+/** Sends ready-made HTML (e.g. an exact resend from the email log) with the saved email credentials. */
+export async function sendHtmlEmail(to: string, subject: string, html: string) {
+  const stored = asRecord(await readKv<Record<string, unknown>>("admin", "email-creds"));
+  const notify = asRecord(await readKv<Record<string, unknown>>("admin", "notify-creds"));
+  return sendTransactionalEmail({ ...readMobileEmailCreds(), ...asRecord(notify.email), ...stored }, { to, subject, html });
+}
+
 export async function sendMobileEmail(to: string, subject: string, body: string) {
   const stored = asRecord(await readKv<Record<string, unknown>>("admin", "email-creds"));
   const notify = asRecord(await readKv<Record<string, unknown>>("admin", "notify-creds"));

@@ -1978,6 +1978,15 @@ export function OrderSettingsDesk() {
             <Text label="Delayed pre-order: customer may cancel for a full refund (incl. platform fee) this many days after the announced date (0 = off)" type="number" value={value.cancellation.delayDays} onChange={(days) => set({ cancellation: { ...value.cancellation, delayDays: Number(days) || 0 } })} />
             <Check label="Refund the platform fee when the desk cancels an order (pre-ticked on the refund panel)" checked={value.cancellation.refundFeeOnDesk} onChange={(refundFeeOnDesk) => set({ cancellation: { ...value.cancellation, refundFeeOnDesk } })} />
             <Text label="Store pickup: flag orders not collected after this many days (0 = off)" type="number" value={value.cancellation.pickupHoldDays} onChange={(days) => set({ cancellation: { ...value.cancellation, pickupHoldDays: Number(days) || 0 } })} />
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-xs font-medium text-slate-600">Store pickup time slots (one per line). The desk picks one for each ready order; it goes in the pickup email.</span>
+              <textarea
+                className="mt-1 min-h-28 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={value.pickupSlots.join("\n")}
+                onChange={(event) => set({ pickupSlots: event.target.value.split("\n") })}
+                onBlur={() => set({ pickupSlots: value.pickupSlots.map((slot) => slot.trim()).filter(Boolean) })}
+              />
+            </label>
           </div>
         </Card>
       </div>

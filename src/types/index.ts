@@ -665,6 +665,8 @@ export interface Order {
   shippingDue?: boolean;
   /** Store pickup changed to courier delivery: the customer is asked to add the delivery address in My Orders. */
   addressRequest?: { at: string; doneAt?: string };
+  /** Store pickup: the date and time slot the desk gave for collection; `at` is when the pickup email was last sent. */
+  pickupWindow?: { date: string; slot: string; at: string };
   /** Part of `shipping` the desk marked as the packing charge; shown as its own "Packing charge" line. */
   packing?: number;
   extraCharges?: { amount: number; reason: string; kind: "shipping" | "other"; at: string; by?: string }[];

@@ -217,7 +217,14 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
               {order.deliveryMode === "store_pickup" ? (
                 <p className="text-sm text-text-primary">
                   Store pickup at the Foundation office, Pune.
-                  You will be notified via WhatsApp when it is ready.
+                  {order.pickupWindow ? (
+                    <span className="mt-2 block font-semibold">
+                      Your pickup slot:{" "}
+                      {new Date(`${order.pickupWindow.date}T12:00:00+05:30`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}, {order.pickupWindow.slot}
+                    </span>
+                  ) : (
+                    " You will be notified when it is ready to collect."
+                  )}
                 </p>
               ) : order.addressRequest && !order.addressRequest.doneAt ? (
                 <AddAddressForm orderId={order.id} initial={order.deliveryAddress} />

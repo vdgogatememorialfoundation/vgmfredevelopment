@@ -88,6 +88,11 @@ function refundKey(refund: RefundRecord) {
   return `refund:${refund.id}:${refund.status === "processed" ? "processed" : refund.status === "failed" ? "failed" : "initiated"}`;
 }
 
+function pickupDay(date: string) {
+  const day = new Date(`${date}T12:00:00+05:30`);
+  return Number.isNaN(day.getTime()) ? date : day.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+}
+
 function stagesFor(prev: Order | undefined, next: Order): Stage[] {
   const stages: Stage[] = [];
   const pre = next.preorderPayment;
@@ -119,6 +124,17 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
         `Please add your full delivery address, phone and PIN code here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#add-address`,
         "We will pack it and send the courier charge as a balance payment link. The order ships once that is paid.",
       ],
+    });
+  }
+  const pickup = next.deliveryMode === "store_pickup";
+  const windowLine = next.pickupWindow ? `Your pickup slot: ${pickupDay(next.pickupWindow.date)}, ${next.pickupWindow.slot}.` : "";
+  const win = next.pickupWindow;
+  if (pickup && win && win.at !== prev?.pickupWindow?.at && !["Cancelled", "Delivered"].includes(next.status)) {
+    stages.push({
+      key: `pickup-window:${win.at}`,
+      subject: `Order ${next.id}: pickup on ${pickupDay(win.date)}, ${win.slot}`,
+      intro: `Your order ${next.id} ${next.status === "Packed" || next.status === "Ready to Ship" ? "is ready to collect" : "will be ready to collect"}.`,
+      next: [windowLine, `Pickup address: ${siteConfig.address}.`, "Bring your order ID and the pickup code shown in My Orders. If the slot does not suit you, reply to this email."],
     });
   }
   if (prev && prev.status !== next.status) {
@@ -154,12 +170,14 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
         next: [`Please reply to this email or write to ${CARE} with a convenient time and your phone number, so we can arrange another attempt.`],
       },
     };
-    if (next.status === "Ready to Ship" && next.deliveryMode === "store_pickup") {
-      map["Ready to Ship"] = {
+    if (pickup) {
+      const ready = {
         subject: `Order ${next.id} is ready for pickup`,
         intro: `Your order ${next.id} is ready to collect.`,
-        next: [`Pickup address: ${siteConfig.address}.`, "Bring your order ID and the pickup code shown in My Orders."],
+        next: [windowLine, `Pickup address: ${siteConfig.address}.`, "Bring your order ID and the pickup code shown in My Orders."],
       };
+      map.Packed = ready;
+      map["Ready to Ship"] = ready;
     }
     const stage = map[next.status];
     if (stage) stages.push({ key: `status:${next.status}`, ...stage });
@@ -303,7 +321,7 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order, opt
   const to = next.deliveryAddress?.email || next.accountEmail || "";
   const sent = new Set(readSent()[next.id] ?? []);
   for (const stage of stagesFor(prev, next)) {
-    if (options.statusOnly && !stage.key.startsWith("status:") && !stage.key.startsWith("address-request:")) continue;
+    if (options.statusOnly && !/^(status|address-request|pickup-window):/.test(stage.key)) continue;
     if (sent.has(stage.key)) continue;
     markSent(next.id, stage.key);
     const name = next.deliveryAddress?.fullName || "Reader";

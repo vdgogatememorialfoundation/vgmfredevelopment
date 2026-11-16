@@ -306,6 +306,8 @@ export interface OrderSettings {
     /** Days a store pickup may wait uncollected before the desk is prompted to cancel and refund. 0 = off. */
     pickupHoldDays: number;
   };
+  /** Time slots the desk offers for collecting a store-pickup order, e.g. "6:00 PM – 7:00 PM". */
+  pickupSlots: string[];
   adminActions: {
     processAfterDelivery: boolean;
   };
@@ -511,6 +513,7 @@ export const defaultOrderSettings: OrderSettings = {
   },
   refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false, creditExpiryDays: 0 },
   cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0, delayDays: 30, refundFeeOnDesk: true, pickupHoldDays: 30 },
+  pickupSlots: ["6:00 PM – 7:00 PM", "7:00 PM – 8:00 PM", "8:00 PM – 9:00 PM", "9:00 PM – 10:00 PM"],
   adminActions: { processAfterDelivery: true },
   platformFee: { enabled: false, amount: 0, refundable: false },
   gst: { enabled: false, ratePercent: 0, invoiceEnabled: false, legalName: "", gstin: "", stateName: "Maharashtra", invoiceFooter: DEFAULT_INVOICE_FOOTER },
@@ -849,6 +852,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       refundFeeOnDesk: merged.cancellation?.refundFeeOnDesk !== false,
       pickupHoldDays: Math.max(0, finiteNumber(merged.cancellation?.pickupHoldDays, 30)),
     },
+    pickupSlots: Array.isArray(merged.pickupSlots) ? merged.pickupSlots.map((slot) => String(slot).trim()).filter(Boolean).slice(0, 30) : defaultOrderSettings.pickupSlots,
     adminActions: {
       processAfterDelivery: merged.adminActions?.processAfterDelivery !== false,
     },
