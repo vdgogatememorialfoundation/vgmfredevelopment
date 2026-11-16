@@ -3,9 +3,13 @@ import { siteConfig } from "@/lib/constants";
 import { dataFile } from "@/lib/server/paths";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 import { pushToCustomer } from "@/lib/server/fcm";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+import { readKv } from "@/lib/server/db";
+import { applyTemplateVars, defaultMessageCopy } from "@/lib/message-templates";
+import type { NotificationEventId } from "@/lib/integrations";
 import type { Order, RefundRecord } from "@/types";
 
-type Stage = { key: string; subject: string; intro: string; next: string[] };
+type Stage = { key: string; subject: string; intro: string; next: string[]; vars?: Record<string, string> };
 
 const SIGN = "Vaidya Gogate Memorial Foundation";
 const CARE = "care@vaidyagogate.org";
@@ -47,6 +51,35 @@ function placedReady(order: Order) {
 
 function isCod(order: Order) {
   return /cod|cash/i.test(order.paymentMethod || "") && order.paymentStatus !== "Paid";
+}
+
+function isPreorder(order: Order) {
+  return Boolean(order.preorderPayment) || order.items.some((item) => item.preorder);
+}
+
+const STAGE_EVENTS: [RegExp, NotificationEventId][] = [
+  [/^status:Packed$/, "order-packed"],
+  [/^status:Shipped$/, "order-shipped"],
+  [/^status:Out for Delivery$/, "order-out-for-delivery"],
+  [/^status:Delivered$/, "order-delivered"],
+  [/^status:Cancelled$/, "order-cancelled"],
+  [/^status:Failed$/, "order-delivery-failed"],
+  [/^return:/, "order-return-update"],
+  [/^refund:.*:rrn$/, "refund-bank-reference"],
+];
+
+/** The Admin's edited copy for this stage (Settings → Templates), when it differs from the default. */
+async function editedCopy(stageKey: string) {
+  const id = STAGE_EVENTS.find(([pattern]) => pattern.test(stageKey))?.[1];
+  if (!id) return null;
+  const fromFile = (savedAdminIntegrations().messages ?? {}) as Record<string, { emailSubject?: string; emailBody?: string }>;
+  const kv = ((await readKv<Record<string, unknown>>("admin", "notify-creds").catch(() => null))?.messages ?? {}) as typeof fromFile;
+  const saved = fromFile[id] ?? kv[id];
+  const fallback = defaultMessageCopy[id];
+  const subject = saved?.emailSubject?.trim() || "";
+  const body = saved?.emailBody?.trim() || "";
+  if ((!subject || subject === fallback.emailSubject) && (!body || body === fallback.emailBody.trim())) return null;
+  return { subject: subject || fallback.emailSubject, body: body || fallback.emailBody };
 }
 
 function refundKey(refund: RefundRecord) {
@@ -136,6 +169,7 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
               refund.gatewayRefundId ? `Refund ID: ${refund.gatewayRefundId}` : "",
               "Look for this credit in your bank or UPI app. If it has not arrived within 5–7 working days, quote this reference to your bank.",
             ].filter(Boolean),
+            vars: { amount: rupees(refund.amount), bankRef, vgmfId: refund.vgmfId || "", refundId: refund.gatewayRefundId || "" },
           });
         }
         continue;
@@ -156,6 +190,31 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
           store ? "The store credit is available on your next order." : key.endsWith("processed") ? "The amount is usually credited to your account within 5–7 working days of processing. Quote the bank reference to your bank if it does not appear." : "Banks usually take 3–5 working days to process, then 5–7 working days to credit. Follow it in My Orders.",
         ].filter(Boolean),
       });
+    }
+    const ret = next.returnRequest;
+    if (ret && (ret.status !== prev.returnRequest?.status || ret.id !== prev.returnRequest?.id)) {
+      const word = ret.kind === "replacement" ? "replacement" : "return";
+      const text: Partial<Record<typeof ret.status, string>> = {
+        "Pending Review": `We have received your ${word} request for order ${next.id}. Our team will review it within 2 working days.`,
+        "Return Requested": `We have received your ${word} request for order ${next.id}. Our team will review it within 2 working days.`,
+        Accepted: `Your ${word} request for order ${next.id} has been approved.`,
+        "Return Approved": `Your ${word} request for order ${next.id} has been approved.`,
+        Rejected: `We could not approve the ${word} request for order ${next.id}.${ret.decisionNote ? ` Reason: ${ret.decisionNote}` : ""}`,
+        "Pickup Scheduled": `A courier pickup has been scheduled for the ${word} on order ${next.id}. Please keep the parcel packed and ready.`,
+        "Picked Up": `The courier has picked up the ${word} parcel for order ${next.id}. We will update you once it reaches us.`,
+        Refunded: `The return for order ${next.id} is complete and your refund has been initiated.`,
+        "Replacement Created": `Your replacement for order ${next.id} has been created${ret.replacementOrderId ? ` as order ${ret.replacementOrderId}` : ""}. We will email you when it ships.`,
+      };
+      const intro = text[ret.status];
+      if (intro) {
+        stages.push({
+          key: `return:${ret.id}:${ret.status}`,
+          subject: `${word === "return" ? "Return" : "Replacement"} update for order ${next.id}: ${ret.status}`,
+          intro,
+          next: [ret.reason ? `Reason given: ${ret.reason}` : "", "Follow the request in My Orders."].filter(Boolean),
+          vars: { status: ret.status },
+        });
+      }
     }
     if (pre?.link?.createdAt && pre.link.createdAt !== prev.preorderPayment?.link?.createdAt && !pre.balancePaidAt) {
       stages.push({
@@ -213,7 +272,8 @@ function details(order: Order) {
       : `Deliver to: ${[address?.fullName, address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ")}`,
     address?.phone ? `Phone: ${address.phone}` : "",
     order.trackingId ? `Courier: ${order.courierName || "Courier"} · AWB ${order.trackingId}` : "",
-    order.eta && order.status !== "Delivered" ? `Expected delivery: ${order.eta}` : "",
+    // Pre-order dispatch depends on the book's arrival, so no date is promised by email.
+    order.eta && order.status !== "Delivered" && !isPreorder(order) ? `Expected delivery: ${order.eta}` : "",
   ];
   return lines.filter((line, index, all) => line !== "" || (all[index - 1] !== "" && index > 0)).join("\n");
 }
@@ -227,16 +287,43 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order, opt
     if (sent.has(stage.key)) continue;
     markSent(next.id, stage.key);
     const name = next.deliveryAddress?.fullName || "Reader";
+    const trackUrl = `${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}`;
+    const nextLines = stage.next.filter(Boolean).map((line) => `• ${line}`).join("\n");
+    const edited = await editedCopy(stage.key);
+    if (edited) {
+      const vars = {
+        name,
+        orderId: next.id,
+        status: next.status,
+        amount: rupees(next.total),
+        link: next.preorderPayment?.link?.url || next.paymentLink?.url || "",
+        intro: stage.intro,
+        next: nextLines,
+        details: details(next),
+        trackUrl,
+        courier: next.courierName || "",
+        awb: next.trackingId || "",
+        ...stage.vars,
+      };
+      const subject = applyTemplateVars(edited.subject, vars);
+      void pushToCustomer(
+        { email: to || undefined, phone: next.deliveryAddress?.phone, accountId: next.userId },
+        { title: subject, body: stage.intro, url: `/account/orders/${encodeURIComponent(next.id)}` }
+      ).catch(() => undefined);
+      if (to) await sendMobileEmail(to, subject, applyTemplateVars(edited.body, vars)).catch(() => undefined);
+      continue;
+    }
     const body = [
       `Dear ${name},`,
       "",
       `Namaste, and greetings from ${SIGN}.`,
       "",
       stage.intro,
+      ...(nextLines ? ["", nextLines] : []),
       "",
       details(next),
       "",
-      `Track your order: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}`,
+      `Track your order: ${trackUrl}`,
       `Questions? Reply to this email or write to ${CARE} with your order ID.`,
       "",
       "With warm regards,",

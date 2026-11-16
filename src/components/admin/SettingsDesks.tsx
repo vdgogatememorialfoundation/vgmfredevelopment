@@ -1169,7 +1169,7 @@ export function MessageTemplatesDesk() {
     <div className="space-y-5">
       <Header
         title="Email, SMS and WhatsApp templates"
-        text="Greet the customer by name and sign as Vaidya Gogate Memorial Foundation — not VGMF. Placeholders: {name} {code} {purpose} {email} {phone} {accountId} {signin} {orderId} {status} {amount} {link}."
+        text="Greet the customer by name and sign as Vaidya Gogate Memorial Foundation — not VGMF. Placeholders: {name} {code} {purpose} {email} {phone} {accountId} {signin} {orderId} {status} {amount} {link}. Order emails also: {intro} {next} {details} {trackUrl} {courier} {awb} {bankRef} {vgmfId} {refundId}. Edit an order event to replace its built-in email."
         action={
           <span className="flex flex-wrap gap-2">
             <button type="button" className={ghost} onClick={restoreDefaults}>Restore Foundation defaults</button>

@@ -58,6 +58,14 @@ export const notificationEvents = [
   { id: "ticket-update", label: "Ticket update" },
   { id: "abandoned-cart", label: "Abandoned cart" },
   { id: "otp", label: "One-time password" },
+  { id: "order-packed", label: "Order packed" },
+  { id: "order-shipped", label: "Order shipped" },
+  { id: "order-out-for-delivery", label: "Out for delivery" },
+  { id: "order-delivered", label: "Order delivered" },
+  { id: "order-cancelled", label: "Order cancelled" },
+  { id: "order-delivery-failed", label: "Delivery attempt failed" },
+  { id: "order-return-update", label: "Return / replacement update" },
+  { id: "refund-bank-reference", label: "Refund bank reference (RRN/ARN)" },
 ] as const;
 
 export type NotificationEventId = (typeof notificationEvents)[number]["id"];

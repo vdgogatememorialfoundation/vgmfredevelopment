@@ -119,7 +119,7 @@ export function classifyCourierScan(text: string): CourierStage | null {
     return "packed";
   }
   if (
-    /\b(in transit|shipment arrived|shipped|dispatch|departed|outscan|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete)\b/.test(
+    /\b(in transit|shipment arrived|shipped|dispatch(ed)?|departed|outscan|forwarded|further connected|connected|left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|arrived at|reached at|received at|inward|bag received|reached (the )?(destination|hub|facility|warehouse|pickup)|picked up|pickup done|pickup complete)\b/.test(
       value
     ) &&
     !/out for delivery|customer|doorstep/.test(value)
@@ -497,17 +497,20 @@ export function buildTrackingStages(
   }
 
   const scanStages = classifyScanSequence(liveScans.map((scan) => scan.status));
+  // Ekart logs "Dispatched to <next hub>" at the next hub's city; the parcel left the facility it last reached.
+  const leftFrom = (index: number) => {
+    const scan = liveScans[index];
+    if (!/\bdispatched to\b/i.test(scan.status)) return scan;
+    const before = liveScans.slice(0, index).reverse().find((item) => item.location && !/\bdispatched to\b/i.test(item.status));
+    return before?.location ? { ...scan, location: before.location } : scan;
+  };
   const shippedEvents = liveScans
     .map((scan, index) => ({ scan, mapped: scanStages[index], index }))
     .filter((item) => item.mapped === "shipped" && !routingOnly)
-    .map((item) =>
-      scanEvent(
-        item.scan,
-        item.index,
-        shippedReached,
-        hyperlocal ? item.scan.status : courierEventTitle(item.scan.status, item.scan.location, courier)
-      )
-    );
+    .map((item) => {
+      const scan = hyperlocal ? item.scan : leftFrom(item.index);
+      return scanEvent(scan, item.index, shippedReached, hyperlocal ? scan.status : courierEventTitle(scan.status, scan.location, courier));
+    });
 
   if (shippedReached && shippedEvents.length === 0) {
     shippedEvents.push({
