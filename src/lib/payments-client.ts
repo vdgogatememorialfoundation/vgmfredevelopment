@@ -273,13 +273,16 @@ export async function cancelOrderPaymentLinks(orderId: string) {
 }
 
 /** Razorpay Payment Link in test/live mode, otherwise a /pay link on this site. `amount` defaults to the order total. */
-export async function createPaymentLink(orderId: string, amountOverride?: number) {
+export async function createPaymentLink(orderId: string, amountOverride?: number, validUntil?: string) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   const settings = getIntegrations();
   const amount = Math.round((amountOverride && amountOverride > 0 ? amountOverride : order.total) * 100) / 100;
   if (!(amount > 0)) throw new Error("Enter an amount above ₹0.");
-  const expiresAt = linkExpiry();
+  const until = validUntil ? new Date(validUntil).getTime() : NaN;
+  if (validUntil && !(until > Date.now() + 15 * 60_000)) throw new Error("Pick a link expiry at least 15 minutes from now.");
+  const minutes = Number.isFinite(until) ? Math.ceil((until - Date.now()) / 60_000) : linkMinutes();
+  const expiresAt = Number.isFinite(until) ? new Date(until).toISOString() : linkExpiry();
   let link: NonNullable<Order["paymentLink"]>;
   if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
     link = {
@@ -299,7 +302,7 @@ export async function createPaymentLink(orderId: string, amountOverride?: number
       phone: order.deliveryAddress?.phone,
       description: `Vaidya Gogate Memorial Foundation order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?done=1`,
-      expiryMinutes: linkMinutes(),
+      expiryMinutes: minutes,
     });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
     link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), amount, expiresAt };
@@ -313,7 +316,7 @@ export async function createPaymentLink(orderId: string, amountOverride?: number
     params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${amount}`, link.url],
     subject: `Pay for your Vaidya Gogate Memorial Foundation order ${order.id}`,
     template: "payment-link",
-    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${amount.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid for ${linkMinutes()} minutes.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${amount.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid until ${new Date(expiresAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
 }
@@ -481,6 +484,24 @@ export async function createBalancePaymentLink(orderId: string) {
 }
 
 /** Moves the expiry of the order's open balance link (the same link keeps working; nothing is resent). */
+export async function changeOrderLinkExpiry(orderId: string, expiresAt: string) {
+  const order = getOrder(orderId);
+  const link = order?.paymentLink;
+  if (!order || !link) throw new Error("This order has no payment link.");
+  if (order.paymentStatus === "Paid") throw new Error("The order is already paid.");
+  const at = new Date(expiresAt);
+  if (!Number.isFinite(at.getTime()) || at.getTime() < Date.now() + 15 * 60_000) throw new Error("Pick a time at least 15 minutes from now.");
+  let next = at.toISOString();
+  if (link.provider === "razorpay" && link.id) {
+    const result = await api<{ status: string; expiresAt: string }>({ action: "link-expiry", linkId: link.id, expiresAt: next });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not change the link expiry.");
+    if (result.status !== "created" && result.status !== "partially_paid") throw new Error(`The link is ${result.status}; send a new link instead.`);
+    next = result.expiresAt || next;
+  }
+  patchOrder(order.id, { paymentLink: { ...link, expiresAt: next } }, `Payment link expiry changed to ${new Date(next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
+  return `Link now valid till ${new Date(next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.`;
+}
+
 export async function changeBalanceLinkExpiry(orderId: string, expiresAt: string) {
   const order = getOrder(orderId);
   const plan = order?.preorderPayment;

@@ -58,7 +58,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { changeBalanceLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
+import { changeBalanceLinkExpiry, changeOrderLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -1041,6 +1041,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [method, setMethod] = useState("UPI");
   const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
   const [linkAmount, setLinkAmount] = useState("");
+  const [linkUntil, setLinkUntil] = useState("");
   const [rzpPaymentId, setRzpPaymentId] = useState("");
   const [partAmount, setPartAmount] = useState("");
   const [extraAmount, setExtraAmount] = useState("");
@@ -1522,7 +1523,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 )}
                 <Button variant="outline" disabled={busy === "link"} onClick={() => run("link", async () => {
                   const amount = linkMode === "full" ? order.total : linkMode === "custom" ? Number(linkAmount) : remainingDue(order);
-                  const link = await createPaymentLink(order.id, amount);
+                  const link = await createPaymentLink(order.id, amount, linkUntil || undefined);
                   return `Payment link for ${rupees(link.amount ?? amount)} sent, valid until ${formatDateTime(link.expiresAt ?? "")}: ${link.url}`;
                 })}>
                   {order.paymentLink ? "Resend payment link" : "Send payment link"}
@@ -1533,6 +1534,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     <Button variant="ghost" onClick={() => run("check", () => refreshPaymentLink(order.id))}>Check status</Button>
                   </>
                 )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                <label htmlFor={`link-until-${order.id}`}>Link valid until</label>
+                <TextInput id={`link-until-${order.id}`} className="w-52" type="datetime-local" value={linkUntil} onChange={(event) => setLinkUntil(event.target.value)} />
+                <span>{linkUntil ? "" : "Blank = default validity from Settings."}</span>
+                {order.paymentLink && linkUntil && (
+                  <Button variant="ghost" disabled={busy === "expiry"} onClick={() => run("expiry", () => changeOrderLinkExpiry(order.id, linkUntil))}>Change current link&apos;s expiry</Button>
+                )}
+                {order.paymentLink?.expiresAt && <span>Current link valid till {formatDateTime(order.paymentLink.expiresAt)}</span>}
               </div>
               {order.paymentLink && <p className="break-all rounded bg-warm-cream px-2 py-1 font-mono text-[11px] text-text-muted">{order.paymentLink.url}</p>}
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
