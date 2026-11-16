@@ -8,7 +8,8 @@ import ReturnSection from "@/components/store/ReturnSection";
 import CancelOrderSection from "@/components/store/CancelOrderSection";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
+import { addMyDeliveryAddress, getOrdersForAccount, formatPrice, purgeSampleOrders } from "@/lib/store";
+import type { DeliveryAddress } from "@/types";
 import { useOrderSettings } from "@/lib/use-cms";
 import { printGstInvoice } from "@/lib/gst-invoice";
 import { formatDate } from "@/lib/utils";
@@ -218,6 +219,8 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                   Store pickup at the Foundation office, Pune.
                   You will be notified via WhatsApp when it is ready.
                 </p>
+              ) : order.addressRequest && !order.addressRequest.doneAt ? (
+                <AddAddressForm orderId={order.id} initial={order.deliveryAddress} />
               ) : (
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between gap-4">
@@ -315,5 +318,69 @@ function AdjustmentNotes({ token }: { token: string }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function AddAddressForm({ orderId, initial }: { orderId: string; initial?: DeliveryAddress }) {
+  const [form, setForm] = useState({
+    fullName: initial?.fullName ?? "",
+    phone: initial?.phone ?? "",
+    altPhone: initial?.altPhone ?? "",
+    line1: initial?.line1 ?? "",
+    landmark: initial?.landmark ?? "",
+    city: initial?.city ?? "",
+    state: initial?.state ?? "",
+    pincode: initial?.pincode ?? "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const field = (key: keyof typeof form, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+    <label className="block text-xs text-text-muted">
+      {label}
+      <input
+        {...props}
+        value={form[key]}
+        onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+        className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm text-text-primary"
+      />
+    </label>
+  );
+  return (
+    <form
+      id="add-address"
+      className="space-y-3"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setBusy(true);
+        setError("");
+        try {
+          await addMyDeliveryAddress(orderId, form, initial?.phone);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Could not save the address.");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+        This order will now be sent by courier instead of store pickup. Please add your delivery address. The courier charge is sent as a balance payment link after packing.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {field("fullName", "Full name", { required: true, autoComplete: "name" })}
+        {field("phone", "Phone", { required: true, inputMode: "tel", autoComplete: "tel" })}
+        {field("altPhone", "Alternative phone (optional)", { inputMode: "tel" })}
+        {field("pincode", "PIN code", { required: true, inputMode: "numeric", pattern: "\\d{6}", maxLength: 6, autoComplete: "postal-code" })}
+      </div>
+      {field("line1", "House, building, street, area", { required: true, autoComplete: "street-address" })}
+      {field("landmark", "Landmark (optional)")}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {field("city", "City", { required: true, autoComplete: "address-level2" })}
+        {field("state", "State", { required: true, autoComplete: "address-level1" })}
+      </div>
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      <button type="submit" disabled={busy} className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">
+        {busy ? "Saving…" : "Save delivery address"}
+      </button>
+    </form>
   );
 }

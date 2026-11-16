@@ -346,6 +346,7 @@ async function bookShipmentOnce(
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not need a courier.");
+  if (order.addressRequest && !order.addressRequest.doneAt) throw new Error("Waiting for the customer to add the delivery address (or add it with Edit order).");
   const existing = getShipments().find(
     (shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled" && (!split || shipment.part === split.part)
   );

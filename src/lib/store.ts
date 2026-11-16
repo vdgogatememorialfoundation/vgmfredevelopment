@@ -229,6 +229,24 @@ export async function cancelMyOrder(orderId: string, reason: string, phone?: str
   return cancelled;
 }
 
+/** Customer adds the delivery address after the desk changed a store-pickup order to courier delivery. */
+export async function addMyDeliveryAddress(orderId: string, address: Partial<DeliveryAddress>, phone?: string): Promise<Order> {
+  const response = await fetch("/api/shop/orders", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "address", orderId, address, phone }),
+  });
+  const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string; order?: Order } | null;
+  if (!response.ok || !data?.ok || !data.order) throw new Error(data?.error || "Could not save the address.");
+  const saved = data.order;
+  const orders = getOrders();
+  const next = orders.some((item) => item.id === orderId) ? orders.map((item) => (item.id === orderId ? { ...item, ...saved } : item)) : [saved, ...orders];
+  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(next));
+  window.dispatchEvent(new Event("vgmf-cms"));
+  return saved;
+}
+
 export function publishShopOrder(order: Order) {
   if (typeof window === "undefined" || !order?.id) return;
   void fetch("/api/shop/orders", {

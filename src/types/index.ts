@@ -663,6 +663,8 @@ export interface Order {
   /** Amounts the desk added after ordering, e.g. a charge wrongly shown as free. */
   /** Shipping was left at ₹0; the courier charge is added once the parcel is packed and weighed. */
   shippingDue?: boolean;
+  /** Store pickup changed to courier delivery: the customer is asked to add the delivery address in My Orders. */
+  addressRequest?: { at: string; doneAt?: string };
   /** Part of `shipping` the desk marked as the packing charge; shown as its own "Packing charge" line. */
   packing?: number;
   extraCharges?: { amount: number; reason: string; kind: "shipping" | "other"; at: string; by?: string }[];

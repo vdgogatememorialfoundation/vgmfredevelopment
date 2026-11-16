@@ -109,6 +109,18 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
       ],
     });
   }
+  const ask = next.addressRequest;
+  if (ask && !ask.doneAt && ask.at !== prev?.addressRequest?.at) {
+    stages.push({
+      key: `address-request:${ask.at}`,
+      subject: `Add your delivery address for order ${next.id}`,
+      intro: `As requested, your order ${next.id} will now be sent by courier instead of store pickup.`,
+      next: [
+        `Please add your full delivery address, phone and PIN code here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#add-address`,
+        "We will pack it and send the courier charge as a balance payment link. The order ships once that is paid.",
+      ],
+    });
+  }
   if (prev && prev.status !== next.status) {
     const map: Partial<Record<Order["status"], Omit<Stage, "key">>> = {
       Packed: {
@@ -291,7 +303,7 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order, opt
   const to = next.deliveryAddress?.email || next.accountEmail || "";
   const sent = new Set(readSent()[next.id] ?? []);
   for (const stage of stagesFor(prev, next)) {
-    if (options.statusOnly && !stage.key.startsWith("status:")) continue;
+    if (options.statusOnly && !stage.key.startsWith("status:") && !stage.key.startsWith("address-request:")) continue;
     if (sent.has(stage.key)) continue;
     markSent(next.id, stage.key);
     const name = next.deliveryAddress?.fullName || "Reader";

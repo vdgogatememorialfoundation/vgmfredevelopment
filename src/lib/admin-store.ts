@@ -803,6 +803,11 @@ export function resaveOrder(
     shipping,
     Math.max(0, Math.round(((update.packing !== undefined && Number.isFinite(update.packing) ? update.packing : order.packing) ?? 0) * 100) / 100)
   );
+  const address = update.deliveryAddress ?? order.deliveryAddress;
+  const addressRequest =
+    order.addressRequest && !order.addressRequest.doneAt && address?.line1?.trim() && address?.pincode?.trim()
+      ? { ...order.addressRequest, doneAt: new Date().toISOString() }
+      : order.addressRequest;
   const total = subtotal + gst + platformFee + shipping - (order.storeCreditUsed ?? 0);
   const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
   const paidSoFar =
@@ -827,6 +832,7 @@ export function resaveOrder(
       items,
       deliveryAddress: update.deliveryAddress ?? order.deliveryAddress,
       deliveryMode: update.deliveryMode ?? order.deliveryMode,
+      addressRequest,
       subtotal,
       discount,
       gst,
@@ -1555,30 +1561,27 @@ export function convertToStorePickup(orderId: string) {
     : "Changed to store pickup.";
 }
 
-/** Desk switches a store-pickup order to courier delivery: the address is saved and the courier charge is added after packing as a balance due. */
-export function convertToShipping(orderId: string, address: DeliveryAddress) {
+/** Desk switches a store-pickup order to courier delivery: the customer is asked to add the address; the courier charge is added after packing as a balance due. */
+export function convertToShipping(orderId: string) {
   const order = getOrder(orderId);
   if (!order) return "Order not found.";
   if (order.deliveryMode !== "store_pickup") return "This order is already a courier delivery.";
   if (["Delivered", "Cancelled", "Failed"].includes(order.status)) return "This order is already closed.";
-  const clean = { ...address, fullName: address.fullName.trim(), phone: address.phone.trim(), line1: address.line1.trim(), city: address.city.trim(), state: address.state.trim(), pincode: address.pincode.trim() };
-  if (!clean.fullName || !clean.phone || !clean.line1 || !clean.city || !clean.state || !clean.pincode) return "Enter name, phone, address, city, state and postal code first.";
   const plan = order.preorderPayment;
+  const balanceOpen = Boolean(plan && !plan.balancePaidAt);
   const next = withHistory(
     {
       ...order,
       deliveryMode: "delivery",
-      deliveryAddress: clean,
-      shippingDue: plan && !plan.balancePaidAt ? undefined : true,
-      preorderPayment: plan && !plan.balancePaidAt ? { ...plan, shippingDue: true } : plan,
+      addressRequest: { at: new Date().toISOString() },
+      shippingDue: balanceOpen ? undefined : true,
+      preorderPayment: plan && balanceOpen ? { ...plan, shippingDue: true } : plan,
     },
     order.status,
-    "Changed from store pickup to courier delivery by the desk; the courier charge will be added as a balance due once packed."
+    "Changed from store pickup to courier delivery by the desk; the customer was asked to add the delivery address. The courier charge is added as a balance due once packed."
   );
   updateOrderInStore(next);
-  return plan && !plan.balancePaidAt
-    ? "Changed to courier delivery. Pick the courier in Pre-order balance; its charge joins the balance and the payment link goes out."
-    : "Changed to courier delivery. After packing, add the courier charge under Payment → Add extra charge → Courier charge and send the payment link.";
+  return "Changed to courier delivery. The customer got an email and app notification to add the delivery address in My Orders. Book the courier once the address is in; the courier charge is then added as a balance due.";
 }
 
 /** Adds a charge the customer still owes (e.g. courier shown as free by mistake); what they already paid stays recorded, so only the difference is due. */
@@ -2272,7 +2275,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     ${order.discount ? `<tr><td>Discount</td><td class="right">−${rupees(order.discount)}</td></tr>` : ""}
     ${order.gst ? `<tr><td>GST</td><td class="right">${rupees(order.gst)}</td></tr>` : ""}
     ${order.platformFee ? `<tr><td>Platform fee</td><td class="right">${rupees(order.platformFee)}</td></tr>` : ""}
-    ${hideShipping(order) ? "" : `<tr><td>Shipping</td><td class="right">${shippingSplit(order).courier ? rupees(shippingSplit(order).courier) : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</td></tr>`}
+    ${hideShipping(order) ? "" : `<tr><td>Shipping</td><td class="right">${shippingSplit(order).courier ? rupees(shippingSplit(order).courier) : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</td></tr>`}
     ${shippingSplit(order).packing ? `<tr><td>Packing charge</td><td class="right">${rupees(shippingSplit(order).packing)}</td></tr>` : ""}
     ${order.storeCreditUsed ? `<tr><td>Store credit</td><td class="right">−${rupees(order.storeCreditUsed)}</td></tr>` : ""}
     <tr class="grand"><td>Total</td><td class="right">${rupees(order.total)}</td></tr>

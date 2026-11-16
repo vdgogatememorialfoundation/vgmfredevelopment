@@ -10,7 +10,7 @@ import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { syncCancellationRefunds } from "@/lib/server/shipment-sync";
 import { cancellationAutoRefund } from "@/lib/transactions";
 import { canCustomerCancel, customerCancellationRefund, preorderLate, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
-import type { Order } from "@/types";
+import type { DeliveryAddress, Order } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const body = (await request.json().catch(() => null)) as { order?: Order; action?: string; orderId?: string; reason?: string; phone?: string } | null;
+  const body = (await request.json().catch(() => null)) as { order?: Order; action?: string; orderId?: string; reason?: string; phone?: string; address?: Partial<DeliveryAddress> } | null;
   if (body?.action === "cancel") {
     const orderId = String(body.orderId ?? "");
     const order = findShopOrder(orderId);
@@ -72,6 +72,45 @@ export async function POST(request: NextRequest) {
     });
     if (next?.autoRefund) await syncCancellationRefunds(order.id, 0).catch(() => undefined);
     const latest = findShopOrder(order.id) ?? next;
+    return NextResponse.json({ ok: true, order: latest ? forCustomer(latest) : undefined });
+  }
+  if (body?.action === "address") {
+    const orderId = String(body.orderId ?? "");
+    const order = findShopOrder(orderId);
+    const viewers = [customerViewer(request), commerceViewer(request)].filter((viewer) => viewer && (viewer.email || viewer.phone || viewer.id));
+    const owns = Boolean(
+      order &&
+        (viewers.some((viewer) => ordersForAccount(viewer!).some((item) => item.id === orderId)) ||
+          (body.phone && orderPhoneMatches(order, String(body.phone))))
+    );
+    if (!order || !owns) return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
+    if (!order.addressRequest || order.addressRequest.doneAt || order.deliveryMode !== "delivery") {
+      return NextResponse.json({ ok: false, error: "This order does not need an address now." }, { status: 400 });
+    }
+    const input = (body.address ?? {}) as Partial<DeliveryAddress>;
+    const text = (value: unknown, max = 200) => String(value ?? "").trim().slice(0, max);
+    const address: DeliveryAddress = {
+      ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "", country: "India" }),
+      fullName: text(input.fullName, 120) || order.deliveryAddress?.fullName || "",
+      phone: text(input.phone, 20) || order.deliveryAddress?.phone || "",
+      altPhone: text(input.altPhone, 20) || order.deliveryAddress?.altPhone,
+      line1: text(input.line1),
+      landmark: text(input.landmark) || undefined,
+      city: text(input.city, 80),
+      state: text(input.state, 80),
+      pincode: text(input.pincode, 10),
+      country: order.deliveryAddress?.country || "India",
+    };
+    if (!address.fullName || !address.phone || !address.line1 || !address.city || !address.state || !/^\d{6}$/.test(address.pincode)) {
+      return NextResponse.json({ ok: false, error: "Enter name, phone, address, city, state and a 6-digit PIN code." }, { status: 400 });
+    }
+    const now = new Date().toISOString();
+    patchShopOrder(order.id, {
+      deliveryAddress: address,
+      addressRequest: { ...order.addressRequest, doneAt: now },
+      history: [...(order.history ?? []), { at: now, status: order.status, note: "Customer added the delivery address.", by: "Customer" }],
+    });
+    const latest = findShopOrder(order.id);
     return NextResponse.json({ ok: true, order: latest ? forCustomer(latest) : undefined });
   }
   if (body?.action === "delete") {
