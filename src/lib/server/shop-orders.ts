@@ -17,6 +17,11 @@ function withTxnIds(order: Order, prev?: Order): Order {
   if (next.refunds?.length) {
     next.refunds = next.refunds.map((refund) => (refund.vgmfId ? refund : { ...refund, vgmfId: prev?.refunds?.find((item) => item.id === refund.id)?.vgmfId || vgmfTxnId() }));
   }
+  // Everything refundable returned (the platform fee is kept) counts as Refunded, not partial.
+  if (next.paymentStatus === "Partially Refunded") {
+    const collected = next.preorderPayment && !next.preorderPayment.balancePaidAt ? next.preorderPayment.advance : next.total;
+    if ((next.refundAmount ?? 0) >= collected - Math.max(0, next.platformFee ?? 0) - 0.001) next.paymentStatus = "Refunded";
+  }
   // An automatic refund already sent must not be marked due again by an older desk copy.
   if (prev?.autoRefund && prev.autoRefund.status !== "due") next.autoRefund = prev.autoRefund;
   return next;
