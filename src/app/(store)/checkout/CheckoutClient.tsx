@@ -441,7 +441,7 @@ export default function CheckoutClient() {
     const live = (await fetch("/api/payments/hosted", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "verify-items", items: orderItems.map((item) => ({ bookId: item.bookId, preorder: Boolean(item.preorder) })) }),
+      body: JSON.stringify({ action: "verify-items", items: orderItems.map((item) => ({ bookId: item.bookId, preorder: Boolean(item.preorder), quantity: item.quantity })) }),
     })
       .then((response) => response.json())
       .catch(() => ({ ok: true }))) as { ok?: boolean; error?: string };

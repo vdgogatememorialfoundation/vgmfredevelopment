@@ -71,17 +71,21 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (body.action === "verify-items") {
     // The live catalogue decides pre-order vs in stock, not the customer's possibly stale browser copy.
-    const items = Array.isArray(body.items) ? (body.items as { bookId?: unknown; preorder?: unknown }[]) : [];
+    const items = Array.isArray(body.items) ? (body.items as { bookId?: unknown; preorder?: unknown; quantity?: unknown }[]) : [];
     const books = readMobileFeed().books ?? [];
     for (const item of items) {
       const book = books.find((row) => row.id === item.bookId);
-      const inStock = book ? book.stockStatus !== "out_of_stock" && book.stock > 0 : true;
-      if (book && !item.preorder && !inStock && book.preorder?.enabled) {
-        return NextResponse.json(
-          { ok: false, error: `${book.title} is on pre-order now. Please refresh the page and check out again.` },
-          { status: 409 }
-        );
-      }
+      if (!book || item.preorder) continue;
+      const inStock = book.stockStatus !== "out_of_stock" && book.stock > 0;
+      const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+      const error = !inStock
+        ? book.preorder?.enabled
+          ? `${book.title} is on pre-order now. Please refresh the page and check out again.`
+          : `${book.title} is out of stock now. Please remove it from your cart.`
+        : quantity > book.stock
+          ? `Only ${book.stock} of ${book.title} left. Please lower the quantity.`
+          : "";
+      if (error) return NextResponse.json({ ok: false, error }, { status: 409 });
     }
     return NextResponse.json({ ok: true });
   }
