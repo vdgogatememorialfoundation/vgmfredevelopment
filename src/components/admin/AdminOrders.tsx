@@ -1080,7 +1080,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [editItems, setEditItems] = useState(order.items.map((item) => ({ ...item })));
   const [addBookId, setAddBookId] = useState("");
   const [addQty, setAddQty] = useState(1);
-  const [editShipping, setEditShipping] = useState(String(order.shipping ?? 0));
+  const [editShipping, setEditShipping] = useState(String(shippingSplit(order).courier));
   const [editPacking, setEditPacking] = useState(String(order.packing ?? 0));
   const catalogue = editing ? getLiveBooks().filter((book) => book.active !== false) : [];
   const addProduct = () => {
@@ -1111,10 +1111,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     run("save", () => {
       const items = editItems.filter((item) => item.quantity > 0);
       if (!items.length) throw new Error("Keep at least one product in the order.");
-      const shipping = Number(editShipping);
-      if (!Number.isFinite(shipping) || shipping < 0) throw new Error("Enter a shipping charge of ₹0 or more.");
+      const courier = Number(editShipping || 0);
+      if (!Number.isFinite(courier) || courier < 0) throw new Error("Enter a shipping charge of ₹0 or more.");
       const packing = Number(editPacking || 0);
-      if (!Number.isFinite(packing) || packing < 0 || packing > shipping) throw new Error("The packing charge must be between ₹0 and the shipping charge.");
+      if (!Number.isFinite(packing) || packing < 0) throw new Error("Enter a packing charge of ₹0 or more.");
+      const shipping = Math.round((courier + packing) * 100) / 100;
       const next = resaveOrder(order.id, { items, deliveryAddress: editAddress, shipping, packing });
       setEditing(false);
       const due = remainingDue(next);
@@ -1236,7 +1237,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 setEditAddress(order.deliveryAddress ?? editAddress);
                 setEditItems(order.items.map((item) => ({ ...item })));
               } else {
-                setEditShipping(String(order.shipping ?? 0));
+                setEditShipping(String(shippingSplit(order).courier));
                 setEditPacking(String(order.packing ?? 0));
                 setEditing(true);
               }
@@ -1322,14 +1323,14 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <span className="w-28">
                   <TextInput type="number" min={0} step="0.01" value={editShipping} onChange={(event) => setEditShipping(event.target.value)} />
                 </span>
-                <span className="font-normal text-text-muted">was {order.shipping === 0 ? "Free" : rupees(order.shipping)}. Raise it if the courier costs more.</span>
+                <span className="font-normal text-text-muted">courier only, was {shippingSplit(order).courier === 0 ? "₹0" : rupees(shippingSplit(order).courier)}. Raise it if the courier costs more.</span>
               </label>
               <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-text-primary">
-                Of which packing charge ₹
+                Packing charge ₹
                 <span className="w-28">
                   <TextInput type="number" min={0} step="0.01" value={editPacking} onChange={(event) => setEditPacking(event.target.value)} />
                 </span>
-                <span className="font-normal text-text-muted">This part shows to the customer as &quot;Packing charge&quot; instead of shipping (order page, invoice, emails). The total does not change.</span>
+                <span className="font-normal text-text-muted">was {rupees(shippingSplit(order).packing)}. Shows to the customer as its own &quot;Packing charge&quot; line. Shipping + packing together make the delivery charge in the total.</span>
               </label>
               <p className="text-xs text-text-muted">
                 New items subtotal {rupees(editSubtotal)} (was {rupees(order.subtotal)}). GST and fees are worked out again when you save. If the new total is more than the customer paid, the difference shows as Remaining for a payment link.
