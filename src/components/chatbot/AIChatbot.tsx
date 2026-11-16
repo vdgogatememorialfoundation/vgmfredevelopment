@@ -6,7 +6,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { useAuth } from "@/components/auth/AuthContext";
-import { answerQuestion } from "@/lib/chat-knowledge";
+import { answerQuestion, isChatFallback } from "@/lib/chat-knowledge";
+import TrackLookup from "@/components/store/TrackLookup";
 import SiteLogo from "@/components/common/SiteLogo";
 import {
   CHAT_UNANSWERED_MS,
@@ -45,7 +46,7 @@ export function AIChatbot() {
   useSyncExternalStore(subscribeLiveChat, chatSnapshot, () => "");
   const live = getLiveChatSettings();
   const [isOpen, setIsOpen] = useState(false);
-  const [mode, setMode] = useState<"ai" | "live">("ai");
+  const [mode, setMode] = useState<"ai" | "live" | "track">("ai");
   const [showPopup, setShowPopup] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -101,8 +102,17 @@ export function AIChatbot() {
     setInput("");
     setIsTyping(true);
 
-    window.setTimeout(() => {
-      const answer = answerQuestion(question);
+    window.setTimeout(async () => {
+      let answer = answerQuestion(question);
+      if (isChatFallback(answer)) {
+        try {
+          const response = await fetch("/api/mobile/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: question }) });
+          const data = (await response.json()) as { reply?: string; source?: string };
+          if (data.source === "faq" && data.reply) answer = data.reply;
+        } catch {
+          // keep the local answer
+        }
+      }
       setMessages((current) => [
         ...current,
         {
@@ -189,8 +199,8 @@ export function AIChatbot() {
             </button>
           </div>
 
-          {live.enabled && (
-            <div className="flex gap-2 border-b border-border bg-white px-4 py-2">
+          {(
+            <div className="flex flex-wrap gap-2 border-b border-border bg-white px-4 py-2">
               <button
                 type="button"
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${mode === "ai" ? "bg-burgundy text-white" : "text-text-muted"}`}
@@ -200,15 +210,28 @@ export function AIChatbot() {
               </button>
               <button
                 type="button"
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${mode === "track" ? "bg-burgundy text-white" : "text-text-muted"}`}
+                onClick={() => setMode("track")}
+              >
+                Track your order
+              </button>
+              {live.enabled && (
+              <button
+                type="button"
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${mode === "live" ? "bg-burgundy text-white" : "text-text-muted"}`}
                 onClick={() => setMode("live")}
               >
                 {t("chat.talkPerson")}
               </button>
+              )}
             </div>
           )}
 
-          {mode === "live" ? (
+          {mode === "track" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-warm-cream px-3 py-3 text-sm">
+              <TrackLookup compact />
+            </div>
+          ) : mode === "live" ? (
             <>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-warm-cream px-4 py-4 text-sm">
                 {!live.online ? (
@@ -335,7 +358,7 @@ export function AIChatbot() {
               <button
                 key={question.ask}
                 type="button"
-                onClick={() => handleSend(question.ask)}
+                onClick={() => (question.ask === QUICK_QUESTIONS[3] ? setMode("track") : handleSend(question.ask))}
                 className="rounded-full border border-burgundy/20 bg-burgundy/5 px-3 py-1.5 text-xs font-medium text-burgundy transition hover:bg-burgundy hover:text-white"
               >
                 {question.label}

@@ -307,7 +307,7 @@ export default function CheckoutClient() {
   const hasPreorder = Boolean(preorderBook);
 
   useEffect(() => {
-    if (deliveryMode !== "delivery" || !pincodeValid || !domestic || !orderSettings.showCourierChoice || hasPreorder) return;
+    if (deliveryMode !== "delivery" || !pincodeValid || !domestic || hasPreorder) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       setLoadingRates(true);
@@ -331,7 +331,7 @@ export default function CheckoutClient() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [address.pincode, pincodeValid, domestic, deliveryMode, orderSettings.showCourierChoice, hasPreorder, cartKey, cartValue, cartUnits]);
+  }, [address.pincode, pincodeValid, domestic, deliveryMode, hasPreorder, cartKey, cartValue, cartUnits]);
 
   const courierOptions: CourierOption[] =
     liveRates && liveRates.pincode === address.pincode

@@ -2,6 +2,7 @@ import { getAbout } from "@/lib/about";
 import { getLiveAnnouncements, getLiveClinics, getLiveEvents, getLiveNotices, getLiveVideos, getPublishedArticles, getSiteFlags } from "@/lib/cms";
 import { getLiveBooks } from "@/lib/product-data";
 import { getPolicies } from "@/lib/policies";
+import { getOrderSettings } from "@/lib/integrations";
 import { isEventPast } from "@/lib/event-status";
 import { isPublishedNow } from "@/lib/schedule";
 import { addToCart, buildTrackingStages, formatPrice, getOrders } from "@/lib/store";
@@ -270,6 +271,74 @@ function formatOrderStatus(order: Order): string {
   return `${done}${courierLine} Estimated delivery: ${eta}. You can tap the order card in My Orders for the full journey — delivery agent OTP shows when out for delivery.`;
 }
 
+
+const FALLBACK_START = "I answer from published";
+
+/** True when no built-in rule answered, so the chat can try the Admin FAQs on the server. */
+export function isChatFallback(answer: string) {
+  return answer.startsWith(FALLBACK_START);
+}
+
+/** Shop questions answered from the live order settings (charges, pre-orders, refunds, returns…). */
+function answerShopHelp(question: string): string | null {
+  const q = question.toLowerCase();
+  const settings = getOrderSettings();
+  const pre = settings.preorderPayment;
+  const advance = pre.advanceType === "percent" ? `${pre.advanceValue}% of the price` : formatPrice(pre.advanceValue);
+  if (/pre-?order|advance|balance (link|payment|due|amount)|pay (the )?balance/.test(q)) {
+    return pre.mode === "advance"
+      ? `For a pre-order you pay an advance (${advance}) now. When the book is ready we email a link for the balance and the courier charge, and send reminders until it is paid. Delivery date: calculated once shipped — it is shared once the courier picks up your parcel. Pre-orders can be tracked in the "Track your order" tab or My Orders.`
+      : "For a pre-order you pay the book price now; the courier charge comes as a payment link when the book is ready. Delivery date: calculated once shipped — it is shared once the courier picks up your parcel.";
+  }
+  if (/(shipping|courier|delivery|postage) (charge|charges|fee|fees|cost|rate|amount)|how much.{0,20}(shipping|delivery|courier)|free (shipping|delivery)/.test(q)) {
+    switch (settings.shippingFeeMode) {
+      case "free":
+        return "Delivery is free on every order.";
+      case "flat":
+        return `Delivery is a flat ${formatPrice(settings.flatFee)} per order.`;
+      case "per_item":
+        return `Delivery is ${formatPrice(settings.perItemFee)} per item.`;
+      case "free_above":
+        return `Delivery is free on orders of ${formatPrice(settings.freeAbove)} or more, otherwise ${formatPrice(settings.flatFee)}.`;
+      default:
+        return "The courier charge depends on your pincode and the parcel's weight. Enter your delivery pincode at checkout and the exact charge and delivery date are shown before you pay. Store pickup has no delivery charge.";
+    }
+  }
+  if (/(when|how long|how many days).{0,30}(deliver|arrive|reach|get)|delivery (date|time|days)|expected delivery/.test(q)) {
+    return "For books in stock, the delivery date is shown at checkout once you enter your pincode, and again in your order emails and tracking. For pre-orders, the delivery date is calculated once shipped — after the courier picks up the parcel.";
+  }
+  if (/cancel/.test(q)) {
+    if (!settings.cancellation.enabled) return "Orders cannot be cancelled from the website right now. Write to us from the Contact page or raise a ticket and the team will help.";
+    return `You can cancel from My Orders until the order is ${settings.cancellation.allowedUntil.toLowerCase()}. If it is cancelled before it ships, the refund starts automatically to your original payment method (the platform fee is not refunded) and you get an email with the refund and VGMF transaction ID.`;
+  }
+  if (/refund|rrn|arn|utr|money back|credited/.test(q)) {
+    return `Refunds go back to the original payment method, usually within ${settings.refunds.processingDays || 7} working days. You get an email when the refund starts and again with the bank reference (RRN/ARN/UTR). On the order page, "How to check my refund" shows the steps: open your bank statement and look for the credit of the refund amount, using the reference to ask your bank if it hasn't arrived.`;
+  }
+  if (/return|replace|replacement|damaged|torn|wrong book|missing (book|item|page)/.test(q)) {
+    if (!settings.returns.enabled) return "Returns are not open on the website right now. Please raise a ticket with photos and the team will help.";
+    return `You can request a ${settings.returns.returnForRefund ? "return or replacement" : "replacement"} from My Orders within ${settings.returns.windowDays} days of delivery. Choose the reason and add the photos it asks for; you get an email at each step (received, approved, pickup, refunded or replaced).`;
+  }
+  if (/payment link|pay(ment)? (failed|due|pending)|click here to pay|link (expired|expiry)|how (do|can) i pay/.test(q)) {
+    return "When a payment is due, open the order in My Orders or its tracking page and tap \"click here to pay\" — the same link is in your email, with the date and time it is valid until. Payment is confirmed on the order automatically within a minute.";
+  }
+  if (/\bcod\b|cash on delivery/.test(q)) {
+    return settings.codEnabled ? `Cash on delivery is available${settings.codFee ? ` with a ${formatPrice(settings.codFee)} fee` : ""}; choose it at checkout. Pre-orders are paid online.` : "Cash on delivery is not available. You can pay securely online by UPI, card or net banking at checkout.";
+  }
+  if (/store pickup|pick ?up from (the )?(store|office|foundation)|collect (it )?(from|at) (the )?(store|office)/.test(q)) {
+    return "Choose Store pickup at checkout: there is no delivery charge, and we email you when the order is ready to collect with the pickup details.";
+  }
+  if (/invoice|receipt|bill\b|gst/.test(q)) {
+    return "Your invoice can be downloaded from the order in My Orders. It lists the items, GST, delivery charge and total.";
+  }
+  if (/alternat(e|ive) (phone|number|mobile)|another (phone|number)|second number/.test(q)) {
+    return "Add an alternative phone number with your delivery address at checkout or in My Account → Addresses. The courier can use it if your main number is not reachable.";
+  }
+  if (/change (my |the )?(delivery )?address|wrong address|edit (my )?address/.test(q)) {
+    return "If the order hasn't shipped yet, raise a ticket or write to us from the Contact page with the order ID and the correct address, and the team will update it.";
+  }
+  return null;
+}
+
 function findBooksForQuestion(question: string): Book[] {
   const tokens = question
     .toLowerCase()
@@ -289,6 +358,10 @@ function findBooksForQuestion(question: string): Book[] {
 
 export function answerQuestion(question: string): string {
   const hasOrderId = /\b\d{10,14}\b/.test(question);
+  if (!hasOrderId && !/\btrack\b|where is/i.test(question)) {
+    const help = answerShopHelp(question);
+    if (help) return help;
+  }
 
   if (TRACKING_INTENT.test(question) || hasOrderId) {
     const order = findOrderForQuestion(question);
@@ -296,7 +369,7 @@ export function answerQuestion(question: string): string {
     if (hasOrderId) {
       return "I couldn't find an order with that ID. Double-check it against your confirmation, or open My Orders — every order you place appears there.";
     }
-    return "Happy to help! Please share your 12-digit Order ID (found in your confirmation or on My Orders) and I'll fetch its live status right here.";
+    return "Open the \"Track your order\" tab above and enter your order ID or courier tracking number with the mobile number on the order — you'll see the full live tracking right here. Or share your 12-digit Order ID and I'll tell you its status.";
   }
 
   if (ORDERING_INTENT.test(question) && !EVENT_INTENT.test(question)) {
@@ -356,6 +429,6 @@ export function answerQuestion(question: string): string {
 
   return (
     searchFedContent(question) ??
-    `I answer from published events, notices, clinics, articles, About Us and shop listings of the ${siteConfig.shortName}. Ask about the next seminar, a clinic, a policy, or an article title — or write via the Contact page.`
+    `${FALLBACK_START} events, notices, clinics, articles, About Us and shop listings of the ${siteConfig.shortName}. Ask about the next seminar, a clinic, a policy, or an article title — or write via the Contact page.`
   );
 }

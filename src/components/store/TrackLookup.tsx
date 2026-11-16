@@ -8,7 +8,7 @@ import type { Order, ShipmentRecord } from "@/types";
 
 type Lookup = { ok?: boolean; error?: string; order?: Order; shipments?: ShipmentRecord[]; link?: string };
 
-export default function TrackLookup() {
+export default function TrackLookup({ compact = false }: { compact?: boolean } = {}) {
   const [ref, setRef] = useState("");
   const [phone, setPhone] = useState("");
   const [order, setOrder] = useState<Order | null>(null);
@@ -48,12 +48,12 @@ export default function TrackLookup() {
   }
 
   return (
-    <div className="container py-8">
-      <h1 className="font-serif text-3xl text-ink">Track your order</h1>
-      <p className="mt-2 max-w-xl text-sm text-text-muted">
+    <div className={compact ? "" : "container py-8"}>
+      {compact ? <p className="font-serif text-lg text-ink">Track your order</p> : <h1 className="font-serif text-3xl text-ink">Track your order</h1>}
+      <p className={`mt-2 max-w-xl text-text-muted ${compact ? "text-xs" : "text-sm"}`}>
         Enter your order ID or the courier tracking (AWB) number, with the mobile number on the order. This works for every courier we ship with.
       </p>
-      <form onSubmit={onSubmit} className="mt-5 grid max-w-2xl gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <form onSubmit={onSubmit} className={`grid max-w-2xl gap-3 ${compact ? "mt-3" : "mt-5 sm:grid-cols-[1fr_1fr_auto] sm:items-end"}`}>
         <label className="block text-sm">
           <span className="mb-1 block font-semibold text-text-primary">Order ID or tracking number</span>
           <input value={ref} onChange={(event) => setRef(event.target.value)} required className="w-full rounded-xl border border-border bg-white px-3 py-3" />
