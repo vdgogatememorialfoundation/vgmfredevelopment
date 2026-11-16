@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 /** Indian languages Google Translate supports (Santali, Kashmiri and Bodo are not offered by Google). */
 export const SITE_LANGUAGES = [
-  { code: "en", label: "English" },
+  { code: "en", label: "English", short: "EN" },
   { code: "hi", label: "हिन्दी · Hindi" },
   { code: "mr", label: "मराठी · Marathi" },
   { code: "bn", label: "বাংলা · Bengali" },
@@ -104,23 +104,31 @@ export function SiteTranslate({ className = "" }: { className?: string }) {
     else if ((window as TranslateWindow).__vgmfTranslate) window.location.reload();
   }, [pathname]);
 
+  const short = language === "en" ? "EN" : SITE_LANGUAGES.find((option) => option.code === language)?.label.split(" · ")[0] ?? "EN";
+
   return (
-    <select
-      aria-label="Language"
-      title="Read this site in your language"
-      translate="no"
-      className={`notranslate h-9 max-w-[8.5rem] rounded-full border border-border bg-white px-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-burgundy/30 ${className}`}
-      value={language}
-      onChange={(event) => {
-        saveLanguage(event.target.value);
-        window.location.reload();
-      }}
-    >
-      {SITE_LANGUAGES.map((option) => (
-        <option key={option.code} value={option.code}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <span translate="no" className={`notranslate relative inline-flex h-9 shrink-0 items-center gap-1 rounded-full border border-border bg-white px-2 text-xs font-semibold text-ink focus-within:ring-2 focus-within:ring-burgundy/30 ${className}`}>
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3Z" />
+      </svg>
+      <span className="max-w-[3.5rem] truncate">{short}</span>
+      <select
+        aria-label="Language"
+        title="Read this site in your language"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        value={language}
+        onChange={(event) => {
+          saveLanguage(event.target.value);
+          window.location.reload();
+        }}
+      >
+        {SITE_LANGUAGES.map((option) => (
+          <option key={option.code} value={option.code}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }

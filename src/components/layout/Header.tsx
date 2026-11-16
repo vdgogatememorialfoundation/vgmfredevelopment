@@ -595,6 +595,7 @@ export default function Header() {
 
               {/* Mobile */}
               <div className="flex shrink-0 items-center gap-2 lg:hidden">
+                <SiteTranslate className="h-8 px-1.5" />
                 <Link
                   href="/cart"
                   aria-label={`Cart, ${count} item${count === 1 ? "" : "s"}`}
@@ -637,7 +638,6 @@ export default function Header() {
               <div className="min-w-0 shrink">
                 <DeliverTo />
               </div>
-              <SiteTranslate className="h-8 max-w-[5.5rem] shrink-0" />
               <form
                 action="/search"
                 role="search"
