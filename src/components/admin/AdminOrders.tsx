@@ -1708,7 +1708,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </div>
       )}
 
-      {!isPreorderOrder(order) && !shipment && !["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status) && (
+      {(!isPreorderOrder(order) || (!order.preorderPayment && order.paymentStatus === "Paid" && order.deliveryMode === "delivery")) && !shipment && !["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status) && (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-warm-cream/50 p-3 text-sm">
           <span>Book not in stock yet?</span>
           <Button

@@ -501,7 +501,7 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
     const shown = customerCourierRates(valid, { ...settings, courierMarkup: { ...settings.courierMarkup, chargeHighest: true } });
     const charged = Math.max(...shown.map((rate) => rate.rate));
     const fee = shippingFeeFor(order.subtotal, units, charged, settings);
-    const previous = plan.shippingDue ? 0 : plan.shipping ?? 0;
+    const previous = plan.shippingDue ? plan.prepaidShipping ?? 0 : plan.shipping ?? 0;
     const round = (value: number) => Math.round(value * 100) / 100;
     patchOrder(
       order.id,
@@ -533,7 +533,7 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
       )?.rate ?? choice.rate
     : undefined;
   const fee = choice ? shippingFeeFor(order.subtotal, units, charged, settings) : Math.round(((typedFee ?? 0) + packingChargeFor(units, getOrderSettings())) * 100) / 100;
-  const previous = plan.shippingDue ? 0 : plan.shipping ?? 0;
+  const previous = plan.shippingDue ? plan.prepaidShipping ?? 0 : plan.shipping ?? 0;
   const round = (value: number) => Math.round(value * 100) / 100;
   patchOrder(
     order.id,
@@ -559,12 +559,13 @@ async function chargePreorderCourier(orderId: string, choice: CourierRate) {
   if (!order || !plan?.shippingDue || plan.balancePaidAt) return;
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
   const fee = shippingFeeFor(order.subtotal, units, choice.rate, getOrderSettings());
+  const prepaid = plan.prepaidShipping ?? 0;
   patchOrder(
     order.id,
     {
-      shipping: (order.shipping || 0) + fee,
-      total: Math.round((order.total + fee) * 100) / 100,
-      preorderPayment: { ...plan, balance: Math.round((plan.balance + fee) * 100) / 100, shipping: fee, shippingDue: false },
+      shipping: Math.round(((order.shipping || 0) - prepaid + fee) * 100) / 100,
+      total: Math.round((order.total - prepaid + fee) * 100) / 100,
+      preorderPayment: { ...plan, balance: Math.round((plan.balance - prepaid + fee) * 100) / 100, shipping: fee, shippingDue: false },
     },
     `Courier charge ₹${fee} (${choice.courierName}) added to the pre-order balance`
   );

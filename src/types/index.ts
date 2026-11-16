@@ -686,6 +686,8 @@ export interface Order {
     shippingDue?: boolean;
     /** Courier charge added to the balance. */
     shipping?: number;
+    /** Shipping/packing the customer already paid before it became a pre-order; taken off the courier charge added later. */
+    prepaidShipping?: number;
     link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; expiresAt?: string };
   };
   /** Warehouse pick & pack: who picks, and what has been scanned. */

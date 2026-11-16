@@ -1600,7 +1600,7 @@ export function addExtraCharge(orderId: string, input: { amount: number; reason:
 export function convertToPreorder(orderId: string, releaseDate?: string) {
   const order = getOrder(orderId);
   if (!order) return "Order not found.";
-  if (order.preorderPayment || order.items.every((item) => item.preorder)) return "This order is already a pre-order.";
+  if (order.preorderPayment || (order.items.every((item) => item.preorder) && order.paymentStatus !== "Paid")) return "This order is already a pre-order.";
   if (["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status)) return "This order is already packed, sent or closed.";
   const items = order.items.map((item) => ({ ...item, preorder: true, releaseDate: releaseDate || item.releaseDate }));
   const round = (value: number) => Math.round(value * 100) / 100;
@@ -1609,7 +1609,15 @@ export function convertToPreorder(orderId: string, releaseDate?: string) {
   const now = new Date().toISOString();
   let preorderPayment: Order["preorderPayment"] = order.preorderPayment;
   let money = "already paid in full, nothing more to collect";
-  if (order.paymentStatus === "Partially Paid" && order.amountPaid !== undefined) {
+  let paymentPatch: Partial<Order> = {};
+  if (order.paymentStatus === "Paid" && order.deliveryMode === "delivery") {
+    // Paid in full as a normal order: the books are covered, the courier charge is added once the desk picks the courier.
+    const advance = round(order.amountPaid ?? order.total);
+    const prepaid = round(Math.max(0, order.shipping ?? 0));
+    preorderPayment = { advance, balance: 0, balanceWhen, advancePaidAt: order.paidAt || now, shippingDue: true, prepaidShipping: prepaid || undefined };
+    paymentPatch = { paymentStatus: "Partially Paid", amountPaid: advance, shippingDue: undefined };
+    money = `₹${advance} paid covers the books; the courier charge${prepaid ? ` (less ₹${prepaid} already paid)` : ""} is added and sent as a link once you pick the courier`;
+  } else if (order.paymentStatus === "Partially Paid" && order.amountPaid !== undefined) {
     const advance = round(order.amountPaid);
     preorderPayment = { advance, balance: Math.max(0, round(order.total - advance)), balanceWhen, advancePaidAt: order.paidAt || now };
     money = `₹${advance} already paid is the advance; balance ₹${preorderPayment.balance}`;
@@ -1622,7 +1630,7 @@ export function convertToPreorder(orderId: string, releaseDate?: string) {
     money = "payment unchanged";
   }
   const next = withHistory(
-    { ...order, items, preorderPayment },
+    { ...order, ...paymentPatch, items, preorderPayment },
     order.status,
     `Changed to a pre-order by the desk${releaseDate ? `; expected ${formatDate(releaseDate)}` : ""}; ${money}.`
   );
