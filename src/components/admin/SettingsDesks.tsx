@@ -1856,7 +1856,7 @@ export function OrderSettingsDesk() {
           )}
           {value.shippingFeeMode === "per_item" && <Text label="Fee per item (₹)" type="number" value={value.perItemFee} onChange={(fee) => set({ perItemFee: Number(fee) || 0 })} />}
           {value.shippingFeeMode === "free_above" && <Text label="Free above (₹)" type="number" value={value.freeAbove} onChange={(amount) => set({ freeAbove: Number(amount) || 0 })} />}
-          <Check label="Add a packing charge" hint="Added into the courier charge for normal orders and pre-orders (on a pre-order it joins the balance with the courier charge). Customers never see it on its own." checked={value.packingCharge.enabled} onChange={(enabled) => set({ packingCharge: { ...value.packingCharge, enabled } })} />
+          <Check label="Add a packing charge" hint="Added into the courier charge for normal orders and pre-orders (on a pre-order it joins the balance with the courier charge). Store pickup orders have no packing charge; any balance is only for the books. Customers never see it on its own." checked={value.packingCharge.enabled} onChange={(enabled) => set({ packingCharge: { ...value.packingCharge, enabled } })} />
           {value.packingCharge.enabled && (
             <>
               <Text label="Packing charge (₹)" type="number" value={value.packingCharge.amount} onChange={(amount) => set({ packingCharge: { ...value.packingCharge, amount: Math.max(0, Number(amount) || 0) } })} />

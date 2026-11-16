@@ -793,8 +793,10 @@ export function resaveOrder(
   const charges = commerceCharges(subtotal);
   const gst = charges.gst;
   const platformFee = charges.platformFee;
-  const shipping =
-    update.shipping !== undefined && Number.isFinite(update.shipping)
+  const pickup = (update.deliveryMode ?? order.deliveryMode) === "store_pickup";
+  const shipping = pickup
+    ? 0
+    : update.shipping !== undefined && Number.isFinite(update.shipping)
       ? Math.max(0, Math.round(update.shipping * 100) / 100)
       : order.shipping;
   const packing = Math.min(
