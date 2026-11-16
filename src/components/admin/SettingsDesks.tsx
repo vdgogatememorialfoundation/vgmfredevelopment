@@ -1873,6 +1873,10 @@ export function OrderSettingsDesk() {
           <Text label="Legal name on the invoice" value={value.gst.legalName} onChange={(legalName) => set({ gst: { ...value.gst, legalName } })} />
           <Text label="GSTIN" value={value.gst.gstin} onChange={(gstin) => set({ gst: { ...value.gst, gstin } })} />
           <Text label="State" value={value.gst.stateName} onChange={(stateName) => set({ gst: { ...value.gst, stateName } })} />
+          <div className="md:col-span-2">
+            <Text label="Invoice footer line (printed at the bottom of every invoice; leave empty to hide)" value={value.gst.invoiceFooter} onChange={(invoiceFooter) => set({ gst: { ...value.gst, invoiceFooter } })} />
+            <p className="mt-1 text-xs text-slate-600">{"{name}"}, {"{phone}"}, {"{email}"} and {"{invoice}"} are filled in with the Foundation name, phone, email and the invoice number.</p>
+          </div>
         </div>
       </Card>
       <div className="grid gap-5 lg:grid-cols-3">

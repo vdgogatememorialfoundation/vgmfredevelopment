@@ -2655,7 +2655,7 @@ type OrderEmailRow = { at: string; to: string; subject: string; ok: boolean; err
 
 /** Emails the server sent about this order: what, to whom, when, and whether it went out. */
 function OrderEmails({ orderId }: { orderId: string }) {
-  const [data, setData] = useState<{ emails: OrderEmailRow[]; earlier: { label: string }[] } | null>(null);
+  const [data, setData] = useState<{ emails: OrderEmailRow[]; earlier: { label: string; at?: string }[] } | null>(null);
   const [error, setError] = useState("");
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -2698,7 +2698,7 @@ function OrderEmails({ orderId }: { orderId: string }) {
         <div className="mt-3">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sent before this list started (no time recorded)</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-text-muted">
-            {earlier.map((item, index) => <li key={index}>{item.label}</li>)}
+            {earlier.map((item, index) => <li key={index}>{item.label}{item.at ? ` · ${formatDateTime(item.at)}` : ""}</li>)}
           </ul>
         </div>
       )}

@@ -2200,6 +2200,12 @@ function invoiceSubtotal(order: Order) {
   return Math.round((order.total + (order.discount || 0) - (order.gst || 0) - (order.platformFee || 0) - (order.shipping || 0) + (order.storeCreditUsed || 0) - extras) * 100) / 100;
 }
 
+function invoiceFooterHtml(invoice: string) {
+  const vars: Record<string, string> = { name: siteConfig.name, phone: siteConfig.phone, email: siteConfig.email, invoice };
+  const text = getOrderSettings().gst.invoiceFooter.replace(/\{(name|phone|email|invoice)\}/g, (_, key: string) => vars[key]);
+  return text ? `<p class="foot">${esc(text)}</p>` : "";
+}
+
 export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
   const itemsHtml = order.items
     .map(
@@ -2243,7 +2249,7 @@ export function printOrderInvoice(order: Order, shipment?: ShipmentRecord) {
     ${order.storeCreditUsed ? `<tr><td>Store credit</td><td class="right">−${rupees(order.storeCreditUsed)}</td></tr>` : ""}
     <tr class="grand"><td>Total</td><td class="right">${rupees(order.total)}</td></tr>
   </table>
-  <p class="foot">This invoice is issued by ${esc(siteConfig.name)}. Books are supplied as listed. For a correction, contact ${esc(siteConfig.phone)} or ${esc(siteConfig.email)} with invoice ${esc(order.id)}.</p>`;
+  ${invoiceFooterHtml(order.id)}`;
   printHtml(`Invoice ${order.id}`, html);
 }
 

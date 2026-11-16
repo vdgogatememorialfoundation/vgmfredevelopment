@@ -320,8 +320,12 @@ export interface OrderSettings {
     legalName: string;
     gstin: string;
     stateName: string;
+    /** Last line of the printed invoice. {name}, {phone}, {email} and {invoice} are filled in when printing. */
+    invoiceFooter: string;
   };
 }
+
+export const DEFAULT_INVOICE_FOOTER = "This invoice is issued by {name}. Books are supplied as listed. For a correction, contact {phone} or {email} with invoice {invoice}.";
 
 export const defaultIntegrations: IntegrationSettings = {
   razorpay: {
@@ -506,7 +510,7 @@ export const defaultOrderSettings: OrderSettings = {
   cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0, delayDays: 30, refundFeeOnDesk: true, pickupHoldDays: 30 },
   adminActions: { processAfterDelivery: true },
   platformFee: { enabled: false, amount: 0, refundable: false },
-  gst: { enabled: false, ratePercent: 0, invoiceEnabled: false, legalName: "", gstin: "", stateName: "Maharashtra" },
+  gst: { enabled: false, ratePercent: 0, invoiceEnabled: false, legalName: "", gstin: "", stateName: "Maharashtra", invoiceFooter: DEFAULT_INVOICE_FOOTER },
 };
 
 function readJSON<T>(key: string, fallback: T): T {
@@ -856,6 +860,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       legalName: String(merged.gst?.legalName ?? "").trim(),
       gstin: String(merged.gst?.gstin ?? "").trim().toUpperCase(),
       stateName: String(merged.gst?.stateName ?? "Maharashtra").trim() || "Maharashtra",
+      invoiceFooter: String(merged.gst?.invoiceFooter ?? DEFAULT_INVOICE_FOOTER).trim().slice(0, 600),
     },
   };
 }

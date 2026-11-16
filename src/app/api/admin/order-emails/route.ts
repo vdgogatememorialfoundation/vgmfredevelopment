@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
   const logged = emailsForOrder(orderId);
   const stages = readJson<Record<string, string[]>>("order-stage-mail.json", {})[orderId] ?? [];
   const invoice = readJson<Record<string, { emailedTo?: string; emailedAt?: string }>>("delivery-invoices.json", {})[orderId];
-  const earlier = stages.map((key) => ({ label: stageLabel(key) }));
+  const earlier: { label: string; at?: string }[] = stages.map((key) => ({ label: stageLabel(key) }));
   if (invoice?.emailedAt && !logged.some((entry) => entry.at <= invoice.emailedAt! && /invoice/i.test(entry.subject))) {
-    earlier.push({ label: `Invoice emailed to ${invoice.emailedTo ?? "customer"} · ${invoice.emailedAt}` });
+    earlier.push({ label: `Invoice emailed to ${invoice.emailedTo ?? "customer"}`, at: invoice.emailedAt });
   }
   return NextResponse.json({ ok: true, emails: logged, earlier }, { headers: { "cache-control": "no-store" } });
 }
