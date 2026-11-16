@@ -465,20 +465,12 @@ export function buildTrackingStages(
       location: origin,
       reached: true,
     });
-    if (shipmentBooked && !hyperlocal) {
-      const pickupScan = shippedReached
-        ? liveScans
-            .filter((scan) => {
-              const value = scan.status.toLowerCase();
-              return PICKED_UP.test(value) && !PICKUP_PENDING.test(value);
-            })
-            .sort((left, right) => Date.parse(left.at) - Date.parse(right.at))[0]
-        : undefined;
+    if (shipmentBooked && !hyperlocal && !shippedReached) {
       packedEvents.push({
         id: "awaiting-pickup",
-        title: shippedReached ? "Item has been picked up by courier partner." : "Item waiting to be Picked up by Courier Partner",
-        at: (shippedReached && (pickupScan?.at || fromScans.at)) || shipment?.generatedAt || packedAt || order.date,
-        location: pickupScan?.location || origin,
+        title: "Item waiting to be Picked up by Courier Partner",
+        at: shipment?.generatedAt || packedAt || order.date,
+        location: origin,
         reached: true,
       });
     }
