@@ -525,7 +525,14 @@ export function buildTrackingStages(
       return scanEvent(scan, item.index, shippedReached, hyperlocal ? scan.status : courierEventTitle(scan.status, scan.location, courier));
     });
 
-  if (shippedReached && shippedEvents.length === 0) {
+  // The pickup already shows under Packed ("Item has been picked up by courier partner."), so Shipped doesn't repeat it.
+  const pickupUnderPacked = packedEvents.some((event) => event.id === "awaiting-pickup" && shippedReached);
+  const pickedUpTitle = "Your item has been picked up by delivery partner.";
+  if (pickupUnderPacked) {
+    for (let index = shippedEvents.length - 1; index >= 0; index--) if (shippedEvents[index].title === pickedUpTitle) shippedEvents.splice(index, 1);
+  }
+
+  if (shippedReached && shippedEvents.length === 0 && !pickupUnderPacked) {
     shippedEvents.push({
       id: "shipped",
       title: "Your item has been picked up by delivery partner.",
