@@ -9,6 +9,8 @@ import type { Order } from "@/types";
 /** Every payment, balance payment and refund gets a 12-digit VGMF ID once; a desk copy without them keeps the saved ones. */
 function withTxnIds(order: Order, prev?: Order): Order {
   const next = { ...order };
+  // A book saved with "original price ₹0" once produced negative discounts; a discount is never below zero.
+  if ((next.discount ?? 0) < 0) next.discount = 0;
   const paid = next.paymentStatus && next.paymentStatus !== "Pending" && next.paymentStatus !== "Failed";
   next.paymentTxnId = next.paymentTxnId || prev?.paymentTxnId || (paid ? vgmfTxnId() : undefined);
   if (!next.paymentTxnId) delete next.paymentTxnId;

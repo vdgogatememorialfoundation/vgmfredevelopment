@@ -40,7 +40,8 @@ async function call(url: string, init: RequestInit & { json?: unknown } = {}) {
     const message =
       (data as Json)?.message ??
       ((data as Json)?.error as Json)?.message ??
-      (data as Json)?.error ??
+      ((data as Json)?.error as Json)?.description ??
+      (typeof (data as Json)?.error === "string" ? (data as Json).error : undefined) ??
       (typeof data === "string" ? data.slice(0, 200) : `HTTP ${response.status}`);
     throw new ProviderError(String(message), response.status);
   }

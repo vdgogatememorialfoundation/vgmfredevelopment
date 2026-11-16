@@ -644,7 +644,7 @@ export function createAdminOrder(input: {
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = orderItems.reduce(
-    (sum, item) => sum + ((item.originalPrice ?? item.price) - item.price) * item.quantity,
+    (sum, item) => sum + Math.max(0, (item.originalPrice ?? item.price) - item.price) * item.quantity,
     0
   );
   const settings = getOrderSettings();
@@ -790,7 +790,7 @@ export function resaveOrder(
   }
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discount = items.reduce(
-    (sum, item) => sum + ((item.originalPrice ?? item.price) - item.price) * item.quantity,
+    (sum, item) => sum + Math.max(0, (item.originalPrice ?? item.price) - item.price) * item.quantity,
     0
   );
   const charges = commerceCharges(subtotal);

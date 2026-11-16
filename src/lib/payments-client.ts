@@ -492,6 +492,11 @@ export async function changeOrderLinkExpiry(orderId: string, expiresAt: string) 
   const at = new Date(expiresAt);
   if (!Number.isFinite(at.getTime()) || at.getTime() < Date.now() + 15 * 60_000) throw new Error("Pick a time at least 15 minutes from now.");
   let next = at.toISOString();
+  // Razorpay can't reopen an expired link, so an expired one is replaced by a new link with the chosen validity.
+  if (link.expiresAt && Date.parse(link.expiresAt) <= Date.now()) {
+    const fresh = await createPaymentLink(order.id, link.amount, next);
+    return `The old link had expired, so a new link for ₹${(fresh.amount ?? link.amount ?? order.total).toLocaleString("en-IN")} was sent, valid till ${new Date(fresh.expiresAt ?? next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}: ${fresh.url}`;
+  }
   if (link.provider === "razorpay" && link.id) {
     const result = await api<{ status: string; expiresAt: string }>({ action: "link-expiry", linkId: link.id, expiresAt: next });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not change the link expiry.");
