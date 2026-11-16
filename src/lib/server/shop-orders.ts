@@ -3,7 +3,24 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
 import { notifyOrderStage } from "@/lib/server/order-stage-mail";
+import { vgmfTxnId } from "@/lib/transactions";
 import type { Order } from "@/types";
+
+/** Every payment, balance payment and refund gets a 12-digit VGMF ID once; a desk copy without them keeps the saved ones. */
+function withTxnIds(order: Order, prev?: Order): Order {
+  const next = { ...order };
+  const paid = next.paymentStatus && next.paymentStatus !== "Pending" && next.paymentStatus !== "Failed";
+  next.paymentTxnId = next.paymentTxnId || prev?.paymentTxnId || (paid ? vgmfTxnId() : undefined);
+  if (!next.paymentTxnId) delete next.paymentTxnId;
+  const plan = next.preorderPayment;
+  if (plan?.balancePaidAt) next.preorderPayment = { ...plan, balanceTxnId: plan.balanceTxnId || prev?.preorderPayment?.balanceTxnId || vgmfTxnId() };
+  if (next.refunds?.length) {
+    next.refunds = next.refunds.map((refund) => (refund.vgmfId ? refund : { ...refund, vgmfId: prev?.refunds?.find((item) => item.id === refund.id)?.vgmfId || vgmfTxnId() }));
+  }
+  // An automatic refund already sent must not be marked due again by an older desk copy.
+  if (prev?.autoRefund && prev.autoRefund.status !== "due") next.autoRefund = prev.autoRefund;
+  return next;
+}
 
 function file() {
   return dataFile("shop-orders.json");
@@ -67,7 +84,7 @@ export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {})
   if (prev && orderActivityAt(prev) > orderActivityAt(order)) return prev;
   const orders = all.filter((item) => item.id !== order.id);
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
-  orders.unshift(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken });
+  orders.unshift(withTxnIds(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken }, prev));
   writeAll(orders);
   void notifyOrderStage(prev, orders[0], { statusOnly: options.quiet }).catch(() => undefined);
   return orders[0];
@@ -100,7 +117,7 @@ export function patchShopOrder(id: string, update: Partial<Order>) {
   const index = all.findIndex((order) => order.id === id);
   if (index === -1) return;
   const prev = all[index];
-  all[index] = { ...prev, ...update };
+  all[index] = withTxnIds({ ...prev, ...update }, prev);
   writeAll(all);
   void notifyOrderStage(prev, all[index]).catch(() => undefined);
   return all[index];

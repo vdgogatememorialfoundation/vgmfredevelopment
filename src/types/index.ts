@@ -676,6 +676,8 @@ export interface Order {
     advancePaidAt?: string;
     balancePaidAt?: string;
     balanceRef?: string;
+    /** 12-digit VGMF transaction ID of the balance payment. */
+    balanceTxnId?: string;
     /** Courier charge still to be worked out and added to the balance (pre-orders sent by courier). */
     shippingDue?: boolean;
     /** Courier charge added to the balance. */
@@ -718,6 +720,10 @@ export interface Order {
   createdBy?: string;
   cancelReason?: string;
   refundAmount?: number;
+  /** Refund the server sends by itself after a cancellation before shipping. */
+  autoRefund?: { status: "due" | "done" | "failed"; amount: number; at: string; error?: string };
+  /** 12-digit VGMF transaction ID of the order payment. */
+  paymentTxnId?: string;
   /** What the customer had already paid when the desk last edited the order; the rest is due by payment link. */
   amountPaid?: number;
   /** `custom` is the tracking step id an admin-added status shows under. */
@@ -735,6 +741,8 @@ export interface RefundRecord {
   by?: string;
   gateway?: "razorpay";
   gatewayRefundId?: string;
+  /** 12-digit VGMF transaction ID. */
+  vgmfId?: string;
   status?: "pending" | "processed" | "failed";
   /** Bank reference from the gateway's acquirer data (RRN, ARN or UTR). */
   rrn?: string;

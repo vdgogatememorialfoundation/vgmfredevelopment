@@ -121,8 +121,25 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
     const before = new Set((prev.refunds ?? []).map(refundKey));
     for (const refund of next.refunds ?? []) {
       const key = refundKey(refund);
-      if (before.has(key)) continue;
       const bankRef = refund.arn || refund.rrn || refund.utr;
+      const earlier = prev.refunds?.find((item) => item.id === refund.id);
+      if (before.has(key)) {
+        // The bank reference often arrives after the refund was initiated: tell the customer as soon as it does.
+        if (bankRef && earlier && !(earlier.arn || earlier.rrn || earlier.utr)) {
+          stages.push({
+            key: `refund:${refund.id}:rrn`,
+            subject: `Bank reference for your refund on order ${next.id}`,
+            intro: `Your bank has issued a reference number for the refund of ${rupees(refund.amount)} on order ${next.id}.`,
+            next: [
+              `Bank reference (RRN/ARN): ${bankRef}`,
+              refund.vgmfId ? `VGMF transaction ID: ${refund.vgmfId}` : "",
+              refund.gatewayRefundId ? `Refund ID: ${refund.gatewayRefundId}` : "",
+              "Look for this credit in your bank or UPI app. If it has not arrived within 5–7 working days, quote this reference to your bank.",
+            ].filter(Boolean),
+          });
+        }
+        continue;
+      }
       const store = refund.destination === "store_credit";
       stages.push({
         key,
@@ -133,6 +150,7 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
             ? `The refund of ${rupees(refund.amount)} for order ${next.id} could not be completed. Our team will retry and write to you.`
             : `A refund of ${rupees(refund.amount)} for order ${next.id} has been initiated${store ? " as store credit" : " to your original payment method"}.`,
         next: [
+          refund.vgmfId ? `VGMF transaction ID: ${refund.vgmfId}` : "",
           refund.gatewayRefundId ? `Refund ID: ${refund.gatewayRefundId}` : "",
           bankRef ? `Bank reference (ARN/RRN): ${bankRef}` : "",
           store ? "The store credit is available on your next order." : key.endsWith("processed") ? "The amount is usually credited to your account within 5–7 working days of processing. Quote the bank reference to your bank if it does not appear." : "Banks usually take 3–5 working days to process, then 5–7 working days to credit. Follow it in My Orders.",

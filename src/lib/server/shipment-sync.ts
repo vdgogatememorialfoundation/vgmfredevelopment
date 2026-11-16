@@ -3,6 +3,7 @@ import { listShopShipments } from "@/lib/server/shop-shipments";
 import { deletedShopOrderIds, findShopOrder, listShopOrders, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import { listHolds, saveHold } from "@/lib/server/payment-holds";
 import { razorpayCreds, razorpayLinkStatus, razorpayOrderPayments, razorpayRefund, razorpayRefundStatus } from "@/lib/server/providers";
+import { collectedAmount, vgmfTxnId } from "@/lib/transactions";
 import type { Order, RefundRecord } from "@/types";
 
 const EVERY_MS = 3 * 60 * 1000;
@@ -213,6 +214,81 @@ export async function syncRazorpayHolds() {
   }
 }
 
+let refunding = false;
+
+/** Sends the refund for orders cancelled before shipping (platform fee kept), so nobody has to refund them by hand. Desk cancellations wait 2 minutes first. */
+export async function syncCancellationRefunds(onlyOrderId = "", waitMs = 2 * 60_000) {
+  const creds = razorpayCreds({});
+  if (!creds || refunding) return;
+  refunding = true;
+  try {
+    const due = listShopOrders().filter((order) => order.status === "Cancelled" && order.autoRefund?.status === "due" && (!onlyOrderId || order.id === onlyOrderId));
+    for (const order of due) {
+      const plan = order.autoRefund!;
+      if (Date.now() - (Date.parse(plan.at) || 0) < waitMs) continue;
+      const now = new Date().toISOString();
+      const already = order.refundAmount ?? 0;
+      const collected = collectedAmount(order);
+      const amount = Math.round(Math.min(plan.amount, collected - already) * 100) / 100;
+      if (!(amount > 0)) {
+        patchShopOrder(order.id, { autoRefund: { ...plan, status: "done" } });
+        continue;
+      }
+      const balanceId = order.preorderPayment?.balancePaidAt && order.preorderPayment.balanceRef?.startsWith("pay_") ? order.preorderPayment.balanceRef : "";
+      const pieces: [string, number][] = [];
+      if (order.razorpayPaymentId && balanceId) {
+        const first = Math.min(amount, order.preorderPayment!.advance);
+        pieces.push([order.razorpayPaymentId, first]);
+        if (amount - first > 0.001) pieces.push([balanceId, Math.round((amount - first) * 100) / 100]);
+      } else if (order.razorpayPaymentId || balanceId) pieces.push([order.razorpayPaymentId || balanceId, amount]);
+      const refunds: RefundRecord[] = [];
+      let error = "";
+      for (const [paymentId, value] of pieces) {
+        try {
+          const result = await razorpayRefund(creds, paymentId, value);
+          const processed = result.status === "processed";
+          refunds.push({
+            id: `${Date.now()}${refunds.length}`,
+            at: now,
+            amount: value,
+            destination: "original",
+            method: order.paymentMethod,
+            note: `Automatic refund on cancellation · Razorpay refund ${result.refundId}`,
+            by: "Automatic refund",
+            gateway: "razorpay",
+            gatewayRefundId: result.refundId,
+            vgmfId: vgmfTxnId(),
+            status: processed ? "processed" : result.status === "failed" ? "failed" : "pending",
+            rrn: result.rrn || undefined,
+            arn: result.arn || undefined,
+            utr: result.utr || undefined,
+            speed: result.speed || undefined,
+            processedAt: processed ? now : undefined,
+          });
+        } catch (caught) {
+          error = caught instanceof Error ? caught.message : String(caught);
+          break;
+        }
+      }
+      const sent = refunds.reduce((sum, refund) => sum + refund.amount, 0);
+      const total = already + sent;
+      const feeKept = (order.platformFee ?? 0) > 0 && plan.amount <= collected - (order.platformFee ?? 0) + 0.001;
+      const note = sent
+        ? `Refund of ₹${sent.toLocaleString("en-IN")} sent automatically to the original payment method${feeKept ? ` (platform fee ₹${order.platformFee} kept)` : ""}${error ? `. The rest failed: ${error}` : ""}`
+        : `Automatic refund failed: ${error || "no Razorpay payment on this order"}. Refund it from the order's Payment section.`;
+      patchShopOrder(order.id, {
+        refunds: [...(order.refunds ?? []), ...refunds],
+        refundAmount: total,
+        paymentStatus: sent ? (total >= collected - 0.001 ? "Refunded" : "Partially Refunded") : order.paymentStatus,
+        autoRefund: { ...plan, status: error || !sent ? "failed" : "done", ...(error ? { error } : {}) },
+        history: [...(order.history ?? []), { at: now, status: order.status, note, by: "Automatic refund" }],
+      });
+    }
+  } finally {
+    refunding = false;
+  }
+}
+
 export function startShipmentSync() {
   if (started) return;
   started = true;
@@ -220,6 +296,7 @@ export function startShipmentSync() {
     void syncOpenShipments();
     void syncOpenRefunds();
     void syncRazorpayHolds();
+    void syncCancellationRefunds();
   };
   setTimeout(tick, 20_000).unref?.();
   setInterval(tick, EVERY_MS).unref?.();

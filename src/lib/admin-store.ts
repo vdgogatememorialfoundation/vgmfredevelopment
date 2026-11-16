@@ -12,6 +12,7 @@ import type {
   SupportTicket,
   FAQItem,
   User, RefundRecord } from "@/types";
+import { cancellationAutoRefund, deskCancellationRefund, vgmfTxnId } from "@/lib/transactions";
 import { itemTotals } from "@/lib/order-item-totals";
 import { dropPortalAccount, pushPortalAccounts } from "@/lib/portal-accounts-sync";
 import { pickupInstructions } from "@/lib/fulfillment";
@@ -869,7 +870,7 @@ export function refundToStoreCredit(orderId: string, amount?: number, note?: str
       ...order,
       paymentStatus: refundAmount >= cap - 0.001 ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", reference: txn, note, by: currentActor() }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "store_credit", reference: txn, note, by: currentActor(), vgmfId: vgmfTxnId() }],
     },
     "Store credit issued",
     `₹${refundAmount} · balance ₹${balance} · Transaction ID ${txn}`
@@ -1351,7 +1352,14 @@ export function cancelOrder(orderId: string, reason?: string) {
   if (!order) return;
   releaseStockForOrder(order);
   const next: Order = withHistory(
-    { ...order, status: "Cancelled", cancelReason: reason, stockCommitted: false, preorderStockCommitted: false },
+    {
+      ...order,
+      status: "Cancelled",
+      cancelReason: reason,
+      stockCommitted: false,
+      preorderStockCommitted: false,
+      autoRefund: order.autoRefund ?? cancellationAutoRefund(order, deskCancellationRefund(order)),
+    },
     "Cancelled",
     reason
   );
@@ -1371,7 +1379,7 @@ export function refundOrder(orderId: string, amount?: number, note?: string, ext
       ...order,
       paymentStatus: refundAmount >= cap - 0.001 ? "Refunded" : "Partially Refunded",
       refundAmount: (order.refundAmount ?? 0) + refundAmount,
-      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor(), ...extra }],
+      refunds: [...(order.refunds ?? []), { id: String(Date.now()), at: new Date().toISOString(), amount: refundAmount, destination: "original", note, by: currentActor(), vgmfId: vgmfTxnId(), ...extra }],
     },
     "Refunded",
     note ?? `₹${refundAmount}`

@@ -1,4 +1,5 @@
 import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
+import RefundHelp from "@/components/store/RefundHelp";
 import type { Order, RefundRecord } from "@/types";
 
 const stamp = (value?: string) =>
@@ -173,6 +174,7 @@ export default function RefundDetails({
               <Fact label="Processed" value={stamp(refund.processedAt)} />
               <Fact label="Expected credit" value={refundExpectedCreditLabel(refund).replace(/^(Expected credit by|Should have been credited by|Credited) /, "")} />
               <Fact label="Refund to" value={refund.destination === "store_credit" ? "Store credit" : refund.method || order.paymentMethod || "Original payment method"} />
+              <Fact label="VGMF transaction ID" value={refund.vgmfId} />
               <Fact label="Refund ID" value={refund.gatewayRefundId || refund.reference} />
               <Fact label="Bank RRN" value={refund.rrn} />
               <Fact label="ARN" value={refund.arn} />
@@ -182,6 +184,7 @@ export default function RefundDetails({
             {refund.gatewayRefundId && refund.status !== "processed" && refund.status !== "failed" && !refund.rrn && !refund.arn ? (
               <p className="mt-2 text-xs text-slate-600">The bank reference (RRN/ARN) shows here once the refund is processed, usually within 3–5 working days. This page updates on its own.</p>
             ) : null}
+            <RefundHelp refund={refund} orderId={order.id} />
             {onCheck && refund.gatewayRefundId ? (
               <button type="button" disabled={busyId === refund.id} onClick={() => onCheck(refund)} className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
                 {busyId === refund.id ? "Checking…" : "Check status with gateway"}

@@ -7,6 +7,8 @@ import { redeemPromo } from "@/lib/server/promotions";
 import { ensureGuestAccount } from "@/lib/server/guest-account";
 import { inviteOrderFeedback } from "@/lib/server/forms";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { syncCancellationRefunds } from "@/lib/server/shipment-sync";
+import { cancellationAutoRefund } from "@/lib/transactions";
 import { canCustomerCancel, customerCancellationRefund, preorderLate, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import type { Order } from "@/types";
 
@@ -65,9 +67,12 @@ export async function POST(request: NextRequest) {
     const next = patchShopOrder(order.id, {
       status: "Cancelled",
       cancelReason: reason,
+      autoRefund: cancellationAutoRefund(order, refund),
       history: [...(order.history ?? []), { at: new Date().toISOString(), status: "Cancelled", note, by: "Customer" }],
     });
-    return NextResponse.json({ ok: true, order: next ? forCustomer(next) : undefined });
+    if (next?.autoRefund) await syncCancellationRefunds(order.id, 0).catch(() => undefined);
+    const latest = findShopOrder(order.id) ?? next;
+    return NextResponse.json({ ok: true, order: latest ? forCustomer(latest) : undefined });
   }
   if (body?.action === "delete") {
     const viewer = commerceViewer(request);
