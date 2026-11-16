@@ -258,6 +258,19 @@ export async function razorpayPayment(creds: { keyId: string; keySecret: string 
   };
 }
 
+/** Every payment or refund Razorpay recorded between two Unix times (seconds), all pages. */
+export async function razorpayList(creds: { keyId: string; keySecret: string }, kind: "payments" | "refunds", from: number, to: number) {
+  const headers = { authorization: razorpayAuth(creds) };
+  const items: Json[] = [];
+  for (let skip = 0; skip < 5000; skip += 100) {
+    const data = await call(`https://api.razorpay.com/v1/${kind}?from=${from}&to=${to}&count=100&skip=${skip}`, { headers });
+    const page = (data.items as Json[] | undefined) ?? [];
+    items.push(...page);
+    if (page.length < 100) break;
+  }
+  return items;
+}
+
 export async function razorpayOrderPayments(
   creds: { keyId: string; keySecret: string },
   orderId: string,

@@ -328,6 +328,7 @@ export function OrdersDashboard() {
             </p>
           </div>
         )}
+        <GatewaySummaryCard />
       </div>
 
       <ItemTotalsStrip
@@ -2624,6 +2625,100 @@ function AwbPhotos({ order, awb }: { order: Order; awb: string }) {
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+type GatewaySummary = {
+  ok: boolean;
+  error?: string;
+  gateway?: {
+    name: string;
+    collected: number;
+    count: number;
+    onOrders: number;
+    notOnOrders: number;
+    fullyRefunded: { count: number; amount: number };
+    refunded: number;
+    refundCount: number;
+  } | null;
+  orderRefunds?: { toBank: number; toStoreCredit: number; count: number };
+  unmatched?: { id: string; amount: number; refunded: number; status: string; at: string; orderId: string; orderDeleted: boolean }[];
+};
+
+/** Payments and refunds as the gateway records them, so the Orders tab matches the Razorpay dashboard. */
+function GatewaySummaryCard() {
+  const [days, setDays] = useState(7);
+  const [summary, setSummary] = useState<GatewaySummary | null>(null);
+  const [showUnmatched, setShowUnmatched] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/admin/gateway-summary?days=${days}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: GatewaySummary) => live && setSummary(data))
+      .catch(() => live && setSummary({ ok: false, error: "Could not reach the server." }));
+    return () => {
+      live = false;
+    };
+  }, [days]);
+  const gateway = summary?.gateway;
+  const refunds = summary?.orderRefunds;
+  const unmatched = summary?.unmatched ?? [];
+  return (
+    <div className="rounded-xl border border-border bg-white p-4 text-left sm:col-span-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Payments &amp; refunds{gateway ? ` · ${gateway.name}` : ""}</p>
+        <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="rounded-md border border-border bg-white px-2 py-1 text-xs">
+          <option value={1}>Last 24 hours</option>
+          <option value={7}>Last 7 days</option>
+          <option value={30}>Last 30 days</option>
+          <option value={90}>Last 90 days</option>
+        </select>
+      </div>
+      {!summary ? (
+        <p className="mt-2 text-xs text-text-muted">Loading from the gateway…</p>
+      ) : (
+        <>
+          {gateway ? (
+            <>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{rupees(gateway.collected)}</p>
+              <p className="text-xs text-text-muted">
+                Collected from {gateway.count} captured payments · on orders <b>{rupees(gateway.onOrders)}</b>
+                {gateway.notOnOrders ? <> · not on any order <b className="text-amber-700">{rupees(gateway.notOnOrders)}</b></> : null}
+              </p>
+              <p className="mt-1 text-xs text-text-muted">
+                Refunded via {gateway.name} <b className="text-rose-700">{rupees(gateway.refunded)}</b> ({gateway.refundCount})
+                {gateway.fullyRefunded.count ? <> · {gateway.fullyRefunded.count} fully refunded payments ({rupees(gateway.fullyRefunded.amount)}) are not in Collected</> : null}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-xs text-text-muted">{summary.error || "No payment gateway keys are saved."}</p>
+          )}
+          {refunds && (
+            <p className="mt-1 text-xs text-text-muted">
+              Refunds on orders: to bank <b>{rupees(refunds.toBank)}</b> · to store credit <b>{rupees(refunds.toStoreCredit)}</b> ({refunds.count})
+            </p>
+          )}
+          {unmatched.length > 0 && (
+            <div className="mt-2">
+              <button type="button" onClick={() => setShowUnmatched((open) => !open)} className="text-xs font-semibold text-burgundy underline">
+                {showUnmatched ? "Hide" : "Show"} {unmatched.length} gateway payments not on any order
+              </button>
+              {showUnmatched && (
+                <ul className="mt-1 space-y-0.5 text-xs text-text-muted">
+                  {unmatched.map((payment) => (
+                    <li key={payment.id}>
+                      {payment.id} · {rupees(payment.amount)} · {formatDateTime(payment.at)}
+                      {payment.orderId ? ` · order #${payment.orderId}${payment.orderDeleted ? " (deleted)" : ""}` : ""}
+                      {payment.refunded ? ` · refunded ${rupees(payment.refunded)}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
