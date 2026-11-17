@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/admin/AdminUI";
 
 type Detector = { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> };
@@ -85,12 +85,18 @@ export function BarcodeCamera({
   onClose,
   label = "Point the camera at a product barcode",
   continuous = false,
+  feedback,
+  children,
 }: {
   onScan: (code: string) => void;
   onClose: () => void;
   label?: string;
   /** Keep the camera open and read the next code after each scan. */
   continuous?: boolean;
+  /** Result of the last scan, shown on the camera view itself (e.g. "Scanned" or why it was refused). */
+  feedback?: { ok: boolean; text: string } | null;
+  /** Shown under the camera, e.g. the live scan checklist. */
+  children?: ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const onScanRef = useRef(onScan);
@@ -184,9 +190,17 @@ export function BarcodeCamera({
         </div>
         <div className="relative">
           <video ref={videoRef} className="aspect-[4/3] max-h-[60vh] w-full bg-ink object-cover sm:aspect-video" muted playsInline autoPlay />
-          <div className="pointer-events-none absolute inset-x-[12%] top-1/2 h-1/3 -translate-y-1/2 rounded-lg border-2 border-white/80" />
+          <div className={`pointer-events-none absolute inset-x-[12%] top-1/2 h-1/3 -translate-y-1/2 rounded-lg border-2 ${feedback ? (feedback.ok ? "border-emerald-400" : "border-red-500") : "border-white/80"}`} />
+          {feedback ? (
+            <div role="status" aria-live="assertive" className={`absolute inset-x-2 bottom-2 rounded-lg px-3 py-2 text-sm font-semibold text-white shadow ${feedback.ok ? "bg-emerald-600/95" : "bg-red-600/95"}`}>
+              {feedback.ok ? "✓ Scanned" : "✗ Not scanned"}
+              {last ? <span className="font-normal"> · {last}</span> : null}
+              <span className="block text-xs font-normal">{feedback.text}</span>
+            </div>
+          ) : null}
         </div>
-        {last ? <p className="px-4 pt-3 text-xs text-emerald-700">Read: {last}</p> : null}
+        {last && !feedback ? <p className="px-4 pt-3 text-xs text-emerald-700">Read: {last}</p> : null}
+        {children ? <div className="px-4 pt-3">{children}</div> : null}
         {error && <p className="px-4 pt-3 text-xs text-red-700">{error}</p>}
         <form
           className="flex gap-2 p-4"

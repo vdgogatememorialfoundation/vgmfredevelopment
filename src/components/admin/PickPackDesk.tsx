@@ -358,7 +358,25 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
         )}
         {!active && note ? <p className="mt-2 text-sm text-emerald-700">{note}</p> : null}
         {!active && error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
-        {camera ? <BarcodeCamera label="Scan a product barcode or the order QR" continuous onScan={(value) => scan(value)} onClose={() => setCamera(false)} /> : null}
+        {camera ? (
+          <BarcodeCamera
+            label="Scan a product barcode or the order QR"
+            continuous
+            onScan={(value) => scan(value)}
+            onClose={() => setCamera(false)}
+            feedback={error ? { ok: false, text: error } : note ? { ok: true, text: note } : null}
+          >
+            {(() => {
+              const current = orders.find((order) => order.id === active);
+              return current?.pick?.acceptedAt ? (
+                <div className="text-sm">
+                  <p className="font-semibold text-slate-900">Order {current.id} · {progress(current)}</p>
+                  <ScanChecklist order={current} />
+                </div>
+              ) : null;
+            })()}
+          </BarcodeCamera>
+        ) : null}
       </Panel>
 
       {lead && mode !== "pack" ? (
