@@ -65,7 +65,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { changeBalanceLinkExpiry, changeOrderLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
+import { changeBalanceLinkExpiry, changeOrderLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel, createSplitShipmentLink, splitShipmentDue } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -2533,17 +2533,19 @@ function SplitShipments({
   const [error, setError] = useState("");
   const [courierFee, setCourierFee] = useState<Record<number, string>>({});
   if (units < 2) return null;
-  const chargedFor = (part: number) => order.extraCharges?.find((charge) => charge.reason.startsWith(`Shipment ${part} `));
-  const packFor = (part: 1 | 2) => (part === 1 && (order.packing ?? 0) > 0 ? 0 : packingChargeFor(itemsFor(part).reduce((sum, row) => sum + row.quantity, 0)));
-  const charge = (part: 1 | 2) => {
-    const courier = Math.max(0, Math.round(Number(courierFee[part] ?? rate?.rate ?? 0)));
-    const pack = packFor(part);
-    if (!(courier + pack > 0)) {
-      setError("Enter the courier charge for this shipment.");
-      return;
+  const courierFor = (part: 1 | 2) => Math.max(0, Math.round(Number(courierFee[part] ?? rate?.rate ?? 0)));
+  const rowFor = (part: number) => order.splitCharges?.find((row) => row.part === part);
+  const sendLink = async (part: 1 | 2) => {
+    setBusy(part);
+    setError("");
+    try {
+      const result = await createSplitShipmentLink(order.id, part, itemsFor(part), courierFor(part));
+      onDone(`Shipment ${part}: payment link for ₹${result.amount} sent to the customer. Book it once it shows Paid.`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not send the payment link.");
+    } finally {
+      setBusy(0);
     }
-    const text = addExtraCharge(order.id, { amount: courier + pack, reason: `Shipment ${part} of 2: courier ₹${courier} + packing ₹${pack}`, kind: "shipping" });
-    onDone(`Shipment ${part}: ${text}`);
   };
   const itemsFor = (part: 1 | 2) =>
     order.items
@@ -2590,20 +2592,34 @@ function SplitShipments({
           ))}
           <div className="space-y-1 text-xs">
             {([1, 2] as const).map((part) => {
-              const charged = chargedFor(part);
-              if (parts.some((item) => item.part === part)) return null;
-              return charged ? (
-                <p key={part} className="text-emerald-800">Shipment {part} charge added: ₹{charged.amount} ({charged.reason.replace(/^Shipment \d+ of \d+: /, "")})</p>
-              ) : (
+              if (parts.some((item) => item.part === part) || !itemsFor(part).length) return null;
+              const row = rowFor(part);
+              if (row) {
+                return (
+                  <p key={part} className={row.paidAt ? "text-emerald-800" : "text-amber-800"}>
+                    Shipment {part}: ₹{row.amount} (book balance ₹{row.books} + packing ₹{row.packing} + courier ₹{row.courier}) · {row.paidAt ? "Paid, ready to book" : "link sent, waiting for payment"}
+                    {!row.paidAt && row.link && (
+                      <>
+                        {" · "}
+                        <button type="button" className="underline" onClick={() => void navigator.clipboard?.writeText(row.link?.url ?? "")}>Copy link</button>
+                        {" · "}
+                        <button type="button" className="underline" disabled={Boolean(busy)} onClick={() => void sendLink(part)}>Resend link</button>
+                      </>
+                    )}
+                  </p>
+                );
+              }
+              const due = splitShipmentDue(order, itemsFor(part), part, courierFor(part));
+              return (
                 <div key={part} className="flex flex-wrap items-center gap-2">
-                  <span>Shipment {part} charge: courier ₹</span>
+                  <span>Shipment {part}: book balance ₹{due.books} + packing ₹{due.packing} + courier ₹</span>
                   <input type="number" min={0} className="w-20 rounded-lg border border-border px-2 py-1" placeholder={rate ? String(rate.rate) : "0"} value={courierFee[part] ?? ""} onChange={(event) => setCourierFee((current) => ({ ...current, [part]: event.target.value }))} aria-label={`Courier charge for shipment ${part}`} />
-                  <span>+ packing ₹{packFor(part)}</span>
-                  <Button variant="outline" onClick={() => charge(part)}>Add as balance due</Button>
+                  <span>= <b>₹{due.amount}</b></span>
+                  <Button variant="outline" disabled={Boolean(busy) || !(due.amount > 0)} onClick={() => void sendLink(part)}>{busy === part ? "Sending…" : `Send shipment ${part} payment link`}</Button>
                 </div>
               );
             })}
-            <p className="text-text-muted">Each shipment is charged on its own: add its courier + packing charge, send the payment link from Payment, and book it once paid.</p>
+            <p className="text-text-muted">Each shipment has its own payment link: only its books&apos; remaining balance (the advance already paid is shared by book value; the platform fee is not charged again) + its packing + its courier. Book each shipment yourself once its link is paid; nothing goes to the courier until you press Book.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {([1, 2] as const).map((part) => {

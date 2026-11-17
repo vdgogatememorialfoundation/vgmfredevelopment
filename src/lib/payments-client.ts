@@ -1,8 +1,8 @@
 import type { CourierRate, Order } from "@/types";
-import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
+import { getIntegrations, packingChargeFor, paytmKeys, razorpayKeys } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import { getOrders } from "@/lib/store";
-import { getOrder, maxRefundable, patchOrder, recordBalancePayment, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
+import { addExtraCharge, getOrder, maxRefundable, patchOrder, recordBalancePayment, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 
@@ -319,6 +319,75 @@ export async function createPaymentLink(orderId: string, amountOverride?: number
     body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${amount.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid until ${new Date(expiresAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
+}
+
+/** What one shipment of a split order collects: its books' unpaid balance (pre-order advance shared by book value), packing and courier. */
+export function splitShipmentDue(order: Order, items: { bookId: string; quantity: number }[], part: number, courier: number) {
+  const plan = order.preorderPayment;
+  const round = (value: number) => Math.round(value * 100) / 100;
+  const value = items.reduce((sum, row) => sum + (order.items.find((item) => item.bookId === row.bookId)?.price ?? 0) * row.quantity, 0);
+  const copies = items.reduce((sum, row) => sum + row.quantity, 0);
+  const open = plan && !plan.balancePaidAt;
+  // Book balance still due = order total less platform fee (charged once, inside the advance), packing, courier and later extras, less the advance.
+  const fee = Math.max(0, order.platformFee ?? 0);
+  const extras = (order.extraCharges ?? []).reduce((sum, row) => sum + row.amount, 0);
+  const shippingExtras = (order.extraCharges ?? []).filter((row) => row.kind === "shipping").reduce((sum, row) => sum + row.amount, 0);
+  const goodsDue = open ? Math.max(0, order.total - extras - fee - (order.packing ?? 0) - Math.max(0, (order.shipping ?? 0) - shippingExtras) - Math.max(0, plan.advance - fee)) : 0;
+  const other = order.splitCharges?.find((row) => row.part !== part);
+  const books = !open || order.subtotal <= 0 ? 0 : round(other ? Math.max(0, goodsDue - other.books) : (goodsDue * value) / order.subtotal);
+  const paidPacking = part === 1 && (order.packing ?? 0) > 0;
+  const packingNew = paidPacking ? 0 : packingChargeFor(copies);
+  const packingInBalance = paidPacking && open ? order.packing ?? 0 : 0;
+  const packing = round(packingNew + packingInBalance);
+  const courierFee = round(Math.max(0, courier));
+  return { books, packing, packingNew, courier: courierFee, amount: round(books + packing + courierFee) };
+}
+
+/** Sends one shipment's own payment link; that shipment can be booked once it is paid. */
+export async function createSplitShipmentLink(orderId: string, part: number, items: { bookId: string; quantity: number }[], courier: number) {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.splitCharges?.some((row) => row.part === part && row.paidAt)) throw new Error(`Shipment ${part} is already paid.`);
+  const due = splitShipmentDue(order, items, part, courier);
+  if (!(due.amount > 0)) throw new Error("Nothing is due for this shipment. Book it directly.");
+  const prior = order.splitCharges?.find((row) => row.part === part);
+  const extra = due.packingNew + due.courier;
+  if (!prior && extra > 0) {
+    addExtraCharge(order.id, { amount: extra, reason: `Shipment ${part} of 2: courier ₹${due.courier} + packing ₹${due.packingNew}`, kind: "shipping" });
+  }
+  const fresh = getOrder(orderId) ?? order;
+  const amount = prior ? prior.amount : due.amount;
+  const expiresAt = linkExpiry();
+  let link: NonNullable<NonNullable<Order["splitCharges"]>[number]["link"]>;
+  if (getIntegrations().razorpay.mode === "demo" && !requiresLiveCommerce()) {
+    link = { url: `${window.location.origin}/pay/${order.id}?d=${encodeSummary(fresh, amount, ["Payment"])}&x=${Date.parse(expiresAt)}`, provider: "demo", createdAt: new Date().toISOString(), expiresAt };
+  } else {
+    const result = await api<{ id: string; url: string }>({
+      action: "link",
+      amount,
+      orderId: order.id,
+      name: order.deliveryAddress?.fullName ?? "Customer",
+      email: order.deliveryAddress?.email,
+      phone: order.deliveryAddress?.phone,
+      description: `Order ${order.id} · shipment ${part}`,
+      callbackUrl: `${window.location.origin}/pay/${order.id}?done=1`,
+      expiryMinutes: linkMinutes(),
+    });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), expiresAt };
+  }
+  const row = prior ? { ...prior, link } : { part, amount, books: due.books, packing: due.packing, courier: due.courier, link };
+  patchOrder(order.id, { splitCharges: [...(fresh.splitCharges ?? []).filter((item) => item.part !== part), row].sort((a, b) => a.part - b.part) }, `Shipment ${part} payment link sent · ₹${amount}`);
+  sendEmail({
+    to: order.deliveryAddress?.email ?? "",
+    phone: order.deliveryAddress?.phone,
+    name: order.deliveryAddress?.fullName,
+    params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${amount}`, link.url],
+    subject: `Pay for shipment ${part} of your order ${order.id}`,
+    template: "payment-link",
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPart of your order ${order.id} is ready to send. Please pay ₹${amount.toLocaleString("en-IN")} for this shipment (book balance ₹${row.books}, packing ₹${row.packing}, courier ₹${row.courier}):\n${link.url}\n\nWe will send it as soon as it is paid. The rest of your order follows in a separate shipment.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  return { link, amount };
 }
 
 /** Link for a store-pickup customer to pay only the courier charge; paying switches the order to courier delivery. */

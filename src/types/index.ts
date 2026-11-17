@@ -666,6 +666,17 @@ export interface Order {
   /** Store pickup changed to courier delivery: the customer is asked to add the delivery address in My Orders. */
   /** `fix`: the desk asked the customer to correct a wrong address (not a pickup → courier switch). */
   addressRequest?: { at: string; doneAt?: string; fix?: boolean };
+  /** Split orders: what each shipment collects (its books' balance + packing + courier) and its own payment link. */
+  splitCharges?: {
+    part: number;
+    amount: number;
+    books: number;
+    packing: number;
+    courier: number;
+    link?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; expiresAt?: string };
+    paidAt?: string;
+    ref?: string;
+  }[];
   /** Store pickup: the date and time slot the desk gave for collection; `at` is when the pickup email was last sent. */
   pickupWindow?: { date: string; slot: string; at: string };
   /** Part of `shipping` the desk marked as the packing charge; shown as its own "Packing charge" line. */

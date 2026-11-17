@@ -110,6 +110,25 @@ async function checkOpenPaymentLinks(creds: { keyId: string; keySecret: string }
           });
         }
       }
+      for (const row of order.splitCharges ?? []) {
+        if (row.paidAt || row.link?.provider !== "razorpay" || !row.link.id || !recent(row.link.createdAt)) continue;
+        const result = await razorpayLinkStatus(creds, row.link.id);
+        if (result.status !== "paid") continue;
+        const at = new Date().toISOString();
+        const current = findShopOrder(order.id) ?? order;
+        const round = (value: number) => Math.round(value * 100) / 100;
+        const livePlan = current.preorderPayment;
+        const paidBefore = current.amountPaid ?? (livePlan?.advancePaidAt ? livePlan.advance : current.paymentStatus === "Paid" ? current.total : 0);
+        const amountPaid = round(paidBefore + row.amount);
+        const balance = livePlan && !livePlan.balancePaidAt ? round(Math.max(0, livePlan.balance - row.amount)) : undefined;
+        patchShopOrder(order.id, {
+          splitCharges: (current.splitCharges ?? []).map((item) => (item.part === row.part ? { ...item, paidAt: at, ref: result.paymentId } : item)),
+          amountPaid,
+          paymentStatus: amountPaid >= current.total - 0.5 ? "Paid" : "Partially Paid",
+          preorderPayment: livePlan && balance !== undefined ? { ...livePlan, balance, ...(balance <= 0.5 ? { balancePaidAt: at, balanceRef: result.paymentId } : {}) } : livePlan,
+          history: [...(current.history ?? []), { at, status: `Shipment ${row.part} paid`, note: `₹${row.amount} · Razorpay payment link${result.paymentId ? ` · ${result.paymentId}` : ""}` }],
+        });
+      }
       if (plan?.link?.provider === "razorpay" && plan.link.id && !plan.balancePaidAt && recent(plan.link.createdAt)) {
         const result = await razorpayLinkStatus(creds, plan.link.id);
         if (result.status === "paid") {
