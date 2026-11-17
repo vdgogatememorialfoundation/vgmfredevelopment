@@ -32,6 +32,7 @@ import {
   recordCourierPayment,
   convertToStorePickup,
   convertToShipping,
+  requestAddressCorrection,
   setPickupWindow,
   convertToPreorder,
   markPartiallyPaid,
@@ -1387,6 +1388,17 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </Section>
 
         <Section title="Customer">
+          {!editing && order.deliveryMode === "delivery" && !["Shipped", "Out for Delivery", "Delivered", "Cancelled", "Failed"].includes(order.status) && (
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              {order.addressRequest && !order.addressRequest.doneAt ? (
+                <span className="rounded-lg bg-amber-50 px-2 py-1 font-semibold text-amber-800">Waiting for the customer to {order.addressRequest.fix ? "correct" : "add"} the address · booking blocked</span>
+              ) : null}
+              <Button variant="outline" disabled={busy === "fix-address"} onClick={() => run("fix-address", () => requestAddressCorrection(order.id))}>
+                {order.addressRequest && !order.addressRequest.doneAt ? "Resend address request" : "Ask customer to correct address"}
+              </Button>
+              <span className="text-text-muted">Or fix it yourself with Edit order.</span>
+            </div>
+          )}
           {editing ? (
             <div className="grid gap-2 sm:grid-cols-2">
               <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Name" />

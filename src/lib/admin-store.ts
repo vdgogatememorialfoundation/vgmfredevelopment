@@ -1603,6 +1603,16 @@ export function convertToShipping(orderId: string) {
   return "Changed to courier delivery. The customer got an email and app notification to add the delivery address in My Orders. Book the courier once the address is in; the courier charge is then added as a balance due.";
 }
 
+/** Asks the customer to correct the delivery address in My Orders; courier booking waits until they do (or the desk edits it). */
+export function requestAddressCorrection(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (order.deliveryMode !== "delivery") return "This is a store pickup order. Use Convert to shipping instead.";
+  if (["Shipped", "Out for Delivery", "Delivered", "Cancelled", "Failed"].includes(order.status)) return "This order has already left or is closed; change the address with the courier instead.";
+  updateOrderInStore(withHistory({ ...order, addressRequest: { at: new Date().toISOString(), fix: true } }, order.status, "The desk asked the customer to correct the delivery address."));
+  return "The customer got an email and app notification to correct the delivery address in My Orders. Book the courier once it is updated (or fix it yourself with Edit order).";
+}
+
 /** Adds a charge the customer still owes (e.g. courier shown as free by mistake); what they already paid stays recorded, so only the difference is due. */
 /** Shipping shown free by mistake: the customer sees "calculated once packed" until the desk adds the courier charge. */
 export function markShippingDue(orderId: string) {

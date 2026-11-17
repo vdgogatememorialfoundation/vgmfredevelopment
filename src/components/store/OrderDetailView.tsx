@@ -227,7 +227,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
                   )}
                 </p>
               ) : order.addressRequest && !order.addressRequest.doneAt ? (
-                <AddAddressForm orderId={order.id} initial={order.deliveryAddress} />
+                <AddAddressForm orderId={order.id} initial={order.deliveryAddress} fix={order.addressRequest.fix} />
               ) : (
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between gap-4">
@@ -328,7 +328,7 @@ function AdjustmentNotes({ token }: { token: string }) {
   );
 }
 
-function AddAddressForm({ orderId, initial }: { orderId: string; initial?: DeliveryAddress }) {
+function AddAddressForm({ orderId, initial, fix }: { orderId: string; initial?: DeliveryAddress; fix?: boolean }) {
   const [form, setForm] = useState({
     fullName: initial?.fullName ?? "",
     phone: initial?.phone ?? "",
@@ -370,7 +370,9 @@ function AddAddressForm({ orderId, initial }: { orderId: string; initial?: Deliv
       }}
     >
       <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-        This order will now be sent by courier instead of store pickup. Please add your delivery address. The courier charge is sent as a balance payment link after packing.
+        {fix
+          ? "Your delivery address looks incomplete or incorrect, so we are holding the parcel. Please correct it below and we will send your order."
+          : "This order will now be sent by courier instead of store pickup. Please add your delivery address. The courier charge is sent as a balance payment link after packing."}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         {field("fullName", "Full name", { required: true, autoComplete: "name" })}

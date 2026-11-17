@@ -664,7 +664,8 @@ export interface Order {
   /** Shipping was left at ₹0; the courier charge is added once the parcel is packed and weighed. */
   shippingDue?: boolean;
   /** Store pickup changed to courier delivery: the customer is asked to add the delivery address in My Orders. */
-  addressRequest?: { at: string; doneAt?: string };
+  /** `fix`: the desk asked the customer to correct a wrong address (not a pickup → courier switch). */
+  addressRequest?: { at: string; doneAt?: string; fix?: boolean };
   /** Store pickup: the date and time slot the desk gave for collection; `at` is when the pickup email was last sent. */
   pickupWindow?: { date: string; slot: string; at: string };
   /** Part of `shipping` the desk marked as the packing charge; shown as its own "Packing charge" line. */

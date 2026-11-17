@@ -118,12 +118,19 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
   if (ask && !ask.doneAt && ask.at !== prev?.addressRequest?.at) {
     stages.push({
       key: `address-request:${ask.at}`,
-      subject: `Add your delivery address for order ${next.id}`,
-      intro: `As requested, your order ${next.id} will now be sent by courier instead of store pickup.`,
-      next: [
-        `Please add your full delivery address, phone and PIN code here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#add-address`,
-        "We will pack it and send the courier charge as a balance payment link. The order ships once that is paid.",
-      ],
+      subject: ask.fix ? `Please check your delivery address for order ${next.id}` : `Add your delivery address for order ${next.id}`,
+      intro: ask.fix
+        ? `The delivery address on your order ${next.id} looks incomplete or incorrect, so we have held the parcel before sending it to the courier.`
+        : `As requested, your order ${next.id} will now be sent by courier instead of store pickup.`,
+      next: ask.fix
+        ? [
+            `Please correct your delivery address, phone and PIN code here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#add-address`,
+            "We will send your order as soon as it is updated.",
+          ]
+        : [
+            `Please add your full delivery address, phone and PIN code here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#add-address`,
+            "We will pack it and send the courier charge as a balance payment link. The order ships once that is paid.",
+          ],
     });
   }
   const pickup = next.deliveryMode === "store_pickup";
