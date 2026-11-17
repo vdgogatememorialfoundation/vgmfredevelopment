@@ -625,6 +625,9 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
         ? [address.line1, address.landmark, address.city, address.state, address.pincode].filter(Boolean).join(", ")
         : "";
   const contact = [address?.phone, address?.email || order.accountEmail].filter(Boolean).join(" · ");
+  const shipment = order.trackingId || ["To Ship", "Ready to Ship", "Shipped", "Out for Delivery"].includes(order.status)
+    ? getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled")
+    : undefined;
   const payment = [
     order.paymentMethod,
     order.razorpayPaymentId || order.paymentRef,
@@ -644,8 +647,23 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
         {payment ? ` · ${payment}` : ""}
         {order.trackingId ? ` · AWB ${order.trackingId}` : ""}
       </span>
+      {shipment && (
+        <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-text-primary">
+          <span><span className="text-text-muted">Pickup by:</span> {rowDate(shipment.pickupScheduledFor) ?? "not scheduled"}{shipment.pickupSlot ? ` (${shipment.pickupSlot})` : ""}</span>
+          <span><span className="text-text-muted">Delivery:</span> {rowDate(shipment.expectedBy) ?? "not given"}</span>
+          <span>
+            <span className="text-text-muted">Status:</span> {[...(shipment.tracking ?? [])].sort((x, y) => y.at.localeCompare(x.at))[0]?.status ?? shipment.status} · {shipment.courier}
+            {bookedViaLabel(shipment.provider) ? ` (${bookedViaLabel(shipment.provider)})` : ""}
+          </span>
+        </span>
+      )}
     </span>
   );
+}
+
+function rowDate(value?: string) {
+  if (!value) return undefined;
+  return Number.isNaN(new Date(value).getTime()) ? value : formatDate(value, { weekday: "short" });
 }
 
 type PaymentChoice = "link" | "collect" | "paid" | "partial" | "cod";
