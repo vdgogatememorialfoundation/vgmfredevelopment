@@ -351,17 +351,13 @@ async function bookShipmentOnce(
     (shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled" && (!split || shipment.part === split.part)
   );
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
-  // A split shipment with its own paid link (its books' balance + packing + courier) can go; shipment 2 always needs one.
-  const partPaid = Boolean(split && order.splitCharges?.some((row) => row.part === split.part && row.paidAt));
-  if (split && !partPaid && order.splitCharges?.some((row) => row.part === split.part)) {
-    throw new Error(`Shipment ${split.part}'s payment link is not paid yet. Book it once the customer pays.`);
-  }
-  if (split && split.part >= 2 && !partPaid) {
-    throw new Error(`Send shipment ${split.part}'s payment link (its books' balance + packing + courier) from the Split order box; book it once paid.`);
+  // Each later shipment of a split order carries its own courier + packing charge, paid before it is booked.
+  if (split && split.part >= 2 && !order.extraCharges?.some((charge) => charge.reason.startsWith(`Shipment ${split.part} `))) {
+    throw new Error(`Add shipment ${split.part}'s courier + packing charge in the Split order box and send the payment link; book it once paid.`);
   }
   const unpaidPlan = order.preorderPayment;
-  if (!partPaid && unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
-    throw new Error(split ? `The pre-order balance is not paid yet. Send shipment ${split.part}'s payment link from the Split order box, then book it once paid.` : "The pre-order balance is not paid yet. Click Charge highest quote & send balance link, then book the courier once it is paid.");
+  if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
+    throw new Error("The pre-order balance is not paid yet. Click Charge highest quote & send balance link, then book the courier once it is paid.");
   }
   const quoted = order.courierQuote;
   if (unpaidPlan && quoted && override && !split) {
@@ -372,11 +368,11 @@ async function bookShipmentOnce(
     const actual = override.providerRate ?? override.rate;
     if (actual > quoted.highest + 0.5) throw new Error(`${override.courierName} costs ₹${actual}, more than the ₹${quoted.highest} quote the customer paid for. Pick a courier within that amount.`);
   }
-  if (!partPaid && !unpaidPlan && order.shippingDue) {
+  if (!unpaidPlan && order.shippingDue) {
     throw new Error("The courier charge is not on this order yet. Add it under Payment → Add extra charge (Courier charge) and send the payment link, then book the courier once it is paid.");
   }
   const owed = Math.round((order.total - (order.amountPaid ?? order.total)) * 100) / 100;
-  if (!partPaid && !unpaidPlan && order.paymentStatus === "Partially Paid" && owed > 0) {
+  if (!unpaidPlan && order.paymentStatus === "Partially Paid" && owed > 0) {
     if (override) {
       patchOrder(order.id, { courierChoice: override, courierName: override.courierName }, `Courier ${override.courierName} selected · book it once the ₹${owed} due is paid`);
     }
@@ -385,7 +381,7 @@ async function bookShipmentOnce(
     );
   }
   // Final gate for every order: the full amount (items, shipping, packing, extras) must be paid, and Admin must have picked the courier.
-  if (!partPaid && (order.paymentStatus !== "Paid" || (order.shippingDue && !(unpaidPlan && unpaidPlan.shippingDue === false)) || (unpaidPlan && !unpaidPlan.balancePaidAt && unpaidPlan.balance > 0))) {
+  if (order.paymentStatus !== "Paid" || (order.shippingDue && !(unpaidPlan && unpaidPlan.shippingDue === false)) || (unpaidPlan && !unpaidPlan.balancePaidAt && unpaidPlan.balance > 0)) {
     throw new Error("This order is not fully paid yet (including shipping). Nothing was sent to the courier. Book it once the payment shows Paid.");
   }
   if (!override) throw new Error("Pick a courier from the rate list, then click Book. Nothing was sent to the courier.");
