@@ -276,6 +276,7 @@ export async function cancelOrderPaymentLinks(orderId: string) {
 export async function createPaymentLink(orderId: string, amountOverride?: number, validUntil?: string) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
+  if (order.splitInto?.length) throw new Error(`Order ${order.id} was split. Send payment links from ${order.splitInto.map((row) => row.id).join(" and ")}.`);
   const settings = getIntegrations();
   const amount = Math.round((amountOverride && amountOverride > 0 ? amountOverride : order.total) * 100) / 100;
   if (!(amount > 0)) throw new Error("Enter an amount above ₹0.");
@@ -438,6 +439,7 @@ export async function createBalancePaymentLink(orderId: string) {
   }
   const plan = order?.preorderPayment;
   if (!order || !plan) throw new Error("This order has no pre-order balance.");
+  if (order.splitInto?.length) throw new Error(`Order ${order.id} was split. Send payment links from ${order.splitInto.map((row) => row.id).join(" and ")}.`);
   if (plan.balancePaidAt) throw new Error("The balance is already paid.");
   const address = order.deliveryAddress;
   const amount = Math.round(plan.balance * 100) / 100;

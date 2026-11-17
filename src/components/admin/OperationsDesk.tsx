@@ -31,6 +31,9 @@ import { deleteCertificate, publishCertificate, syncCertificatesWithServer } fro
 import OrderPaymentPanel from "@/components/admin/OrderPaymentPanel";
 import type { Order } from "@/types";
 
+/** Split parents are audit records; their child orders carry the money. */
+const liveOrders = () => getOrders().filter((order) => !order.splitInto?.length);
+
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const button = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white";
 const ghost = "rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700";
@@ -53,10 +56,10 @@ const paymentTitles: Record<PaymentFilter, string> = {
 
 export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
   const { version } = useCommerceMirror();
-  const [orders, setOrders] = useState<Order[]>(() => getOrders());
-  const refresh = () => setOrders(getOrders());
+  const [orders, setOrders] = useState<Order[]>(() => liveOrders());
+  const refresh = () => setOrders(liveOrders());
   useEffect(() => {
-    setOrders(getOrders());
+    setOrders(liveOrders());
   }, [version]);
   const [open, setOpen] = useState("");
   const shown = filter === "all" ? orders : orders.filter((order) => order.paymentStatus === filter);
@@ -122,9 +125,9 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
 
 export function ReconciliationDesk() {
   const { version } = useCommerceMirror();
-  const [orders, setOrders] = useState<Order[]>(() => getOrders());
+  const [orders, setOrders] = useState<Order[]>(() => liveOrders());
   useEffect(() => {
-    setOrders(getOrders());
+    setOrders(liveOrders());
   }, [version]);
   const rows = (["Paid", "Pending", "Failed", "Refunded"] as const).map((status) => {
     const list = orders.filter((order) => order.paymentStatus === status);

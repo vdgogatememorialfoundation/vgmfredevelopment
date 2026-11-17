@@ -50,8 +50,32 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
         <>
           <h1 className="mt-4 text-xl font-semibold text-text-primary">Order {order.id}</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Placed {formatDate(order.date)} · {orderStatusText(customerOrderStatus(order.status))}
+            Placed {formatDate(order.date)} · {order.splitInto?.length ? `Split into ${order.splitInto.length} orders` : orderStatusText(customerOrderStatus(order.status))}
           </p>
+          {order.splitFrom ? (
+            <p className="mt-3 rounded-xl bg-warm-cream px-4 py-3 text-sm text-text-muted">
+              Part {order.splitPart ?? ""} of your order{" "}
+              <Link className="font-semibold text-burgundy underline" href={`/account/orders/${encodeURIComponent(order.splitFrom)}`}>{order.splitFrom}</Link>
+              , sent separately.{order.splitAdvance ? ` ₹${order.splitAdvance} of your advance is counted here.` : ""} The platform fee was paid once on the original order.
+            </p>
+          ) : null}
+          {order.splitInto?.length ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-slate-800">
+              <p>This order is being sent in {order.splitInto.length} parts. Each part has its own packing, courier charge, payment and tracking:</p>
+              <ul className="mt-2 space-y-1">
+                {order.splitInto.map((row) => {
+                  const child = getOrdersForAccount(user).find((item) => item.id === row.id);
+                  return (
+                    <li key={row.id}>
+                      <Link className="font-semibold text-burgundy underline" href={`/account/orders/${encodeURIComponent(row.id)}`}>Order {row.id}</Link> · {row.label}
+                      {child ? ` · ${orderStatusText(customerOrderStatus(child.status))} · ${formatPrice(child.total)}` : ""}
+                    </li>
+                  );
+                })}
+              </ul>
+              {(order.platformFee ?? 0) > 0 ? <p className="mt-2 text-xs text-slate-600">Platform fee {formatPrice(order.platformFee ?? 0)} was paid once on this order and is not charged again.</p> : null}
+            </div>
+          ) : null}
           {order.preorderPayment && !order.preorderPayment.balancePaidAt && order.status !== "Cancelled" ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <div className="text-sm text-amber-900">

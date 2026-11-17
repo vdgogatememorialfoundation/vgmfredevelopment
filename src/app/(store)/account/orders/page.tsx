@@ -81,6 +81,8 @@ export default function OrdersPage() {
                     <OrderTrackingPreview order={order} />
                     <span className="mt-1 block text-xs text-text-muted">
                       Order ID: {order.id} · {formatDate(order.date)}
+                      {order.splitFrom ? ` · Part ${order.splitPart ?? ""} of order ${order.splitFrom}` : ""}
+                      {order.splitInto?.length ? ` · Split into ${order.splitInto.map((row) => row.id).join(" and ")}` : ""}
                     </span>
                   </span>
 

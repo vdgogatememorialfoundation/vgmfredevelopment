@@ -106,6 +106,24 @@ function pickupDay(date: string) {
 
 function stagesFor(prev: Order | undefined, next: Order): Stage[] {
   const stages: Stage[] = [];
+  // Child orders of a split are announced once, by the parent's split email.
+  if (next.splitFrom && !prev) return stages;
+  if (next.splitInto?.length && !prev?.splitInto?.length) {
+    const fee = Math.max(0, next.platformFee ?? 0);
+    const openPlan = next.preorderPayment && !next.preorderPayment.balancePaidAt;
+    stages.push({
+      key: "status:split",
+      subject: `Your order ${next.id} will be sent in ${next.splitInto.length} parts`,
+      intro: `To send what is ready sooner, your order ${next.id} is now split into ${next.splitInto.length} orders.`,
+      next: [
+        ...next.splitInto.map((row) => `Order ${row.id}: ${row.label}`),
+        "Each part has its own order number in My Orders, with its own packing, courier charge, payment link and tracking.",
+        openPlan ? "Your advance is shared across the parts by book. Each part's payment link asks only for that part's remaining book balance plus its packing and courier." : "",
+        fee ? `The platform fee (${rupees(fee)}) was charged once on order ${next.id} and is not charged again.` : "",
+      ],
+    });
+    return stages;
+  }
   const pre = next.preorderPayment;
   const track = next.trackingId ? `Courier: ${next.courierName || "Courier"} · AWB ${next.trackingId}` : "";
   if (placedReady(next) && (!prev || !placedReady(prev))) {

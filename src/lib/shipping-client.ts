@@ -346,15 +346,12 @@ async function bookShipmentOnce(
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders do not need a courier.");
+  if (order.splitInto?.length) throw new Error(`Order ${order.id} was split. Book ${order.splitInto.map((row) => row.id).join(" and ")} separately.`);
   if (order.addressRequest && !order.addressRequest.doneAt) throw new Error("Waiting for the customer to add the delivery address (or add it with Edit order).");
   const existing = getShipments().find(
     (shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled" && (!split || shipment.part === split.part)
   );
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
-  // Each later shipment of a split order carries its own courier + packing charge, paid before it is booked.
-  if (split && split.part >= 2 && !order.extraCharges?.some((charge) => charge.reason.startsWith(`Shipment ${split.part} `))) {
-    throw new Error(`Add shipment ${split.part}'s courier + packing charge in the Split order box and send the payment link; book it once paid.`);
-  }
   const unpaidPlan = order.preorderPayment;
   if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
     throw new Error("The pre-order balance is not paid yet. Click Charge highest quote & send balance link, then book the courier once it is paid.");
@@ -497,6 +494,7 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
   const order = getOrder(orderId);
   const plan = order?.preorderPayment;
   if (!order || !plan) throw new Error("This order has no pre-order balance.");
+  if (order.splitInto?.length) throw new Error(`Order ${order.id} was split. Charge the courier on ${order.splitInto.map((row) => row.id).join(" and ")}.`);
   if (plan.balancePaidAt) throw new Error("The balance is already paid.");
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders have no courier charge.");
   const valid = allRates.filter((rate) => !rate.estimate && rate.rate > 0 && rate.provider !== "local");

@@ -104,7 +104,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
     const late = now > due;
     return `${order.pick?.pickedAt ? "Pack" : "Pick"} by ${new Date(due).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${late ? " · late" : ""}`;
   };
-  const unassigned = orders.filter((order) => OPEN.has(order.status) && !order.pick);
+  const unassigned = orders.filter((order) => OPEN.has(order.status) && !order.pick && !order.splitInto?.length);
   const staff = getAccounts().filter((account) => account.role === "staff" || account.role === "admin" || account.role === "coadmin");
   const [active, setActive] = useState("");
   const [code, setCode] = useState("");

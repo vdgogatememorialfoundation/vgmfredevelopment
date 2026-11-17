@@ -1013,7 +1013,7 @@ export function preorderLate(order: Order, settings = getOrderSettings(), now = 
 }
 
 export function canCustomerCancel(order?: Order, settings = getOrderSettings(), now = Date.now()) {
-  if (!order || order.returnRequest) return false;
+  if (!order || order.returnRequest || order.splitInto?.length) return false;
   const stage = CANCEL_STAGE[order.status];
   if (stage === undefined) return false;
   if (stage <= 1 && preorderLate(order, settings, now)) return true;

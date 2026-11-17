@@ -26,6 +26,7 @@ import { commitPreorderStock, commitStockForOrder, getLiveBooks, preorderDeliver
 import { matchesBarcode, matchesTag } from "@/lib/barcode";
 import QRCode from "qrcode";
 import { sameShipmentSlot } from "@/lib/shipment-slot";
+import { isSplitParent, planOrderSplit, splitBlocker } from "@/lib/split-order";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
@@ -1016,12 +1017,38 @@ export function printOrdersPdf(orders: Order[]) {
   );
 }
 
+/* ---------------- Split order ---------------- */
+
+/** Splits an order into two child orders (#ID-1, #ID-2) that each run as a normal order; the parent stays as the audit record. */
+export function splitOrder(orderId: string, secondQty: Record<string, number>) {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  const booked = getShipments().some((shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled");
+  const blocker = splitBlocker(order, booked);
+  if (blocker) throw new Error(blocker);
+  if (getOrder(`${order.id}-1`) || getOrder(`${order.id}-2`)) throw new Error(`Orders ${order.id}-1 / ${order.id}-2 already exist.`);
+  const now = new Date().toISOString();
+  const { children, parentPatch } = planOrderSplit(order, secondQty, { perCopyAdvance: getOrderSettings().preorderPayment?.advanceType === "amount", now });
+  for (const child of children) updateOrderInStore(child);
+  const fee = Math.max(0, order.platformFee ?? 0);
+  updateOrderInStore(
+    withHistory(
+      { ...order, ...parentPatch },
+      order.status,
+      `Split into ${children.map((child) => `${child.id} (${child.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")})`).join(" and ")}. Stock moved to the child orders.${fee && !children.some((child) => child.platformFee) ? ` Platform fee ₹${fee} stays paid on this order.` : ""}`
+    )
+  );
+  logAudit("order.split", order.id, children.map((child) => child.id).join(", "));
+  return `Split into ${children.map((child) => child.id).join(" and ")}. Each runs as its own order: picker/packer, package size, packing + courier charge, payment link, booking and tracking.`;
+}
+
 /* ---------------- Pick & pack ---------------- */
 
 export function assignPicker(orderId: string, assignee: string) {
   const order = getOrder(orderId);
   const email = assignee.trim().toLowerCase();
   if (!order || !email) throw new Error("Pick a staff member to assign.");
+  if (isSplitParent(order)) throw new Error(`Order ${order.id} was split. Assign pickers on ${order.splitInto!.map((row) => row.id).join(" and ")}.`);
   updateOrderInStore(withHistory({ ...order, pick: { assignee: email, assignedAt: new Date().toISOString(), picked: {}, packScan: {} } }, "Picker assigned", email));
 }
 

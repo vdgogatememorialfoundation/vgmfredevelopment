@@ -424,6 +424,11 @@ export async function issueDeliveryInvoice(orderId: string) {
     if (readAll()[orderId]) return;
     const created = [createInvoice({ kind: "order", orderId })];
     if (settings.separatePlatformFee && Number(order.platformFee) > 0) created.push(createInvoice({ kind: "platform-fee", orderId }));
+    // Split order: the platform fee was paid once on the parent; invoice it when the last child order is delivered.
+    const parent = order.splitFrom ? findShopOrder(order.splitFrom) : undefined;
+    if (parent && Number(parent.platformFee) > 0 && !issuedInvoice(parent.id, "platform-fee") && (parent.splitInto ?? []).every((row) => findShopOrder(row.id)?.status === "Delivered")) {
+      created.push(createInvoice({ kind: "platform-fee", orderId: parent.id }));
+    }
     for (const invoice of created) await emailInvoice(invoice.key).catch(() => undefined);
   } finally {
     issuing = false;

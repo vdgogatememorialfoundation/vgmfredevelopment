@@ -7,6 +7,8 @@ import { getSession } from "@/lib/auth";
 import OrderFeedback from "@/components/store/OrderFeedback";
 import { DIRECT_COURIERS } from "@/lib/couriers";
 import { isDeskScan, isFailedAttempt } from "@/lib/order-pipeline";
+import { splitBlocker, splitLedger } from "@/lib/split-order";
+import { collectedAmount } from "@/lib/transactions";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelOrder,
@@ -82,7 +84,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
 import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
 import { itemTotals } from "@/lib/order-item-totals";
-import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack, hideShipmentScan, removeHistoryEntry, setRefundCreditDate } from "@/lib/admin-store";
+import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack, splitOrder, hideShipmentScan, removeHistoryEntry, setRefundCreditDate } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
@@ -159,7 +161,10 @@ export function OrdersDashboard() {
   const [pickStaff, setPickStaff] = useState("");
   const [bulkNote, setBulkNote] = useState("");
 
-  const orders = getOrders();
+  const allOrders = getOrders();
+  // Split parents are audit records (their child orders do the work), so they stay out of the working lists and counts.
+  const orders = allOrders.filter((order) => !order.splitInto?.length);
+  const splitParents = allOrders.filter((order) => order.splitInto?.length);
   void version;
   void remoteVersion;
   const seenOrders = useRef<Set<string> | null>(null);
@@ -187,11 +192,11 @@ export function OrdersDashboard() {
   const catalogue = getLiveBooks();
   const languagesOf = (order: Order) => orderLanguages(order, catalogue);
   const languages = [...new Set(orders.flatMap(languagesOf))].sort();
-  const filtered = orders
+  const filtered = (statusFilter === "split" ? splitParents : statusFilter === "Everything" || query.trim() ? allOrders : orders)
     .filter((order) =>
       statusFilter === "All"
         ? !CLOSED_OR_SENT.includes(order.status) || Boolean(query.trim()) || paymentFilter !== "All"
-        : statusFilter === "Everything" || (STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter)
+        : statusFilter === "Everything" || statusFilter === "split" || (STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter)
     )
     .filter((order) => modeFilter === "All" || order.deliveryMode === modeFilter)
     .filter((order) => languageFilter === "All" || languagesOf(order).includes(languageFilter))
@@ -480,6 +485,7 @@ export function OrdersDashboard() {
                   statusFilter === value && paymentFilter === "All",
                 ] as [string, () => void, boolean]),
                 [`Everything (${orders.length})`, () => { setPaymentFilter("All"); setStatusFilter("Everything"); }, statusFilter === "Everything" && paymentFilter === "All"],
+                ...(splitParents.length ? [[`Split orders (${splitParents.length})`, () => { setPaymentFilter("All"); setStatusFilter("split"); }, statusFilter === "split"] as [string, () => void, boolean]] : []),
                 ["Refunded", () => { setStatusFilter("All"); setPaymentFilter("Refunded"); }, paymentFilter === "Refunded"],
                 ["Part refunded", () => { setStatusFilter("All"); setPaymentFilter("Partially Refunded"); }, paymentFilter === "Partially Refunded"],
               ] as [string, () => void, boolean][]).map(([label, apply, on]) => (
@@ -1258,6 +1264,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       }
     >
       {order.replacementOf && <p className="mb-3 rounded-lg bg-warm-cream px-3 py-2 text-xs text-text-muted">Replacement for order #{order.replacementOf}</p>}
+      <SplitOrderInfo order={order} />
       {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       {problem && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
 
@@ -1874,11 +1881,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </Button>
                   )}
                 </div>
-                <SplitShipments
-                  order={order}
-                  rate={picked !== undefined ? quote?.rates[picked] : undefined}
-                  onDone={(text) => { setMessage(text); onChanged(); }}
-                />
+                <SplitOrderBox order={order} onDone={(text) => { setMessage(text); onChanged(); }} />
                 <p className="mt-2 text-xs text-text-muted">
                   Click a courier row, then Book: the shipment goes at once to that row&apos;s aggregator (Shiprocket, Ekart Elite, GoSwift, Nimbuspost, iThink, Shipyaari, Tookan or Shipday), which creates the AWB and charges its wallet. Nothing is sent before you click Book, and booking stays blocked until the order is fully paid.
                 </p>
@@ -2513,114 +2516,88 @@ function isPreorderOrder(order?: Order | null) {
   return Boolean(order && (order.preorderPayment || order.items.some((item) => item.preorder)));
 }
 
-function SplitShipments({
-  order,
-  rate,
-  pickup,
-  onDone,
-}: {
-  order: Order;
-  rate?: CourierRate;
-  pickup?: Parameters<typeof bookShipment>[2];
-  onDone: (message: string) => void;
-}) {
-  const parts = getShipments().filter((item) => item.orderId === order.id && item.part && item.note !== "Cancelled");
+/** Split order: part of the items go to a second order; both child orders then run as normal orders. */
+function SplitOrderBox({ order, onDone }: { order: Order; onDone: (message: string) => void }) {
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  const [open, setOpen] = useState(parts.length > 0);
+  const [open, setOpen] = useState(false);
   const [second, setSecond] = useState<Record<string, number>>(() =>
     Object.fromEntries(order.items.map((item, index) => [item.bookId, order.items.length > 1 ? (index % 2 ? item.quantity : 0) : Math.floor(item.quantity / 2)]))
   );
-  const [busy, setBusy] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [courierFee, setCourierFee] = useState<Record<number, string>>({});
-  if (units < 2) return null;
-  const chargedFor = (part: number) => order.extraCharges?.find((charge) => charge.reason.startsWith(`Shipment ${part} `));
-  const packFor = (part: 1 | 2) => (part === 1 && (order.packing ?? 0) > 0 ? 0 : packingChargeFor(itemsFor(part).reduce((sum, row) => sum + row.quantity, 0)));
-  const charge = (part: 1 | 2) => {
-    const courier = Math.max(0, Math.round(Number(courierFee[part] ?? rate?.rate ?? 0)));
-    const pack = packFor(part);
-    if (!(courier + pack > 0)) {
-      setError("Enter the courier charge for this shipment.");
-      return;
-    }
-    const text = addExtraCharge(order.id, { amount: courier + pack, reason: `Shipment ${part} of 2: courier ₹${courier} + packing ₹${pack}`, kind: "shipping" });
-    onDone(`Shipment ${part}: ${text}`);
-  };
-  const itemsFor = (part: 1 | 2) =>
-    order.items
-      .map((item) => ({ bookId: item.bookId, quantity: part === 2 ? second[item.bookId] ?? 0 : item.quantity - (second[item.bookId] ?? 0) }))
-      .filter((row) => row.quantity > 0);
-  const book = async (part: 1 | 2) => {
-    setBusy(part);
+  if (units < 2 || order.splitFrom || order.splitInto?.length) return null;
+  const blocker = splitBlocker(order, false);
+  const split = async () => {
+    if (!window.confirm(`Split order ${order.id} into ${order.id}-1 and ${order.id}-2? The customer is emailed, and each part then needs its own packing, courier charge and payment.`)) return;
+    setBusy(true);
     setError("");
     try {
-      const result = await bookShipment(order.id, rate, pickup, { part, items: itemsFor(part) });
-      onDone(`Shipment ${part}: ${result.message}`);
+      await cancelOrderPaymentLinks(order.id);
+      onDone(splitOrder(order.id, second));
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : "Could not book this shipment.");
+      setError(problem instanceof Error ? problem.message : "Could not split this order.");
     } finally {
-      setBusy(0);
+      setBusy(false);
     }
   };
   return (
     <div className="mt-4 rounded-xl border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-text-primary">Split into 2 shipments</p>
+        <p className="text-sm font-semibold text-text-primary">Split order</p>
         <Button variant="ghost" onClick={() => setOpen(!open)}>{open ? "Hide" : "Split order"}</Button>
       </div>
       {open && (
         <div className="mt-2 space-y-2 text-sm">
-          <p className="text-xs text-text-muted">Set how many of each item go in shipment 2; the rest go in shipment 1. Each shipment gets its own courier booking, AWB, label and tracking. The courier picked above (or the default rule) is used.</p>
+          <p className="text-xs text-text-muted">Send what is ready now and the rest later. This order stays as the parent record, and its items move to two new orders, {order.id}-1 and {order.id}-2. Each new order has its own picker/packer, package size, packing + courier charge, payment link, booking, tracking, invoice and returns. A paid pre-order advance is shared by book, and the platform fee stays paid on this order, so it is not charged again.</p>
           {order.items.map((item) => (
             <div key={item.bookId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warm-cream/40 px-3 py-2">
               <span className="font-medium">{currentProductTitle(item)} × {item.quantity}</span>
               <span className="flex items-center gap-2 text-xs">
-                Shipment 1: <b>{item.quantity - (second[item.bookId] ?? 0)}</b> · Shipment 2:
+                {order.id}-1: <b>{item.quantity - (second[item.bookId] ?? 0)}</b> · {order.id}-2:
                 <input
                   type="number"
                   min={0}
                   max={item.quantity}
                   className="w-16 rounded-lg border border-border px-2 py-1"
                   value={second[item.bookId] ?? 0}
-                  disabled={parts.length > 0}
                   onChange={(event) => setSecond((current) => ({ ...current, [item.bookId]: Math.max(0, Math.min(item.quantity, Math.floor(Number(event.target.value) || 0))) }))}
-                  aria-label={`Units of ${item.title} in shipment 2`}
+                  aria-label={`Copies of ${item.title} in order 2`}
                 />
               </span>
             </div>
           ))}
-          <div className="space-y-1 text-xs">
-            {([1, 2] as const).map((part) => {
-              const charged = chargedFor(part);
-              if (parts.some((item) => item.part === part)) return null;
-              return charged ? (
-                <p key={part} className="text-emerald-800">Shipment {part} charge added: ₹{charged.amount} ({charged.reason.replace(/^Shipment \d+ of \d+: /, "")})</p>
-              ) : (
-                <div key={part} className="flex flex-wrap items-center gap-2">
-                  <span>Shipment {part} charge: courier ₹</span>
-                  <input type="number" min={0} className="w-20 rounded-lg border border-border px-2 py-1" placeholder={rate ? String(rate.rate) : "0"} value={courierFee[part] ?? ""} onChange={(event) => setCourierFee((current) => ({ ...current, [part]: event.target.value }))} aria-label={`Courier charge for shipment ${part}`} />
-                  <span>+ packing ₹{packFor(part)}</span>
-                  <Button variant="outline" onClick={() => charge(part)}>Add as balance due</Button>
-                </div>
-              );
-            })}
-            <p className="text-text-muted">Each shipment is charged on its own: add its courier + packing charge, send the payment link from Payment, and book it once paid.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {([1, 2] as const).map((part) => {
-              const done = parts.find((item) => item.part === part);
-              return done ? (
-                <span key={part} className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">Shipment {part}: {done.courier} · {done.awb}</span>
-              ) : (
-                <Button key={part} disabled={Boolean(busy) || !itemsFor(part).length} onClick={() => void book(part)}>
-                  {busy === part ? "Booking…" : `Book shipment ${part}`}
-                </Button>
-              );
-            })}
-          </div>
+          {blocker ? <p className="text-xs text-amber-800">{blocker}</p> : null}
+          <Button disabled={busy || Boolean(blocker)} onClick={() => void split()}>{busy ? "Splitting…" : "Split into 2 orders"}</Button>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Parent ↔ child links, and the parent's consolidated ledger. */
+function SplitOrderInfo({ order }: { order: Order }) {
+  const link = (id: string) => <a key={id} className="font-semibold text-burgundy underline" href={`/admin/commerce/orders?order=${encodeURIComponent(id)}`}>#{id}</a>;
+  if (order.splitFrom) {
+    return <p className="mb-3 rounded-lg bg-warm-cream px-3 py-2 text-xs text-text-muted">Order {order.splitPart ?? ""} of a split order · parent {link(order.splitFrom)}{order.splitAdvance ? ` · advance ₹${order.splitAdvance} allocated from the parent` : ""}. The platform fee is on the parent.</p>;
+  }
+  if (!order.splitInto?.length) return null;
+  const children = order.splitInto.map((row) => getStoredOrder(row.id)).filter((child): child is Order => Boolean(child));
+  const ledger = splitLedger(order, children, collectedAmount);
+  return (
+    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-slate-800">
+      <p className="font-semibold">Split{order.splitAt ? ` on ${formatDateTime(order.splitAt)}` : ""} into {order.splitInto.map((row, index) => <span key={row.id}>{index ? " and " : ""}{link(row.id)}</span>)}. This parent is kept as the record: book, charge and pack the child orders.</p>
+      <table className="mt-2 w-full text-left">
+        <thead><tr className="text-slate-500"><th className="py-1">Order</th><th>Items</th><th>Status</th><th className="text-right">Total</th><th className="text-right">Advance</th><th className="text-right">Packing</th><th className="text-right">Courier</th><th className="text-right">Extra</th><th className="text-right">Paid</th><th className="text-right">Due</th></tr></thead>
+        <tbody>
+          {ledger.rows.map((row) => (
+            <tr key={row.id} className="border-t border-amber-200">
+              <td className="py-1">{link(row.id)}</td><td>{row.label}</td><td>{row.status}</td><td className="text-right">₹{row.total}</td><td className="text-right">₹{row.advance}</td><td className="text-right">₹{row.packing}</td><td className="text-right">₹{row.courier}</td><td className="text-right">₹{row.extra}</td><td className="text-right">₹{row.collected}</td><td className="text-right">₹{row.due}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2">Original order ₹{ledger.original}{ledger.advance ? ` · advance received ₹${ledger.advance}` : ""}{ledger.fee ? ` · platform fee ₹${ledger.fee} ${ledger.feePaidOnParent ? "paid once on this order" : "carried by the first child order"}` : ""} · child orders ₹{ledger.childTotal} · collected ₹{ledger.collected} · still due ₹{ledger.due}</p>
     </div>
   );
 }
