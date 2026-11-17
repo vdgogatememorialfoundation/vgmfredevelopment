@@ -1584,7 +1584,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           </p>
           {order.paidAt && <p className="text-xs text-text-muted">Paid {formatDateTime(order.paidAt)}</p>}
           {order.razorpayPaymentId && <p className="font-mono text-xs text-text-muted">{order.razorpayPaymentId}</p>}
-          {order.paymentStatus === "Partially Paid" && <p className="text-xs text-text-muted">Paid {rupees(order.amountPaid ?? 0)} · due {rupees(remainingDue(order))}</p>}
+          {order.paymentStatus === "Partially Paid" && <p className="text-xs text-text-muted">Paid {rupees(Math.max(0, Math.round((order.total - remainingDue(order)) * 100) / 100))} · due {rupees(remainingDue(order))}</p>}
           {order.extraCharges?.map((charge) => (
             <p key={charge.at} className="text-xs text-text-muted">
               Extra {charge.kind === "shipping" ? "courier charge" : "charge"} {rupees(charge.amount)} · {charge.reason} · {formatDateTime(charge.at)}
