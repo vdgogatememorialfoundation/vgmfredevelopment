@@ -131,6 +131,8 @@ function pickStage(order: Order) {
 const CLOSED_OR_SENT: Order["status"][] = ["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"];
 /** The Paid chip lists paid orders still to be packed or booked; To Ship and later have their own chips. */
 const PAID_CHIP_HIDES: Order["status"][] = [...CLOSED_OR_SENT, "Ready to Ship", "To Ship"];
+/** Status chip/filter match: the Packed chip leaves out paid orders (they are listed under Paid and To Ship). */
+const inStatus = (order: Order, status: string) => order.status === status && !(status === "Packed" && order.paymentStatus === "Paid");
 const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
   "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) && order.paymentStatus !== "Paid" },
@@ -217,7 +219,7 @@ export function OrdersDashboard() {
     .filter((order) =>
       statusFilter === "All"
         ? Boolean(query.trim()) || (paymentFilter === "Paid" ? !PAID_CHIP_HIDES.includes(order.status) : !CLOSED_OR_SENT.includes(order.status) || paymentFilter !== "All")
-        : statusFilter === "Everything" || statusFilter === "split" || (STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter)
+        : statusFilter === "Everything" || statusFilter === "split" || (STATUS_GROUPS[statusFilter]?.test(order) ?? inStatus(order, statusFilter))
     )
     .filter((order) => modeFilter === "All" || order.deliveryMode === modeFilter)
     .filter((order) => pickFilter === "All" || pickStage(order) === pickFilter)
@@ -503,8 +505,8 @@ export function OrdersDashboard() {
               {([
                 [`Confirmed orders (${orders.filter((order) => !CLOSED_OR_SENT.includes(order.status)).length})`, () => { setStatusFilter("All"); setPaymentFilter("All"); }, statusFilter === "All" && paymentFilter === "All"],
                 [`Paid (${orders.filter((order) => order.paymentStatus === "Paid" && !PAID_CHIP_HIDES.includes(order.status)).length})`, () => { setStatusFilter("All"); setPaymentFilter("Paid"); }, paymentFilter === "Paid"],
-                ...ALL_STATUSES.filter((value) => orders.some((order) => order.status === value)).map((value) => [
-                  `${orderStatusText(value)} (${orders.filter((order) => order.status === value).length})`,
+                ...ALL_STATUSES.filter((value) => orders.some((order) => inStatus(order, value))).map((value) => [
+                  `${orderStatusText(value)} (${orders.filter((order) => inStatus(order, value)).length})`,
                   () => { setPaymentFilter("All"); setStatusFilter(value); },
                   statusFilter === value && paymentFilter === "All",
                 ] as [string, () => void, boolean]),
