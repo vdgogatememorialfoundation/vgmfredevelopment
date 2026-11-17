@@ -1740,8 +1740,8 @@ async function ithinkPost(path: string, payload: Json & { host?: string }) {
   delete body.host;
   const data = await call(`${host}${path.replace(/^\//, "")}`, { method: "POST", json: { data: body } });
   const status = String(data.status ?? data.status_code ?? "").toLowerCase();
-  if (status && status !== "success" && status !== "200" && Number(data.status_code) >= 400) {
-    throw new ProviderError(String(data.message ?? data.remark ?? "iThink Logistics rejected the request."));
+  if (status === "error" || (status && status !== "success" && status !== "200" && Number(data.status_code) >= 400)) {
+    throw new ProviderError(String(data.message ?? data.html_message ?? data.remark ?? "iThink Logistics rejected the request."));
   }
   return data;
 }
@@ -1759,6 +1759,7 @@ export async function ithinkRates(input: Json, parcel: Parcel): Promise<RateOut[
     shipping_weight_kg: String(parcel.weightKg),
     order_type: "forward",
     payment_type: parcel.cod ? "cod" : "prepaid",
+    product_mrp: String(Math.max(1, Math.round(parcel.declaredValue || 0))),
   });
   const rates = ((data.data as Json)?.rate as Json[]) ?? (data.data as Json[]) ?? [];
   return rates.map((courier) => ({
