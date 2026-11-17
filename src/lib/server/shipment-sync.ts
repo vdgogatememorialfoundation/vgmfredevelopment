@@ -116,6 +116,7 @@ async function checkOpenPaymentLinks(creds: { keyId: string; keySecret: string }
           const at = new Date().toISOString();
           patchShopOrder(order.id, {
             paymentStatus: "Paid",
+            amountPaid: order.total,
             paidAt: order.paidAt ?? at,
             preorderPayment: { ...plan, balancePaidAt: at, balanceRef: result.paymentId },
             history: [...(order.history ?? []), paidNote(order, at, `Pre-order balance ₹${plan.balance} · Razorpay payment link${result.paymentId ? ` · ${result.paymentId}` : ""}`)],
