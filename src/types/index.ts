@@ -1063,6 +1063,8 @@ export interface ShipmentRecord {
   directCourier?: string;
   /** Set when an order goes as several shipments: 1, 2, … */
   part?: number;
+  /** Order status this shipment alone has reached (split orders roll these up). */
+  orderStatus?: Order["status"];
   providerOrderId?: string;
   providerShipmentId?: string;
   labelUrl?: string;

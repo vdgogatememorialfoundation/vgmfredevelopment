@@ -14,7 +14,7 @@ import {
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
 import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
 import { findShopOrder, patchShopOrder } from "@/lib/server/shop-orders";
-import { findShopShipment, replaceShopShipment } from "@/lib/server/shop-shipments";
+import { findShopShipment, listShopShipments, replaceShopShipment } from "@/lib/server/shop-shipments";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
 import type { Order, ShipmentRecord } from "@/types";
 import { inviteOrderFeedback } from "@/lib/server/forms";
@@ -189,8 +189,24 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   replaceShopShipment(next);
   const order = orderForLeg;
   if (order) {
-    const target = stage ? orderStatusFor(stage, hyperlocal) : undefined;
     const rank: Record<string, number> = { Packed: 1, "Ready to Ship": 1, "To Ship": 1, Shipped: 2, "Out for Delivery": 3, Delivered: 4, Failed: 5 };
+    const own = stage ? orderStatusFor(stage, hyperlocal) : undefined;
+    let target = own;
+    // A split order moves only as far as its slowest shipment: Delivered once every shipment is delivered.
+    if (next.part) {
+      if (own && own !== shipment.orderStatus) replaceShopShipment({ ...next, orderStatus: own });
+      const parts = listShopShipments().filter((item) => item.orderId === orderId && item.part && item.note !== "Cancelled");
+      if (parts.length >= 2) {
+        const statusOf = (item: ShipmentRecord): Order["status"] => (item.id === next.id ? own : item.orderStatus) || "Packed";
+        const slowest = parts.map(statusOf).sort((a, b) => (rank[a] ?? 0) - (rank[b] ?? 0))[0];
+        if (own && own !== shipment.orderStatus && own !== slowest) {
+          patchShopOrder(orderId, {
+            history: [...(findShopOrder(orderId)?.history ?? []), { at: new Date().toISOString(), status: `Shipment ${next.part} of ${parts.length} ${own.toLowerCase()}`, note: latestStatus }],
+          });
+        }
+        target = slowest === "Packed" ? undefined : slowest;
+      }
+    }
     const wrongDelivered =
       order.status === "Delivered" &&
       stage !== "delivered" &&
