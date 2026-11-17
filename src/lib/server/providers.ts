@@ -2481,7 +2481,13 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
   if (!/^\d{6}$/.test(String(order.customer.pincode).trim())) {
     throw new ProviderError(`The delivery PIN "${order.customer.pincode}" isn't 6 digits. Fix it in the order's address, then book again.`);
   }
-  const altPhone = goswiftPhone(order.customer.altPhone ?? "");
+  // Ekart Elite needs a second number that differs from the customer's: their alternate number, else our pickup contact.
+  const alternate = [order.customer.altPhone, order.pickup.phone]
+    .map((value) => goswiftPhone(value ?? ""))
+    .find((value) => value && value >= 1000000000 && value !== phone);
+  if (!alternate) {
+    throw new ProviderError("Ekart needs a second phone number that differs from the customer's. Add the customer's alternate number in the order's address, or set the pickup phone in Settings → Shipping APIs → Pickup address.");
+  }
   const day = new Date(order.orderDate);
   const invoiceDate = (Number.isNaN(day.getTime()) ? new Date() : day).toISOString().slice(0, 10);
   const category = String(input.category ?? "").trim() || "Books";
@@ -2500,7 +2506,7 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
       invoice_number: order.orderId,
       invoice_date: invoiceDate,
       consignee_name: order.customer.name,
-      consignee_alternate_phone: String(altPhone && altPhone >= 1000000000 ? altPhone : phone),
+      consignee_alternate_phone: String(alternate),
       payment_mode: order.cod ? "COD" : "Prepaid",
       category_of_goods: category,
       ...(/book/i.test(category) ? { hsn_code: "4901" } : {}),
