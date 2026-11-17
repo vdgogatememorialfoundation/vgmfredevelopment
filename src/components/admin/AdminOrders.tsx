@@ -111,6 +111,23 @@ const ALL_STATUSES: Order["status"][] = [
 /** Summary tiles count several statuses; clicking a tile filters to the same set. */
 const PACKED_STATUSES = ["Packed", "Ready to Ship", "To Ship"];
 /** "Confirmed orders" lists only orders still to be sent; these have their own chips. */
+const PICK_STAGES: Record<string, string> = {
+  none: "No picker",
+  assigned: "Picker assigned (not started)",
+  picking: "Picking",
+  picked: "Picked · waiting for packer",
+  packing: "Packing",
+  packed: "Packed",
+};
+
+function pickStage(order: Order) {
+  const pick = order.pick;
+  if (!pick) return "none";
+  if (pick.packedAt) return "packed";
+  if (pick.pickedAt) return pick.boxScannedAt || pick.orderScannedAt || Object.keys(pick.packScan ?? {}).length ? "packing" : "picked";
+  return pick.acceptedAt ? "picking" : "assigned";
+}
+
 const CLOSED_OR_SENT: Order["status"][] = ["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"];
 const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
@@ -153,6 +170,8 @@ export function OrdersDashboard() {
   const [languageFilter, setLanguageFilter] = useState("All");
   const [productFilter, setProductFilter] = useState("All");
   const [modeFilter, setModeFilter] = useState("All");
+  const [pickFilter, setPickFilter] = useState("All");
+  const [pickerFilter, setPickerFilter] = useState("All");
   const [sortBy, setSortBy] = useState("newest");
   const [shipOne, setShipOne] = useState(false);
   const [query, setQuery] = useState("");
@@ -199,6 +218,8 @@ export function OrdersDashboard() {
         : statusFilter === "Everything" || statusFilter === "split" || (STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter)
     )
     .filter((order) => modeFilter === "All" || order.deliveryMode === modeFilter)
+    .filter((order) => pickFilter === "All" || pickStage(order) === pickFilter)
+    .filter((order) => pickerFilter === "All" || order.pick?.assignee === pickerFilter || order.pick?.packer === pickerFilter)
     .filter((order) => languageFilter === "All" || languagesOf(order).includes(languageFilter))
     .filter((order) => productFilter === "All" || order.items.some((item) => (catalogue.find((book) => book.id === item.bookId)?.productType === "other" ? "Other" : "Books") === productFilter))
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
@@ -493,7 +514,7 @@ export function OrdersDashboard() {
               ))}
               <a href="/admin/payments/refunds" className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-burgundy">Refunds module →</a>
             </div>
-            <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
+            <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-9">
               <TextInput placeholder="Search id, name, phone, AWB" value={query} onChange={(event) => setQuery(event.target.value)} />
               <SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option>All</option>
@@ -517,6 +538,14 @@ export function OrdersDashboard() {
                 <option value="All">Pickup + courier</option>
                 <option value="store_pickup">Store pickup</option>
                 <option value="delivery">Courier delivery</option>
+              </SelectInput>
+              <SelectInput value={pickFilter} onChange={(event) => setPickFilter(event.target.value)} aria-label="Pick and pack">
+                <option value="All">Pick & pack: all</option>
+                {Object.entries(PICK_STAGES).map(([value, label]) => <option key={value} value={value}>{label} ({orders.filter((order) => pickStage(order) === value).length})</option>)}
+              </SelectInput>
+              <SelectInput value={pickerFilter} onChange={(event) => setPickerFilter(event.target.value)} aria-label="Picker or packer">
+                <option value="All">Any picker / packer</option>
+                {[...new Set(orders.flatMap((order) => [order.pick?.assignee, order.pick?.packer]).filter((email): email is string => Boolean(email)))].sort().map((email) => <option key={email} value={email}>{email}</option>)}
               </SelectInput>
               <SelectInput value={productFilter} onChange={(event) => setProductFilter(event.target.value)} aria-label="Product type">
                 <option value="All">All products</option>
