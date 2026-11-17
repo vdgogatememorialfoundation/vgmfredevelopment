@@ -133,7 +133,7 @@ const CLOSED_OR_SENT: Order["status"][] = ["Shipped", "Out for Delivery", "Deliv
 const PAID_CHIP_HIDES: Order["status"][] = [...CLOSED_OR_SENT, "Ready to Ship", "To Ship"];
 const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
-  "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) },
+  "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) && order.paymentStatus !== "Paid" },
   "group:to-ship": { label: "To Ship (fully paid · book courier / waiting for pickup)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
   "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => order.status === "Shipped" || order.status === "Out for Delivery" },
 };
@@ -647,6 +647,9 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
         {payment ? ` · ${payment}` : ""}
         {order.trackingId ? ` · AWB ${order.trackingId}` : ""}
       </span>
+      {order.paymentStatus === "Paid" && order.status !== "Cancelled" && (
+        <span className={classNames("block font-semibold", sentState(order, Boolean(shipment)).sent ? "text-emerald-700" : "text-amber-700")}>{sentState(order, Boolean(shipment)).label}</span>
+      )}
       {shipment && (
         <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-text-primary">
           <span><span className="text-text-muted">Pickup by:</span> {rowDate(shipment.pickupScheduledFor) ?? "not scheduled"}{shipment.pickupSlot ? ` (${shipment.pickupSlot})` : ""}</span>
@@ -659,6 +662,14 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
       )}
     </span>
   );
+}
+
+function sentState(order: Order, booked: boolean) {
+  if (order.deliveryMode === "store_pickup") return order.status === "Delivered" ? { sent: true, label: "Collected from store" } : { sent: false, label: "Store pickup · not collected yet" };
+  if (order.status === "Delivered") return { sent: true, label: "Shipped · delivered" };
+  if (order.status === "Shipped" || order.status === "Out for Delivery") return { sent: true, label: `Shipped · ${order.status === "Shipped" ? "in transit" : "out for delivery"}` };
+  if (booked) return { sent: false, label: "Not shipped yet · courier booked, waiting for pickup" };
+  return { sent: false, label: `Not shipped yet · ${order.status === "Packed" ? "packed, courier not booked" : "not packed"}` };
 }
 
 function rowDate(value?: string) {
