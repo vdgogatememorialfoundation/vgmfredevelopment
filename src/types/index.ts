@@ -1076,7 +1076,8 @@ export interface ShipmentRecord {
   pickupReference?: string;
   courierCost?: number;
   customerPaid?: number;
-  tracking?: { at: string; status: string; location?: string }[];
+  /** `src: "site"` = the courier's public tracking page (what the courier itself shows). */
+  tracking?: { at: string; status: string; location?: string; src?: "site" | "api" }[];
   trackingUrl?: string;
   /** Promised arrival from the courier that booked this shipment. */
   expectedBy?: string;

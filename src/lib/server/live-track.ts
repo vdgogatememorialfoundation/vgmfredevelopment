@@ -43,8 +43,18 @@ type TrackHit = {
   expectedBy?: string;
 };
 
-function dedupe(events: { at: string; status: string; location?: string }[]) {
-  const out: { at: string; status: string; location?: string }[] = [];
+type Scan = { at: string; status: string; location?: string; src?: "site" | "api" };
+
+// Raw system codes from courier APIs ("ShipmentGrouped - Hub", "dispatched_to_tc", "Expected - Hub") aren't shown to people.
+function readableScan(status: string) {
+  const text = cleanScanText(status).replace(/^in transit\s*[–-]\s*/i, "");
+  if (/^expected\b/i.test(text)) return false;
+  if (/^[a-z]/.test(text) || /\b[a-z]+_[a-z_]+\b/.test(text)) return false;
+  return !/^[A-Za-z]*[a-z][A-Z][A-Za-z]*(\s+-\s+|$)/.test(text);
+}
+
+function dedupe(events: Scan[]) {
+  const out: Scan[] = [];
   for (const raw of events) {
     if (!usableScan(raw)) continue;
     const event = { ...raw, status: cleanScanText(raw.status) };
@@ -115,11 +125,24 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   }
   if (!hit) return { ok: true as const, live: false as const, shipment };
   // The Ekart Elite API lags behind ekartlogistics.com (hub scans show there first), so read both.
-  if (!direct && provider === "ekart" && shipment.awb) {
+  // People see ekartlogistics.com's own list; API scans are shown only while they are ahead of it, but every scan counts for the status.
+  let siteScans: Scan[] = [];
+  let apiScans: Scan[] = [];
+  const ekartBoth = !direct && provider === "ekart" && Boolean(shipment.awb);
+  if (ekartBoth) {
     const site = await courierWebTrack("ekart", shipment.awb, (creds.tracker ?? {}) as TrackerCreds).catch(() => null);
-    if (site?.events?.length) hit = { ...hit, events: [...(hit.events ?? []), ...site.events] };
+    siteScans = (await withScanPlaces(site?.events ?? []).catch(() => site?.events ?? [])).map((event) => ({ ...event, src: "site" as const }));
   }
   hit.events = await withScanPlaces(hit.events ?? []).catch(() => hit?.events ?? []);
+  if (ekartBoth) {
+    apiScans = hit.events.map((event) => ({ ...event, src: "api" as const }));
+    const base = siteScans.length ? siteScans : (shipment.tracking ?? []).filter((event) => event.src === "site");
+    if (base.length) {
+      const lastSite = Math.max(...base.map((event) => Date.parse(event.at) || 0));
+      const ahead = apiScans.filter((event) => (Date.parse(event.at) || 0) > lastSite + 60_000 && readableScan(event.status));
+      hit = { ...hit, events: [...siteScans, ...ahead] };
+    }
+  }
 
   // Courier tracking pages show only the latest scans, so keep earlier ones; drop anything dated in the future.
   const latestOk = Date.now() + 10 * 60_000;
@@ -127,8 +150,9 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   const sameScan = (x: { status: string; location?: string }, y: { status: string; location?: string }) =>
     x.status.trim().toLowerCase() === y.status.trim().toLowerCase() && placeKey(x.location) === placeKey(y.location);
   // A re-read scan replaces the stored copy, so an earlier wrong timestamp is corrected rather than duplicated.
+  const kept = (shipment.tracking ?? []).filter((old) => !ekartBoth || old.src === "site" || !(siteScans.length || (shipment.tracking ?? []).some((event) => event.src === "site")));
   const merged = direct || provider === "ekart"
-    ? [...(shipment.tracking ?? []).filter((old) => !fresh.some((event) => sameScan(event, old))), ...fresh]
+    ? [...kept.filter((old) => !fresh.some((event) => sameScan(event, old))), ...fresh]
     : fresh.length
       ? fresh
       : shipment.tracking ?? [];
@@ -140,17 +164,20 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });
   const awb = hit.awb || shipment.awb;
   // The latest scan in context wins ("Dispatched to <hub>" after pickup is in transit); the courier's headline status only if it is further along.
-  const sequence = classifyScanSequence(events.map((event) => event.status));
+  const scans = ekartBoth && apiScans.length
+    ? dedupe([...events, ...apiScans].filter((event) => (Date.parse(event.at) || 0) <= latestOk).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)))
+    : events;
+  const sequence = classifyScanSequence(scans.map((event) => event.status));
   const lastIndex = sequence.findLastIndex((mapped) => Boolean(mapped));
   const headline = cleanScanText(hit.status ?? "");
   const headlineStage = headline ? classifyCourierScan(headline) : null;
   let stage = lastIndex >= 0 ? sequence[lastIndex] : null;
-  let latestStatus = lastIndex >= 0 ? events[lastIndex].status : headline;
+  let latestStatus = lastIndex >= 0 ? scans[lastIndex].status : headline;
   if (headlineStage && (!stage || courierStageRank(headlineStage) > courierStageRank(stage))) {
     stage = headlineStage;
     latestStatus = headline;
   }
-  if (stage === "shipped" && onlyRoutingScans([...events.map((event) => event.status), headline].filter(Boolean))) stage = "packed";
+  if (stage === "shipped" && onlyRoutingScans([...scans.map((event) => event.status), headline].filter(Boolean))) stage = "packed";
   const orderForLeg = findShopOrder(orderId);
   const hyperlocal = isHyperlocalProvider(provider, orderForLeg?.courierChoice?.lastMile, hit.courierName || shipment.courier || orderForLeg?.courierName);
   const shipmentStatus = stage ? shipmentStatusFor(stage) : undefined;
