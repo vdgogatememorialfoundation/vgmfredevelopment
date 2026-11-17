@@ -2555,7 +2555,8 @@ function ChargesBreakdown({ order }: { order: Order }) {
   const plan = order.preorderPayment;
   const extras = order.extraCharges ?? [];
   const courierExtras = extras.filter((row) => row.kind === "shipping").reduce((sum, row) => sum + row.amount, 0);
-  const packing = order.packing ?? (quote?.packing && quote.fee ? quote.packing : 0);
+  // Older quotes saved only the courier price: the rest of the shipping charge is packing.
+  const packing = order.packing ?? quote?.packing ?? (quote && (order.shipping ?? 0) - courierExtras > quote.charged ? Math.round(((order.shipping ?? 0) - courierExtras - quote.charged) * 100) / 100 : 0);
   const courier = Math.max(0, Math.round(((order.shipping ?? 0) - courierExtras - packing) * 100) / 100);
   const booked = getShipments().filter((item) => item.orderId === order.id && item.note !== "Cancelled");
   const paid = Math.max(0, Math.round((order.total - remainingDue(order)) * 100) / 100);
@@ -2586,7 +2587,7 @@ function ChargesBreakdown({ order }: { order: Order }) {
         </table>
         {quote ? (
           <div className="mt-3 rounded-lg bg-warm-cream/50 p-2 text-xs">
-            <p className="font-semibold">Courier quote sent {formatDateTime(quote.at)}: {quote.courierName ?? "highest quote"}{quote.provider ? ` (${bookedViaLabel(quote.provider as CourierRate["provider"])})` : ""} · {rupees(quote.charged)}{quote.fee ? ` → charged ${rupees(quote.fee)} incl. packing ${rupees(quote.packing ?? 0)}` : ""}</p>
+            <p className="font-semibold">Courier quote sent {formatDateTime(quote.at)}: {quote.courierName ?? "courier and aggregator not saved (quoted before 17 Nov, 9 pm)"}{quote.provider ? ` (${bookedViaLabel(quote.provider as CourierRate["provider"])})` : ""} · {rupees(quote.charged)}{quote.fee ? ` → charged ${rupees(quote.fee)} incl. packing ${rupees(quote.packing ?? 0)}` : ""}</p>
             <p className="text-text-muted">{quote.source === "typed" ? "Typed by the desk" : quote.source === "chosen" ? "Courier picked by the desk" : `Highest of ${quote.couriers} live quote${quote.couriers === 1 ? "" : "s"}`} · package {quote.weightKg} kg{quote.parcel ? ` · ${quote.parcel.length}×${quote.parcel.breadth}×${quote.parcel.height} cm` : ""}</p>
             {quote.quotes?.length ? <p className="text-text-muted">All quotes: {quote.quotes.map((row) => `${row.name} ${rupees(row.rate)}`).join(" · ")}</p> : null}
           </div>
