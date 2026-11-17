@@ -1248,6 +1248,7 @@ export function recordPickScan(orderId: string, code: string): string {
   const order = getOrder(orderId);
   const pick = order?.pick;
   if (!order || !pick) throw new Error("This order has no picker assigned.");
+  if (isSplitParent(order)) throw new Error(`Order ${order.id} was split. Scan for ${order.splitInto!.map((row) => row.id).join(" or ")} instead.`);
   const value = code.trim();
   if (!value) throw new Error("Scan a code.");
   const books = getLiveBooks();

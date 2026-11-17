@@ -86,6 +86,7 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
   const mine = orders.filter(
     (order) =>
       order.pick &&
+      !order.splitInto?.length &&
       (lead || (order.pick.pickedAt && order.pick.packer ? order.pick.packer : order.pick.assignee) === me) &&
       !order.pick.packedAt &&
       order.status !== "Cancelled" &&
