@@ -1,3 +1,4 @@
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ekartBook,
@@ -97,9 +98,12 @@ export async function POST(request: NextRequest) {
     switch (body.action) {
       case "rates": {
         const parcel = body.parcel as Parameters<typeof shiprocketRates>[1];
-        const wanted = Array.isArray(body.providers)
+        const saved = savedAdminIntegrations() as { settings?: { shipping?: Record<string, { enabled?: boolean } | undefined> } };
+        const switchedOn = (id: string) => saved.settings?.shipping?.[id]?.enabled !== false;
+        const wanted = (Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax"];
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax"]
+        ).filter(switchedOn);
         // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
         const stored = readShippingCreds() as typeof creds;
         const keys = (id: keyof typeof creds) => ({ ...(stored[id] ?? {}), ...Object.fromEntries(Object.entries(creds[id] ?? {}).filter(([, value]) => value !== "" && value != null)) });

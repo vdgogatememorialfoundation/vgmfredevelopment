@@ -196,7 +196,8 @@ export async function fetchCourierRates(input: {
   const { shipping } = settings;
   const notes: string[] = [];
   // Keys may live only on the host (customer browsers never hold them); the server reports unconfigured accounts.
-  const wanted = CHECKOUT_PROVIDERS.filter((id) => shipping[id].enabled);
+  // The server keeps only the aggregators switched on in the saved settings, so a stale browser copy can't hide one.
+  const wanted = [...CHECKOUT_PROVIDERS];
   let live: CourierRate[] = [];
   if (/^\d{6}$/.test(input.deliveryPincode) && wanted.length) {
     try {
