@@ -237,6 +237,7 @@ export async function preparePreorderBalance(id: string, email: string) {
   if (!order || owner !== email.toLowerCase()) return { error: "This order was not found on your account." };
   const plan = order.preorderPayment;
   if (!plan || plan.balancePaidAt) return { error: "Nothing is due on this order." };
+  if (order.splitInto?.length) return { error: `This order is now sent in parts. Pay from order ${order.splitInto.map((row) => row.id).join(" or ")}.` };
   if (NOT_PROCESSED.includes(order.status)) return { error: "You can pay the balance once your order is processed." };
   if (plan.shippingDue) return { error: "We will send you the payment link once we select the courier for your parcel. Its charge is added to the balance then." };
   return { order, balance: plan.balance };

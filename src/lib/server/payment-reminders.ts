@@ -58,7 +58,7 @@ export async function sendPaymentReminders(now = new Date()) {
     const log = readLog();
     let changed = false;
     for (const order of listShopOrders()) {
-      if (order.paymentStatus !== "Partially Paid" || ["Cancelled", "Failed", "Refunded"].includes(order.status)) continue;
+      if (order.paymentStatus !== "Partially Paid" || ["Cancelled", "Failed", "Refunded"].includes(order.status) || order.splitInto?.length) continue;
       // A pre-order balance is due only once the balance link has gone out (the book is ready).
       if (order.preorderPayment && !order.preorderPayment.link) continue;
       const due = dueOn(order);
