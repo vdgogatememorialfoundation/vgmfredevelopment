@@ -98,7 +98,10 @@ export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {})
   if (prev && orderActivityAt(prev) > orderActivityAt(order)) return prev;
   const orders = all.filter((item) => item.id !== order.id);
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
-  orders.unshift(withTxnIds(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken }, prev));
+  const merged: Order = prev ? { ...prev, ...order, trackToken } : { ...order, trackToken };
+  // A field sent as null was cleared on the desk (e.g. Cancel picking); JSON drops undefined, so null is the "remove it" signal.
+  for (const key of Object.keys(merged) as (keyof Order)[]) if (merged[key] === null) delete merged[key];
+  orders.unshift(withTxnIds(merged, prev));
   writeAll(orders);
   void notifyOrderStage(prev, orders[0], { statusOnly: options.quiet }).catch(() => undefined);
   return orders[0];

@@ -1058,7 +1058,8 @@ export function cancelPicking(orderId: string) {
   if (!order?.pick) throw new Error(`Order ${orderId} has no picker assigned.`);
   if (order.pick.packedAt) throw new Error(`Order ${orderId} is already packed. Change its status instead.`);
   const who = [order.pick.assignee, order.pick.packer].filter(Boolean).join(", ");
-  updateOrderInStore(withHistory({ ...order, pick: undefined }, order.status, `Picking cancelled by the desk${who ? ` (was ${who})` : ""}; scans cleared.`));
+  // null (not undefined) so the server also drops the saved pick when it merges this copy.
+  updateOrderInStore(withHistory({ ...order, pick: null as unknown as undefined }, order.status, `Picking cancelled by the desk${who ? ` (was ${who})` : ""}; scans cleared.`));
   return `Picking cancelled for order ${orderId}. Assign a picker again when ready.`;
 }
 
