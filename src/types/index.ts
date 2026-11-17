@@ -659,7 +659,7 @@ export interface Order {
   /** Full address of each picked Ship from location, printed as the label's sender / return address. */
   shipFromAddress?: Partial<Record<"shiprocket" | "ekart" | "goswift", { name?: string; address: string; phone?: string }>>;
   /** Pre-order: the courier amount charged from the highest valid quote, and the package it was quoted for. */
-  courierQuote?: { at: string; charged: number; highest: number; weightKg: number; parcel?: { length: number; breadth: number; height: number }; couriers: number };
+  courierQuote?: { at: string; charged: number; highest: number; weightKg: number; parcel?: { length: number; breadth: number; height: number }; couriers: number; courierName?: string; provider?: string; packing?: number; fee?: number; quotes?: { name: string; provider: string; rate: number }[]; source?: "highest" | "chosen" | "typed" };
   /** Amounts the desk added after ordering, e.g. a charge wrongly shown as free. */
   /** Shipping was left at ₹0; the courier charge is added once the parcel is packed and weighed. */
   shippingDue?: boolean;

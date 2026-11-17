@@ -1424,6 +1424,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           </dl>
         </Section>
 
+        <ChargesBreakdown order={order} />
         <Section title="Customer">
           {!editing && order.deliveryMode === "delivery" && !["Shipped", "Out for Delivery", "Delivered", "Cancelled", "Failed"].includes(order.status) && (
             <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
@@ -2544,6 +2545,56 @@ function ParcelEditor({ order, onSaved }: { order: Order; onSaved: () => void })
 /** Pre-orders are never booked automatically: the desk creates the shipment after packing. */
 function isPreorderOrder(order?: Order | null) {
   return Boolean(order && (order.preorderPayment || order.items.some((item) => item.preorder)));
+}
+
+/** Every rupee on the order, and where the courier charge came from. */
+function ChargesBreakdown({ order }: { order: Order }) {
+  const quote = order.courierQuote;
+  const plan = order.preorderPayment;
+  const extras = order.extraCharges ?? [];
+  const courierExtras = extras.filter((row) => row.kind === "shipping").reduce((sum, row) => sum + row.amount, 0);
+  const packing = order.packing ?? (quote?.packing && quote.fee ? quote.packing : 0);
+  const courier = Math.max(0, Math.round(((order.shipping ?? 0) - courierExtras - packing) * 100) / 100);
+  const booked = getShipments().filter((item) => item.orderId === order.id && item.note !== "Cancelled");
+  const paid = Math.max(0, Math.round((order.total - remainingDue(order)) * 100) / 100);
+  const rows: [string, number, string?][] = [
+    ...order.items.map((item) => [`${currentProductTitle(item)} × ${item.quantity} @ ${rupees(item.price)}`, item.price * item.quantity] as [string, number]),
+    ...(order.promo?.amount ? [[`Coupon / gift card ${order.promo.code}`, -order.promo.amount] as [string, number]] : []),
+    ...(order.storeCreditUsed ? [["Store credit used", -order.storeCreditUsed] as [string, number]] : []),
+    ...(order.gst ? [["GST", order.gst] as [string, number]] : []),
+    ...(order.platformFee ? [["Platform fee (once per order)", order.platformFee] as [string, number]] : []),
+    ...(packing ? [["Packing", packing] as [string, number]] : []),
+    ...(courier || order.deliveryMode === "delivery" ? [[order.shippingDue || plan?.shippingDue ? "Courier (not charged yet)" : "Courier", courier] as [string, number]] : []),
+    ...extras.map((row) => [`Extra: ${row.reason}`, row.amount, row.by] as [string, number, string?]),
+  ];
+  return (
+    <div className="mt-4">
+      <Section title="Charges breakdown">
+        <table className="w-full text-xs">
+          <tbody>
+            {rows.map(([label, amount, by], index) => (
+              <tr key={index} className="border-b border-border/60"><td className="py-1">{label}{by ? <span className="text-text-muted"> · {by}</span> : null}</td><td className="py-1 text-right">{amount < 0 ? "−" : ""}{rupees(Math.abs(amount))}</td></tr>
+            ))}
+            <tr className="font-semibold"><td className="py-1">Total</td><td className="py-1 text-right">{rupees(order.total)}</td></tr>
+            {plan ? <tr><td className="py-1">Advance {plan.advancePaidAt ? `paid ${formatDateTime(plan.advancePaidAt)}` : "(not paid)"}</td><td className="py-1 text-right">{rupees(plan.advance)}</td></tr> : null}
+            {plan ? <tr><td className="py-1">Balance {plan.balancePaidAt ? `paid ${formatDateTime(plan.balancePaidAt)}` : "due"}</td><td className="py-1 text-right">{rupees(plan.balance)}</td></tr> : null}
+            <tr className="font-semibold text-emerald-800"><td className="py-1">Paid so far</td><td className="py-1 text-right">{rupees(paid)}</td></tr>
+            <tr className="font-semibold text-amber-800"><td className="py-1">Still due</td><td className="py-1 text-right">{rupees(remainingDue(order))}</td></tr>
+          </tbody>
+        </table>
+        {quote ? (
+          <div className="mt-3 rounded-lg bg-warm-cream/50 p-2 text-xs">
+            <p className="font-semibold">Courier quote sent {formatDateTime(quote.at)}: {quote.courierName ?? "highest quote"}{quote.provider ? ` (${bookedViaLabel(quote.provider as CourierRate["provider"])})` : ""} · {rupees(quote.charged)}{quote.fee ? ` → charged ${rupees(quote.fee)} incl. packing ${rupees(quote.packing ?? 0)}` : ""}</p>
+            <p className="text-text-muted">{quote.source === "typed" ? "Typed by the desk" : quote.source === "chosen" ? "Courier picked by the desk" : `Highest of ${quote.couriers} live quote${quote.couriers === 1 ? "" : "s"}`} · package {quote.weightKg} kg{quote.parcel ? ` · ${quote.parcel.length}×${quote.parcel.breadth}×${quote.parcel.height} cm` : ""}</p>
+            {quote.quotes?.length ? <p className="text-text-muted">All quotes: {quote.quotes.map((row) => `${row.name} ${rupees(row.rate)}`).join(" · ")}</p> : null}
+          </div>
+        ) : null}
+        {booked.map((item) => (
+          <p key={item.id} className="mt-2 text-xs">Booked: {item.courier} · AWB {item.awb} · courier cost {rupees(item.charges)}</p>
+        ))}
+      </Section>
+    </div>
+  );
 }
 
 /** Split order: part of the items go to a second order; both child orders then run as normal orders. */
