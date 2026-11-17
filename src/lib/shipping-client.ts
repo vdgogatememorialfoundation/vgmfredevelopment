@@ -120,11 +120,12 @@ export async function checkCourierWallet(provider: string, needed = 0) {
   }
   const settings = getIntegrations();
   const floor = Math.max(settings.shipping.minWalletRupees || 0, needed);
-  const result = await post<{ balance?: number }>({ action: "wallet", provider, creds: credsFrom(settings) });
+  const result = await post<{ balance?: number; unavailable?: boolean }>({ action: "wallet", provider, creds: credsFrom(settings) });
   if (!result.ok) {
     if (result.configured === false) return { ok: true as const, skipped: true };
     throw new Error(`Could not read ${label(provider)} credits: ${result.error ?? "unknown error"}. Booking is blocked until the wallet can be checked.`);
   }
+  if (result.unavailable) return { ok: true as const, skipped: true };
   const balance = Number(result.balance ?? 0);
   if (!Number.isFinite(balance) || balance < floor) {
     throw new Error(
@@ -142,8 +143,9 @@ export async function readCourierWallets(): Promise<CourierWallet[]> {
   return Promise.all(
     WALLET_PROVIDERS.map(async (provider) => {
       const name = provider === "ithink" ? "iThink Logistics" : provider === "nimbuspost" ? "NimbusPost" : label(provider);
-      const result = await post<{ balance?: number }>({ action: "wallet", provider, creds }).catch((error: Error) => ({ ok: false, configured: true, error: error.message, balance: undefined }));
+      const result = await post<{ balance?: number; unavailable?: boolean }>({ action: "wallet", provider, creds }).catch((error: Error) => ({ ok: false, configured: true, error: error.message, balance: undefined, unavailable: undefined }));
       if (!result.ok) return { provider, label: name, connected: result.configured !== false, error: result.configured === false ? undefined : result.error ?? "Could not read the wallet." };
+      if (result.unavailable) return { provider, label: name, connected: true, error: "Balance not given by the API; check it on the aggregator's panel." };
       const balance = Number(result.balance ?? 0);
       return { provider, label: name, connected: true, balance: Number.isFinite(balance) ? balance : 0 };
     })

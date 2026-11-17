@@ -1902,9 +1902,8 @@ export async function ithinkWallet(input: Json) {
   if (!auth) return null;
   const data = await ithinkPost("wallet/balance.json", { ...auth });
   const balance = walletAmount(data.data ?? data);
-  if (balance === undefined) {
-    throw new ProviderError(`iThink sent no wallet balance (reply: ${JSON.stringify(data).slice(0, 200)}).`);
-  }
+  // iThink's API often gives no balance (empty reply); iThink itself refuses a booking when the wallet is short.
+  if (balance === undefined) return { provider: "ithink", balance: undefined, unavailable: true, currency: "INR" };
   return { provider: "ithink", balance, currency: "INR" };
 }
 
