@@ -1,5 +1,6 @@
 import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
 import RefundHelp from "@/components/store/RefundHelp";
+import { getOrderSettings } from "@/lib/integrations";
 import type { Order, RefundRecord } from "@/types";
 
 const stamp = (value?: string) =>
@@ -16,19 +17,22 @@ function addWorkingDays(from: number, days: number) {
   return date;
 }
 
-export const REFUND_CREDIT_NOTE = "The amount will be credited to your bank account within 5–7 working days after the refund is processed. If it has not arrived by then, please contact your bank.";
+export const REFUND_CREDIT_NOTE = "The amount is credited to your bank account by the expected credit date shown after the refund is processed. If it has not arrived by then, please contact your bank.";
 
-/** Credited 7 working days after Razorpay processes the refund (about 3–5 to process first). */
+/** Credited on the desk's date, else the Order settings' credit days (default 5) after the refund is processed. */
 export function refundExpectedCredit(refund: RefundRecord): { date: Date; done: boolean } | null {
   if (refund.status === "failed") return null;
   if (refund.destination === "store_credit") {
     const at = Date.parse(refund.at);
     return Number.isFinite(at) ? { date: new Date(at), done: true } : null;
   }
+  const fixed = Date.parse(refund.creditBy || "");
+  if (Number.isFinite(fixed)) return { date: new Date(fixed), done: Date.now() >= fixed };
   const processed = Date.parse(refund.processedAt || "");
   const base = Number.isFinite(processed) ? processed : Date.parse(refund.at);
   if (!Number.isFinite(base)) return null;
-  const date = addWorkingDays(base, Number.isFinite(processed) ? 7 : refund.speed === "optimum" ? 1 : 12);
+  const creditDays = getOrderSettings().refunds.creditDays ?? 5;
+  const date = Number.isFinite(processed) ? new Date(processed + creditDays * 86_400_000) : addWorkingDays(base, refund.speed === "optimum" ? 1 : 5 + creditDays);
   return { date, done: Date.now() >= date.getTime() };
 }
 
@@ -147,10 +151,13 @@ export default function RefundDetails({
   order,
   onCheck,
   busyId,
+  onCreditDate,
 }: {
   order: Order;
   onCheck?: (refund: RefundRecord) => void;
   busyId?: string;
+  /** Desk only: change the expected credit date shown to the customer. */
+  onCreditDate?: (refund: RefundRecord, date: string) => void;
 }) {
   const refunds = order.refunds ?? [];
   if (!refunds.length) return null;
@@ -173,6 +180,17 @@ export default function RefundDetails({
               <Fact label="Initiated" value={stamp(refund.at)} />
               <Fact label="Processed" value={stamp(refund.processedAt)} />
               <Fact label="Expected credit" value={refundExpectedCreditLabel(refund).replace(/^(Expected credit by|Should have been credited by|Credited) /, "")} />
+              {onCreditDate && refund.destination !== "store_credit" && refund.status !== "failed" ? (
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  Change credit date
+                  <input
+                    type="date"
+                    className="mt-0.5 block rounded border border-slate-300 px-2 py-1 text-sm normal-case tracking-normal text-slate-900"
+                    defaultValue={(() => { const at = refundExpectedCredit(refund)?.date; return at ? new Date(at.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10) : ""; })()}
+                    onChange={(event) => event.target.value && onCreditDate(refund, event.target.value)}
+                  />
+                </label>
+              ) : null}
               <Fact label="Refund to" value={refund.destination === "store_credit" ? "Store credit" : refund.method || order.paymentMethod || "Original payment method"} />
               <Fact label="VGMF transaction ID" value={refund.vgmfId} />
               <Fact label="Refund ID" value={refund.gatewayRefundId || refund.reference} />

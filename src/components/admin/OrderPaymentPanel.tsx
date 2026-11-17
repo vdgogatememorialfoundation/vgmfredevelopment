@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import RefundDetails from "@/components/store/RefundDetails";
-import { maxRefundable, refundToStoreCredit } from "@/lib/admin-store";
+import { maxRefundable, refundToStoreCredit, setRefundCreditDate } from "@/lib/admin-store";
 import { refreshRefundStatus, refundThroughGateway } from "@/lib/payments-client";
 import type { Order, RefundRecord } from "@/types";
 
@@ -92,7 +92,7 @@ export default function OrderPaymentPanel({ order, onChange }: { order: Order; o
         </div>
       ) : null}
       {note ? <p className="mt-2 text-xs font-semibold text-slate-700">{note}</p> : null}
-      <RefundDetails order={order} onCheck={check} busyId={busy} />
+      <RefundDetails order={order} onCheck={check} busyId={busy} onCreditDate={(refund, date) => setNote(setRefundCreditDate(order.id, refund.id, date))} />
     </div>
   );
 }

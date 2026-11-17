@@ -146,7 +146,7 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
       : shipment.tracking ?? [];
   const events = dedupe(
     merged
-      .filter((event) => (Date.parse(event.at) || 0) <= latestOk)
+      .filter((event) => (Date.parse(event.at) || 0) <= latestOk && !(shipment.hiddenScans ?? []).includes(`${event.at}|${event.status.trim().toLowerCase()}`))
       .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
   );
   const courier = direct ? shipment.courier : customerCourierLabel({ provider, courier: hit.courierName || shipment.courier });

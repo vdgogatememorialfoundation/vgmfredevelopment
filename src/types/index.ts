@@ -777,6 +777,8 @@ export interface RefundRecord {
   speed?: string;
   processedAt?: string;
   checkedAt?: string;
+  /** Expected credit date set by the desk (otherwise processed date + the credit days in Order settings). */
+  creditBy?: string;
 }
 
 export interface ReturnShipment {
@@ -1058,6 +1060,8 @@ export interface ProductOverride {
 
 export interface ShipmentRecord {
   id: string;
+  /** Courier scans the desk removed as wrong (`at|status`); they are not shown or re-added on refresh. */
+  hiddenScans?: string[];
   orderId: string;
   courier: string;
   awb: string;

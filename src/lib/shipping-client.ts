@@ -1017,7 +1017,8 @@ function dedupeScans(events: { at: string; status: string; location?: string }[]
 }
 
 function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
-  const events = dedupeScans(result.events?.length ? result.events : shipment.tracking ?? []);
+  const hidden = new Set(shipment.hiddenScans ?? []);
+  const events = dedupeScans(result.events?.length ? result.events : shipment.tracking ?? []).filter((event) => !hidden.has(`${event.at}|${event.status.trim().toLowerCase()}`));
   const courier = customerCourierLabel({ provider: shipment.provider, courier: result.courierName || shipment.courier });
   const awb = result.awb || shipment.awb;
   const mapped = result.status ? mapCourierStatus(result.status) : undefined;

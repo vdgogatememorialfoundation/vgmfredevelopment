@@ -82,7 +82,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
 import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
 import { itemTotals } from "@/lib/order-item-totals";
-import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack } from "@/lib/admin-store";
+import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack, hideShipmentScan, removeHistoryEntry, setRefundCreditDate } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
@@ -1663,7 +1663,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               )}
             </div>
           )}
-          <RefundDetails order={order} busyId={busy} onCheck={(refund) => run(refund.id, () => refreshRefundStatus(order.id, refund.id))} />
+          <RefundDetails order={order} busyId={busy} onCheck={(refund) => run(refund.id, () => refreshRefundStatus(order.id, refund.id))} onCreditDate={(refund, date) => { setRefundCreditDate(order.id, refund.id, date); onChanged(); }} />
         </Section>
       </div>
 
@@ -2053,7 +2053,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {shipment.tracking && shipment.tracking.length > 0 ? (
                     <ol className="mt-3 space-y-1 border-t border-border pt-3">
                       {shipment.tracking.filter((event) => !isDeskScan(event)).reverse().map((event, index) => (
-                        <li key={index} className="flex gap-3"><span className="w-44 shrink-0 text-text-muted">{statusStamp(event.at)}</span><span>{event.status}{event.location ? ` · ${event.location}` : ""}</span></li>
+                        <li key={index} className="flex gap-3"><span className="w-44 shrink-0 text-text-muted">{statusStamp(event.at)}</span><span className="flex-1">{event.status}{event.location ? ` · ${event.location}` : ""}</span><button type="button" className="text-xs text-red-600 hover:underline" title="Remove this wrong update" onClick={() => { if (window.confirm(`Remove "${event.status}" from this shipment's tracking?`)) { setMessage(hideShipmentScan(shipment.id, event)); onChanged(); } }}>Remove</button></li>
                       ))}
                     </ol>
                   ) : <p className="mt-2 text-text-muted">No courier scans yet.</p>}
@@ -2363,7 +2363,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               {order.history.slice().reverse().map((entry, index) => (
                 <li key={index} className="flex gap-3">
                   <span className="w-36 shrink-0 text-text-muted">{formatDateTime(entry.at)}</span>
-                  <span><b>{entry.status}</b>{entry.note ? ` · ${entry.note}` : ""}{entry.by ? <span className="text-text-muted"> · {entry.by}</span> : null}</span>
+                  <span className="flex-1"><b>{entry.status}</b>{entry.note ? ` · ${entry.note}` : ""}{entry.by ? <span className="text-text-muted"> · {entry.by}</span> : null}</span>
+                  <button type="button" className="shrink-0 text-red-600 hover:underline" title="Remove this wrong update" onClick={() => { if (window.confirm(`Remove "${entry.status}" from this order's history? The customer stops seeing it.`)) { setMessage(removeHistoryEntry(order.id, entry)); onChanged(); } }}>Remove</button>
                 </li>
               ))}
             </ol>

@@ -6,10 +6,21 @@ import { sendMobileEmail } from "@/lib/server/mobile-mail";
 import { pushToCustomer } from "@/lib/server/fcm";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { readKv } from "@/lib/server/db";
+import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopShipment } from "@/lib/server/shop-shipments";
 import { applyTemplateVars, defaultMessageCopy } from "@/lib/message-templates";
 import type { NotificationEventId } from "@/lib/integrations";
 import type { Order, RefundRecord } from "@/types";
+
+/** The desk's credit date, else processed date + Order settings' credit days (default 5). */
+function creditDay(refund: RefundRecord) {
+  const days = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined).refunds.creditDays ?? 5;
+  const fixed = Date.parse(refund.creditBy || "");
+  const base = Date.parse(refund.processedAt || "") || Date.now();
+  const at = Number.isFinite(fixed) ? fixed : base + days * 86_400_000;
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(at));
+}
 
 type Stage = { key: string; subject: string; intro: string; next: string[]; vars?: Record<string, string> };
 
@@ -226,7 +237,7 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
           refund.vgmfId ? `VGMF transaction ID: ${refund.vgmfId}` : "",
           refund.gatewayRefundId ? `Refund ID: ${refund.gatewayRefundId}` : "",
           bankRef ? `Bank reference (ARN/RRN): ${bankRef}` : "",
-          store ? "The store credit is available on your next order." : key.endsWith("processed") ? "The amount is usually credited to your account within 5–7 working days of processing. Quote the bank reference to your bank if it does not appear." : "Banks usually take 3–5 working days to process, then 5–7 working days to credit. Follow it in My Orders.",
+          store ? "The store credit is available on your next order." : key.endsWith("processed") ? `Expected in your account by ${creditDay(refund)}. Quote the bank reference to your bank if it does not appear by then.` : "Banks usually take 3–5 working days to process the refund. Follow it in My Orders.",
         ].filter(Boolean),
       });
     }

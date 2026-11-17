@@ -290,6 +290,8 @@ export interface OrderSettings {
     enabled: boolean;
     method: "original" | "manual";
     processingDays: number;
+    /** Customers are told the refund reaches their account this many days after it is processed. */
+    creditDays: number;
     autoRefundOnReturnPickup: boolean;
     /** Store credit lapses this many days after it is added; 0 keeps it forever. */
     creditExpiryDays: number;
@@ -511,7 +513,7 @@ export const defaultOrderSettings: OrderSettings = {
     returnForRefund: false,
     replacementAddressChange: true,
   },
-  refunds: { enabled: true, method: "original", processingDays: 7, autoRefundOnReturnPickup: false, creditExpiryDays: 0 },
+  refunds: { enabled: true, method: "original", processingDays: 7, creditDays: 5, autoRefundOnReturnPickup: false, creditExpiryDays: 0 },
   cancellation: { enabled: false, allowedUntil: "Packed", windowHours: 0, fee: 0, delayDays: 30, refundFeeOnDesk: true, pickupHoldDays: 30 },
   pickupSlots: ["6:00 PM – 7:00 PM", "7:00 PM – 8:00 PM", "8:00 PM – 9:00 PM", "9:00 PM – 10:00 PM"],
   adminActions: { processAfterDelivery: true },
@@ -840,6 +842,7 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       enabled: Boolean(merged.refunds?.enabled),
       method: merged.refunds?.method === "manual" ? "manual" : "original",
       processingDays: Math.max(1, finiteNumber(merged.refunds?.processingDays, defaultOrderSettings.refunds.processingDays)),
+      creditDays: Math.max(0, Math.round(finiteNumber(merged.refunds?.creditDays, defaultOrderSettings.refunds.creditDays))),
       autoRefundOnReturnPickup: Boolean(merged.refunds?.autoRefundOnReturnPickup),
       creditExpiryDays: Math.max(0, Math.round(finiteNumber(merged.refunds?.creditExpiryDays, 0))),
     },

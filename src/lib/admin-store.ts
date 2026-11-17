@@ -1802,6 +1802,46 @@ export function saveShipmentRecord(shipment: ShipmentRecord) {
   publishShipment(shipment);
 }
 
+/** Desk sets the date the customer is told the refund reaches their account. */
+export function setRefundCreditDate(orderId: string, refundId: string, date: string) {
+  const order = getOrder(orderId);
+  const at = Date.parse(`${date}T18:00:00+05:30`);
+  if (!order || !Number.isFinite(at)) return "Pick a valid date.";
+  const creditBy = new Date(at).toISOString();
+  updateOrderInStore(
+    withHistory(
+      { ...order, refunds: (order.refunds ?? []).map((refund) => (refund.id === refundId ? { ...refund, creditBy } : refund)) },
+      order.status,
+      `Refund expected credit date set to ${date} by the desk.`
+    )
+  );
+  return `Expected credit date changed to ${date}. The customer sees it in My Orders.`;
+}
+
+/** Desk removes a wrong entry from the order's status history (customers stop seeing it). */
+export function removeHistoryEntry(orderId: string, entry: { at: string; status: string; note?: string }) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  const index = (order.history ?? []).findIndex((item) => item.at === entry.at && item.status === entry.status && (item.note ?? "") === (entry.note ?? ""));
+  if (index < 0) return "That update is already gone.";
+  updateOrderInStore({ ...order, history: (order.history ?? []).filter((_, i) => i !== index) });
+  return `Removed "${entry.status}" from the history.`;
+}
+
+export const scanKey = (scan: { at: string; status: string }) => `${scan.at}|${scan.status.trim().toLowerCase()}`;
+
+/** Desk removes a wrong courier scan; it stays hidden when tracking refreshes. */
+export function hideShipmentScan(shipmentId: string, scan: { at: string; status: string }) {
+  const shipment = getShipments().find((item) => item.id === shipmentId);
+  if (!shipment) return "Shipment not found.";
+  const key = scanKey(scan);
+  patchShipment(shipmentId, {
+    hiddenScans: [...new Set([...(shipment.hiddenScans ?? []), key])],
+    tracking: (shipment.tracking ?? []).filter((item) => scanKey(item) !== key),
+  });
+  return `Removed "${scan.status}". It won't come back when tracking refreshes. If the order status was wrong because of it, set the right one with Update status.`;
+}
+
 export function patchShipment(shipmentId: string, update: Partial<ShipmentRecord>) {
   const list = getShipments();
   const index = list.findIndex((item) => item.id === shipmentId);
