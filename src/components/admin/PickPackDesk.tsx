@@ -4,7 +4,7 @@ import { orderItemBatch } from "@/lib/product-data";
 import { useEffect, useRef, useState } from "react";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
-import { acceptPick, assignPicker, bypassPickStep, confirmPacked, maybeFinishPack, pickPackChecklist, pickPackGates, pickPackLeft, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
+import { acceptPick, assignPicker, cancelPicking, bypassPickStep, confirmPacked, maybeFinishPack, pickPackChecklist, pickPackGates, pickPackLeft, reassignPickPack, getAccounts, getOrder, patchOrder, printPackagingSlips, recordPickScan } from "@/lib/admin-store";
 import { uploadMediaFile } from "@/lib/media-client";
 import { getOrders } from "@/lib/store";
 import { getSession } from "@/lib/auth";
@@ -336,6 +336,22 @@ export function PickPackDesk({ mode = "all", cameraFirst = false }: { mode?: "pi
                       }}
                     >
                       {order.pick?.pickedAt ? (order.pick.packer ? "Reassign packer" : "Assign packer") : "Reassign picker"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (!window.confirm(`Cancel picking for order ${order.id}? The picker, packer and every scan are cleared.`)) return;
+                        try {
+                          setError("");
+                          setNote(cancelPicking(order.id));
+                          if (active === order.id) setActive("");
+                          setTick((value) => value + 1);
+                        } catch (problem) {
+                          setError(problem instanceof Error ? problem.message : "Could not cancel picking.");
+                        }
+                      }}
+                    >
+                      Cancel picking
                     </Button>
                   </div>
                 ) : null}

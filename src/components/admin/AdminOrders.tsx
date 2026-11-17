@@ -84,7 +84,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
 import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
 import { itemTotals } from "@/lib/order-item-totals";
-import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack, splitOrder, hideShipmentScan, removeHistoryEntry, setRefundCreditDate } from "@/lib/admin-store";
+import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack, cancelPicking, splitOrder, hideShipmentScan, removeHistoryEntry, setRefundCreditDate } from "@/lib/admin-store";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
 import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
@@ -410,6 +410,7 @@ export function OrdersDashboard() {
             if (!getStoredOrder(id)?.pick) assignPicker(id, pickStaff);
             reassignPickPack(id, pickStaff, "pack");
           })}>Assign packer</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => { if (window.confirm(`Cancel picking on ${selectedIds.length} order(s)? Pickers, packers and scans are cleared.`)) void bulk("Picking cancelled", (id) => { if (getStoredOrder(id)?.pick) cancelPicking(id); }); }}>Cancel picking</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ordered", (id) => setOrderStatus(id, "Ordered"))}>Confirm</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {

@@ -1052,6 +1052,16 @@ export function assignPicker(orderId: string, assignee: string) {
   updateOrderInStore(withHistory({ ...order, pick: { assignee: email, assignedAt: new Date().toISOString(), picked: {}, packScan: {} } }, "Picker assigned", email));
 }
 
+/** Admin stops pick & pack before packing: picker, packer and every scan are cleared (numbered copies are freed); the order can be assigned again. */
+export function cancelPicking(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order?.pick) throw new Error(`Order ${orderId} has no picker assigned.`);
+  if (order.pick.packedAt) throw new Error(`Order ${orderId} is already packed. Change its status instead.`);
+  const who = [order.pick.assignee, order.pick.packer].filter(Boolean).join(", ");
+  updateOrderInStore(withHistory({ ...order, pick: undefined }, order.status, `Picking cancelled by the desk${who ? ` (was ${who})` : ""}; scans cleared.`));
+  return `Picking cancelled for order ${orderId}. Assign a picker again when ready.`;
+}
+
 /** Hand picking (or packing, once picked) to the same or another staff member; their scanner rings. */
 export function reassignPickPack(orderId: string, assignee: string, stage: "pick" | "pack") {
   const order = getOrder(orderId);
