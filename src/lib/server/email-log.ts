@@ -19,10 +19,10 @@ function readLog(): EmailLogEntry[] {
   }
 }
 
-/** Order ids (12 digits) in the subject and text, so each order can list the emails about it. */
+/** Order ids (12 digits, split orders with -1/-2) in the subject and text, so each order can list the emails about it. */
 function refsIn(subject: string, html: string) {
   const text = `${subject} ${html.replace(/<[^>]+>/g, " ")}`;
-  return [...new Set(text.match(/(?<!\d)\d{12}(?!\d)/g) ?? [])].slice(0, 20);
+  return [...new Set(text.match(/(?<!\d)\d{12}(?:-\d{1,2})?(?![\d-])/g) ?? [])].slice(0, 20);
 }
 
 export function logEmail(mail: { to: string; subject: string; html: string }, result: { ok: boolean; provider?: string; error?: string }) {
