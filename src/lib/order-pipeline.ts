@@ -220,7 +220,7 @@ export function courierEventTitle(status: string, location?: string, courier = "
     return `Shipment arrived at courier facility${place}`;
   }
   if (/left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|departed|\bdispatched\b|\bdespatched\b|outscan|forwarded|in transit|shipment shipped|connected to|further connected|has left|added to connection/.test(value) && !/out for delivery/.test(value)) {
-    return `Shipment left Courier Facility${place}`;
+    return `Shipment left courier facility${place}`;
   }
   return status;
 }
@@ -486,16 +486,9 @@ export function buildTrackingStages(
       });
     }
   }
-  if (routingOnly && !hyperlocal) {
-    liveScans.forEach((scan, index) => {
-      if (classifyCourierScan(scan.status) === "shipped") packedEvents.push(scanEvent(scan, index, true, courierEventTitle(scan.status, scan.location, courier)));
-    });
-  }
   if (!hyperlocal) {
-    liveScans.forEach((scan, index) => {
-      if (!/pickup scheduled|pickup awaited|pickup pending|awaiting pickup|pickup request|out for pickup|ready for pickup/i.test(scan.status)) return;
-      packedEvents.push(scanEvent(scan, index, true, "Pickup scheduled"));
-    });
+    const scheduled = liveScans.findIndex((scan) => /pickup scheduled|pickup awaited|pickup pending|awaiting pickup|pickup request|out for pickup|ready for pickup/i.test(scan.status));
+    if (scheduled >= 0) packedEvents.push(scanEvent(liveScans[scheduled], scheduled, true, "Pickup scheduled"));
   }
   if (!hyperlocal && shipment?.pickupScheduledFor && !packedEvents.some((event) => event.title === "Pickup scheduled")) {
     packedEvents.push({
@@ -527,8 +520,11 @@ export function buildTrackingStages(
       const scan = hyperlocal ? item.scan : leftFrom(item.index);
       return scanEvent(scan, item.index, shippedReached, hyperlocal ? scan.status : courierEventTitle(scan.status, scan.location, courier));
     })
+    // Customers see only: picked up, arrived at / left a courier facility (every courier's raw scans stay in Admin).
+    .filter((event) => hyperlocal || event.title === PICKUP_TITLE || /^Shipment (arrived at|left) courier facility/.test(event.title))
     // Couriers often log one pickup as several scans ("Pickup From Seller", "Picked Up"); show it once.
-    .filter((event, index, list) => event.title !== PICKUP_TITLE || list.findIndex((other) => other.title === PICKUP_TITLE) === index);
+    .filter((event, index, list) => event.title !== PICKUP_TITLE || list.findIndex((other) => other.title === PICKUP_TITLE) === index)
+    .filter((event, index, list) => hyperlocal || index === 0 || list[index - 1].title !== event.title);
 
   if (shippedReached && shippedEvents.length === 0) {
     shippedEvents.push({
@@ -550,8 +546,9 @@ export function buildTrackingStages(
             ...scanEvent(item.scan, item.index, outReached, "Delivery attempt unsuccessful"),
             detail: `${cleanScanText(item.scan.status)} · the courier will reattempt delivery.`,
           }
-        : scanEvent(item.scan, item.index, outReached)
-    );
+        : scanEvent(item.scan, item.index, outReached, hyperlocal ? item.scan.status : "Out for delivery")
+    )
+    .filter((event, index, list) => hyperlocal || index === 0 || list[index - 1].title !== event.title);
 
   if (hyperlocal && outReached && outEvents.length === 0) {
     outEvents.push({
@@ -566,7 +563,8 @@ export function buildTrackingStages(
   const deliveredEvents = liveScans
     .map((scan, index) => ({ scan, mapped: classifyCourierScan(scan.status), index }))
     .filter((item) => item.mapped === "delivered")
-    .map((item) => scanEvent(item.scan, item.index, deliveredReached));
+    .slice(0, 1)
+    .map((item) => scanEvent(item.scan, item.index, deliveredReached, "Delivered"));
 
   if (deliveredReached && deliveredEvents.length === 0) {
     const markedAt = order.history?.find((item) => item.status === "Delivered")?.at || fromScans.at || order.date;
