@@ -129,6 +129,8 @@ function pickStage(order: Order) {
 }
 
 const CLOSED_OR_SENT: Order["status"][] = ["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"];
+/** The Paid chip lists paid orders still to be packed or booked; To Ship and later have their own chips. */
+const PAID_CHIP_HIDES: Order["status"][] = [...CLOSED_OR_SENT, "Ready to Ship", "To Ship"];
 const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
   "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) },
@@ -214,7 +216,7 @@ export function OrdersDashboard() {
   const filtered = (statusFilter === "split" ? splitParents : statusFilter === "Everything" || query.trim() ? allOrders : orders)
     .filter((order) =>
       statusFilter === "All"
-        ? !CLOSED_OR_SENT.includes(order.status) || Boolean(query.trim()) || paymentFilter !== "All"
+        ? Boolean(query.trim()) || (paymentFilter === "Paid" ? !PAID_CHIP_HIDES.includes(order.status) : !CLOSED_OR_SENT.includes(order.status) || paymentFilter !== "All")
         : statusFilter === "Everything" || statusFilter === "split" || (STATUS_GROUPS[statusFilter]?.test(order) ?? order.status === statusFilter)
     )
     .filter((order) => modeFilter === "All" || order.deliveryMode === modeFilter)
@@ -500,7 +502,7 @@ export function OrdersDashboard() {
             <div className="mb-2 flex flex-wrap gap-2">
               {([
                 [`Confirmed orders (${orders.filter((order) => !CLOSED_OR_SENT.includes(order.status)).length})`, () => { setStatusFilter("All"); setPaymentFilter("All"); }, statusFilter === "All" && paymentFilter === "All"],
-                ["Paid", () => { setStatusFilter("All"); setPaymentFilter("Paid"); }, paymentFilter === "Paid"],
+                [`Paid (${orders.filter((order) => order.paymentStatus === "Paid" && !PAID_CHIP_HIDES.includes(order.status)).length})`, () => { setStatusFilter("All"); setPaymentFilter("Paid"); }, paymentFilter === "Paid"],
                 ...ALL_STATUSES.filter((value) => orders.some((order) => order.status === value)).map((value) => [
                   `${orderStatusText(value)} (${orders.filter((order) => order.status === value).length})`,
                   () => { setPaymentFilter("All"); setStatusFilter(value); },
