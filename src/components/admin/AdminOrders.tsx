@@ -2556,7 +2556,16 @@ function ChargesBreakdown({ order }: { order: Order }) {
   const extras = order.extraCharges ?? [];
   const courierExtras = extras.filter((row) => row.kind === "shipping").reduce((sum, row) => sum + row.amount, 0);
   // Older quotes saved only the courier price: the rest of the shipping charge is packing.
-  const packing = order.packing ?? quote?.packing ?? (quote && (order.shipping ?? 0) - courierExtras > quote.charged ? Math.round(((order.shipping ?? 0) - courierExtras - quote.charged) * 100) / 100 : 0);
+  const shippingBase = Math.max(0, (order.shipping ?? 0) - courierExtras);
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const packing =
+    order.packing ??
+    quote?.packing ??
+    (quote && shippingBase > quote.charged
+      ? Math.round((shippingBase - quote.charged) * 100) / 100
+      : order.deliveryMode === "delivery" && shippingBase > 0
+        ? Math.min(shippingBase, packingChargeFor(units))
+        : 0);
   const courier = Math.max(0, Math.round(((order.shipping ?? 0) - courierExtras - packing) * 100) / 100);
   const booked = getShipments().filter((item) => item.orderId === order.id && item.note !== "Cancelled");
   const paid = Math.max(0, Math.round((order.total - remainingDue(order)) * 100) / 100);
@@ -2567,12 +2576,16 @@ function ChargesBreakdown({ order }: { order: Order }) {
     ...(order.gst ? [["GST", order.gst] as [string, number]] : []),
     ...(order.platformFee ? [["Platform fee (once per order)", order.platformFee] as [string, number]] : []),
     ...(packing ? [["Packing", packing] as [string, number]] : []),
-    ...(courier || order.deliveryMode === "delivery" ? [[order.shippingDue || plan?.shippingDue ? "Courier (not charged yet)" : "Courier", courier] as [string, number]] : []),
+    ...(courier || order.deliveryMode === "delivery"
+      ? quote && quote.highest > 0 && courier > quote.highest
+        ? ([[`Courier: aggregator rate${quote.courierName ? ` (${quote.courierName})` : ""}`, quote.highest], ["Courier markup (ours)", Math.round((courier - quote.highest) * 100) / 100]] as [string, number][])
+        : [[order.shippingDue || plan?.shippingDue ? "Courier (not charged yet)" : "Courier", courier] as [string, number]]
+      : []),
     ...extras.map((row) => [`Extra: ${row.reason}`, row.amount, row.by] as [string, number, string?]),
   ];
   return (
     <div className="mt-4">
-      <Section title="Charges breakdown">
+      <Section title="Charges breakdown (Admin only)">
         <table className="w-full text-xs">
           <tbody>
             {rows.map(([label, amount, by], index) => (
