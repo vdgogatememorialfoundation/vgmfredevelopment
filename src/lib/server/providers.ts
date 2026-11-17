@@ -690,10 +690,10 @@ async function nimbusToken(input: Json) {
 }
 
 const shiprocketOrigins = new Map<string, { pins: string[]; at: number }>();
-const shiprocketPickupRows = new Map<string, { rows: { nickname: string; pincode: string; active: boolean }[]; at: number }>();
+const shiprocketPickupRows = new Map<string, { rows: { nickname: string; pincode: string; active: boolean; primary: boolean }[]; at: number }>();
 
 /** The Shiprocket pickup location to use: Settings → Shiprocket → Pickup location, else the default pickup nickname. Undefined when neither is on the panel. */
-async function shiprocketPickupLocation(token: string, input: Json, fallbackNickname = "") {
+async function shiprocketPickupLocation(token: string, input: Json, fallbackNickname = "", pincode = "") {
   let cached = shiprocketPickupRows.get(token);
   if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
     const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", { headers: { authorization: `Bearer ${token}` } });
@@ -701,14 +701,24 @@ async function shiprocketPickupLocation(token: string, input: Json, fallbackNick
       nickname: String(row.pickup_location ?? "").trim(),
       pincode: String(row.pin_code ?? row.pincode ?? ""),
       active: Number(row.status ?? 1) === 1,
+      primary: Number(row.is_primary_location ?? 0) === 1,
     }));
     cached = { rows, at: Date.now() };
     shiprocketPickupRows.set(token, cached);
   }
   const rows = cached.rows;
   const find = (name: string) => (name.trim() ? rows.find((row) => row.nickname.toLowerCase() === name.trim().toLowerCase()) : undefined);
-  return find(String(input.pickupLocation ?? "")) ?? find(fallbackNickname);
+  const named = find(String(input.pickupLocation ?? "")) ?? find(fallbackNickname);
+  if (named) return named;
+  // Name not on the panel: the active location at our pickup PIN (primary first), else the only active one.
+  const active = rows.filter((row) => row.active).sort((a, b) => Number(b.primary) - Number(a.primary));
+  const pin = pincode.trim();
+  return (pin ? active.find((row) => row.pincode === pin) : undefined) ?? (active.length === 1 ? active[0] : undefined);
 }
+
+/** Pickup names saved on the Shiprocket panel, for error messages. */
+const shiprocketPickupNames = (token: string) =>
+  (shiprocketPickupRows.get(token)?.rows ?? []).filter((row) => row.active).map((row) => row.nickname).filter(Boolean).join(", ");
 
 /** Rates must be asked from a pincode Shiprocket has as an active pickup address, or it returns far fewer couriers. */
 async function shiprocketOrigin(token: string, wanted: string) {
@@ -869,10 +879,11 @@ export async function shiprocketBook(input: Json, order: BookInput): Promise<Boo
   const token = await shiprocketToken(input);
   if (!token) return null;
   const auth = { authorization: `Bearer ${token}` };
-  const location = await shiprocketPickupLocation(token, input, order.pickup.nickname);
+  const location = await shiprocketPickupLocation(token, input, order.pickup.nickname, order.pickup.pincode);
   if (!location) {
     const asked = String(input.pickupLocation ?? "").trim() || order.pickup.nickname;
-    throw new ProviderError(`Shiprocket has no pickup location named "${asked}". Choose one in Settings → Shipping APIs → Shiprocket → Pickup location. Nothing was booked.`, 400);
+    const names = shiprocketPickupNames(token);
+    throw new ProviderError(`Shiprocket has no pickup location named "${asked}"${names ? ` (saved on Shiprocket: ${names})` : ""}. Choose one in Settings → Shipping APIs → Shiprocket → Pickup location. Nothing was booked.`, 400);
   }
   const [firstName, ...rest] = order.customer.name.split(" ");
   const created = await call("https://apiv2.shiprocket.in/v1/external/orders/create/adhoc", {

@@ -1387,7 +1387,52 @@ export function ShippingApisDesk() {
             <Text label="API user email" value={value.shiprocket.email} onChange={(email) => set({ shiprocket: { ...value.shiprocket, email } })} />
             <Secret label="API user password" value={value.shiprocket.password} onChange={(password) => set({ shiprocket: { ...value.shiprocket, password } })} />
             <Text label="Channel ID (optional)" value={value.shiprocket.channelId} onChange={(channelId) => set({ shiprocket: { ...value.shiprocket, channelId } })} />
-            <Text label="Pickup location (nickname on Shiprocket)" value={value.shiprocket.pickupLocation ?? ""} onChange={(pickupLocation) => set({ shiprocket: { ...value.shiprocket, pickupLocation } })} hint={`Shiprocket quotes and bookings use this address. Leave blank to use the default pickup nickname${pickup.nickname ? ` (${pickup.nickname})` : ""}. Use List locations below to see the names.`} />
+            <div className="rounded-xl border border-border bg-slate-50 p-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-text-primary">Shiprocket pickup address</p>
+                <button
+                  type="button"
+                  className={ghost}
+                  disabled={busy === "shiprocket-pickups"}
+                  onClick={async () => {
+                    save();
+                    setBusy("shiprocket-pickups");
+                    const result = await listPickupLocations().catch((error: Error) => ({ ok: false, error: error.message, locations: [] as PickupLocation[] }));
+                    setBusy("");
+                    if (!result.ok) {
+                      setNote(`Shiprocket pickup list: ${result.error}`);
+                      return;
+                    }
+                    setPickupLocations(result.locations ?? []);
+                    setNote(result.locations?.length ? `Shiprocket has ${result.locations.length} pickup address(es). Choose one under Shiprocket.` : "Shiprocket returned no pickup locations.");
+                  }}
+                >
+                  {busy === "shiprocket-pickups" ? "Loading…" : "Load from Shiprocket"}
+                </button>
+              </div>
+              {pickupLocations.length ? (
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+                  value={value.shiprocket.pickupLocation ?? ""}
+                  onChange={(event) => set({ shiprocket: { ...value.shiprocket, pickupLocation: event.target.value } })}
+                >
+                  <option value="">Default pickup nickname{pickup.nickname ? ` (${pickup.nickname})` : ""}</option>
+                  {value.shiprocket.pickupLocation && !pickupLocations.some((location) => location.nickname === value.shiprocket.pickupLocation) ? (
+                    <option value={value.shiprocket.pickupLocation}>{value.shiprocket.pickupLocation} (not on Shiprocket)</option>
+                  ) : null}
+                  {pickupLocations.map((location) => (
+                    <option key={location.nickname} value={location.nickname}>
+                      {[location.nickname, location.address, location.city, location.pincode].filter(Boolean).join(" · ")}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Text label="Pickup location (nickname on Shiprocket)" value={value.shiprocket.pickupLocation ?? ""} onChange={(pickupLocation) => set({ shiprocket: { ...value.shiprocket, pickupLocation } })} />
+              )}
+              <p className="text-xs text-slate-500">
+                Only Shiprocket uses this; the other aggregators keep their own pickup addresses. Click Load from Shiprocket and choose the address saved on your Shiprocket panel, then Save. If the name isn&apos;t found on Shiprocket, bookings use the Shiprocket address at your pickup PIN.
+              </p>
+            </div>
             <button type="button" className={primary} disabled={busy === "shiprocket"} onClick={() => test("shiprocket")}>{busy === "shiprocket" ? "Checking live…" : "Save & test"}</button>
             <p className="text-xs text-slate-500">
               Webhook URL for Shiprocket Settings → API → Webhooks:{" "}
