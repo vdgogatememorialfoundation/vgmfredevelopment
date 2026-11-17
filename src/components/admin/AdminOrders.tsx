@@ -41,7 +41,7 @@ import {
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, recordReturnInspection, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
 import { currentProductTitle, getLiveBooks, orderItemBatch } from "@/lib/product-data";
-import { getIntegrations, getOrderSettings, orderStatusText, preorderLate, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
+import { getIntegrations, getOrderSettings, orderStatusText, packingChargeFor, preorderLate, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
   attachDirectTracking,
@@ -2519,7 +2519,20 @@ function SplitShipments({
   );
   const [busy, setBusy] = useState(0);
   const [error, setError] = useState("");
+  const [courierFee, setCourierFee] = useState<Record<number, string>>({});
   if (units < 2) return null;
+  const chargedFor = (part: number) => order.extraCharges?.find((charge) => charge.reason.startsWith(`Shipment ${part} `));
+  const packFor = (part: 1 | 2) => (part === 1 && (order.packing ?? 0) > 0 ? 0 : packingChargeFor(itemsFor(part).reduce((sum, row) => sum + row.quantity, 0)));
+  const charge = (part: 1 | 2) => {
+    const courier = Math.max(0, Math.round(Number(courierFee[part] ?? rate?.rate ?? 0)));
+    const pack = packFor(part);
+    if (!(courier + pack > 0)) {
+      setError("Enter the courier charge for this shipment.");
+      return;
+    }
+    const text = addExtraCharge(order.id, { amount: courier + pack, reason: `Shipment ${part} of 2: courier ₹${courier} + packing ₹${pack}`, kind: "shipping" });
+    onDone(`Shipment ${part}: ${text}`);
+  };
   const itemsFor = (part: 1 | 2) =>
     order.items
       .map((item) => ({ bookId: item.bookId, quantity: part === 2 ? second[item.bookId] ?? 0 : item.quantity - (second[item.bookId] ?? 0) }))
@@ -2563,6 +2576,23 @@ function SplitShipments({
               </span>
             </div>
           ))}
+          <div className="space-y-1 text-xs">
+            {([1, 2] as const).map((part) => {
+              const charged = chargedFor(part);
+              if (parts.some((item) => item.part === part)) return null;
+              return charged ? (
+                <p key={part} className="text-emerald-800">Shipment {part} charge added: ₹{charged.amount} ({charged.reason.replace(/^Shipment \d+ of \d+: /, "")})</p>
+              ) : (
+                <div key={part} className="flex flex-wrap items-center gap-2">
+                  <span>Shipment {part} charge: courier ₹</span>
+                  <input type="number" min={0} className="w-20 rounded-lg border border-border px-2 py-1" placeholder={rate ? String(rate.rate) : "0"} value={courierFee[part] ?? ""} onChange={(event) => setCourierFee((current) => ({ ...current, [part]: event.target.value }))} aria-label={`Courier charge for shipment ${part}`} />
+                  <span>+ packing ₹{packFor(part)}</span>
+                  <Button variant="outline" onClick={() => charge(part)}>Add as balance due</Button>
+                </div>
+              );
+            })}
+            <p className="text-text-muted">Each shipment is charged on its own: add its courier + packing charge, send the payment link from Payment, and book it once paid.</p>
+          </div>
           <div className="flex flex-wrap gap-2">
             {([1, 2] as const).map((part) => {
               const done = parts.find((item) => item.part === part);

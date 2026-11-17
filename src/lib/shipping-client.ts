@@ -351,6 +351,10 @@ async function bookShipmentOnce(
     (shipment) => shipment.orderId === order.id && shipment.note !== "Cancelled" && (!split || shipment.part === split.part)
   );
   if (existing) return { shipment: existing, live: Boolean(existing.live), message: `Already booked with ${existing.courier} (${existing.awb}).` };
+  // Each later shipment of a split order carries its own courier + packing charge, paid before it is booked.
+  if (split && split.part >= 2 && !order.extraCharges?.some((charge) => charge.reason.startsWith(`Shipment ${split.part} `))) {
+    throw new Error(`Add shipment ${split.part}'s courier + packing charge in the Split order box and send the payment link; book it once paid.`);
+  }
   const unpaidPlan = order.preorderPayment;
   if (unpaidPlan && !unpaidPlan.balancePaidAt && (unpaidPlan.shippingDue || unpaidPlan.balance > 0)) {
     throw new Error("The pre-order balance is not paid yet. Click Charge highest quote & send balance link, then book the courier once it is paid.");
