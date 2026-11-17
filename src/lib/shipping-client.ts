@@ -272,6 +272,7 @@ function bookingPayload(order: Order, choice: CourierRate, settings: Integration
     customer: {
       name: address?.fullName ?? "Customer",
       phone: address?.phone ?? "",
+      altPhone: address?.altPhone,
       email: address?.email,
       line1: address?.line1 ?? "",
       line2: address?.landmark,

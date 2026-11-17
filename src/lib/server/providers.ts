@@ -37,7 +37,11 @@ async function call(url: string, init: RequestInit & { json?: unknown } = {}) {
     /* plain-text reply */
   }
   if (!response.ok) {
+    const detail = (data as Json)?.description;
     const message =
+      ((data as Json)?.message && typeof detail === "string" && detail && detail !== (data as Json).message
+        ? `${(data as Json).message}: ${detail}`
+        : undefined) ??
       (data as Json)?.message ??
       ((data as Json)?.error as Json)?.message ??
       ((data as Json)?.error as Json)?.description ??
@@ -841,7 +845,7 @@ type BookInput = {
   length: number;
   breadth: number;
   height: number;
-  customer: { name: string; phone: string; email?: string; line1: string; line2?: string; city: string; state: string; pincode: string };
+  customer: { name: string; phone: string; altPhone?: string; email?: string; line1: string; line2?: string; city: string; state: string; pincode: string };
   pickup: { nickname: string; contactName: string; phone: string; email: string; line1: string; line2: string; city: string; state: string; pincode: string };
   items: { name: string; sku: string; units: number; price: number }[];
 };
@@ -1853,12 +1857,43 @@ export async function ithinkTrack(input: Json, awb: string) {
   };
 }
 
+/** First balance-like number in a wallet reply, whether it is an object, an array of rows or nested ("1,000.00" strings too). */
+function walletAmount(value: unknown, depth = 0): number | undefined {
+  if (depth > 4 || value == null) return undefined;
+  if (Array.isArray(value)) {
+    for (const row of value) {
+      const found = walletAmount(row, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object") return undefined;
+  const entries = Object.entries(value as Json);
+  const keys = [/^(wallet_)?balance(_amount)?$/i, /balance/i, /credit/i, /wallet/i, /amount/i];
+  for (const pattern of keys) {
+    for (const [key, raw] of entries) {
+      if (!pattern.test(key) || (raw !== null && typeof raw === "object")) continue;
+      const amount = Number(String(raw ?? "").replace(/[^\d.-]/g, ""));
+      if (String(raw ?? "").trim() && Number.isFinite(amount)) return amount;
+    }
+  }
+  for (const [, raw] of entries) {
+    if (raw && typeof raw === "object") {
+      const found = walletAmount(raw, depth + 1);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
 export async function ithinkWallet(input: Json) {
   const auth = ithinkAuth(input);
   if (!auth) return null;
   const data = await ithinkPost("wallet/balance.json", { ...auth });
-  const nested = (data.data as Json) ?? data;
-  const balance = Number(nested.balance ?? nested.wallet_balance ?? nested.amount ?? nested.credit ?? 0);
+  const balance = walletAmount(data.data ?? data);
+  if (balance === undefined) {
+    throw new ProviderError(`iThink sent no wallet balance (reply: ${JSON.stringify(data).slice(0, 200)}).`);
+  }
   return { provider: "ithink", balance, currency: "INR" };
 }
 
@@ -2424,30 +2459,45 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
   const from = await swiftPickup(input, token);
   const alias = from.alias;
   const pickup = alias ? { name: alias } : place({ ...order.pickup, name: order.pickup.contactName });
-  const value = Math.max(1, Math.round(order.total));
+  // Declared goods value (books only, not courier/fees), matching the item lines.
+  const goods = order.items.reduce((sum, item) => sum + item.price * item.units, 0) || order.subtotal || order.total;
+  const value = Math.max(1, Math.round(goods));
   const units = order.items.reduce((sum, item) => sum + item.units, 0) || 1;
+  const phone = goswiftPhone(order.customer.phone);
+  if (!phone || phone < 1000000000) {
+    throw new ProviderError(`The customer's phone "${order.customer.phone}" isn't a 10-digit mobile number. Fix it in the order's address, then book again.`);
+  }
+  if (!/^\d{6}$/.test(String(order.customer.pincode).trim())) {
+    throw new ProviderError(`The delivery PIN "${order.customer.pincode}" isn't 6 digits. Fix it in the order's address, then book again.`);
+  }
+  const altPhone = goswiftPhone(order.customer.altPhone ?? "");
+  const day = new Date(order.orderDate);
+  const invoiceDate = (Number.isNaN(day.getTime()) ? new Date() : day).toISOString().slice(0, 10);
+  const category = String(input.category ?? "").trim() || "Books";
   const data = await call(`${swiftBase(input)}/api/v1/package/create`, {
     method: "PUT",
     headers: goswiftAuth(token),
     json: {
       seller_name: order.pickup.contactName,
       seller_address: (alias && from.address) || [order.pickup.line1, order.pickup.line2, order.pickup.city, order.pickup.state, order.pickup.pincode].filter(Boolean).join(", "),
-      seller_gst_tin: "",
+      seller_gst_tin: String(input.gstin ?? "").trim(),
       seller_gst_amount: 0,
       consignee_gst_amount: 0,
       integrated_gst_amount: 0,
       tax_value: 0,
       order_number: order.orderId,
       invoice_number: order.orderId,
-      invoice_date: order.orderDate.slice(0, 10),
+      invoice_date: invoiceDate,
       consignee_name: order.customer.name,
+      consignee_alternate_phone: String(altPhone && altPhone >= 1000000000 ? altPhone : phone),
       payment_mode: order.cod ? "COD" : "Prepaid",
-      category_of_goods: String(input.category ?? "").trim() || "Books",
+      category_of_goods: category,
+      ...(/book/i.test(category) ? { hsn_code: "4901" } : {}),
       products_desc: order.items.map((item) => `${item.name} x${item.units}`).join(", ").slice(0, 10000),
       total_amount: value,
       taxable_amount: value,
       commodity_value: String(value),
-      cod_amount: order.cod ? value : 0,
+      cod_amount: order.cod ? Math.min(49999, Math.max(1, Math.round(order.total))) : 0,
       return_reason: "",
       quantity: units,
       weight: Math.max(1, Math.round(order.weightKg * 1000)),
@@ -2457,7 +2507,7 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
       drop_location: place(order.customer),
       pickup_location: pickup,
       return_location: pickup,
-      service: String(input.service ?? "").trim() || "SURFACE",
+      service: String(input.service ?? "").trim().toUpperCase() === "EXPRESS" ? "EXPRESS" : "SURFACE",
       items: order.items.map((item) => ({ product_name: item.name, sku: item.sku, quantity: item.units, taxable_value: Math.max(1, Math.round(item.price)) })),
     },
   });
