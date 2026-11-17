@@ -2287,7 +2287,10 @@ async function swiftPickup(input: Json, token: string) {
   const rows = await call(`${swiftBase(input)}/api/v2/addresses`, { headers: goswiftAuth(token) })
     .then((data) => (Array.isArray(data) ? (data as Json[]) : []))
     .catch(() => [] as Json[]);
-  const row = rows.find((item) => String(item.alias ?? "").trim().toLowerCase() === wanted.toLowerCase()) ?? (wanted ? undefined : rows[0]);
+  // The alias, else an address whose PIN is in the saved text (a full address typed instead of the alias), else the first one.
+  const row =
+    rows.find((item) => String(item.alias ?? "").trim().toLowerCase() === wanted.toLowerCase()) ??
+    (wanted ? rows.find((item) => String(item.pincode ?? "").length === 6 && wanted.includes(String(item.pincode))) : rows[0]);
   if (wanted && !row && rows.length) {
     throw new Error(`No pickup address named "${wanted}" on ${isEkart(input) ? "Ekart Elite" : "GoSwift"} (saved: ${rows.map((item) => String(item.alias ?? "")).filter(Boolean).join(", ")}). Nothing was sent to the courier.`);
   }
@@ -2374,6 +2377,23 @@ export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut
     })
     .filter((row) => row.rate > 0);
   if (priced.length) return priced;
+  // No rate card for courier groups on the account: the pricing estimate is still the live charge for this parcel.
+  const estimated = Number(estimate.total) || Number(estimate.shippingCharge) || 0;
+  if (estimated > 0) {
+    return [
+      {
+        provider: "goswift",
+        courierId: "goswift",
+        courierName: `${swiftName(input)} ${shipment.serviceType === "EXPRESS" ? "Express" : "Surface"}`,
+        rate: Math.round(estimated * 100) / 100,
+        chargeWeightKg: billedKg,
+        etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
+        live: true as const,
+        cod: details.cod !== false,
+        pickupFrom,
+      },
+    ];
+  }
   return [
     {
       provider: "goswift",
