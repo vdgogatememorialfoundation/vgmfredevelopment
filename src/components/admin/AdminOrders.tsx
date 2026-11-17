@@ -1895,14 +1895,17 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                         disabled={busy === "preorder-courier" || !quote}
                         onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, undefined, undefined, quote?.rates ?? []))}
                       >
-                        {quote ? "Charge highest quote & send balance link" : "Click Show couriers & rates first"}
+                        {!quote ? "Click Show couriers & rates first" : order.preorderPayment.link ? "Revise quote: charge highest & send new link" : "Charge highest quote & send balance link"}
                       </Button>
                       <div className="flex items-center gap-2">
                         <TextInput className="w-32" inputMode="decimal" placeholder="Charge ₹" value={typedCharge} onChange={(event) => setTypedCharge(event.target.value)} />
                         <Button variant="outline" disabled={busy === "preorder-courier" || typedCharge.trim() === ""} onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, undefined, Number(typedCharge)))}>
-                          Add charge & send link
+                          {order.preorderPayment.link ? "Revise charge & send new link" : "Add charge & send link"}
                         </Button>
                       </div>
+                      {order.preorderPayment.link && (
+                        <p className="w-full text-xs text-text-muted">A balance link was already sent ({new Date(order.preorderPayment.link.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}). Revising cancels that link, so only the new one can be paid. If the customer already paid it, the balance is marked paid instead.</p>
+                      )}
                       <p className="w-full text-xs text-text-muted">Pre-order: no courier is picked now. The customer is charged the highest live quote from the aggregators ticked above for this package (+ markup, up to the maximum in Settings → Orders), plus packing. Once the balance is paid, book any courier within that quote. Nothing is booked automatically.</p>
                     </>
                   ) : (

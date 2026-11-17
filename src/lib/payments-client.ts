@@ -432,6 +432,22 @@ export async function addPreorderShipping(orderId: string) {
 }
 
 /** Sends the pre-order customer a link for the remaining balance. */
+/** Revised quote: cancels the balance link already sent, so only the new link can be paid. Stops if the customer already paid it. */
+export async function retireBalanceLink(orderId: string) {
+  const order = getOrder(orderId);
+  const previous = order?.preorderPayment?.link;
+  if (!order || !previous) return false;
+  if (previous.provider === "razorpay" && previous.id) {
+    const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: previous.id });
+    if (current.ok && current.status === "paid") {
+      recordBalancePayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+      throw new Error("The customer has already paid the earlier link. The balance is now marked paid, so the quote can't be revised.");
+    }
+    await api({ action: "link-cancel", linkId: previous.id }).catch(() => undefined);
+  }
+  return true;
+}
+
 export async function createBalancePaymentLink(orderId: string) {
   const order = getOrder(orderId);
   if (order?.preorderPayment?.shippingDue && !order.preorderPayment.balancePaidAt) {

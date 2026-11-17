@@ -500,6 +500,9 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
   if (order.deliveryMode !== "delivery") throw new Error("Store pickup orders have no courier charge.");
   const valid = allRates.filter((rate) => !rate.estimate && rate.rate > 0 && rate.provider !== "local");
   if (!choice && !valid.length && !(typedFee !== undefined && Number.isFinite(typedFee) && typedFee >= 0)) throw new Error("No live courier quote for this package. Type the courier charge.");
+  const { retireBalanceLink } = await import("@/lib/payments-client");
+  const revised = await retireBalanceLink(order.id);
+  const note = revised ? " (revised quote; the earlier balance link is cancelled)" : "";
   const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
   const settings = getOrderSettings();
   if (!choice && valid.length && typedFee === undefined) {
@@ -529,14 +532,14 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
           source: "highest",
         },
         shippingDue: undefined,
-        preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
+        preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false },
       },
-      `Courier charge ₹${fee} from the highest of ${valid.length} courier quotes added to the pre-order balance`
+      `Courier charge ₹${fee} from the highest of ${valid.length} courier quotes added to the pre-order balance${note}`
     );
     if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return `Courier charge ₹${fee} added. Nothing is left to pay.`;
     const { createBalancePaymentLink } = await import("@/lib/payments-client");
     const link = await createBalancePaymentLink(order.id);
-    return `Courier charge ₹${fee} (highest of ${valid.length} quotes) added. Balance payment link sent: ${link.url}`;
+    return `Courier charge ₹${fee} (highest of ${valid.length} quotes) added. ${revised ? "Earlier link cancelled. New balance" : "Balance"} payment link sent: ${link.url}`;
   }
   // Same rule as checkout: courier markup, and the highest rate among the couriers when "charge highest" is on.
   const charged = choice
@@ -567,14 +570,14 @@ export async function selectPreorderCourier(orderId: string, choice?: CourierRat
         source: choice ? "chosen" : "typed",
       },
       shippingDue: undefined,
-        preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false, link: undefined },
+        preorderPayment: { ...plan, balance: round(plan.balance - previous + fee), shipping: fee, shippingDue: false },
     },
-    `Courier ${choice ? `${choice.courierName} ` : ""}selected · charge ₹${fee} added to the pre-order balance`
+    `Courier ${choice ? `${choice.courierName} ` : ""}selected · charge ₹${fee} added to the pre-order balance${note}`
   );
   if ((getOrder(order.id)?.preorderPayment?.balance ?? 0) <= 0) return `Courier charge ₹${fee} added. Nothing is left to pay.`;
   const { createBalancePaymentLink } = await import("@/lib/payments-client");
   const link = await createBalancePaymentLink(order.id);
-  return `Courier charge ₹${fee} added. Balance payment link sent: ${link.url}`;
+  return `Courier charge ₹${fee} added. ${revised ? "Earlier link cancelled. New balance" : "Balance"} payment link sent: ${link.url}`;
 }
 
 /** Pre-order courier charge: added to the balance once a courier is booked, then the customer gets a link for the rest. */
