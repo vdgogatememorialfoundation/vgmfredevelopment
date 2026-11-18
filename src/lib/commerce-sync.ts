@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { orderActivityAt, shipmentActivityAt } from "@/lib/commerce-stamp";
+import { orderActivityAt, shipmentActivityAt, uniqueHistory } from "@/lib/commerce-stamp";
 import { getSettings, getShipments, getStoreCreditLedger, pushStoreCredit, rememberWallet, type StoreCreditEntry } from "@/lib/admin-store";
 import { getSession, isPortalRole } from "@/lib/auth";
 import { getCart, getOrders, getWishlist, withAccountEmail } from "@/lib/store";
@@ -64,7 +64,15 @@ function rememberOrders(remote: Order[]) {
   const byId = new Map(getOrders().map((order) => [order.id, order]));
   let changed = false;
   for (const order of remote) {
-    const prev = byId.get(order.id);
+    let prev = byId.get(order.id);
+    if (prev?.history?.length) {
+      const history = uniqueHistory(prev.history);
+      if (history.length < prev.history.length) {
+        prev = { ...prev, history };
+        byId.set(order.id, prev);
+        changed = true;
+      }
+    }
     if (prev) alertOrderChange(prev, order);
     if (!prev || orderActivityAt(order) >= orderActivityAt(prev)) {
       byId.set(order.id, prev ? { ...prev, ...order } : order);

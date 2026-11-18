@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
-import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
+import { orderActivityAt, orderBelongsTo, phonesMatch, uniqueHistory, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
 import { notifyOrderStage } from "@/lib/server/order-stage-mail";
 import { vgmfTxnId } from "@/lib/transactions";
@@ -108,18 +108,6 @@ export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {})
   writeAll(orders);
   void notifyOrderStage(prev, orders[0], { statusOnly: options.quiet }).catch(() => undefined);
   return orders[0];
-}
-
-/** An open page that re-runs a check must not stack copies of the same entry (same status and note). */
-function uniqueHistory(history: NonNullable<Order["history"]>) {
-  const seen = new Set<string>();
-  return history.filter((entry) => {
-    if (!entry?.note) return true;
-    const key = `${entry.status}\u0000${entry.note}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 function deletedFile() {
