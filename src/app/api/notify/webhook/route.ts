@@ -23,12 +23,31 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ ok: false }, { status: 403 });
 }
 
+/** A Meta app has one callback URL; the seminar portal shares the app, so it gets a copy of every event. */
+const FORWARD_TO = (process.env.META_WA_FORWARD_URLS ?? "https://seminar.vaidyagogate.org/api/webhooks/whatsapp")
+  .split(",")
+  .map((url) => url.trim())
+  .filter(Boolean);
+
+function forwardWebhook(raw: string, signature: string | null) {
+  for (const url of FORWARD_TO) {
+    void fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(signature ? { "x-hub-signature-256": signature } : {}) },
+      body: raw,
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => undefined);
+  }
+}
+
 export async function POST(request: NextRequest) {
   const raw = await request.text();
   const secret = metaAppSecret();
-  if (!metaSignatureOk(raw, request.headers.get("x-hub-signature-256"), secret)) {
+  const signature = request.headers.get("x-hub-signature-256");
+  if (!metaSignatureOk(raw, signature, secret)) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
+  forwardWebhook(raw, signature);
   let body: Record<string, unknown> = {};
   try {
     body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
