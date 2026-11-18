@@ -1089,6 +1089,9 @@ function labelSheetFrom(source: Json | null | undefined): LabelSheet {
     destination: labelText(bag, ["destination", "destination_hub", "destination_code"]),
     courierName: labelText(bag, ["courier_name", "courier", "courierName"]),
     awb: labelText(bag, ["awb", "awb_code", "awb_number", "awbNumber"]),
+    invoiceNo: labelText(bag, ["invoice_no", "invoice_number", "invoiceNumber", "invoice"]),
+    invoiceDate: labelText(bag, ["invoice_date", "invoiceDate"]).slice(0, 10),
+    ewaybill: labelText(bag, ["eway_bill_number", "ewaybill_number", "ewaybill", "ewbn", "eway_bill"]).replace(/^-$/, ""),
     serviceMode: serviceModeOf(
       labelText(bag, ["mode", "shipping_mode", "service_type", "serviceType", "service_mode", "transport_mode", "delivery_mode", "courier_type", "product_type"]),
       labelText(bag, ["courier_name", "courier", "courierName"]),
