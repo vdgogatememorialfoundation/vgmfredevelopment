@@ -2164,13 +2164,14 @@ function printDoc(title: string, html: string, page: string, autoPrint: boolean)
     .agg .pin { font-size: 14px; letter-spacing: 0.04em; }
     .agg .courier { font-size: 14px; }
     .agg .routing { font-size: 18px; letter-spacing: 0.06em; }
-    .agg .pay-mode { display: inline-block; font-size: 20px; font-weight: 900; letter-spacing: 0.1em; color: #000; border: 2px solid #000; border-radius: 4px; padding: 2px 10px; margin: 2px 0 3px; line-height: 1.2; }
+    .agg .pay-mode { display: inline-block; white-space: nowrap; font-size: 22px; font-weight: 900; letter-spacing: 0.04em; color: #000; border: 2.5px solid #000; border-radius: 4px; padding: 4px 14px; line-height: 1.15; box-sizing: border-box; flex: none; }
     .agg table { margin-top: 0; }
     .agg td, .agg th { border-bottom: 1px solid #000; }
     .agg .qr { display: block; margin-top: 4px; }
     .agg-foot { display: flex; gap: 8px; align-items: center; padding: 6px 8px; font-size: 9px; line-height: 1.35; }
     .size-4x6 .agg-cell { padding: 4px 6px; font-size: 10px; }
-    .size-4x6 .agg .pay-mode, .size-4x6 .agg .routing { font-size: 15px; }
+    .size-4x6 .agg .pay-mode { font-size: 18px; padding: 3px 10px; }
+    .size-4x6 .agg .routing { font-size: 15px; }
     .mono .label-sheet, .mono .label-sheet * { color: #000 !important; }
     .mono .label-sheet { border: 2px solid #fff; background: #fff; }
     .mono .label-sheet .label-band { background: #fff; border-bottom: 1.5px solid #000; }
@@ -2330,7 +2331,7 @@ export function printShippingLabel(
   const gst = getOrderSettings().gst;
   const serviceMode = details?.serviceMode || shipment.serviceMode || serviceModeOf(courier, shipment.courier);
   const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
-    <div class="agg-head">${design.showLogo ? `<span class="label-brand">${logoImg("label-logo")}</span>` : ""}<span class="ttl">SHIPPING LABEL</span>${serviceMode && design.showServiceMode ? `<span class="svc">${esc(serviceMode.toUpperCase())}</span>` : "<span></span>"}</div>
+    <div class="agg-head">${design.showLogo ? `<span class="label-brand">${logoImg("label-logo")}</span>` : ""}<b class="pay-mode">${cod ? "COD" : "PREPAID"}</b>${serviceMode && design.showServiceMode ? `<span class="svc">${esc(serviceMode.toUpperCase())}</span>` : "<span></span>"}</div>
     <div class="agg-row">
       <div class="agg-cell grow to">
         <p class="label">Ship to</p>
@@ -2361,7 +2362,7 @@ export function printShippingLabel(
     <div class="agg-row">
       ${design.showDimensions ? `<div class="agg-cell"><p class="label">Dimensions (cm)</p><b>${esc(`${box.length} × ${box.breadth} × ${box.height}`)}</b></div>` : ""}
       <div class="agg-cell"><p class="label">Weight</p><b>${esc(weight)} kg</b></div>
-      <div class="agg-cell pay-cell"><p class="label">Payment</p><b class="pay-mode">${cod ? "COD" : "PREPAID"}</b><br/>${cod ? `Collect ${esc(rupees(collect))}` : "Do not collect cash"}</div>
+      <div class="agg-cell pay-cell"><p class="label">Payment</p><b>${cod ? "Cash on delivery" : "Prepaid"}</b><br/>${cod ? `Collect ${esc(rupees(collect))}` : "Do not collect cash"}</div>
     </div>
     <div class="agg-row">
       <div class="agg-cell grow">
@@ -2382,10 +2383,10 @@ export function printShippingLabel(
     ${design.showOrderCodes ? `<div class="agg-row center">
       <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 56, module: 1.5, format: "code128" })}</div>
     </div>` : ""}
-    ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th>${design.showTaxColumns ? "<th>HSN</th>" : ""}<th class="right">Qty</th></tr>
+    ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th></tr>
     ${priced
       .map((item) => {
-        return `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td>${design.showTaxColumns ? `<td>${esc(design.hsn)}</td>` : ""}<td class="right">${esc(item.quantity)}</td></tr>`;
+        return `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td><td class="right">${esc(item.quantity)}</td></tr>`;
       })
       .join("")}
     </table>` : ""}
