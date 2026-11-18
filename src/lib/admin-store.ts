@@ -2041,9 +2041,9 @@ function printHtml(title: string, html: string, page = "A4") {
 
 const PAGE_MM: Record<string, [number, number]> = { A4: [210, 297], A5: [148, 210], "100mm 150mm": [100, 150], "80mm 240mm": [80, 240], auto: [100, 150] };
 
-/** Saves the page straight to a PDF file: no print dialog, no new window. */
-async function downloadHtmlPdf(fileName: string, title: string, html: string, page = "A4") {
-  if (typeof window === "undefined") return;
+/** Renders the page to a PDF, saves it on the server and returns its unique download link (no print dialog). */
+async function downloadHtmlPdf(fileName: string, title: string, html: string, page = "A4"): Promise<string> {
+  if (typeof window === "undefined") return "";
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");
   frame.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;height:1400px;border:0;background:#fff";
@@ -2076,7 +2076,15 @@ async function downloadHtmlPdf(fileName: string, title: string, html: string, pa
     const room = [width - margin * 2, height - margin * 2];
     const ratio = Math.min(room[0] / canvas.width, room[1] / canvas.height);
     pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin + (room[0] - canvas.width * ratio) / 2, margin, canvas.width * ratio, canvas.height * ratio);
-    pdf.save(fileName);
+    const response = await fetch(`/api/admin/labels?name=${encodeURIComponent(fileName)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/pdf" },
+      body: pdf.output("blob"),
+    });
+    const result = (await response.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
+    if (!response.ok || !result.url) throw new Error(result.error || "Could not save the label link.");
+    return new URL(result.url, window.location.origin).toString();
   } finally {
     frame.remove();
   }
@@ -2147,7 +2155,8 @@ function printDoc(title: string, html: string, page: string, autoPrint: boolean)
     .agg { border: 2px solid #000; }
     .label-sheet.agg { border: 2px solid #000; border-radius: 6px; overflow: hidden; }
     .agg-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 2px solid #000; background: #f5f5f4; }
-    .agg-head .ttl { font-size: 13px; font-weight: 800; letter-spacing: 0.14em; }
+    .agg-head .ttl { font-size: 14px; font-weight: 800; letter-spacing: 0.01em; line-height: 1.2; }
+    .agg-head .head-right { display: flex; gap: 6px; align-items: center; flex: none; }
     .agg-head .svc { font-size: 12px; font-weight: 800; border: 1.5px solid #000; border-radius: 4px; padding: 1px 6px; }
     .qr-row .agg-cell { padding: 8px; }
     .qr-row svg { width: 150px; height: 150px; display: block; margin: 0 auto; }
@@ -2313,7 +2322,6 @@ export function printShippingLabel(
   const awb = details?.awb || shipment.awb;
   const courier = details?.courierName || shipment.courier || "Courier";
   const routing = details?.routingCode || shipment.routingCode || "";
-  const hub = details?.destination || shipment.destinationHub || "";
   const order = getOrder(shipment.orderId);
   const cod = Boolean(order && order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid");
   const collect = cod && order ? Math.max(0, order.total - (order.storeCreditUsed ?? 0)) : 0;
@@ -2331,7 +2339,7 @@ export function printShippingLabel(
   const gst = getOrderSettings().gst;
   const serviceMode = details?.serviceMode || shipment.serviceMode || serviceModeOf(courier, shipment.courier);
   const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
-    <div class="agg-head">${design.showLogo ? `<span class="label-brand">${logoImg("label-logo")}</span>` : ""}<b class="pay-mode">${cod ? "COD" : "PREPAID"}</b>${serviceMode && design.showServiceMode ? `<span class="svc">${esc(serviceMode.toUpperCase())}</span>` : "<span></span>"}</div>
+    <div class="agg-head"><span class="label-brand">${design.showLogo ? logoImg("label-logo") : ""}<span class="ttl">${esc(siteConfig.name)}</span></span><span class="head-right">${serviceMode && design.showServiceMode ? `<span class="svc">${esc(serviceMode.toUpperCase())}</span>` : ""}<b class="pay-mode">${cod ? "COD" : "PREPAID"}</b></span></div>
     <div class="agg-row">
       <div class="agg-cell grow to">
         <p class="label">Ship to</p>
@@ -2346,7 +2354,6 @@ export function printShippingLabel(
         <b class="courier">${esc(courier)}</b>
         ${serviceMode && design.showServiceMode ? `<p class="label" style="margin-top:6px">Service</p><b class="routing">${esc(serviceMode.toUpperCase())}</b>` : ""}
         ${routing && design.showRouting ? `<p class="label" style="margin-top:6px">Routing code</p><b class="routing">${esc(routing)}</b>` : ""}
-        ${hub && design.showRouting ? `<p class="meta">Hub ${esc(hub)}</p>` : ""}
       </div>
     </div>
     <div class="agg-row center">

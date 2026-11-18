@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Button, Field, Panel, TextInput } from "@/components/admin/AdminUI";
+import { Button, Field, Panel, TextInput, LinkText } from "@/components/admin/AdminUI";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { addPickupLocation, bookShipment, downloadLabel, downloadManifest, fetchCourierRates, listPickupLocations, type RateQuote } from "@/lib/shipping-client";
@@ -233,7 +233,7 @@ export function QuickShipment() {
         {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
         {note && (
           <p className="mt-3 text-sm text-emerald-700">
-            {note} Reference {booked}. <Link href="/admin/commerce/shipments" className="underline">Open Shipment Management</Link>
+            <LinkText text={note} /> Reference {booked}. <Link href="/admin/commerce/shipments" className="underline">Open Shipment Management</Link>
           </p>
         )}
         {shipmentId && (

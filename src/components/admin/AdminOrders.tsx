@@ -74,7 +74,7 @@ import { formatDate } from "@/lib/utils";
 import { deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
 import { isOwnFleet, bookedViaLabel } from "@/lib/courier-label";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
-import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
+import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput, LinkText } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
 import { accountToDelivery } from "@/lib/account-search";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesFor } from "@/lib/geo";
@@ -396,7 +396,7 @@ export function OrdersDashboard() {
           }}
         />
       )}
-      {bulkNote && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{bulkNote}</p>}
+      {bulkNote && <p className="whitespace-pre-line rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><LinkText text={bulkNote} /></p>}
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">{selectedIds.length} selected</span>
@@ -429,10 +429,14 @@ export function OrdersDashboard() {
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Delivered", (id) => setOrderStatus(id, "Delivered"))}>Delivered</Button>
           <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]), languageFilter === "All" ? undefined : languageFilter)}>Excel</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(filtered.filter((order) => picked[order.id]))}>PDF</Button>
-          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Labels", async (id) => {
-            const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
-            if (shipment) await downloadLabel(shipment.id);
-          })}>Labels</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={async () => {
+            const links: string[] = [];
+            await bulk("Labels", async (id) => {
+              const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
+              if (shipment) links.push(`#${id}: ${(await downloadLabel(shipment.id)).split(": ").pop()}`);
+            });
+            if (links.length) setBulkNote(`Label links\n${links.join("\n")}`);
+          }}>Labels</Button>
           <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "individual")}>Print slips: individual</Button>
           <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "bulk")}>Print slips: bulk list</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", async (id) => {
@@ -1330,7 +1334,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     >
       {order.replacementOf && <p className="mb-3 rounded-lg bg-warm-cream px-3 py-2 text-xs text-text-muted">Replacement for order #{order.replacementOf}</p>}
       <SplitOrderInfo order={order} />
-      {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
+      {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><LinkText text={message} /></p>}
       {problem && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
 
       <div className="grid gap-4 lg:grid-cols-2">

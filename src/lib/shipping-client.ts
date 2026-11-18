@@ -811,9 +811,9 @@ export async function downloadLabel(shipmentId: string) {
     link.click();
     return `Downloaded the ${label(provider ?? "courier")} label.`;
   }
-  await printShippingLabel(latest, details, undefined, undefined, "pdf");
-  const fromPortal = fetched.has(provider ?? "") && shipment.live ? ` using the ${label(provider ?? "courier")} shipment` : "";
-  return `Downloaded the shipping label (PDF)${fromPortal}.`;
+  const url = (await printShippingLabel(latest, details, undefined, undefined, "pdf")) || "";
+  if (url) void navigator.clipboard?.writeText(url).catch(() => undefined);
+  return `Label ready for AWB ${details.awb || latest.awb || shipment.orderId} (link copied): ${url}`;
 }
 
 /** Gogate Products only. Customers see the date. The clock is kept for the tracking line and the courier task. */
