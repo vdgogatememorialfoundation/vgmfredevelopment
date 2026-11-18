@@ -54,7 +54,7 @@ import {
 } from "@/components/admin/AdminUI";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { WhatsAppInboxDesk } from "@/components/admin/WhatsAppInbox";
-import { CustomerOrders } from "@/components/admin/CustomerOrders";
+import { CustomerOrders, DeskApprovals } from "@/components/admin/CustomerOrders";
 
 const TICKET_TONES: Record<string, string> = {
   Open: "bg-burgundy/10 text-burgundy",
@@ -65,7 +65,7 @@ const TICKET_TONES: Record<string, string> = {
 
 export function SupportSection() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"queries" | "tickets" | "chat" | "whatsapp" | "faq">("tickets");
+  const [tab, setTab] = useState<"queries" | "tickets" | "chat" | "whatsapp" | "approvals" | "faq">("tickets");
   const [messages, setMessages] = useState(() => getSupportMessages());
   const [tickets, setTickets] = useState(() => ticketsVisibleTo(user));
   const [createForm, setCreateForm] = useState({ name: "", email: "", phone: "", subject: "", body: "", assignedTo: "" });
@@ -104,7 +104,7 @@ export function SupportSection() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {(["tickets", "chat", "whatsapp", "queries", "faq"] as const).map((t) => (
+        {(["tickets", "chat", "whatsapp", "approvals", "queries", "faq"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -114,7 +114,7 @@ export function SupportSection() {
               tab === t ? "bg-burgundy text-white" : "bg-white text-text-muted hover:text-burgundy border border-border"
             )}
           >
-            {t === "queries" ? "Contact queries" : t === "tickets" ? "Tickets" : t === "chat" ? "Live chat" : t === "whatsapp" ? "WhatsApp" : "FAQ"}
+            {t === "queries" ? "Contact queries" : t === "tickets" ? "Tickets" : t === "chat" ? "Live chat" : t === "whatsapp" ? "WhatsApp" : t === "approvals" ? "Approvals" : "FAQ"}
           </button>
         ))}
       </div>
@@ -207,6 +207,7 @@ export function SupportSection() {
       {tab === "chat" && <LiveChatDesk />}
 
       {tab === "whatsapp" && <WhatsAppInboxDesk />}
+      {tab === "approvals" && <DeskApprovals />}
 
       {tab === "faq" && (
         <Panel title={`FAQ (${faqs.length})`} description="SPAs answer these in the chatbot and FAQ pages.">
