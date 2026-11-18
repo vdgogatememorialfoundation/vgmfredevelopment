@@ -6,7 +6,7 @@ import { RatesTable } from "@/components/admin/SettingsDesks";
 import { getShipments } from "@/lib/admin-store";
 import { getOrders } from "@/lib/store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { bookShipment, fetchCourierRates, orderDims, orderWeightKg, type RateQuote } from "@/lib/shipping-client";
+import { bookPickedCourier, fetchCourierRates, orderDims, orderWeightKg, type RateQuote } from "@/lib/shipping-client";
 import { formatDate } from "@/lib/utils";
 import type { Order } from "@/types";
 
@@ -84,7 +84,7 @@ function ReadyOrder({ order }: { order: Order }) {
           </Button>
           <Button
             disabled={busy === "book" || picked === undefined || !quote}
-            onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
+            onClick={() => run("book", async () => (await bookPickedCourier(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
           >
             {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pick a courier to book"}
           </Button>

@@ -47,7 +47,7 @@ import { getIntegrations, getOrderSettings, orderStatusText, packingChargeFor, p
 import {
   attachManualTracking,
   attachDirectTracking,
-  bookShipment,
+  bookPickedCourier,
   MANUAL_PORTALS,
   cancelShipment,
   dropOrderShipments,
@@ -1942,7 +1942,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   ) : (
                   <Button
                     disabled={busy === "book" || picked === undefined || !quote}
-                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
+                    onClick={() => run("book", async () => (await bookPickedCourier(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
                   >
                     {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Show rates and pick a courier to book"}
                   </Button>

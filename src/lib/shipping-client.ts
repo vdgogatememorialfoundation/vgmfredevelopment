@@ -326,13 +326,30 @@ function splitOrder(order: Order, split: ShipmentSplit): Order {
   };
 }
 
+/** Books the picked courier; if it costs more than the pre-order quote the customer paid, asks Admin whether the Foundation pays the difference. */
+export async function bookPickedCourier(orderId: string, rate?: CourierRate) {
+  try {
+    return await bookShipment(orderId, rate);
+  } catch (error) {
+    if (!(error instanceof AboveQuoteError) || !rate) throw error;
+    const paid = getOrder(orderId)?.courierQuote?.highest ?? 0;
+    const actual = rate.providerRate ?? rate.rate;
+    const extra = Math.round((actual - paid) * 100) / 100;
+    if (!window.confirm(`${rate.courierName} costs ₹${actual}, but the customer paid ₹${paid} for courier. Book anyway? The Foundation pays the ₹${extra} difference.`)) throw error;
+    return bookShipment(orderId, rate, undefined, undefined, { allowAboveQuote: true });
+  }
+}
+
+export class AboveQuoteError extends Error {}
+
 export async function bookShipment(
   orderId: string,
   override?: CourierRate,
   pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>,
-  split?: ShipmentSplit
+  split?: ShipmentSplit,
+  options: { allowAboveQuote?: boolean } = {}
 ): Promise<BookingResult> {
-  const result = await bookShipmentOnce(orderId, override, pickupOverride, split);
+  const result = await bookShipmentOnce(orderId, override, pickupOverride, split, options);
   logAudit(
     "Shipment created",
     orderId,
@@ -345,7 +362,8 @@ async function bookShipmentOnce(
   orderId: string,
   override?: CourierRate,
   pickupOverride?: Partial<IntegrationSettings["shipping"]["pickup"]>,
-  split?: ShipmentSplit
+  split?: ShipmentSplit,
+  options: { allowAboveQuote?: boolean } = {}
 ): Promise<BookingResult> {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
@@ -367,7 +385,12 @@ async function bookShipmentOnce(
       JSON.stringify(quoted.parcel ?? null) === JSON.stringify(order.parcel ? { length: order.parcel.length, breadth: order.parcel.breadth, height: order.parcel.height } : null);
     if (!sameParcel) throw new Error("The package weight or size changed after the customer was charged. Check the package matches the packed box, or add the difference as an extra charge, before booking.");
     const actual = override.providerRate ?? override.rate;
-    if (actual > quoted.highest + 0.5) throw new Error(`${override.courierName} costs ₹${actual}, more than the ₹${quoted.highest} quote the customer paid for. Pick a courier within that amount.`);
+    if (actual > quoted.highest + 0.5 && !options.allowAboveQuote) {
+      throw new AboveQuoteError(`${override.courierName} costs ₹${actual}, more than the ₹${quoted.highest} quote the customer paid for. Pick a courier within that amount.`);
+    }
+    if (actual > quoted.highest + 0.5) {
+      logAudit("Courier above customer quote", order.id, `${override.courierName} ₹${actual} vs ₹${quoted.highest} paid · Foundation pays ₹${Math.round((actual - quoted.highest) * 100) / 100}`);
+    }
   }
   if (!unpaidPlan && order.shippingDue) {
     throw new Error("The courier charge is not on this order yet. Add it under Payment → Add extra charge (Courier charge) and send the payment link, then book the courier once it is paid.");
