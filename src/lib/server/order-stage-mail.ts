@@ -101,7 +101,7 @@ function courierParams(order: Order, status: string, name: string) {
   }
   if (status === "Out for Delivery") return [name, order.id, courier, awb, isCod(order) ? `Please keep ${rupees(order.total)} ready to pay the courier.` : "No payment is due at the door."];
   const delivered = [...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.at;
-  return [name, order.id, day(delivered) || day(new Date().toISOString()), courier, awb];
+  return [name, order.id, day(delivered) || day(new Date().toISOString()), courier, awb, `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}#feedback`];
 }
 
 /** Sends the courier-detail template when one is mapped for this status; null when the status has none. */
@@ -289,7 +289,7 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
       Delivered: {
         subject: `Order ${next.id} delivered`,
         intro: `Your order ${next.id} has been delivered. We hope the books serve you well.`,
-        next: ["If any item arrived damaged, open the order in My Orders and request a replacement with photos.", "Your invoice is available in My Orders."],
+        next: [`Please rate our delivery and the books here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#feedback`, "If any item arrived damaged, open the order in My Orders and request a replacement with photos.", "Your invoice is available in My Orders."],
       },
       Cancelled: {
         subject: `Order ${next.id} cancelled`,
