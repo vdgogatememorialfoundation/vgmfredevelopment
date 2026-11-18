@@ -78,7 +78,7 @@ function Card({ title, text, children, right, badge, onSave }: { title: string; 
       {children}
       {save ? (
         <div className="mt-4 border-t border-slate-100 pt-4">
-          <button type="button" className={primary} onClick={save}>
+          <button type="button" className={primary} onClick={() => save()}>
             Save
           </button>
         </div>
