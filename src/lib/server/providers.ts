@@ -3251,7 +3251,7 @@ async function enviaCarriers(input: Json, headers: Record<string, string>) {
   const cached = enviaCarrierCache.get(key);
   if (cached && Date.now() - cached.at < 36e5) return cached.names;
   const data = await call(`${enviaQueries(input)}/carrier?country_code=IN`, { headers }).catch(() => ({}) as Json);
-  const names = ((data.data as Json[]) ?? []).filter((row) => row.active !== 0 && row.active !== false).map((row) => String(row.name ?? "").toLowerCase()).filter(Boolean);
+  const names = ((data.data as Json[]) ?? []).filter((row) => row.active !== 0 && row.active !== false).map((row) => String(row.name ?? "")).filter(Boolean);
   const out = names.length ? names : ENVIA_INDIA_CARRIERS;
   enviaCarrierCache.set(key, { names: out, at: Date.now() });
   return out;
@@ -3281,6 +3281,13 @@ function enviaPackage(weightKg: number, length: number, width: number, height: n
     dimensions: { length: Math.max(0.1, length), width: Math.max(0.1, width), height: Math.max(0.1, height) },
     ...(cod ? { additionalServices: [{ service: "cash_on_delivery", data: { amount: String(Math.round(value)) } }] } : {}),
   };
+}
+
+/** "Delhivery Surface 0.5Kg", not "Delhivery Delhivery Surface 0.5Kg": Envia's service text often already names the carrier. */
+function enviaCourierName(row: Json) {
+  const carrier = String(row.carrierDescription || row.carrier || "").trim();
+  const service = String(row.serviceDescription || row.service || "").trim();
+  return service.toLowerCase().startsWith(carrier.toLowerCase()) ? service : `${carrier} ${service}`.trim();
 }
 
 export async function enviaRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
@@ -3322,7 +3329,7 @@ export async function enviaRates(input: Json, parcel: Parcel): Promise<RateOut[]
       return {
         provider: "envia",
         courierId: `${row.carrier}|${row.service}`,
-        courierName: `${String(row.carrierDescription || row.carrier)} ${String(row.serviceDescription || row.service || "")}`.trim(),
+        courierName: enviaCourierName(row),
         rate: Math.round(Number(row.totalPrice) * 100) / 100,
         etaDays: Number.isFinite(days) && days > 0 ? days : 5,
         deliverBy: date.date ? String(date.date) : undefined,
