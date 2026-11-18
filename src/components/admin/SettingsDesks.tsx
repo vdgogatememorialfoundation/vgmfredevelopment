@@ -2348,6 +2348,9 @@ function LabelDesignFields({ design, onChange }: { design: LabelDesign; onChange
     ["showValue", "Invoice value"],
     ["showItems", "Item list"],
     ["showLogo", "Foundation logo"],
+    ["showTaxColumns", "HSN, rate and GST columns"],
+    ["showGstin", "GSTIN"],
+    ["showEwaybill", "eWaybill no."],
   ];
   return (
     <div className="mt-4 rounded-xl border border-border bg-white p-4">
@@ -2362,6 +2365,8 @@ function LabelDesignFields({ design, onChange }: { design: LabelDesign; onChange
         <Text label="Invoice no. prefix" value={design.invoicePrefix} placeholder="e.g. VGMF/" onChange={(invoicePrefix) => onChange({ invoicePrefix })} />
         <Text label="Jurisdiction line" value={design.jurisdiction} placeholder="Subject to Pune jurisdiction" onChange={(jurisdiction) => onChange({ jurisdiction })} />
         <Text label="Footer note" value={design.footerText} onChange={(footerText) => onChange({ footerText })} />
+        <Text label="HSN code" value={design.hsn} onChange={(hsn) => onChange({ hsn })} />
+        <Text label="Sender alternate phone" value={design.senderAltPhone} onChange={(senderAltPhone) => onChange({ senderAltPhone })} />
       </div>
     </div>
   );

@@ -1085,6 +1085,8 @@ export interface ShipmentRecord {
   routingCode?: string;
   /** Express, Air or Surface, from the aggregator or the courier name. */
   serviceMode?: string;
+  /** e-Way bill number, when one was generated for the consignment. */
+  ewaybill?: string;
   destinationHub?: string;
   invoiceUrl?: string;
   manifestUrl?: string;

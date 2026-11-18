@@ -2308,6 +2308,8 @@ export function printShippingLabel(
   });
   const value = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const design = labelDesign(shipping);
+  const gst = getOrderSettings().gst;
+  const gstRate = gst.enabled ? gst.ratePercent / 100 : 0;
   const serviceMode = details?.serviceMode || shipment.serviceMode || serviceModeOf(courier, shipment.courier);
   const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
     <div class="agg-row">
@@ -2331,9 +2333,8 @@ export function printShippingLabel(
       <div class="agg-cell grow">
         <p class="label">AWB no.</p>
         ${barcodeSvg(awb, { height: 56, module: 1.6, format: "code128" })}
-        <p class="awb">${esc(awb)}</p>
       </div>
-      ${design.showAwbQr && awb ? `<div class="agg-cell side" style="text-align:center"><p class="label">AWB QR</p>${qrSvg(awb, 90)}</div>` : ""}
+      ${design.showAwbQr && awb ? `<div class="agg-cell side" style="text-align:center">${qrSvg(awb, 130)}</div>` : ""}
     </div>
     <div class="agg-row">
       ${design.showDimensions ? `<div class="agg-cell"><p class="label">Dimensions (cm)</p><b>${esc(`${box.length} × ${box.breadth} × ${box.height}`)}</b></div>` : ""}
@@ -2345,13 +2346,14 @@ export function printShippingLabel(
         <p class="label">Shipped by (if undelivered, return to)</p>
         <strong>${esc(fromName)}</strong><br/>
         ${esc(fromAddress)}${fromPhone ? `<br/>
-        ${esc(fromPhone)}` : ""}
+        ${esc([fromPhone, design.senderAltPhone].filter(Boolean).join(" / "))}` : ""}${design.showGstin && gst.gstin ? `<br/>GSTIN: ${esc(gst.gstin)}` : ""}
       </div>
       <div class="agg-cell side">
         <p class="label">Order no.</p>
         <b>${esc(shipment.orderId)}</b>
         <p class="meta">Order date ${esc(formatDate(order?.date || shipment.generatedAt))}</p>
-        ${design.showInvoiceNo ? `<p class="meta">Invoice no. ${esc(`${design.invoicePrefix}${shipment.orderId}`)}</p>` : ""}
+        ${design.showInvoiceNo ? `<p class="meta">Invoice no. ${esc(`${design.invoicePrefix}${shipment.orderId}`)}</p><p class="meta">Invoice date ${esc(formatDate(order?.paidAt || order?.date || shipment.generatedAt))}</p>` : ""}
+        ${design.showEwaybill ? `<p class="meta">eWaybill no. ${esc(shipment.ewaybill || "N/A")}</p>` : ""}
         ${design.showValue ? `<p class="meta">Invoice value ${esc(rupees(order?.total || value || 0))}</p>` : ""}
       </div>
     </div>
@@ -2359,12 +2361,14 @@ export function printShippingLabel(
       <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
       <div class="agg-cell side" style="text-align:center">${qrSvg(shipment.orderId, 100)}</div>
     </div>` : ""}
-    ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th></tr>
+    ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th>${design.showTaxColumns ? "<th>HSN</th>" : ""}<th class="right">Qty</th>${design.showTaxColumns ? '<th class="right">Rate</th><th class="right">Taxable</th><th class="right">CGST</th><th class="right">SGST</th><th class="right">Total</th>' : ""}</tr>
     ${priced
-      .map(
-        (item) =>
-          `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td><td class="right">${esc(item.quantity)}</td></tr>`
-      )
+      .map((item) => {
+        const taxable = item.price * item.quantity;
+        const half = Math.round(taxable * gstRate * 50) / 10000;
+        const money = (value: number) => value.toFixed(2);
+        return `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td>${design.showTaxColumns ? `<td>${esc(design.hsn)}</td>` : ""}<td class="right">${esc(item.quantity)}</td>${design.showTaxColumns ? `<td class="right">${money(item.price)}</td><td class="right">${money(taxable)}</td><td class="right">${money(half)}</td><td class="right">${money(half)}</td><td class="right">${money(taxable + half * 2)}</td>` : ""}</tr>`;
+      })
       .join("")}
     </table>` : ""}
     <div class="agg-foot">

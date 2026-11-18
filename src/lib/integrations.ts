@@ -252,6 +252,11 @@ export interface LabelDesign {
   showValue: boolean;
   showItems: boolean;
   showLogo: boolean;
+  showTaxColumns: boolean;
+  showGstin: boolean;
+  showEwaybill: boolean;
+  hsn: string;
+  senderAltPhone: string;
   /** Printed before the order number to make the invoice number. */
   invoicePrefix: string;
   jurisdiction: string;
@@ -268,6 +273,11 @@ export const DEFAULT_LABEL_DESIGN: LabelDesign = {
   showValue: true,
   showItems: true,
   showLogo: true,
+  showTaxColumns: true,
+  showGstin: true,
+  showEwaybill: true,
+  hsn: "4901",
+  senderAltPhone: "",
   invoicePrefix: "",
   jurisdiction: "Subject to Pune jurisdiction",
   footerText: "Handle books with care. Do not bend.",
