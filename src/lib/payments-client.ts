@@ -585,6 +585,7 @@ export async function refreshPaymentLink(orderId: string) {
   if (result.status === "paid") {
     const plan = order.preorderPayment;
     if (order.paymentLink.purpose === "advance" && plan) {
+      if (plan.advancePaidAt && order.paymentStatus !== "Pending") return `Advance ₹${plan.advance} paid. Balance ₹${plan.balance} is due later.`;
       const at = new Date().toISOString();
       patchOrder(order.id, {
         paymentStatus: "Partially Paid",
