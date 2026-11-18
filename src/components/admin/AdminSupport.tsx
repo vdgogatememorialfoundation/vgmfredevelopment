@@ -20,11 +20,9 @@ import {
   triggerOutOfStockEmails,
   updateTicketStatus,
   saveFaq,
-  maxRefundable,
 } from "@/lib/admin-store";
-import { getOrders, getOrdersForAccount } from "@/lib/store";
+import { getOrders } from "@/lib/store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { refundThroughGateway } from "@/lib/payments-client";
 import { useAuth } from "@/components/auth/AuthContext";
 import {
   closeChat,
@@ -56,6 +54,7 @@ import {
 } from "@/components/admin/AdminUI";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { WhatsAppInboxDesk } from "@/components/admin/WhatsAppInbox";
+import { CustomerOrders } from "@/components/admin/CustomerOrders";
 
 const TICKET_TONES: Record<string, string> = {
   Open: "bg-burgundy/10 text-burgundy",
@@ -219,63 +218,6 @@ export function SupportSection() {
 }
 
 /** The customer's orders with live status, payment and a refund action, beside the chat or ticket. */
-function CustomerOrders({ email, phone }: { email?: string; phone?: string }) {
-  useCommerceMirror();
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState("");
-  const orders = email || phone ? getOrdersForAccount({ email, phone }) : [];
-  if (!orders.length) return <p className="mt-3 rounded-lg bg-warm-cream p-2.5 text-xs text-text-muted">No orders found for this customer.</p>;
-  return (
-    <div className="mt-3 rounded-xl border border-border bg-white p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Customer orders ({orders.length})</p>
-      <ul className="mt-2 space-y-2">
-        {orders.slice(0, 10).map((order) => {
-          const cap = maxRefundable(order);
-          return (
-            <li key={order.id} className="rounded-lg border border-border p-2.5 text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Link href={`/admin/commerce/orders?order=${encodeURIComponent(order.id)}`} className="font-mono font-semibold text-burgundy underline">{order.id}</Link>
-                <span className="font-semibold text-text-primary">{order.status} · {order.paymentStatus} · ₹{order.total}</span>
-              </div>
-              <p className="mt-1 text-text-muted">
-                {formatDateTime(order.date)} · {order.items.map((item) => `${item.title} × ${item.quantity}`).join(", ")}
-                {order.trackingId ? ` · AWB ${order.trackingId}${order.courierName ? ` (${order.courierName})` : ""}` : ""}
-              </p>
-              {cap > 0 ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <TextInput type="number" min={0} className="w-28" placeholder={`Up to ₹${cap}`} value={amounts[order.id] ?? ""} onChange={(event) => setAmounts({ ...amounts, [order.id]: event.target.value })} />
-                  <Button
-                    variant="outline"
-                    disabled={busy === order.id}
-                    onClick={async () => {
-                      const value = Number(amounts[order.id] || cap);
-                      if (!window.confirm(`Refund ₹${value} on order ${order.id}?`)) return;
-                      setBusy(order.id);
-                      setNote("");
-                      try {
-                        await refundThroughGateway(order.id, value);
-                        setNote(`Refund of ₹${value} started on ${order.id}.`);
-                      } catch (problem) {
-                        setNote(problem instanceof Error ? problem.message : "Refund failed.");
-                      } finally {
-                        setBusy("");
-                      }
-                    }}
-                  >
-                    {busy === order.id ? "Refunding…" : "Initiate refund"}
-                  </Button>
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-      {note ? <p className="mt-2 text-xs font-semibold text-burgundy">{note}</p> : null}
-    </div>
-  );
-}
-
 function TicketOrder({ orderId }: { orderId: string }) {
   useCommerceMirror();
   const order = getOrders().find((row) => row.id === orderId);

@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { Button, EmptyState, Panel, SelectInput } from "@/components/admin/AdminUI";
 import { displayName, listSupportAgents } from "@/lib/admin-store";
 import { formatDateTime } from "@/lib/utils";
+import { CustomerOrders } from "@/components/admin/CustomerOrders";
 
 const DEPARTMENTS = ["Support", "Shop", "Clinic", "Events", "Accounts"] as const;
 
@@ -345,6 +346,10 @@ export function WhatsAppInboxDesk() {
                       </Button>
                     )}
                   </div>
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer font-semibold text-burgundy">Customer orders · cancel, return, refund</summary>
+                    <CustomerOrders phone={active.phone} />
+                  </details>
                   <div className="mt-3 flex max-h-[360px] flex-1 flex-col gap-2 overflow-y-auto rounded-lg bg-warm-cream/60 p-3">
                     {active.messages.map((message) =>
                       message.system ? (
