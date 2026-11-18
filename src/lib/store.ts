@@ -1,3 +1,4 @@
+import { pixelEvent } from "@/lib/meta-pixel";
 import type {
   Book,
   CartItem,
@@ -60,6 +61,7 @@ export function persistCart(cart: CartItem[]) {
 }
 
 export function addToCart(bookId: string, quantity = 1) {
+  pixelEvent("AddToCart", { content_ids: [bookId], contents: [{ id: bookId, quantity }] });
   const cart = getCart();
   const existing = cart.find((item) => item.bookId === bookId);
   const cap = quantityCap(bookId);

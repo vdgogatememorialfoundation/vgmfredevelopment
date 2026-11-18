@@ -1,5 +1,6 @@
 "use client";
 
+import { pixelEvent } from "@/lib/meta-pixel";
 import { checkPromoCode, promoDiscount, type PromoRule } from "@/lib/promotions";
 import BulkOrderNote from "@/components/store/BulkOrderNote";
 import Link from "next/link";
@@ -143,6 +144,14 @@ export default function CheckoutClient() {
   const [holdingNote, setHoldingNote] = useState("");
   const [razorpayHold, setRazorpayHold] = useState("");
   const [orderId, setOrderId] = useState("");
+  const pixelSent = useRef("");
+  useEffect(() => {
+    if (step !== "success" || !orderId || pixelSent.current === orderId) return;
+    const placed = getOrders().find((order) => order.id === orderId);
+    if (!placed) return;
+    pixelSent.current = orderId;
+    pixelEvent("Purchase", { content_ids: placed.items.map((item) => item.bookId), contents: placed.items.map((item) => ({ id: item.bookId, quantity: item.quantity })), value: placed.total, num_items: placed.items.reduce((sum, item) => sum + item.quantity, 0) });
+  }, [step, orderId]);
   const [placedEta, setPlacedEta] = useState("");
   const [useCredit, setUseCredit] = useState(false);
   const [promo, setPromo] = useState<PromoRule | null>(null);

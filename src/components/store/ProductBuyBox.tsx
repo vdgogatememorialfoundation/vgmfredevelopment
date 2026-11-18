@@ -1,5 +1,6 @@
 "use client";
 
+import { pixelEvent } from "@/lib/meta-pixel";
 import { preorderDatesHidden } from "@/lib/integrations";
 import BulkOrderNote from "@/components/store/BulkOrderNote";
 import CartStepper from "@/components/store/CartStepper";
@@ -30,6 +31,9 @@ import { saveDeliverTo, useDeliverTo } from "@/lib/deliver-to";
 type CourierPromise = CourierRate & { deliverBy: string; dayLabel?: string; express: boolean };
 
 export default function ProductBuyBox({ book }: { book: Book }) {
+  useEffect(() => {
+    pixelEvent("ViewContent", { content_ids: [book.id], content_name: book.title, value: book.price });
+  }, [book.id, book.title, book.price]);
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
   const [quantity, setQuantity] = useState(1);
