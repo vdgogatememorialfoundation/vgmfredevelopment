@@ -33,8 +33,30 @@ export type WaThread = {
   updatedAt: string;
   unread: number;
   lastInboundAt?: string;
+  ticketId?: string;
+  createdAt?: string;
   messages: WaMessage[];
 };
+
+/** Reference id shown to the desk and the customer, in the same style as website chats (YYMMDD-XXXXXX). */
+export function waRef(thread: Pick<WaThread, "phone" | "createdAt" | "messages">) {
+  const first = thread.createdAt || thread.messages[0]?.at || "";
+  const day = first.slice(2, 10).replace(/-/g, "");
+  return `WA${day}-${thread.phone.slice(-6)}`;
+}
+
+export function markWhatsAppTicket(threadId: string, ticketId: string) {
+  const store = readStore();
+  const thread = store.threads.find((item) => item.id === threadId);
+  if (!thread) return null;
+  thread.ticketId = ticketId;
+  writeStore(store);
+  return thread;
+}
+
+export function findWhatsAppThread(threadId: string) {
+  return readStore().threads.find((item) => item.id === threadId) ?? null;
+}
 
 export const WA_DEPARTMENTS = ["Support", "Shop", "Clinic", "Events", "Accounts"] as const;
 
@@ -156,6 +178,7 @@ export function listWhatsAppThreads() {
       ...thread,
       preview: thread.messages[thread.messages.length - 1]?.text ?? "",
       windowOpen: serviceWindowOpen(thread),
+      ref: waRef(thread),
     }));
 }
 
@@ -207,6 +230,7 @@ function upsert(store: Store, input: {
       phone,
       name: input.name?.trim() || `+${phone}`,
       provider: input.provider,
+      createdAt: input.at || new Date().toISOString(),
       updatedAt: input.at || new Date().toISOString(),
       unread: 0,
       messages: [],

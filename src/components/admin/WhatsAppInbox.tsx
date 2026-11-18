@@ -21,6 +21,8 @@ type WaMessage = {
 };
 
 type WaThread = {
+  ref?: string;
+  ticketId?: string;
   id: string;
   phone: string;
   name: string;
@@ -152,6 +154,31 @@ export function WhatsAppInboxDesk() {
     }
   };
 
+  const raiseTicket = async () => {
+    if (!active || moving) return;
+    const subject = window.prompt("Ticket subject", `WhatsApp chat ${active.ref ?? ""}`.trim());
+    if (subject === null) return;
+    const customerEmail = window.prompt("Customer email (leave blank to use the email on their account)", "") ?? "";
+    setMoving(true);
+    setNote("");
+    try {
+      const response = await fetch("/api/whatsapp/inbox", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "ticket", threadId: active.id, subject, customerEmail, name: deskName(user) }),
+      });
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string; ticket?: { id: string } } | null;
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "The ticket could not be created.");
+      setNote(`Ticket ${data.ticket?.id} created and the customer was told on WhatsApp.`);
+      await load();
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setMoving(false);
+    }
+  };
+
   const move = async (action: "transfer" | "take") => {
     if (!active || moving) return;
     const agent = agents.find((item) => item.email === staffEmail);
@@ -248,7 +275,11 @@ export function WhatsAppInboxDesk() {
                 <div className="flex min-h-[420px] flex-col rounded-xl border border-border bg-white p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="font-semibold text-text-primary">{active.name}</p>
+                      <p className="font-semibold text-text-primary">
+                        {active.name}
+                        {active.ref ? <span className="ml-2 font-mono text-xs text-text-muted">Ref {active.ref}</span> : null}
+                        {active.ticketId ? <span className="ml-2 text-xs text-burgundy">Ticket {active.ticketId}</span> : null}
+                      </p>
                       <p className="text-xs text-text-muted">
                         Customer +{active.phone} · {providerLabel(active.provider)} number{active.lineNumber ? ` +${active.lineNumber}` : ""}
                         {active.windowOpen ? " · reply window open" : " · outside 24-hour window"}
@@ -275,6 +306,9 @@ export function WhatsAppInboxDesk() {
                     </Button>
                     <Button variant="outline" disabled={moving} onClick={() => void move("take")}>
                       Take this chat
+                    </Button>
+                    <Button variant="outline" disabled={moving} onClick={() => void raiseTicket()}>
+                      {active.ticketId ? "Create another ticket" : "Create ticket"}
                     </Button>
                   </div>
                   <div className="mt-3 flex max-h-[360px] flex-1 flex-col gap-2 overflow-y-auto rounded-lg bg-warm-cream/60 p-3">
