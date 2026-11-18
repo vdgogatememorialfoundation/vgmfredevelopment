@@ -2797,13 +2797,6 @@ export function ekartTrackingUrl(id: string) {
 /** Only real Ekart quotes: no placeholder rate is ever returned for Ekart. */
 export async function ekartRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const rows = await goswiftRates(ekartInput(input), parcel);
-  if (rows && parcel.deliveryPincode) {
-    const token = await goswiftToken(ekartInput(input)).catch(() => null);
-    const check = token
-      ? await call(`${EKART}/api/v2/serviceability/${encodeURIComponent(parcel.deliveryPincode)}`, { headers: goswiftAuth(token) }).catch(() => null)
-      : null;
-    if (check && check.status === false) return [];
-  }
   return rows ? rows.filter((row) => !row.estimate).map((row) => ({ ...row, provider: "ekart", courierId: "ekart", courierName: EKART_NAME })) : null;
 }
 
