@@ -2075,12 +2075,12 @@ async function downloadHtmlPdf(fileName: string, title: string, html: string, pa
     const pdf = new jsPDF({ unit: "mm", format: [width, height], orientation: width > height ? "landscape" : "portrait" });
     const room = [width - margin * 2, height - margin * 2];
     const ratio = Math.min(room[0] / canvas.width, room[1] / canvas.height);
-    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin + (room[0] - canvas.width * ratio) / 2, margin, canvas.width * ratio, canvas.height * ratio);
-    const response = await fetch(`/api/admin/labels?name=${encodeURIComponent(fileName)}`, {
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", margin + (room[0] - canvas.width * ratio) / 2, margin, canvas.width * ratio, canvas.height * ratio);
+    const response = await fetch("/api/admin/labels", {
       method: "POST",
       credentials: "same-origin",
-      headers: { "content-type": "application/pdf" },
-      body: pdf.output("blob"),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: fileName, pdf: pdf.output("datauristring").split(",").pop() }),
     });
     const result = (await response.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
     if (!response.ok || !result.url) throw new Error(result.error || "Could not save the label link.");

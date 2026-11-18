@@ -12,7 +12,8 @@ function dir() {
 
 /** Stores a label PDF under a random token; the link is the only way to fetch it. */
 export function saveLabelPdf(bytes: Uint8Array, name: string) {
-  if (bytes.length === 0 || bytes.length > MAX_BYTES) throw new Error("The label file is empty or too large.");
+  if (bytes.length === 0) throw new Error("The label file arrived empty. Please try again.");
+  if (bytes.length > MAX_BYTES) throw new Error(`The label file is too large (${Math.round(bytes.length / 1024)} KB).`);
   if (Buffer.from(bytes.subarray(0, 4)).toString("latin1") !== "%PDF") throw new Error("Only PDF labels can be saved.");
   const token = randomBytes(16).toString("hex");
   const safeName = (name.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "label.pdf").slice(0, 80);
