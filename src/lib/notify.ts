@@ -79,7 +79,8 @@ export function queueNotification(input: {
       fromName: input.fromName,
     });
   }
-  const senders = input.phone ? whatsAppSenders(settings.whatsapp).filter((provider) => whatsAppTemplateFor(settings.whatsapp, provider, input.template)) : [];
+  // Order status WhatsApp updates are sent by the server for every stage (order-stage-mail), so the browser skips them.
+  const senders = input.phone && input.template !== "order-status" ? whatsAppSenders(settings.whatsapp).filter((provider) => whatsAppTemplateFor(settings.whatsapp, provider, input.template)) : [];
   const waRecord = (provider: string, fallbacks: string[]): NotificationRecord => ({
     id: newId("WA"),
     channel: "whatsapp",

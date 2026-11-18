@@ -1,3 +1,4 @@
+import { sendWhatsAppAlert } from "@/lib/server/whatsapp-inbox";
 import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import { readFileSync, writeFileSync } from "node:fs";
 import { siteConfig } from "@/lib/constants";
@@ -80,6 +81,26 @@ const STAGE_EVENTS: [RegExp, NotificationEventId][] = [
   [/^return:/, "order-return-update"],
   [/^refund:.*:rrn$/, "refund-bank-reference"],
 ];
+
+/** WhatsApp update for an order stage, using the template mapped to that event (or to "Order status changed"). */
+async function whatsAppStage(key: string, order: Order, name: string) {
+  const phone = order.deliveryAddress?.phone;
+  if (!phone) return;
+  const event = STAGE_EVENTS.find(([pattern]) => pattern.test(key))?.[1];
+  // Website checkout sends its own "order placed" alert from the browser; app and chat orders get it here.
+  if (key === "placed") {
+    if (order.createdBy !== "WhatsApp" && order.createdBy !== "Android app") return;
+    await sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] }).catch(() => false);
+    return;
+  }
+  if (key.startsWith("status:") && key !== "status:split") {
+    await sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, order.status], fallbackEvent: "order-status" }).catch(() => false);
+    return;
+  }
+  if (key.startsWith("return:")) {
+    await sendWhatsAppAlert("order-return-update", { phone, name, params: [name, order.id, `return ${order.returnRequest?.status ?? "updated"}`], fallbackEvent: "order-status" }).catch(() => false);
+  }
+}
 
 /** The Admin's edited copy for this stage (Settings → Templates), when it differs from the default. */
 async function editedCopy(stageKey: string) {
@@ -361,6 +382,7 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order, opt
     if (sent.has(stage.key)) continue;
     markSent(next.id, stage.key);
     const name = next.deliveryAddress?.fullName || "Reader";
+    void whatsAppStage(stage.key, next, name);
     const trackUrl = `${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}`;
     const nextLines = stage.next.filter(Boolean).map((line) => `• ${line}`).join("\n");
     const edited = await editedCopy(stage.key);

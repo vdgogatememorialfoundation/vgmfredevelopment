@@ -3,7 +3,9 @@ import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 import { readKv } from "@/lib/server/db";
 import { chatBotReply, pauseChatBot, resumeChatBot } from "@/lib/server/whatsapp-bot";
-import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText } from "@/lib/server/providers";
+import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText, sendZohoCpaas } from "@/lib/server/providers";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+import { whatsAppSenders, whatsAppTemplateFor, type IntegrationSettings } from "@/lib/integrations";
 
 export type WaProvider = "meta" | "aisensy";
 
@@ -494,6 +496,44 @@ async function runChatBot(message: InboundWa) {
   } catch {
     /* the desk still sees the message in the inbox */
   }
+}
+
+/**
+ * Sends a mapped WhatsApp alert from the server (order stages), through every provider switched on for alerts
+ * (failover or all, as set in Settings → WhatsApp). Meta and AiSensy sends are kept in that number's inbox thread.
+ */
+export async function sendWhatsAppAlert(event: string, input: { phone?: string; name: string; params: string[]; fallbackEvent?: string }) {
+  const phone = waPhone(input.phone || "");
+  if (phone.length < 10) return false;
+  const settings = (savedAdminIntegrations().whatsapp ?? {}) as unknown as IntegrationSettings["whatsapp"];
+  if (!settings || typeof settings !== "object") return false;
+  const wa = { ...settings, mapping: settings.mapping ?? {} };
+  const creds = { ...(await loadWhatsAppCreds()), zohoCpaasApiKey: String(wa.zohoCpaasApiKey || ""), zohoCpaasFrom: String(wa.zohoCpaasFrom || ""), zohoCpaasDomain: String(wa.zohoCpaasDomain || "") };
+  let delivered = false;
+  for (const provider of whatsAppSenders(wa)) {
+    const template = whatsAppTemplateFor(wa, provider, event) || (input.fallbackEvent ? whatsAppTemplateFor(wa, provider, input.fallbackEvent) : "");
+    if (!template) continue;
+    try {
+      const language = (wa.templates ?? []).find((item) => item.name === template)?.language || "en";
+      const sent =
+        provider === "aisensy"
+          ? await sendAiSensy(creds, { to: phone, campaign: template, name: input.name, params: input.params })
+          : provider === "zoho"
+            ? await sendZohoCpaas(creds, { to: phone, template, language, params: input.params })
+            : await sendMetaTemplate(creds, { to: phone, template, language, params: input.params });
+      if (!sent) continue;
+      delivered = true;
+      if (provider !== "zoho") {
+        const store = readStore();
+        upsert(store, { provider: provider as WaProvider, phone, name: input.name, text: `[${template}] ${input.params.join(" · ")}`, direction: "out", externalId: sent.id || undefined, by: "Order update", status: "sent" });
+        writeStore(store);
+      }
+      if (wa.sendMode !== "all") break;
+    } catch {
+      /* try the next provider */
+    }
+  }
+  return delivered;
 }
 
 function readCredsFile() {
