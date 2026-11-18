@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 import { readKv } from "@/lib/server/db";
-import { chatBotReply, pauseChatBot } from "@/lib/server/whatsapp-bot";
+import { chatBotReply, pauseChatBot, resumeChatBot } from "@/lib/server/whatsapp-bot";
 import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText } from "@/lib/server/providers";
 
 export type WaProvider = "meta" | "aisensy";
@@ -35,6 +35,8 @@ export type WaThread = {
   lastInboundAt?: string;
   ticketId?: string;
   createdAt?: string;
+  closedAt?: string;
+  closedBy?: string;
   messages: WaMessage[];
 };
 
@@ -52,6 +54,30 @@ export function markWhatsAppTicket(threadId: string, ticketId: string) {
   thread.ticketId = ticketId;
   writeStore(store);
   return thread;
+}
+
+/** Closes the chat: the customer is told, the desk list moves it to Closed, and the auto menu answers their next message. */
+export async function closeWhatsApp(threadId: string, byName: string, byEmail: string) {
+  const thread = findWhatsAppThread(threadId);
+  if (!thread) throw new Error("That chat is no longer in the inbox.");
+  let noticeError = "";
+  try {
+    await replyOnWhatsApp(threadId, `Thank you for contacting Vaidya Gogate Memorial Foundation. This chat (ref ${waRef(thread)}) is now closed. Type *menu* any time to start again.`, byEmail);
+  } catch (error) {
+    noticeError = (error as Error).message;
+  }
+  resumeChatBot(threadId);
+  const store = readStore();
+  const row = store.threads.find((item) => item.id === threadId);
+  if (row) {
+    row.closedAt = new Date().toISOString();
+    row.closedBy = byName;
+    row.unread = 0;
+    row.assignedTo = undefined;
+    row.assignedName = undefined;
+    writeStore(store);
+  }
+  return { thread: row ?? thread, noticeError };
 }
 
 export function findWhatsAppThread(threadId: string) {
@@ -265,6 +291,10 @@ function upsert(store: Store, input: {
   if (input.direction === "in") {
     thread.lastInboundAt = at;
     thread.unread += 1;
+    if (thread.closedAt) {
+      delete thread.closedAt;
+      delete thread.closedBy;
+    }
   }
   store.threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   if (store.threads.length > MAX_THREADS) store.threads.length = MAX_THREADS;

@@ -64,6 +64,14 @@ export function pauseChatBot(key: string) {
   save(rows);
 }
 
+/** After the desk closes a chat, the customer's next message gets the menu again. */
+export function resumeChatBot(key: string) {
+  const rows = load();
+  if (!rows[key]) return;
+  rows[key] = { ...rows[key], step: "menu", deskUntil: undefined, updatedAt: new Date().toISOString() };
+  save(rows);
+}
+
 type FeedBook = { id: string; title: string; language?: string; price: number; stock?: number; stockStatus?: string; active?: boolean; preorder?: { enabled: boolean }; offer?: { price: number } };
 
 function catalogue(): FeedBook[] {

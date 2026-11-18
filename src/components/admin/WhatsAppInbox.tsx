@@ -22,6 +22,8 @@ type WaMessage = {
 
 type WaThread = {
   ref?: string;
+  closedAt?: string;
+  closedBy?: string;
   ticketId?: string;
   id: string;
   phone: string;
@@ -39,7 +41,7 @@ type WaThread = {
   messages: WaMessage[];
 };
 
-type DeskFilter = "all" | "mine" | "waiting" | (typeof DEPARTMENTS)[number];
+type DeskFilter = "all" | "mine" | "waiting" | "closed" | (typeof DEPARTMENTS)[number];
 
 function providerLabel(provider: WaThread["provider"]) {
   return provider === "aisensy" ? "AiSensy" : "Meta";
@@ -88,6 +90,8 @@ export function WhatsAppInboxDesk() {
   const agents = listSupportAgents();
   const visible = threads.filter((thread) => {
     if (line !== "all" && thread.provider !== line) return false;
+    if (filter === "closed") return Boolean(thread.closedAt);
+    if (thread.closedAt) return false;
     if (filter === "mine") return (thread.assignedTo || "").toLowerCase() === (user?.email || "").toLowerCase();
     if (filter === "waiting") return !thread.assignedTo;
     if (filter !== "all") return thread.department === filter;
@@ -151,6 +155,28 @@ export function WhatsAppInboxDesk() {
       setNote((error as Error).message);
     } finally {
       setSending(false);
+    }
+  };
+
+  const closeChat = async () => {
+    if (!active || moving || !window.confirm("Close this chat? The customer is told it is closed.")) return;
+    setMoving(true);
+    setNote("");
+    try {
+      const response = await fetch("/api/whatsapp/inbox", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "close", threadId: active.id, name: deskName(user) }),
+      });
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "The chat could not be closed.");
+      setNote(data.error ? `Chat closed. The customer was not notified: ${data.error}` : "Chat closed. The customer was told.");
+      await load();
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setMoving(false);
     }
   };
 
@@ -236,6 +262,7 @@ export function WhatsAppInboxDesk() {
               <Chip pressed={filter === "all"} onClick={() => setFilter("all")}>All</Chip>
               <Chip pressed={filter === "mine"} onClick={() => setFilter("mine")}>Mine</Chip>
               <Chip pressed={filter === "waiting"} onClick={() => setFilter("waiting")}>Waiting</Chip>
+              <Chip pressed={filter === "closed"} onClick={() => setFilter("closed")}>Closed</Chip>
               {DEPARTMENTS.map((item) => (
                 <Chip key={item} pressed={filter === item} onClick={() => setFilter(item)}>{item}</Chip>
               ))}
@@ -310,6 +337,13 @@ export function WhatsAppInboxDesk() {
                     <Button variant="outline" disabled={moving} onClick={() => void raiseTicket()}>
                       {active.ticketId ? "Create another ticket" : "Create ticket"}
                     </Button>
+                    {active.closedAt ? (
+                      <span className="self-center text-xs text-text-muted">Closed {formatDateTime(active.closedAt)}{active.closedBy ? ` by ${active.closedBy}` : ""}</span>
+                    ) : (
+                      <Button variant="outline" disabled={moving} onClick={() => void closeChat()}>
+                        Close chat
+                      </Button>
+                    )}
                   </div>
                   <div className="mt-3 flex max-h-[360px] flex-1 flex-col gap-2 overflow-y-auto rounded-lg bg-warm-cream/60 p-3">
                     {active.messages.map((message) =>

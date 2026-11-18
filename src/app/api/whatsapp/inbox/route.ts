@@ -2,7 +2,7 @@ import { addTicket } from "@/lib/server/mobile-store";
 import { findAccount } from "@/lib/server/accounts";
 import { NextRequest, NextResponse } from "next/server";
 import { denyUnlessPortal, portalSessionFrom } from "@/lib/server/portal-auth";
-import { findWhatsAppThread, listWhatsAppThreads, markWhatsAppRead, markWhatsAppTicket, replyOnWhatsApp, transferWhatsApp, waRef } from "@/lib/server/whatsapp-inbox";
+import { closeWhatsApp, findWhatsAppThread, listWhatsAppThreads, markWhatsAppRead, markWhatsAppTicket, replyOnWhatsApp, transferWhatsApp, waRef } from "@/lib/server/whatsapp-inbox";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +56,10 @@ export async function POST(request: NextRequest) {
         byEmail: portal.email || "desk",
       });
       return NextResponse.json({ ok: true, thread: result.thread, noticeSent: result.noticeSent, error: result.noticeError });
+    }
+    if (body?.action === "close") {
+      const result = await closeWhatsApp(threadId, byName, portal.email || "desk");
+      return NextResponse.json({ ok: true, thread: result.thread, error: result.noticeError || undefined });
     }
     if (body?.action === "ticket") {
       const thread = findWhatsAppThread(threadId);
