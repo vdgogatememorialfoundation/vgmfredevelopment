@@ -76,7 +76,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "templates") {
-      return NextResponse.json({ ok: true, templates: await listMetaTemplates(creds) });
+      const found = await listMetaTemplates(creds);
+      return NextResponse.json({ ok: true, templates: found.templates, wabaId: found.wabaId });
     }
 
     if (body.channel === "email") {

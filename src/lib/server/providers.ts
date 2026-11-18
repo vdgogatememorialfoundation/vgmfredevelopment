@@ -549,16 +549,57 @@ export async function sendMetaText(input: Json, message: { to: string; body: str
   return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
 }
 
+/** WhatsApp Business Account IDs the access token can manage (Meta debug_token granular scopes). */
+async function metaWabaIdsForToken(token: string, version: string) {
+  try {
+    const data = await call(`https://graph.facebook.com/${version}/debug_token?input_token=${encodeURIComponent(token)}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const scopes = (((data.data as Json)?.granular_scopes as Json[]) ?? []).filter((scope) => String(scope.scope).startsWith("whatsapp_business"));
+    return [...new Set(scopes.flatMap((scope) => ((scope.target_ids as unknown[]) ?? []).map(String)))].filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export async function listMetaTemplates(input: Json) {
   const token = pick(input.metaAccessToken, "META_WA_TOKEN");
-  const wabaId = pick(input.metaWabaId, "META_WA_WABA_ID");
-  if (!token || !wabaId) throw new ProviderError("Add the WhatsApp Business Account ID and access token first.");
+  const given = pick(input.metaWabaId, "META_WA_WABA_ID").replace(/\D/g, "");
+  if (!token) throw new ProviderError("Add the access token first.");
   const version = typeof input.metaApiVersion === "string" && input.metaApiVersion ? input.metaApiVersion : "v21.0";
   const fields = "name,status,category,language,components";
-  const data = await call(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=200&fields=${fields}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  return ((data.data as Json[]) ?? []).map((template) => {
+  const fetchFor = (wabaId: string) =>
+    call(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=200&fields=${fields}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+  let wabaId = given;
+  let data: Json | null = null;
+  let firstError: unknown = null;
+  if (wabaId) {
+    try {
+      data = await fetchFor(wabaId);
+    } catch (error) {
+      firstError = error;
+    }
+  }
+  if (!data) {
+    const candidates = (await metaWabaIdsForToken(token, version)).filter((id) => id !== given);
+    for (const id of candidates) {
+      try {
+        data = await fetchFor(id);
+        wabaId = id;
+        break;
+      } catch {
+        /* try the next account */
+      }
+    }
+  }
+  if (!data) {
+    if (!given) throw new ProviderError("Add the WhatsApp Business Account ID first.");
+    const reason = firstError instanceof Error ? firstError.message : "Meta refused the request.";
+    throw new ProviderError(`${reason} Check the WhatsApp Business Account ID (Meta → WhatsApp → API Setup), not the App ID or Phone number ID, and that the token has whatsapp_business_management.`);
+  }
+  const templates = ((data.data as Json[]) ?? []).map((template) => {
     const components = (template.components as Json[]) ?? [];
     const body = String(components.find((component) => component.type === "BODY")?.text ?? "");
     return {
@@ -570,6 +611,7 @@ export async function listMetaTemplates(input: Json) {
       variables: (body.match(/\{\{\d+\}\}/g) ?? []).length,
     };
   });
+  return { templates, wabaId };
 }
 
 export async function sendAiSensy(input: Json, message: { to: string; campaign: string; name: string; params: string[] }) {

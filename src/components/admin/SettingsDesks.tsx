@@ -22,7 +22,8 @@ import {
   type CustomMessageTemplate,
   type OrderSettings,
   type ShippingProviderId,
-  type WhatsAppTemplate, nextStoreWorkingDay, serverSavedSecrets } from "@/lib/integrations";
+  type WhatsAppSender,
+  type WhatsAppTemplate, nextStoreWorkingDay, serverSavedSecrets, whatsAppSenders, whatsAppTemplateFor } from "@/lib/integrations";
 import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
@@ -136,8 +137,10 @@ function useIntegrationSlice<K extends keyof IntegrationSettings>(key: K) {
   const [value, setValue] = useState<IntegrationSettings[K]>(() => getIntegrations()[key]);
   const [note, setNote] = useState("");
   const save = (next = value) => {
-    saveIntegrations({ ...getIntegrations(), [key]: next });
-    setNote("Saved.");
+    setNote("Saving…");
+    void saveIntegrations({ ...getIntegrations(), [key]: next }).then((stored) =>
+      setNote(stored ? "Saved on the server." : "Could not reach the server, so this is saved on this device only. Click Save again.")
+    );
   };
   return { value, setValue, note, setNote, save };
 }
@@ -919,12 +922,13 @@ export function WhatsAppSettingsDesk() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "templates", creds: value }),
       });
-      const result = (await response.json()) as { ok: boolean; templates?: WhatsAppTemplate[]; error?: string };
+      const result = (await response.json()) as { ok: boolean; templates?: WhatsAppTemplate[]; wabaId?: string; error?: string };
       if (!result.ok) throw new Error(result.error);
-      const next = { ...value, templates: result.templates ?? [], templatesSyncedAt: new Date().toISOString() };
+      const fixed = result.wabaId && result.wabaId !== value.metaWabaId.replace(/\D/g, "") ? result.wabaId : "";
+      const next = { ...value, ...(fixed ? { metaWabaId: fixed } : {}), templates: result.templates ?? [], templatesSyncedAt: new Date().toISOString() };
       setValue(next);
       save(next);
-      setNote(`Synced ${next.templates.length} templates from Meta.`);
+      setNote(`Synced ${next.templates.length} templates from Meta.${fixed ? ` The WhatsApp Business Account ID was corrected to ${fixed}.` : ""}`);
     } catch (error) {
       setNote(`Sync failed: ${(error as Error).message}`);
     } finally {
@@ -933,31 +937,51 @@ export function WhatsAppSettingsDesk() {
   };
 
   const approved = value.templates.filter((template) => template.status === "APPROVED");
+  const senders = whatsAppSenders(value);
+  const mapped = senders.length ? senders : (["meta"] as WhatsAppSender[]);
 
   return (
     <div className="space-y-5">
       <Header title="WhatsApp" text="Two business numbers stay live together. Chats on the Meta number are answered through Meta. Chats on the AiSensy number are answered through AiSensy. The choice below is only which line sends order and account alerts." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
-      <Card title="Provider">
-        <div className="grid gap-3 md:grid-cols-4">
+      <Card title="Providers for alerts" text="Switch on one or more. Each provider keeps its own inbox; this only chooses which numbers send order and account alerts.">
+        <div className="grid gap-3 md:grid-cols-3">
           {([
-            ["none", "Off", "Only email is sent."],
-            ["meta", "Meta Cloud API", "Order alerts from the Meta number."],
-            ["zoho", "Zoho CPaaS", "Zoho CPaaS WhatsApp channel."],
-            ["aisensy", "AiSensy", "Order alerts from the AiSensy number."],
-          ] as const).map(([provider, label, hint]) => (
-            <button
-              key={provider}
-              type="button"
-              onClick={() => set({ provider })}
-              className={`rounded-xl border-2 p-4 text-left ${value.provider === provider ? "border-burgundy bg-burgundy/5" : "border-slate-200"}`}
-            >
-              <p className="font-semibold text-slate-900">{label}</p>
-              <p className="mt-1 text-xs text-slate-500">{hint}</p>
-            </button>
-          ))}
+            ["meta", "Meta Cloud API", "Alerts from the Meta number."],
+            ["aisensy", "AiSensy", "Alerts from the AiSensy number."],
+            ["zoho", "Zoho CPaaS", "Alerts from the Zoho CPaaS number."],
+          ] as const).map(([provider, label, hint]) => {
+            const on = senders.includes(provider);
+            return (
+              <label key={provider} className={`flex cursor-pointer gap-3 rounded-xl border-2 p-4 ${on ? "border-burgundy bg-burgundy/5" : "border-slate-200"}`}>
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 accent-burgundy"
+                  checked={on}
+                  onChange={(event) => {
+                    const providers = event.target.checked ? [...senders, provider] : senders.filter((item) => item !== provider);
+                    set({ providers, provider: providers[0] ?? "none" });
+                  }}
+                />
+                <span>
+                  <span className="block font-semibold text-slate-900">{label}{on && senders.length > 1 ? ` · ${senders.indexOf(provider) + 1}` : ""}</span>
+                  <span className="mt-1 block text-xs text-slate-500">{hint}</span>
+                </span>
+              </label>
+            );
+          })}
         </div>
+        {senders.length === 0 && <p className="mt-3 text-sm text-slate-500">All off: only email is sent.</p>}
+        {senders.length > 1 && (
+          <label className="mt-4 block max-w-md text-xs font-semibold text-slate-500">
+            When more than one is on
+            <select className={`${input} mt-1`} value={value.sendMode ?? "failover"} onChange={(event) => set({ sendMode: event.target.value === "all" ? "all" : "failover" })}>
+              <option value="failover">Send from the first; use the next only if it fails</option>
+              <option value="all">Send from every provider that is on</option>
+            </select>
+          </label>
+        )}
       </Card>
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Meta Cloud API" text="developers.facebook.com/docs → WhatsApp Cloud API. Phone number ID + permanent System User token. Templates are sent as Graph /{phone-number-id}/messages.">
@@ -1057,22 +1081,26 @@ export function WhatsAppSettingsDesk() {
         </datalist>
         <div className="grid gap-3 md:grid-cols-2">
           {notificationEvents.map((item) => (
-            <label key={item.id} className="flex items-center gap-3 text-sm">
-              <span className="w-44 shrink-0 font-medium text-slate-700">{item.label}</span>
-              <input
-                className={input}
-                list="wa-templates"
-                placeholder={
-                  value.provider === "aisensy"
-                    ? "AiSensy campaign name"
-                    : value.provider === "zoho"
-                      ? "Zoho template alias or template key"
-                      : "Meta template name"
-                }
-                value={value.mapping[item.id] ?? ""}
-                onChange={(eventInput) => set({ mapping: { ...value.mapping, [item.id]: eventInput.target.value } })}
-              />
-            </label>
+            <div key={item.id} className="flex items-start gap-3 text-sm">
+              <span className="w-44 shrink-0 pt-2 font-medium text-slate-700">{item.label}</span>
+              <div className="flex-1 space-y-1">
+                {mapped.map((provider) => (
+                  <input
+                    key={provider}
+                    className={input}
+                    list={provider === "meta" ? "wa-templates" : undefined}
+                    placeholder={provider === "aisensy" ? "AiSensy campaign name" : provider === "zoho" ? "Zoho template alias or template key" : "Meta template name"}
+                    value={whatsAppTemplateFor(value, provider, item.id)}
+                    onChange={(eventInput) => {
+                      const name = eventInput.target.value;
+                      const byProvider = { ...(value.mappingByProvider ?? {}) };
+                      byProvider[provider] = { ...(byProvider[provider] ?? {}), [item.id]: name };
+                      set({ mappingByProvider: byProvider, ...(provider === (senders[0] ?? value.provider) ? { mapping: { ...value.mapping, [item.id]: name } } : {}) });
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
@@ -1085,7 +1113,7 @@ export function WhatsAppSettingsDesk() {
           <button
             type="button"
             className={ghost}
-            disabled={busy || value.provider === "none"}
+            disabled={busy || senders.length === 0}
             onClick={async () => {
               save();
               setBusy(true);

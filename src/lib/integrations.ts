@@ -28,6 +28,24 @@ export type CustomMessageTemplate = MessageCopy & {
   whatsappTemplate: string;
 };
 export type WhatsAppProvider = "none" | "meta" | "aisensy" | "zoho";
+export type WhatsAppSender = Exclude<WhatsAppProvider, "none">;
+export const WHATSAPP_SENDERS: WhatsAppSender[] = ["meta", "aisensy", "zoho"];
+
+type WhatsAppAlertSettings = Pick<IntegrationSettings["whatsapp"], "provider" | "providers" | "mapping" | "mappingByProvider">;
+
+/** Providers that send alerts, in order. */
+export function whatsAppSenders(whatsapp: WhatsAppAlertSettings): WhatsAppSender[] {
+  const list = (whatsapp.providers ?? []).filter((item): item is WhatsAppSender => WHATSAPP_SENDERS.includes(item));
+  if (list.length) return [...new Set(list)];
+  return whatsapp.provider && whatsapp.provider !== "none" ? [whatsapp.provider] : [];
+}
+
+/** Template (Meta/Zoho) or campaign (AiSensy) mapped to an event for one provider. */
+export function whatsAppTemplateFor(whatsapp: WhatsAppAlertSettings, provider: string, event: string) {
+  const own = whatsapp.mappingByProvider?.[provider as WhatsAppSender]?.[event as NotificationEventId];
+  if (own?.trim()) return own.trim();
+  return whatsapp.provider === provider || !whatsapp.mappingByProvider?.[provider as WhatsAppSender] ? (whatsapp.mapping[event as NotificationEventId] ?? "").trim() : "";
+}
 export type SmsProvider = "none" | "msg91";
 export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax";
 export type HyperlocalId = "tookan" | "shipday";
@@ -163,6 +181,12 @@ export interface IntegrationSettings {
     templatesSyncedAt: string;
     /** Site event → template (Meta) or campaign (AiSensy) name. */
     mapping: Partial<Record<NotificationEventId, string>>;
+    /** Every provider switched on for alerts, in order. Empty = just `provider`. */
+    providers?: WhatsAppSender[];
+    /** failover: first provider, the next one only if it fails. all: send through each. */
+    sendMode?: "failover" | "all";
+    /** Per-provider template/campaign names; falls back to `mapping`. */
+    mappingByProvider?: Partial<Record<WhatsAppSender, Partial<Record<NotificationEventId, string>>>>;
   };
   sms: {
     provider: SmsProvider;
@@ -613,8 +637,8 @@ export function recordShippingConnection(provider: ShippingProviderId, status: S
   return settings.shipping.connection[provider]!;
 }
 
-function persistMailStatus(settings: IntegrationSettings) {
-  if (typeof window === "undefined") return;
+function persistMailStatus(settings: IntegrationSettings): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
   const email = settings.email;
   const ready = Boolean(
     email.zeptoToken.trim() ||
@@ -633,7 +657,7 @@ function persistMailStatus(settings: IntegrationSettings) {
       zohoCpaasDomain: settings.whatsapp.zohoCpaasDomain,
     }),
   }).catch(() => undefined);
-  void fetch("/api/notify", {
+  return fetch("/api/notify", {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -645,10 +669,13 @@ function persistMailStatus(settings: IntegrationSettings) {
       messages: settings.messages,
       customTemplates: settings.customTemplates,
     }),
-  }).catch(() => undefined);
+  })
+    .then((response) => response.ok)
+    .catch(() => false);
 }
 
-export function saveIntegrations(settings: IntegrationSettings) {
+/** Resolves true once the server has stored the settings; false means saved on this device only. */
+export function saveIntegrations(settings: IntegrationSettings): Promise<boolean> {
   const previous = getIntegrations();
   const next = merge(defaultIntegrations, settings);
   const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "tookan", "shipday"];
@@ -660,21 +687,22 @@ export function saveIntegrations(settings: IntegrationSettings) {
   }
   next.shipping.connection = connection;
   writeJSON(INTEGRATIONS_KEY, next);
-  persistMailStatus(next);
-  pushAdminIntegrations(next);
+  return Promise.all([persistMailStatus(next), pushAdminIntegrations(next)]).then(([mail, admin]) => mail && admin);
 }
 
 const INTEGRATIONS_AT = "vgmf_integrations_at";
 
-function pushAdminIntegrations(settings: IntegrationSettings, at = new Date().toISOString()) {
-  if (typeof window === "undefined") return;
+function pushAdminIntegrations(settings: IntegrationSettings, at = new Date().toISOString()): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
   window.localStorage.setItem(INTEGRATIONS_AT, at);
-  void fetch("/api/admin/integrations", {
+  return fetch("/api/admin/integrations", {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ settings, at }),
-  }).catch(() => undefined);
+  })
+    .then((response) => response.ok)
+    .catch(() => false);
 }
 
 function withoutBlanks(value: unknown): unknown {
@@ -716,7 +744,7 @@ export async function syncAdminIntegrations() {
     window.dispatchEvent(new Event("vgmf-cms"));
     return;
   }
-  if (hasLocal && (!serverHas || localAt > serverAt)) pushAdminIntegrations(getIntegrations(), localAt || new Date().toISOString());
+  if (hasLocal && (!serverHas || localAt > serverAt)) void pushAdminIntegrations(getIntegrations(), localAt || new Date().toISOString());
 }
 
 function finiteNumber(value: unknown, fallback: number) {

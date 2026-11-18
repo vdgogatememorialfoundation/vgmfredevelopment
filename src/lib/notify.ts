@@ -1,11 +1,11 @@
 import type { OutboxEmail } from "@/types";
-import { getIntegrations, notificationEvents, type NotificationEventId } from "@/lib/integrations";
+import { getIntegrations, notificationEvents, whatsAppSenders, whatsAppTemplateFor, type NotificationEventId } from "@/lib/integrations";
 import { messageCopyFor } from "@/lib/message-templates";
 
 const OUTBOX_KEY = "vgmf_outbox";
 const MAX_LOG = 500;
 
-export type NotificationRecord = OutboxEmail & { phone?: string; name?: string; params?: string[] };
+export type NotificationRecord = OutboxEmail & { phone?: string; name?: string; params?: string[]; fallbacks?: string[] };
 
 function read(): NotificationRecord[] {
   if (typeof window === "undefined") return [];
@@ -79,22 +79,25 @@ export function queueNotification(input: {
       fromName: input.fromName,
     });
   }
-  const templateName = settings.whatsapp.mapping[input.template as NotificationEventId];
-  if (settings.whatsapp.provider !== "none" && templateName && input.phone) {
-    records.push({
-      id: newId("WA"),
-      channel: "whatsapp",
-      provider: settings.whatsapp.provider,
-      to: input.phone,
-      phone: input.phone,
-      name: input.name,
-      params: input.params ?? [],
-      subject: `${templateName} · ${eventLabel(input.template)}`,
-      template: input.template,
-      body: input.body,
-      status: "Queued",
-      sentAt: now,
-    });
+  const senders = input.phone ? whatsAppSenders(settings.whatsapp).filter((provider) => whatsAppTemplateFor(settings.whatsapp, provider, input.template)) : [];
+  const waRecord = (provider: string, fallbacks: string[]): NotificationRecord => ({
+    id: newId("WA"),
+    channel: "whatsapp",
+    provider,
+    to: input.phone!,
+    phone: input.phone,
+    name: input.name,
+    params: input.params ?? [],
+    subject: `${whatsAppTemplateFor(settings.whatsapp, provider, input.template)} · ${eventLabel(input.template)}`,
+    template: input.template,
+    body: input.body,
+    status: "Queued",
+    sentAt: now,
+    fallbacks,
+  });
+  if (senders.length) {
+    if (settings.whatsapp.sendMode === "all") records.push(...senders.map((provider) => waRecord(provider, [])));
+    else records.push(waRecord(senders[0], senders.slice(1)));
   }
   if (settings.sms.provider === "msg91" && input.phone) {
     records.push({
@@ -143,11 +146,12 @@ export async function deliver(id: string) {
   try {
     let payload: Record<string, unknown>;
     if (record.channel === "whatsapp") {
-      const template = settings.whatsapp.mapping[record.template as NotificationEventId] ?? "";
+      const provider = record.provider || whatsAppSenders(settings.whatsapp)[0] || settings.whatsapp.provider;
+      const template = whatsAppTemplateFor(settings.whatsapp, provider, record.template);
       const language = settings.whatsapp.templates.find((item) => item.name === template)?.language ?? "en";
       payload = {
         channel: "whatsapp",
-        provider: settings.whatsapp.provider,
+        provider,
         to: record.phone ?? record.to,
         name: record.name,
         template,
@@ -190,9 +194,20 @@ export async function deliver(id: string) {
     if (result.ok) {
       patch(id, { status: "Sent", live: true, providerMessageId: result.id, error: undefined });
     } else {
-      patch(id, { status: "Failed", live: Boolean(result.configured), error: result.error ?? "The provider rejected the message." });
+      failWhatsApp(record, result.error ?? "The provider rejected the message.", Boolean(result.configured));
     }
   } catch (error) {
-    patch(id, { status: "Failed", error: (error as Error).message || "Network error." });
+    failWhatsApp(record, (error as Error).message || "Network error.");
   }
+}
+
+/** On failure a WhatsApp alert moves to the next switched-on provider, if any. */
+function failWhatsApp(record: NotificationRecord, error: string, live?: boolean) {
+  const [next, ...rest] = record.channel === "whatsapp" ? record.fallbacks ?? [] : [];
+  if (next) {
+    patch(record.id, { provider: next, fallbacks: rest, error: `${record.provider}: ${error}` });
+    void deliver(record.id);
+    return;
+  }
+  patch(record.id, { status: "Failed", ...(live === undefined ? {} : { live }), error });
 }

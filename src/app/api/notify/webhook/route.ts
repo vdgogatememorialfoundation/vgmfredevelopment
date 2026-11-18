@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { metaSignatureOk } from "@/lib/server/providers";
 import { pushWebhook } from "@/lib/server/webhooks";
-import { applyWhatsAppWebhook, metaAppSecret, whatsAppVerifyToken } from "@/lib/server/whatsapp-inbox";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+import { applyWhatsAppWebhook, loadWhatsAppCreds, metaAppSecret, whatsAppVerifyToken } from "@/lib/server/whatsapp-inbox";
 
 /**
  * Meta Cloud API webhook. Incoming chats are stored for the admin WhatsApp inbox.
@@ -12,7 +13,10 @@ export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("hub.verify_token");
   const challenge = request.nextUrl.searchParams.get("hub.challenge");
   const allowed = whatsAppVerifyToken();
-  const matches = Boolean(token && (token === allowed.env || token === allowed.file));
+  const fromKv = await loadWhatsAppCreds().catch(() => ({}) as Record<string, string>);
+  const fromSettings = (savedAdminIntegrations().whatsapp as Record<string, unknown> | undefined)?.metaVerifyToken;
+  const tokens = [allowed.env, allowed.file, fromKv.metaVerifyToken, typeof fromSettings === "string" ? fromSettings : ""].map((item) => String(item || "").trim()).filter(Boolean);
+  const matches = Boolean(token && tokens.includes(token.trim()));
   if (mode === "subscribe" && matches && challenge) {
     return new NextResponse(challenge, { status: 200 });
   }
