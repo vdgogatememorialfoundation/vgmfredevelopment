@@ -237,7 +237,44 @@ export interface IntegrationSettings {
     labelSource: "aggregator" | "foundation";
     /** Default paper for the Foundation label; "printer" lets the print dialog choose. */
     labelSize: "printer" | "4x6" | "a4" | "a5" | "roll";
+    /** What the Foundation shipping label shows; editable in Settings → Shipping. */
+    labelDesign?: Partial<LabelDesign>;
   };
+}
+
+export interface LabelDesign {
+  showAwbQr: boolean;
+  showOrderCodes: boolean;
+  showRouting: boolean;
+  showServiceMode: boolean;
+  showDimensions: boolean;
+  showInvoiceNo: boolean;
+  showValue: boolean;
+  showItems: boolean;
+  showLogo: boolean;
+  /** Printed before the order number to make the invoice number. */
+  invoicePrefix: string;
+  jurisdiction: string;
+  footerText: string;
+}
+
+export const DEFAULT_LABEL_DESIGN: LabelDesign = {
+  showAwbQr: true,
+  showOrderCodes: true,
+  showRouting: true,
+  showServiceMode: true,
+  showDimensions: true,
+  showInvoiceNo: true,
+  showValue: true,
+  showItems: true,
+  showLogo: true,
+  invoicePrefix: "",
+  jurisdiction: "Subject to Pune jurisdiction",
+  footerText: "Handle books with care. Do not bend.",
+};
+
+export function labelDesign(shipping: { labelDesign?: Partial<LabelDesign> }): LabelDesign {
+  return { ...DEFAULT_LABEL_DESIGN, ...(shipping.labelDesign ?? {}) };
 }
 
 export interface ScanRules {
@@ -469,7 +506,7 @@ export const defaultIntegrations: IntegrationSettings = {
     autoBookOnPack: false,
     autoSchedulePickup: true,
     rateChoice: "customer",
-    labelSource: "aggregator",
+    labelSource: "foundation",
     labelSize: "4x6",
   },
 };

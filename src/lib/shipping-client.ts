@@ -1,7 +1,7 @@
 import { isCourierInfoLine, isFailedAttempt } from "@/lib/order-pipeline";
 import { courierTrackingLink, directCourier } from "@/lib/couriers";
 import type { CourierRate, Order, ShipmentRecord } from "@/types";
-import { customerCourierLabel, fleetCourierLabel, isOwnFleet } from "@/lib/courier-label";
+import { customerCourierLabel, fleetCourierLabel, isOwnFleet, serviceModeOf } from "@/lib/courier-label";
 import { deliveryDatePhrase, formatIndiaClock } from "@/lib/delivery-expectation";
 import { checkPincode } from "@/lib/fulfillment";
 import { customerCourierRates } from "@/lib/checkout-couriers";
@@ -434,6 +434,8 @@ async function bookShipmentOnce(
     pickupReference?: string;
     courierCost?: number;
     trackingUrl?: string;
+    routingCode?: string;
+    serviceMode?: string;
   }>({
     action: "book",
     provider: choice.provider,
@@ -464,6 +466,8 @@ async function bookShipmentOnce(
     pickupReference: result.pickupReference || undefined,
     courierCost: result.courierCost ?? choice.rate,
     trackingUrl: result.trackingUrl || undefined,
+    routingCode: result.routingCode || undefined,
+    serviceMode: result.serviceMode || serviceModeOf(result.courierName, choice.courierName) || undefined,
     note: `Booked on ${label(choice.provider)}.`,
   };
   const message = `Booked on ${label(choice.provider)} with ${shipment.courier}. AWB ${shipment.awb}.`;
@@ -738,6 +742,7 @@ type LabelFetch = {
   destination?: string;
   courierName?: string;
   awb?: string;
+  serviceMode?: string;
 };
 
 export async function downloadLabel(shipmentId: string) {
@@ -751,6 +756,7 @@ export async function downloadLabel(shipmentId: string) {
     destination: shipment.destinationHub,
     courierName: shipment.courier,
     awb: shipment.awb,
+    serviceMode: shipment.serviceMode,
   };
   if (shipment.live && provider && fetched.has(provider) && (shipment.awb || shipment.providerShipmentId)) {
     const result = await post<LabelFetch>({
@@ -767,10 +773,12 @@ export async function downloadLabel(shipmentId: string) {
         destination: result.destination || details.destination,
         courierName: result.courierName || details.courierName,
         awb: result.awb || details.awb,
+        serviceMode: result.serviceMode || details.serviceMode,
       };
       patchShipment(shipmentId, {
         labelUrl: details.labelUrl,
         routingCode: details.routingCode,
+        serviceMode: details.serviceMode,
         destinationHub: details.destination,
       });
     }

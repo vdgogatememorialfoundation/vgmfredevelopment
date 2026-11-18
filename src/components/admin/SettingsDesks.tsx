@@ -23,7 +23,7 @@ import {
   type OrderSettings,
   type ShippingProviderId,
   type WhatsAppSender,
-  type WhatsAppTemplate, nextStoreWorkingDay, serverSavedSecrets, whatsAppSenders, whatsAppTemplateFor } from "@/lib/integrations";
+  type WhatsAppTemplate, nextStoreWorkingDay, serverSavedSecrets, whatsAppSenders, whatsAppTemplateFor, labelDesign, type LabelDesign } from "@/lib/integrations";
 import { defaultMessageCopy } from "@/lib/message-templates";
 import { ConnectionBadge } from "@/components/admin/AdminUI";
 import { clearNotifications, deliver, eventLabel, getNotifications, markNotification, queueNotification, type NotificationRecord } from "@/lib/notify";
@@ -1658,7 +1658,7 @@ export function ShippingApisDesk() {
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Shipping label</span>
-            <select className={input} value={value.labelSource ?? "aggregator"} onChange={(event) => set({ labelSource: event.target.value === "foundation" ? "foundation" : "aggregator" })}>
+            <select className={input} value={value.labelSource ?? "foundation"} onChange={(event) => set({ labelSource: event.target.value === "foundation" ? "foundation" : "aggregator" })}>
               <option value="aggregator">Aggregator label (Shiprocket, Nimbuspost, iThink, Shipyaari) when available</option>
               <option value="foundation">Foundation label for every courier</option>
             </select>
@@ -1676,6 +1676,7 @@ export function ShippingApisDesk() {
             <span className="mt-1 block text-xs text-slate-500">Default for every device. Each device can still pick a size next to the Print label button.</span>
           </label>
         </div>
+        <LabelDesignFields design={labelDesign(value)} onChange={(patch) => set({ labelDesign: { ...labelDesign(value), ...patch } })} />
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
           <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.min(15, Math.max(8, Number(seconds) || 8)) })} hint="How often the live map asks Tookan or Shipday for the rider. 8 to 15 seconds." />
@@ -2333,5 +2334,35 @@ function LinksField({ label, links, onChange }: { label: string; links?: SiteChr
         }}
       />
     </label>
+  );
+}
+
+function LabelDesignFields({ design, onChange }: { design: LabelDesign; onChange: (patch: Partial<LabelDesign>) => void }) {
+  const toggles: [keyof LabelDesign, string][] = [
+    ["showAwbQr", "AWB QR code"],
+    ["showOrderCodes", "Order barcode and QR"],
+    ["showRouting", "Routing code and hub"],
+    ["showServiceMode", "Service type (Express / Air / Surface)"],
+    ["showDimensions", "Dimensions"],
+    ["showInvoiceNo", "Invoice number"],
+    ["showValue", "Invoice value"],
+    ["showItems", "Item list"],
+    ["showLogo", "Foundation logo"],
+  ];
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-white p-4">
+      <p className="text-sm font-semibold text-slate-800">Foundation label design</p>
+      <p className="mt-1 text-xs text-slate-500">Used for Shiprocket, Ekart Elite and every other courier when the Foundation label is printed.</p>
+      <div className="mt-3 grid gap-3 md:grid-cols-4">
+        {toggles.map(([key, label]) => (
+          <Check key={key} label={label} checked={Boolean(design[key])} onChange={(checked) => onChange({ [key]: checked })} />
+        ))}
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <Text label="Invoice no. prefix" value={design.invoicePrefix} placeholder="e.g. VGMF/" onChange={(invoicePrefix) => onChange({ invoicePrefix })} />
+        <Text label="Jurisdiction line" value={design.jurisdiction} placeholder="Subject to Pune jurisdiction" onChange={(jurisdiction) => onChange({ jurisdiction })} />
+        <Text label="Footer note" value={design.footerText} onChange={(footerText) => onChange({ footerText })} />
+      </div>
+    </div>
   );
 }

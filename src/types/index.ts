@@ -1083,6 +1083,8 @@ export interface ShipmentRecord {
   labelUrl?: string;
   /** Sort code returned by Shiprocket, Nimbuspost, or Shipyaari. */
   routingCode?: string;
+  /** Express, Air or Surface, from the aggregator or the courier name. */
+  serviceMode?: string;
   destinationHub?: string;
   invoiceUrl?: string;
   manifestUrl?: string;

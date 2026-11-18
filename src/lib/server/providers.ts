@@ -1,4 +1,5 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { serviceModeOf } from "@/lib/courier-label";
 import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { logEmail } from "@/lib/server/email-log";
@@ -915,6 +916,8 @@ export type BookOut = {
   pickupReference?: string;
   courierCost?: number;
   trackingUrl?: string;
+  routingCode?: string;
+  serviceMode?: string;
 };
 
 export async function shiprocketBook(input: Json, order: BookInput): Promise<BookOut | null> {
@@ -972,6 +975,8 @@ export async function shiprocketBook(input: Json, order: BookInput): Promise<Boo
     courierName: String(awbData.courier_name ?? ""),
     providerOrderId: String(created.order_id ?? ""),
     providerShipmentId: shipmentId,
+    routingCode: labelText(awbData, ["routing_code", "routingCode", "sort_code"]) || undefined,
+    serviceMode: serviceModeOf(awbData.mode, awbData.shipping_mode, awbData.courier_type, awbData.courier_name) || undefined,
     courierCost: Number(awbData.freight_charges ?? awbData.applied_weight_amount ?? 0) || undefined,
   };
 }
@@ -1002,6 +1007,7 @@ export type LabelSheet = {
   destination?: string;
   courierName?: string;
   awb?: string;
+  serviceMode?: string;
 };
 
 function labelText(source: Json, keys: string[]) {
@@ -1025,6 +1031,10 @@ function labelSheetFrom(source: Json | null | undefined): LabelSheet {
     destination: labelText(bag, ["destination", "destination_hub", "destination_code"]),
     courierName: labelText(bag, ["courier_name", "courier", "courierName"]),
     awb: labelText(bag, ["awb", "awb_code", "awb_number", "awbNumber"]),
+    serviceMode: serviceModeOf(
+      labelText(bag, ["mode", "shipping_mode", "service_type", "serviceType", "service_mode", "transport_mode", "delivery_mode", "courier_type", "product_type"]),
+      labelText(bag, ["courier_name", "courier", "courierName"]),
+    ),
   };
 }
 

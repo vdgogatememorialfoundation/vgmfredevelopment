@@ -1,4 +1,5 @@
 import { hideShipping, shippingSplit } from "@/lib/order-charges";
+import { serviceModeOf } from "@/lib/courier-label";
 import type {
   AccountStatus,
   DeliveryAddress,
@@ -30,7 +31,7 @@ import { isSplitParent, planOrderSplit, splitBlocker } from "@/lib/split-order";
 import { getNotifications, queueNotification } from "@/lib/notify";
 import { messageCopyFor } from "@/lib/message-templates";
 import { pushInbox } from "@/lib/inbox";
-import { commerceCharges, getIntegrations, getOrderSettings, preorderAdvance, shippingFeeFor } from "@/lib/integrations";
+import { commerceCharges, getIntegrations, getOrderSettings, labelDesign, preorderAdvance, shippingFeeFor } from "@/lib/integrations";
 import { barcodeSvg } from "@/lib/barcode";
 import { generatePassword } from "@/lib/passwords";
 import { currentActorEmail, recordActivity } from "@/lib/activity";
@@ -2230,7 +2231,7 @@ function labelPageMm(page: string): [number, number] | null {
 
 export function printShippingLabel(
   shipment: ShipmentRecord,
-  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string },
+  details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string; serviceMode?: string },
   size: LabelSize = getLabelSize(),
   colour: LabelColour = getLabelColour()
 ) {
@@ -2269,6 +2270,8 @@ export function printShippingLabel(
     return { ...item, price: line?.price ?? 0, batch: line?.batchNo ?? "" };
   });
   const value = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const design = labelDesign(shipping);
+  const serviceMode = details?.serviceMode || shipment.serviceMode || serviceModeOf(courier, shipment.courier);
   const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
     <div class="agg-row">
       <div class="agg-cell grow to">
@@ -2282,8 +2285,9 @@ export function printShippingLabel(
       <div class="agg-cell side">
         <p class="label">Courier</p>
         <b class="courier">${esc(courier)}</b>
-        ${routing ? `<p class="label" style="margin-top:6px">Routing code</p><b class="routing">${esc(routing)}</b>` : ""}
-        ${hub ? `<p class="meta">Hub ${esc(hub)}</p>` : ""}
+        ${serviceMode && design.showServiceMode ? `<p class="label" style="margin-top:6px">Service</p><b class="routing">${esc(serviceMode.toUpperCase())}</b>` : ""}
+        ${routing && design.showRouting ? `<p class="label" style="margin-top:6px">Routing code</p><b class="routing">${esc(routing)}</b>` : ""}
+        ${hub && design.showRouting ? `<p class="meta">Hub ${esc(hub)}</p>` : ""}
       </div>
     </div>
     <div class="agg-row center">
@@ -2292,9 +2296,10 @@ export function printShippingLabel(
         ${barcodeSvg(awb, { height: 56, module: 1.6, format: "code128" })}
         <p class="awb">${esc(awb)}</p>
       </div>
+      ${design.showAwbQr && awb ? `<div class="agg-cell side" style="text-align:center"><p class="label">AWB QR</p>${qrSvg(awb, 90)}</div>` : ""}
     </div>
     <div class="agg-row">
-      <div class="agg-cell"><p class="label">Dimensions (cm)</p><b>${esc(`${box.length} × ${box.breadth} × ${box.height}`)}</b></div>
+      ${design.showDimensions ? `<div class="agg-cell"><p class="label">Dimensions (cm)</p><b>${esc(`${box.length} × ${box.breadth} × ${box.height}`)}</b></div>` : ""}
       <div class="agg-cell"><p class="label">Weight</p><b>${esc(weight)} kg</b></div>
       <div class="agg-cell pay-cell"><p class="label">Payment</p><b class="pay-mode">${cod ? "COD" : "PREPAID"}</b><br/>${cod ? `Collect ${esc(rupees(collect))}` : "Do not collect cash"}</div>
     </div>
@@ -2309,24 +2314,25 @@ export function printShippingLabel(
         <p class="label">Order no.</p>
         <b>${esc(shipment.orderId)}</b>
         <p class="meta">Order date ${esc(formatDate(order?.date || shipment.generatedAt))}</p>
-        <p class="meta">Invoice value ${esc(rupees(order?.total || value || 0))}</p>
+        ${design.showInvoiceNo ? `<p class="meta">Invoice no. ${esc(`${design.invoicePrefix}${shipment.orderId}`)}</p>` : ""}
+        ${design.showValue ? `<p class="meta">Invoice value ${esc(rupees(order?.total || value || 0))}</p>` : ""}
       </div>
     </div>
-    <div class="agg-row center">
+    ${design.showOrderCodes ? `<div class="agg-row center">
       <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
       <div class="agg-cell side" style="text-align:center">${qrSvg(shipment.orderId, 100)}</div>
-    </div>
-    <table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th></tr>
+    </div>` : ""}
+    ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th><th class="right">Qty</th></tr>
     ${priced
       .map(
         (item) =>
           `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td><td class="right">${esc(item.quantity)}</td></tr>`
       )
       .join("")}
-    </table>
+    </table>` : ""}
     <div class="agg-foot">
-      <span>${logoImg("label-logo")}</span>
-      <span>${esc(siteConfig.name)}${hideStorePhone ? "" : ` · ${esc(siteConfig.phone)}`} · Handle books with care. Do not bend.<br/>This is a computer-generated label and does not need a signature.</span>
+      ${design.showLogo ? `<span>${logoImg("label-logo")}</span>` : ""}
+      <span>${esc(siteConfig.name)}${hideStorePhone ? "" : ` · ${esc(siteConfig.phone)}`}${design.footerText ? ` · ${esc(design.footerText)}` : ""}<br/>${design.jurisdiction ? `<b>${esc(design.jurisdiction)}</b> · ` : ""}This is a computer-generated label and does not need a signature.</span>
     </div>
   </div></div>`;
   const page = size === "printer" ? "auto" : size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
