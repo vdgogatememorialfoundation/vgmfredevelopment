@@ -188,6 +188,8 @@ export interface IntegrationSettings {
     providers?: WhatsAppSender[];
     /** Self-service menu (order books, my orders, my account, talk to us) answers new chats. Default on. */
     botEnabled?: boolean;
+    /** Off: the bot and WhatsApp catalogue carts send customers to the website instead of taking orders. */
+    orderingEnabled?: boolean;
     /** failover: first provider, the next one only if it fails. all: send through each. */
     sendMode?: "failover" | "all";
     /** Per-provider template/campaign names; falls back to `mapping`. */

@@ -950,6 +950,10 @@ export function WhatsAppSettingsDesk() {
           <input type="checkbox" className="h-4 w-4 accent-burgundy" checked={value.botEnabled !== false} onChange={(event) => set({ botEnabled: event.target.checked })} />
           Answer new chats with the auto menu
         </label>
+        <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="h-4 w-4 accent-burgundy" checked={value.orderingEnabled !== false} onChange={(event) => set({ orderingEnabled: event.target.checked })} />
+          Take orders on WhatsApp (Order books menu and catalogue carts). Off: customers get the website link instead.
+        </label>
       </Card>
       <Card title="Providers for alerts" text="Switch on one or more. Each provider keeps its own inbox; this only chooses which numbers send order and account alerts.">
         <div className="grid gap-3 md:grid-cols-3">

@@ -58,6 +58,12 @@ export function chatBotEnabled() {
 }
 
 /** The desk took over this chat (Talk to us, or a staff reply): the menu stays quiet until the customer types "menu". */
+/** Admin → WhatsApp → "Take orders on WhatsApp". */
+export function whatsAppOrderingOn() {
+  const whatsapp = (savedAdminIntegrations().whatsapp ?? {}) as { orderingEnabled?: boolean };
+  return whatsapp.orderingEnabled !== false;
+}
+
 export function pauseChatBot(key: string) {
   const rows = load();
   rows[key] = { ...(rows[key] ?? { step: "menu", cart: [] }), step: "desk", deskUntil: new Date(Date.now() + DESK_MS).toISOString(), updatedAt: new Date().toISOString() };
@@ -220,12 +226,18 @@ export async function chatBotReply(key: string, phone: string, text: string, pro
     save(rows);
     return reply;
   };
+  const ordering = whatsAppOrderingOn();
+  const orderOnSite = `Ordering on WhatsApp is paused right now. Please order on our website: ${SITE}/books\n\nReply *menu* for the menu.`;
   const books = catalogue();
   const bookMenu = () =>
     books.length
       ? [`Choose a book (reply with its number):`, ...books.slice(0, 20).map((book, index) => `${index + 1}. ${bookLabel(book)}`)].join("\n")
       : `No books are open for ordering right now. See ${SITE}/books`;
 
+  if (!ordering && (cart?.length || !["menu", "desk"].includes(session.step))) {
+    session = { step: "menu", cart: [], email: session.email, updatedAt: now.toISOString() };
+    if (cart?.length) return finish(orderOnSite);
+  }
   if (cart?.length) {
     const known = cart.filter((line) => books.some((book) => book.id === line.id));
     if (!known.length) return finish("Those items aren't available to order right now. Reply *1* to see the books you can order.");
@@ -239,6 +251,7 @@ export async function chatBotReply(key: string, phone: string, text: string, pro
   switch (session.step) {
     case "menu": {
       if (input === "1" || (lower.includes("order") && lower.includes("book"))) {
+        if (!ordering) return finish(orderOnSite);
         session.step = books.length ? "book" : "menu";
         return finish(bookMenu());
       }
