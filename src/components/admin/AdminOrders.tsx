@@ -1242,9 +1242,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     let stopped = false;
     const check = async () => {
       try {
+        const before = JSON.stringify(getStoredOrder(order.id) ?? null);
         const result =
           openLink === "balance" ? await refreshBalancePaymentLink(order.id) : openLink === "courier" ? await refreshCourierPaymentLink(order.id) : await refreshPaymentLink(order.id);
-        if (!stopped && result && !result.startsWith("Razorpay link status") && !result.startsWith("Demo")) {
+        // Re-render only when the check changed the order; the remount re-runs this check, so an unchanged order would loop.
+        if (!stopped && result && !result.startsWith("Razorpay link status") && !result.startsWith("Demo") && JSON.stringify(getStoredOrder(order.id) ?? null) !== before) {
           setMessage(result);
           onChanged();
         }
