@@ -47,6 +47,7 @@ export function AIChatbot() {
   const live = getLiveChatSettings();
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<"ai" | "live" | "track">("ai");
+  const menuActive = useRef(false);
   const [showPopup, setShowPopup] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -103,6 +104,21 @@ export function AIChatbot() {
     setIsTyping(true);
 
     window.setTimeout(async () => {
+      const menuTurn = /^(menu|\d{1,2})$/i.test(question) || menuActive.current;
+      if (menuTurn) {
+        try {
+          const response = await fetch("/api/chat/menu", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: question }) });
+          const data = (await response.json()) as { reply?: string; signIn?: boolean };
+          if (data.reply) {
+            menuActive.current = !data.signIn && !/^(Order \*#|Thank you\. A member|Our team has this chat)/.test(data.reply);
+            setMessages((current) => [...current, { role: "bot", text: data.reply! }]);
+            setIsTyping(false);
+            return;
+          }
+        } catch {
+          // fall back to the assistant answer
+        }
+      }
       let answer = answerQuestion(question);
       if (isChatFallback(answer)) {
         try {
