@@ -83,6 +83,18 @@ const STAGE_EVENTS: [RegExp, NotificationEventId][] = [
   [/^refund:.*:rrn$/, "refund-bank-reference"],
 ];
 
+/** Pre-orders get their own WhatsApp templates (advance and balance shown); false when none is mapped, so the normal one goes instead. */
+async function preorderAlert(kind: "placed" | "update", order: Order, phone: string, name: string, status: string = order.status) {
+  const plan = order.preorderPayment;
+  if (!plan || (kind === "placed" && !plan.advancePaidAt)) return false;
+  const due = plan.balancePaidAt
+    ? "nil (fully paid)"
+    : `${rupees(plan.balance + (plan.shipping ?? 0))}${plan.shippingDue && !plan.shipping ? " plus courier" : ""}`;
+  return kind === "placed"
+    ? sendWhatsAppAlert("preorder-placed", { phone, name, params: [name, order.id, rupees(plan.advance), due] }).catch(() => false)
+    : sendWhatsAppAlert("preorder-update", { phone, name, params: [name, order.id, status, due] }).catch(() => false);
+}
+
 /** Admin "Resend WhatsApp": sends that stage's WhatsApp update again for any order. */
 export async function resendWhatsAppStage(orderId: string, key: string) {
   const order = findShopOrder(orderId);
@@ -91,11 +103,12 @@ export async function resendWhatsAppStage(orderId: string, key: string) {
   if (!phone) throw new Error("This order has no phone number.");
   const name = order.deliveryAddress?.fullName || "Reader";
   const event = STAGE_EVENTS.find(([pattern]) => pattern.test(key))?.[1];
-  if (key === "placed") return sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] });
+  if (key === "placed") return (await preorderAlert("placed", order, phone, name)) || sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] });
   if (key.startsWith("return:")) {
     return sendWhatsAppAlert("order-return-update", { phone, name, params: [name, order.id, `return ${order.returnRequest?.status ?? "updated"}`], fallbackEvent: "order-status" });
   }
   const status = key.startsWith("status:") ? key.slice(7) : order.status;
+  if (await preorderAlert("update", order, phone, name, status)) return true;
   return sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, status], fallbackEvent: "order-status" });
 }
 
@@ -107,10 +120,12 @@ async function whatsAppStage(key: string, order: Order, name: string) {
   // Website checkout sends its own "order placed" alert from the browser; app and chat orders get it here.
   if (key === "placed") {
     if (order.createdBy !== "WhatsApp" && order.createdBy !== "Android app") return;
+    if (await preorderAlert("placed", order, phone, name)) return;
     await sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] }).catch(() => false);
     return;
   }
   if (key.startsWith("status:") && key !== "status:split") {
+    if (await preorderAlert("update", order, phone, name)) return;
     await sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, order.status], fallbackEvent: "order-status" }).catch(() => false);
     return;
   }

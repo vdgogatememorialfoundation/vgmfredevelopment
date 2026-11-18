@@ -85,6 +85,9 @@ export const notificationEvents = [
   { id: "order-delivery-failed", label: "Delivery attempt failed" },
   { id: "order-return-update", label: "Return / replacement update" },
   { id: "refund-bank-reference", label: "Refund bank reference (RRN/ARN)" },
+  { id: "preorder-placed", label: "Pre-order placed (advance paid)" },
+  { id: "preorder-update", label: "Pre-order status changed" },
+  { id: "preorder-ready", label: "Pre-order ready (balance link)" },
 ] as const;
 
 export type NotificationEventId = (typeof notificationEvents)[number]["id"];

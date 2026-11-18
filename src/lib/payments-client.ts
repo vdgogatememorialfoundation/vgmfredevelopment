@@ -1,5 +1,5 @@
 import type { CourierRate, Order } from "@/types";
-import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
+import { getIntegrations, paytmKeys, razorpayKeys, whatsAppSenders, whatsAppTemplateFor } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
 import { getOrders } from "@/lib/store";
 import { getOrder, maxRefundable, patchOrder, recordBalancePayment, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
@@ -495,7 +495,7 @@ export async function createBalancePaymentLink(orderId: string) {
     name: address?.fullName,
     params: [address?.fullName || "Customer", order.id, `₹${amount}`, link.url],
     subject: `Your Vaidya Gogate Memorial Foundation pre-order ${order.id} is ready — balance due`,
-    template: "payment-link",
+    template: preorderReadyTemplate(),
     body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour pre-order ${order.id} is ready. Please pay the remaining balance of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nWe dispatch the order once the balance is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
@@ -948,4 +948,10 @@ export async function openHostedCheckout(input: { gateway: ReadyGateway["id"]; a
     return;
   }
   throw new Error("The payment gateway did not return a checkout page.");
+}
+
+/** Pre-order balance links use the pre-order WhatsApp template once one is mapped; until then the normal payment-link one. */
+function preorderReadyTemplate() {
+  const whatsapp = getIntegrations().whatsapp;
+  return whatsAppSenders(whatsapp).some((provider) => whatsAppTemplateFor(whatsapp, provider, "preorder-ready")) ? "preorder-ready" : "payment-link";
 }

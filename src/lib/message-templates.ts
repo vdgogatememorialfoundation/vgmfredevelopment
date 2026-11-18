@@ -78,6 +78,21 @@ export const defaultMessageCopy: Record<NotificationEventId, MessageCopy> = {
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\nYour order {orderId} is now {status}.\n\nWith warm regards,\n${SIGN}`,
     smsBody: `${SIGN}: order {orderId} is now {status}.`,
   },
+  "preorder-placed": {
+    emailSubject: `Pre-order {orderId} confirmed: advance received`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: pre-order {orderId} confirmed. Advance received; balance is due when the book is ready.`,
+  },
+  "preorder-update": {
+    emailSubject: `Pre-order {orderId}: {status}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: pre-order {orderId} is now {status}.`,
+  },
+  "preorder-ready": {
+    emailSubject: `Pre-order {orderId} is ready: balance due`,
+    emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\nYour pre-order {orderId} is ready. Please pay the balance using this link:\n{link}\n\nWith warm regards,\n${SIGN}`,
+    smsBody: `${SIGN}: pre-order {orderId} is ready. Pay the balance: {link}`,
+  },
   "payment-link": {
     emailSubject: `Payment link for order {orderId}`,
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\nPlease complete payment for order {orderId} using this link:\n{link}\n\nWith warm regards,\n${SIGN}`,
