@@ -590,7 +590,7 @@ export function OrdersDashboard() {
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isPreorderOrder(order) ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
                             {isPreorderOrder(order) ? "Pre-order" : "Normal"}
                           </span>
-                          {isAppOrder(order) ? <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">App</span> : null}
+                          {(() => { const platform = orderPlatform(order); return <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ${platform.tone}`}>{platform.label}</span>; })()}
                         </span>
                         <span className="block truncate text-xs text-text-muted">
                           {order.deliveryAddress?.fullName || (order.items[0] ? currentProductTitle(order.items[0]) : "")} · {formatDate(order.date)}
@@ -1318,7 +1318,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   return (
     <Panel
       title={`Order #${order.id}`}
-      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${isAppOrder(order) ? " · APP order" : order.channel ? ` · ${order.channel}` : ""}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
+      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${` · ordered on ${orderPlatform(order).label}`}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
       action={
         <span className="flex gap-1">
           <StatusBadge status={order.status} mapping={ORDER_STATUS_TONES} />
@@ -2731,6 +2731,16 @@ function SplitOrderInfo({ order }: { order: Order }) {
       <p className="mt-2">Original order ₹{ledger.original}{ledger.advance ? ` · advance received ₹${ledger.advance}` : ""}{ledger.fee ? ` · platform fee ₹${ledger.fee} ${ledger.feePaidOnParent ? "paid once on this order" : "carried by the first child order"}` : ""} · child orders ₹{ledger.childTotal} · collected ₹{ledger.collected} · still due ₹{ledger.due}</p>
     </div>
   );
+}
+
+/** Where the order was placed, shown as a badge in Admin. */
+function orderPlatform(order: { createdBy?: string; channel?: string }) {
+  if (order.createdBy === "WhatsApp") return { label: "WhatsApp", tone: "bg-emerald-600" };
+  if (isAppOrder(order)) return { label: "App", tone: "bg-indigo-600" };
+  if (order.channel === "pos") return { label: "Store / POS", tone: "bg-amber-600" };
+  if (order.channel === "admin" || order.channel === "shipment") return { label: "Admin", tone: "bg-slate-600" };
+  if (/-sync$/.test(order.createdBy ?? "")) return { label: "Partner site", tone: "bg-sky-600" };
+  return { label: "Website", tone: "bg-burgundy" };
 }
 
 /** Placed from the Android/iOS app (mobile checkout stamps createdBy "Android app"). */
