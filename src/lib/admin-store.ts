@@ -2036,6 +2036,43 @@ function printHtml(title: string, html: string, page = "A4") {
   // A real page of this site, so the browser's print header shows the site address instead of "about:blank".
   const win = window.open("/print.html", "_blank");
   if (!win) return;
+  writeWhenReady(win, printDoc(title, html, page, true), title);
+}
+
+const PAGE_MM: Record<string, [number, number]> = { A4: [210, 297], A5: [148, 210], "100mm 150mm": [100, 150], "80mm 240mm": [80, 240], auto: [100, 150] };
+
+/** Saves the page straight to a PDF file: no print dialog, no new window. */
+async function downloadHtmlPdf(fileName: string, title: string, html: string, page = "A4") {
+  if (typeof window === "undefined") return;
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:900px;height:1400px;border:0;background:#fff";
+  document.body.appendChild(frame);
+  try {
+    await new Promise<void>((resolve) => {
+      frame.onload = () => resolve();
+      frame.srcdoc = printDoc(title, html, page, false);
+    });
+    const doc = frame.contentDocument;
+    if (!doc) throw new Error("Could not prepare the label.");
+    const started = Date.now();
+    while (doc.body.getAttribute("data-ready") !== "1" && Date.now() - started < 4000) await new Promise((done) => setTimeout(done, 60));
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+    const target = (doc.querySelector(".label-sheet") as HTMLElement | null) ?? doc.body;
+    const canvas = await html2canvas(target, { scale: 3, backgroundColor: "#ffffff", useCORS: true });
+    const [width, height] = PAGE_MM[page] ?? PAGE_MM.A4;
+    const margin = page === "A4" || page === "A5" ? 10 : 3;
+    const pdf = new jsPDF({ unit: "mm", format: [width, height], orientation: width > height ? "landscape" : "portrait" });
+    const room = [width - margin * 2, height - margin * 2];
+    const ratio = Math.min(room[0] / canvas.width, room[1] / canvas.height);
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin + (room[0] - canvas.width * ratio) / 2, margin, canvas.width * ratio, canvas.height * ratio);
+    pdf.save(fileName);
+  } finally {
+    frame.remove();
+  }
+}
+
+function printDoc(title: string, html: string, page: string, autoPrint: boolean) {
   const margin = page === "A4" || page === "A5" || page === "auto" ? "10mm" : "3mm";
   const pageRule = page === "auto" ? `@page { margin: ${margin}; }` : `@page { size: ${page}; margin: ${margin}; }`;
   const doc = `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
@@ -2151,8 +2188,7 @@ function printHtml(title: string, html: string, page = "A4") {
         if (printed) return;
         printed = true;
         fit();
-        window.focus();
-        window.print();
+        ${autoPrint ? "window.focus(); window.print();" : 'document.body.setAttribute("data-ready", "1");'}
       }
       var images = Array.prototype.slice.call(document.images);
       var pending = images.filter(function (img) { return !img.complete; });
@@ -2166,7 +2202,7 @@ function printHtml(title: string, html: string, page = "A4") {
       setTimeout(go, 3000);
     })();
   </script></body></html>`;
-  writeWhenReady(win, doc, title);
+  return doc;
 }
 
 /** Waits for /print.html to load in the new window, then puts the printable page into it. */
@@ -2233,7 +2269,8 @@ export function printShippingLabel(
   shipment: ShipmentRecord,
   details?: { routingCode?: string; destination?: string; courierName?: string; awb?: string; serviceMode?: string },
   size: LabelSize = getLabelSize(),
-  colour: LabelColour = getLabelColour()
+  colour: LabelColour = getLabelColour(),
+  output: "print" | "pdf" = "print"
 ) {
   const to = shipment.toAddress;
   // Booked through an aggregator: the pickup address registered with it is the sender and return address.
@@ -2336,6 +2373,7 @@ export function printShippingLabel(
     </div>
   </div></div>`;
   const page = size === "printer" ? "auto" : size === "a4" ? "A4" : size === "a5" ? "A5" : size === "roll" ? "80mm 240mm" : "100mm 150mm";
+  if (output === "pdf") return downloadHtmlPdf(`label-${awb || shipment.orderId}.pdf`, `Label ${awb}`, html, page);
   printHtml(`Label ${awb}`, html, page);
 }
 

@@ -795,16 +795,18 @@ export async function downloadLabel(shipmentId: string) {
     }
   }
   const latest = getShipments().find((item) => item.id === shipmentId) ?? shipment;
-  if (getIntegrations().shipping.labelSource !== "foundation" && /^https?:\/\//.test(details.labelUrl ?? "")) {
-    const opened = typeof window !== "undefined" ? window.open(details.labelUrl, "_blank") : null;
-    if (opened) {
-      opened.opener = null;
-      return `Opened the ${label(provider ?? "courier")} label. Its paper size follows the label setting in the ${label(provider ?? "courier")} panel.`;
-    }
+  if (getIntegrations().shipping.labelSource === "aggregator" && /^https?:\/\//.test(details.labelUrl ?? "") && typeof document !== "undefined") {
+    const link = document.createElement("a");
+    link.href = details.labelUrl ?? "";
+    link.download = `label-${details.awb || shipment.orderId}.pdf`;
+    link.rel = "noopener";
+    link.target = "_blank";
+    link.click();
+    return `Downloaded the ${label(provider ?? "courier")} label.`;
   }
-  printShippingLabel(latest, details);
+  await printShippingLabel(latest, details, undefined, undefined, "pdf");
   const fromPortal = fetched.has(provider ?? "") && shipment.live ? ` using the ${label(provider ?? "courier")} shipment` : "";
-  return `Printed the shipping label${fromPortal}.`;
+  return `Downloaded the shipping label (PDF)${fromPortal}.`;
 }
 
 /** Gogate Products only. Customers see the date. The clock is kept for the tracking line and the courier task. */
