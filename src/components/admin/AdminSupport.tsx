@@ -66,6 +66,13 @@ const TICKET_TONES: Record<string, string> = {
 export function SupportSection() {
   const { user } = useAuth();
   const [tab, setTab] = useState<"queries" | "tickets" | "chat" | "whatsapp" | "approvals" | "faq">("tickets");
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    if (wanted === "whatsapp" || wanted === "chat" || wanted === "approvals" || wanted === "queries" || wanted === "faq") {
+      const timer = window.setTimeout(() => setTab(wanted), 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, []);
   const [messages, setMessages] = useState(() => getSupportMessages());
   const [tickets, setTickets] = useState(() => ticketsVisibleTo(user));
   const [createForm, setCreateForm] = useState({ name: "", email: "", phone: "", subject: "", body: "", assignedTo: "" });

@@ -159,12 +159,44 @@ export function PortalShell({
                   <div className="truncate font-semibold">{title}</div>
                 </div>
               </div>
-              {actions && <div className="flex flex-wrap items-center justify-end gap-2 text-sm sm:gap-3">{actions}</div>}
+              <div className="flex items-center gap-2">
+                <ChatBell />
+                {actions && <div className="flex flex-wrap items-center justify-end gap-2 text-sm sm:gap-3">{actions}</div>}
+              </div>
             </div>
           </header>
           <div className={`min-w-0 max-lg:overflow-x-auto ${contentClassName}`}>{children}</div>
         </main>
       </div>
     </div>
+  );
+}
+
+/** Chat icon: unread WhatsApp messages on open chats; opens Support → WhatsApp. */
+function ChatBell() {
+  const [unread, setUnread] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const response = await fetch("/api/whatsapp/inbox", { credentials: "same-origin", cache: "no-store" }).catch(() => null);
+      if (!response?.ok) return;
+      const data = (await response.json().catch(() => null)) as { threads?: { unread?: number; closedAt?: string }[] } | null;
+      if (alive) setUnread((data?.threads ?? []).filter((thread) => !thread.closedAt).reduce((sum, thread) => sum + (thread.unread || 0), 0));
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 20_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+  if (unread === null) return null;
+  return (
+    <Link href="/admin/support?tab=whatsapp" className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-700" aria-label={`Chats: ${unread} unread`}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      {unread > 0 ? <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-5 text-white">{unread > 99 ? "99+" : unread}</span> : null}
+    </Link>
   );
 }
