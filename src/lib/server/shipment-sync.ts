@@ -131,7 +131,7 @@ async function checkOpenPaymentLinks(creds: { keyId: string; keySecret: string }
         if (result.status === "paid") markAppOrderPaid(order.id, { paymentId: result.paymentId ?? "", razorpayOrderId: link.id });
         continue;
       }
-      if (link?.provider === "razorpay" && link.id && order.paymentStatus !== "Paid" && recent(link.createdAt)) {
+      if (link?.purpose !== "advance" && link?.provider === "razorpay" && link.id && order.paymentStatus !== "Paid" && recent(link.createdAt)) {
         const result = await razorpayLinkStatus(creds, link.id);
         if (result.status === "paid") {
           const at = new Date().toISOString();
