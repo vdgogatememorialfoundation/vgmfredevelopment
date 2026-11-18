@@ -1408,6 +1408,12 @@ export async function shiprocketAddPickup(input: Json, pickup: BookInput["pickup
   return { saved: true };
 }
 
+/** Nimbuspost v2 wants a full ISO date-time ("2026-11-13T14:30:00.000Z"), not a bare date. */
+function isoDateTime(value?: string) {
+  const day = new Date(value ?? "");
+  return (Number.isNaN(day.getTime()) ? new Date() : day).toISOString();
+}
+
 export async function nimbusBook(input: Json, order: BookInput): Promise<BookOut | null> {
   const v2 = nimbusV2Headers(input);
   if (v2) {
@@ -1421,7 +1427,7 @@ export async function nimbusBook(input: Json, order: BookInput): Promise<BookOut
         ...(order.cod ? { order_collectable_amount: Math.round(order.total) } : {}),
         order_amount: order.total,
         warehouse_id: await nimbusWarehouse(input, v2),
-        order_date: order.orderDate.slice(0, 10),
+        order_date: isoDateTime(order.orderDate),
         shipping_address: {
           name: order.customer.name,
           email: order.customer.email || undefined,
