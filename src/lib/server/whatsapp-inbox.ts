@@ -372,7 +372,19 @@ export type InboundWa = {
   at?: string;
   direction: "in" | "out";
   lineNumber?: string;
+  /** Items from a WhatsApp catalogue cart (retailer id = book id). */
+  cart?: { id: string; quantity: number }[];
 };
+
+function metaCart(message: Record<string, unknown>) {
+  if (String(message.type) !== "order") return undefined;
+  const items = asRecord(message.order)?.product_items;
+  if (!Array.isArray(items)) return undefined;
+  return items
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item?.product_retailer_id))
+    .map((item) => ({ id: String(item.product_retailer_id), quantity: Math.max(1, Math.min(20, Math.floor(Number(item.quantity) || 1))) }));
+}
 
 export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string }[] } {
   const messages: InboundWa[] = [];
@@ -401,7 +413,8 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
           provider: "meta",
           phone,
           name: names.get(phone),
-          text: metaMessageText(message),
+          text: String(message.type) === "order" ? "[Cart from the WhatsApp catalogue]" : metaMessageText(message),
+          cart: metaCart(message),
           externalId: String(message.id || ""),
           at: Number.isFinite(stamp) && stamp > 0 ? new Date(stamp * 1000).toISOString() : undefined,
           direction: "in",
@@ -486,7 +499,7 @@ async function runChatBot(message: InboundWa) {
   if (message.direction !== "in" || !message.phone) return;
   try {
     const key = threadKey(message.provider, waPhone(message.phone));
-    const reply = await chatBotReply(key, message.phone, message.text, message.name);
+    const reply = await chatBotReply(key, message.phone, message.text, message.name, message.cart);
     if (!reply) return;
     const creds = await loadWhatsAppCreds();
     const sent = message.provider === "aisensy" ? await sendAiSensySession(creds, { to: message.phone, body: reply }) : await sendMetaText(creds, { to: message.phone, body: reply });

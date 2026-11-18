@@ -199,10 +199,10 @@ async function placeOrder(phone: string, session: Session): Promise<string> {
 }
 
 /** Returns the reply to send, or null when the menu should stay quiet (desk is handling the chat). */
-export async function chatBotReply(key: string, phone: string, text: string, profileName?: string): Promise<string | null> {
+export async function chatBotReply(key: string, phone: string, text: string, profileName?: string, cart?: { id: string; quantity: number }[]): Promise<string | null> {
   if (!chatBotEnabled()) return null;
   const rows = load();
-  const input = text.trim();
+  let input = text.trim();
   const lower = input.toLowerCase();
   const now = new Date();
   let session: Session = rows[key] ?? { step: "menu", cart: [], updatedAt: now.toISOString() };
@@ -223,7 +223,12 @@ export async function chatBotReply(key: string, phone: string, text: string, pro
       ? [`Choose a book (reply with its number):`, ...books.slice(0, 20).map((book, index) => `${index + 1}. ${bookLabel(book)}`)].join("\n")
       : `No books are open for ordering right now. See ${SITE}/books`;
 
-  if (restart || session.step === "desk") {
+  if (cart?.length) {
+    const known = cart.filter((line) => books.some((book) => book.id === line.id));
+    if (!known.length) return finish("Those items aren't available to order right now. Reply *1* to see the books you can order.");
+    session = { step: "more", cart: known, email: session.email, updatedAt: now.toISOString() };
+    input = "2";
+  } else if (restart || session.step === "desk") {
     session = { step: "menu", cart: session.cart, email: session.email, updatedAt: now.toISOString() };
     return finish(`${account ? `Hello ${account.firstName || profileName || ""}! ` : ""}${MENU}`.trim());
   }
