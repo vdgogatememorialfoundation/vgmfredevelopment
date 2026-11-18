@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 import { readKv } from "@/lib/server/db";
-import { chatBotReply, pauseChatBot, resumeChatBot } from "@/lib/server/whatsapp-bot";
+import { chatBotReply, pauseChatBot, recordWhatsAppPayment, resumeChatBot } from "@/lib/server/whatsapp-bot";
 import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText, sendZohoCpaas } from "@/lib/server/providers";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { whatsAppSenders, whatsAppTemplateFor, type IntegrationSettings } from "@/lib/integrations";
@@ -386,7 +386,10 @@ function metaCart(message: Record<string, unknown>) {
     .map((item) => ({ id: String(item.product_retailer_id), quantity: Math.max(1, Math.min(20, Math.floor(Number(item.quantity) || 1))) }));
 }
 
-export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string }[] } {
+type WaPayment = { referenceId: string; status: string; paymentId: string; phone?: string };
+
+export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string }[]; payments: WaPayment[] } {
+  const payments: WaPayment[] = [];
   const messages: InboundWa[] = [];
   const statuses: { id: string; status: string }[] = [];
   const root = asRecord(body);
@@ -424,11 +427,22 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
       for (const raw of Array.isArray(value.statuses) ? value.statuses : []) {
         const status = asRecord(raw);
         if (!status?.id) continue;
+        const payment = asRecord(status.payment);
+        if (String(status.type) === "payment" && payment?.reference_id) {
+          const txn = asRecord(payment.transaction);
+          payments.push({
+            referenceId: String(payment.reference_id),
+            status: String(txn?.status || status.status || ""),
+            paymentId: String(txn?.pg_transaction_id || txn?.id || ""),
+            phone: status.recipient_id ? String(status.recipient_id) : undefined,
+          });
+          continue;
+        }
         statuses.push({ id: String(status.id), status: String(status.status || "") });
       }
     }
   }
-  return { messages, statuses };
+  return { messages, statuses, payments };
 }
 
 function firstString(record: Record<string, unknown> | null, keys: string[]) {
@@ -486,6 +500,7 @@ export function applyWhatsAppWebhook(kind: "meta" | "aisensy", body: unknown) {
     for (const status of parsed.statuses) markWhatsAppExternalStatus(status.id, status.status);
     const threads = parsed.messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
     for (const message of parsed.messages) void runChatBot(message);
+    for (const payment of parsed.payments) void recordWhatsAppPayment(payment).catch(() => undefined);
     return { messages: parsed.messages.length, statuses: parsed.statuses.length, threads: threads.length };
   }
   const messages = parseAiSensyWebhook(body);

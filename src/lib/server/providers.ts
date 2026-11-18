@@ -550,6 +550,61 @@ export async function sendMetaText(input: Json, message: { to: string; body: str
   return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
 }
 
+type PayLine = { id: string; name: string; amount: number; quantity: number };
+
+/** In-chat "Review and pay" (WhatsApp Payments, Razorpay configuration set up in WhatsApp Manager). Amounts in rupees. */
+export async function sendMetaOrderDetails(
+  input: Json,
+  message: { to: string; body: string; referenceId: string; configurationName: string; items: PayLine[]; tax?: { amount: number; description: string }; shipping?: number; discount?: number; total: number },
+) {
+  const token = pick(input.metaAccessToken, "META_WA_TOKEN");
+  const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
+  if (!token || !phoneId) return null;
+  const version = typeof input.metaApiVersion === "string" && input.metaApiVersion ? input.metaApiVersion : "v21.0";
+  const paise = (value: number) => ({ value: Math.round(value * 100), offset: 100 });
+  const subtotal = message.items.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+  const data = await call(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    json: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: waCloudTo(message.to),
+      type: "interactive",
+      interactive: {
+        type: "order_details",
+        body: { text: message.body.slice(0, 1024) },
+        footer: { text: "Vaidya Gogate Memorial Foundation" },
+        action: {
+          name: "review_and_pay",
+          parameters: {
+            reference_id: message.referenceId,
+            type: "physical-goods",
+            payment_settings: [
+              {
+                type: "payment_gateway",
+                payment_gateway: { type: "razorpay", configuration_name: message.configurationName, razorpay: { receipt: message.referenceId, notes: { order_id: message.referenceId } } },
+              },
+            ],
+            currency: "INR",
+            total_amount: paise(message.total),
+            order: {
+              status: "pending",
+              items: message.items.map((item) => ({ retailer_id: item.id, name: item.name.slice(0, 60), amount: paise(item.amount), quantity: item.quantity })),
+              subtotal: paise(subtotal),
+              ...(message.tax?.amount ? { tax: { ...paise(message.tax.amount), description: message.tax.description } } : {}),
+              ...(message.shipping ? { shipping: paise(message.shipping) } : {}),
+              ...(message.discount ? { discount: paise(message.discount) } : {}),
+            },
+          },
+        },
+      },
+    },
+  });
+  const messages = (data.messages as Json[] | undefined) ?? [];
+  return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
+}
+
 /** WhatsApp Business Account IDs the access token can manage (Meta debug_token granular scopes). */
 async function metaWabaIdsForToken(token: string, version: string) {
   try {

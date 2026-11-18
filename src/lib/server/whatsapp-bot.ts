@@ -9,7 +9,7 @@ import { findAccount } from "@/lib/server/accounts";
 import { ordersForAccount, patchShopOrder } from "@/lib/server/shop-orders";
 import { findShopShipment } from "@/lib/server/shop-shipments";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
-import { razorpayCreds, razorpayLink } from "@/lib/server/providers";
+import { razorpayCreds, razorpayLink, razorpayLinkCancel, sendMetaOrderDetails, sendMetaText } from "@/lib/server/providers";
 import { offerActive } from "@/lib/promotions";
 import { isValidPostal } from "@/lib/geo";
 
@@ -144,7 +144,7 @@ function cartText(cart: Session["cart"]) {
     .join("\n");
 }
 
-async function placeOrder(phone: string, session: Session): Promise<string> {
+async function placeOrder(phone: string, session: Session, key = ""): Promise<string> {
   const books = catalogue();
   const items = session.cart
     .map((line) => {
@@ -193,7 +193,9 @@ async function placeOrder(phone: string, session: Session): Promise<string> {
     `Total: *${inr(order.total)}*`,
     order.preorderPayment ? `Pay now (advance): *${inr(payNow)}*` : "",
     "",
-    `Pay here (valid 24 hours): ${link.url}`,
+    (await payInChat(key, phone, order, payNow).catch(() => false))
+      ? `Tap *Review and pay* above to pay inside WhatsApp, or use this link (valid 24 hours): ${link.url}`
+      : `Pay here (valid 24 hours): ${link.url}`,
     "We'll confirm on WhatsApp and email once it's paid.",
   ];
   return lines.filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n");
@@ -361,7 +363,7 @@ export async function chatBotReply(key: string, phone: string, text: string, pro
       }
       if (input !== "1") return finish("Reply 1 to place the order or 2 to cancel.");
       try {
-        const reply = await placeOrder(phone, session);
+        const reply = await placeOrder(phone, session, key);
         session = { step: "menu", cart: [], email: session.email, updatedAt: now.toISOString() };
         return finish(reply);
       } catch (error) {
@@ -371,4 +373,51 @@ export async function chatBotReply(key: string, phone: string, text: string, pro
   }
   void appPickupAllowed;
   return finish(MENU);
+}
+
+/** Meta numbers: also send an order card the customer can pay inside WhatsApp (Razorpay set up in WhatsApp Manager → Payment configurations). */
+async function payInChat(key: string, phone: string, order: Order, payNow: number) {
+  if (!key.startsWith("meta:") || payNow <= 0) return false;
+  const whatsapp = (savedAdminIntegrations().whatsapp ?? {}) as { metaPaymentConfiguration?: string };
+  const configurationName = String(whatsapp.metaPaymentConfiguration || "Razorpay").trim();
+  const { loadWhatsAppCreds } = await import("@/lib/server/whatsapp-inbox");
+  const creds = await loadWhatsAppCreds();
+  const titles = order.items.map((item) => item.title).join(", ");
+  const books = order.items.map((item) => ({ id: item.bookId || item.sku || item.title, name: item.title, amount: item.price, quantity: item.quantity }));
+  const fee = order.platformFee || 0;
+  const shipping = order.shipping || 0;
+  const discount = order.discount || 0;
+  const itemised = !order.preorderPayment && books.reduce((sum, item) => sum + item.amount * item.quantity, 0) + fee + shipping - discount === payNow;
+  const sent = await sendMetaOrderDetails(creds, {
+    to: phone,
+    referenceId: order.id,
+    configurationName,
+    body: order.preorderPayment ? `Pre-order #${order.id}: advance ${inr(payNow)} now. The balance and courier are due when the book is ready.` : `Order #${order.id}: please review and pay.`,
+    items: itemised ? books : [{ id: order.id, name: order.preorderPayment ? `Pre-order advance · ${titles}` : `Order ${order.id} · ${titles}`, amount: payNow, quantity: 1 }],
+    tax: itemised && fee ? { amount: fee, description: "Platform fee" } : undefined,
+    shipping: itemised ? shipping : undefined,
+    discount: itemised ? discount : undefined,
+    total: payNow,
+  });
+  return Boolean(sent?.id);
+}
+
+/** Payment made on the in-chat order card (Meta "payment" status webhook). */
+export async function recordWhatsAppPayment(input: { referenceId: string; status: string; paymentId: string; phone?: string }) {
+  if (!/^(success|captured)$/i.test(input.status)) return;
+  const { findShopOrder } = await import("@/lib/server/shop-orders");
+  const order = findShopOrder(input.referenceId);
+  if (!order || order.paymentStatus !== "Pending") return;
+  const { markAppOrderPaid } = await import("@/lib/server/mobile-shop");
+  markAppOrderPaid(order.id, { paymentId: input.paymentId, razorpayOrderId: "", note: `Paid inside WhatsApp (Razorpay)${input.paymentId ? ` · ${input.paymentId}` : ""}` });
+  const creds = razorpayCreds({});
+  if (creds && order.paymentLink?.id) await razorpayLinkCancel(creds, order.paymentLink.id).catch(() => undefined);
+  const phone = input.phone || order.deliveryAddress?.phone;
+  if (!phone) return;
+  const { loadWhatsAppCreds } = await import("@/lib/server/whatsapp-inbox");
+  const plan = order.preorderPayment;
+  const body = plan
+    ? `Thank you! Advance ${inr(plan.advance)} received for pre-order #${order.id}. We'll message you when the book is ready, with the balance.`
+    : `Thank you! Payment received for order #${order.id}. We'll update you here at every step.`;
+  await sendMetaText(await loadWhatsAppCreds(), { to: phone, body }).catch(() => null);
 }

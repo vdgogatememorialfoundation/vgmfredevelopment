@@ -120,7 +120,7 @@ export function recordAppOrder(
   return upsertShopOrder(order) ?? order;
 }
 
-export function markAppOrderPaid(id: string, payment: { paymentId: string; razorpayOrderId: string }) {
+export function markAppOrderPaid(id: string, payment: { paymentId: string; razorpayOrderId: string; note?: string }) {
   const order = findShopOrder(id);
   if (!order) return null;
   const at = new Date().toISOString();
@@ -135,7 +135,7 @@ export function markAppOrderPaid(id: string, payment: { paymentId: string; razor
     paymentRef: payment.paymentId,
     razorpayPaymentId: payment.paymentId,
     razorpayOrderId: payment.razorpayOrderId,
-    history: [...(order.history ?? []), { at, status: "Paid", note: order.createdBy === "WhatsApp" ? "Paid through the Razorpay link sent over chat." : "Paid through Razorpay in the Android app." }],
+    history: [...(order.history ?? []), { at, status: "Paid", note: payment.note || (order.createdBy === "WhatsApp" ? "Paid through the Razorpay link sent over chat." : "Paid through Razorpay in the Android app.") }],
   });
 }
 
