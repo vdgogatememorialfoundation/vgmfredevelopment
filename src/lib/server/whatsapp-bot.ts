@@ -94,6 +94,7 @@ const MENU = [
   "2. My orders",
   "3. My account",
   "4. Talk to our team",
+  "5. My seminar / event applications",
   "",
   "Type *menu* any time to come back here.",
 ].join("\n");
@@ -257,6 +258,17 @@ export async function chatBotReply(key: string, phone: string, text: string, pro
             .filter((line) => line !== "")
             .join("\n")
         );
+      }
+      if (input === "5" || lower.includes("application") || lower.includes("seminar") || lower.includes("registration")) {
+        try {
+          const { liveRecordsForEmail } = await import("@/lib/server/partner-portals");
+          const records = await liveRecordsForEmail(session.email || "", phone);
+          const rows = records.tickets.slice(0, 8);
+          if (!rows.length) return finish("We couldn't find seminar or event applications for this number. Applications made with another number or email show on seminar.vaidyagogate.org or autism.vaidyagogate.org after you sign in.\n\nReply *menu* for the menu.");
+          return finish(["Your applications:", "", ...rows.map((row) => `• ${row.eventName}${row.applicationNo ? ` (${row.applicationNo})` : ""}\n   Status: *${row.status}*${row.portalUrl ? `\n   ${row.portalUrl}` : ""}`), "", "Reply *4* to talk to our team or *menu* for the menu."].join("\n"));
+        } catch {
+          return finish("We couldn't load applications right now. Please try again in a few minutes, or reply *4* to talk to our team.");
+        }
       }
       if (input === "4" || lower.includes("talk") || lower.includes("agent") || lower.includes("help")) {
         session.step = "desk";
