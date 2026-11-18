@@ -104,6 +104,10 @@ export async function resendWhatsAppStage(orderId: string, key: string) {
   const name = order.deliveryAddress?.fullName || "Reader";
   const event = STAGE_EVENTS.find(([pattern]) => pattern.test(key))?.[1];
   if (key === "placed") return (await preorderAlert("placed", order, phone, name)) || sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] });
+  if (key.startsWith("refund:")) {
+    const refund = (order.refunds ?? []).find((item) => key.startsWith(`refund:${item.id}`)) ?? order.refunds?.at(-1);
+    if (refund) return sendWhatsAppAlert("refund", { phone, name, params: [name, order.id, rupees(refund.amount)] });
+  }
   if (key.startsWith("return:")) {
     return sendWhatsAppAlert("order-return-update", { phone, name, params: [name, order.id, `return ${order.returnRequest?.status ?? "updated"}`], fallbackEvent: "order-status" });
   }
