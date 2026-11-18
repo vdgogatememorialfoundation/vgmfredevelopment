@@ -10,6 +10,7 @@ import { readKv } from "@/lib/server/db";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopShipment } from "@/lib/server/shop-shipments";
+import { findShopOrder } from "@/lib/server/shop-orders";
 import { applyTemplateVars, defaultMessageCopy } from "@/lib/message-templates";
 import type { NotificationEventId } from "@/lib/integrations";
 import type { Order, RefundRecord } from "@/types";
@@ -81,6 +82,22 @@ const STAGE_EVENTS: [RegExp, NotificationEventId][] = [
   [/^return:/, "order-return-update"],
   [/^refund:.*:rrn$/, "refund-bank-reference"],
 ];
+
+/** Admin "Resend WhatsApp": sends that stage's WhatsApp update again for any order. */
+export async function resendWhatsAppStage(orderId: string, key: string) {
+  const order = findShopOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  const phone = order.deliveryAddress?.phone;
+  if (!phone) throw new Error("This order has no phone number.");
+  const name = order.deliveryAddress?.fullName || "Reader";
+  const event = STAGE_EVENTS.find(([pattern]) => pattern.test(key))?.[1];
+  if (key === "placed") return sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] });
+  if (key.startsWith("return:")) {
+    return sendWhatsAppAlert("order-return-update", { phone, name, params: [name, order.id, `return ${order.returnRequest?.status ?? "updated"}`], fallbackEvent: "order-status" });
+  }
+  const status = key.startsWith("status:") ? key.slice(7) : order.status;
+  return sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, status], fallbackEvent: "order-status" });
+}
 
 /** WhatsApp update for an order stage, using the template mapped to that event (or to "Order status changed"). */
 async function whatsAppStage(key: string, order: Order, name: string) {

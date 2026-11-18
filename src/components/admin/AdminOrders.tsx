@@ -2865,9 +2865,17 @@ type OrderEmailRow = { id?: string; at: string; to: string; subject: string; ok:
 
 /** Emails the server sent about this order: what, to whom, when, and whether it went out. */
 function OrderEmails({ orderId }: { orderId: string }) {
-  const [data, setData] = useState<{ emails: OrderEmailRow[]; earlier: { label: string; at?: string }[] } | null>(null);
+  const [data, setData] = useState<{ emails: OrderEmailRow[]; earlier: { label: string; at?: string }[]; whatsapp: { key: string; label: string }[] } | null>(null);
   const [error, setError] = useState("");
   const [tick, setTick] = useState(0);
+  const [waNote, setWaNote] = useState<Record<string, string>>({});
+  const resendWhatsApp = async (key: string) => {
+    setWaNote((prev) => ({ ...prev, [key]: "Sending…" }));
+    const body = await fetch("/api/admin/order-emails", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId, key }) })
+      .then((response) => response.json())
+      .catch(() => ({ ok: false, error: "Could not reach the server." }));
+    setWaNote((prev) => ({ ...prev, [key]: body?.ok ? "Sent on WhatsApp" : body?.error || "Not sent" }));
+  };
   useEffect(() => {
     let live = true;
     fetch(`/api/admin/order-emails?orderId=${encodeURIComponent(orderId)}`, { cache: "no-store" })
@@ -2875,7 +2883,7 @@ function OrderEmails({ orderId }: { orderId: string }) {
       .then((body) => {
         if (!live) return;
         if (body?.ok) {
-          setData({ emails: body.emails ?? [], earlier: body.earlier ?? [] });
+          setData({ emails: body.emails ?? [], earlier: body.earlier ?? [], whatsapp: body.whatsapp ?? [] });
           setError("");
         } else setError(body?.error || "Could not load the emails.");
       })
@@ -2891,6 +2899,20 @@ function OrderEmails({ orderId }: { orderId: string }) {
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
       {!data && !error ? <p className="text-xs text-text-muted">Loading…</p> : null}
       {data && emails.length === 0 && earlier.length === 0 ? <p className="text-xs text-text-muted">No emails sent for this order yet.</p> : null}
+      {data && data.whatsapp.length > 0 && (
+        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800">Resend on WhatsApp</p>
+          <ul className="mt-1 space-y-1 text-xs">
+            {data.whatsapp.map((item) => (
+              <li key={item.key} className="flex flex-wrap items-center gap-2">
+                <span>{item.label}</span>
+                <button type="button" className="font-medium text-primary" onClick={() => void resendWhatsApp(item.key)}>Resend WhatsApp</button>
+                {waNote[item.key] ? <span className={waNote[item.key].startsWith("Sent") ? "text-green-700" : "text-text-muted"}>{waNote[item.key]}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {emails.length > 0 && (
         <ol className="space-y-1.5 text-xs">
           {emails.map((entry, index) => (
