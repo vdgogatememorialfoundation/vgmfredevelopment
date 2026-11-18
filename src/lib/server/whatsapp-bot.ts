@@ -208,7 +208,7 @@ export async function chatBotReply(key: string, phone: string, text: string, pro
   const now = new Date();
   let session: Session = rows[key] ?? { step: "menu", cart: [], updatedAt: now.toISOString() };
   const restart = /^(menu|hi|hello|hey|namaste|namaskar|start|0)$/i.test(input);
-  if (session.step === "desk" && !restart && session.deskUntil && Date.parse(session.deskUntil) > now.getTime()) return null;
+  if (session.step === "desk" && !restart && !cart?.length && session.deskUntil && Date.parse(session.deskUntil) > now.getTime()) return null;
   if (now.getTime() - Date.parse(session.updatedAt) > IDLE_MS && session.step !== "desk") session = { step: "menu", cart: [], updatedAt: now.toISOString() };
   const account = findAccount(phone);
   session.email ||= account?.email;
