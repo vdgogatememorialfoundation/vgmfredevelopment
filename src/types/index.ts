@@ -1080,6 +1080,8 @@ export interface ShipmentRecord {
   orderStatus?: Order["status"];
   providerOrderId?: string;
   providerShipmentId?: string;
+  /** Our own label PDF saved on the server, at its unique download link. */
+  labelLink?: string;
   labelUrl?: string;
   /** Sort code returned by Shiprocket, Nimbuspost, or Shipyaari. */
   routingCode?: string;

@@ -87,8 +87,9 @@ export function ShipmentsSection() {
                     </SelectInput>
                     <LabelSizePicker />
                     <Button variant="ghost" onClick={() => void downloadLabel(shipment.id).then(setLabelNote).catch((problem) => setLabelNote(problem instanceof Error ? problem.message : "Could not make the label."))}>
-                      Shipping label
+                      Make label link
                     </Button>
+                    {shipment.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label</a>}
                     <Button
                       variant="ghost"
                       onClick={() => {

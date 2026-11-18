@@ -2005,7 +2005,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
                     <LabelSizePicker />
-                    <Button variant="outline" onClick={() => run("label", () => downloadLabel(shipment.id))}>Download AWB label</Button>
+                    <Button variant="outline" onClick={() => run("label", () => downloadLabel(shipment.id))}>{shipment.labelLink ? "Make new label link" : "Make label link"}</Button>
+                    {shipment.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
                     {shipment.provider === "shiprocket" && shipment.live && (
                       <>
                         <Button variant="outline" onClick={() => run("invoice", () => downloadInvoice(shipment.id))}>Courier invoice</Button>
@@ -2410,7 +2411,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         <Button variant="ghost" onClick={() => printOrderInvoice(order, shipment)}>Print invoice</Button>
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
         {shipment && <LabelSizePicker />}
-        {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Print shipping label</Button>}
+        {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Make label link</Button>}
+        {shipment?.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
           run("delete", async () => {

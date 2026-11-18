@@ -812,7 +812,10 @@ export async function downloadLabel(shipmentId: string) {
     return `Downloaded the ${label(provider ?? "courier")} label.`;
   }
   const url = (await printShippingLabel(latest, details, undefined, undefined, "pdf")) || "";
-  if (url) void navigator.clipboard?.writeText(url).catch(() => undefined);
+  if (url) {
+    patchShipment(shipmentId, { labelLink: url });
+    void navigator.clipboard?.writeText(url).catch(() => undefined);
+  }
   return `Label ready for AWB ${details.awb || latest.awb || shipment.orderId} (link copied): ${url}`;
 }
 
