@@ -5,6 +5,7 @@ import { getShipments } from "@/lib/admin-store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
 import { buildTrackingStages, customerOrderStatus, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
 import { agreedDelivery, clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
+import { useOrderSettings } from "@/lib/use-cms";
 import type { Order, ShipmentRecord } from "@/types";
 import { REFUND_CREDIT_NOTE, refundExpectedCredit, refundExpectedCreditLabel } from "@/components/store/RefundDetails";
 
@@ -61,6 +62,7 @@ function dayLabel(at: string | undefined, country?: string) {
 /** Collapsed My Orders card: headline, latest scan and a mini progress bar that follow the order's live status. */
 export default function OrderTrackingPreview({ order, live = true }: { order: Order; live?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
+  const orderSettings = useOrderSettings();
   const shipment: ShipmentRecord | undefined = getShipments().find(
     (item) => item.orderId === order.id && item.note !== "Cancelled"
   );
@@ -115,6 +117,9 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
     };
   }, [order.id, live, terminal, pickup]);
 
+  const preorder = Boolean(order.preorderPayment) || order.items.some((item) => item.preorder);
+  // Same rule as the full timeline: hidden dates (or a pre-order with dates off) wait for the courier's own date.
+  const hideDates = orderSettings.hideDeliveryDates || (preorder && !orderSettings.showPreorderStepDates);
   let headline: string;
   if (status === "Delivered") {
     const deliveredOn = dayLabel(latest?.at, country);
@@ -129,7 +134,11 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   } else if (pickup && current?.id === "ready") {
     headline = "Ready for pickup at the Foundation office";
   } else {
-    headline = deliveryExpectation(status, agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date)), now, country);
+    const courierBooked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.courier));
+    const expected = hideDates
+      ? courierBooked ? shipment?.expectedBy || "" : ""
+      : agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date));
+    headline = deliveryExpectation(status, expected, now, country);
   }
 
   const bad = status === "Failed" || status === "Cancelled";
