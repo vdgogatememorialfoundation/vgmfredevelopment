@@ -27,7 +27,6 @@ import {
   printPackagingSlips,
   recordPayment,
   maxRefundable,
-  refundToStoreCredit,
   resaveOrder,
   setOrderStatus,
   recordBalancePayment,
@@ -1181,7 +1180,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [manualCourier, setManualCourier] = useState("");
   const [deliveryWhen, setDeliveryWhen] = useState("");
   const [returnReason, setReturnReason] = useState(getOrderSettings().returns.reasons[0] ?? "");
-  const [refundDest, setRefundDest] = useState<"original" | "store_credit">("original");
+  const refundDest = "original" as const;
   const [editing, setEditing] = useState(false);
   const [editAddress, setEditAddress] = useState<DeliveryAddress>(order.deliveryAddress ?? { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "", country: "India", countryCode: "IN" });
   const [editItems, setEditItems] = useState(order.items.map((item) => ({ ...item })));
@@ -1720,17 +1719,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           {refundable && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
               <div className="w-28"><TextInput type="number" min={1} max={refundCap} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} /></div>
-              <SelectInput value={refundDest} onChange={(event) => setRefundDest(event.target.value as "original" | "store_credit")}>
-                <option value="original">Original payment method</option>
-                <option value="store_credit">Store credit</option>
-              </SelectInput>
+              <span className="text-sm font-semibold text-slate-700">To original payment method</span>
               <Button variant="danger" disabled={busy === "refund"} onClick={() => {
-                if (!window.confirm(`Refund ₹${refundAmount} to ${refundDest === "store_credit" ? "store credit" : "the original method"}?`)) return;
-                run("refund", () => refundDest === "store_credit"
-                  ? (refundToStoreCredit(order.id, Number(refundAmount), undefined, { withPlatformFee: refundFee }), "Store credit issued.")
-                  : refundThroughGateway(order.id, Number(refundAmount), { withPlatformFee: refundFee }));
+                if (!window.confirm(`Refund ₹${refundAmount} to the original payment method?`)) return;
+                run("refund", () => refundThroughGateway(order.id, Number(refundAmount), { withPlatformFee: refundFee }));
               }}>
-                {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund to original payment method" : "Record refund"}
+                {busy === "refund" ? "Refunding…" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund to original payment method" : "Record refund"}
               </Button>
               {(order.platformFee ?? 0) > 0 && (
                 <label className="flex w-full items-center gap-2 text-xs text-slate-600">

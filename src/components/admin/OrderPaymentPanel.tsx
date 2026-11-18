@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import RefundDetails from "@/components/store/RefundDetails";
-import { maxRefundable, refundToStoreCredit, setRefundCreditDate } from "@/lib/admin-store";
+import { maxRefundable, setRefundCreditDate } from "@/lib/admin-store";
 import { refreshRefundStatus, refundThroughGateway } from "@/lib/payments-client";
 import type { Order, RefundRecord } from "@/types";
 
@@ -77,10 +77,7 @@ export default function OrderPaymentPanel({ order, onChange }: { order: Order; o
             className="w-40 rounded-lg border border-slate-200 px-3 py-1.5 text-xs"
           />
           <button type="button" className={ghost} disabled={Boolean(busy)} onClick={() => void run("refund", () => refundThroughGateway(order.id, value(), { withPlatformFee: withFee }))}>
-            {busy === "refund" ? "Refunding…" : gateway ? "Refund via Razorpay" : "Record refund"}
-          </button>
-          <button type="button" className={ghost} disabled={Boolean(busy)} onClick={() => void run("credit", () => (refundToStoreCredit(order.id, value(), undefined, { withPlatformFee: withFee }), "Store credit issued."))}>
-            Refund to store credit
+            {busy === "refund" ? "Refunding…" : gateway ? "Refund to original payment method" : "Record refund"}
           </button>
           {(order.platformFee ?? 0) > 0 ? (
             <label className="flex items-center gap-1.5 text-xs text-slate-600">

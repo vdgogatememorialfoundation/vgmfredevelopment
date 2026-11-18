@@ -191,7 +191,7 @@ export default function RefundDetails({
                   />
                 </label>
               ) : null}
-              <Fact label="Refund to" value={refund.destination === "store_credit" ? "Store credit" : refund.method || order.paymentMethod || "Original payment method"} />
+              <Fact label="Refund to" value={refund.destination === "store_credit" ? "Store credit" : `Original payment method${refund.method || order.paymentMethod ? ` (${refund.method || order.paymentMethod})` : ""}`} />
               <Fact label="VGMF transaction ID" value={refund.vgmfId} />
               <Fact label="Refund ID" value={refund.gatewayRefundId || refund.reference} />
               <Fact label="Bank RRN" value={refund.rrn} />
