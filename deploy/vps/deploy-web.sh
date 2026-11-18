@@ -117,6 +117,8 @@ for ENV in "${ENVS[@]}"; do
     done
   fi
   echo "[$ENV] Live build: $(cat "$APP/.next/BUILD_ID") ($COMMIT). Rollback copy: ${PREV:-none}"
+  # Each deploy leaves a full app copy; keep only the newest 2 so the disk doesn't fill up.
+  ls -d "$APP".prev-* 2>/dev/null | sort | head -n -2 | xargs -r rm -rf
 done
 
 [ "${SKIP_PM2:-}" = 1 ] || pm2 save >/dev/null
