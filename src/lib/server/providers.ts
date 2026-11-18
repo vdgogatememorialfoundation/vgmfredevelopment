@@ -2642,6 +2642,18 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
   if (!alternate) {
     throw new ProviderError("Ekart needs a second phone number that differs from the customer's. Add the customer's alternate number in the order's address, or set the pickup phone in Settings → Shipping APIs → Pickup address.");
   }
+  // Ekart/GoSwift match the drop PIN to their own city and state; the customer's wording (e.g. "Hiriyur, Chitradurga") can make it refuse the PIN.
+  const area = await call(`${swiftBase(input)}/api/v2/serviceability/${encodeURIComponent(String(order.customer.pincode).trim())}`, { headers: goswiftAuth(token) })
+    .then((data) => (data.details as Json) ?? {})
+    .catch(() => ({}) as Json);
+  const typedCity = order.customer.city.replace(/[\s,]+$/, "").trim();
+  const dropCity = String(area.city ?? "").trim() || typedCity;
+  const dropLocation = {
+    ...place(order.customer),
+    address: [order.customer.line1, order.customer.line2, dropCity.toLowerCase() === typedCity.toLowerCase() ? "" : typedCity].filter(Boolean).join(", "),
+    city: dropCity,
+    state: String(area.state ?? "").trim() || order.customer.state,
+  };
   const day = new Date(order.orderDate);
   const invoiceDate = (Number.isNaN(day.getTime()) ? new Date() : day).toISOString().slice(0, 10);
   const category = String(input.category ?? "").trim() || "Books";
@@ -2675,7 +2687,7 @@ export async function goswiftBook(input: Json, order: BookInput): Promise<BookOu
       length: Math.max(1, Math.round(order.length)),
       width: Math.max(1, Math.round(order.breadth)),
       height: Math.max(1, Math.round(order.height)),
-      drop_location: place(order.customer),
+      drop_location: dropLocation,
       pickup_location: pickup,
       return_location: pickup,
       service: String(input.service ?? "").trim().toUpperCase() === "EXPRESS" ? "EXPRESS" : "SURFACE",
