@@ -1912,6 +1912,37 @@ export function OrderSettingsDesk() {
                   <option value="copy">Copy</option>
                 </select>
               </label>
+              <div className="space-y-2 sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Packing charge by number of books</p>
+                <p className="text-xs text-slate-500">
+                  Optional. Each row means: up to this many books, charge this packing amount. Larger orders use the last row. With rows set, they replace the charge above.
+                </p>
+                {(value.packingCharge.tiers ?? []).map((tier, index) => {
+                  const tiers = value.packingCharge.tiers ?? [];
+                  const update = (patch: Partial<{ upTo: number; amount: number }>) =>
+                    set({ packingCharge: { ...value.packingCharge, tiers: tiers.map((row, at) => (at === index ? { ...row, ...patch } : row)) } });
+                  return (
+                    <div key={index} className="flex flex-wrap items-end gap-2">
+                      <Text label="Up to (books)" type="number" value={tier.upTo} onChange={(upTo) => update({ upTo: Math.max(1, Math.floor(Number(upTo) || 1)) })} />
+                      <Text label="Packing (₹)" type="number" value={tier.amount} onChange={(amount) => update({ amount: Math.max(0, Number(amount) || 0) })} />
+                      <button type="button" className={ghost} onClick={() => set({ packingCharge: { ...value.packingCharge, tiers: tiers.filter((_, at) => at !== index) } })}>
+                        Remove
+                      </button>
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  className={ghost}
+                  onClick={() => {
+                    const tiers = value.packingCharge.tiers ?? [];
+                    const last = tiers[tiers.length - 1];
+                    set({ packingCharge: { ...value.packingCharge, tiers: [...tiers, { upTo: (last?.upTo ?? 0) + 2, amount: last?.amount ?? value.packingCharge.amount }] } });
+                  }}
+                >
+                  Add row
+                </button>
+              </div>
             </>
           )}
         </div>

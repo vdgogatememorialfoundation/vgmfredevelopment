@@ -230,7 +230,7 @@ export interface OrderSettings {
   perItemFee: number;
   freeAbove: number;
   /** Packing charge, folded into the courier/shipping charge (never shown to customers on its own). */
-  packingCharge: { enabled: boolean; amount: number; per: "order" | "copy" };
+  packingCharge: { enabled: boolean; amount: number; per: "order" | "copy"; tiers?: PackingTier[] };
   showCourierChoice: boolean;
   /** Keep our own Tookan / Shipday fleet off the checkout courier list. */
   hideTookanAtCheckout: boolean;
@@ -746,6 +746,10 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
       enabled: Boolean(merged.packingCharge?.enabled),
       amount: Math.max(0, finiteNumber(merged.packingCharge?.amount, 0)),
       per: merged.packingCharge?.per === "copy" ? "copy" : "order",
+      tiers: (Array.isArray(merged.packingCharge?.tiers) ? merged.packingCharge.tiers : [])
+        .map((tier) => ({ upTo: Math.max(1, Math.floor(finiteNumber(tier?.upTo, 0))), amount: Math.max(0, finiteNumber(tier?.amount, 0)) }))
+        .filter((tier) => tier.upTo > 0)
+        .sort((a, b) => a.upTo - b.upTo),
     },
     showCourierChoice: Boolean(merged.showCourierChoice),
     hideTookanAtCheckout: Boolean(merged.hideTookanAtCheckout),
@@ -933,10 +937,19 @@ export function shippingFeeFor(
   return courierOnlyFee(subtotal, itemCount, courierRate, settings) + packingChargeFor(itemCount, settings);
 }
 
+/** Packing charge by book count: the first tier whose "up to" covers the order; larger orders use the last tier. */
+export type PackingTier = { upTo: number; amount: number };
+
 /** Packing charge for a delivery; it is added into the courier charge, never listed on its own. */
 export function packingChargeFor(itemCount: number, settings: Pick<OrderSettings, "packingCharge"> = getOrderSettings()) {
   const packing = settings.packingCharge;
-  if (!packing?.enabled || !(packing.amount > 0)) return 0;
+  if (!packing?.enabled) return 0;
+  const tiers = [...(packing.tiers ?? [])].sort((a, b) => a.upTo - b.upTo);
+  if (tiers.length) {
+    const count = Math.max(1, itemCount);
+    return (tiers.find((tier) => count <= tier.upTo) ?? tiers[tiers.length - 1]).amount;
+  }
+  if (!(packing.amount > 0)) return 0;
   return Math.round(packing.amount * (packing.per === "copy" ? Math.max(1, itemCount) : 1) * 100) / 100;
 }
 
