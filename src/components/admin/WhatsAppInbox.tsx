@@ -98,7 +98,7 @@ export function WhatsAppInboxDesk() {
     if (filter !== "all") return thread.department === filter;
     return true;
   });
-  const active = threads.find((thread) => thread.id === activeId) ?? visible[0];
+  const active = visible.find((thread) => thread.id === activeId) ?? visible[0];
 
   const load = useCallback(async () => {
     const response = await fetch("/api/whatsapp/inbox", { credentials: "same-origin", cache: "no-store" });
@@ -112,7 +112,7 @@ export function WhatsAppInboxDesk() {
       return;
     }
     setThreads(data.threads);
-    setActiveId((current) => current || data.threads?.[0]?.id || "");
+    setActiveId((current) => current || data.threads?.find((thread) => !thread.closedAt)?.id || "");
   }, []);
 
   useEffect(() => {
@@ -173,6 +173,7 @@ export function WhatsAppInboxDesk() {
       const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
       if (!response.ok || !data?.ok) throw new Error(data?.error || "The chat could not be closed.");
       setNote(data.error ? `Chat closed. The customer was not notified: ${data.error}` : "Chat closed. The customer was told.");
+      setActiveId("");
       await load();
     } catch (error) {
       setNote((error as Error).message);
