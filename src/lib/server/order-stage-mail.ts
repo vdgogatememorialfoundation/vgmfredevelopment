@@ -8,7 +8,7 @@ import { pushToCustomer } from "@/lib/server/fcm";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { readKv } from "@/lib/server/db";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
-import { publicOrderSettings, type OrderSettings } from "@/lib/integrations";
+import { publicOrderSettings, whatsAppSenders, whatsAppTemplateFor, type OrderSettings } from "@/lib/integrations";
 import { findShopShipment } from "@/lib/server/shop-shipments";
 import { findShopOrder } from "@/lib/server/shop-orders";
 import { applyTemplateVars, defaultMessageCopy } from "@/lib/message-templates";
@@ -83,6 +83,42 @@ const STAGE_EVENTS: [RegExp, NotificationEventId][] = [
   [/^refund:.*:rrn$/, "refund-bank-reference"],
 ];
 
+/** Shipped, out for delivery and delivered carry the courier, tracking ID and dates; the general update is the fallback. */
+const COURIER_STAGES: Record<string, NotificationEventId> = { Shipped: "order-shipped", "Out for Delivery": "order-out-for-delivery", Delivered: "order-delivered" };
+
+function day(iso?: string) {
+  const time = Date.parse(iso || "");
+  return Number.isFinite(time) ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(time) : "";
+}
+
+function courierParams(order: Order, status: string, name: string) {
+  const shipment = findShopShipment(order.id);
+  const courier = order.courierName || shipment?.courier || "our courier";
+  const awb = order.trackingId || shipment?.awb || "shared in My Orders shortly";
+  if (status === "Shipped") {
+    const url = shipment?.trackingUrl || `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}`;
+    return [name, order.id, courier, awb, day(shipment?.expectedBy) || "shared by the courier soon", url];
+  }
+  if (status === "Out for Delivery") return [name, order.id, courier, awb, isCod(order) ? `Please keep ${rupees(order.total)} ready to pay the courier.` : "No payment is due at the door."];
+  const delivered = [...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.at;
+  return [name, order.id, day(delivered) || day(new Date().toISOString()), courier, awb];
+}
+
+/** Sends the courier-detail template when one is mapped for this status; null when the status has none. */
+async function courierAlert(order: Order, phone: string, name: string, status: string) {
+  const event = COURIER_STAGES[status];
+  if (!event) return null;
+  const params = courierParams(order, status, name);
+  const wa = savedAdminIntegrations().whatsapp as (Parameters<typeof whatsAppTemplateFor>[0] & { templates?: { name: string; variables?: number }[] }) | undefined;
+  const dedicated = Boolean(wa) && whatsAppSenders(wa!).some((provider) => {
+    const template = whatsAppTemplateFor(wa!, provider, event);
+    const saved = (wa!.templates ?? []).find((item) => item.name === template);
+    return Boolean(template) && Number(saved?.variables) >= params.length;
+  });
+  if (!dedicated) return null;
+  return sendWhatsAppAlert(event, { phone, name, params, fallbackEvent: "order-status", fallbackParams: [name, order.id, status] }).catch(() => false);
+}
+
 /** Pre-orders get their own WhatsApp templates (advance and balance shown); false when none is mapped, so the normal one goes instead. */
 async function preorderAlert(kind: "placed" | "update", order: Order, phone: string, name: string, status: string = order.status) {
   const plan = order.preorderPayment;
@@ -112,6 +148,8 @@ export async function resendWhatsAppStage(orderId: string, key: string) {
     return sendWhatsAppAlert("order-return-update", { phone, name, params: [name, order.id, `return ${order.returnRequest?.status ?? "updated"}`], fallbackEvent: "order-status" });
   }
   const status = key.startsWith("status:") ? key.slice(7) : order.status;
+  const courier = await courierAlert(order, phone, name, status);
+  if (courier !== null) return courier;
   if (await preorderAlert("update", order, phone, name, status)) return true;
   return sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, status], fallbackEvent: "order-status" });
 }
@@ -129,6 +167,7 @@ async function whatsAppStage(key: string, order: Order, name: string) {
     return;
   }
   if (key.startsWith("status:") && key !== "status:split") {
+    if ((await courierAlert(order, phone, name, key.slice(7))) !== null) return;
     if (await preorderAlert("update", order, phone, name)) return;
     await sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, order.status], fallbackEvent: "order-status" }).catch(() => false);
     return;
@@ -240,7 +279,7 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
       Shipped: {
         subject: `Order ${next.id} has been shipped`,
         intro: `Your order ${next.id} has been handed to the courier.`,
-        next: [track || "Tracking details will appear in My Orders shortly.", "Follow the live status in My Orders. Keep your phone reachable for the courier."],
+        next: [track || "Tracking details will appear in My Orders shortly.", findShopShipment(next.id)?.expectedBy ? `Expected delivery: ${day(findShopShipment(next.id)?.expectedBy)}` : "", "Follow the live status in My Orders. Keep your phone reachable for the courier."],
       },
       "Out for Delivery": {
         subject: `Order ${next.id} is out for delivery`,

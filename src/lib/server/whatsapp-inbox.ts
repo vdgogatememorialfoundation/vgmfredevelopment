@@ -545,7 +545,7 @@ export function logOutboundWhatsApp(input: { provider: WaProvider; phone: string
   writeStore(store);
 }
 
-export async function sendWhatsAppAlert(event: string, input: { phone?: string; name: string; params: string[]; fallbackEvent?: string }) {
+export async function sendWhatsAppAlert(event: string, input: { phone?: string; name: string; params: string[]; fallbackEvent?: string; fallbackParams?: string[] }) {
   const phone = waPhone(input.phone || "");
   if (phone.length < 10) return false;
   const settings = (savedAdminIntegrations().whatsapp ?? {}) as unknown as IntegrationSettings["whatsapp"];
@@ -554,21 +554,26 @@ export async function sendWhatsAppAlert(event: string, input: { phone?: string; 
   const creds = { ...(await loadWhatsAppCreds()), zohoCpaasApiKey: String(wa.zohoCpaasApiKey || ""), zohoCpaasFrom: String(wa.zohoCpaasFrom || ""), zohoCpaasDomain: String(wa.zohoCpaasDomain || "") };
   let delivered = false;
   for (const provider of whatsAppSenders(wa)) {
-    const template = whatsAppTemplateFor(wa, provider, event) || (input.fallbackEvent ? whatsAppTemplateFor(wa, provider, input.fallbackEvent) : "");
+    const primary = whatsAppTemplateFor(wa, provider, event);
+    const template = primary || (input.fallbackEvent ? whatsAppTemplateFor(wa, provider, input.fallbackEvent) : "");
     if (!template) continue;
     try {
-      const language = (wa.templates ?? []).find((item) => item.name === template)?.language || "en";
+      const saved = (wa.templates ?? []).find((item) => item.name === template);
+      const language = saved?.language || "en";
+      // A shorter template (e.g. the general order update) gets the short parameter list.
+      const short = Boolean(input.fallbackParams) && (template !== primary || (Number(saved?.variables) > 0 && Number(saved?.variables) < input.params.length));
+      const params = short ? (input.fallbackParams ?? input.params) : input.params;
       const sent =
         provider === "aisensy"
-          ? await sendAiSensy(creds, { to: phone, campaign: template, name: input.name, params: input.params })
+          ? await sendAiSensy(creds, { to: phone, campaign: template, name: input.name, params })
           : provider === "zoho"
-            ? await sendZohoCpaas(creds, { to: phone, template, language, params: input.params })
-            : await sendMetaTemplate(creds, { to: phone, template, language, params: input.params });
+            ? await sendZohoCpaas(creds, { to: phone, template, language, params })
+            : await sendMetaTemplate(creds, { to: phone, template, language, params });
       if (!sent) continue;
       delivered = true;
       if (provider !== "zoho") {
         const store = readStore();
-        upsert(store, { provider: provider as WaProvider, phone, name: input.name, text: `[${template}] ${input.params.join(" · ")}`, direction: "out", externalId: sent.id || undefined, by: "Order update", status: "sent" });
+        upsert(store, { provider: provider as WaProvider, phone, name: input.name, text: `[${template}] ${params.join(" · ")}`, direction: "out", externalId: sent.id || undefined, by: "Order update", status: "sent" });
         writeStore(store);
       }
       if (wa.sendMode !== "all") break;
