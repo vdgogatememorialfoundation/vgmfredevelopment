@@ -743,6 +743,9 @@ type LabelFetch = {
   courierName?: string;
   awb?: string;
   serviceMode?: string;
+  invoiceNo?: string;
+  invoiceDate?: string;
+  ewaybill?: string;
 };
 
 export async function downloadLabel(shipmentId: string) {
@@ -764,6 +767,7 @@ export async function downloadLabel(shipmentId: string) {
       provider,
       creds: credsFrom(getIntegrations()),
       shipmentId: shipment.providerShipmentId,
+      providerOrderId: shipment.providerOrderId,
       awb: shipment.awb,
     });
     if (result.ok) {
@@ -780,6 +784,9 @@ export async function downloadLabel(shipmentId: string) {
         routingCode: details.routingCode,
         serviceMode: details.serviceMode,
         destinationHub: details.destination,
+        invoiceNo: result.invoiceNo || shipment.invoiceNo,
+        invoiceDate: result.invoiceDate || shipment.invoiceDate,
+        ewaybill: result.ewaybill || shipment.ewaybill,
       });
     }
   } else if (shipment.live && provider === "ithink" && shipment.awb && !shipment.labelUrl) {

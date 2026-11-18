@@ -2308,6 +2308,7 @@ export function printShippingLabel(
   });
   const value = priced.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const design = labelDesign(shipping);
+  const latestShip = getShipments().find((item) => item.id === shipment.id) ?? shipment;
   const gst = getOrderSettings().gst;
   const gstRate = gst.enabled ? gst.ratePercent / 100 : 0;
   const serviceMode = details?.serviceMode || shipment.serviceMode || serviceModeOf(courier, shipment.courier);
@@ -2352,8 +2353,8 @@ export function printShippingLabel(
         <p class="label">Order no.</p>
         <b>${esc(shipment.orderId)}</b>
         <p class="meta">Order date ${esc(formatDate(order?.date || shipment.generatedAt))}</p>
-        ${design.showInvoiceNo ? `<p class="meta">Invoice no. ${esc(`${design.invoicePrefix}${shipment.orderId}`)}</p><p class="meta">Invoice date ${esc(formatDate(order?.paidAt || order?.date || shipment.generatedAt))}</p>` : ""}
-        ${design.showEwaybill ? `<p class="meta">eWaybill no. ${esc(shipment.ewaybill || "N/A")}</p>` : ""}
+        ${design.showInvoiceNo ? `<p class="meta">Invoice no. ${esc(latestShip.invoiceNo || `${design.invoicePrefix}${shipment.orderId}`)}</p><p class="meta">Invoice date ${esc(latestShip.invoiceDate || formatDate(order?.paidAt || order?.date || shipment.generatedAt))}</p>` : ""}
+        ${design.showEwaybill ? `<p class="meta">eWaybill no. ${esc(latestShip.ewaybill || "N/A")}</p>` : ""}
         ${design.showValue ? `<p class="meta">Invoice value ${esc(rupees(order?.total || value || 0))}</p>` : ""}
       </div>
     </div>

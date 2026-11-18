@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true, configured: true, awb, labelUrl: `/api/shipping/${provider}/label?awb=${encodeURIComponent(awb)}` });
         }
         if (provider !== "shiprocket") return unsupported(provider);
-        const result = await shiprocketLabelSheet(own, String(body.shipmentId ?? ""), String(body.awb ?? ""));
+        const result = await shiprocketLabelSheet(own, String(body.shipmentId ?? ""), String(body.awb ?? ""), String(body.providerOrderId ?? ""));
         if (!result) return NextResponse.json({ ok: false, configured: false, error: "Shiprocket credentials are not configured." });
         return NextResponse.json({ ok: true, configured: true, ...result });
       }

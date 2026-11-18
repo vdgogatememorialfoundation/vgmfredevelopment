@@ -1063,6 +1063,9 @@ export type LabelSheet = {
   courierName?: string;
   awb?: string;
   serviceMode?: string;
+  invoiceNo?: string;
+  invoiceDate?: string;
+  ewaybill?: string;
 };
 
 function labelText(source: Json, keys: string[]) {
@@ -1094,7 +1097,7 @@ function labelSheetFrom(source: Json | null | undefined): LabelSheet {
 }
 
 /** Shiprocket label PDF plus the routing code printed on that label. */
-export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb = ""): Promise<LabelSheet | null> {
+export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb = "", providerOrderId = ""): Promise<LabelSheet | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
   const headers = { authorization: `Bearer ${token}` };
@@ -1125,6 +1128,24 @@ export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb 
       sheet = { ...extra, ...Object.fromEntries(Object.entries(sheet).filter(([, value]) => value)) };
     } catch {
       /* routing is optional */
+    }
+  }
+  if (providerOrderId) {
+    try {
+      const shown = await call(`https://apiv2.shiprocket.in/v1/external/orders/show/${encodeURIComponent(providerOrderId)}`, { headers });
+      const data = (shown.data as Json) ?? {};
+      const awbData = (data.awb_data as Json) ?? {};
+      const shipments = (data.shipments as Json) ?? {};
+      const eway = labelText(shipments, ["eway_bill_number"]);
+      sheet = {
+        ...sheet,
+        routingCode: sheet.routingCode || labelText(awbData, ["routing_code"]),
+        invoiceNo: labelText(data, ["invoice_no"]) || sheet.invoiceNo,
+        invoiceDate: labelText(data, ["invoice_date"]).slice(0, 10) || sheet.invoiceDate,
+        ewaybill: eway && eway !== "-" ? eway : sheet.ewaybill,
+      };
+    } catch {
+      /* order details are optional */
     }
   }
   return sheet;

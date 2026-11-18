@@ -1087,6 +1087,9 @@ export interface ShipmentRecord {
   serviceMode?: string;
   /** e-Way bill number, when one was generated for the consignment. */
   ewaybill?: string;
+  /** Invoice number and date the aggregator printed on its own label. */
+  invoiceNo?: string;
+  invoiceDate?: string;
   destinationHub?: string;
   invoiceUrl?: string;
   manifestUrl?: string;
