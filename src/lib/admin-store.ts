@@ -2135,6 +2135,14 @@ function printDoc(title: string, html: string, page: string, autoPrint: boolean)
     .size-4x6 .foot { margin-top: 6px; padding-top: 4px; font-size: 9px; line-height: 1.35; }
     .size-4x6 svg { max-width: 100%; height: 44px; }
     .agg { border: 2px solid #000; }
+    .label-sheet.agg { border: 2px solid #000; border-radius: 6px; overflow: hidden; }
+    .agg-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 2px solid #000; background: #f5f5f4; }
+    .agg-head .ttl { font-size: 13px; font-weight: 800; letter-spacing: 0.14em; }
+    .agg-head .svc { font-size: 12px; font-weight: 800; border: 1.5px solid #000; border-radius: 4px; padding: 1px 6px; }
+    .qr-row .agg-cell { padding: 8px; }
+    .qr-row svg { width: 150px; height: 150px; display: block; margin: 0 auto; }
+    .qr-cap { margin: 3px 0 0; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; }
+    .mono .agg-head { background: #fff; }
     .agg-row { display: flex; border-bottom: 1.5px solid #000; }
     .agg-row.center { text-align: center; }
     .agg-row.center svg { margin: 0 auto; }
@@ -2313,6 +2321,7 @@ export function printShippingLabel(
   const gstRate = gst.enabled ? gst.ratePercent / 100 : 0;
   const serviceMode = details?.serviceMode || shipment.serviceMode || serviceModeOf(courier, shipment.courier);
   const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
+    <div class="agg-head">${design.showLogo ? `<span class="label-brand">${logoImg("label-logo")}</span>` : ""}<span class="ttl">SHIPPING LABEL</span>${serviceMode && design.showServiceMode ? `<span class="svc">${esc(serviceMode.toUpperCase())}</span>` : `<span class="svc">${cod ? "COD" : "PREPAID"}</span>`}</div>
     <div class="agg-row">
       <div class="agg-cell grow to">
         <p class="label">Ship to</p>
@@ -2335,8 +2344,11 @@ export function printShippingLabel(
         <p class="label">AWB no.</p>
         ${barcodeSvg(awb, { height: 56, module: 1.6, format: "code128" })}
       </div>
-      ${design.showAwbQr && awb ? `<div class="agg-cell side" style="text-align:center">${qrSvg(awb, 130)}</div>` : ""}
     </div>
+    ${(design.showAwbQr && awb) || design.showOrderCodes ? `<div class="agg-row center qr-row">
+      ${design.showAwbQr && awb ? `<div class="agg-cell">${qrSvg(awb, 150)}<p class="qr-cap">${esc(awb)}</p></div>` : ""}
+      ${design.showOrderCodes ? `<div class="agg-cell">${qrSvg(shipment.orderId, 150)}<p class="qr-cap">Order ${esc(shipment.orderId)}</p></div>` : ""}
+    </div>` : ""}
     <div class="agg-row">
       ${design.showDimensions ? `<div class="agg-cell"><p class="label">Dimensions (cm)</p><b>${esc(`${box.length} × ${box.breadth} × ${box.height}`)}</b></div>` : ""}
       <div class="agg-cell"><p class="label">Weight</p><b>${esc(weight)} kg</b></div>
@@ -2359,8 +2371,7 @@ export function printShippingLabel(
       </div>
     </div>
     ${design.showOrderCodes ? `<div class="agg-row center">
-      <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 64, module: 1.5, format: "code128" })}</div>
-      <div class="agg-cell side" style="text-align:center">${qrSvg(shipment.orderId, 100)}</div>
+      <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 56, module: 1.5, format: "code128" })}</div>
     </div>` : ""}
     ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th>${design.showTaxColumns ? "<th>HSN</th>" : ""}<th class="right">Qty</th>${design.showTaxColumns ? '<th class="right">Rate</th><th class="right">Taxable</th><th class="right">CGST</th><th class="right">SGST</th><th class="right">Total</th>' : ""}</tr>
     ${priced
