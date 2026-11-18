@@ -409,6 +409,15 @@ function details(order: Order) {
 export async function notifyOrderStage(prev: Order | undefined, next: Order, options: { statusOnly?: boolean } = {}) {
   const to = next.deliveryAddress?.email || next.accountEmail || "";
   const sent = new Set(readSent()[next.id] ?? []);
+  const phone = next.deliveryAddress?.phone;
+  // Refund alerts go from the server for every refund, whichever desk issued it.
+  for (const refund of next.refunds ?? []) {
+    const key = `refund:${refund.id}`;
+    if (!phone || sent.has(key) || (prev?.refunds ?? []).some((item) => item.id === refund.id)) continue;
+    markSent(next.id, key);
+    const name = next.deliveryAddress?.fullName || "Reader";
+    void sendWhatsAppAlert("refund", { phone, name, params: [name, next.id, rupees(refund.amount)] }).catch(() => false);
+  }
   for (const stage of stagesFor(prev, next)) {
     if (options.statusOnly && !/^(status|address-request|pickup-window):/.test(stage.key)) continue;
     if (sent.has(stage.key)) continue;

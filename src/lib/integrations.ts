@@ -270,7 +270,7 @@ export const DEFAULT_LABEL_DESIGN: LabelDesign = {
   showServiceMode: true,
   showDimensions: true,
   showInvoiceNo: true,
-  showValue: true,
+  showValue: false,
   showItems: true,
   showLogo: true,
   showTaxColumns: true,

@@ -2348,7 +2348,7 @@ function LabelDesignFields({ design, onChange }: { design: LabelDesign; onChange
     ["showValue", "Invoice value"],
     ["showItems", "Item list"],
     ["showLogo", "Foundation logo"],
-    ["showTaxColumns", "HSN, rate and GST columns"],
+    ["showTaxColumns", "HSN column"],
     ["showGstin", "GSTIN"],
     ["showEwaybill", "eWaybill no."],
   ];

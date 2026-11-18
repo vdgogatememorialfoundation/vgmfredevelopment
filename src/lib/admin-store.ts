@@ -2058,6 +2058,16 @@ async function downloadHtmlPdf(fileName: string, title: string, html: string, pa
     const started = Date.now();
     while (doc.body.getAttribute("data-ready") !== "1" && Date.now() - started < 4000) await new Promise((done) => setTimeout(done, 60));
     const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
+    // html2canvas drops inline SVG barcodes and QR codes; swap them for images first.
+    doc.querySelectorAll("svg").forEach((svg) => {
+      const box = svg.getBoundingClientRect();
+      if (!svg.getAttribute("xmlns")) svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      const img = doc.createElement("img");
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.outerHTML)}`;
+      img.style.cssText = `width:${box.width}px;height:${box.height}px;display:block;margin:0 auto`;
+      svg.replaceWith(img);
+    });
+    await Promise.all(Array.from(doc.images).map((img) => (img.complete ? null : new Promise((done) => { img.onload = img.onerror = done; }))));
     const target = (doc.querySelector(".label-sheet") as HTMLElement | null) ?? doc.body;
     const canvas = await html2canvas(target, { scale: 3, backgroundColor: "#ffffff", useCORS: true });
     const [width, height] = PAGE_MM[page] ?? PAGE_MM.A4;
@@ -2154,7 +2164,7 @@ function printDoc(title: string, html: string, page: string, autoPrint: boolean)
     .agg .pin { font-size: 14px; letter-spacing: 0.04em; }
     .agg .courier { font-size: 14px; }
     .agg .routing { font-size: 18px; letter-spacing: 0.06em; }
-    .agg .pay-mode { font-size: 18px; letter-spacing: 0.08em; }
+    .agg .pay-mode { display: inline-block; font-size: 20px; font-weight: 900; letter-spacing: 0.1em; color: #000; border: 2px solid #000; border-radius: 4px; padding: 2px 10px; margin: 2px 0 3px; line-height: 1.2; }
     .agg table { margin-top: 0; }
     .agg td, .agg th { border-bottom: 1px solid #000; }
     .agg .qr { display: block; margin-top: 4px; }
@@ -2318,10 +2328,9 @@ export function printShippingLabel(
   const design = labelDesign(shipping);
   const latestShip = getShipments().find((item) => item.id === shipment.id) ?? shipment;
   const gst = getOrderSettings().gst;
-  const gstRate = gst.enabled ? gst.ratePercent / 100 : 0;
   const serviceMode = details?.serviceMode || shipment.serviceMode || serviceModeOf(courier, shipment.courier);
   const html = `<div class="size-${size}${colour === "bw" ? " mono" : ""}"><div class="label-sheet agg">
-    <div class="agg-head">${design.showLogo ? `<span class="label-brand">${logoImg("label-logo")}</span>` : ""}<span class="ttl">SHIPPING LABEL</span>${serviceMode && design.showServiceMode ? `<span class="svc">${esc(serviceMode.toUpperCase())}</span>` : `<span class="svc">${cod ? "COD" : "PREPAID"}</span>`}</div>
+    <div class="agg-head">${design.showLogo ? `<span class="label-brand">${logoImg("label-logo")}</span>` : ""}<span class="ttl">SHIPPING LABEL</span>${serviceMode && design.showServiceMode ? `<span class="svc">${esc(serviceMode.toUpperCase())}</span>` : "<span></span>"}</div>
     <div class="agg-row">
       <div class="agg-cell grow to">
         <p class="label">Ship to</p>
@@ -2373,13 +2382,10 @@ export function printShippingLabel(
     ${design.showOrderCodes ? `<div class="agg-row center">
       <div class="agg-cell grow">${barcodeSvg(shipment.orderId, { height: 56, module: 1.5, format: "code128" })}</div>
     </div>` : ""}
-    ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th>${design.showTaxColumns ? "<th>HSN</th>" : ""}<th class="right">Qty</th>${design.showTaxColumns ? '<th class="right">Rate</th><th class="right">Taxable</th><th class="right">CGST</th><th class="right">SGST</th><th class="right">Total</th>' : ""}</tr>
+    ${design.showItems ? `<table><tr><th>Item</th><th>SKU</th>${design.showTaxColumns ? "<th>HSN</th>" : ""}<th class="right">Qty</th></tr>
     ${priced
       .map((item) => {
-        const taxable = item.price * item.quantity;
-        const half = Math.round(taxable * gstRate * 50) / 10000;
-        const money = (value: number) => value.toFixed(2);
-        return `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td>${design.showTaxColumns ? `<td>${esc(design.hsn)}</td>` : ""}<td class="right">${esc(item.quantity)}</td>${design.showTaxColumns ? `<td class="right">${money(item.price)}</td><td class="right">${money(taxable)}</td><td class="right">${money(half)}</td><td class="right">${money(half)}</td><td class="right">${money(taxable + half * 2)}</td>` : ""}</tr>`;
+        return `<tr><td>${esc(item.title)}${item.batch ? `<br/><small>Batch ${esc(item.batch)}</small>` : ""}</td><td>${esc(String(item.sku ?? "").replace(/^bks-/i, ""))}</td>${design.showTaxColumns ? `<td>${esc(design.hsn)}</td>` : ""}<td class="right">${esc(item.quantity)}</td></tr>`;
       })
       .join("")}
     </table>` : ""}

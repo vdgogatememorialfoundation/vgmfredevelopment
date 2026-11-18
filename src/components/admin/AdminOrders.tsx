@@ -1726,7 +1726,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   ? (refundToStoreCredit(order.id, Number(refundAmount), undefined, { withPlatformFee: refundFee }), "Store credit issued.")
                   : refundThroughGateway(order.id, Number(refundAmount), { withPlatformFee: refundFee }));
               }}>
-                {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund via Razorpay" : "Record refund"}
+                {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund to original payment method" : "Record refund"}
               </Button>
               {(order.platformFee ?? 0) > 0 && (
                 <label className="flex w-full items-center gap-2 text-xs text-slate-600">
