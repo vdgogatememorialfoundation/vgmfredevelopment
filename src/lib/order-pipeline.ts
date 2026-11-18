@@ -309,6 +309,10 @@ export function buildTrackingStages(
   const trackingId = order.trackingId ?? shipment?.awb ?? "";
   const liveScans = (scans.length ? scans : shipment?.tracking ?? []).filter((scan) => !isDeskScan(scan));
   const fromScans = highestScanStage(liveScans);
+  // When no courier scan has reached a stage yet, its time is when the order was moved to that status, never an earlier booking scan.
+  const stageAt = (stage: CourierStage, status: Order["status"]) =>
+    (STAGE_RANK[fromScans.stage] >= STAGE_RANK[stage] ? fromScans.at : undefined) ||
+    [...(order.history ?? [])].reverse().find((item) => item.status === status)?.at;
   // The day it was actually packed: the last "Packed" step, else the courier booking (not notes that mention packing).
   const packedAt =
     [...(order.history ?? [])].reverse().find((item) => /^packed$/i.test(item.status.trim()))?.at ||
@@ -530,7 +534,7 @@ export function buildTrackingStages(
     shippedEvents.push({
       id: "shipped",
       title: PICKUP_TITLE,
-      at: fromScans.at || packedAt || order.date,
+      at: stageAt("shipped", "Shipped") || fromScans.at || packedAt || order.date,
       location: origin,
       detail: shippedReached && trackingId ? `Courier: ${courier} · Tracking id: ${trackingId}` : `Courier: ${courier}`,
       reached: true,
@@ -554,7 +558,7 @@ export function buildTrackingStages(
     outEvents.push({
       id: "out",
       title: "Collected from the store",
-      at: fromScans.at || packedAt || order.date,
+      at: stageAt("out", "Out for Delivery") || fromScans.at || packedAt || order.date,
       location: origin,
       reached: true,
     });
@@ -586,7 +590,7 @@ export function buildTrackingStages(
     failedEvents.push({
       id: "failed",
       title: "Delivery failed",
-      at: fromScans.at || order.date,
+      at: stageAt("failed", "Failed") || fromScans.at || order.date,
       location: dest,
       reached: true,
       detail: "The courier marked this shipment as failed or returned. Contact the Foundation if you need a reattempt.",

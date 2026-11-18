@@ -104,6 +104,20 @@ function courierParams(order: Order, status: string, name: string) {
   return [name, order.id, day(delivered) || day(new Date().toISOString()), courier, awb, `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}#feedback`];
 }
 
+/** The status line for the general update templates, with courier, tracking ID and expected date once a courier has them. */
+function statusText(order: Order, status: string) {
+  if (!COURIER_STAGES[status]) return status;
+  const shipment = findShopShipment(order.id);
+  const courier = order.courierName || shipment?.courier;
+  const awb = order.trackingId || shipment?.awb;
+  if (!courier || !awb) return status;
+  if (status === "Shipped") {
+    const expected = day(shipment?.expectedBy);
+    return `Shipped with ${courier}, tracking ID ${awb}${expected ? `, expected delivery ${expected}` : ""}`;
+  }
+  return status === "Out for Delivery" ? `Out for delivery with ${courier}, tracking ID ${awb}` : `Delivered by ${courier}, tracking ID ${awb}`;
+}
+
 /** Sends the courier-detail template when one is mapped for this status; null when the status has none. */
 async function courierAlert(order: Order, phone: string, name: string, status: string) {
   const event = COURIER_STAGES[status];
@@ -116,7 +130,7 @@ async function courierAlert(order: Order, phone: string, name: string, status: s
     return Boolean(template) && Number(saved?.variables) >= params.length;
   });
   if (!dedicated) return null;
-  return sendWhatsAppAlert(event, { phone, name, params, fallbackEvent: "order-status", fallbackParams: [name, order.id, status] }).catch(() => false);
+  return sendWhatsAppAlert(event, { phone, name, params, fallbackEvent: "order-status", fallbackParams: [name, order.id, statusText(order, status)] }).catch(() => false);
 }
 
 /** Pre-orders get their own WhatsApp templates (advance and balance shown); false when none is mapped, so the normal one goes instead. */
@@ -150,8 +164,8 @@ export async function resendWhatsAppStage(orderId: string, key: string) {
   const status = key.startsWith("status:") ? key.slice(7) : order.status;
   const courier = await courierAlert(order, phone, name, status);
   if (courier !== null) return courier;
-  if (await preorderAlert("update", order, phone, name, status)) return true;
-  return sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, status], fallbackEvent: "order-status" });
+  if (await preorderAlert("update", order, phone, name, statusText(order, status))) return true;
+  return sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, statusText(order, status)], fallbackEvent: "order-status" });
 }
 
 /** WhatsApp update for an order stage, using the template mapped to that event (or to "Order status changed"). */
@@ -168,8 +182,8 @@ async function whatsAppStage(key: string, order: Order, name: string) {
   }
   if (key.startsWith("status:") && key !== "status:split") {
     if ((await courierAlert(order, phone, name, key.slice(7))) !== null) return;
-    if (await preorderAlert("update", order, phone, name)) return;
-    await sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, order.status], fallbackEvent: "order-status" }).catch(() => false);
+    if (await preorderAlert("update", order, phone, name, statusText(order, order.status))) return;
+    await sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, statusText(order, order.status)], fallbackEvent: "order-status" }).catch(() => false);
     return;
   }
   if (key.startsWith("return:")) {
