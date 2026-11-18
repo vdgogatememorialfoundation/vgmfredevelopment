@@ -103,10 +103,23 @@ export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {})
   for (const key of Object.keys(merged) as (keyof Order)[]) if (merged[key] === null) delete merged[key];
   // A split parent is never picked; an old browser copy must not bring its pick record back.
   if (merged.splitInto?.length) delete merged.pick;
+  if (merged.history?.length) merged.history = uniqueHistory(merged.history);
   orders.unshift(withTxnIds(merged, prev));
   writeAll(orders);
   void notifyOrderStage(prev, orders[0], { statusOnly: options.quiet }).catch(() => undefined);
   return orders[0];
+}
+
+/** An open page that re-runs a check must not stack copies of the same entry (same status and note). */
+function uniqueHistory(history: NonNullable<Order["history"]>) {
+  const seen = new Set<string>();
+  return history.filter((entry) => {
+    if (!entry?.note) return true;
+    const key = `${entry.status}\u0000${entry.note}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function deletedFile() {
