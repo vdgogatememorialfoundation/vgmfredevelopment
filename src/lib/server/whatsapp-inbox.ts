@@ -46,7 +46,7 @@ export type WaThread = {
 export function waRef(thread: Pick<WaThread, "phone" | "createdAt" | "messages">) {
   const first = thread.createdAt || thread.messages[0]?.at || "";
   const day = first.slice(2, 10).replace(/-/g, "");
-  return `WA${day}-${thread.phone.slice(-6)}`;
+  return `${day}${thread.phone.slice(-6)}`;
 }
 
 export function markWhatsAppTicket(threadId: string, ticketId: string) {
@@ -669,12 +669,13 @@ export async function replyOnWhatsApp(threadId: string, text: string, by: string
   return updated;
 }
 
-function connectionNotice(name: string, department: string) {
+function connectionNotice(name: string, department: string, ref: string) {
   const who = name.trim();
   const desk = department.trim();
-  if (who && desk) return `You have been connected to ${who} from the ${desk} desk.`;
-  if (who) return `You have been connected to ${who}.`;
-  if (desk) return `You have been connected to the ${desk} desk. An executive will reply here.`;
+  const tail = ref ? ` Chat reference: ${ref}.` : "";
+  if (who && desk) return `You have been connected to ${who} from the ${desk} desk.${tail}`;
+  if (who) return `You have been connected to ${who}.${tail}`;
+  if (desk) return `You have been connected to the ${desk} desk. An executive will reply here.${tail}`;
   return "";
 }
 
@@ -701,6 +702,7 @@ export async function transferWhatsApp(input: {
   const store = readStore();
   const thread = store.threads.find((item) => item.id === input.threadId);
   if (!thread) throw new Error("That chat is no longer in the inbox.");
+  if (thread.closedAt) throw new Error("This chat is closed. It reopens when the customer writes again.");
   const clearAssignee = Boolean(department) && !assignedTo && !assignedName;
   const nextDept = department || thread.department || "";
   const nextTo = clearAssignee ? "" : assignedTo || thread.assignedTo || "";
@@ -732,7 +734,7 @@ export async function transferWhatsApp(input: {
   const actorKeepsIt = Boolean(nextTo) && nextTo.toLowerCase() === byEmail.toLowerCase();
   thread.unread = actorKeepsIt ? 0 : thread.unread + 1;
   writeStore(store);
-  const notice = connectionNotice(nextName, nextDept);
+  const notice = connectionNotice(nextName, nextDept, waRef(thread));
   let noticeSent = false;
   let noticeError = "";
   if (notice) {

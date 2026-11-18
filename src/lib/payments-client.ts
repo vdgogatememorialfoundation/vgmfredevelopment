@@ -583,6 +583,21 @@ export async function refreshPaymentLink(orderId: string) {
   const result = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: order.paymentLink.id });
   if (!result.ok) throw new Error(result.error ?? "Could not read the link status.");
   if (result.status === "paid") {
+    const plan = order.preorderPayment;
+    if (order.paymentLink.purpose === "advance" && plan) {
+      const at = new Date().toISOString();
+      patchOrder(order.id, {
+        paymentStatus: "Partially Paid",
+        status: order.status === "Pending" ? "Paid" : order.status,
+        paidAt: order.paidAt ?? at,
+        paymentMethod: "Razorpay payment link",
+        paymentRef: result.paymentId,
+        razorpayPaymentId: result.paymentId,
+        preorderPayment: { ...plan, advancePaidAt: plan.advancePaidAt ?? at },
+        history: [...(order.history ?? []), { at, status: "Advance paid", note: `₹${plan.advance} · Razorpay payment link${result.paymentId ? ` · ${result.paymentId}` : ""}` }],
+      });
+      return `Advance ₹${plan.advance} paid on Razorpay. Balance ₹${plan.balance} and courier are due later.`;
+    }
     recordPayment(order.id, { method: "Razorpay payment link", reference: result.paymentId, razorpayPaymentId: result.paymentId });
     return "Paid on Razorpay. The order is confirmed.";
   }

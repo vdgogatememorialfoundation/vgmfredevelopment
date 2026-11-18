@@ -125,8 +125,10 @@ function persist<T>(key: "otp" | "tickets" | "orders" | "sessions", file: string
   writeFile(key === "sessions" ? sessionsFile() : file, value);
 }
 
+/** Same 12-digit, numbers-only format as website order ids. */
 function newId() {
-  return randomBytes(6).toString("hex");
+  const bytes = randomBytes(12);
+  return Array.from(bytes, (byte, index) => (index === 0 ? 1 + (byte % 9) : byte % 10)).join("");
 }
 
 export function issueMobileOtp(email: string): { code?: string; error?: string } {

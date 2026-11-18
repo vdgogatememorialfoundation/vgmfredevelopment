@@ -306,7 +306,7 @@ export function WhatsAppInboxDesk() {
                     <div>
                       <p className="font-semibold text-text-primary">
                         {active.name}
-                        {active.ref ? <span className="ml-2 font-mono text-xs text-text-muted">Ref {active.ref}</span> : null}
+                        {active.ref ? <span className="ml-2 font-mono text-xs text-text-muted">{active.ref}</span> : null}
                         {active.ticketId ? <span className="ml-2 text-xs text-burgundy">Ticket {active.ticketId}</span> : null}
                       </p>
                       <p className="text-xs text-text-muted">
@@ -333,7 +333,7 @@ export function WhatsAppInboxDesk() {
                     <Button variant="outline" disabled={moving || (!department && !staffEmail)} onClick={() => void move("transfer")}>
                       {moving ? "Moving…" : "Transfer"}
                     </Button>
-                    <Button variant="outline" disabled={moving} onClick={() => void move("take")}>
+                    <Button variant="outline" disabled={moving || Boolean(active.closedAt)} onClick={() => void move("take")}>
                       Take this chat
                     </Button>
                     <Button variant="outline" disabled={moving} onClick={() => void raiseTicket()}>
