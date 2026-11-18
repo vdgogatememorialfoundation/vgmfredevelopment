@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 import { readKv } from "@/lib/server/db";
+import { chatBotReply, pauseChatBot } from "@/lib/server/whatsapp-bot";
 import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText } from "@/lib/server/providers";
 
 export type WaProvider = "meta" | "aisensy";
@@ -415,11 +416,30 @@ export function applyWhatsAppWebhook(kind: "meta" | "aisensy", body: unknown) {
     const parsed = parseMetaWebhook(body);
     for (const status of parsed.statuses) markWhatsAppExternalStatus(status.id, status.status);
     const threads = parsed.messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
+    for (const message of parsed.messages) void runChatBot(message);
     return { messages: parsed.messages.length, statuses: parsed.statuses.length, threads: threads.length };
   }
   const messages = parseAiSensyWebhook(body);
   const threads = messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
+  for (const message of messages) void runChatBot(message);
   return { messages: messages.length, statuses: 0, threads: threads.length };
+}
+
+/** Answers the self-service menu on the same number the customer wrote to; the reply is kept in the inbox thread. */
+async function runChatBot(message: InboundWa) {
+  if (message.direction !== "in" || !message.phone) return;
+  try {
+    const key = threadKey(message.provider, waPhone(message.phone));
+    const reply = await chatBotReply(key, message.phone, message.text, message.name);
+    if (!reply) return;
+    const creds = await loadWhatsAppCreds();
+    const sent = message.provider === "aisensy" ? await sendAiSensySession(creds, { to: message.phone, body: reply }) : await sendMetaText(creds, { to: message.phone, body: reply });
+    const store = readStore();
+    upsert(store, { provider: message.provider, phone: message.phone, text: reply, direction: "out", externalId: sent?.id || undefined, by: "Auto menu", status: "sent" });
+    writeStore(store);
+  } catch {
+    /* the desk still sees the message in the inbox */
+  }
 }
 
 function readCredsFile() {
@@ -538,6 +558,7 @@ export async function replyOnWhatsApp(threadId: string, text: string, by: string
   });
   if (updated && !options?.keepUnread) updated.unread = 0;
   writeStore(store);
+  if (by !== "Auto menu") pauseChatBot(existing.id);
   return updated;
 }
 

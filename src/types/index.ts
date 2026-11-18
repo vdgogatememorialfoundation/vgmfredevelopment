@@ -652,7 +652,7 @@ export interface Order {
   paidAt?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
-  paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string };
+  paymentLink?: { url: string; id?: string; provider: "razorpay" | "demo"; createdAt: string; amount?: number; expiresAt?: string; /** "advance": first payment of a pre-order placed over chat. */ purpose?: "advance" };
   courierChoice?: CourierRate;
   /** Pickup address picked for this order on each aggregator's panel (Shiprocket nickname, Ekart/GoSwift alias). */
   shipFrom?: { shiprocket?: string; ekart?: string; goswift?: string };

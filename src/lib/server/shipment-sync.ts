@@ -1,3 +1,4 @@
+import { markAppOrderPaid } from "@/lib/server/mobile-shop";
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { listShopShipments } from "@/lib/server/shop-shipments";
 import { deletedShopOrderIds, findShopOrder, listShopOrders, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
@@ -125,6 +126,11 @@ async function checkOpenPaymentLinks(creds: { keyId: string; keySecret: string }
         continue;
       }
       const link = order.paymentLink;
+      if (link?.purpose === "advance" && link.provider === "razorpay" && link.id && order.paymentStatus === "Pending" && recent(link.createdAt)) {
+        const result = await razorpayLinkStatus(creds, link.id);
+        if (result.status === "paid") markAppOrderPaid(order.id, { paymentId: result.paymentId ?? "", razorpayOrderId: link.id });
+        continue;
+      }
       if (link?.provider === "razorpay" && link.id && order.paymentStatus !== "Paid" && recent(link.createdAt)) {
         const result = await razorpayLinkStatus(creds, link.id);
         if (result.status === "paid") {

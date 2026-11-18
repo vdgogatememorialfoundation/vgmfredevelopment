@@ -945,6 +945,12 @@ export function WhatsAppSettingsDesk() {
       <Header title="WhatsApp" text="Two business numbers stay live together. Chats on the Meta number are answered through Meta. Chats on the AiSensy number are answered through AiSensy. The choice below is only which line sends order and account alerts." action={<button type="button" className={primary} onClick={() => save()}>Save</button>} />
       <Saved text={note} />
       <SettingsSave save={save}>
+      <Card title="Auto menu" text="When a customer writes in, a numbered menu answers: Order books (with a payment link), My orders, My account, Talk to our team. It stays quiet once staff reply or the customer picks Talk to our team, until they type menu.">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="h-4 w-4 accent-burgundy" checked={value.botEnabled !== false} onChange={(event) => set({ botEnabled: event.target.checked })} />
+          Answer new chats with the auto menu
+        </label>
+      </Card>
       <Card title="Providers for alerts" text="Switch on one or more. Each provider keeps its own inbox; this only chooses which numbers send order and account alerts.">
         <div className="grid gap-3 md:grid-cols-3">
           {([

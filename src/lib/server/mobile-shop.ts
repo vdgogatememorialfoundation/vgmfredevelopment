@@ -135,7 +135,7 @@ export function markAppOrderPaid(id: string, payment: { paymentId: string; razor
     paymentRef: payment.paymentId,
     razorpayPaymentId: payment.paymentId,
     razorpayOrderId: payment.razorpayOrderId,
-    history: [...(order.history ?? []), { at, status: "Paid", note: "Paid through Razorpay in the Android app." }],
+    history: [...(order.history ?? []), { at, status: "Paid", note: order.createdBy === "WhatsApp" ? "Paid through the Razorpay link sent over chat." : "Paid through Razorpay in the Android app." }],
   });
 }
 
@@ -145,7 +145,7 @@ const DESK_EMAILS = ["care@vaidyagogate.org", "vd.gogatememorialfoundation@gmail
 async function mailDeskNewOrder(order: Order, paymentId: string) {
   const address = order.deliveryAddress;
   const body = [
-    `New order ${order.id} from the Android app`,
+    `New order ${order.id} from ${order.createdBy === "WhatsApp" ? "WhatsApp" : "the Android app"}`,
     "",
     `Customer: ${address?.fullName || "—"}`,
     `Phone: ${address?.phone || "—"}`,
