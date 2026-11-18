@@ -380,7 +380,7 @@ async function payInChat(key: string, phone: string, order: Order, payNow: numbe
   if (!key.startsWith("meta:") || payNow <= 0) return false;
   const whatsapp = (savedAdminIntegrations().whatsapp ?? {}) as { metaPaymentConfiguration?: string };
   const configurationName = String(whatsapp.metaPaymentConfiguration || "Razorpay").trim();
-  const { loadWhatsAppCreds } = await import("@/lib/server/whatsapp-inbox");
+  const { loadWhatsAppCreds, logOutboundWhatsApp } = await import("@/lib/server/whatsapp-inbox");
   const creds = await loadWhatsAppCreds();
   const titles = order.items.map((item) => item.title).join(", ");
   const books = order.items.map((item) => ({ id: item.bookId || item.sku || item.title, name: item.title, amount: item.price, quantity: item.quantity }));
@@ -399,6 +399,7 @@ async function payInChat(key: string, phone: string, order: Order, payNow: numbe
     discount: itemised ? discount : undefined,
     total: payNow,
   });
+  if (sent?.id) logOutboundWhatsApp({ provider: "meta", phone, text: `[Review and pay card] #${order.id} · ${inr(payNow)}`, externalId: sent.id, by: "Auto menu" });
   return Boolean(sent?.id);
 }
 

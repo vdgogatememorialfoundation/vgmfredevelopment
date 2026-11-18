@@ -16,6 +16,8 @@ export type WaMessage = {
   provider: WaProvider;
   text: string;
   status?: string;
+  /** Meta's reason when a message failed to deliver. */
+  error?: string;
   externalId?: string;
   by?: string;
   /** Desk-only note. Never sent out on WhatsApp. */
@@ -319,7 +321,7 @@ export function markWhatsAppRead(threadId: string) {
   return thread;
 }
 
-export function markWhatsAppExternalStatus(externalId: string, status: string) {
+export function markWhatsAppExternalStatus(externalId: string, status: string, error?: string) {
   if (!externalId || !status) return;
   const store = readStore();
   let changed = false;
@@ -327,6 +329,7 @@ export function markWhatsAppExternalStatus(externalId: string, status: string) {
     const message = thread.messages.find((item) => item.externalId === externalId);
     if (!message) continue;
     message.status = status;
+    if (error) message.error = error;
     changed = true;
   }
   if (changed) writeStore(store);
@@ -388,10 +391,10 @@ function metaCart(message: Record<string, unknown>) {
 
 type WaPayment = { referenceId: string; status: string; paymentId: string; phone?: string };
 
-export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string }[]; payments: WaPayment[] } {
+export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string; error?: string }[]; payments: WaPayment[] } {
   const payments: WaPayment[] = [];
   const messages: InboundWa[] = [];
-  const statuses: { id: string; status: string }[] = [];
+  const statuses: { id: string; status: string; error?: string }[] = [];
   const root = asRecord(body);
   const entries = Array.isArray(root?.entry) ? root.entry : [];
   for (const entry of entries) {
@@ -438,7 +441,9 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
           });
           continue;
         }
-        statuses.push({ id: String(status.id), status: String(status.status || "") });
+        const errors = Array.isArray(status.errors) ? status.errors.map(asRecord).filter(Boolean) : [];
+        const error = errors.map((item) => [item?.code, item?.title, asRecord(item?.error_data)?.details].filter(Boolean).join(" · ")).join("; ");
+        statuses.push({ id: String(status.id), status: String(status.status || ""), error: error || undefined });
       }
     }
   }
@@ -497,7 +502,10 @@ export function parseAiSensyWebhook(body: unknown): InboundWa[] {
 export function applyWhatsAppWebhook(kind: "meta" | "aisensy", body: unknown) {
   if (kind === "meta") {
     const parsed = parseMetaWebhook(body);
-    for (const status of parsed.statuses) markWhatsAppExternalStatus(status.id, status.status);
+    for (const status of parsed.statuses) {
+      if (status.error) console.warn(`[whatsapp] ${status.id} ${status.status}: ${status.error}`);
+      markWhatsAppExternalStatus(status.id, status.status, status.error);
+    }
     const threads = parsed.messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
     for (const message of parsed.messages) void runChatBot(message);
     for (const payment of parsed.payments) void recordWhatsAppPayment(payment).catch(() => undefined);
@@ -530,6 +538,13 @@ async function runChatBot(message: InboundWa) {
  * Sends a mapped WhatsApp alert from the server (order stages), through every provider switched on for alerts
  * (failover or all, as set in Settings → WhatsApp). Meta and AiSensy sends are kept in that number's inbox thread.
  */
+/** Keeps a server-sent message (e.g. the in-chat payment card) in the number's inbox thread, so its delivery status shows. */
+export function logOutboundWhatsApp(input: { provider: WaProvider; phone: string; text: string; externalId?: string; by: string }) {
+  const store = readStore();
+  upsert(store, { ...input, direction: "out", status: "sent" });
+  writeStore(store);
+}
+
 export async function sendWhatsAppAlert(event: string, input: { phone?: string; name: string; params: string[]; fallbackEvent?: string }) {
   const phone = waPhone(input.phone || "");
   if (phone.length < 10) return false;

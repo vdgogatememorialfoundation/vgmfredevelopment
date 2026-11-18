@@ -17,6 +17,7 @@ type WaMessage = {
   provider: "meta" | "aisensy";
   text: string;
   status?: string;
+  error?: string;
   by?: string;
   system?: boolean;
 };
@@ -363,7 +364,7 @@ export function WhatsAppInboxDesk() {
                           <p className="whitespace-pre-wrap">{message.text}</p>
                           <p className={`mt-1 text-[10px] ${message.direction === "out" ? "text-white/80" : "text-text-muted"}`}>
                             {message.direction === "out" ? message.by || "Desk" : "Customer"} · {formatDateTime(message.at)}
-                            {message.status ? ` · ${message.status}` : ""}
+                            {message.status ? ` · ${message.status}` : ""}{message.error ? ` · ${message.error}` : ""}
                           </p>
                         </div>
                       )
