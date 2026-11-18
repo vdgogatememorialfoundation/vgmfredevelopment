@@ -45,6 +45,7 @@ async function call(url: string, init: RequestInit & { json?: unknown } = {}) {
         : undefined) ??
       (data as Json)?.message ??
       ((data as Json)?.error as Json)?.message ??
+      ((data as Json)?.error as Json)?.detail ??
       ((data as Json)?.error as Json)?.description ??
       (typeof (data as Json)?.error === "string" ? (data as Json).error : undefined) ??
       (typeof data === "string" ? data.slice(0, 200) : `HTTP ${response.status}`);
@@ -3201,4 +3202,237 @@ export async function shadowfaxTest(input: Json) {
   if (!headers) return null;
   const served = await call(`${shadowfaxBase(input)}/v1/clients/serviceability/?service=customer_delivery&pincodes=411005`, { headers });
   return { message: `Shadowfax connected (${String(input.environment ?? "").toLowerCase() === "staging" ? "staging" : "live"}). Pune 411005 ${Array.isArray(served) && served.length ? "is" : "is not"} serviceable.` };
+}
+
+/* ---------------- Envia (docs.envia.com) ---------------- */
+
+const enviaSandbox = (input: Json) => String(input.environment ?? "").toLowerCase() === "sandbox";
+const enviaShip = (input: Json) => (enviaSandbox(input) ? "https://api-test.envia.com" : "https://api.envia.com");
+const enviaQueries = (input: Json) => (enviaSandbox(input) ? "https://queries.test.envia.com" : "https://queries.envia.com");
+const ENVIA_INDIA_CARRIERS = ["delhivery", "xpressbees", "bluedart", "ekart", "dtdc", "shadowfax", "amazon"];
+
+function enviaAuth(input: Json) {
+  const token = pick(input.apiToken, "ENVIA_API_TOKEN");
+  return token ? { authorization: `Bearer ${token}` } : null;
+}
+
+function enviaFailed(data: Json, fallback: string) {
+  const error = (data.error as Json) ?? {};
+  if (data.meta !== "error" && !data.error) return null;
+  return new ProviderError(String(error.message || error.description || data.message || fallback));
+}
+
+const enviaPlaces = new Map<string, { city: string; state: string }>();
+
+/** City and two-letter state code Envia expects for an Indian PIN, from Envia's own geocodes API. */
+async function enviaPlace(pincode: string, city = "", state = "") {
+  const pin = String(pincode).replace(/\D/g, "");
+  let found = enviaPlaces.get(pin);
+  if (!found) {
+    const rows = await call(`https://geocodes.envia.com/zipcode/IN/${pin}`).catch(() => [] as unknown as Json);
+    const row = (Array.isArray(rows) ? (rows[0] as Json) : undefined) ?? {};
+    const code = (((row.state as Json) ?? {}).code as Json) ?? {};
+    found = { city: String(row.locality ?? "").trim(), state: String(code["2digit"] ?? "").trim() };
+    if (found.city || found.state) enviaPlaces.set(pin, found);
+  }
+  return { city: found.city || city, state: found.state || state };
+}
+
+const enviaCarrierCache = new Map<string, { names: string[]; at: number }>();
+
+/** Envia prices one carrier per request: the carriers listed in Settings, else every carrier Envia has active for India. */
+async function enviaCarriers(input: Json, headers: Record<string, string>) {
+  const listed = String(input.carriers ?? "")
+    .split(/[\s,]+/)
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  if (listed.length) return listed;
+  const key = headers.authorization;
+  const cached = enviaCarrierCache.get(key);
+  if (cached && Date.now() - cached.at < 36e5) return cached.names;
+  const data = await call(`${enviaQueries(input)}/carrier?country_code=IN`, { headers }).catch(() => ({}) as Json);
+  const names = ((data.data as Json[]) ?? []).filter((row) => row.active !== 0 && row.active !== false).map((row) => String(row.name ?? "").toLowerCase()).filter(Boolean);
+  const out = names.length ? names : ENVIA_INDIA_CARRIERS;
+  enviaCarrierCache.set(key, { names: out, at: Date.now() });
+  return out;
+}
+
+function enviaPickup(input: Json) {
+  const pickup = (input.pickup as Json) ?? {};
+  const text = (value: unknown, fallback: string) => String(value ?? "").trim() || fallback;
+  return {
+    name: text(pickup.contactName ?? pickup.name, "Vaidya Gogate Memorial Foundation"),
+    phone: text(pickup.phone, "8668904067").replace(/\D/g, "").slice(-10),
+    street: text([pickup.line1, pickup.line2].filter(Boolean).join(", "), "Pickup address"),
+    city: text(pickup.city, ""),
+    state: text(pickup.state, ""),
+  };
+}
+
+function enviaPackage(weightKg: number, length: number, width: number, height: number, value: number, cod: boolean) {
+  return {
+    content: "Books",
+    amount: 1,
+    type: "box",
+    weight: Math.max(0.01, Math.round(weightKg * 1000) / 1000),
+    declaredValue: Math.max(1, Math.round(value)),
+    weightUnit: "KG",
+    lengthUnit: "CM",
+    dimensions: { length: Math.max(0.1, length), width: Math.max(0.1, width), height: Math.max(0.1, height) },
+    ...(cod ? { additionalServices: [{ service: "cash_on_delivery", data: { amount: String(Math.round(value)) } }] } : {}),
+  };
+}
+
+export async function enviaRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  const pickup = enviaPickup(input);
+  const [from, to, carriers] = await Promise.all([
+    enviaPlace(parcel.pickupPincode, pickup.city, pickup.state),
+    enviaPlace(parcel.deliveryPincode),
+    enviaCarriers(input, headers),
+  ]);
+  const origin = { name: pickup.name, phone: pickup.phone, street: pickup.street, city: from.city, state: from.state, country: "IN", postalCode: parcel.pickupPincode, phone_code: "IN" };
+  const destination = { name: "Customer", phone: "9999999999", street: "Delivery address", city: to.city, state: to.state, country: "IN", postalCode: parcel.deliveryPincode, phone_code: "IN" };
+  const replies = await Promise.allSettled(
+    carriers.map((carrier) =>
+      call(`${enviaShip(input)}/ship/rate/`, {
+        method: "POST",
+        headers,
+        json: {
+          origin,
+          destination,
+          packages: [enviaPackage(parcel.weightKg, parcel.length, parcel.breadth, parcel.height, parcel.declaredValue || 1, parcel.cod)],
+          shipment: { type: 1, import: 0, carrier },
+          settings: { currency: "INR" },
+        },
+      })
+    )
+  );
+  const rows = replies.flatMap((reply) => (reply.status === "fulfilled" && Array.isArray(reply.value.data) ? (reply.value.data as Json[]) : []));
+  if (!rows.length) {
+    const auth = replies.find((reply) => reply.status === "rejected" && (reply.reason as ProviderError)?.status === 401);
+    if (auth) throw (auth as PromiseRejectedResult).reason;
+  }
+  return rows
+    .filter((row) => Number(row.totalPrice) > 0)
+    .map((row) => {
+      const date = (row.deliveryDate as Json) ?? {};
+      const days = Number(date.dateDifference);
+      return {
+        provider: "envia",
+        courierId: `${row.carrier}|${row.service}`,
+        courierName: `${String(row.carrierDescription || row.carrier)} ${String(row.serviceDescription || row.service || "")}`.trim(),
+        rate: Math.round(Number(row.totalPrice) * 100) / 100,
+        etaDays: Number.isFinite(days) && days > 0 ? days : 5,
+        deliverBy: date.date ? String(date.date) : undefined,
+        live: true as const,
+        cod: parcel.cod || undefined,
+        pickupFrom: `Pickup pincode ${parcel.pickupPincode}`,
+      };
+    });
+}
+
+export async function enviaBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  const [carrier, service] = order.courierId.split("|");
+  if (!carrier || !service) throw new ProviderError("Pick an Envia courier from the live quotes, then book again.");
+  const phone = (value: string) => value.replace(/\D/g, "").slice(-10);
+  const [from, to] = await Promise.all([enviaPlace(order.pickup.pincode, order.pickup.city, order.pickup.state), enviaPlace(order.customer.pincode, order.customer.city, order.customer.state)]);
+  const typedCity = order.customer.city.replace(/[\s,]+$/, "").trim();
+  const data = await call(`${enviaShip(input)}/ship/generate/`, {
+    method: "POST",
+    headers,
+    json: {
+      origin: {
+        name: order.pickup.contactName,
+        company: "Vaidya Gogate Memorial Foundation",
+        email: order.pickup.email,
+        phone: phone(order.pickup.phone),
+        street: [order.pickup.line1, order.pickup.line2].filter(Boolean).join(", "),
+        number: "",
+        district: "",
+        city: from.city,
+        state: from.state,
+        country: "IN",
+        postalCode: order.pickup.pincode,
+        phone_code: "IN",
+        reference: "",
+        category: 1,
+      },
+      destination: {
+        name: order.customer.name,
+        company: "",
+        email: order.customer.email ?? "",
+        phone: phone(order.customer.phone),
+        street: [order.customer.line1, order.customer.line2, to.city.toLowerCase() === typedCity.toLowerCase() ? "" : typedCity].filter(Boolean).join(", "),
+        number: "",
+        district: "",
+        city: to.city,
+        state: to.state,
+        country: "IN",
+        postalCode: order.customer.pincode,
+        phone_code: "IN",
+        reference: order.customer.altPhone ? `Alt phone ${phone(order.customer.altPhone)}` : "",
+        category: 1,
+      },
+      packages: [enviaPackage(order.weightKg, order.length, order.breadth, order.height, order.subtotal || order.total, order.cod)],
+      settings: { currency: "INR", printFormat: "PDF", printSize: "STOCK_4X6" },
+      shipment: { type: 1, reverse_pickup: 0, import: 0, carrier, service, orderReference: order.orderId },
+    },
+  });
+  const failed = enviaFailed(data, "Envia did not create the shipment.");
+  if (failed) throw failed;
+  const row = ((data.data as Json[]) ?? [])[0] ?? {};
+  const awb = String(row.trackingNumber ?? "");
+  if (!awb) throw new ProviderError("Envia did not assign a tracking number.");
+  return {
+    provider: "envia",
+    awb,
+    courierName: `${String(row.carrier ?? carrier)} ${String(row.service ?? service)}`.trim(),
+    providerOrderId: String(row.carrier ?? carrier),
+    providerShipmentId: row.shipmentId != null ? String(row.shipmentId) : undefined,
+    labelUrl: row.label ? String(row.label) : undefined,
+    trackingUrl: row.trackUrl ? String(row.trackUrl) : undefined,
+    courierCost: Number(row.totalPrice) > 0 ? Number(row.totalPrice) : undefined,
+    serviceMode: serviceModeOf(row.service, service),
+  };
+}
+
+export async function enviaTrack(input: Json, awb: string) {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  const data = await call(`${enviaShip(input)}/ship/generaltrack/`, { method: "POST", headers, json: { trackingNumbers: [awb] } });
+  const failed = enviaFailed(data, "Envia has no tracking for this number yet.");
+  if (failed) throw failed;
+  const row = (Array.isArray(data.data) ? (data.data as Json[])[0] : (data.data as Json)) ?? {};
+  const history = (row.eventHistory ?? row.events ?? row.history ?? []) as Json[];
+  const events = (Array.isArray(history) ? history : [])
+    .map((event) => ({
+      at: String(event.date ?? event.datetime ?? event.timestamp ?? ""),
+      status: String(event.event ?? event.description ?? event.status ?? "").trim(),
+      location: String(event.location ?? ""),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: String(row.status ?? ""),
+    awb,
+    courierName: String(row.carrier ?? "Envia"),
+    events,
+    trackingUrl: String(row.trackUrl ?? ""),
+    expectedBy: String(row.estimatedDelivery ?? row.estimatedDeliveryDate ?? ""),
+  };
+}
+
+export async function enviaCancel(input: Json, awb: string, carrier = "") {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  let name = carrier.trim();
+  if (!name) name = String((await enviaTrack(input, awb).catch(() => null))?.courierName ?? "").split(" ")[0].toLowerCase();
+  if (!name) throw new ProviderError("Envia needs the carrier to cancel this shipment.");
+  const data = await call(`${enviaShip(input)}/ship/cancel/`, { method: "POST", headers, json: { carrier: name, trackingNumber: awb } });
+  const failed = enviaFailed(data, "Envia did not cancel the shipment.");
+  if (failed) throw failed;
+  return { cancelled: true };
 }

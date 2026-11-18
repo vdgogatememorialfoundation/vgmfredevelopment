@@ -9,6 +9,7 @@ import {
   goswiftTrack,
   ekartTrack,
   shadowfaxTrack,
+  enviaTrack,
   tookanTrack,
 } from "@/lib/server/providers";
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
@@ -72,6 +73,7 @@ async function track(
   if (provider === "shipyaari") return shipyaariTrack(creds.shipyaari ?? own, awb);
   if (provider === "goswift") return goswiftTrack(creds.goswift ?? own, awb);
   if (provider === "ekart") return ekartTrack(creds.ekart ?? own, awb);
+  if (provider === "envia") return enviaTrack(creds.envia ?? own, awb);
   if (provider === "shadowfax") return shadowfaxTrack(creds.shadowfax ?? own, awb, String(extraId ?? "") === "reverse");
   if (provider === "tookan" || provider === "tookan-parcel") {
     return tookanTrack(creds.tookan ?? own, String(providerOrderId || awb), String(extraId || awb));

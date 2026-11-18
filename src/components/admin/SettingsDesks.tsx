@@ -1574,6 +1574,16 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "shadowfax"} onClick={() => test("shadowfax")}>{busy === "shadowfax" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="Envia" text="docs.envia.com — API token from Envia → Developer → API Keys (a sandbox token only works with Environment sandbox). Live rates per courier, booking with Envia's label, tracking and cancel. Uses the pickup address below." badge={<ProviderStatus id="envia" />} right={<Check label="Use" checked={value.envia?.enabled ?? false} onChange={(enabled) => set({ envia: { ...value.envia, enabled } })} />}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Secret label="API token" value={value.envia?.apiToken ?? ""} onChange={(apiToken) => set({ envia: { ...value.envia, apiToken } })} />
+            <Text label="Environment" value={value.envia?.environment ?? "live"} onChange={(environment) => set({ envia: { ...value.envia, environment: environment.toLowerCase() } })} hint="live or sandbox" />
+            <Text label="Couriers to price" value={value.envia?.carriers ?? ""} onChange={(carriers) => set({ envia: { ...value.envia, carriers } })} hint="Blank = every Envia courier for India, or e.g. delhivery, xpressbees, bluedart" />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={primary} disabled={busy === "envia"} onClick={() => test("envia")}>{busy === "envia" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
       </div>
 
       <Card
