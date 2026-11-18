@@ -1505,9 +1505,12 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "tookan"} onClick={() => test("tookan")}>{busy === "tookan" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
-        <Card title="Nimbuspost" text="Nimbuspost login email and password, used as a second aggregator if you keep that account." badge={<ProviderStatus id="nimbuspost" />} right={<Check label="Use" checked={value.nimbuspost.enabled} onChange={(enabled) => set({ nimbuspost: { ...value.nimbuspost, enabled } })} />}>
+        <Card title="Nimbuspost" text="Nimbuspost API v2: API key ID and secret from Nimbuspost → Settings → API Keys (admin role). Email/password is only the old v1 login." badge={<ProviderStatus id="nimbuspost" />} right={<Check label="Use" checked={value.nimbuspost.enabled} onChange={(enabled) => set({ nimbuspost: { ...value.nimbuspost, enabled } })} />}>
           <div className="space-y-3">
-            <Text label="Email" value={value.nimbuspost.email} onChange={(email) => set({ nimbuspost: { ...value.nimbuspost, email } })} />
+            <Text label="API key ID (npk_…)" value={value.nimbuspost.apiKey ?? ""} onChange={(apiKey) => set({ nimbuspost: { ...value.nimbuspost, apiKey } })} />
+            <Secret label="API secret" value={value.nimbuspost.apiSecret ?? ""} onChange={(apiSecret) => set({ nimbuspost: { ...value.nimbuspost, apiSecret } })} />
+            <Text label="Warehouse ID or code (blank = primary)" value={value.nimbuspost.warehouseId ?? ""} onChange={(warehouseId) => set({ nimbuspost: { ...value.nimbuspost, warehouseId } })} />
+            <Text label="Old login email (only without API key)" value={value.nimbuspost.email} onChange={(email) => set({ nimbuspost: { ...value.nimbuspost, email } })} />
             <Secret label="Password" value={value.nimbuspost.password} onChange={(password) => set({ nimbuspost: { ...value.nimbuspost, password } })} />
             <button type="button" className={primary} disabled={busy === "nimbuspost"} onClick={() => test("nimbuspost")}>{busy === "nimbuspost" ? "Checking live…" : "Save & test"}</button>
           </div>

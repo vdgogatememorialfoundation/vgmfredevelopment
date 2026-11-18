@@ -50,7 +50,7 @@ function credsFor(id: string): CredDraft {
     return { email: shipping.shiprocket.email, password: shipping.shiprocket.password, channelId: shipping.shiprocket.channelId };
   }
   if (id === "nimbuspost") {
-    return { email: shipping.nimbuspost.email, password: shipping.nimbuspost.password };
+    return { apiKey: shipping.nimbuspost.apiKey ?? "", apiSecret: shipping.nimbuspost.apiSecret ?? "", warehouseId: shipping.nimbuspost.warehouseId ?? "", email: shipping.nimbuspost.email, password: shipping.nimbuspost.password };
   }
   if (id === "ithink") {
     return {
@@ -73,7 +73,7 @@ function persistCreds(id: string, fields: CredDraft, enabled: boolean) {
   if (id === "shiprocket") {
     shipping.shiprocket = { ...shipping.shiprocket, email: fields.email ?? "", password: fields.password ?? "", channelId: fields.channelId ?? "", enabled };
   } else if (id === "nimbuspost") {
-    shipping.nimbuspost = { ...shipping.nimbuspost, email: fields.email ?? "", password: fields.password ?? "", enabled };
+    shipping.nimbuspost = { ...shipping.nimbuspost, apiKey: fields.apiKey ?? "", apiSecret: fields.apiSecret ?? "", warehouseId: fields.warehouseId ?? "", email: fields.email ?? "", password: fields.password ?? "", enabled };
   } else if (id === "ithink") {
     shipping.ithink = {
       ...shipping.ithink,
@@ -273,8 +273,11 @@ function CarrierCard({
         )}
         {carrier.id === "nimbuspost" && (
           <>
-            <TextField label="Email" value={fields.email ?? ""} onChange={(value) => setField("email", value)} />
-            <SecretField label="Password" value={fields.password ?? ""} onChange={(value) => setField("password", value)} />
+            <TextField label="API key ID (npk_…)" value={fields.apiKey ?? ""} onChange={(value) => setField("apiKey", value)} />
+            <SecretField label="API secret" value={fields.apiSecret ?? ""} onChange={(value) => setField("apiSecret", value)} />
+            <TextField label="Warehouse ID or code (blank = primary)" value={fields.warehouseId ?? ""} onChange={(value) => setField("warehouseId", value)} />
+            <TextField label="Old login email (only without API key)" value={fields.email ?? ""} onChange={(value) => setField("email", value)} />
+            <SecretField label="Old login password" value={fields.password ?? ""} onChange={(value) => setField("password", value)} />
           </>
         )}
       </div>

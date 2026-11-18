@@ -208,7 +208,7 @@ export interface IntegrationSettings {
   shipping: {
     /** pickupLocation: the pickup nickname on the Shiprocket panel; blank uses the default pickup nickname. */
     shiprocket: { email: string; password: string; channelId: string; pickupLocation?: string; enabled: boolean };
-    nimbuspost: { email: string; password: string; enabled: boolean };
+    nimbuspost: { email: string; password: string; apiKey?: string; apiSecret?: string; warehouseId?: string; enabled: boolean };
     ithink: { accessToken: string; secretKey: string; pickupAddressId: string; host: string; enabled: boolean };
     shipyaari: { email: string; password: string; apiKey: string; enabled: boolean };
     /** GoSwift: client ID + API username/password. No rate API, so the desk sets the checkout charge and days. */
@@ -635,7 +635,7 @@ export function shippingProviderId(id: string): ShippingProviderId | null {
 
 function credentialFingerprint(shipping: IntegrationSettings["shipping"], provider: ShippingProviderId) {
   if (provider === "shiprocket") return `${shipping.shiprocket.email}\0${shipping.shiprocket.password}\0${shipping.shiprocket.channelId}`;
-  if (provider === "nimbuspost") return `${shipping.nimbuspost.email}\0${shipping.nimbuspost.password}`;
+  if (provider === "nimbuspost") return `${shipping.nimbuspost.email}\0${shipping.nimbuspost.password}\0${shipping.nimbuspost.apiKey ?? ""}\0${shipping.nimbuspost.apiSecret ?? ""}\0${shipping.nimbuspost.warehouseId ?? ""}`;
   if (provider === "ithink") return `${shipping.ithink.accessToken}\0${shipping.ithink.secretKey}\0${shipping.ithink.host}`;
   if (provider === "shipyaari") return `${shipping.shipyaari.email}\0${shipping.shipyaari.password}\0${shipping.shipyaari.apiKey}`;
   if (provider === "goswift") return `${shipping.goswift.clientId}\0${shipping.goswift.username}\0${shipping.goswift.password}`;
@@ -648,7 +648,7 @@ function credentialFingerprint(shipping: IntegrationSettings["shipping"], provid
 export function hasShippingCredentials(provider: ShippingProviderId, settings = getIntegrations()) {
   const shipping = settings.shipping;
   if (provider === "shiprocket") return Boolean(shipping.shiprocket.email && shipping.shiprocket.password);
-  if (provider === "nimbuspost") return Boolean(shipping.nimbuspost.email && shipping.nimbuspost.password);
+  if (provider === "nimbuspost") return Boolean((shipping.nimbuspost.apiKey && shipping.nimbuspost.apiSecret) || (shipping.nimbuspost.email && shipping.nimbuspost.password));
   if (provider === "ithink") return Boolean(shipping.ithink.accessToken && shipping.ithink.secretKey);
   if (provider === "shipyaari") return Boolean(shipping.shipyaari.apiKey || (shipping.shipyaari.email && shipping.shipyaari.password));
   if (provider === "goswift") return Boolean(shipping.goswift.clientId && shipping.goswift.username && shipping.goswift.password);

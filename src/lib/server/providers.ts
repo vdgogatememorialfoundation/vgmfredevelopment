@@ -773,6 +773,33 @@ async function shiprocketToken(input: Json) {
   return String(data.token);
 }
 
+const NIMBUS_V2 = "https://api-v2.nimbuspost.com/v2";
+
+function nimbusV2Headers(input: Json) {
+  const key = pick(input.apiKey, "NIMBUSPOST_API_KEY");
+  const secret = pick(input.apiSecret, "NIMBUSPOST_API_SECRET");
+  return key && secret ? { "x-api-key": key, "x-api-secret": secret } : null;
+}
+
+async function nimbusV2(path: string, headers: Record<string, string>, init: RequestInit & { json?: unknown } = {}) {
+  const data = await call(`${NIMBUS_V2}${path}`, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) } });
+  if (data.success === false) {
+    const error = (data.error as Json) ?? {};
+    throw new ProviderError(String(error.message ?? data.message ?? "Nimbuspost refused the request."));
+  }
+  return data;
+}
+
+async function nimbusWarehouse(input: Json, headers: Record<string, string>) {
+  const wanted = String(input.warehouseId ?? "").trim();
+  if (wanted) return wanted;
+  const data = await nimbusV2("/warehouses", headers);
+  const rows = ((data.data as Json[]) ?? []).filter((row) => row.status !== "inactive");
+  const row = rows.find((item) => item.is_primary) ?? rows[0];
+  if (!row) throw new ProviderError("No pickup warehouse on Nimbuspost. Add one in Nimbuspost → Warehouses, then book again.");
+  return String(row.warehouse_id);
+}
+
 const nimbusTokens = new Map<string, { token: string; at: number }>();
 
 async function nimbusToken(input: Json) {
@@ -907,6 +934,32 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
 }
 
 export async function nimbusRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const data = await nimbusV2("/serviceability", v2, {
+      method: "POST",
+      json: {
+        pickupPincode: parcel.pickupPincode,
+        deliveryPincode: parcel.deliveryPincode,
+        paymentMode: parcel.cod ? "cod" : "prepaid",
+        packages: [{ weight: Math.max(1, Math.round(parcel.weightKg * 1000)), length: parcel.length, width: parcel.breadth, height: parcel.height }],
+        order_value: Math.max(1, Math.round(parcel.declaredValue || 0)),
+      },
+    });
+    return (((data.data as Json)?.available as Json[]) ?? []).map((courier) => {
+      const result = (courier.result as Json) ?? {};
+      return {
+        provider: "nimbuspost",
+        courierId: String(courier.courierId ?? ""),
+        courierName: String(courier.courierDisplayName || courier.courierName || "Nimbuspost courier"),
+        // totalPaise is GST-exclusive; other aggregators quote with GST.
+        rate: Math.round(Number(result.totalPaise ?? 0) * 1.18) / 100,
+        chargeWeightKg: Number(result.chargeableGrams) > 0 ? Number(result.chargeableGrams) / 1000 : undefined,
+        etaDays: Number(courier.tatDays) || 5,
+        live: true as const,
+      };
+    });
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call("https://api.nimbuspost.com/v1/courier/serviceability", {
@@ -1355,6 +1408,55 @@ export async function shiprocketAddPickup(input: Json, pickup: BookInput["pickup
 }
 
 export async function nimbusBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const digits = (value?: string) => Number(String(value ?? "").replace(/\D/g, "").slice(-10)) || undefined;
+    const data = await nimbusV2("/shipments", v2, {
+      method: "POST",
+      json: {
+        order_number: order.orderId,
+        order_type: "b2c",
+        payment_mode: order.cod ? "cod" : "prepaid",
+        ...(order.cod ? { order_collectable_amount: Math.round(order.total) } : {}),
+        order_amount: order.total,
+        warehouse_id: await nimbusWarehouse(input, v2),
+        order_date: order.orderDate.slice(0, 10),
+        shipping_address: {
+          name: order.customer.name,
+          email: order.customer.email || undefined,
+          address: order.customer.line1,
+          address_opt: order.customer.line2 ?? "",
+          pincode: Number(order.customer.pincode),
+          city: order.customer.city.replace(/[\s,]+$/, ""),
+          state: order.customer.state,
+          country: "India",
+          phone: digits(order.customer.phone),
+          phone_alt: digits(order.customer.altPhone),
+        },
+        items: order.items.map((item) => ({ name: item.name, qty: item.units, price: item.price, sku: item.sku })),
+        package: { weight: Math.max(0.01, order.weightKg), length: order.length, width: order.breadth, height: order.height },
+        org_charges: { shipping_charges: order.shippingCharge },
+        courier_id: order.courierId || undefined,
+        label_format: "thermal-4x6",
+      },
+    });
+    const booking = ((data.data as Json)?.booking as Json) ?? {};
+    const awb = String(booking.awb ?? "");
+    if (!awb) throw new ProviderError("Nimbuspost created the order but did not book a courier. Pick another courier and try again.");
+    const price = (booking.price as Json) ?? {};
+    return {
+      provider: "nimbuspost",
+      awb,
+      courierName: String(booking.courier_name ?? booking.parent_courier_name ?? "Nimbuspost"),
+      providerOrderId: String(booking.order_id ?? ""),
+      providerShipmentId: String(booking.order_id ?? ""),
+      labelUrl: String(booking.label_url ?? ""),
+      trackingUrl: String(booking.tracking_url ?? "") || undefined,
+      routingCode: String(booking.routing_key ?? "") || undefined,
+      pickupScheduledFor: String(booking.pickup_date ?? "") || "Auto pickup requested",
+      courierCost: Number(price.total) || undefined,
+    };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call("https://api.nimbuspost.com/v1/shipments", {
@@ -1410,6 +1512,23 @@ export async function nimbusBook(input: Json, order: BookInput): Promise<BookOut
 }
 
 export async function nimbusTrack(input: Json, awb: string) {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const data = await nimbusV2(`/tracking/${encodeURIComponent(awb)}`, v2);
+    const info = (data.data as Json) ?? {};
+    const latest = (info.latest as Json) ?? {};
+    const scans = (info.scans as Json[]) ?? [];
+    const status = String(latest.shipStatus ?? info.orderStatus ?? "");
+    return {
+      status,
+      courierName: String(info.courierName ?? info.courier_name ?? ""),
+      awb,
+      events: scans.map((scan) => ({ at: String(scan.timestamp ?? ""), status: String(scan.remark || scan.status || ""), location: String(scan.location ?? "") })),
+      trackingUrl: String(info.tracking_url ?? "") || `https://ship.nimbuspost.com/?awb=${awb}`,
+      expectedBy: promisedFrom(data, info.edd, info.expectedDeliveryDate, info.expected_delivery_date),
+      ...riderHit(data, status),
+    };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call(`https://api.nimbuspost.com/v1/shipments/track/${encodeURIComponent(awb)}`, {
@@ -1429,6 +1548,12 @@ export async function nimbusTrack(input: Json, awb: string) {
 }
 
 export async function nimbusWallet(input: Json) {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const data = await nimbusV2("/wallet/balance", v2);
+    const wallet = (data.data as Json) ?? {};
+    return { provider: "nimbuspost", balance: Number(wallet.usable_balance ?? wallet.total_balance ?? 0), currency: String(wallet.currency ?? "INR") };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call("https://api.nimbuspost.com/v1/wallet", {
@@ -1440,6 +1565,15 @@ export async function nimbusWallet(input: Json) {
 }
 
 export async function nimbusLabel(input: Json, awb: string): Promise<LabelSheet | null> {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const tracked = await nimbusV2(`/tracking/${encodeURIComponent(awb)}`, v2);
+    const info = (tracked.data as Json) ?? {};
+    const orderId = String(info.orderId ?? "");
+    if (!orderId) throw new ProviderError("Nimbuspost has no order for this AWB.");
+    const data = await nimbusV2("/shipments/labels", v2, { method: "POST", json: { order_ids: [orderId] } });
+    return { ...labelSheetFrom(info), labelUrl: String((data.data as Json)?.url ?? ""), awb };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const headers = { authorization: `Bearer ${token}` };
@@ -1461,6 +1595,11 @@ export async function nimbusLabel(input: Json, awb: string): Promise<LabelSheet 
 }
 
 export async function nimbusCancel(input: Json, awb: string) {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    await nimbusV2("/shipments/cancel", v2, { method: "POST", json: { awb } });
+    return { cancelled: true };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   await call("https://api.nimbuspost.com/v1/shipments/cancel", {
