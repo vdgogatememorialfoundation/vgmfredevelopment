@@ -1884,7 +1884,9 @@ async function ithinkPost(path: string, payload: Json & { host?: string }) {
   const host = String(payload.host ?? "https://my.ithinklogistics.com/api_v3/").replace(/\/?$/, "/");
   const body = { ...payload };
   delete body.host;
-  const data = await call(`${host}${path.replace(/^\//, "")}`, { method: "POST", json: { data: body } });
+  const reply = await call(`${host}${path.replace(/^\//, "")}`, { method: "POST", json: { data: body } });
+  if (!reply || typeof reply !== "object") throw new ProviderError("iThink Logistics sent back an empty reply. Please try again.");
+  const data = reply;
   const status = String(data.status ?? data.status_code ?? "").toLowerCase();
   if (status === "error" || (status && status !== "success" && status !== "200" && Number(data.status_code) >= 400)) {
     throw new ProviderError(String(data.message ?? data.html_message ?? data.remark ?? "iThink Logistics rejected the request."));
@@ -1910,8 +1912,8 @@ export async function ithinkRates(input: Json, parcel: Parcel): Promise<RateOut[
   const rates = ((data.data as Json)?.rate as Json[]) ?? (data.data as Json[]) ?? [];
   return rates.map((courier) => ({
     provider: "ithink",
-    courierId: String(courier.logistic_id ?? courier.id ?? courier.logistic_name ?? ""),
-    courierName: String(courier.logistic_name ?? courier.name ?? "iThink courier"),
+    courierId: courier.logistic_name ? `${courier.logistic_name}|${courier.service_type ?? ""}` : String(courier.logistic_id ?? courier.id ?? ""),
+    courierName: `${courier.logistic_name ?? courier.name ?? "iThink courier"}${courier.service_type ? ` ${courier.service_type}` : ""}`,
     rate: Number(courier.total_charges ?? courier.rate ?? courier.freight_charge ?? 0),
     chargeWeightKg: chargeKg(courier, "chargeable_weight", "charge_weight", "applicable_weight", "billable_weight", "weight_slab"),
     etaDays: daysUntil(String(courier.edd ?? courier.estimated_delivery ?? "")) ?? Number(courier.tat ?? 5),
@@ -1923,56 +1925,78 @@ export async function ithinkBook(input: Json, order: BookInput): Promise<BookOut
   const auth = ithinkAuth(input);
   if (!auth) return null;
   const pickupId = typeof input.pickupAddressId === "string" ? input.pickupAddressId : "";
+  const [logistic, serviceType] = order.courierId.split("|");
+  const logistics = /[a-z]/i.test(logistic ?? "") ? logistic.trim().toLowerCase() : "";
+  const phone = (value: string) => value.replace(/\D/g, "").slice(-10);
   const data = await ithinkPost("order/add.json", {
     ...auth,
     pickup_address_id: pickupId,
+    logistics,
+    s_type: logistics && serviceType ? serviceType.trim().toLowerCase() : "",
+    order_type: "",
     shipments: [
       {
         waybill: "",
         order: order.orderId,
-        sub_order: `${order.orderId}-1`,
-        order_date: order.orderDate.slice(0, 10),
+        sub_order: "",
+        order_date: order.orderDate.slice(0, 10).split("-").reverse().join("-"),
         total_amount: String(order.total),
         name: order.customer.name,
         company_name: "",
         add: order.customer.line1,
         add2: order.customer.line2 ?? "",
+        add3: "",
         pin: order.customer.pincode,
         city: order.customer.city,
         state: order.customer.state,
         country: "India",
-        phone: order.customer.phone.replace(/\D/g, "").slice(-10),
+        phone: phone(order.customer.phone),
+        alt_phone: order.customer.altPhone ? phone(order.customer.altPhone) : "",
         email: order.customer.email ?? order.pickup.email,
-        products: order.items.map((item) => item.name).join(", "),
-        quantity: String(order.items.reduce((sum, item) => sum + item.units, 0)),
-        payment_mode: order.cod ? "COD" : "Prepaid",
+        is_billing_same_as_shipping: "yes",
+        products: order.items.map((item) => ({
+          product_name: item.name,
+          product_sku: item.sku,
+          product_quantity: String(item.units),
+          product_price: String(item.price),
+          product_tax_rate: "0",
+          product_hsn_code: "",
+          product_discount: "0",
+        })),
+        shipment_length: String(order.length),
+        shipment_width: String(order.breadth),
+        shipment_height: String(order.height),
+        weight: String(order.weightKg),
         shipping_charges: String(order.shippingCharge),
+        giftwrap_charges: "0",
+        transaction_charges: "0",
+        total_discount: "0",
+        first_attemp_discount: "0",
         cod_charges: "0",
-        discount: "0",
-        order_type: "forward",
-        return_address: order.pickup.line1,
-        return_pin: order.pickup.pincode,
-        return_city: order.pickup.city,
-        return_state: order.pickup.state,
-        return_country: "India",
-        return_phone: order.pickup.phone.replace(/\D/g, "").slice(-10),
-        shipping_length_cms: String(order.length),
-        shipping_width_cms: String(order.breadth),
-        shipping_height_cms: String(order.height),
-        shipping_weight_kg: String(order.weightKg),
-        logistic: order.courierId || undefined,
+        advance_amount: "0",
+        cod_amount: order.cod ? String(order.total) : "0",
+        payment_mode: order.cod ? "COD" : "Prepaid",
+        reseller_name: "",
+        eway_bill_number: "",
+        gst_number: "",
+        return_address_id: pickupId,
       },
     ],
   });
-  const shipment = (((data.data as Json)?.shipments as Json[]) ?? [data.data as Json])[0] ?? {};
-  const awb = String(shipment.waybill ?? shipment.awb ?? shipment.awb_number ?? "");
-  if (!awb) throw new ProviderError(String(data.message ?? "iThink Logistics did not assign an AWB."));
+  const result = (data.data as Json) ?? {};
+  const shipment = ((result["1"] as Json) ?? Object.values(result).find((value) => value && typeof value === "object") ?? {}) as Json;
+  if (String(shipment.status ?? "").toLowerCase() === "error") {
+    throw new ProviderError(String(shipment.remark || data.html_message || "iThink Logistics refused the booking."));
+  }
+  const awb = String(shipment.waybill ?? shipment.awb ?? "");
+  if (!awb) throw new ProviderError(String(shipment.remark || data.html_message || data.message || "iThink Logistics did not assign an AWB."));
   return {
     provider: "ithink",
     awb,
     courierName: String(shipment.logistic_name ?? shipment.courier ?? "iThink Logistics"),
-    providerOrderId: String(shipment.order_id ?? order.orderId),
-    providerShipmentId: String(shipment.shipment_id ?? ""),
+    providerOrderId: String(shipment.refnum ?? order.orderId),
+    providerShipmentId: String(shipment.refnum ?? ""),
+    serviceMode: logistics && serviceType ? serviceType.trim() : undefined,
     labelUrl: String(shipment.shipping_label ?? shipment.label ?? ""),
     courierCost: Number(shipment.total_charges ?? 0) || undefined,
   };
@@ -2773,6 +2797,13 @@ export function ekartTrackingUrl(id: string) {
 /** Only real Ekart quotes: no placeholder rate is ever returned for Ekart. */
 export async function ekartRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const rows = await goswiftRates(ekartInput(input), parcel);
+  if (rows && parcel.deliveryPincode) {
+    const token = await goswiftToken(ekartInput(input)).catch(() => null);
+    const check = token
+      ? await call(`${EKART}/api/v2/serviceability/${encodeURIComponent(parcel.deliveryPincode)}`, { headers: goswiftAuth(token) }).catch(() => null)
+      : null;
+    if (check && check.status === false) return [];
+  }
   return rows ? rows.filter((row) => !row.estimate).map((row) => ({ ...row, provider: "ekart", courierId: "ekart", courierName: EKART_NAME })) : null;
 }
 
