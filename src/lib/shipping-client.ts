@@ -27,7 +27,7 @@ type ShippingCreds = Record<string, Record<string, unknown>>;
 export type ShipFrom = NonNullable<Order["shipFrom"]>;
 
 function credsFrom(settings: IntegrationSettings, shipFrom?: ShipFrom): ShippingCreds {
-  const { shiprocket, nimbuspost, ithink, shipyaari, goswift, ekart, shadowfax, envia, daakly, tookan, shipday, tracker, pickup } = settings.shipping;
+  const { shiprocket, nimbuspost, ithink, shipyaari, goswift, ekart, shadowfax, envia, daakly, rapidshyp, vamaship, tookan, shipday, tracker, pickup } = settings.shipping;
   return {
     shiprocket: shipFrom?.shiprocket ? { ...shiprocket, pickupLocation: shipFrom.shiprocket } : shiprocket,
     nimbuspost,
@@ -38,6 +38,8 @@ function credsFrom(settings: IntegrationSettings, shipFrom?: ShipFrom): Shipping
     shadowfax: shadowfax ?? {},
     envia: { ...(envia ?? {}), pickup },
     daakly: { ...(daakly ?? {}), pickup },
+    rapidshyp: { ...(rapidshyp ?? {}), pickup },
+    vamaship: { ...(vamaship ?? {}), pickup },
     tookan,
     shipday,
     tracker: tracker ?? {},
@@ -58,7 +60,7 @@ async function trackDirect(shipment: ShipmentRecord) {
 }
 
 const WALLET_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari"] as const;
-export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly"] as const;
+export const CHECKOUT_PROVIDERS = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship"] as const;
 
 export function lastMileLabel(provider?: string, lastMile?: string, courier?: string) {
   const partner = customerCourierLabel({ provider, courier });
@@ -68,7 +70,7 @@ export function lastMileLabel(provider?: string, lastMile?: string, courier?: st
   return partner;
 }
 
-const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "tookan", "tookan-parcel", "shipday"]);
+const REAL_CHECKOUT = new Set(["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship", "tookan", "tookan-parcel", "shipday"]);
 
 export function checkoutCourierRates(rates: CourierRate[]) {
   return rates.filter((rate) => REAL_CHECKOUT.has(rate.provider) && rate.live !== false);
@@ -648,6 +650,8 @@ export const MANUAL_PORTALS: { id: Exclude<CourierRate["provider"], "local" | "t
   { id: "shadowfax", label: "Shadowfax" },
   { id: "envia", label: "Envia" },
   { id: "daakly", label: "Daakly (India Post)" },
+  { id: "rapidshyp", label: "RapidShyp" },
+  { id: "vamaship", label: "Vamaship" },
   { id: "tookan", label: "Gogate Products (Tookan)" },
   { id: "shipday", label: "Gogate Products (Shipday)" },
 ];
@@ -779,7 +783,7 @@ export async function downloadLabel(shipmentId: string) {
   const shipment = getShipments().find((item) => item.id === shipmentId);
   if (!shipment) throw new Error("Shipment not found.");
   const provider = shipment.provider;
-  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari", "goswift", "ekart"]);
+  const fetched = new Set(["shiprocket", "nimbuspost", "shipyaari", "goswift", "ekart", "daakly"]);
   let details: LabelFetch = {
     labelUrl: shipment.labelUrl,
     routingCode: shipment.routingCode,
@@ -1258,7 +1262,7 @@ export async function cancelShipment(shipmentId: string) {
 export async function testShippingProvider(provider: string) {
   const result = await post<{ message?: string }>({ action: "test", provider, creds: credsFrom(getIntegrations()) });
   const id = (provider === "tookan-parcel" ? "tookan" : provider) as ShippingProviderId;
-  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "tookan", "shipday"].includes(id)) {
+  if (["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship", "tookan", "shipday"].includes(id)) {
     recordShippingConnection(
       id,
       result.ok ? "success" : "failed",
@@ -1285,7 +1289,7 @@ export async function goswiftNdrRequest(shipmentId: string, ndrAction: "Re-Attem
 
 export async function testConfiguredShippingProviders() {
   const settings = getIntegrations();
-  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly"] as const).filter((id) => hasShippingCredentials(id, settings));
+  const wanted = (["shipday", "shiprocket", "ithink", "tookan", "nimbuspost", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship"] as const).filter((id) => hasShippingCredentials(id, settings));
   const results: { id: string; ok: boolean; message?: string; error?: string }[] = [];
   for (const id of wanted) {
     const result = await testShippingProvider(id);

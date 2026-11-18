@@ -11,6 +11,8 @@ import {
   shadowfaxTrack,
   enviaTrack,
   daaklyTrack,
+  rapidshypTrack,
+  vamashipTrack,
   tookanTrack,
 } from "@/lib/server/providers";
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
@@ -76,6 +78,8 @@ async function track(
   if (provider === "ekart") return ekartTrack(creds.ekart ?? own, awb);
   if (provider === "envia") return enviaTrack(creds.envia ?? own, awb);
   if (provider === "daakly") return daaklyTrack(creds.daakly ?? own, awb);
+  if (provider === "rapidshyp") return rapidshypTrack(creds.rapidshyp ?? own, awb);
+  if (provider === "vamaship") return vamashipTrack(creds.vamaship ?? own, awb);
   if (provider === "shadowfax") return shadowfaxTrack(creds.shadowfax ?? own, awb, String(extraId ?? "") === "reverse");
   if (provider === "tookan" || provider === "tookan-parcel") {
     return tookanTrack(creds.tookan ?? own, String(providerOrderId || awb), String(extraId || awb));

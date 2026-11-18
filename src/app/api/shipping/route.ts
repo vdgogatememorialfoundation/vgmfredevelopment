@@ -18,6 +18,14 @@ import {
   daaklyLabel,
   daaklyRates,
   daaklyTrack,
+  rapidshypBook,
+  rapidshypCancel,
+  rapidshypRates,
+  rapidshypTrack,
+  vamashipBook,
+  vamashipCancel,
+  vamashipRates,
+  vamashipTrack,
   enviaBook,
   enviaCancel,
   enviaRates,
@@ -111,7 +119,7 @@ export async function POST(request: NextRequest) {
         const switchedOn = (id: string) => saved.settings?.shipping?.[id]?.enabled !== false;
         const wanted = (Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly"]
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship"]
         ).filter(switchedOn);
         // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
         const stored = readShippingCreds() as typeof creds;
@@ -127,6 +135,8 @@ export async function POST(request: NextRequest) {
             if (id === "shadowfax") return { provider: id, rates: await shadowfaxRates(keys("shadowfax"), parcel) };
             if (id === "envia") return { provider: id, rates: await enviaRates(keys("envia"), parcel) };
             if (id === "daakly") return { provider: id, rates: await daaklyRates(keys("daakly"), parcel) };
+            if (id === "rapidshyp") return { provider: id, rates: await rapidshypRates(keys("rapidshyp"), parcel) };
+            if (id === "vamaship") return { provider: id, rates: await vamashipRates(keys("vamaship"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -166,7 +176,11 @@ export async function POST(request: NextRequest) {
                                 ? await enviaBook(creds.envia ?? own, order)
                                 : provider === "daakly"
                                   ? await daaklyBook(creds.daakly ?? own, order)
-                                  : undefined;
+                                  : provider === "rapidshyp"
+                                    ? await rapidshypBook(creds.rapidshyp ?? own, order)
+                                    : provider === "vamaship"
+                                      ? await vamashipBook(creds.vamaship ?? own, order)
+                                      : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -210,7 +224,7 @@ export async function POST(request: NextRequest) {
       }
       case "label": {
         if (provider === "daakly") {
-          const result = await daaklyLabel(creds.daakly ?? own, String(body.providerShipmentId ?? body.awb ?? ""));
+          const result = await daaklyLabel(creds.daakly ?? own, String(body.shipmentId || body.providerShipmentId || body.awb || ""));
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "Daakly API key is not configured." });
           return NextResponse.json({ ok: true, configured: true, ...result });
         }
@@ -280,7 +294,11 @@ export async function POST(request: NextRequest) {
                               ? await enviaTrack(creds.envia ?? own, awb)
                               : provider === "daakly"
                                 ? await daaklyTrack(creds.daakly ?? own, awb)
-                                : undefined;
+                                : provider === "rapidshyp"
+                                  ? await rapidshypTrack(creds.rapidshyp ?? own, awb)
+                                  : provider === "vamaship"
+                                    ? await vamashipTrack(creds.vamaship ?? own, awb)
+                                    : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         const events = "events" in result && Array.isArray(result.events) ? await withScanPlaces(result.events as { location?: string }[]) : undefined;
@@ -309,8 +327,12 @@ export async function POST(request: NextRequest) {
                             : provider === "envia"
                               ? await enviaCancel(creds.envia ?? own, String(body.awb ?? ""), String(body.providerOrderId ?? ""))
                               : provider === "daakly"
-                                ? await daaklyCancel(creds.daakly ?? own, String(body.providerShipmentId ?? body.awb ?? ""))
-                                : undefined;
+                                ? await daaklyCancel(creds.daakly ?? own, String(body.providerShipmentId || body.awb || ""))
+                                : provider === "rapidshyp"
+                                  ? await rapidshypCancel(creds.rapidshyp ?? own, String(body.providerOrderId || ""))
+                                  : provider === "vamaship"
+                                    ? await vamashipCancel(creds.vamaship ?? own, String(body.providerOrderId || ""))
+                                    : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -440,7 +462,11 @@ export async function POST(request: NextRequest) {
                   ? await enviaRates(creds.envia ?? own, { ...parcel, pickupPincode: "411030" })
                   : provider === "daakly"
                     ? await daaklyRates(creds.daakly ?? own, { ...parcel, pickupPincode: "411030", cod: false })
-                    : undefined;
+                    : provider === "rapidshyp"
+                      ? await rapidshypRates(creds.rapidshyp ?? own, { ...parcel, pickupPincode: "411030" })
+                      : provider === "vamaship"
+                        ? await vamashipRates(creds.vamaship ?? own, { ...parcel, pickupPincode: "411030" })
+                        : undefined;
         if (rates === undefined) return unsupported(provider);
         if (rates === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, message: `Connected. ${rates.length} couriers priced Pune → Delhi.` });

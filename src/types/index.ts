@@ -799,7 +799,7 @@ export interface ReturnShipment {
 }
 
 export interface CourierRate {
-  provider: "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly" | "tookan" | "tookan-parcel" | "shipday" | "local";
+  provider: "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly" | "rapidshyp" | "vamaship" | "tookan" | "tookan-parcel" | "shipday" | "local";
   courierId: string;
   courierName: string;
   rate: number;

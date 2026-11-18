@@ -47,7 +47,7 @@ export function whatsAppTemplateFor(whatsapp: WhatsAppAlertSettings, provider: s
   return whatsapp.provider === provider || !whatsapp.mappingByProvider?.[provider as WhatsAppSender] ? (whatsapp.mapping[event as NotificationEventId] ?? "").trim() : "";
 }
 export type SmsProvider = "none" | "msg91";
-export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly";
+export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly" | "rapidshyp" | "vamaship";
 export type HyperlocalId = "tookan" | "shipday";
 export type ShippingProviderId = AggregatorId | HyperlocalId;
 export type ShippingConnection = { status: "success" | "failed" | "untested"; message: string; at: string };
@@ -223,6 +223,10 @@ export interface IntegrationSettings {
     envia: { apiToken: string; environment: string; carriers: string; enabled: boolean };
     /** Daakly (India Post contract rates): API key dk_live_… or dk_test_…; drop-off at a post office, prepaid only. */
     daakly: { apiKey: string; services: string; enabled: boolean };
+    /** RapidShyp (docs.rapidshyp.com): API key from Settings → Configure API; pickupName = a pickup location saved on RapidShyp (blank = send ours). */
+    rapidshyp: { apiKey: string; pickupName: string; enabled: boolean };
+    /** Vamaship (docs.vamaship.com): Bearer API key; environment live or sandbox. */
+    vamaship: { apiToken: string; environment: string; enabled: boolean };
     tookan: { apiKey: string; teamId: string; hyperlocal: boolean; parcel: boolean };
     shipday: { apiKey: string; enabled: boolean };
     /** Fallback tracking service for couriers without an API account (their own site is read first). */
@@ -500,6 +504,8 @@ export const defaultIntegrations: IntegrationSettings = {
     shadowfax: { apiToken: "", environment: "live", pickupPincode: "", rate: "", etaDays: "", service: "Regular", enabled: false },
     envia: { apiToken: "", environment: "live", carriers: "", enabled: false },
     daakly: { apiKey: "", services: "", enabled: false },
+    rapidshyp: { apiKey: "", pickupName: "", enabled: false },
+    vamaship: { apiToken: "", environment: "live", enabled: false },
     tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
     shipday: { apiKey: "", enabled: true },
     tracker: { service: "aftership", apiKey: "", enabled: true },
@@ -637,7 +643,7 @@ function merge<T extends object>(base: T, saved: Partial<T> | null | undefined):
 
 export function shippingProviderId(id: string): ShippingProviderId | null {
   if (id === "tookan-parcel") return "tookan";
-  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "shipyaari" || id === "goswift" || id === "ekart" || id === "shadowfax" || id === "envia" || id === "daakly" || id === "tookan" || id === "shipday") return id;
+  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "shipyaari" || id === "goswift" || id === "ekart" || id === "shadowfax" || id === "envia" || id === "daakly" || id === "rapidshyp" || id === "vamaship" || id === "tookan" || id === "shipday") return id;
   return null;
 }
 
@@ -651,6 +657,8 @@ function credentialFingerprint(shipping: IntegrationSettings["shipping"], provid
   if (provider === "shadowfax") return `${shipping.shadowfax?.apiToken ?? ""}\0${shipping.shadowfax?.environment ?? ""}`;
   if (provider === "envia") return `${shipping.envia?.apiToken ?? ""}\0${shipping.envia?.environment ?? ""}`;
   if (provider === "daakly") return shipping.daakly?.apiKey ?? "";
+  if (provider === "rapidshyp") return shipping.rapidshyp?.apiKey ?? "";
+  if (provider === "vamaship") return `${shipping.vamaship?.apiToken ?? ""}\0${shipping.vamaship?.environment ?? ""}`;
   if (provider === "tookan") return `${shipping.tookan.apiKey}\0${shipping.tookan.teamId}`;
   return shipping.shipday.apiKey;
 }
@@ -666,6 +674,8 @@ export function hasShippingCredentials(provider: ShippingProviderId, settings = 
   if (provider === "shadowfax") return Boolean(shipping.shadowfax?.apiToken);
   if (provider === "envia") return Boolean(shipping.envia?.apiToken);
   if (provider === "daakly") return Boolean(shipping.daakly?.apiKey);
+  if (provider === "rapidshyp") return Boolean(shipping.rapidshyp?.apiKey);
+  if (provider === "vamaship") return Boolean(shipping.vamaship?.apiToken);
   if (provider === "tookan") return Boolean(shipping.tookan.apiKey);
   if (provider === "shipday") return Boolean(shipping.shipday.apiKey);
   return false;
@@ -742,7 +752,7 @@ function persistMailStatus(settings: IntegrationSettings): Promise<boolean> {
 export function saveIntegrations(settings: IntegrationSettings): Promise<boolean> {
   const previous = getIntegrations();
   const next = merge(defaultIntegrations, settings);
-  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "tookan", "shipday"];
+  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship", "tookan", "shipday"];
   const connection = { ...next.shipping.connection, ...previous.shipping.connection };
   for (const provider of providers) {
     if (credentialFingerprint(previous.shipping, provider) !== credentialFingerprint(next.shipping, provider)) {

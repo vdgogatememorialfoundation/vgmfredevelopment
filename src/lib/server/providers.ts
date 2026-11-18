@@ -3628,3 +3628,339 @@ export async function daaklyLabel(input: Json, idOrAwb: string) {
   const file = await daakly(`/shipments/${encodeURIComponent(id)}/label`, input);
   return { labelUrl: String(file?.url ?? "") };
 }
+
+/* ---------------- RapidShyp (docs.rapidshyp.com) ---------------- */
+
+const RAPIDSHYP = "https://api.rapidshyp.com/rapidshyp/apis/v1";
+
+function rapidshypHeaders(input: Json) {
+  const key = pick(input.apiKey, "RAPIDSHYP_API_KEY");
+  return key ? { "rapidshyp-token": key } : null;
+}
+
+/** RapidShyp answers 200 with status false / success false and a remark when it refuses. */
+async function rapidshyp(path: string, input: Json, json: unknown) {
+  const headers = rapidshypHeaders(input);
+  if (!headers) return null;
+  const data = await call(`${RAPIDSHYP}${path}`, { method: "POST", headers, json });
+  const ok = data.status === true || data.status === "SUCCESS" || data.success === true;
+  if (!ok) throw new ProviderError(String(data.remarks || data.remark || data.msg || data.message || "RapidShyp refused the request."));
+  return data;
+}
+
+const rapidPhone = (value?: string) => String(value ?? "").replace(/\D/g, "").slice(-10);
+const atLeast3 = (value: string, fallback: string) => (value.trim().length >= 3 ? value.trim() : fallback).slice(0, 100);
+
+export async function rapidshypRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  if (!rapidshypHeaders(input)) return null;
+  const data = await rapidshyp("/serviceabilty_check", input, {
+    Pickup_pincode: String(parcel.pickupPincode),
+    Delivery_pincode: String(parcel.deliveryPincode),
+    cod: parcel.cod,
+    total_order_value: Math.max(1, Math.round(parcel.declaredValue || 1)),
+    weight: Math.max(0.01, parcel.weightKg),
+  }).catch((error: ProviderError) => {
+    if (/not serviceable|no courier/i.test(error.message)) return { serviceable_courier_list: [] } as Json;
+    throw error;
+  });
+  return ((data?.serviceable_courier_list as Json[]) ?? [])
+    .filter((row) => Number(row.total_freight) > 0)
+    .map((row) => {
+      const edd = String(row.edd ?? "").match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      const deliverBy = edd ? `${edd[3]}-${edd[2]}-${edd[1]}` : undefined;
+      const days = deliverBy ? Math.max(1, Math.ceil((new Date(deliverBy).getTime() - Date.now()) / 864e5)) : String(row.freight_mode).toLowerCase() === "air" ? 3 : 5;
+      return {
+        provider: "rapidshyp",
+        courierId: String(row.courier_code ?? ""),
+        courierName: String(row.courier_name ?? row.parent_courier_name ?? "RapidShyp"),
+        rate: Math.round(Number(row.total_freight) * 100) / 100,
+        etaDays: days,
+        live: true as const,
+        cod: parcel.cod,
+        deliverBy,
+      };
+    });
+}
+
+export async function rapidshypBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  if (!rapidshypHeaders(input)) return null;
+  const p = order.pickup;
+  const c = order.customer;
+  const [firstName, ...rest] = c.name.trim().split(/\s+/);
+  const pickupName = String(input.pickupName ?? "").trim();
+  const data = await rapidshyp("/wrapper", input, {
+    orderId: order.orderId,
+    orderDate: isoDateTime(order.orderDate).slice(0, 10),
+    ...(pickupName
+      ? { pickupAddressName: pickupName }
+      : {
+          pickupLocation: {
+            contactName: p.contactName || "Vaidya Gogate Memorial Foundation",
+            pickupName: atLeast3(p.nickname || "Gogate Products Pune", "Gogate Products Pune").slice(0, 75),
+            pickupEmail: p.email || "care@vaidyagogate.org",
+            pickupPhone: rapidPhone(p.phone),
+            pickupAddress1: atLeast3(p.line1, "Pickup address"),
+            ...(p.line2 && p.line2.trim().length >= 3 ? { pickupAddress2: p.line2.slice(0, 100) } : {}),
+            pinCode: String(p.pincode),
+          },
+        }),
+    storeName: "DEFAULT",
+    billingIsShipping: true,
+    shippingAddress: {
+      firstName: atLeast3(firstName || c.name, "Customer"),
+      lastName: rest.join(" "),
+      addressLine1: atLeast3(c.line1, `${c.city} ${c.pincode}`),
+      ...(c.line2 && c.line2.trim().length >= 3 ? { addressLine2: c.line2.slice(0, 100) } : {}),
+      pinCode: String(c.pincode),
+      email: c.email || "",
+      phone: rapidPhone(c.phone),
+    },
+    orderItems: order.items.map((item) => ({
+      itemName: atLeast3(item.name, "Book").slice(0, 200),
+      ...(item.sku && item.sku.length >= 3 ? { sku: item.sku } : {}),
+      units: item.units,
+      unitPrice: Math.max(1, item.price),
+      tax: 0,
+    })),
+    paymentMethod: order.cod ? "COD" : "PREPAID",
+    shippingCharges: order.shippingCharge,
+    packageDetails: {
+      packageLength: Math.max(1, order.length),
+      packageBreadth: Math.max(1, order.breadth),
+      packageHeight: Math.max(1, order.height),
+      packageWeight: Math.max(1, Math.round(order.weightKg * 1000)),
+    },
+  });
+  const shipment = ((data?.shipment as Json[]) ?? [])[0] ?? {};
+  const awb = String(shipment.awb ?? "");
+  if (!awb) throw new ProviderError(String(data?.remarks || "RapidShyp created the order but did not assign a courier. Check the order on RapidShyp."));
+  return {
+    provider: "rapidshyp",
+    awb,
+    courierName: String(shipment.courierName ?? shipment.parentCourierName ?? "RapidShyp"),
+    providerOrderId: String(data?.orderId ?? order.orderId),
+    providerShipmentId: String(shipment.shipmentId ?? ""),
+    labelUrl: shipment.labelURL ? String(shipment.labelURL) : undefined,
+    manifestUrl: shipment.manifestURL ? String(shipment.manifestURL) : undefined,
+    routingCode: shipment.routingCode ? String(shipment.routingCode) : undefined,
+    serviceMode: serviceModeOf(shipment.courierName) || undefined,
+  };
+}
+
+export async function rapidshypTrack(input: Json, awb: string) {
+  if (!rapidshypHeaders(input)) return null;
+  const data = await rapidshyp("/track_order", input, { orderId: "", awb, contact: "", email: "" });
+  const record = ((data?.records as Json[]) ?? [])[0] ?? {};
+  const shipment = ((record.shipment_details as Json[]) ?? []).find((row) => String(row.awb) === awb) ?? ((record.shipment_details as Json[]) ?? [])[0] ?? {};
+  const scans = (shipment.track_scans as Json[]) ?? [];
+  const events = scans
+    .map((scan) => ({
+      at: String(scan.scan_datetime ?? scan.date ?? scan.datetime ?? ""),
+      status: String(scan.status_desc ?? scan.rapidshyp_status_desc ?? scan.scan ?? scan.status ?? "").trim(),
+      location: String(scan.scan_location ?? scan.location ?? ""),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: String(shipment.current_tracking_status_desc ?? shipment.shipment_status ?? record.order_status ?? ""),
+    awb,
+    courierName: String(shipment.child_courier_name ?? shipment.courier_name ?? "RapidShyp"),
+    events,
+    expectedBy: String(shipment.current_courier_edd ?? ""),
+  };
+}
+
+export async function rapidshypCancel(input: Json, orderId: string) {
+  if (!rapidshypHeaders(input)) return null;
+  if (!orderId) throw new ProviderError("RapidShyp needs the order ID to cancel this shipment.");
+  await rapidshyp("/cancel_order", input, { orderId, storeName: "DEFAULT" });
+  return { cancelled: true };
+}
+
+/* ---------------- Vamaship (docs.vamaship.com) ---------------- */
+
+const vamashipBase = (input: Json) =>
+  String(input.environment ?? "").toLowerCase() === "sandbox" ? "https://ecom3stagingapi.vamaship.com/ecom/api/v1" : "https://api.vamaship.com/ecom/v1";
+
+function vamashipHeaders(input: Json) {
+  const token = pick(input.apiToken, "VAMASHIP_API_TOKEN");
+  return token ? { authorization: `Bearer ${token}` } : null;
+}
+
+function vamashipFailed(data: Json, fallback: string) {
+  if (data.success !== false) return null;
+  const errors = Array.isArray(data.errors) ? (data.errors as unknown[]).join(", ") : typeof data.errors === "object" && data.errors ? Object.values(data.errors as Json).flat().join(", ") : "";
+  return new ProviderError(String(data.message || errors || fallback));
+}
+
+function vamashipSeller(input: Json) {
+  const pickup = (input.pickup as Json) ?? {};
+  const text = (value: unknown, fallback: string) => String(value ?? "").trim() || fallback;
+  const address = text([pickup.line1, pickup.line2].filter(Boolean).join(", "), "C10/2, Sarita Nagari Phase 2, Sinhagad Road");
+  return {
+    name: text(pickup.contactName ?? pickup.name, "Vaidya Gogate Memorial Foundation"),
+    address: address.padEnd(10, ".").slice(0, 200),
+    city: text(pickup.city, "Pune"),
+    state: text(pickup.state, "Maharashtra"),
+    country: "India",
+    email: text(pickup.email, "care@vaidyagogate.org"),
+    phone: text(pickup.phone, "8668904067").replace(/\D/g, "").slice(-10),
+    pincode: text(pickup.pincode, "411030"),
+  };
+}
+
+type VamaMode = "surface" | "air";
+const vamaPath = (mode: VamaMode, action: "quote" | "book") => (mode === "surface" ? `/surface/${action}` : `/dom/${action}`);
+
+export async function vamashipRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const [to] = await Promise.all([enviaPlace(parcel.deliveryPincode)]);
+  const shipment = {
+    address: "Delivery address, customer",
+    city: to.city || "City",
+    state: to.state || "State",
+    country: "India",
+    email: "care@vaidyagogate.org",
+    name: "Customer",
+    phone: "9999999999",
+    pincode: String(parcel.deliveryPincode),
+    is_cod: parcel.cod,
+    ...(parcel.cod ? { cod_value: Math.max(1, Math.round(parcel.declaredValue || 1)) } : {}),
+    length: String(Math.max(1, parcel.length)),
+    breadth: String(Math.max(1, parcel.breadth)),
+    height: String(Math.max(1, parcel.height)),
+    unit: "cm",
+    weight: String(Math.max(0.01, parcel.weightKg)),
+    product: "Books",
+    product_value: Math.max(1, Math.round(parcel.declaredValue || 1)),
+    quantity: 1,
+  };
+  const seller = { ...vamashipSeller(input), pincode: String(parcel.pickupPincode), get_all_quotes: true };
+  const replies = await Promise.allSettled(
+    (["surface", "air"] as VamaMode[]).map(async (mode) => {
+      const data = await call(`${vamashipBase(input)}${vamaPath(mode, "quote")}`, {
+        method: "POST",
+        headers,
+        json: { seller, shipments: [mode === "surface" ? { ...shipment, surface_category: "b2c" } : shipment] },
+      });
+      const failed = vamashipFailed(data, "Vamaship returned no quote.");
+      if (failed) throw failed;
+      return ((data.quotes as Json[]) ?? []).flatMap((quote) => ((quote.suppliers as Json[]) ?? []).map((row) => ({ mode, row })));
+    })
+  );
+  const rows = replies.flatMap((reply) => (reply.status === "fulfilled" ? reply.value : []));
+  if (!rows.length) {
+    const auth = replies.find((reply) => reply.status === "rejected" && (reply.reason as ProviderError)?.status === 401);
+    if (auth) throw (auth as PromiseRejectedResult).reason;
+  }
+  return rows
+    .filter(({ row }) => Number(row.shipping_cost) > 0 && row.supplier_id != null)
+    .map(({ mode, row }) => ({
+      provider: "vamaship",
+      courierId: `${mode}:${row.supplier_id}`,
+      courierName: `${String(row.supplier ?? "Vamaship")}${mode === "air" && !/air/i.test(String(row.supplier)) ? " (Air)" : ""}`,
+      rate: Math.round(Number(row.shipping_cost) * 100) / 100,
+      etaDays: Number(row.duration) > 0 ? Number(row.duration) : mode === "air" ? 3 : 5,
+      live: true as const,
+      cod: parcel.cod,
+    }));
+}
+
+export async function vamashipBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const [modeText, supplier] = String(order.courierId || "surface:").split(":");
+  const mode: VamaMode = modeText === "air" ? "air" : "surface";
+  const c = order.customer;
+  const p = order.pickup;
+  const seller = {
+    ...vamashipSeller({ pickup: p }),
+  };
+  const address = [c.line1, c.line2].filter(Boolean).join(", ").replace(/[^\w\s,.\-/#]/g, " ").replace(/\s+/g, " ").trim();
+  const shipment = {
+    name: c.name,
+    address: address.padEnd(10, ".").slice(0, 200),
+    city: c.city.replace(/[\s,]+$/, ""),
+    state: c.state,
+    country: "India",
+    email: c.email || p.email || "care@vaidyagogate.org",
+    phone: String(c.phone ?? "").replace(/\D/g, "").slice(-10),
+    pincode: String(c.pincode),
+    is_cod: order.cod,
+    ...(order.cod ? { cod_value: Math.round(order.total) } : {}),
+    length: String(Math.max(1, order.length)),
+    breadth: String(Math.max(1, order.breadth)),
+    height: String(Math.max(1, order.height)),
+    unit: "cm",
+    weight: String(Math.max(0.01, order.weightKg)),
+    product: order.items.map((item) => item.name).join(", ").slice(0, 190) || "Books",
+    product_value: Math.max(1, Math.round(order.subtotal || order.total)),
+    quantity: order.items.reduce((sum, item) => sum + item.units, 0) || 1,
+    reference1: order.orderId,
+    ...(supplier ? { supplier_id: Number(supplier) } : {}),
+    line_items: order.items.map((item) => ({ name: item.name.slice(0, 197), quantity: item.units, price: item.price })),
+    ...(mode === "surface" ? { surface_category: "b2c" } : {}),
+  };
+  const data = await call(`${vamashipBase(input)}${vamaPath(mode, "book")}`, { method: "POST", headers, json: { seller, shipments: [shipment] } });
+  const failed = vamashipFailed(data, "Vamaship did not accept the booking.");
+  if (failed) throw failed;
+  let result = data;
+  const refid = String(data.refid ?? "");
+  // Vamaship books in the background (status_code 300): poll the reference until the AWB is out.
+  for (let attempt = 0; refid && Number(result.status_code) === 300 && attempt < 8; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    result = await call(`${vamashipBase(input)}/details/${encodeURIComponent(refid)}`, { headers });
+    const pollFailed = vamashipFailed(result, "Vamaship could not book this shipment.");
+    if (pollFailed) throw pollFailed;
+  }
+  const row = ((result.shipments as Json[]) ?? [])[0] ?? {};
+  if (row.success === false) throw new ProviderError(String(row.message ?? row.error ?? "Vamaship could not book this shipment."));
+  const awb = String(row.awb ?? "");
+  if (!awb) throw new ProviderError(`Vamaship is still processing this booking (reference ${refid}). Check it on Vamaship, then use Track an existing shipment with the AWB.`);
+  const documents = (result.documents as Json) ?? {};
+  const first = (key: string) => (Array.isArray(documents[key]) ? String((documents[key] as unknown[])[0] ?? "") : "") || undefined;
+  return {
+    provider: "vamaship",
+    awb,
+    courierName: String(row.supplier_name ?? "Vamaship"),
+    providerOrderId: row.order_id != null ? String(row.order_id) : undefined,
+    providerShipmentId: refid || undefined,
+    labelUrl: first("thermal_labels") ?? first("labels"),
+    manifestUrl: first("manifests"),
+    serviceMode: mode === "air" ? "Express" : "Surface",
+  };
+}
+
+export async function vamashipTrack(input: Json, awb: string) {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const data = await call(`${vamashipBase(input)}/trackawb/${encodeURIComponent(awb)}`, { headers });
+  const row = (((data.tracking_details as Json) ?? {})[awb] as Json) ?? {};
+  if (row.success === false) throw new ProviderError(String(row.message ?? "Vamaship has no tracking for this AWB yet."));
+  const events = ((row.trackingEvents as Json[]) ?? [])
+    .map((event) => ({
+      at: String(event.datetime ?? ""),
+      status: String(event.status ?? "").trim(),
+      location: String(event.location ?? ""),
+      ...(event.comments ? { remarks: String(event.comments) } : {}),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: events[0]?.status ?? "",
+    awb,
+    courierName: "Vamaship",
+    events,
+    trackingUrl: String(row.partner_track_url ?? ""),
+  };
+}
+
+export async function vamashipCancel(input: Json, orderId: string) {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const id = Number(orderId);
+  if (!id) throw new ProviderError("Vamaship needs its shipment number to cancel this shipment.");
+  const data = await call(`${vamashipBase(input)}/cancel`, { method: "POST", headers, json: { order_ids: [id] } });
+  const row = ((data as Json)[String(id)] as Json) ?? {};
+  if (row.success === false) throw new ProviderError(String(row.status ?? "Vamaship refused the cancellation."));
+  return { cancelled: true, message: String(row.status ?? "Cancellation request submitted.") };
+}

@@ -1597,6 +1597,24 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "daakly"} onClick={() => test("daakly")}>{busy === "daakly" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="RapidShyp" text="docs.rapidshyp.com — API key from RapidShyp → Settings → Configure API. Live courier quotes, booking with RapidShyp's label, tracking and cancel. RapidShyp picks the courier by your courier rules in its panel, so the booked courier can differ from the quote you clicked." badge={<ProviderStatus id="rapidshyp" />} right={<Check label="Use" checked={value.rapidshyp?.enabled ?? false} onChange={(enabled) => set({ rapidshyp: { ...value.rapidshyp, enabled } })} />}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Secret label="API key" value={value.rapidshyp?.apiKey ?? ""} onChange={(apiKey) => set({ rapidshyp: { ...value.rapidshyp, apiKey } })} />
+            <Text label="Pickup location name on RapidShyp" value={value.rapidshyp?.pickupName ?? ""} onChange={(pickupName) => set({ rapidshyp: { ...value.rapidshyp, pickupName } })} hint="Blank = send the pickup address below" />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={primary} disabled={busy === "rapidshyp"} onClick={() => test("rapidshyp")}>{busy === "rapidshyp" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
+        <Card title="Vamaship" text="docs.vamaship.com — API key from Vamaship (Bearer token). Live Surface and Air quotes per courier, booking with the chosen courier, Vamaship label, tracking and cancel (Vamaship approves cancellations if not picked up)." badge={<ProviderStatus id="vamaship" />} right={<Check label="Use" checked={value.vamaship?.enabled ?? false} onChange={(enabled) => set({ vamaship: { ...value.vamaship, enabled } })} />}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Secret label="API key" value={value.vamaship?.apiToken ?? ""} onChange={(apiToken) => set({ vamaship: { ...value.vamaship, apiToken } })} />
+            <Text label="Environment" value={value.vamaship?.environment ?? "live"} onChange={(environment) => set({ vamaship: { ...value.vamaship, environment: environment.toLowerCase() } })} hint="live or sandbox" />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={primary} disabled={busy === "vamaship"} onClick={() => test("vamaship")}>{busy === "vamaship" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
       </div>
 
       <Card

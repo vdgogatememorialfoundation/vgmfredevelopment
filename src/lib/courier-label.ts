@@ -14,9 +14,11 @@ const AGGREGATOR_NAMES: Record<string, string> = {
   shadowfax: "Shadowfax",
   envia: "Envia",
   daakly: "India Post (Daakly)",
+  rapidshyp: "RapidShyp",
+  vamaship: "Vamaship",
 };
 
-const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari|goswift|swift|envia)(\s+(surface|air|express|courier|driver))?$/i;
+const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari|goswift|swift|envia|rapidshyp|vamaship)(\s+(surface|air|express|courier|driver))?$/i;
 
 /** Express, Air or Surface from an aggregator field or a courier name such as "Delhivery Surface". */
 export function serviceModeOf(...values: unknown[]) {
