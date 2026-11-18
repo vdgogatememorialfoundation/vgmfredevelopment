@@ -1588,6 +1588,15 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "envia"} onClick={() => test("envia")}>{busy === "envia" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="Daakly (India Post)" text="daakly.com/developers — API key from Daakly → API access (dk_live_… books real parcels from the Daakly wallet; dk_test_… is the sandbox). Speed Post and Business Parcel at contract rates, India Post label, tracking and cancel. Prepaid only (no COD). No doorstep pickup: hand the parcel in at the post office of the pickup pincode below." badge={<ProviderStatus id="daakly" />} right={<Check label="Use" checked={value.daakly?.enabled ?? false} onChange={(enabled) => set({ daakly: { ...value.daakly, enabled } })} />}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Secret label="API key" value={value.daakly?.apiKey ?? ""} onChange={(apiKey) => set({ daakly: { ...value.daakly, apiKey } })} />
+            <Text label="Services to price" value={value.daakly?.services ?? ""} onChange={(services) => set({ daakly: { ...value.daakly, services } })} hint="Blank = both, or speed_post / business_parcel" />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={primary} disabled={busy === "daakly"} onClick={() => test("daakly")}>{busy === "daakly" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
       </div>
 
       <Card

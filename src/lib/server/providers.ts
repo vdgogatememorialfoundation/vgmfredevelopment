@@ -3449,3 +3449,182 @@ export async function enviaCancel(input: Json, awb: string, carrier = "") {
   if (failed) throw failed;
   return { cancelled: true };
 }
+
+/* ---------------- Daakly (India Post contract rates, daakly.com/developers) ---------------- */
+
+const DAAKLY = "https://api.daakly.com/api/v1";
+const DAAKLY_SERVICES = { speed_post: { name: "India Post Speed Post", days: 3 }, business_parcel: { name: "India Post Business Parcel", days: 6 } } as const;
+type DaaklyService = keyof typeof DAAKLY_SERVICES;
+
+function daaklyAuth(input: Json) {
+  const key = pick(input.apiKey, "DAAKLY_API_KEY");
+  return key ? { "x-api-key": key } : null;
+}
+
+function daaklyServices(input: Json): DaaklyService[] {
+  const wanted = String(input.services ?? "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim().toLowerCase())
+    .filter((value): value is DaaklyService => value in DAAKLY_SERVICES);
+  return wanted.length ? wanted : ["speed_post", "business_parcel"];
+}
+
+const daaklyGrams = (kg: number) => Math.min(35000, Math.max(1, Math.round(kg * 1000)));
+const daaklyCm = (value: number) => Math.min(150, Math.max(0.5, Number(value) || 1));
+const daaklyPhone = (value?: string) => String(value ?? "").replace(/\D/g, "").slice(-10);
+
+/** India Post fields are capped at 80 characters: split a long address over line1–line3. */
+function daaklyLines(text: string) {
+  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const lines: string[] = [""];
+  for (const word of words) {
+    const last = lines.length - 1;
+    if (`${lines[last]} ${word}`.trim().length <= 80) lines[last] = `${lines[last]} ${word}`.trim();
+    else if (lines.length < 3) lines.push(word.slice(0, 80));
+  }
+  return { line1: lines[0] || "Address", ...(lines[1] ? { line2: lines[1] } : {}), ...(lines[2] ? { line3: lines[2] } : {}) };
+}
+
+/** Daakly errors are { error: { code, message, details } }; the message is written to be shown as it is. */
+async function daakly(path: string, input: Json, init: RequestInit & { json?: unknown } = {}) {
+  const headers = daaklyAuth(input);
+  if (!headers) return null;
+  try {
+    return await call(`${DAAKLY}${path}`, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) } });
+  } catch (error) {
+    const fields = (error as ProviderError).message;
+    throw new ProviderError(`Daakly: ${fields}`, (error as ProviderError).status);
+  }
+}
+
+export async function daaklyRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  if (!daaklyAuth(input)) return null;
+  if (parcel.cod) return [];
+  const data = await daakly("/quotes", input, {
+    method: "POST",
+    json: {
+      origin_pincode: String(parcel.pickupPincode),
+      destination_pincode: String(parcel.deliveryPincode),
+      weight_g: daaklyGrams(parcel.weightKg),
+      length_cm: daaklyCm(parcel.length),
+      breadth_cm: daaklyCm(parcel.breadth),
+      height_cm: daaklyCm(parcel.height),
+    },
+  });
+  const allowed = new Set(daaklyServices(input));
+  return ((data?.quotes as Json[]) ?? [])
+    .filter((quote) => allowed.has(String(quote.service) as DaaklyService) && Number(quote.total_paise) > 0)
+    .map((quote) => {
+      const service = DAAKLY_SERVICES[String(quote.service) as DaaklyService];
+      return {
+        provider: "daakly",
+        courierId: String(quote.service),
+        courierName: service.name,
+        rate: Math.round(Number(quote.total_paise)) / 100,
+        etaDays: service.days,
+        live: true as const,
+        cod: false,
+        chargeWeightKg: Number(quote.billable_weight_g) > 0 ? Number(quote.billable_weight_g) / 1000 : undefined,
+      };
+    });
+}
+
+export async function daaklyBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  if (!daaklyAuth(input)) return null;
+  if (order.cod) throw new ProviderError("Daakly (India Post) does not take cash on delivery. Pick another courier for this COD order.");
+  const service: DaaklyService = order.courierId === "business_parcel" ? "business_parcel" : "speed_post";
+  const p = order.pickup;
+  const c = order.customer;
+  const data = await daakly("/shipments", input, {
+    method: "POST",
+    // One key per parcel: a retry of this order and service re-uses it, so India Post is never booked twice.
+    headers: { "idempotency-key": `vgmf-${order.orderId}-${service}`.slice(0, 120) },
+    json: {
+      service,
+      sender: {
+        name: (p.contactName || p.nickname || "Vaidya Gogate Memorial Foundation").slice(0, 80),
+        ...daaklyLines([p.line1, p.line2].filter(Boolean).join(", ")),
+        city: p.city.slice(0, 80),
+        state: p.state.slice(0, 80),
+        pincode: String(p.pincode),
+        phone: daaklyPhone(p.phone),
+        ...(p.email ? { email: p.email.slice(0, 80) } : {}),
+      },
+      receiver: {
+        name: c.name.slice(0, 80),
+        ...daaklyLines([c.line1, c.line2].filter(Boolean).join(", ")),
+        city: c.city.replace(/[\s,]+$/, "").slice(0, 80),
+        state: c.state.slice(0, 80),
+        pincode: String(c.pincode),
+        phone: daaklyPhone(c.phone),
+        ...(c.altPhone && daaklyPhone(c.altPhone).length === 10 ? { alt_phone: daaklyPhone(c.altPhone) } : {}),
+        ...(c.email ? { email: c.email.slice(0, 80) } : {}),
+      },
+      weight_g: daaklyGrams(order.weightKg),
+      length_cm: daaklyCm(order.length),
+      breadth_cm: daaklyCm(order.breadth),
+      height_cm: daaklyCm(order.height),
+      contents: "Books",
+      declared_value_paise: Math.max(0, Math.round(order.subtotal * 100)),
+      client_reference: order.orderId.slice(0, 24),
+    },
+  });
+  const awb = String(data?.consignment ?? "");
+  if (!awb) throw new ProviderError("Daakly did not return an India Post article number.");
+  return {
+    provider: "daakly",
+    awb,
+    courierName: DAAKLY_SERVICES[service].name,
+    providerOrderId: String(data?.reference ?? ""),
+    providerShipmentId: String(data?.id ?? ""),
+    courierCost: Number(data?.postage_paise) > 0 ? Number(data?.postage_paise) / 100 : undefined,
+    pickupScheduledFor: "Hand in at the post office (no doorstep pickup)",
+    serviceMode: service === "speed_post" ? "Express" : "Surface",
+  };
+}
+
+/** Daakly's shipment id from its id or the India Post article number. */
+async function daaklyShipmentId(input: Json, idOrAwb: string) {
+  const value = idOrAwb.trim();
+  if (!/^[A-Z]{2}\d{9}[A-Z]{2}$/i.test(value)) return value;
+  const list = await daakly(`/shipments?search=${encodeURIComponent(value)}&page_size=5`, input);
+  const row = ((list?.items as Json[]) ?? []).find((item) => String(item.consignment).toUpperCase() === value.toUpperCase());
+  if (!row) throw new ProviderError("Daakly has no shipment with this article number.");
+  return String(row.id);
+}
+
+export async function daaklyTrack(input: Json, awb: string) {
+  if (!daaklyAuth(input)) return null;
+  const data = await daakly(`/track/${encodeURIComponent(awb)}`, input);
+  const scans = ((data?.events ?? data?.scans ?? []) as Json[]) ?? [];
+  const events = (Array.isArray(scans) ? scans : [])
+    .map((event) => ({
+      at: String(event.at ?? event.time ?? event.timestamp ?? ""),
+      status: String(event.note ?? event.remarks ?? event.event ?? event.status ?? "").trim(),
+      location: String(event.location ?? event.office ?? event.city ?? ""),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: String(data?.status ?? ""),
+    awb,
+    courierName: "India Post",
+    events,
+    trackingUrl: `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx`,
+    expectedBy: String(data?.expected_by ?? ""),
+  };
+}
+
+export async function daaklyCancel(input: Json, idOrAwb: string) {
+  if (!daaklyAuth(input)) return null;
+  const id = await daaklyShipmentId(input, idOrAwb);
+  await daakly(`/shipments/${encodeURIComponent(id)}/cancel`, input, { method: "POST", json: { reason: "Cancelled by Vaidya Gogate Memorial Foundation" } });
+  return { cancelled: true };
+}
+
+/** India Post label PDF; the link Daakly gives expires within minutes, so open it straight away. */
+export async function daaklyLabel(input: Json, idOrAwb: string) {
+  if (!daaklyAuth(input)) return null;
+  const id = await daaklyShipmentId(input, idOrAwb);
+  const file = await daakly(`/shipments/${encodeURIComponent(id)}/label`, input);
+  return { labelUrl: String(file?.url ?? "") };
+}

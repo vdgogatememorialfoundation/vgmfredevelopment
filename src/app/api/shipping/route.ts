@@ -13,6 +13,11 @@ import {
   goswiftRates,
   goswiftRegisterWebhook,
   goswiftTest,
+  daaklyBook,
+  daaklyCancel,
+  daaklyLabel,
+  daaklyRates,
+  daaklyTrack,
   enviaBook,
   enviaCancel,
   enviaRates,
@@ -106,7 +111,7 @@ export async function POST(request: NextRequest) {
         const switchedOn = (id: string) => saved.settings?.shipping?.[id]?.enabled !== false;
         const wanted = (Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia"]
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly"]
         ).filter(switchedOn);
         // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
         const stored = readShippingCreds() as typeof creds;
@@ -121,6 +126,7 @@ export async function POST(request: NextRequest) {
             if (id === "ekart") return { provider: id, rates: await ekartRates(keys("ekart"), parcel) };
             if (id === "shadowfax") return { provider: id, rates: await shadowfaxRates(keys("shadowfax"), parcel) };
             if (id === "envia") return { provider: id, rates: await enviaRates(keys("envia"), parcel) };
+            if (id === "daakly") return { provider: id, rates: await daaklyRates(keys("daakly"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -158,7 +164,9 @@ export async function POST(request: NextRequest) {
                               ? await shadowfaxBook(creds.shadowfax ?? own, order)
                               : provider === "envia"
                                 ? await enviaBook(creds.envia ?? own, order)
-                                : undefined;
+                                : provider === "daakly"
+                                  ? await daaklyBook(creds.daakly ?? own, order)
+                                  : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -201,6 +209,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, configured: true, ...result });
       }
       case "label": {
+        if (provider === "daakly") {
+          const result = await daaklyLabel(creds.daakly ?? own, String(body.providerShipmentId ?? body.awb ?? ""));
+          if (!result) return NextResponse.json({ ok: false, configured: false, error: "Daakly API key is not configured." });
+          return NextResponse.json({ ok: true, configured: true, ...result });
+        }
         if (provider === "ithink") {
           const result = await ithinkLabel(creds.ithink ?? own, String(body.awb ?? ""));
           if (!result) return NextResponse.json({ ok: false, configured: false, error: "iThink Logistics credentials are not configured." });
@@ -265,7 +278,9 @@ export async function POST(request: NextRequest) {
                             ? await shadowfaxTrack(creds.shadowfax ?? own, awb, body.providerShipmentId === "reverse")
                             : provider === "envia"
                               ? await enviaTrack(creds.envia ?? own, awb)
-                              : undefined;
+                              : provider === "daakly"
+                                ? await daaklyTrack(creds.daakly ?? own, awb)
+                                : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         const events = "events" in result && Array.isArray(result.events) ? await withScanPlaces(result.events as { location?: string }[]) : undefined;
@@ -293,7 +308,9 @@ export async function POST(request: NextRequest) {
                             ? await shadowfaxCancel(creds.shadowfax ?? own, String(body.awb ?? ""))
                             : provider === "envia"
                               ? await enviaCancel(creds.envia ?? own, String(body.awb ?? ""), String(body.providerOrderId ?? ""))
-                              : undefined;
+                              : provider === "daakly"
+                                ? await daaklyCancel(creds.daakly ?? own, String(body.providerShipmentId ?? body.awb ?? ""))
+                                : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });
@@ -421,7 +438,9 @@ export async function POST(request: NextRequest) {
                 ? await ithinkRates(creds.ithink ?? own, parcel)
                 : provider === "envia"
                   ? await enviaRates(creds.envia ?? own, { ...parcel, pickupPincode: "411030" })
-                  : undefined;
+                  : provider === "daakly"
+                    ? await daaklyRates(creds.daakly ?? own, { ...parcel, pickupPincode: "411030", cod: false })
+                    : undefined;
         if (rates === undefined) return unsupported(provider);
         if (rates === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, message: `Connected. ${rates.length} couriers priced Pune → Delhi.` });
