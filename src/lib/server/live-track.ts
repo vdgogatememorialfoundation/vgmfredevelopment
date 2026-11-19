@@ -108,9 +108,18 @@ function orderStatusFor(stage: string, hyperlocal: boolean): Order["status"] | u
   return undefined;
 }
 
+/** Several viewers polling every second share one courier call per shipment every few seconds. */
+const lastLiveRead = new Map<string, number>();
+
 export async function refreshStoredShipment(orderId: string, shipmentId = "") {
   const shipment = findShopShipment(orderId, shipmentId);
   if (!shipment) return { ok: false as const, error: "Shipment not on the server yet." };
+  const hyperlocalLive = isHyperlocalProvider(shipment.provider, undefined, shipment.courier) && shipment.status !== "Delivered";
+  if (hyperlocalLive) {
+    const at = lastLiveRead.get(shipment.id) ?? 0;
+    if (Date.now() - at < 3000) return { ok: true as const, live: false as const, shipment };
+    lastLiveRead.set(shipment.id, Date.now());
+  }
   const provider = shipment.provider;
   const direct = !shipment.live && shipment.directCourier ? shipment.directCourier : "";
   if (!direct && (!shipment.live || !provider || provider === "local")) {

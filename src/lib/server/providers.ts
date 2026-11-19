@@ -1880,7 +1880,7 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
   const deliveryId = String(task.delivery_job_id ?? task.job_id ?? "");
   return {
     provider: "tookan",
-    awb: deliveryId || pickupId,
+    awb: String(task.barcode ?? "") || deliveryId || pickupId,
     courierName: "Gogate Products-Tookan",
     providerOrderId: pickupId || deliveryId,
     providerShipmentId: deliveryId,
@@ -1949,7 +1949,8 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
     status: currentLabel,
     courierName: "Gogate Products-Tookan",
     barcode: String(delivery?.job.barcode ?? job.barcode ?? pickup?.job.barcode ?? ""),
-    awb: String(delivery?.job.job_id ?? jobId),
+    // The parcel barcode is the AWB customers and labels see; task ids stay in providerOrderId / providerShipmentId.
+    awb: String(delivery?.job.barcode ?? pickup?.job.barcode ?? delivery?.job.job_id ?? jobId),
     accepted,
     agentLeg: pickupOpen ? "pickup" : "delivery",
     agentName: accepted ? riderName : "",

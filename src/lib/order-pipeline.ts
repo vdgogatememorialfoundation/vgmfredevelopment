@@ -542,18 +542,26 @@ export function buildTrackingStages(
     });
   }
 
+  // Hyperlocal customers see only: Picked up from seller, Out for delivery (then Delivered). Rider app steps and GPS stay in Admin.
+  const pickedIdx = hyperlocal ? liveScans.findIndex((scan) => /picked up/i.test(scan.status)) : -1;
   const outEvents = liveScans
     .map((scan, index) => ({ scan, mapped: scanStages[index], index }))
     .filter((item) => item.mapped === "out" || (hyperlocal && item.mapped === "shipped"))
-    .map((item) =>
-      isFailedAttempt(item.scan.status)
-        ? {
-            ...scanEvent(item.scan, item.index, outReached, "Delivery attempt unsuccessful"),
-            detail: `${cleanScanText(item.scan.status)} · the courier will reattempt delivery.`,
-          }
-        : scanEvent(item.scan, item.index, outReached, hyperlocal ? item.scan.status : "Out for delivery")
-    )
-    .filter((event, index, list) => hyperlocal || index === 0 || list[index - 1].title !== event.title);
+    .filter((item) => !hyperlocal || (pickedIdx >= 0 && item.index >= pickedIdx))
+    .map((item) => {
+      if (isFailedAttempt(item.scan.status)) {
+        return {
+          ...scanEvent(item.scan, item.index, outReached, "Delivery attempt unsuccessful"),
+          detail: `${cleanScanText(item.scan.status)} · the courier will reattempt delivery.`,
+        };
+      }
+      if (!hyperlocal) return scanEvent(item.scan, item.index, outReached, "Out for delivery");
+      const title = /picked up/i.test(item.scan.status) ? "Picked up from seller" : "Out for delivery";
+      return { ...scanEvent({ ...item.scan, location: "" }, item.index, outReached, title), detail: undefined };
+    })
+    .filter((event, index, list) =>
+      hyperlocal ? list.findIndex((other) => other.title === event.title) === index : index === 0 || list[index - 1].title !== event.title
+    );
 
   if (hyperlocal && outReached && outEvents.length === 0) {
     outEvents.push({

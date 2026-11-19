@@ -44,7 +44,7 @@ export default function HyperlocalStatus({ order, shipment }: { order: Order; sh
             <span className="block text-xs text-slate-600">Your delivery partner</span>
           </span>
           {shipment.agentPhone ? (
-            <a href={`tel:${shipment.agentPhone}`} className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white">
+            <a href={`tel:${shipment.agentPhone}`} className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold !text-white visited:!text-white hover:!text-white">
               Call
             </a>
           ) : null}

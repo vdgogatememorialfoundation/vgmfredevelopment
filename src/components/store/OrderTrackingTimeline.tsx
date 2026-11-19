@@ -131,7 +131,8 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
     };
     void run();
     const terminal = order.status === "Delivered" || order.status === "Cancelled" || order.status === "Failed";
-    const ping = Math.min(10, Math.max(8, getIntegrations().shipping.hyperlocalPingSeconds || 8));
+    // Hyperlocal: the rider moves on the map every second, without reloading the page.
+    const ping = 1;
     const refundOpen = order.refunds?.some((refund) => refund.gatewayRefundId && refund.status !== "processed" && refund.status !== "failed");
     const ms = refundOpen ? 60_000 : terminal ? 120_000 : hyperlocal ? ping * 1000 : 45_000;
     const timer = window.setInterval(run, ms);
@@ -144,7 +145,8 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
 
   const delivered = order.status === "Delivered";
   const shownScans = scans.map((scan, index, list) =>
-    !delivered && index === list.length - 1 && (shipment?.agentName || shipment?.agentPhone)
+    // Hyperlocal: the rider card (with Call) shows the agent, not the timeline.
+    !hyperlocal && !delivered && index === list.length - 1 && (shipment?.agentName || shipment?.agentPhone)
       ? { ...scan, agent: { name: shipment.agentName, phone: shipment.agentPhone }, otp: shipment.deliveryOtp || scan.otp }
       : scan
   );
@@ -179,7 +181,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
         detail: [trackingId ? `Tracking id: ${trackingId}` : "", hyperlocal ? "Hyperlocal" : ""].filter(Boolean).join(" · "),
       };
     }
-    if (stage.id === "out" && stage.reached && order.status !== "Delivered" && (shipment?.agentPhone || shipment?.agentName || shipment?.deliveryOtp)) {
+    if (!hyperlocal && stage.id === "out" && stage.reached && order.status !== "Delivered" && (shipment?.agentPhone || shipment?.agentName || shipment?.deliveryOtp)) {
       next.courierNote = {
         title: shipment.agentName ? `Delivery agent: ${shipment.agentName}` : "Delivery agent",
         detail: [shipment.agentPhone ? `Phone ${shipment.agentPhone}` : "", shipment.deliveryOtp ? `Delivery PIN ${shipment.deliveryOtp}` : ""].filter(Boolean).join(" · ") || "Contact shared by the courier",
