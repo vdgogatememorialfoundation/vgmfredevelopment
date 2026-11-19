@@ -1,6 +1,6 @@
 import { isCourierInfoLine } from "@/lib/order-pipeline";
 import { courierTrackingCode, courierTrackingLink, directCourier } from "@/lib/couriers";
-import { riderFrom } from "@/lib/server/providers";
+import { daaklyTrack, riderFrom } from "@/lib/server/providers";
 
 /**
  * Reads tracking scans for couriers sent without an API account: first from the
@@ -308,8 +308,24 @@ async function trackingPage(courierId: string, awb: string) {
   return hit(courierId, awb, page.events, new URL(url).hostname, page.facts.status ?? page.facts["current status"] ?? "", expected);
 }
 
+/** India Post scans through Daakly's public tracking (works for any India Post article number, booked anywhere). */
+async function indiaPost(awb: string): Promise<CourierWebHit | null> {
+  const hit = await daaklyTrack({ public: true }, awb);
+  if (!hit) return null;
+  return {
+    status: hit.status,
+    events: hit.events,
+    trackingUrl: courierTrackingLink("india-post", awb) || hit.trackingUrl,
+    courierName: "India Post (Speed Post)",
+    awb,
+    expectedBy: hit.expectedBy || undefined,
+    source: "India Post",
+  };
+}
+
 const SITE_READERS: Record<string, (awb: string) => Promise<CourierWebHit | null>> = {
   "amazon-shipping": amazon,
+  "india-post": indiaPost,
   delhivery,
   ekart,
 };

@@ -200,7 +200,8 @@ export function isDeskScan(scan: { status: string; location?: string }) {
 }
 
 export function courierEventTitle(status: string, location?: string, courier = "") {
-  const value = status.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  // Delhivery (via Shiprocket) spells it "Recieved at Origin Center".
+  const value = status.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").replace(/\brecie?ved\b/g, "received").trim();
   const city = cityName(location) || cityName(status.split(/[-–]/).slice(1).join(" "));
   const place = city ? ` - ${city}` : "";
   const rule = (getOrderSettings().scanTitles ?? []).find(
@@ -216,7 +217,7 @@ export function courierEventTitle(status: string, location?: string, courier = "
   }
   if (PICKED_UP.test(value) && !PICKUP_PENDING.test(value) && !/received at|in ?scan/.test(value)) return PICKUP_TITLE;
   if (classifyCourierScan(status) === "packed" && !/\bdispatch/.test(value)) return status;
-  if (/arrived at|reached at|received at|inward|bag received|in ?scan|item received|trip arrived|vehicle arrived|^shipment arrived$|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
+  if (/arrived at|reached at|received at|inward|bag received|in ?scan|item received|trip arrived|vehicle arrived|origin cent(er|re)|^shipment arrived$|reached (the )?(hub|facility|destination hub|warehouse)|at (the )?(hub|facility|warehouse)/.test(value) && !/out for delivery|customer|doorstep/.test(value)) {
     return `Shipment arrived at courier facility${place}`;
   }
   if (/left (for |from )?(the )?(next )?(hub|facility|warehouse|location|origin|city)|shipment left|bagged|added to bag|en route to|reached (the )?(next )?(hub|facility)|departed|\bdispatched\b|\bdespatched\b|outscan|forwarded|in transit|shipment shipped|connected to|further connected|has left|added to connection/.test(value) && !/out for delivery/.test(value)) {

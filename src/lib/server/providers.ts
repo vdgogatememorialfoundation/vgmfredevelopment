@@ -3593,15 +3593,37 @@ async function daaklyShipmentId(input: Json, idOrAwb: string) {
   return String(row.id);
 }
 
+const DAAKLY_STATUS: Record<string, string> = {
+  picked_up: "Picked up",
+  in_transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  failed_attempt: "Delivery attempted",
+  rto_in_transit: "Returning to sender",
+  rto_delivered: "Returned to sender",
+  cancelled: "Cancelled",
+  lost: "Lost",
+};
+
+/** India Post's own line ("Item Booked", "Item Bagged") under Daakly's stage, so a counter booking reads as picked up. */
+function daaklyScan(event: Json) {
+  const stage = DAAKLY_STATUS[String(event.status ?? "")] ?? "";
+  const note = String(event.note ?? event.remarks ?? "").trim();
+  if (stage && note) return `${stage} (${note})`;
+  return stage || note || String(event.status ?? "").trim();
+}
+
+/** Public: GET /track/{article} needs no key and covers any India Post article number. */
 export async function daaklyTrack(input: Json, awb: string) {
-  if (!daaklyAuth(input)) return null;
-  const data = await daakly(`/track/${encodeURIComponent(awb)}`, input);
+  const headers = daaklyAuth(input);
+  if (!headers && !input.public) return null;
+  const data = await call(`${DAAKLY}/track/${encodeURIComponent(awb)}`, headers ? { headers } : {});
   const scans = ((data?.events ?? data?.scans ?? []) as Json[]) ?? [];
   const events = (Array.isArray(scans) ? scans : [])
     .map((event) => ({
       at: String(event.at ?? event.time ?? event.timestamp ?? ""),
-      status: String(event.note ?? event.remarks ?? event.event ?? event.status ?? "").trim(),
-      location: String(event.location ?? event.office ?? event.city ?? ""),
+      status: daaklyScan(event),
+      location: String(event.location ?? event.office ?? event.city ?? "").replace(/\b(S\.?O|H\.?O|B\.?O|G\.?P\.?O)\b\.?/g, "Post Office").trim(),
     }))
     .filter((event) => event.status);
   return {
@@ -3609,7 +3631,7 @@ export async function daaklyTrack(input: Json, awb: string) {
     awb,
     courierName: "India Post",
     events,
-    trackingUrl: `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx`,
+    trackingUrl: `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx?consignment=${encodeURIComponent(awb)}`,
     expectedBy: String(data?.expected_by ?? ""),
   };
 }
