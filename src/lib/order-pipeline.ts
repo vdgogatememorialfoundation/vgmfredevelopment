@@ -542,7 +542,7 @@ export function buildTrackingStages(
     });
   }
 
-  // Hyperlocal customers see only: Picked up from seller, Out for delivery (then Delivered). Rider app steps and GPS stay in Admin.
+  // Hyperlocal customers see only: Ordered → Packed → Out for delivery (from pickup) → Delivered. Rider app steps and GPS stay in Admin.
   const pickedIdx = hyperlocal ? liveScans.findIndex((scan) => /picked up/i.test(scan.status)) : -1;
   const outEvents = liveScans
     .map((scan, index) => ({ scan, mapped: scanStages[index], index }))
@@ -556,7 +556,7 @@ export function buildTrackingStages(
         };
       }
       if (!hyperlocal) return scanEvent(item.scan, item.index, outReached, "Out for delivery");
-      const title = /picked up/i.test(item.scan.status) ? "Picked up from seller" : "Out for delivery";
+      const title = "Out for delivery";
       return { ...scanEvent({ ...item.scan, location: "" }, item.index, outReached, title), detail: undefined };
     })
     .filter((event, index, list) =>
