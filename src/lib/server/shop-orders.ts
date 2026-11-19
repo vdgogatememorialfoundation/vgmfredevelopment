@@ -1,24 +1,56 @@
 import { randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
-import { orderActivityAt, orderBelongsTo, phonesMatch, type AccountRef } from "@/lib/commerce-stamp";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { orderActivityAt, orderBelongsTo, phonesMatch, uniqueHistory, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
+import { notifyOrderStage } from "@/lib/server/order-stage-mail";
+import { vgmfTxnId } from "@/lib/transactions";
 import type { Order } from "@/types";
+
+/** Every payment, balance payment and refund gets a 12-digit VGMF ID once; a desk copy without them keeps the saved ones. */
+function withTxnIds(order: Order, prev?: Order): Order {
+  const next = { ...order };
+  // A book saved with "original price ₹0" once produced negative discounts; a discount is never below zero.
+  if ((next.discount ?? 0) < 0) next.discount = 0;
+  const paid = next.paymentStatus && next.paymentStatus !== "Pending" && next.paymentStatus !== "Failed";
+  next.paymentTxnId = next.paymentTxnId || prev?.paymentTxnId || (paid ? vgmfTxnId() : undefined);
+  if (!next.paymentTxnId) delete next.paymentTxnId;
+  const plan = next.preorderPayment;
+  if (plan?.balancePaidAt) next.preorderPayment = { ...plan, balanceTxnId: plan.balanceTxnId || prev?.preorderPayment?.balanceTxnId || vgmfTxnId() };
+  if (next.refunds?.length) {
+    next.refunds = next.refunds.map((refund) => (refund.vgmfId ? refund : { ...refund, vgmfId: prev?.refunds?.find((item) => item.id === refund.id)?.vgmfId || vgmfTxnId() }));
+  }
+  // Everything refundable returned (the platform fee is kept) counts as Refunded, not partial.
+  if (next.paymentStatus === "Partially Refunded") {
+    const collected = next.preorderPayment && !next.preorderPayment.balancePaidAt ? next.preorderPayment.advance : next.total;
+    if ((next.refundAmount ?? 0) >= collected - Math.max(0, next.platformFee ?? 0) - 0.001) next.paymentStatus = "Refunded";
+  }
+  // An automatic refund already sent must not be marked due again by an older desk copy.
+  if (prev?.autoRefund && prev.autoRefund.status !== "due") next.autoRefund = prev.autoRefund;
+  return next;
+}
 
 function file() {
   return dataFile("shop-orders.json");
 }
 
 function readAll(): Order[] {
+  let text: string;
   try {
-    const parsed = JSON.parse(readFileSync(file(), "utf8")) as Order[];
-    return Array.isArray(parsed) ? parsed : [];
+    text = readFileSync(file(), "utf8");
   } catch {
     return [];
   }
+  // A half-written or damaged file must never read as "no orders", or the next save would wipe every order.
+  const parsed = JSON.parse(text) as Order[];
+  if (!Array.isArray(parsed)) throw new Error("shop-orders.json is not a list.");
+  return parsed;
 }
 
 function writeAll(orders: Order[]) {
-  writeFileSync(file(), JSON.stringify(orders.slice(0, 2000)));
+  const target = file();
+  const temp = `${target}.${process.pid}.tmp`;
+  writeFileSync(temp, JSON.stringify(orders.slice(0, 2000)));
+  renameSync(temp, target);
 }
 
 export function listShopOrders() {
@@ -48,30 +80,66 @@ export function orderPhoneMatches(order: Order, phone: string) {
   return phonesMatch(order.deliveryAddress?.phone, phone);
 }
 
-export function upsertShopOrder(order: Order) {
+/** The order as a customer may see it: packing proof photos stay with the desk. */
+export function forCustomer(order: Order): Order {
+  if (!order.packPhotos) return order;
+  const copy = { ...order };
+  delete copy.packPhotos;
+  return copy;
+}
+
+/** `quiet`: a desk edit; the customer is told only about a status change (e.g. the desk marks it Shipped). */
+export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {}) {
   if (!order?.id) return;
+  // A browser with an old cached copy must not bring back an order the desk deleted.
+  if (deletedShopOrderIds().includes(order.id)) return;
   const all = readAll();
   const prev = all.find((item) => item.id === order.id);
   if (prev && orderActivityAt(prev) > orderActivityAt(order)) return prev;
   const orders = all.filter((item) => item.id !== order.id);
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
-  orders.unshift(prev ? { ...prev, ...order, trackToken } : { ...order, trackToken });
+  const merged: Order = prev ? { ...prev, ...order, trackToken } : { ...order, trackToken };
+  // A field sent as null was cleared on the desk (e.g. Cancel picking); JSON drops undefined, so null is the "remove it" signal.
+  for (const key of Object.keys(merged) as (keyof Order)[]) if (merged[key] === null) delete merged[key];
+  // A split parent is never picked; an old browser copy must not bring its pick record back.
+  if (merged.splitInto?.length) delete merged.pick;
+  if (merged.history?.length) merged.history = uniqueHistory(merged.history);
+  orders.unshift(withTxnIds(merged, prev));
   writeAll(orders);
+  void notifyOrderStage(prev, orders[0], { statusOnly: options.quiet }).catch(() => undefined);
   return orders[0];
+}
+
+function deletedFile() {
+  return dataFile("shop-orders-deleted.json");
+}
+
+/** Ids the desk deleted, so customers' browsers drop their cached copy too. */
+export function deletedShopOrderIds(): string[] {
+  try {
+    const parsed = JSON.parse(readFileSync(deletedFile(), "utf8"));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function deleteShopOrder(id: string) {
   const clean = id.trim();
   if (!clean) return;
   writeAll(readAll().filter((order) => order.id !== clean));
+  const gone = deletedShopOrderIds().filter((item) => item !== clean);
+  writeFileSync(deletedFile(), JSON.stringify([clean, ...gone].slice(0, 2000)));
 }
 
 export function patchShopOrder(id: string, update: Partial<Order>) {
   const all = readAll();
   const index = all.findIndex((order) => order.id === id);
   if (index === -1) return;
-  all[index] = { ...all[index], ...update };
+  const prev = all[index];
+  all[index] = withTxnIds({ ...prev, ...update }, prev);
   writeAll(all);
+  void notifyOrderStage(prev, all[index]).catch(() => undefined);
   return all[index];
 }
 

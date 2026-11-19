@@ -2,7 +2,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 import { readKv } from "@/lib/server/db";
-import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText } from "@/lib/server/providers";
+import { chatBotReply, pauseChatBot, recordWhatsAppPayment, resumeChatBot } from "@/lib/server/whatsapp-bot";
+import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText, sendZohoCpaas } from "@/lib/server/providers";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+import { whatsAppSenders, whatsAppTemplateFor, type IntegrationSettings } from "@/lib/integrations";
 
 export type WaProvider = "meta" | "aisensy";
 
@@ -13,6 +16,8 @@ export type WaMessage = {
   provider: WaProvider;
   text: string;
   status?: string;
+  /** Meta's reason when a message failed to deliver. */
+  error?: string;
   externalId?: string;
   by?: string;
   /** Desk-only note. Never sent out on WhatsApp. */
@@ -32,8 +37,56 @@ export type WaThread = {
   updatedAt: string;
   unread: number;
   lastInboundAt?: string;
+  ticketId?: string;
+  createdAt?: string;
+  closedAt?: string;
+  closedBy?: string;
   messages: WaMessage[];
 };
+
+/** Reference id shown to the desk and the customer, in the same style as website chats (YYMMDD-XXXXXX). */
+export function waRef(thread: Pick<WaThread, "phone" | "createdAt" | "messages">) {
+  const first = thread.createdAt || thread.messages[0]?.at || "";
+  const day = first.slice(2, 10).replace(/-/g, "");
+  return `${day}${thread.phone.slice(-6)}`;
+}
+
+export function markWhatsAppTicket(threadId: string, ticketId: string) {
+  const store = readStore();
+  const thread = store.threads.find((item) => item.id === threadId);
+  if (!thread) return null;
+  thread.ticketId = ticketId;
+  writeStore(store);
+  return thread;
+}
+
+/** Closes the chat: the customer is told, the desk list moves it to Closed, and the auto menu answers their next message. */
+export async function closeWhatsApp(threadId: string, byName: string, byEmail: string) {
+  const thread = findWhatsAppThread(threadId);
+  if (!thread) throw new Error("That chat is no longer in the inbox.");
+  let noticeError = "";
+  try {
+    await replyOnWhatsApp(threadId, `Thank you for contacting Vaidya Gogate Memorial Foundation. This chat (ref ${waRef(thread)}) is now closed. Type *menu* any time to start again.`, byEmail);
+  } catch (error) {
+    noticeError = (error as Error).message;
+  }
+  resumeChatBot(threadId);
+  const store = readStore();
+  const row = store.threads.find((item) => item.id === threadId);
+  if (row) {
+    row.closedAt = new Date().toISOString();
+    row.closedBy = byName;
+    row.unread = 0;
+    row.assignedTo = undefined;
+    row.assignedName = undefined;
+    writeStore(store);
+  }
+  return { thread: row ?? thread, noticeError };
+}
+
+export function findWhatsAppThread(threadId: string) {
+  return readStore().threads.find((item) => item.id === threadId) ?? null;
+}
 
 export const WA_DEPARTMENTS = ["Support", "Shop", "Clinic", "Events", "Accounts"] as const;
 
@@ -155,6 +208,7 @@ export function listWhatsAppThreads() {
       ...thread,
       preview: thread.messages[thread.messages.length - 1]?.text ?? "",
       windowOpen: serviceWindowOpen(thread),
+      ref: waRef(thread),
     }));
 }
 
@@ -206,6 +260,7 @@ function upsert(store: Store, input: {
       phone,
       name: input.name?.trim() || `+${phone}`,
       provider: input.provider,
+      createdAt: input.at || new Date().toISOString(),
       updatedAt: input.at || new Date().toISOString(),
       unread: 0,
       messages: [],
@@ -240,6 +295,10 @@ function upsert(store: Store, input: {
   if (input.direction === "in") {
     thread.lastInboundAt = at;
     thread.unread += 1;
+    if (thread.closedAt) {
+      delete thread.closedAt;
+      delete thread.closedBy;
+    }
   }
   store.threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   if (store.threads.length > MAX_THREADS) store.threads.length = MAX_THREADS;
@@ -262,7 +321,7 @@ export function markWhatsAppRead(threadId: string) {
   return thread;
 }
 
-export function markWhatsAppExternalStatus(externalId: string, status: string) {
+export function markWhatsAppExternalStatus(externalId: string, status: string, error?: string) {
   if (!externalId || !status) return;
   const store = readStore();
   let changed = false;
@@ -270,6 +329,7 @@ export function markWhatsAppExternalStatus(externalId: string, status: string) {
     const message = thread.messages.find((item) => item.externalId === externalId);
     if (!message) continue;
     message.status = status;
+    if (error) message.error = error;
     changed = true;
   }
   if (changed) writeStore(store);
@@ -315,11 +375,26 @@ export type InboundWa = {
   at?: string;
   direction: "in" | "out";
   lineNumber?: string;
+  /** Items from a WhatsApp catalogue cart (retailer id = book id). */
+  cart?: { id: string; quantity: number }[];
 };
 
-export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string }[] } {
+function metaCart(message: Record<string, unknown>) {
+  if (String(message.type) !== "order") return undefined;
+  const items = asRecord(message.order)?.product_items;
+  if (!Array.isArray(items)) return undefined;
+  return items
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item?.product_retailer_id))
+    .map((item) => ({ id: String(item.product_retailer_id), quantity: Math.max(1, Math.min(20, Math.floor(Number(item.quantity) || 1))) }));
+}
+
+type WaPayment = { referenceId: string; status: string; paymentId: string; phone?: string };
+
+export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; statuses: { id: string; status: string; error?: string }[]; payments: WaPayment[] } {
+  const payments: WaPayment[] = [];
   const messages: InboundWa[] = [];
-  const statuses: { id: string; status: string }[] = [];
+  const statuses: { id: string; status: string; error?: string }[] = [];
   const root = asRecord(body);
   const entries = Array.isArray(root?.entry) ? root.entry : [];
   for (const entry of entries) {
@@ -344,7 +419,8 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
           provider: "meta",
           phone,
           name: names.get(phone),
-          text: metaMessageText(message),
+          text: String(message.type) === "order" ? "[Cart from the WhatsApp catalogue]" : metaMessageText(message),
+          cart: metaCart(message),
           externalId: String(message.id || ""),
           at: Number.isFinite(stamp) && stamp > 0 ? new Date(stamp * 1000).toISOString() : undefined,
           direction: "in",
@@ -354,11 +430,24 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
       for (const raw of Array.isArray(value.statuses) ? value.statuses : []) {
         const status = asRecord(raw);
         if (!status?.id) continue;
-        statuses.push({ id: String(status.id), status: String(status.status || "") });
+        const payment = asRecord(status.payment);
+        if (String(status.type) === "payment" && payment?.reference_id) {
+          const txn = asRecord(payment.transaction);
+          payments.push({
+            referenceId: String(payment.reference_id),
+            status: String(txn?.status || status.status || ""),
+            paymentId: String(txn?.pg_transaction_id || txn?.id || ""),
+            phone: status.recipient_id ? String(status.recipient_id) : undefined,
+          });
+          continue;
+        }
+        const errors = Array.isArray(status.errors) ? status.errors.map(asRecord).filter(Boolean) : [];
+        const error = errors.map((item) => [item?.code, item?.title, asRecord(item?.error_data)?.details].filter(Boolean).join(" · ")).join("; ");
+        statuses.push({ id: String(status.id), status: String(status.status || ""), error: error || undefined });
       }
     }
   }
-  return { messages, statuses };
+  return { messages, statuses, payments };
 }
 
 function firstString(record: Record<string, unknown> | null, keys: string[]) {
@@ -413,13 +502,86 @@ export function parseAiSensyWebhook(body: unknown): InboundWa[] {
 export function applyWhatsAppWebhook(kind: "meta" | "aisensy", body: unknown) {
   if (kind === "meta") {
     const parsed = parseMetaWebhook(body);
-    for (const status of parsed.statuses) markWhatsAppExternalStatus(status.id, status.status);
+    for (const status of parsed.statuses) {
+      if (status.error) console.warn(`[whatsapp] ${status.id} ${status.status}: ${status.error}`);
+      markWhatsAppExternalStatus(status.id, status.status, status.error);
+    }
     const threads = parsed.messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
+    for (const message of parsed.messages) void runChatBot(message);
+    for (const payment of parsed.payments) void recordWhatsAppPayment(payment).catch(() => undefined);
     return { messages: parsed.messages.length, statuses: parsed.statuses.length, threads: threads.length };
   }
   const messages = parseAiSensyWebhook(body);
   const threads = messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
+  for (const message of messages) void runChatBot(message);
   return { messages: messages.length, statuses: 0, threads: threads.length };
+}
+
+/** Answers the self-service menu on the same number the customer wrote to; the reply is kept in the inbox thread. */
+async function runChatBot(message: InboundWa) {
+  if (message.direction !== "in" || !message.phone) return;
+  try {
+    const key = threadKey(message.provider, waPhone(message.phone));
+    const reply = await chatBotReply(key, message.phone, message.text, message.name, message.cart);
+    if (!reply) return;
+    const creds = await loadWhatsAppCreds();
+    const sent = message.provider === "aisensy" ? await sendAiSensySession(creds, { to: message.phone, body: reply }) : await sendMetaText(creds, { to: message.phone, body: reply });
+    const store = readStore();
+    upsert(store, { provider: message.provider, phone: message.phone, text: reply, direction: "out", externalId: sent?.id || undefined, by: "Auto menu", status: "sent" });
+    writeStore(store);
+  } catch {
+    /* the desk still sees the message in the inbox */
+  }
+}
+
+/**
+ * Sends a mapped WhatsApp alert from the server (order stages), through every provider switched on for alerts
+ * (failover or all, as set in Settings → WhatsApp). Meta and AiSensy sends are kept in that number's inbox thread.
+ */
+/** Keeps a server-sent message (e.g. the in-chat payment card) in the number's inbox thread, so its delivery status shows. */
+export function logOutboundWhatsApp(input: { provider: WaProvider; phone: string; text: string; externalId?: string; by: string }) {
+  const store = readStore();
+  upsert(store, { ...input, direction: "out", status: "sent" });
+  writeStore(store);
+}
+
+export async function sendWhatsAppAlert(event: string, input: { phone?: string; name: string; params: string[]; fallbackEvent?: string; fallbackParams?: string[] }) {
+  const phone = waPhone(input.phone || "");
+  if (phone.length < 10) return false;
+  const settings = (savedAdminIntegrations().whatsapp ?? {}) as unknown as IntegrationSettings["whatsapp"];
+  if (!settings || typeof settings !== "object") return false;
+  const wa = { ...settings, mapping: settings.mapping ?? {} };
+  const creds = { ...(await loadWhatsAppCreds()), zohoCpaasApiKey: String(wa.zohoCpaasApiKey || ""), zohoCpaasFrom: String(wa.zohoCpaasFrom || ""), zohoCpaasDomain: String(wa.zohoCpaasDomain || "") };
+  let delivered = false;
+  for (const provider of whatsAppSenders(wa)) {
+    const primary = whatsAppTemplateFor(wa, provider, event);
+    const template = primary || (input.fallbackEvent ? whatsAppTemplateFor(wa, provider, input.fallbackEvent) : "");
+    if (!template) continue;
+    try {
+      const saved = (wa.templates ?? []).find((item) => item.name === template);
+      const language = saved?.language || "en";
+      // A shorter template (e.g. the general order update) gets the short parameter list.
+      const short = Boolean(input.fallbackParams) && (template !== primary || (Number(saved?.variables) > 0 && Number(saved?.variables) < input.params.length));
+      const params = short ? (input.fallbackParams ?? input.params) : input.params;
+      const sent =
+        provider === "aisensy"
+          ? await sendAiSensy(creds, { to: phone, campaign: template, name: input.name, params })
+          : provider === "zoho"
+            ? await sendZohoCpaas(creds, { to: phone, template, language, params })
+            : await sendMetaTemplate(creds, { to: phone, template, language, params });
+      if (!sent) continue;
+      delivered = true;
+      if (provider !== "zoho") {
+        const store = readStore();
+        upsert(store, { provider: provider as WaProvider, phone, name: input.name, text: `[${template}] ${params.join(" · ")}`, direction: "out", externalId: sent.id || undefined, by: "Order update", status: "sent" });
+        writeStore(store);
+      }
+      if (wa.sendMode !== "all") break;
+    } catch {
+      /* try the next provider */
+    }
+  }
+  return delivered;
 }
 
 function readCredsFile() {
@@ -538,15 +700,17 @@ export async function replyOnWhatsApp(threadId: string, text: string, by: string
   });
   if (updated && !options?.keepUnread) updated.unread = 0;
   writeStore(store);
+  if (by !== "Auto menu") pauseChatBot(existing.id);
   return updated;
 }
 
-function connectionNotice(name: string, department: string) {
+function connectionNotice(name: string, department: string, ref: string) {
   const who = name.trim();
   const desk = department.trim();
-  if (who && desk) return `You have been connected to ${who} from the ${desk} desk.`;
-  if (who) return `You have been connected to ${who}.`;
-  if (desk) return `You have been connected to the ${desk} desk. An executive will reply here.`;
+  const tail = ref ? ` Chat reference: ${ref}.` : "";
+  if (who && desk) return `You have been connected to ${who} from the ${desk} desk.${tail}`;
+  if (who) return `You have been connected to ${who}.${tail}`;
+  if (desk) return `You have been connected to the ${desk} desk. An executive will reply here.${tail}`;
   return "";
 }
 
@@ -573,6 +737,7 @@ export async function transferWhatsApp(input: {
   const store = readStore();
   const thread = store.threads.find((item) => item.id === input.threadId);
   if (!thread) throw new Error("That chat is no longer in the inbox.");
+  if (thread.closedAt) throw new Error("This chat is closed. It reopens when the customer writes again.");
   const clearAssignee = Boolean(department) && !assignedTo && !assignedName;
   const nextDept = department || thread.department || "";
   const nextTo = clearAssignee ? "" : assignedTo || thread.assignedTo || "";
@@ -604,7 +769,7 @@ export async function transferWhatsApp(input: {
   const actorKeepsIt = Boolean(nextTo) && nextTo.toLowerCase() === byEmail.toLowerCase();
   thread.unread = actorKeepsIt ? 0 : thread.unread + 1;
   writeStore(store);
-  const notice = connectionNotice(nextName, nextDept);
+  const notice = connectionNotice(nextName, nextDept, waRef(thread));
   let noticeSent = false;
   let noticeError = "";
   if (notice) {

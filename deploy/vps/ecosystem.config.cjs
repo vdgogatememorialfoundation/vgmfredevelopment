@@ -16,6 +16,7 @@ function loadEnv(file) {
 const secrets = "/VGMF-PLATFORM/secrets";
 const stagingEnv = loadEnv(path.join(secrets, "staging.env"));
 const demoEnv = loadEnv(path.join(secrets, "demo.env"));
+const productionEnv = loadEnv(path.join(secrets, "production.env"));
 
 module.exports = {
   apps: [
@@ -43,6 +44,19 @@ module.exports = {
         HOSTNAME: "127.0.0.1",
         PORT: "3012",
         ...demoEnv,
+      },
+    },
+    {
+      name: "vgmf-production",
+      cwd: "/VGMF-PLATFORM/apps/production",
+      script: "server.js",
+      instances: 1,
+      exec_mode: "fork",
+      env: {
+        NODE_ENV: "production",
+        HOSTNAME: "127.0.0.1",
+        PORT: "3007",
+        ...productionEnv,
       },
     },
     {

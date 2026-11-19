@@ -6,26 +6,41 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthContext";
 import { ensureAdminCredentials, getAccounts, sendOtpCode } from "@/lib/admin-store";
+import { saveAccount } from "@/lib/auth";
+import { applyPortalAccess, serverPortalLogin, serverPortalSendCode, serverPortalVerify } from "@/lib/portal-accounts-sync";
 import { loginBlockReason } from "@/lib/auth";
 import { OTP_RESEND_SECONDS, issueEmailOtp, verifyEmailOtp } from "@/lib/otp";
 import { ForgotPasswordForm } from "@/components/account/PasswordResetForm";
+import { canOpen, isSupportAgent } from "@/lib/roles";
 import type { User } from "@/types";
 
 const copy = {
   admin: { label: "Admin", target: "/admin", hint: "administrator" },
   staff: { label: "Staff", target: "/staff", hint: "staff" },
   doctor: { label: "Doctor", target: "/doctor", hint: "doctor" },
+  support: { label: "Customer support", target: "/support", hint: "support" },
+  scanner: { label: "Picker & packer scanner", target: "/scanner", hint: "picker or packer" },
+  picker: { label: "Picker", target: "/picker", hint: "picker" },
+  packer: { label: "Packer", target: "/packer", hint: "packer" },
 } as const;
+
+type PortalId = keyof typeof copy;
+
+/** Admin and staff-side portals sign in with an emailed one-time code only; Doctor keeps password + code. */
+function codeOnly(portal: PortalId) {
+  return portal !== "doctor";
+}
 
 type Mode = "password" | "mfa" | "otp" | "forgot";
 
-export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }) {
+export function PortalLogin({ portal }: { portal: PortalId }) {
   const router = useRouter();
   const { user, signIn, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
-  const [mode, setMode] = useState<Mode>("password");
+  const [mode, setMode] = useState<Mode>(codeOnly(portal) ? "otp" : "password");
+  const [serverCode, setServerCode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpHint, setOtpHint] = useState("");
   const [error, setError] = useState("");
@@ -59,9 +74,17 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     );
   };
 
-  const submitPassword = (event: React.FormEvent) => {
+  const submitPassword = async (event: React.FormEvent) => {
     event.preventDefault();
-    const account = findPortalAccount();
+    let account = findPortalAccount();
+    if (!account || !account.password || account.password !== password) {
+      const remote = await serverPortalLogin(email.trim(), password);
+      if (remote) applyPortalAccess(remote);
+      if (remote && matchesPortal(remote.account, portal)) {
+        account = { ...account, ...remote.account, password } as User;
+        saveAccount(account);
+      }
+    }
     if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
       return;
@@ -89,8 +112,21 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     setMode("mfa");
   };
 
-  const sendCode = (event?: React.FormEvent) => {
+  const sendCode = async (event?: React.FormEvent) => {
     event?.preventDefault();
+    setError("");
+    const remote = await serverPortalSendCode(email.trim(), label);
+    if (remote === "sent") {
+      setServerCode(true);
+      setOtpSent(true);
+      setOtpHint(`A code was sent to ${email.trim()}. It expires in 10 minutes.`);
+      return;
+    }
+    if (remote !== "not-found") {
+      setError(remote);
+      return;
+    }
+    setServerCode(false);
     const account = findPortalAccount();
     if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
@@ -114,8 +150,27 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
     setError("");
   };
 
-  const submitOtp = (event: React.FormEvent) => {
+  const submitOtp = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (serverCode) {
+      const result = await serverPortalVerify(email.trim(), otp);
+      if (typeof result === "string") {
+        setError(result);
+        return;
+      }
+      applyPortalAccess(result);
+      const local = findPortalAccount();
+      const merged = { ...local, ...result.account, password: local?.password ?? result.account.password } as User;
+      if (!matchesPortal(merged, portal)) {
+        setError(`This account does not have access to the ${label} portal.`);
+        return;
+      }
+      setError("");
+      saveAccount(merged);
+      signIn(merged);
+      router.push(target);
+      return;
+    }
     const account = findPortalAccount();
     if (!account) {
       setError(`No ${label.toLowerCase()} account found for this email.`);
@@ -161,7 +216,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
   if (mode === "forgot") {
     return (
       <Card portal={portal}>
-        <ForgotPasswordForm role={portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
+        <ForgotPasswordForm role={portal === "support" || portal === "scanner" || portal === "picker" || portal === "packer" ? "staff" : portal} onBack={() => { setMode("password"); setError(""); }} onComplete={(account) => { signIn(account); router.push(target); }} />
       </Card>
     );
   }
@@ -215,7 +270,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
             Back to password
           </button>
         </form>
-      ) : mode === "password" || portal !== "staff" ? (
+      ) : !codeOnly(portal) ? (
         <form onSubmit={submitPassword} className="space-y-5">
           <EmailField portal={portal} email={email} setEmail={setEmail} />
           <div>
@@ -246,11 +301,11 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
           <EmailField portal={portal} email={email} setEmail={setEmail} />
           {otpSent && (
             <div>
-              <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor="staff-otp">
+              <label className="mb-2 block text-sm font-semibold text-text-primary" htmlFor={`${portal}-otp`}>
                 6-digit code
               </label>
               <input
-                id="staff-otp"
+                id={`${portal}-otp`}
                 inputMode="numeric"
                 pattern="[0-9]{6}"
                 maxLength={6}
@@ -269,7 +324,7 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
             {otpSent ? "Verify code" : "Send email code"}
           </button>
           {otpSent && (
-            <ResendButton onResend={() => sendCode()} />
+            <ResendButton onResend={() => void sendCode()} />
           )}
         </form>
       )}
@@ -281,8 +336,13 @@ export function PortalLogin({ portal }: { portal: "admin" | "staff" | "doctor" }
   );
 }
 
-function matchesPortal(account: Pick<User, "role">, portal: "admin" | "staff" | "doctor") {
+function matchesPortal(account: User, portal: PortalId) {
   if (portal === "staff") return account.role === "staff" || account.role === "coadmin";
+  if (portal === "support") return isSupportAgent(account);
+  if (portal === "picker" || portal === "packer") {
+    return account.role === "admin" || account.role === "coadmin" || (account.role === "staff" && canOpen(account, `/admin/commerce/${portal}`));
+  }
+  if (portal === "scanner") return account.role === "admin" || account.role === "coadmin" || (account.role === "staff" && (canOpen(account, "/admin/commerce/picker") || canOpen(account, "/admin/commerce/packer")));
   return account.role === portal;
 }
 
@@ -345,7 +405,7 @@ function Card({
   portal,
   children,
 }: {
-  portal: "admin" | "staff" | "doctor";
+  portal: PortalId;
   children: React.ReactNode;
 }) {
   const { label, hint } = copy[portal];
@@ -360,11 +420,11 @@ function Card({
             {label} console
           </p>
           <h1 className="mt-1 text-center text-2xl font-bold text-text-primary">
-            {label} sign in
+            Sign in to {label} portal
           </h1>
           <p className="mt-2 text-center text-sm text-text-muted">
-            {portal === "staff"
-              ? "Staff and co-administrators sign in here with email, password and a one-time email code."
+            {codeOnly(portal)
+              ? "Enter your email and we will send you a one-time sign-in code. Sessions stay signed in until Logout."
               : `Use your ${hint} email and password, then the email verification code. Sessions stay signed in until Logout.`}
           </p>
           <div className="mt-7">{children}</div>

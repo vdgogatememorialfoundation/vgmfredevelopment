@@ -50,7 +50,7 @@ function credsFor(id: string): CredDraft {
     return { email: shipping.shiprocket.email, password: shipping.shiprocket.password, channelId: shipping.shiprocket.channelId };
   }
   if (id === "nimbuspost") {
-    return { email: shipping.nimbuspost.email, password: shipping.nimbuspost.password };
+    return { apiKey: shipping.nimbuspost.apiKey ?? "", apiSecret: shipping.nimbuspost.apiSecret ?? "", warehouseId: shipping.nimbuspost.warehouseId ?? "", email: shipping.nimbuspost.email, password: shipping.nimbuspost.password };
   }
   if (id === "ithink") {
     return {
@@ -73,7 +73,7 @@ function persistCreds(id: string, fields: CredDraft, enabled: boolean) {
   if (id === "shiprocket") {
     shipping.shiprocket = { ...shipping.shiprocket, email: fields.email ?? "", password: fields.password ?? "", channelId: fields.channelId ?? "", enabled };
   } else if (id === "nimbuspost") {
-    shipping.nimbuspost = { ...shipping.nimbuspost, email: fields.email ?? "", password: fields.password ?? "", enabled };
+    shipping.nimbuspost = { ...shipping.nimbuspost, apiKey: fields.apiKey ?? "", apiSecret: fields.apiSecret ?? "", warehouseId: fields.warehouseId ?? "", email: fields.email ?? "", password: fields.password ?? "", enabled };
   } else if (id === "ithink") {
     shipping.ithink = {
       ...shipping.ithink,
@@ -273,8 +273,11 @@ function CarrierCard({
         )}
         {carrier.id === "nimbuspost" && (
           <>
-            <TextField label="Email" value={fields.email ?? ""} onChange={(value) => setField("email", value)} />
-            <SecretField label="Password" value={fields.password ?? ""} onChange={(value) => setField("password", value)} />
+            <TextField label="API key ID (npk_…)" value={fields.apiKey ?? ""} onChange={(value) => setField("apiKey", value)} />
+            <SecretField label="API secret" value={fields.apiSecret ?? ""} onChange={(value) => setField("apiSecret", value)} />
+            <TextField label="Warehouse ID or code (blank = primary)" value={fields.warehouseId ?? ""} onChange={(value) => setField("warehouseId", value)} />
+            <TextField label="Old login email (only without API key)" value={fields.email ?? ""} onChange={(value) => setField("email", value)} />
+            <SecretField label="Old login password" value={fields.password ?? ""} onChange={(value) => setField("password", value)} />
           </>
         )}
       </div>
@@ -314,7 +317,7 @@ function CarrierCard({
 
 export function TimelineDesk() {
   const [policy, setPolicy] = useState<FulfillmentPolicy>(() => getPolicy());
-  const [pincode, setPincode] = useState("411005");
+  const [pincode, setPincode] = useState("411002");
   const [saved, setSaved] = useState(false);
   const preview = checkPincode(pincode, books[0]?.id);
 
@@ -599,9 +602,8 @@ export function ProductServiceabilityDesk() {
   );
   const [prefixes, setPrefixes] = useState(profile.serviceablePrefixes.join(", "));
   const [blocked, setBlocked] = useState(profile.blockedPincodes.join(", "));
-  const [pincode, setPincode] = useState("411005");
+  const [pincode, setPincode] = useState("411002");
   const [notice, setNotice] = useState("");
-  const carriers = getCarriers();
   const quote = checkPincode(pincode, bookId);
 
   return (
@@ -710,21 +712,6 @@ export function ProductServiceabilityDesk() {
               placeholder="000000"
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
             />
-          </label>
-          <label className="block text-xs font-semibold text-slate-500">
-            Preferred partner
-            <select
-              value={profile.preferredCarrierId}
-              onChange={(event) => setProfile({ ...profile, preferredCarrierId: event.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900"
-            >
-              <option value="">Fastest available</option>
-              {carriers.map((carrier) => (
-                <option key={carrier.id} value={carrier.id}>
-                  {carrier.name}
-                </option>
-              ))}
-            </select>
           </label>
           <button type="submit" className="rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white">
             Save product delivery

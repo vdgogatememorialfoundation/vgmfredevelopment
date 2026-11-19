@@ -20,6 +20,7 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
   { id: "cards", title: "My Saved Cards", subtitle: "Cards saved after a successful order", icon: "wallet-outline" },
   { id: "addresses", title: "Addresses", subtitle: "Delivery addresses for shop orders", icon: "home-outline" },
   { id: "profile", title: "Edit Profile", subtitle: "Name, email, phone and Account ID", icon: "person-outline" },
+  { id: "wallet", title: "Wallet", subtitle: "Store credit from refunds and the Foundation desk", icon: "wallet-outline" },
   { id: "loyalty", title: "Loyalty Points", subtitle: "Points from shop orders and registrations", icon: "star-outline" },
   { id: "faq", title: "FAQ", subtitle: "Answers published on the website", icon: "help-circle-outline" },
 ];

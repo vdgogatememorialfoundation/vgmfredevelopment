@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { deleteCmsPage, getCmsPages, saveCmsPage, type CmsPage } from "@/lib/cms-pages";
 import { subscribeCms } from "@/lib/cms";
+import { publishLiveSite } from "@/lib/mobile-publish";
 
 function pagesSnapshot() {
   return JSON.stringify(getCmsPages());
@@ -41,7 +42,8 @@ export function CmsPagesDesk() {
       showInFooter: Boolean(editing.showInFooter),
     });
     setEditing(saved);
-    setNote(saved.enabled ? `Saved and live at /p/${saved.slug}.` : `Saved. Tick “Show on the main site” to publish /p/${saved.slug}.`);
+    void publishLiveSite();
+    setNote(saved.enabled ? `Saved and live on the site and app at /p/${saved.slug}.` : `Saved. Tick “Show on the main site” to publish /p/${saved.slug}.`);
   };
 
   return (
@@ -120,6 +122,7 @@ export function CmsPagesDesk() {
                   onClick={() => {
                     if (!window.confirm("Delete this page?")) return;
                     deleteCmsPage(editing.id!);
+                    void publishLiveSite();
                     setEditing(null);
                     setNote("Page deleted.");
                   }}

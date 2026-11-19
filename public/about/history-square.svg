@@ -1,5 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" role="img" aria-label="Our History">
-  <rect width="400" height="400" fill="#0B1F3A"/>
-  <circle cx="200" cy="200" r="92" fill="none" stroke="#F7F3EA" stroke-width="10"/>
-  <path d="M200 132 v68 l48 28" fill="none" stroke="#B8953A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" role="img" aria-label="Our history">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EEF2F8"/></radialGradient>
+    <linearGradient id="navy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3D6299"/><stop offset="1" stop-color="#0B1F3A"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6E3A1"/><stop offset=".55" stop-color="#D4AF55"/><stop offset="1" stop-color="#9C7A2A"/></linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E4E9F2"/></linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".55"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient>
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#0B1F3A" flood-opacity=".22"/></filter>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <ellipse cx="200" cy="330" rx="120" ry="14" fill="#0B1F3A" opacity=".08"/>
+  <g filter="url(#lift)">
+    <circle cx="200" cy="196" r="112" fill="url(#navy)"/>
+    <circle cx="200" cy="196" r="92" fill="url(#paper)"/>
+    <g stroke="#0B1F3A" stroke-width="6" stroke-linecap="round"><path d="M200 116v14M200 262v14M120 196h14M266 196h14"/></g>
+    <path d="M200 196 V142" stroke="url(#gold)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M200 196 L240 220" stroke="#0B1F3A" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="200" cy="196" r="12" fill="url(#gold)"/>
+    <ellipse cx="170" cy="130" rx="60" ry="26" fill="url(#shine)"/>
+  </g>
 </svg>

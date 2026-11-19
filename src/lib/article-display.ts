@@ -1,9 +1,15 @@
 import type { Article } from "@/types";
 import type { Locale } from "@/lib/i18n/locales";
 import { siteConfig } from "@/lib/constants";
+import { isPublishedNow } from "@/lib/schedule";
 
 export function isArticlePublished(article: Article) {
   return (article.status ?? "published") === "published";
+}
+
+/** Published and inside its publish/unpublish window. */
+export function isArticleLive(article: Article, now = Date.now()) {
+  return isArticlePublished(article) && isPublishedNow(article, now);
 }
 
 export function localizedArticle(article: Article, locale: Locale): Article {

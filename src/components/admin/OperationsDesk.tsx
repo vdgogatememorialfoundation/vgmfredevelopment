@@ -20,7 +20,6 @@ import {
 import {
   getSettings,
   getShipments,
-  refundOrder,
   saveSettings,
   setPaymentStatus,
 } from "@/lib/admin-store";
@@ -28,8 +27,12 @@ import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
 import { collectionHook, useLiveEvents } from "@/lib/use-cms";
 import { certificates as seededCertificates } from "@/data/content";
-import { deleteCertificate, publishCertificate } from "@/lib/certificates-client";
+import { deleteCertificate, publishCertificate, syncCertificatesWithServer } from "@/lib/certificates-client";
+import OrderPaymentPanel from "@/components/admin/OrderPaymentPanel";
 import type { Order } from "@/types";
+
+/** Split parents are audit records; their child orders carry the money. */
+const liveOrders = () => getOrders().filter((order) => !order.splitInto?.length);
 
 const field = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
 const button = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white";
@@ -44,6 +47,7 @@ type PaymentFilter = "all" | Order["paymentStatus"];
 const paymentTitles: Record<PaymentFilter, string> = {
   all: "Transactions",
   Paid: "Successful payments",
+  "Partially Paid": "Advance paid (balance due)",
   Failed: "Failed payments",
   Pending: "Pending payments",
   Refunded: "Refunded payments",
@@ -52,11 +56,12 @@ const paymentTitles: Record<PaymentFilter, string> = {
 
 export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
   const { version } = useCommerceMirror();
-  const [orders, setOrders] = useState<Order[]>(() => getOrders());
-  const refresh = () => setOrders(getOrders());
+  const [orders, setOrders] = useState<Order[]>(() => liveOrders());
+  const refresh = () => setOrders(liveOrders());
   useEffect(() => {
-    setOrders(getOrders());
+    setOrders(liveOrders());
   }, [version]);
+  const [open, setOpen] = useState("");
   const shown = filter === "all" ? orders : orders.filter((order) => order.paymentStatus === filter);
   const total = shown.reduce((sum, order) => sum + order.total, 0);
 
@@ -83,11 +88,14 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
       ) : (
         <ul className="space-y-3">
           {shown.map((order) => (
-            <li key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+            <li key={order.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-semibold text-slate-900">Order #{order.id} · {money(order.total)}</p>
                 <p className="text-xs text-slate-500">
-                  {order.deliveryAddress?.fullName ?? "Customer"} · {order.paymentStatus} · {order.status}
+                  {order.deliveryAddress?.fullName ?? "Customer"} · {new Date(order.date).toLocaleDateString("en-IN")} · {order.paymentMethod || "—"} · {order.paymentStatus} · {order.status}
+                  {order.razorpayPaymentId ? ` · ${order.razorpayPaymentId}` : ""}
+                  {order.refundAmount ? ` · refunded ${money(order.refundAmount)}` : ""}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -101,12 +109,12 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
                     Mark failed
                   </button>
                 )}
-                {order.paymentStatus === "Paid" && (
-                  <button type="button" className={ghost} onClick={() => { refundOrder(order.id); refresh(); }}>
-                    Issue refund
-                  </button>
-                )}
+                <button type="button" className={ghost} onClick={() => setOpen(open === order.id ? "" : order.id)}>
+                  {open === order.id ? "Hide details" : "Payment details & refund"}
+                </button>
               </div>
+              </div>
+              {open === order.id ? <OrderPaymentPanel order={order} onChange={refresh} /> : null}
             </li>
           ))}
         </ul>
@@ -117,9 +125,9 @@ export function PaymentsDesk({ filter = "all" }: { filter?: PaymentFilter }) {
 
 export function ReconciliationDesk() {
   const { version } = useCommerceMirror();
-  const [orders, setOrders] = useState<Order[]>(() => getOrders());
+  const [orders, setOrders] = useState<Order[]>(() => liveOrders());
   useEffect(() => {
-    setOrders(getOrders());
+    setOrders(liveOrders());
   }, [version]);
   const rows = (["Paid", "Pending", "Failed", "Refunded"] as const).map((status) => {
     const list = orders.filter((order) => order.paymentStatus === status);
@@ -182,6 +190,18 @@ const useIssuedCertificates = collectionHook<IssuedCertificate>(
 
 export function CertificateRegistry({ mode, eventName }: { mode: "list" | "issue" | "reissue"; eventName?: string }) {
   const records = useIssuedCertificates();
+  const [syncNote, setSyncNote] = useState("");
+  useEffect(() => {
+    let live = true;
+    void syncCertificatesWithServer()
+      .then(({ pulled, pushed }) => {
+        if (live) setSyncNote(pulled || pushed ? `Synced with the website: ${pulled} updated here, ${pushed} sent to the public page.` : "In sync with the public certificate page.");
+      })
+      .catch(() => live && setSyncNote("Could not reach the server. Certificates will sync on the next visit."));
+    return () => {
+      live = false;
+    };
+  }, []);
   const heading = mode === "issue" ? "Issue certificate" : mode === "reissue" ? "Reissue certificate" : "Certificates";
   const description =
     mode === "reissue"
@@ -232,7 +252,7 @@ export function CertificateRegistry({ mode, eventName }: { mode: "list" | "issue
         hideLabel="Revoke"
       />
       <p className="text-xs text-slate-500">
-        Revoke removes the certificate from the public verification page.
+        Revoke removes the certificate from the public verification page.{syncNote ? ` ${syncNote}` : ""}
       </p>
     </div>
   );
@@ -347,7 +367,7 @@ export function EventRecordsDesk({ kind }: { kind: EventRecordKind }) {
         for (const item of config.fields) {
           record[item.key] = item.kind === "select" ? item.options?.[0] ?? "" : "";
         }
-        if (kind === "tickets") record.code = `TKT-${Date.now().toString().slice(-6)}`;
+        if (kind === "tickets") record.code = String(Math.floor(100000000000 + Math.random() * 900000000000));
         return record;
       }}
       onSave={(record) => saveEventRecord(kind, record)}
@@ -402,7 +422,7 @@ const sectionSettings: Record<string, { heading: string; fields: SettingField[] 
       { key: "allowSignup", label: "Allow new customer sign-ups", kind: "toggle", fallback: "true" },
       { key: "allowLogin", label: "Allow customer sign-in", kind: "toggle", fallback: "true" },
       { key: "verifyEmail", label: "Require email OTP for signup and login (on when ZeptoMail is connected)", kind: "toggle", fallback: "true" },
-      { key: "smsLogin", label: "Allow login with MSG91 SMS OTP", kind: "toggle", fallback: "false" },
+      { key: "smsLogin", label: "SMS OTP via MSG91 (sign in, sign up and store pickup)", kind: "toggle", fallback: "false" },
       { key: "welcomeSubject", label: "Welcome email subject", fallback: "Welcome to the Vaidya Gogate Memorial Foundation" },
     ],
   },

@@ -3,14 +3,18 @@
 import { useMemo, useState } from "react";
 import {
   getShipments,
+  patchOrder,
+  removeOrderShipments,
   updateShipmentStatus,
 } from "@/lib/admin-store";
 import { downloadLabel } from "@/lib/shipping-client";
+import LabelSizePicker from "@/components/admin/LabelSizePicker";
 import { getOrder } from "@/lib/admin-store";
 import type { ShipmentRecord } from "@/types";
 import {
   Button,
   EmptyState,
+  LinkText,
   Panel,
   SelectInput,
   StatusBadge,
@@ -33,6 +37,7 @@ export function ShipmentsSection() {
   const [extra, setExtra] = useState(0);
   const shipments = useMemo(() => getShipments().filter((item) => item.note !== "Cancelled"), [version, extra]);
   const refresh = () => setExtra((value) => value + 1);
+  const [labelNote, setLabelNote] = useState("");
 
   return (
     <div className="space-y-5">
@@ -42,6 +47,7 @@ export function ShipmentsSection() {
           Courier bookings, AWB numbers, charges and shipping labels.
         </p>
       </div>
+      {labelNote && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><LinkText text={labelNote} /></p>}
 
       {shipments.length === 0 ? (
         <Panel title="Shipments"><EmptyState text="Book a shipment from an order to see it here." /></Panel>
@@ -79,8 +85,21 @@ export function ShipmentsSection() {
                         <option key={s}>{s}</option>
                       ))}
                     </SelectInput>
-                    <Button variant="ghost" onClick={() => void downloadLabel(shipment.id).catch(() => undefined)}>
-                      Shipping label
+                    <LabelSizePicker />
+                    <Button variant="ghost" onClick={() => void downloadLabel(shipment.id).then(setLabelNote).catch((problem) => setLabelNote(problem instanceof Error ? problem.message : "Could not make the label."))}>
+                      Make label link
+                    </Button>
+                    {shipment.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label</a>}
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        if (!window.confirm(`Delete the shipment for order #${shipment.orderId}? The order stays; its AWB is removed.`)) return;
+                        removeOrderShipments(shipment.orderId);
+                        if (order) patchOrder(order.id, { shipmentId: undefined, trackingId: "" }, `Shipment ${shipment.awb || shipment.id} deleted`);
+                        refresh();
+                      }}
+                    >
+                      Delete shipment
                     </Button>
                     <span className="text-xs text-text-muted">
                       {order ? `${order.items.length} item(s)` : ""} · ₹{order?.total ?? 0}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import OrderPaymentPanel from "@/components/admin/OrderPaymentPanel";
 import { verifyCertificate } from "@/lib/certificates-client";
 import { AccountsSection } from "@/components/admin/AdminAccounts";
 import {
@@ -29,27 +30,39 @@ import {
   type ContentModuleId,
   type SiteFlags,
 } from "@/lib/cms";
-import { partnerSites } from "@/lib/partner-keys";
 import {
   ensureBootstrapped,
   getAccounts,
   getOutbox,
   getSettings,
-  refundOrder,
   saveSettings,
   sendEmail,
   setOrderStatus,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrders } from "@/lib/store";
+import { customerCancellationRefund, getOrderSettings } from "@/lib/integrations";
+import { downloadExcel } from "@/lib/export-file";
 import { useAllArticles, useLiveAnnouncements, useLiveEvents } from "@/lib/use-cms";
-import type { Announcement, Article, ArticleAssignment, ArticleLocaleCopy, ArticleStatus, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
+import type { Announcement, Article, ArticleAssignment, ArticleLocaleCopy, ArticleStatus, ArticleStyle, CaptionedImage, Event, EventTbd, Order, Speaker } from "@/types";
 import { LOCALES, type Locale } from "@/lib/i18n/locales";
 import { ShareBar } from "@/components/common/ShareBar";
 import { articlePublicUrl, articleShareText } from "@/lib/article-display";
 import { getSession } from "@/lib/auth";
 import { displayName } from "@/lib/admin-store";
 import { GalleryField, ImageField } from "@/components/admin/ImageField";
+import {
+  ArticleImportButton,
+  ArticleStyleControls,
+  PublisherLine,
+  RichTextToolbar,
+  exportArticles,
+  notifyArticlePublished,
+  notifyArticleReturned,
+  publisherName,
+  runBulkAction,
+  type BulkAction,
+} from "@/components/admin/ArticleTools";
 import { EventLocationField } from "@/components/events/EventLocationField";
 import type { OrderStatus } from "@/lib/admin-store";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/schedule";
@@ -95,7 +108,7 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const existing = articleId ? getArticle(articleId) : undefined;
   const session = getSession();
   const isAdmin = session?.role === "admin";
-  const [email, setEmail] = useState(() => session?.email ?? "admin@vaidyagogate.org");
+  const [email] = useState(() => session?.email ?? "admin@vaidyagogate.org");
   const [title, setTitle] = useState(existing?.title ?? assignment?.title ?? "");
   const [excerpt, setExcerpt] = useState(existing?.excerpt ?? "");
   const [content, setContent] = useState(existing?.content ?? "");
@@ -105,6 +118,8 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const [coverImage, setCoverImage] = useState(existing?.coverImage ?? "");
   const [images, setImages] = useState<CaptionedImage[]>(existing?.images ?? []);
   const [featured, setFeatured] = useState(Boolean(existing?.featured));
+  const [articlePublishAt, setArticlePublishAt] = useState(toDatetimeLocal(existing?.publishAt));
+  const [articleUnpublishAt, setArticleUnpublishAt] = useState(toDatetimeLocal(existing?.unpublishAt));
   const [assignedTo, setAssignedTo] = useState(existing?.assignedTo ?? assignment?.assignedTo ?? session?.email ?? "");
   const [translations, setTranslations] = useState<Record<string, ArticleLocaleCopy>>(existing?.translations ?? {});
   const [localeEdit, setLocaleEdit] = useState<Locale>("en");
@@ -112,6 +127,11 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
   const [status, setStatus] = useState<ArticleStatus | "">(existing?.status ?? "");
   const [reviewNote, setReviewNote] = useState(existing?.reviewNote ?? "");
   const [error, setError] = useState("");
+  const [articleStyle, setArticleStyle] = useState<ArticleStyle>(existing?.style ?? {});
+  const [emailReaders, setEmailReaders] = useState(false);
+  const [emailNote, setEmailNote] = useState("");
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const translationRef = useRef<HTMLTextAreaElement>(null);
   const staff = getAccounts().filter((account) => account.role === "staff" || account.role === "admin");
 
   const insertImage = (index: number) =>
@@ -138,7 +158,7 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       slug: existing?.slug ?? slugify(title),
       excerpt: excerpt.trim() || content.replace(/\[\[image:\d+\]\]/g, "").trim().slice(0, 160),
       content: content.trim(),
-      author: (session ? displayName(session) : author.trim()) || "VGMF",
+      author: session ? publisherName(session) : author.trim() || publisherName(null),
       publishedByEmail: session?.email || email.trim() || undefined,
       category: category.trim() || "Ayurveda",
       date: existing?.date ?? new Date().toISOString().slice(0, 10),
@@ -151,6 +171,9 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       assignedTo: assignedTo || undefined,
       reviewNote: nextStatus === "published" ? undefined : reviewNote || existing?.reviewNote,
       translations,
+      style: articleStyle,
+      publishAt: fromDatetimeLocal(articlePublishAt),
+      unpublishAt: fromDatetimeLocal(articleUnpublishAt),
     };
     if (!article.tags?.length) article.tags = [article.category];
     try {
@@ -165,6 +188,10 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
       }
       setStatus(nextStatus);
       setSaved(article.slug);
+      if (nextStatus === "published" && existing?.status !== "published") {
+        const sent = notifyArticlePublished(article, { readers: emailReaders, writer: Boolean(existing && existing.publishedByEmail !== session?.email) });
+        setEmailNote(sent ? `Publish email sent to ${sent} recipient${sent === 1 ? "" : "s"}.` : "");
+      }
     } catch {
       setError("The browser storage is full. Use smaller images or image URLs instead of uploads.");
     }
@@ -178,7 +205,7 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
         <h1 className="text-2xl font-bold text-slate-900">{existing ? "Edit article" : "Create article"}</h1>
         <Link href="/admin/articles" className={ghost}>Back to articles</Link>
       </div>
-      <EditorGate moduleId="articles" email={email} onEmail={setEmail} />
+      <PublisherLine user={session} />
       {!isAdmin && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Staff articles go to admin for review before they appear on the public site. You can keep editing at any time.
@@ -207,36 +234,56 @@ export function ArticleEditor({ articleId }: { articleId?: string | null }) {
             <>
               <input className={field} placeholder="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
               <textarea className={field} rows={3} placeholder="Excerpt shown on article cards" value={excerpt} onChange={(event) => setExcerpt(event.target.value)} />
-              <textarea className={`${field} font-mono`} rows={14} placeholder="Article body. Leave a blank line between paragraphs." value={content} onChange={(event) => setContent(event.target.value)} />
+              <RichTextToolbar target={bodyRef} value={content} onChange={setContent} imageCount={images.filter((image) => image.src).length} />
+              <textarea ref={bodyRef} className={field} rows={16} placeholder="Article body. Leave a blank line between paragraphs." value={content} onChange={(event) => setContent(event.target.value)} />
             </>
           ) : (
             <>
               <p className="text-xs text-slate-500">Translation for {LOCALES.find((item) => item.id === localeEdit)?.name}. Leave a field empty to keep the original English.</p>
               <input className={field} placeholder="Translated title" value={translation.title ?? ""} onChange={(event) => setTranslation({ title: event.target.value })} />
               <textarea className={field} rows={3} placeholder="Translated excerpt" value={translation.excerpt ?? ""} onChange={(event) => setTranslation({ excerpt: event.target.value })} />
-              <textarea className={`${field} font-mono`} rows={14} placeholder="Translated body" value={translation.content ?? ""} onChange={(event) => setTranslation({ content: event.target.value })} />
+              <RichTextToolbar target={translationRef} value={translation.content ?? ""} onChange={(next) => setTranslation({ content: next })} imageCount={images.filter((image) => image.src).length} />
+              <textarea ref={translationRef} className={field} rows={16} placeholder="Translated body" value={translation.content ?? ""} onChange={(event) => setTranslation({ content: event.target.value })} />
             </>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             <input
               className={field}
-              placeholder="Published by (account name)"
-              value={session ? displayName(session) : author}
+              placeholder="Publisher"
+              value={session ? publisherName(session) : author}
               onChange={(event) => setAuthor(event.target.value)}
               readOnly={Boolean(session)}
-              title="Articles show the signed-in account name as publisher."
+              title="Admin articles show the Foundation as publisher; staff articles show the writer's name."
             />
             <input className={field} placeholder="Category" value={category} onChange={(event) => setCategory(event.target.value)} />
           </div>
           <input className={field} placeholder="Tags, separated by commas" value={tags} onChange={(event) => setTags(event.target.value)} />
+          <ArticleStyleControls value={articleStyle} onChange={setArticleStyle} />
           <p className="text-xs text-slate-500">
-            Start a line with <code>## </code> for a sub-heading. <code>[[image:2]]</code> on its own line places gallery image 2 inside the article;
-            images not placed in the text are shown as a gallery at the end.
+            Select text and use the toolbar for bold, italic, headings, points, quotes, alignment, links, videos and reference images.
+            Gallery images not placed in the text are shown at the end.
           </p>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)} />
             Feature on the homepage and at the top of Articles
           </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm text-slate-700">
+              Go live at (optional)
+              <input className="input-field mt-1" type="datetime-local" value={articlePublishAt} onChange={(event) => setArticlePublishAt(event.target.value)} />
+            </label>
+            <label className="text-sm text-slate-700">
+              Hide after (optional)
+              <input className="input-field mt-1" type="datetime-local" value={articleUnpublishAt} onChange={(event) => setArticleUnpublishAt(event.target.value)} />
+            </label>
+          </div>
+          {isAdmin && (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={emailReaders} onChange={(event) => setEmailReaders(event.target.checked)} />
+              Email this article to registered readers when it is published
+            </label>
+          )}
+          {emailNote && <p className="text-xs text-emerald-700">{emailNote}</p>}
           {isAdmin && (
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
               Assigned writer
@@ -303,10 +350,15 @@ const statusLabel: Record<ArticleStatus, string> = {
   rejected: "Returned",
 };
 
-export function ArticleAdmin() {
+export function ArticleAdmin({ mode = "all" }: { mode?: "all" | "approvals" }) {
   const articles = useAllArticles();
   const session = getSession();
-  const isAdmin = session?.role === "admin";
+  const isAdmin = session?.role === "admin" || session?.role === "coadmin";
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<BulkAction | "">("");
+  const [filter, setFilter] = useState<ArticleStatus | "all">(mode === "approvals" ? "pending" : "all");
+  const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState("");
   const [assignments, setAssignments] = useState(() => getArticleAssignments());
   const [brief, setBrief] = useState({ title: "", notes: "", assignedTo: "", dueDate: "" });
   const [shareId, setShareId] = useState<string | null>(null);
@@ -338,19 +390,59 @@ export function ArticleAdmin() {
             article.assignedTo?.toLowerCase() === session.email.toLowerCase()
         )
       : articles;
+  const shown = listed.filter(
+    (article) =>
+      (filter === "all" || (article.status ?? "published") === filter) &&
+      (!query.trim() || `${article.title} ${article.category} ${article.author ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
+  );
+  const picked = shown.filter((article) => selected.has(article.id));
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const applyBulk = () => {
+    if (!bulk || !picked.length) return;
+    if (bulk === "delete" && !window.confirm(`Delete ${picked.length} selected article(s)?`)) return;
+    runBulkAction(bulk, picked);
+    setNotice(`${bulk === "export" ? "Exported" : "Updated"} ${picked.length} article${picked.length === 1 ? "" : "s"}.`);
+    setSelected(new Set());
+    setBulk("");
+  };
+  const bulkChoices: { id: BulkAction; label: string; admin?: boolean }[] = [
+    { id: "publish", label: "Approve and publish", admin: true },
+    { id: "return", label: "Return for changes", admin: true },
+    { id: "pending", label: "Send for approval" },
+    { id: "draft", label: "Move to drafts", admin: true },
+    { id: "feature", label: "Feature on homepage", admin: true },
+    { id: "unfeature", label: "Remove from featured", admin: true },
+    { id: "export", label: "Export selected" },
+    { id: "delete", label: "Delete", admin: true },
+  ];
   const sharing = listed.find((article) => article.id === shareId);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Articles</h1>
-          <p className="mt-1 text-sm text-slate-500">Staff drafts wait for admin approval. Share a live article to social networks or copy its link.</p>
+          <h1 className="text-2xl font-bold text-slate-900">{mode === "approvals" ? "Article approvals" : "Articles"}</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {mode === "approvals"
+              ? "Articles sent by staff wait here. Approve to publish them, or return them with a note."
+              : "Staff drafts wait for admin approval. Share a live article to social networks or copy its link."}
+          </p>
         </div>
-        <Link href="/admin/articles/new" className={button}>+ Create article</Link>
+        <div className="flex flex-wrap gap-2">
+          {session && <ArticleImportButton user={session} onDone={setNotice} />}
+          <button type="button" className={ghost} onClick={() => exportArticles(shown)}>Export {filter === "all" ? "all" : statusLabel[filter].toLowerCase()}</button>
+          <Link href="/admin/articles/new" className={button}>+ Create article</Link>
+        </div>
       </div>
+      {notice && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
 
-      {isAdmin && (
+      {isAdmin && mode === "all" && (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
           <p className="font-semibold text-slate-900">Assign an article to write</p>
           <div className="grid gap-3 md:grid-cols-2">
@@ -368,7 +460,7 @@ export function ArticleAdmin() {
         </div>
       )}
 
-      {mine.length > 0 && (
+      {mode === "all" && mine.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <p className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-900">Writing assignments</p>
           <ul>
@@ -397,17 +489,43 @@ export function ArticleAdmin() {
         </div>
       )}
 
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3">
+        <input className={`${field} max-w-xs`} placeholder="Search articles" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <select className={`${field} max-w-[11rem]`} value={filter} onChange={(event) => setFilter(event.target.value as ArticleStatus | "all")}>
+          <option value="all">All statuses</option>
+          {(Object.keys(statusLabel) as ArticleStatus[]).map((key) => <option key={key} value={key}>{statusLabel[key]}</option>)}
+        </select>
+        <span className="mx-1 h-6 w-px bg-slate-200" />
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={shown.length > 0 && picked.length === shown.length}
+            onChange={(event) => setSelected(event.target.checked ? new Set(shown.map((article) => article.id)) : new Set())}
+          />
+          Select all ({picked.length}/{shown.length})
+        </label>
+        <select className={`${field} max-w-[13rem]`} value={bulk} onChange={(event) => setBulk(event.target.value as BulkAction | "")}>
+          <option value="">Bulk action…</option>
+          {bulkChoices.filter((choice) => isAdmin || !choice.admin).map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+        </select>
+        <button type="button" className={button} onClick={applyBulk} disabled={!bulk || !picked.length}>Apply</button>
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
         <ul className="min-w-[36rem]">
-          {listed.map((article) => (
+          {shown.length === 0 && <li className="px-5 py-8 text-center text-sm text-slate-500">{mode === "approvals" ? "Nothing is waiting for approval." : "No articles match."}</li>}
+          {shown.map((article) => (
             <li key={article.id} className="flex flex-col gap-2 border-b border-slate-100 px-5 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              <div className="flex items-start gap-3">
+                <input type="checkbox" className="mt-1" checked={selected.has(article.id)} onChange={() => toggle(article.id)} aria-label={`Select ${article.title}`} />
+                <div>
                 <p className="font-semibold text-slate-900">{article.title}</p>
                 <p className="text-xs text-slate-500">
-                  {statusLabel[article.status ?? "published"]} · {article.category} · Published by {article.author || "VGMF"}
+                  {statusLabel[article.status ?? "published"]} · {article.category} · {article.author && article.author !== publisherName(null) ? `By ${article.author}` : `Published by ${publisherName(null)}`}
                   {article.assignedTo ? ` · Writer ${article.assignedTo}` : ""}
                   {article.reviewNote && (article.status === "rejected" || article.status === "pending") ? ` · Note: ${article.reviewNote}` : ""}
                 </p>
+                </div>
               </div>
               <div className="flex flex-wrap gap-3 text-sm font-semibold">
                 <Link className="text-burgundy" href={`/admin/articles/new?id=${article.id}`}>Edit</Link>
@@ -424,6 +542,7 @@ export function ArticleAdmin() {
                       className="text-emerald-700"
                       onClick={() => {
                         saveArticle({ ...article, status: "published", reviewNote: undefined });
+                        notifyArticlePublished({ ...article, status: "published" }, { readers: false, writer: true });
                       }}
                     >
                       Approve
@@ -434,6 +553,7 @@ export function ArticleAdmin() {
                       onClick={() => {
                         const note = window.prompt("Note for the writer (optional)", article.reviewNote ?? "") ?? "";
                         saveArticle({ ...article, status: "rejected", reviewNote: note.trim() || undefined });
+                        notifyArticleReturned(article, note.trim());
                       }}
                     >
                       Return
@@ -756,35 +876,114 @@ export function EventAdminList() {
   );
 }
 
+type RefundView = "due" | "refunded" | "cancelled" | "refunds" | "all";
+const REFUND_VIEWS: [RefundView, string][] = [
+  ["due", "Cancelled · refund due"],
+  ["refunded", "Cancelled · refunded"],
+  ["cancelled", "All cancelled"],
+  ["refunds", "All refunds"],
+  ["all", "All orders"],
+];
+
+function refundedOf(order: Order) {
+  return order.refundAmount ?? (order.refunds ?? []).reduce((sum, refund) => sum + (Number(refund.amount) || 0), 0);
+}
+
+/** Where a cancelled order stands on its refund. */
+function refundState(order: Order, settings = getOrderSettings()) {
+  const refunded = refundedOf(order);
+  const due = order.status === "Cancelled" ? customerCancellationRefund(order, settings) : 0;
+  const label = due > 0 ? (refunded > 0 ? "Part refunded · more due" : "Refund due") : refunded > 0 ? "Refunded" : order.status === "Cancelled" ? "Nothing to refund" : "—";
+  return { refunded, due, label };
+}
+
 export function RefundsDesk() {
   const { version } = useCommerceMirror();
   const [orders, setOrders] = useState<Order[]>(() => getOrders());
   const refresh = () => setOrders(getOrders());
+  const [open, setOpen] = useState("");
+  const [view, setView] = useState<RefundView>("due");
+  const [query, setQuery] = useState("");
   useEffect(() => {
     setOrders(getOrders());
   }, [version]);
+
+  const settings = getOrderSettings();
+  const rows = orders.map((order) => ({ order, ...refundState(order, settings) }));
+  const matches = (view: RefundView, row: (typeof rows)[number]) =>
+    view === "all" ||
+    (view === "refunds" && row.refunded > 0) ||
+    (row.order.status === "Cancelled" && (view === "cancelled" || (view === "due" && row.due > 0) || (view === "refunded" && row.refunded > 0 && row.due <= 0)));
+  const q = query.trim().toLowerCase();
+  const shown = rows
+    .filter((row) => matches(view, row))
+    .filter((row) => !q || [row.order.id, row.order.deliveryAddress?.fullName, row.order.deliveryAddress?.phone, row.order.deliveryAddress?.email].some((value) => String(value ?? "").toLowerCase().includes(q)));
+  const totalDue = rows.filter((row) => matches("due", row)).reduce((sum, row) => sum + row.due, 0);
+  const totalRefunded = rows.reduce((sum, row) => sum + row.refunded, 0);
+  const inr = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
+
+  const exportRows = () =>
+    downloadExcel(
+      `vgmf-refunds-${view}-${new Date().toISOString().slice(0, 10)}.xls`,
+      "Refunds",
+      ["Order ID", "Date", "Customer", "Phone", "Status", "Payment", "Total", "Refunded", "Refund due", "Refund status", "Cancel reason", "Refund references"],
+      shown.map(({ order, refunded, due, label }) => [
+        order.id,
+        new Date(order.date).toLocaleDateString("en-IN"),
+        order.deliveryAddress?.fullName ?? "",
+        order.deliveryAddress?.phone ?? "",
+        order.status,
+        order.paymentStatus,
+        order.total,
+        refunded,
+        due,
+        label,
+        order.cancelReason ?? "",
+        (order.refunds ?? []).map((refund) => [refund.gatewayRefundId || refund.reference, refund.status].filter(Boolean).join(" ")).join("; "),
+      ])
+    );
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Orders, changes and refunds</h1>
-          <p className="mt-1 text-sm text-slate-500">Advance a status, change it, or issue a refund. New orders are created from the orders desk.</p>
+          <h1 className="text-2xl font-bold text-slate-900">Cancellations and refunds</h1>
+          <p className="mt-1 text-sm text-slate-500">See which cancelled orders still need a refund and which are refunded, then refund from the order.</p>
         </div>
-        <Link href="/admin/commerce/orders" className={button}>Create order</Link>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={ghost} onClick={exportRows}>Excel</button>
+          <Link href="/admin/commerce/orders" className={button}>Open orders</Link>
+        </div>
       </div>
-      {orders.length === 0 && (
-        <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">
-          No store orders yet. Create one from the orders desk, or place a checkout on the shop.
-        </p>
-      )}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase text-slate-500">Refund due</p><p className="mt-1 text-2xl font-bold text-red-700">{rows.filter((row) => matches("due", row)).length} · {inr(totalDue)}</p></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase text-slate-500">Cancelled &amp; refunded</p><p className="mt-1 text-2xl font-bold text-emerald-700">{rows.filter((row) => matches("refunded", row)).length}</p></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-semibold uppercase text-slate-500">Refunded in all</p><p className="mt-1 text-2xl font-bold text-slate-900">{inr(totalRefunded)}</p></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {REFUND_VIEWS.map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setView(id)} className={view === id ? button : ghost}>
+            {label} ({rows.filter((row) => matches(id, row)).length})
+          </button>
+        ))}
+        <input className={`${field} sm:max-w-xs`} placeholder="Search id, name, phone" value={query} onChange={(event) => setQuery(event.target.value)} />
+      </div>
+      {shown.length === 0 && <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500">No orders in this view.</p>}
       <ul className="space-y-3">
-        {orders.map((order) => (
+        {shown.map(({ order, refunded, due, label }) => (
           <li key={order.id} className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-semibold text-slate-900">#{order.id}</p>
-                <p className="text-xs text-slate-500">{order.status} · {order.paymentStatus} · ₹{order.total.toLocaleString("en-IN")}</p>
+                <p className="font-semibold text-slate-900">#{order.id} · {order.deliveryAddress?.fullName ?? ""}</p>
+                <p className="text-xs text-slate-500">
+                  {order.status} · {order.paymentStatus} · {inr(order.total)}
+                  {refunded > 0 ? ` · refunded ${inr(refunded)}` : ""}
+                  {due > 0 ? ` · due ${inr(due)}` : ""}
+                  {order.cancelReason ? ` · ${order.cancelReason}` : ""}
+                </p>
+                {label !== "—" && (
+                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${due > 0 ? "bg-red-50 text-red-700" : refunded > 0 ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{label}</span>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <select
@@ -799,19 +998,12 @@ export function RefundsDesk() {
                     <option key={status}>{status}</option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  className={ghost}
-                  disabled={order.paymentStatus === "Refunded"}
-                  onClick={() => {
-                    refundOrder(order.id);
-                    refresh();
-                  }}
-                >
-                  {order.paymentStatus === "Refunded" ? "Refunded" : "Issue refund"}
+                <button type="button" className={ghost} onClick={() => setOpen(open === order.id ? "" : order.id)}>
+                  {open === order.id ? "Hide payment" : due > 0 ? "Refund now" : "Payment & refunds"}
                 </button>
               </div>
             </div>
+            {open === order.id ? <OrderPaymentPanel order={order} onChange={refresh} /> : null}
           </li>
         ))}
       </ul>
@@ -917,19 +1109,18 @@ export function SupportUsDesk() {
 
 export function CertificateApiDesk() {
   const [number, setNumber] = useState("");
-  const [siteId, setSiteId] = useState<(typeof partnerSites)[number]["id"]>("seminar");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const site = partnerSites.find((item) => item.id === siteId) ?? partnerSites[0];
 
   const run = async () => {
     setBusy(true);
     try {
-      const data = await verifyCertificate(number, site.apiKey);
+      const data = await verifyCertificate(number);
+      const from = data.certificate?.sourceLabel || data.sourceLabel;
       setNote(
         data.verified && data.certificate
-          ? `Verified ${data.certificate.certificateNumber} · ${data.certificate.name} · ${data.certificate.event}.`
-          : `No issued certificate matches that number.`
+          ? `Verified ${data.certificate.certificateNumber} · ${data.certificate.name} · ${data.certificate.event}${from ? ` · ${from}` : ""}.`
+          : data.error || "No issued certificate matches that number on this site, the seminar site or the autism site."
       );
     } catch (error) {
       setNote(error instanceof Error ? error.message : "Verification did not complete.");
@@ -945,15 +1136,8 @@ export function CertificateApiDesk() {
         <p className="mt-1 text-sm text-slate-500">Check a certificate number against this site, the seminar site, or the autism site.</p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <div className="grid gap-3 sm:grid-cols-[1fr_12rem_auto]">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
           <input className={field} value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Certificate number" />
-          <select className={field} value={siteId} onChange={(event) => setSiteId(event.target.value as typeof siteId)}>
-            {partnerSites.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
           <button type="button" disabled={busy} className={button} onClick={() => void run()}>
             {busy ? "Checking…" : "Check"}
           </button>

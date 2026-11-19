@@ -40,6 +40,8 @@ function poolFor(key: PoolKey) {
   const existing = pools.get(key);
   if (existing) return existing;
   const pool = new Pool({ connectionString: url, max: 4, idleTimeoutMillis: 10_000 });
+  // A database restart drops idle connections; without a listener that error crashes the server.
+  pool.on("error", () => undefined);
   pools.set(key, pool);
   return pool;
 }

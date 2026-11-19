@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { collectMobileSnapshot, publishLiveSite } from "@/lib/mobile-publish";
+import { pendingProductIds } from "@/lib/product-data";
+import { hydratePublishedSite } from "@/lib/hydrate-public";
 
 const SETTLE_MS = 1800;
 const HYDRATE_GUARD_MS = 4000;
@@ -30,12 +32,9 @@ export function LivePublishBridge() {
     };
     window.addEventListener("pointerdown", markTouched);
     window.addEventListener("keydown", markTouched);
-    const unlock = window.setTimeout(() => {
-      ready.current = true;
-    }, HYDRATE_GUARD_MS);
-
     const flush = () => {
-      if (!ready.current || !touched.current || busy.current) return;
+      // Product saves that never reached the live site (closed tab, network drop) are sent without waiting for a click.
+      if (!ready.current || busy.current || (!touched.current && !pendingProductIds().length)) return;
       if (!snapshotLooksPublishable()) return;
       busy.current = true;
       void publishLiveSite().finally(() => {
@@ -43,13 +42,30 @@ export function LivePublishBridge() {
       });
     };
 
+    const unlock = window.setTimeout(() => {
+      ready.current = true;
+      if (pendingProductIds().length) flush();
+    }, HYDRATE_GUARD_MS);
+
     const onCms = () => {
       window.clearTimeout(timer.current);
       timer.current = window.setTimeout(flush, SETTLE_MS);
     };
 
+    // The live copy wins quietly: this browser pulls it instead of asking the admin to reload.
+    let pulling = false;
+    const onConflict = () => {
+      if (pulling) return;
+      pulling = true;
+      void hydratePublishedSite().finally(() => {
+        pulling = false;
+      });
+    };
+
     window.addEventListener("vgmf-cms", onCms);
+    window.addEventListener("vgmf-publish-conflict", onConflict);
     return () => {
+      window.removeEventListener("vgmf-publish-conflict", onConflict);
       window.clearTimeout(unlock);
       window.clearTimeout(timer.current);
       window.removeEventListener("pointerdown", markTouched);

@@ -1,23 +1,37 @@
 import { subscribeCms } from "@/lib/cms";
 import { getPublishedFeed } from "@/lib/hydrate-public";
 import type { MessageKey } from "@/lib/i18n/messages";
+import { normalizeFestivals, type FestivalSchedule } from "@/lib/festival-themes";
+import {
+  defaultBirthday,
+  defaultSignupControls,
+  normalizeBirthday,
+  normalizeDisclaimers,
+  normalizeReels,
+  normalizeSignup,
+  type BirthdayControls,
+  type InstagramReel,
+  type SignupControls,
+  type SiteDisclaimer,
+} from "@/lib/site-extras";
 
 const KEY = "vgmf_site_text";
 
 export const homeSections = [
   { id: "hero", label: "Hero slideshow" },
-  { id: "directory", label: "Events / Articles / Clinics shortcuts" },
-  { id: "about", label: "About the Foundation" },
-  { id: "reviews", label: "Seminar voices" },
-  { id: "support", label: "Support Us" },
-  { id: "events", label: "Events & programmes" },
-  { id: "speakers", label: "Speakers" },
-  { id: "awards", label: "Awards" },
-  { id: "legacy", label: "Legacy" },
   { id: "books", label: "Shop & publications" },
+  { id: "directory", label: "Events / Articles / Clinics shortcuts" },
+  { id: "events", label: "Events & programmes" },
   { id: "articles", label: "Articles" },
   { id: "notices", label: "Notice board" },
   { id: "clinics", label: "Clinics" },
+  { id: "about", label: "About the Foundation" },
+  { id: "reviews", label: "Seminar voices" },
+  { id: "support", label: "Support Us" },
+  { id: "speakers", label: "Speakers" },
+  { id: "awards", label: "Awards" },
+  { id: "legacy", label: "Legacy" },
+  { id: "reels", label: "Instagram reels" },
 ] as const;
 
 export type HomeSectionId = (typeof homeSections)[number]["id"];
@@ -56,13 +70,80 @@ export type SiteTheme = {
   trackLink: string;
 };
 
+export type SiteTypography = {
+  /** Google Fonts family for body text. Empty keeps the built-in font. */
+  bodyFont: string;
+  /** Google Fonts family for headings. Empty keeps the built-in font. */
+  headingFont: string;
+  /** Base text size in px. Every size on public pages scales from this. */
+  baseSize: number;
+  /** Heading size as a percentage of the normal size. */
+  headingScale: number;
+};
+
+export const defaultTypography: SiteTypography = { bodyFont: "", headingFont: "", baseSize: 16, headingScale: 100 };
+
+export const bodyFontChoices = ["", "Inter", "Poppins", "Roboto", "Open Sans", "Lato", "Nunito", "Mukta", "Hind", "Noto Sans", "Source Sans 3", "Work Sans"];
+export const headingFontChoices = ["", "Playfair Display", "Merriweather", "Lora", "Noto Serif", "Libre Baskerville", "Cormorant Garamond", "Poppins", "Inter", "Montserrat", "Tiro Devanagari Marathi"];
+
+const FALLBACK_SANS =
+  'var(--font-devanagari), var(--font-kannada), var(--font-tamil), var(--font-malayalam), var(--font-gujarati), "Noto Sans Devanagari", "Nirmala UI", "Segoe UI", system-ui, sans-serif';
+
+export function normalizeTypography(input?: Partial<SiteTypography> | null): SiteTypography {
+  const pick = (value: unknown, list: string[]) => (typeof value === "string" && list.includes(value) ? value : "");
+  const size = Number(input?.baseSize);
+  const scale = Number(input?.headingScale);
+  return {
+    bodyFont: pick(input?.bodyFont, bodyFontChoices),
+    headingFont: pick(input?.headingFont, headingFontChoices),
+    baseSize: Number.isFinite(size) && size ? Math.min(22, Math.max(13, Math.round(size))) : defaultTypography.baseSize,
+    headingScale: Number.isFinite(scale) && scale ? Math.min(150, Math.max(70, Math.round(scale))) : defaultTypography.headingScale,
+  };
+}
+
+/** Applies fonts and text size to the page. Pass null to restore the built-in look (used in admin portals). */
+export function applySiteTypography(typography: SiteTypography | null) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  const t = typography ?? defaultTypography;
+  const families = [t.bodyFont, t.headingFont].filter(Boolean);
+  const linkId = "vgmf-site-fonts";
+  let link = document.getElementById(linkId) as HTMLLinkElement | null;
+  if (families.length) {
+    const href = `https://fonts.googleapis.com/css2?${[...new Set(families)]
+      .map((name) => `family=${name.replace(/ /g, "+")}:wght@400;500;600;700`)
+      .join("&")}&display=swap`;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = linkId;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    if (link.href !== href) link.href = href;
+  } else link?.remove();
+  if (t.bodyFont) root.style.setProperty("--font-sans", `"${t.bodyFont}", ${FALLBACK_SANS}`);
+  else root.style.removeProperty("--font-sans");
+  if (t.headingFont) root.style.setProperty("--font-serif", `"${t.headingFont}", Georgia, serif`);
+  else root.style.removeProperty("--font-serif");
+  root.style.fontSize = t.baseSize === 16 ? "" : `${t.baseSize}px`;
+  root.style.setProperty("--heading-scale", String(t.headingScale / 100));
+}
+
 export type SiteText = {
   text: Partial<Record<MessageKey, string>>;
   pages: Record<string, PageCopy>;
   homeOrder: HomeSectionId[];
   homeHidden: Partial<Record<HomeSectionId, boolean>>;
+  /** Keys are home:section, page:id, or account:/path. True shows an under-development notice. */
+  developing: Partial<Record<string, boolean>>;
   reviews: ReviewsControls;
   theme: SiteTheme;
+  typography?: SiteTypography;
+  festivals?: FestivalSchedule[];
+  disclaimers?: SiteDisclaimer[];
+  signup?: SignupControls;
+  reels?: InstagramReel[];
+  birthday?: BirthdayControls;
 };
 
 export const defaultSiteTheme: SiteTheme = {
@@ -233,8 +314,15 @@ export function defaultSiteText(): SiteText {
     pages: {},
     homeOrder: homeSections.map((section) => section.id),
     homeHidden: {},
+    developing: {},
     reviews: { ...defaultReviewsControls },
     theme: { ...defaultSiteTheme },
+    typography: { ...defaultTypography },
+    festivals: [],
+    disclaimers: [],
+    signup: { ...defaultSignupControls, fields: [] },
+    reels: [],
+    birthday: { ...defaultBirthday },
   };
 }
 
@@ -255,12 +343,21 @@ export function normalizeSiteText(input?: Partial<SiteText> | null): SiteText {
     pages: input.pages && typeof input.pages === "object" ? input.pages : {},
     homeOrder: order,
     homeHidden: input.homeHidden && typeof input.homeHidden === "object" ? input.homeHidden : {},
+    developing: Object.fromEntries(
+      Object.entries(input.developing ?? {}).filter(([, value]) => value === true)
+    ),
     reviews: {
       ...base.reviews,
       ...(input.reviews ?? {}),
       autoplaySeconds: Number.isFinite(seconds) ? Math.min(60, Math.max(0, Math.round(seconds))) : base.reviews.autoplaySeconds,
     },
     theme: normalizeTheme(input.theme),
+    typography: normalizeTypography(input.typography),
+    festivals: normalizeFestivals(input.festivals),
+    disclaimers: normalizeDisclaimers(input.disclaimers),
+    signup: normalizeSignup(input.signup),
+    reels: normalizeReels(input.reels),
+    birthday: normalizeBirthday(input.birthday),
   };
 }
 
@@ -306,6 +403,14 @@ export function saveSiteText(next: SiteText) {
 export function applyPublishedSiteText(value: Partial<SiteText> | undefined) {
   if (typeof window === "undefined" || !value) return;
   window.localStorage.setItem(KEY, JSON.stringify(normalizeSiteText(value)));
+}
+
+export function developingKey(kind: "home" | "page" | "account", id: string) {
+  return `${kind}:${id}`;
+}
+
+export function isDeveloping(kind: "home" | "page" | "account", id: string, text = getSiteText()) {
+  return text.developing?.[developingKey(kind, id)] === true;
 }
 
 export function textOverride(key: MessageKey): string | undefined {

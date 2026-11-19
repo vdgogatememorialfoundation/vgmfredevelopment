@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { denyUnlessPortal } from "@/lib/server/portal-auth";
 import { getCertificateRecord, publicCertificate, revokeCertificateRecord, upsertCertificate } from "@/lib/server/certificates";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,6 +14,8 @@ export async function GET(_request: NextRequest, context: Params) {
 }
 
 export async function PATCH(request: NextRequest, context: Params) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
   const { id } = await context.params;
   const existing = getCertificateRecord(id);
   if (!existing) return NextResponse.json({ ok: false, error: "Certificate not found." }, { status: 404 });
@@ -33,7 +36,9 @@ export async function PATCH(request: NextRequest, context: Params) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: Params) {
+export async function DELETE(request: NextRequest, context: Params) {
+  const denied = denyUnlessPortal(request);
+  if (denied) return denied;
   const { id } = await context.params;
   if (!revokeCertificateRecord(id)) return NextResponse.json({ ok: false, error: "Certificate not found." }, { status: 404 });
   return NextResponse.json({ ok: true });

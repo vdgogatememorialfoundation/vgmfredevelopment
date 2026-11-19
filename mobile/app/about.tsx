@@ -38,12 +38,27 @@ export default function AboutScreen() {
   const { feed, loading, refresh } = useFeed();
   const theme = useTheme();
   const about = resolvedAbout(feed?.about);
+  const foundation = ((feed?.about?.foundation ?? {}) as { title?: string; intro?: string; body?: string });
+  const sections = (Array.isArray(feed?.about?.sections) ? feed?.about?.sections : []) as { id?: string; title?: string; body?: string }[];
   if (loading && !feed) return <Loading />;
   return (
     <Screen refreshing={loading} onRefresh={refresh}>
       <Kicker>Preserving Ayurveda</Kicker>
       <Text style={{ fontSize: 22, color: theme.colors.primary, fontFamily: theme.fontFamily, marginBottom: 8 }}>{SITE.tagline}</Text>
       <PageHeader kicker="About the Foundation" title={about.title} subtitle={about.intro} />
+      {foundation.intro ? (
+        <Card>
+          <Heading>{foundation.title || "About the Foundation"}</Heading>
+          <Paragraphs text={foundation.intro} />
+          {foundation.body ? <Paragraphs text={foundation.body} /> : null}
+        </Card>
+      ) : null}
+      {sections.map((item) => (
+        <Card key={String(item.id ?? item.title)}>
+          <Heading>{String(item.title ?? "")}</Heading>
+          <Paragraphs text={String(item.body ?? "")} />
+        </Card>
+      ))}
       <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
         <Stat value="1933" label="Vd. R. B. Gogate born" />
         <Stat value="2015" label="Work carried forward" />
@@ -96,8 +111,8 @@ export default function AboutScreen() {
 function Stat({ value, label }: { value: string; label: string }) {
   const theme = useTheme();
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 14, padding: 12 }}>
-      <Text style={{ fontSize: 22, fontWeight: "800", color: theme.colors.primary, fontFamily: theme.fontFamily }}>{value}</Text>
+    <View style={{ flex: 1, backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, padding: 12 }}>
+      <Text style={{ fontSize: 22, fontWeight: "600", color: theme.colors.primary, fontFamily: theme.fontFamily }}>{value}</Text>
       <Text style={{ color: theme.colors.muted, fontSize: 11, marginTop: 4 }}>{label}</Text>
     </View>
   );

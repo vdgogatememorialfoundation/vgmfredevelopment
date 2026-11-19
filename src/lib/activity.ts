@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { emailAccountActivity } from "@/lib/account-mail";
+import { logAudit } from "@/lib/audit";
 
 const KEY = "vgmf_account_activity";
 
@@ -41,6 +42,7 @@ export function recordActivity(input: Omit<AccountActivity, "id" | "at" | "userA
     by: input.by,
   };
   write([row, ...read()]);
+  logAudit(`Account ${row.kind}`, row.email, [row.detail, row.by && row.by !== row.email ? `by ${row.by}` : ""].filter(Boolean).join(" · "));
   try {
     emailAccountActivity(row);
   } catch {

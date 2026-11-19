@@ -115,7 +115,21 @@ export function statusStamp(at?: string, country?: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
-  return `${text} ${zoneSuffix(zone)}`;
+  return zone === "UTC" ? `${text} UTC` : text;
+}
+
+/** Weekday and date only, for delivery steps. Customers see the day, not the clock. */
+export function statusDay(at?: string, country?: string) {
+  if (!at) return "";
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return deliveryDatePhrase(at);
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: clockZone(country),
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
 function istDay(ms: number, zone = "Asia/Kolkata") {
@@ -133,6 +147,15 @@ function istDay(ms: number, zone = "Asia/Kolkata") {
 export function deliveryDatePhrase(text?: string) {
   const trimmed = text?.trim() ?? "";
   if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed) && Number.isFinite(Date.parse(trimmed))) {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(trimmed));
+  }
   return trimmed
     .replace(/,?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?/gi, "")
     .replace(/\s+(?:IST|UTC)\b/gi, "")
@@ -168,4 +191,10 @@ export function deliveryExpectation(status: string, expectedText?: string, now =
     month: "short",
   }).format(new Date(expected));
   return `Delivery expected by ${dateLabel}`;
+}
+
+/** The courier's own promised date once it has one, otherwise the date promised at checkout. */
+export function agreedDelivery(eta: string | undefined, courier: string | undefined, around: number) {
+  const promised = eta?.replace(/^(today|tomorrow),\s*/i, "").trim() || "";
+  return parseExpected(courier, around) != null ? courier || promised : promised;
 }

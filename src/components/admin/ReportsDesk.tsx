@@ -19,6 +19,12 @@ type Report = {
 function reports(): { group: string; items: Report[] }[] {
   const accounts = getAccounts();
   const orders = getOrders();
+  const awbsFor = (order: (typeof orders)[number]) =>
+    getShipments()
+      .filter((shipment) => shipment.orderId === order.id)
+      .map((shipment) => shipment.awb)
+      .filter(Boolean)
+      .join(", ") || order.trackingId || "";
   const shipments = getShipments();
   const tickets = getTickets();
   const applications = getAllApplications();
@@ -214,21 +220,94 @@ function reports(): { group: string; items: Report[] }[] {
       items: [
         {
           id: "orders",
-          title: "Orders",
-          description: "Shop and POS orders with payment and fulfilment status.",
+          title: "Orders (full detail)",
+          description: "Every order with customer, full address, products and quantities, amounts, payment, status and AWB.",
           file: "vgmf-orders",
-          headers: ["Order ID", "Date", "Customer", "Country", "Status", "Payment", "Total", "Channel"],
+          headers: ["Order ID", "Date", "Customer", "Phone", "Email", "Address", "City", "State", "Pincode", "Country", "Delivery", "Products (qty)", "Units", "Subtotal", "Discount", "GST", "Shipping", "Total", "Payment method", "Payment status", "Payment ref", "Status", "AWB", "Courier", "Channel"],
           rows: () =>
-            orders.map((order) => [
-              order.id,
-              order.date,
-              order.deliveryAddress?.fullName || order.userId,
-              order.deliveryAddress?.country || order.deliveryAddress?.countryCode || "",
-              order.status,
-              order.paymentStatus,
-              order.total,
-              order.channel ?? "online",
-            ]),
+            orders.map((order) => {
+              const a = order.deliveryAddress;
+              return [
+                order.id,
+                order.date,
+                a?.fullName || order.userId,
+                a?.phone ?? "",
+                a?.email ?? "",
+                [a?.line1, a?.landmark].filter(Boolean).join(", "),
+                a?.city ?? "",
+                a?.state ?? "",
+                a?.pincode ?? "",
+                a?.country || a?.countryCode || "",
+                order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier",
+                order.items.map((item) => `${item.title} × ${item.quantity}`).join("; "),
+                order.items.reduce((sum, item) => sum + item.quantity, 0),
+                order.subtotal,
+                order.discount,
+                order.gst,
+                order.shipping,
+                order.total,
+                order.paymentMethod ?? "",
+                order.paymentStatus,
+                order.paymentRef ?? "",
+                order.status,
+                awbsFor(order),
+                order.courierName ?? "",
+                order.channel ?? "online",
+              ];
+            }),
+        },
+        {
+          id: "order-items",
+          title: "Order items (one row per product)",
+          description: "What was bought in each order: SKU, product, quantity, rate and amount, with the customer and address.",
+          file: "vgmf-order-items",
+          headers: ["Order ID", "Date", "Customer", "Phone", "Email", "Address", "Pincode", "SKU", "Product", "Qty", "Rate", "Amount", "Order total", "Payment method", "Payment status", "Status", "Delivery", "AWB"],
+          rows: () =>
+            orders.flatMap((order) => {
+              const a = order.deliveryAddress;
+              return order.items.map((item) => [
+                order.id,
+                order.date,
+                a?.fullName || order.userId,
+                a?.phone ?? "",
+                a?.email ?? "",
+                [a?.line1, a?.landmark, a?.city, a?.state, a?.country].filter(Boolean).join(", "),
+                a?.pincode ?? "",
+                item.sku || item.bookId,
+                item.title,
+                item.quantity,
+                item.price,
+                item.price * item.quantity,
+                order.total,
+                order.paymentMethod ?? "",
+                order.paymentStatus,
+                order.status,
+                order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier",
+                awbsFor(order),
+              ]);
+            }),
+        },
+        {
+          id: "products-sold",
+          title: "Products sold",
+          description: "Total quantity and amount sold per product across all orders (cancelled orders left out).",
+          file: "vgmf-products-sold",
+          headers: ["SKU", "Product", "Qty sold", "Amount", "Orders"],
+          rows: () => {
+            const map = new Map<string, { sku: string; title: string; qty: number; amount: number; orders: Set<string> }>();
+            for (const order of orders) {
+              if (order.status === "Cancelled") continue;
+              for (const item of order.items) {
+                const key = item.sku || item.bookId;
+                const row = map.get(key) ?? { sku: key, title: item.title, qty: 0, amount: 0, orders: new Set<string>() };
+                row.qty += item.quantity;
+                row.amount += item.price * item.quantity;
+                row.orders.add(order.id);
+                map.set(key, row);
+              }
+            }
+            return [...map.values()].sort((x, y) => y.qty - x.qty).map((row) => [row.sku, row.title, row.qty, row.amount, row.orders.size]);
+          },
         },
         {
           id: "payments",

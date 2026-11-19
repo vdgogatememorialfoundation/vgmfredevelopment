@@ -132,4 +132,4 @@
     .vl-tx td::before { content: attr(data-label); color: #64748b; font-weight: 700; }
 }
 
-.hidden { display: none; }
+#vl-admin-root .hidden { display: none; }

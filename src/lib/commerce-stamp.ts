@@ -56,3 +56,15 @@ export function orderBelongsTo(
   if (userId && (ids.includes(userId) || (email && userId.toLowerCase() === email))) return true;
   return phones.some((phone) => phonesMatch(order.deliveryAddress?.phone, phone));
 }
+
+/** An open page that re-runs a check must not stack copies of the same entry (same status and note). */
+export function uniqueHistory<T extends { status?: string; note?: string }>(history: T[]) {
+  const seen = new Set<string>();
+  return history.filter((entry) => {
+    if (!entry?.note) return true;
+    const key = `${entry.status}\u0000${entry.note}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}

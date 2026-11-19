@@ -2,11 +2,13 @@
 
 import { useEffect } from "react";
 import { getSettings } from "@/lib/admin-store";
+import { cookieChoice } from "@/components/common/CookieConsent";
 
 export function GoogleAnalytics() {
   useEffect(() => {
+    const start = () => {
     const id = getSettings().apiKeys.googleAnalytics?.trim();
-    if (!id || document.getElementById("vgmf-ga")) return;
+    if (!id || cookieChoice() !== "all" || document.getElementById("vgmf-ga")) return;
 
     const script = document.createElement("script");
     script.id = "vgmf-ga";
@@ -18,6 +20,10 @@ export function GoogleAnalytics() {
     inline.id = "vgmf-ga-inline";
     inline.text = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${id.replace(/'/g, "")}',{anonymize_ip:true});`;
     document.head.appendChild(inline);
+    };
+    start();
+    window.addEventListener("vgmf:cookie-consent", start);
+    return () => window.removeEventListener("vgmf:cookie-consent", start);
   }, []);
 
   return null;

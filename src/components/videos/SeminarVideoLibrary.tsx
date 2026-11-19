@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useAuth } from "@/components/auth/AuthContext";
-import { SEMINAR_ADSENSE_CLIENT, seminarDisplaySlot, seminarSavedTag, seminarVideoAdTag } from "@/lib/seminar-ads";
+import { SEMINAR_ADSENSE_CLIENT, SEMINAR_DEFAULT_SLOT, seminarDisplaySlot, seminarSavedTag, seminarVideoAdTag } from "@/lib/seminar-ads";
 
 type Access = {
   allowed?: boolean;
@@ -145,7 +145,8 @@ type AdRuntime = {
 
 const HLS_SRC = "https://seminar.vaidyagogate.org/vendor/hls.light.min.js?v=1.7.3";
 const IMA_SRC = "https://imasdk.googleapis.com/js/sdkloader/ima3.js";
-const MIDROLL_AFTER_SEC = 8 * 60;
+/** Mid-roll ad breaks repeat at this interval, like YouTube, on videos at least this long. */
+const MIDROLL_EVERY_SEC = 8 * 60;
 
 function money(value?: number) {
   return `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -227,6 +228,9 @@ function loadScript(src: string, marker: string) {
   });
 }
 
+/** One ad after this many video cards in a seminar year. */
+const VIDEOS_PER_AD = 4;
+
 function AdBanner({ slot }: { slot: string }) {
   const pushed = useRef(false);
   useEffect(() => {
@@ -242,11 +246,12 @@ function AdBanner({ slot }: { slot: string }) {
   return (
     <ins
       className="adsbygoogle my-4 block"
-      style={{ display: "block" }}
+      style={{ display: "block", textAlign: "center" }}
       data-ad-client={SEMINAR_ADSENSE_CLIENT}
       data-ad-slot={slot}
-      data-ad-format="auto"
-      data-full-width-responsive="true"
+      {...(slot === SEMINAR_DEFAULT_SLOT
+        ? { "data-ad-layout": "in-article", "data-ad-format": "fluid" }
+        : { "data-ad-format": "auto", "data-full-width-responsive": "true" })}
     />
   );
 }
@@ -258,7 +263,7 @@ export function SeminarVideoLibrary() {
   const adDisplayRef = useRef<{ initialize: () => void; destroy: () => void } | null>(null);
   const adsRef = useRef<AdRuntime | null>(null);
   const phaseRef = useRef<"idle" | "pre" | "content" | "mid" | "post">("idle");
-  const midRef = useRef(false);
+  const midRef = useRef(MIDROLL_EVERY_SEC);
   const hlsRef = useRef<{ destroy: () => void; stopLoad: () => void; startLoad: () => void; recoverMediaError: () => void } | null>(null);
   const playRef = useRef<{ token: string; videoId: number; timer: number } | null>(null);
   const catalogRef = useRef<Catalog | null>(null);
@@ -332,7 +337,7 @@ export function SeminarVideoLibrary() {
   const releaseAds = useCallback((video: HTMLVideoElement | null) => {
     const runtime = adsRef.current;
     phaseRef.current = "idle";
-    midRef.current = false;
+    midRef.current = MIDROLL_EVERY_SEC;
     if (runtime) {
       runtime.cancelled = true;
       runtime.settle = null;
@@ -497,16 +502,12 @@ export function SeminarVideoLibrary() {
       requestBreak("post", 0, () => undefined);
     };
     const onTime = () => {
-      if (runtime.savedTag || runtime.cancelled || midRef.current || phaseRef.current !== "content") return;
+      if (runtime.savedTag || runtime.cancelled || phaseRef.current !== "content") return;
       const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : durationHint;
-      if (duration < MIDROLL_AFTER_SEC) return;
-      const mark = duration / 2;
-      if (video.currentTime > mark + 15) {
-        midRef.current = true;
-        return;
-      }
-      if (video.currentTime < Math.max(60, mark)) return;
-      midRef.current = true;
+      if (duration < MIDROLL_EVERY_SEC || video.currentTime < midRef.current) return;
+      // A seek past several breaks plays one break, then the schedule continues from here.
+      midRef.current = (Math.floor(video.currentTime / MIDROLL_EVERY_SEC) + 1) * MIDROLL_EVERY_SEC;
+      if (duration - video.currentTime < 60) return;
       requestBreak("mid", Math.round(video.currentTime * 1000), () => {
         void video.play().catch(() => undefined);
       });
@@ -982,7 +983,8 @@ export function SeminarVideoLibrary() {
               ) : null}
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              {albums.map((album) => (
+              {[
+                ...albums.map((album) => (
                 <article key={album.id} className="rounded-2xl border border-border bg-white p-5 lg:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-burgundy">Album</p>
                   <h3 className="mt-1 font-semibold text-ink">{album.title}</h3>
@@ -993,10 +995,15 @@ export function SeminarVideoLibrary() {
                     ))}
                   </div>
                 </article>
-              ))}
-              {singles.map((item) => (
-                <article key={item.id} className="rounded-2xl border border-border bg-white p-5">{renderCard(item, false)}</article>
-              ))}
+                )),
+                ...singles.map((item) => (
+                  <article key={item.id} className="rounded-2xl border border-border bg-white p-5">{renderCard(item, false)}</article>
+                )),
+              ].flatMap((card, index, cards) =>
+                slot && (index + 1) % VIDEOS_PER_AD === 0 && index < cards.length - 1
+                  ? [card, <div key={`ad-${year.year}-${index}`} className="lg:col-span-2"><AdBanner slot={slot} /></div>]
+                  : [card]
+              )}
             </div>
           </section>
         );

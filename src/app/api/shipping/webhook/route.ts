@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listWebhooks, pushWebhook } from "@/lib/server/webhooks";
+import { refreshStoredShipment } from "@/lib/server/live-track";
+import { listShopShipments } from "@/lib/server/shop-shipments";
 
 /**
  * Shiprocket Settings → API → Webhooks.
@@ -21,6 +23,9 @@ export async function POST(request: NextRequest) {
     status,
     payload: body,
   });
+  // Undelivered, delivery failed, RTO and every other courier update reaches the order straight away.
+  const shipment = awb ? listShopShipments().find((row) => row.awb === awb && row.note !== "Cancelled") : undefined;
+  if (shipment) await refreshStoredShipment(shipment.orderId, shipment.id).catch(() => undefined);
   return NextResponse.json({ ok: true });
 }
 

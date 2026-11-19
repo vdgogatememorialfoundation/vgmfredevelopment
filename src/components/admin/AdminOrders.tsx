@@ -1,5 +1,14 @@
 "use client";
 
+import { hideShipping, shippingSplit } from "@/lib/order-charges";
+import { siteConfig } from "@/lib/constants";
+import { uploadMediaFile } from "@/lib/media-client";
+import { getSession } from "@/lib/auth";
+import OrderFeedback from "@/components/store/OrderFeedback";
+import { DIRECT_COURIERS } from "@/lib/couriers";
+import { isDeskScan, isFailedAttempt } from "@/lib/order-pipeline";
+import { splitBlocker, splitLedger } from "@/lib/split-order";
+import { collectedAmount } from "@/lib/transactions";
 import { useEffect, useRef, useState } from "react";
 import {
   cancelOrder,
@@ -15,19 +24,30 @@ import {
   printOrderInvoice,
   printOrdersPdf,
   printPackagingSlip,
+  printPackagingSlips,
   recordPayment,
   maxRefundable,
-  refundToStoreCredit,
   resaveOrder,
   setOrderStatus,
+  recordBalancePayment,
+  recordCourierPayment,
+  convertToStorePickup,
+  convertToShipping,
+  requestAddressCorrection,
+  setPickupWindow,
+  convertToPreorder,
+  markPartiallyPaid,
+  markShippingDue,
+  addExtraCharge,
 } from "@/lib/admin-store";
 import { useCommerceMirror } from "@/lib/commerce-sync";
-import { getOrders, getReturnRequest, initiateReturn, reviewReplacementRequest, updateReturnRequest } from "@/lib/store";
-import { getLiveBooks } from "@/lib/product-data";
-import { getIntegrations, getOrderSettings, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
+import { advanceReturnRequest, getOrders, getReturnRequest, initiateReturn, recordReturnInspection, reviewReplacementRequest, sendReplacementAfterInspection, updateReturnRequest } from "@/lib/store";
+import { currentProductTitle, getLiveBooks, orderItemBatch } from "@/lib/product-data";
+import { getIntegrations, getOrderSettings, orderStatusText, packingChargeFor, preorderLate, shippingFeeFor, shippingFeeSummary } from "@/lib/integrations";
 import {
   attachManualTracking,
-  bookShipment,
+  attachDirectTracking,
+  bookPickedCourier,
   MANUAL_PORTALS,
   cancelShipment,
   dropOrderShipments,
@@ -37,30 +57,45 @@ import {
   rescheduleOwnDelivery,
   downloadManifest,
   fetchCourierRates,
+  selectPreorderCourier,
+  orderDims,
   orderWeightKg,
   reallocateCourier,
   schedulePickup,
   trackShipment,
   type RateQuote,
 } from "@/lib/shipping-client";
-import { createPaymentLink, paymentMode, refreshPaymentLink, refundThroughGateway } from "@/lib/payments-client";
+import RefundDetails from "@/components/store/RefundDetails";
+import { changeBalanceLinkExpiry, changeOrderLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
 import { deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
-import { isOwnFleet } from "@/lib/courier-label";
+import { isOwnFleet, bookedViaLabel } from "@/lib/courier-label";
 import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
-import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput } from "@/components/admin/AdminUI";
+import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput, LinkText } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
 import { accountToDelivery } from "@/lib/account-search";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, isValidPostal, statesFor } from "@/lib/geo";
 import { fetchPostalPlace, postalLooksComplete } from "@/lib/postal-lookup";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { goswiftNdrRequest, listPickupLocations } from "@/lib/shipping-client";
+import ItemTotalsStrip from "@/components/store/ItemTotalsStrip";
+import { itemTotals } from "@/lib/order-item-totals";
+import { assignPicker, getOrder as getStoredOrder, orderFullyPaid, orderLanguages, patchOrder as patchStoredOrder, reassignPickPack, cancelPicking, splitOrder, hideShipmentScan, removeHistoryEntry, setRefundCreditDate } from "@/lib/admin-store";
+import LabelSizePicker from "@/components/admin/LabelSizePicker";
+import { BulkOrderForm, OrderImport } from "@/components/admin/BulkOrders";
+import { BulkShipCourier } from "@/components/admin/BulkShipCourier";
+import { ResendEmailButton } from "@/components/admin/EmailLogDesk";
+import { beep } from "@/lib/scan-beep";
+import { APPROVAL_LABELS, requestApproval } from "@/lib/approvals";
+import type { ApprovalRequest } from "@/types";
 
 const ALL_STATUSES: Order["status"][] = [
   "Pending",
   "Processing",
+  "Awaiting Confirmation",
   "Ordered",
   "Accepted",
   "Packed",
@@ -72,6 +107,45 @@ const ALL_STATUSES: Order["status"][] = [
   "Failed",
   "Cancelled",
 ];
+/** Summary tiles count several statuses; clicking a tile filters to the same set. */
+const PACKED_STATUSES = ["Packed", "Ready to Ship", "To Ship"];
+/** "Confirmed orders" lists only orders still to be sent; these have their own chips. */
+const PICK_STAGES: Record<string, string> = {
+  none: "No picker",
+  assigned: "Picker assigned (not started)",
+  picking: "Picking",
+  picked: "Picked · waiting for packer",
+  packing: "Packing",
+  packed: "Packed",
+};
+
+function pickStage(order: Order) {
+  const pick = order.pick;
+  if (!pick) return "none";
+  if (pick.packedAt) return "packed";
+  if (pick.pickedAt) return pick.boxScannedAt || pick.orderScannedAt || Object.keys(pick.packScan ?? {}).length ? "packing" : "picked";
+  return pick.acceptedAt ? "picking" : "assigned";
+}
+
+const CLOSED_OR_SENT: Order["status"][] = ["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"];
+/** The Paid chip lists paid orders still to be packed or booked; To Ship and later have their own chips. */
+const PAID_CHIP_HIDES: Order["status"][] = [...CLOSED_OR_SENT, "Ready to Ship", "To Ship"];
+/** Status chip/filter match: the Packed chip leaves out paid orders (they are listed under Paid and To Ship). */
+const inStatus = (order: Order, status: string) => order.status === status && !(status === "Packed" && order.paymentStatus === "Paid");
+const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
+  "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
+  "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) && order.paymentStatus !== "Paid" },
+  "group:to-ship": { label: "To Ship (fully paid · book courier / waiting for pickup)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
+  "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => order.status === "Shipped" || order.status === "Out for Delivery" },
+};
+/** Store pickup has its own steps; the stored status stays canonical. */
+const PICKUP_STATUSES: { status: Order["status"]; label: string }[] = [
+  { status: "Awaiting Confirmation", label: "Awaiting Confirmation" },
+  { status: "Ordered", label: "Order Confirmed" },
+  { status: "Packed", label: "Ready for Pickup" },
+  { status: "Delivered", label: "Picked Up" },
+  { status: "Cancelled", label: "Cancelled" },
+];
 const PAYMENT_TONES: Record<string, string> = {
   Paid: "bg-emerald-50 text-emerald-700",
   Pending: "bg-amber-50 text-amber-700",
@@ -79,7 +153,7 @@ const PAYMENT_TONES: Record<string, string> = {
   Refunded: "bg-slate-100 text-slate-600",
   "Partially Refunded": "bg-amber-50 text-amber-700",
 };
-const PAYMENT_METHODS = ["UPI", "Bank transfer", "Cash", "Card (POS)", "Cheque", "Razorpay (manual)", "Cash on delivery"];
+const PAYMENT_METHODS = ["UPI", "Bank transfer", "Cash", "Card (POS)", "Cheque", "Razorpay (manual)", "Cash on delivery", "Cash at Store"];
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
@@ -93,18 +167,64 @@ export function OrdersDashboard() {
   const [version, refresh] = useOrdersVersion();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showBulk, setShowBulk] = useState<"grid" | "import" | null>(null);
   const [statusFilter, setStatusFilter] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All");
+  const [languageFilter, setLanguageFilter] = useState("All");
+  const [productFilter, setProductFilter] = useState("All");
+  const [modeFilter, setModeFilter] = useState("All");
+  const [pickFilter, setPickFilter] = useState("All");
+  const [pickerFilter, setPickerFilter] = useState("All");
+  const [sortBy, setSortBy] = useState("newest");
+  const [shipOne, setShipOne] = useState(false);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [bulkBusy, setBulkBusy] = useState("");
+  const [pickStaff, setPickStaff] = useState("");
   const [bulkNote, setBulkNote] = useState("");
 
-  const orders = getOrders();
+  const allOrders = getOrders();
+  // Split parents are audit records (their child orders do the work), so they stay out of the working lists and counts.
+  const orders = allOrders.filter((order) => !order.splitInto?.length);
+  const splitParents = allOrders.filter((order) => order.splitInto?.length);
   void version;
   void remoteVersion;
-  const filtered = orders
-    .filter((order) => statusFilter === "All" || order.status === statusFilter)
+  const seenOrders = useRef<Set<string> | null>(null);
+  const [newOrders, setNewOrders] = useState<string[]>([]);
+  const orderIds = orders.map((order) => order.id).join(",");
+  useEffect(() => {
+    const ids = orderIds ? orderIds.split(",") : [];
+    if (!seenOrders.current) {
+      seenOrders.current = new Set(ids);
+      const wanted = new URLSearchParams(window.location.search).get("order");
+      if (wanted) setTimeout(() => setSelectedId(wanted), 0);
+      return;
+    }
+    const seen = seenOrders.current;
+    const placed = new Map(orders.map((order) => [order.id, Date.parse(order.date)]));
+    const unseen = ids.filter((id) => !seen.has(id));
+    unseen.forEach((id) => seen.add(id));
+    // Only orders placed in the last 30 minutes count as new; older ones are synced copies.
+    const fresh = unseen.filter((id) => Date.now() - (placed.get(id) ?? 0) < 30 * 60 * 1000);
+    if (!fresh.length) return;
+    beep("delivered");
+    setTimeout(() => setNewOrders((current) => [...fresh, ...current].slice(0, 10)), 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderIds]);
+  const catalogue = getLiveBooks();
+  const languagesOf = (order: Order) => orderLanguages(order, catalogue);
+  const languages = [...new Set(orders.flatMap(languagesOf))].sort();
+  const filtered = (statusFilter === "split" ? splitParents : statusFilter === "Everything" || query.trim() ? allOrders : orders)
+    .filter((order) =>
+      statusFilter === "All"
+        ? Boolean(query.trim()) || (paymentFilter === "Paid" ? !PAID_CHIP_HIDES.includes(order.status) : !CLOSED_OR_SENT.includes(order.status) || paymentFilter !== "All")
+        : statusFilter === "Everything" || statusFilter === "split" || (STATUS_GROUPS[statusFilter]?.test(order) ?? inStatus(order, statusFilter))
+    )
+    .filter((order) => modeFilter === "All" || order.deliveryMode === modeFilter)
+    .filter((order) => pickFilter === "All" || pickStage(order) === pickFilter)
+    .filter((order) => pickerFilter === "All" || order.pick?.assignee === pickerFilter || order.pick?.packer === pickerFilter)
+    .filter((order) => languageFilter === "All" || languagesOf(order).includes(languageFilter))
+    .filter((order) => productFilter === "All" || order.items.some((item) => (catalogue.find((book) => book.id === item.bookId)?.productType === "other" ? "Other" : "Books") === productFilter))
     .filter((order) => paymentFilter === "All" || order.paymentStatus === paymentFilter)
     .filter((order) => {
       const q = query.trim().toLowerCase();
@@ -113,17 +233,67 @@ export function OrdersDashboard() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
     })
+    .sort((a, b) =>
+      sortBy === "oldest" ? Date.parse(a.date) - Date.parse(b.date)
+        : sortBy === "amount" ? b.total - a.total
+          : sortBy === "newest" ? Date.parse(b.date) - Date.parse(a.date)
+            : 0
+    )
     .slice(0, 300);
   const selected = selectedId ? getOrderByAdmin(selectedId) : null;
 
   const selectedIds = filtered.filter((order) => picked[order.id]).map((order) => order.id);
-  const toPack = orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length;
-  const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery").length;
-  const toShip = orders.filter((order) => order.status === "To Ship" || order.status === "Ready to Ship" || order.status === "Packed").length;
+  const toPack = orders.filter(STATUS_GROUPS["group:to-pack"].test).length;
+  const packedPaymentDue = orders.filter(STATUS_GROUPS["group:payment-due"].test).length;
+  const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery" && order.paymentMethod !== "Cash at Store").length;
+  const toShip = orders.filter(STATUS_GROUPS["group:to-ship"].test).length;
   const outForDelivery = orders.filter((order) => order.status === "Out for Delivery").length;
   const delivered = orders.filter((order) => order.status === "Delivered").length;
-  const inTransit = orders.filter((order) => order.status === "Shipped" || order.status === "Out for Delivery").length;
+  const inTransit = orders.filter(STATUS_GROUPS["group:in-transit"].test).length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
+  const openPreorders = orders.filter((order) => isPreorderOrder(order) && !["Delivered", "Cancelled"].includes(order.status));
+  const preordersOn = openPreorders.length > 0 || getLiveBooks().some((book) => book.preorder?.enabled);
+  const preorderDue = openPreorders.reduce((sum, order) => sum + remainingDue(order), 0);
+  const preorderReceived = openPreorders.reduce((sum, order) => sum + order.total, 0) - preorderDue;
+
+  /** Store-pickup orders become ready at the counter (OTP unlocks); courier orders are marked Ready to Ship; Admin books each courier manually. */
+  const readyForPickup = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkBusy("Ready to pickup");
+    setBulkNote("");
+    let counter = 0;
+    let booked = 0;
+    const failed: string[] = [];
+    for (const id of selectedIds) {
+      const order = getOrderByAdmin(id);
+      if (!order || order.status === "Cancelled" || order.status === "Delivered") continue;
+      try {
+        if (order.deliveryMode === "store_pickup") {
+          setOrderStatus(id, "Packed");
+          counter += 1;
+        } else {
+          setOrderStatus(id, isPreorderOrder(order) || !orderFullyPaid(order) ? "Packed" : "Ready to Ship");
+          if (isPreorderOrder(order)) {
+            failed.push(`${id}: pre-order packed; create its shipment from the order`);
+            continue;
+          }
+          if (!orderFullyPaid(order)) {
+            failed.push(`${id}: packed; stays Packed until the full amount (with shipping) is paid`);
+            continue;
+          }
+          booked += 1;
+        }
+      } catch (error) {
+        failed.push(`${id}: ${error instanceof Error ? error.message : "could not book"}`);
+      }
+    }
+    setBulkNote(
+      [`${counter} store-pickup order${counter === 1 ? "" : "s"} ready at the counter`, `${booked} courier order${booked === 1 ? "" : "s"} ready to ship (book each courier from its order once fully paid)`, ...failed].join(" · ")
+    );
+    setPicked({});
+    refresh();
+    setBulkBusy("");
+  };
 
   const bulk = async (label: string, task: (id: string) => Promise<void> | void) => {
     if (selectedIds.length === 0) return;
@@ -143,6 +313,17 @@ export function OrdersDashboard() {
 
   return (
     <div className="space-y-5">
+      {newOrders.length ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <span>
+            <b>New order{newOrders.length > 1 ? "s" : ""}:</b>{" "}
+            {newOrders.map((id) => (
+              <button key={id} type="button" className="mr-2 font-mono font-semibold underline" onClick={() => setSelectedId(id)}>{id}</button>
+            ))}
+          </span>
+          <Button variant="ghost" onClick={() => setNewOrders([])}>Dismiss</Button>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Orders</h1>
@@ -150,20 +331,23 @@ export function OrdersDashboard() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setShowCreate(true)}>+ Create order</Button>
-          <Button variant="outline" onClick={() => exportOrdersCsv(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>Excel</Button>
+          <Button variant="outline" onClick={() => setShowBulk("grid")}>+ Bulk order</Button>
+          <Button variant="outline" onClick={() => setShowBulk("import")}>Import orders</Button>
+          <Button variant="outline" onClick={() => exportOrdersCsv(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered, languageFilter === "All" ? undefined : languageFilter)}>{languageFilter === "All" ? "Excel" : `Excel · ${languageFilter}`}</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(selectedIds.length ? filtered.filter((order) => picked[order.id]) : filtered)}>PDF</Button>
           <Button variant="outline" onClick={refresh}>Refresh</Button>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className={classNames("grid gap-3 sm:grid-cols-2 lg:grid-cols-4", preordersOn ? "xl:grid-cols-9" : "xl:grid-cols-8")}>
         {[
-          ["To pack", toPack, "Accepted"],
-          ["To Ship", toShip, "To Ship"],
+          ["To pack", toPack, "group:to-pack"],
+          ["Packed · payment due", packedPaymentDue, "group:payment-due"],
+          ["To Ship", toShip, "group:to-ship"],
           ["Out for Delivery", outForDelivery, "Out for Delivery"],
           ["Delivered", delivered, "Delivered"],
           ["Awaiting payment", awaitingPayment, "Pending"],
-          ["In transit", inTransit, "Shipped"],
+          ["In transit", inTransit, "group:in-transit"],
           ["Open returns", returns, "All"],
         ].map(([label, count, filter]) => (
           <button
@@ -176,31 +360,84 @@ export function OrdersDashboard() {
             <p className="mt-1 text-2xl font-bold text-text-primary">{count}</p>
           </button>
         ))}
+        {preordersOn && (
+          <div className="rounded-xl border border-border bg-white p-4 text-left">
+            <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Pre-orders</p>
+            <p className="mt-1 text-2xl font-bold text-text-primary">{openPreorders.length}</p>
+            <p className="mt-1 text-xs text-text-muted">
+              Received <b className="text-emerald-700">{rupees(Math.round(preorderReceived * 100) / 100)}</b> · due <b>{rupees(Math.round(preorderDue * 100) / 100)}</b>
+            </p>
+          </div>
+        )}
+        <GatewaySummaryCard />
       </div>
 
-      {bulkNote && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{bulkNote}</p>}
+      <ItemTotalsStrip
+        label="Items in these orders"
+        totals={itemTotals(
+          filtered,
+          (id) => catalogue.find((book) => book.id === id),
+          (book) =>
+            (languageFilter === "All" || (book?.language?.trim() || "Unspecified") === languageFilter) &&
+            (productFilter === "All" || (book?.productType === "other" ? "Other" : "Books") === productFilter)
+        )}
+      />
+
+      {shipOne && (
+        <BulkShipCourier
+          orderIds={selectedIds}
+          onClose={() => setShipOne(false)}
+          onDone={(note) => {
+            setShipOne(false);
+            setBulkNote(note);
+            setPicked({});
+            refresh();
+          }}
+        />
+      )}
+      {bulkNote && <p className="whitespace-pre-line rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><LinkText text={bulkNote} /></p>}
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
           <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">{selectedIds.length} selected</span>
+          <SelectInput className="w-48" value={pickStaff} onChange={(event) => setPickStaff(event.target.value)} aria-label="Picker or packer">
+            <option value="">Picker / packer…</option>
+            {getAccounts().filter((account) => account.role === "staff" || account.role === "admin" || account.role === "coadmin").map((account) => (
+              <option key={account.email} value={account.email}>{account.email}</option>
+            ))}
+          </SelectInput>
+          <Button variant="outline" disabled={Boolean(bulkBusy) || !pickStaff} onClick={() => bulk("Picker assigned", (id) => {
+            if (getStoredOrder(id)?.pick) reassignPickPack(id, pickStaff, "pick");
+            else assignPicker(id, pickStaff);
+          })}>Assign picker</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy) || !pickStaff} onClick={() => bulk("Packer assigned", (id) => {
+            if (!getStoredOrder(id)?.pick) assignPicker(id, pickStaff);
+            reassignPickPack(id, pickStaff, "pack");
+          })}>Assign packer</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => { if (window.confirm(`Cancel picking on ${selectedIds.length} order(s)? Pickers, packers and scans are cleared.`)) void bulk("Picking cancelled", (id) => { if (getStoredOrder(id)?.pick) cancelPicking(id); }); }}>Cancel picking</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ordered", (id) => setOrderStatus(id, "Ordered"))}>Confirm</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
             setOrderStatus(id, "Packed");
-            const order = getOrderByAdmin(id);
-            if (order?.deliveryMode === "delivery" && getIntegrations().shipping.autoBookOnPack) await bookShipment(id);
           })}>Pack</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("To Ship", async (id) => {
             setOrderStatus(id, "To Ship");
-            const order = getOrderByAdmin(id);
-            if (order?.deliveryMode === "delivery") await bookShipment(id);
           })}>To Ship</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => void readyForPickup()}>Ready to pickup</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => setShipOne(true)}>Ship with one courier</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Out for Delivery", (id) => setOrderStatus(id, "Out for Delivery"))}>Out for Delivery</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Delivered", (id) => setOrderStatus(id, "Delivered"))}>Delivered</Button>
-          <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]))}>Excel</Button>
+          <Button variant="outline" onClick={() => exportOrdersCsv(filtered.filter((order) => picked[order.id]), languageFilter === "All" ? undefined : languageFilter)}>Excel</Button>
           <Button variant="outline" onClick={() => printOrdersPdf(filtered.filter((order) => picked[order.id]))}>PDF</Button>
-          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Labels", async (id) => {
-            const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
-            if (shipment) await downloadLabel(shipment.id);
-          })}>Labels</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={async () => {
+            const links: string[] = [];
+            await bulk("Labels", async (id) => {
+              const shipment = getShipments().find((item) => item.orderId === id && item.note !== "Cancelled");
+              if (shipment) links.push(`#${id}: ${(await downloadLabel(shipment.id)).split(": ").pop()}`);
+            });
+            if (links.length) setBulkNote(`Label links\n${links.join("\n")}`);
+          }}>Labels</Button>
+          <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "individual")}>Print slips: individual</Button>
+          <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "bulk")}>Print slips: bulk list</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", async (id) => {
             await dropOrderShipments(id);
             cancelOrder(id, "Bulk cancel");
@@ -209,10 +446,27 @@ export function OrdersDashboard() {
             if (!window.confirm(`Delete ${selectedIds.length} order(s)? This cannot be undone.`)) return;
             bulk("Deleted", async (id) => {
               await dropOrderShipments(id);
+              await cancelOrderPaymentLinks(id);
               deleteOrder(id);
             });
           }}>Delete</Button>
         </div>
+      )}
+
+      {showBulk && (
+        <AdminModal title={showBulk === "grid" ? "Bulk order" : "Import orders from a template"} wide onClose={() => setShowBulk(null)}>
+          {showBulk === "grid" ? (
+            <BulkOrderForm
+              onDone={(id) => {
+                refresh();
+                setShowBulk(null);
+                if (id) setSelectedId(id);
+              }}
+            />
+          ) : (
+            <OrderImport onDone={refresh} />
+          )}
+        </AdminModal>
       )}
 
       {showCreate && (
@@ -250,10 +504,29 @@ export function OrdersDashboard() {
               </Button>
             }
           >
-            <div className="mb-3 grid gap-2 sm:grid-cols-3">
+            <div className="mb-2 flex flex-wrap gap-2">
+              {([
+                [`Confirmed orders (${orders.filter((order) => !CLOSED_OR_SENT.includes(order.status)).length})`, () => { setStatusFilter("All"); setPaymentFilter("All"); }, statusFilter === "All" && paymentFilter === "All"],
+                [`Paid (${orders.filter((order) => order.paymentStatus === "Paid" && !PAID_CHIP_HIDES.includes(order.status)).length})`, () => { setStatusFilter("All"); setPaymentFilter("Paid"); }, paymentFilter === "Paid"],
+                ...ALL_STATUSES.filter((value) => orders.some((order) => inStatus(order, value))).map((value) => [
+                  `${orderStatusText(value)} (${orders.filter((order) => inStatus(order, value)).length})`,
+                  () => { setPaymentFilter("All"); setStatusFilter(value); },
+                  statusFilter === value && paymentFilter === "All",
+                ] as [string, () => void, boolean]),
+                [`Everything (${orders.length})`, () => { setPaymentFilter("All"); setStatusFilter("Everything"); }, statusFilter === "Everything" && paymentFilter === "All"],
+                ...(splitParents.length ? [[`Split orders (${splitParents.length})`, () => { setPaymentFilter("All"); setStatusFilter("split"); }, statusFilter === "split"] as [string, () => void, boolean]] : []),
+                ["Refunded", () => { setStatusFilter("All"); setPaymentFilter("Refunded"); }, paymentFilter === "Refunded"],
+                ["Part refunded", () => { setStatusFilter("All"); setPaymentFilter("Partially Refunded"); }, paymentFilter === "Partially Refunded"],
+              ] as [string, () => void, boolean][]).map(([label, apply, on]) => (
+                <button key={label} type="button" onClick={apply} className={classNames("rounded-full border px-3 py-1 text-xs font-semibold", on ? "border-burgundy bg-burgundy text-white" : "border-border text-text-primary")}>{label}</button>
+              ))}
+              <a href="/admin/payments/refunds" className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-burgundy">Refunds module →</a>
+            </div>
+            <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-9">
               <TextInput placeholder="Search id, name, phone, AWB" value={query} onChange={(event) => setQuery(event.target.value)} />
               <SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option>All</option>
+                {Object.entries(STATUS_GROUPS).map(([value, group]) => <option key={value} value={value}>{group.label}</option>)}
                 {ALL_STATUSES.map((status) => <option key={status}>{status}</option>)}
               </SelectInput>
               <SelectInput value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
@@ -262,6 +535,35 @@ export function OrdersDashboard() {
                 <option>Paid</option>
                 <option>Refunded</option>
                 <option>Failed</option>
+                <option>Partially Paid</option>
+                <option>Partially Refunded</option>
+              </SelectInput>
+              <SelectInput value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label="Language">
+                <option value="All">All languages</option>
+                {languages.map((language) => <option key={language}>{language}</option>)}
+              </SelectInput>
+              <SelectInput value={modeFilter} onChange={(event) => setModeFilter(event.target.value)} aria-label="Delivery type">
+                <option value="All">Pickup + courier</option>
+                <option value="store_pickup">Store pickup</option>
+                <option value="delivery">Courier delivery</option>
+              </SelectInput>
+              <SelectInput value={pickFilter} onChange={(event) => setPickFilter(event.target.value)} aria-label="Pick and pack">
+                <option value="All">Pick & pack: all</option>
+                {Object.entries(PICK_STAGES).map(([value, label]) => <option key={value} value={value}>{label} ({orders.filter((order) => pickStage(order) === value).length})</option>)}
+              </SelectInput>
+              <SelectInput value={pickerFilter} onChange={(event) => setPickerFilter(event.target.value)} aria-label="Picker or packer">
+                <option value="All">Any picker / packer</option>
+                {[...new Set(orders.flatMap((order) => [order.pick?.assignee, order.pick?.packer]).filter((email): email is string => Boolean(email)))].sort().map((email) => <option key={email} value={email}>{email}</option>)}
+              </SelectInput>
+              <SelectInput value={productFilter} onChange={(event) => setProductFilter(event.target.value)} aria-label="Product type">
+                <option value="All">All products</option>
+                <option value="Books">Books</option>
+                <option value="Other">Other products</option>
+              </SelectInput>
+              <SelectInput value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="amount">Highest amount</option>
               </SelectInput>
             </div>
             {filtered.length === 0 ? (
@@ -286,11 +588,18 @@ export function OrdersDashboard() {
                       )}
                     >
                       <span className="min-w-0">
-                        <span className="block font-mono text-xs font-semibold text-text-primary">#{order.id}</span>
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-xs font-semibold text-text-primary">#{order.id}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isPreorderOrder(order) ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
+                            {isPreorderOrder(order) ? "Pre-order" : "Normal"}
+                          </span>
+                          {(() => { const platform = orderPlatform(order); return <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ${platform.tone}`}>{platform.label}</span>; })()}
+                        </span>
                         <span className="block truncate text-xs text-text-muted">
-                          {order.deliveryAddress?.fullName || order.items[0]?.title} · {formatDate(order.date)}
+                          {order.deliveryAddress?.fullName || (order.items[0] ? currentProductTitle(order.items[0]) : "")} · {formatDate(order.date)}
                           {order.channel === "pos" ? " · POS" : ""}
                         </span>
+                        <OrderRowPreview order={order} />
                       </span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
                         <span className="flex gap-1">
@@ -311,14 +620,76 @@ export function OrdersDashboard() {
   );
 }
 
-type PaymentChoice = "link" | "collect" | "paid" | "cod";
+function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number] }) {
+  const address = order.deliveryAddress;
+  const quantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const place =
+    order.deliveryMode === "store_pickup"
+      ? "Store pickup"
+      : address
+        ? [address.line1, address.landmark, address.city, address.state, address.pincode].filter(Boolean).join(", ")
+        : "";
+  const contact = [address?.phone, address?.email || order.accountEmail].filter(Boolean).join(" · ");
+  const shipment = order.trackingId || ["To Ship", "Ready to Ship", "Shipped", "Out for Delivery"].includes(order.status)
+    ? getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled")
+    : undefined;
+  const payment = [
+    order.paymentMethod,
+    order.razorpayPaymentId || order.paymentRef,
+    order.preorderPayment ? `Pre-order · advance ${rupees(order.preorderPayment.advance)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <span className="mt-1 block space-y-0.5 text-xs">
+      {contact && <span className="block break-words text-text-muted">{contact}</span>}
+      {place && <span className="block break-words text-text-muted">{place}</span>}
+      <span className="block break-words font-medium text-text-primary">
+        {quantity} item{quantity === 1 ? "" : "s"} · {order.items.map((item) => `${currentProductTitle(item)} × ${item.quantity} (${rupees(item.price * item.quantity)})`).join(", ")}
+      </span>
+      <span className="block break-words text-text-muted">
+        Payment: {order.paymentStatus}
+        {payment ? ` · ${payment}` : ""}
+        {order.trackingId ? ` · AWB ${order.trackingId}` : ""}
+      </span>
+      {order.paymentStatus === "Paid" && order.status !== "Cancelled" && (
+        <span className={classNames("block font-semibold", sentState(order, Boolean(shipment)).sent ? "text-emerald-700" : "text-amber-700")}>{sentState(order, Boolean(shipment)).label}</span>
+      )}
+      {shipment && (
+        <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-text-primary">
+          <span><span className="text-text-muted">Pickup by:</span> {rowDate(shipment.pickupScheduledFor) ?? "not scheduled"}{shipment.pickupSlot ? ` (${shipment.pickupSlot})` : ""}</span>
+          <span><span className="text-text-muted">Delivery:</span> {rowDate(shipment.expectedBy) ?? "not given"}</span>
+          <span>
+            <span className="text-text-muted">Status:</span> {[...(shipment.tracking ?? [])].sort((x, y) => y.at.localeCompare(x.at))[0]?.status ?? shipment.status} · {shipment.courier}
+            {bookedViaLabel(shipment.provider) ? ` (${bookedViaLabel(shipment.provider)})` : ""}
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function sentState(order: Order, booked: boolean) {
+  if (order.deliveryMode === "store_pickup") return order.status === "Delivered" ? { sent: true, label: "Collected from store" } : { sent: false, label: "Store pickup · not collected yet" };
+  if (order.status === "Delivered") return { sent: true, label: "Shipped · delivered" };
+  if (order.status === "Shipped" || order.status === "Out for Delivery") return { sent: true, label: `Shipped · ${order.status === "Shipped" ? "in transit" : "out for delivery"}` };
+  if (booked) return { sent: false, label: "Not shipped yet · courier booked, waiting for pickup" };
+  return { sent: false, label: `Not shipped yet · ${order.status === "Packed" ? "packed, courier not booked" : "not packed"}` };
+}
+
+function rowDate(value?: string) {
+  if (!value) return undefined;
+  return Number.isNaN(new Date(value).getTime()) ? value : formatDate(value, { weekday: "short" });
+}
+
+type PaymentChoice = "link" | "collect" | "paid" | "partial" | "cod";
 
 function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const books = getLiveBooks();
   const orderSettings = getOrderSettings();
   const customers = getAccounts().filter((account) => !account.role || account.role === "customer");
   const [accountEmail, setAccountEmail] = useState("");
-  const [items, setItems] = useState<{ bookId: string; quantity: number }[]>([{ bookId: books[0]?.id ?? "", quantity: 1 }]);
+  const [items, setItems] = useState<{ bookId: string; quantity: number; price?: number }[]>([{ bookId: books[0]?.id ?? "", quantity: 1 }]);
   const [customer, setCustomer] = useState<DeliveryAddress>({ fullName: "", phone: "", email: "", line1: "", landmark: "", city: "", state: "Maharashtra", pincode: "", country: "India", countryCode: "IN" });
   const [mode, setMode] = useState<Order["deliveryMode"]>(orderSettings.deliveryEnabled ? "delivery" : "store_pickup");
   const [quote, setQuote] = useState<RateQuote | null>(null);
@@ -327,6 +698,9 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   const [payment, setPayment] = useState<PaymentChoice>("link");
   const [method, setMethod] = useState("UPI");
   const [reference, setReference] = useState("");
+  const [partAmount, setPartAmount] = useState("");
+  const [partLink, setPartLink] = useState(true);
+  const [kind, setKind] = useState<"normal" | "preorder">("normal");
   const [shippingOverride, setShippingOverride] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -371,7 +745,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
     return () => window.clearTimeout(timer);
   }, [customer.countryCode, customer.pincode]);
 
-  const setRow = (index: number, patch: Partial<{ bookId: string; quantity: number }>) =>
+  const setRow = (index: number, patch: Partial<{ bookId: string; quantity: number; price?: number }>) =>
     setItems((list) => list.map((row, i) => (i === index ? { ...row, ...patch } : row)));
 
   const pickAccount = (account: User | null) => {
@@ -379,7 +753,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
     if (account) setCustomer((current) => accountToDelivery(account, current));
   };
 
-  const subtotal = items.reduce((sum, row) => sum + (books.find((book) => book.id === row.bookId)?.price ?? 0) * row.quantity, 0);
+  const subtotal = items.reduce((sum, row) => sum + (row.price ?? books.find((book) => book.id === row.bookId)?.price ?? 0) * row.quantity, 0);
   const itemCount = items.reduce((sum, row) => sum + row.quantity, 0);
   const choice: CourierRate | undefined = picked !== undefined ? quote?.rates[picked] : undefined;
   const shippingFee = mode === "store_pickup" ? 0 : shippingOverride !== "" ? Number(shippingOverride) : shippingFeeFor(subtotal, itemCount, choice?.rate, orderSettings);
@@ -396,15 +770,16 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
     setError("");
     setLoadingRates(true);
     const units = itemCount;
-    const result = await fetchCourierRates({
+    const result = await fetchCourierRates({ admin: true,
       deliveryPincode: customer.pincode,
-      weightKg: Math.max(getIntegrations().shipping.defaultWeightKg, units * getIntegrations().shipping.defaultWeightKg),
+      weightKg: orderWeightKg({ items: items.map((row) => ({ ...row, quantity: row.quantity })) as Order["items"] }),
+      dims: orderDims({ items: items as Order["items"] }),
       declaredValue: subtotal,
       cod: payment === "cod",
       bookIds: items.map((row) => row.bookId),
     });
     setQuote(result);
-    setPicked(result.rates.length ? 0 : undefined);
+    setPicked(undefined);
     setLoadingRates(false);
   };
 
@@ -421,6 +796,10 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
       setError("Add at least one valid item.");
       return;
     }
+    if (payment === "partial" && !(Number(partAmount) > 0)) {
+      setError("Enter the amount the customer has already paid.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -431,13 +810,54 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
         deliverTo: customer,
         items,
         deliveryMode: mode,
-        payment,
+        payment: payment === "partial" ? "collect" : payment,
         paymentMethod: payment === "paid" ? method : undefined,
         paymentRef: payment === "paid" ? reference : undefined,
         courierChoice: mode === "delivery" ? choice : undefined,
         shippingOverride: shippingOverride !== "" ? Number(shippingOverride) : undefined,
+        preorder: kind === "preorder",
       });
+      if (kind === "preorder") {
+        // Pre-order: what was received is the advance; the rest (and the courier charge, if not set) is collected by the balance link once the book is ready.
+        const received = payment === "paid" ? order.total : payment === "partial" ? Math.min(order.total, Number(partAmount)) : 0;
+        const shippingLater = mode === "delivery" && shippingOverride === "";
+        const balance = Math.max(0, Math.round((order.total - received) * 100) / 100);
+        const now = new Date().toISOString();
+        patchStoredOrder(
+          order.id,
+          {
+            preorderPayment: {
+              advance: received,
+              balance,
+              balanceWhen: orderSettings.preorderPayment.balanceWhen,
+              advancePaidAt: received > 0 ? now : undefined,
+              shippingDue: shippingLater || undefined,
+            },
+            ...(received > 0
+              ? {
+                  paymentStatus: balance > 0 || shippingLater ? "Partially Paid" : "Paid",
+                  amountPaid: received,
+                  paymentMethod: method,
+                  paymentRef: reference.trim() || undefined,
+                  paidAt: now,
+                  status: "Ordered",
+                }
+              : {}),
+          },
+          `Pre-order created by the desk · received ${rupees(received)}${balance > 0 ? ` · balance ${rupees(balance)}` : ""}${shippingLater ? " · courier charge added when packed" : ""}`
+        );
+        if (payment === "link") await createPaymentLink(order.id);
+        onDone(order.id);
+        return;
+      }
       if (payment === "link") await createPaymentLink(order.id);
+      if (payment === "partial") {
+        const note = recordPartialPayment(order.id, { amount: Number(partAmount), method, reference });
+        const saved = getStoredOrder(order.id);
+        const due = saved ? remainingDue(saved) : 0;
+        if (partLink && due > 0) await createPaymentLink(order.id, due);
+        else if (!saved || saved.paymentStatus === "Pending") throw new Error(note);
+      }
       onDone(order.id);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not create the order.");
@@ -462,7 +882,15 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Name"><TextInput value={customer.fullName} onChange={(event) => setCustomer({ ...customer, fullName: event.target.value })} /></Field>
             <Field label="Phone (international)"><TextInput value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} placeholder={`${countryByCode(customer.countryCode).dial} 98765 43210`} /></Field>
-            <Field label="Email"><TextInput value={customer.email ?? ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} /></Field>
+            <Field label="Alternative phone (optional)"><TextInput value={customer.altPhone ?? ""} onChange={(event) => setCustomer({ ...customer, altPhone: event.target.value })} placeholder={`${countryByCode(customer.countryCode).dial} 98765 43210`} /></Field>
+            <Field label="Email">
+              <TextInput value={customer.email ?? ""} onChange={(event) => setCustomer({ ...customer, email: event.target.value })} />
+              {!customer.email ? (
+                <button type="button" className="mt-1 text-xs font-semibold text-primary underline" onClick={() => setCustomer({ ...customer, email: siteConfig.email })}>
+                  No email? Use {siteConfig.email} with the customer&apos;s phone
+                </button>
+              ) : null}
+            </Field>
             <Field label={isIndia(customer.countryCode) ? "Pincode" : "Postal code"}>
               <TextInput
                 value={customer.pincode}
@@ -525,17 +953,28 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
             {items.map((row, index) => (
               <div key={index} className="mb-2 flex items-center gap-2">
                 <div className="flex-1">
-                  <SelectInput value={row.bookId} onChange={(event) => setRow(index, { bookId: event.target.value })}>
+                  <SelectInput value={row.bookId} onChange={(event) => setRow(index, { bookId: event.target.value, price: undefined })}>
                     {books.map((book) => (
                       <option key={book.id} value={book.id}>{book.title} — ₹{book.price}</option>
                     ))}
                   </SelectInput>
                 </div>
                 <div className="w-20"><TextInput type="number" min={1} value={row.quantity} onChange={(event) => setRow(index, { quantity: Number(event.target.value) })} /></div>
+                <div className="w-24">
+                  <TextInput
+                    type="number"
+                    min={0}
+                    aria-label="Price per copy (₹)"
+                    title="Price per copy for this order. Leave as is to keep the normal price."
+                    value={row.price ?? books.find((book) => book.id === row.bookId)?.price ?? ""}
+                    onChange={(event) => setRow(index, { price: event.target.value === "" ? undefined : Math.max(0, Number(event.target.value)) })}
+                  />
+                </div>
                 {items.length > 1 && <Button variant="ghost" onClick={() => setItems(items.filter((_, i) => i !== index))}>×</Button>}
               </div>
             ))}
             <Button variant="outline" onClick={() => setItems([...items, { bookId: books[0]?.id ?? "", quantity: 1 }])}>+ Add item</Button>
+            <p className="mt-1 text-xs text-text-muted">Qty and price per copy (₹). The price starts at the normal price; change it only for this order.</p>
           </div>
         </div>
 
@@ -558,15 +997,35 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
                 <Button variant="outline" onClick={loadRates} disabled={loadingRates}>{loadingRates ? "Checking…" : "Show couriers & rates"}</Button>
               </div>
               {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
-              <p className="mt-2 text-xs text-text-muted">{shippingFeeSummary(orderSettings)}. The courier is booked automatically when the order is packed{getIntegrations().shipping.autoBookOnPack ? "" : " (turn on auto-booking in Shipping APIs)"}.</p>
+              <p className="mt-2 text-xs text-text-muted">{shippingFeeSummary(orderSettings)}. Admin books the courier manually after payment.</p>
             </div>
           )}
+          <div>
+            <p className="mb-2 text-sm font-semibold text-text-primary">Order type</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {([
+                ["normal", "Normal order", "Ships once fully paid"],
+                ["preorder", "Pre-order", "Amount received is the advance; balance + courier charge by link when ready"],
+              ] as ["normal" | "preorder", string, string][]).map(([id, label, hint]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setKind(id)}
+                  className={classNames("rounded-xl border p-3 text-left text-sm", kind === id ? "border-burgundy bg-burgundy/5" : "border-border")}
+                >
+                  <span className="block font-semibold text-text-primary">{label}</span>
+                  <span className="block text-xs text-text-muted">{hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <p className="mb-2 text-sm font-semibold text-text-primary">Payment</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {([
                 ["link", "Send payment link", paymentMode() === "demo" ? "Demo link on this site" : "Razorpay payment link"],
                 ["paid", "Already paid", "Record UPI, cash, bank transfer…"],
+                ["partial", "Partly paid", "Record what was paid; the rest stays due"],
                 ["collect", "Collect later", "Order waits as Pending"],
                 ...(orderSettings.codEnabled ? [["cod", "Cash on delivery", `COD fee ₹${orderSettings.codFee}`]] : []),
               ] as [PaymentChoice, string, string][]).map(([id, label, hint]) => (
@@ -581,6 +1040,19 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
                 </button>
               ))}
             </div>
+            {payment === "partial" && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <TextInput inputMode="decimal" placeholder="Total amount received (₹)" value={partAmount} onChange={(event) => setPartAmount(event.target.value.replace(/[^\d.]/g, ""))} />
+                <SelectInput value={method} onChange={(event) => setMethod(event.target.value)}>
+                  {PAYMENT_METHODS.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
+                <TextInput placeholder="Reference / UTR / receipt no." value={reference} onChange={(event) => setReference(event.target.value)} />
+                {kind === "normal" && <label className="flex items-center gap-2 text-xs text-text-muted sm:col-span-3">
+                  <input type="checkbox" checked={partLink} onChange={(event) => setPartLink(event.target.checked)} />
+                  Send a payment link for the balance now (otherwise send it later from the order&apos;s Payment section)
+                </label>}
+              </div>
+            )}
             {payment === "paid" && (
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 <SelectInput value={method} onChange={(event) => setMethod(event.target.value)}>
@@ -612,6 +1084,47 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
   );
 }
 
+/** Who pays the return courier, the payment link for the customer, and the label email. */
+function ReturnChargeBox({ order, run }: { order: Order; run: (label: string, task: () => Promise<string | void> | string | void) => void }) {
+  const back = order.returnShipment!;
+  const [amount, setAmount] = useState(String(back.charge ?? ""));
+  const value = Number(amount) || 0;
+  return (
+    <div className="mb-3 space-y-2 rounded-xl border border-border bg-white p-3 text-xs">
+      <p className="font-semibold text-text-primary">Return courier charge</p>
+      <p className="text-text-muted">
+        {back.chargePaidBy === "foundation"
+          ? `Paid by the Foundation${back.charge ? ` · ₹${back.charge}` : ""}.`
+          : back.chargePaidBy === "customer"
+            ? back.chargePaidAt
+              ? `Customer paid ₹${back.charge}${back.chargeRef ? ` · ${back.chargeRef}` : ""}.`
+              : `Customer to pay ₹${back.charge} · link sent ${formatDateTime(back.chargeLink?.createdAt ?? "")}. Updates on its own once paid.`
+            : "Choose who pays for the return courier."}
+      </p>
+      {!back.chargePaidAt ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <TextInput type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Charge ₹" className="w-28" />
+          <Button variant="outline" onClick={() => run("return-charge", () => {
+            patchOrder(order.id, { returnShipment: { ...back, charge: value || back.charge, chargePaidBy: "foundation", chargeLink: undefined } }, "Return courier charge borne by the Foundation");
+            return "The Foundation pays the return courier.";
+          })}>Foundation pays</Button>
+          <Button onClick={() => run("return-charge", async () => {
+            const link = await createReturnChargeLink(order.id, value);
+            return `Payment link for ₹${link.amount} sent to the customer.`;
+          })}>Customer pays · send link</Button>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {back.labelUrl ? <a href={back.labelUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-burgundy underline">Open return label</a> : <span className="text-text-muted">No label link from the courier yet.</span>}
+        <Button variant="ghost" onClick={() => run("return-label", () => {
+          emailReturnLabel(order.id);
+          return "Return label emailed to the customer. It is also on their My Orders page.";
+        })}>{back.labelEmailedAt ? "Email label again" : "Email label to customer"}</Button>
+      </div>
+    </div>
+  );
+}
+
 function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <section className="rounded-xl border border-border p-4">
@@ -633,24 +1146,125 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState("");
   const [status, setStatus] = useState<Order["status"]>(order.status);
+  const [extraId, setExtraId] = useState("");
+  const extraStatuses = getOrderSettings().customStatuses.filter((row) => row.label.trim());
   const [method, setMethod] = useState("UPI");
+  const [linkMode, setLinkMode] = useState<"remaining" | "full" | "custom">("remaining");
+  const [linkAmount, setLinkAmount] = useState("");
+  const [linkUntil, setLinkUntil] = useState("");
+  const [rzpPaymentId, setRzpPaymentId] = useState("");
+  const [partAmount, setPartAmount] = useState("");
+  const [extraAmount, setExtraAmount] = useState("");
+  const [extraReason, setExtraReason] = useState("");
+  const [extraKind, setExtraKind] = useState<"shipping" | "other">("shipping");
   const [reference, setReference] = useState("");
-  const refundCap = maxRefundable(order);
+  const [refundFee, setRefundFee] = useState(() => {
+    if (order.status !== "Cancelled") return false;
+    const cancelled = order.history?.slice().reverse().find((entry) => entry.status === "Cancelled");
+    return cancelled?.by === "Customer" ? preorderLate(order, getOrderSettings(), Date.parse(cancelled.at)) : getOrderSettings().cancellation.refundFeeOnDesk;
+  });
+  const refundCap = maxRefundable(order, { withPlatformFee: refundFee });
   const [refundAmount, setRefundAmount] = useState(String(refundCap));
   const [cancelReason, setCancelReason] = useState("");
-  const [quote, setQuote] = useState<RateQuote | null>(null);
+  const [approvalKind, setApprovalKind] = useState<ApprovalRequest["kind"]>("cancellation");
+  const [approvalNote, setApprovalNote] = useState("");
+  const [rawQuote, setQuote] = useState<RateQuote | null>(null);
+  const [skipAggregators, setSkipAggregators] = useState<string[]>([]);
+  const quote = rawQuote && { ...rawQuote, rates: rawQuote.rates.filter((rate) => !skipAggregators.includes(rate.provider)) };
   const [picked, setPicked] = useState<number | undefined>();
+  const [typedCharge, setTypedCharge] = useState("");
   const [pickupDate, setPickupDate] = useState(() => shipment?.pickupScheduledFor?.slice(0, 10) || new Date(Date.now() + 864e5).toISOString().slice(0, 10));
   const [pickupSlot, setPickupSlot] = useState(shipment?.pickupSlot || settings.pickupTimeslots[0]?.label || "10:00 – 13:00");
-  const [manualPortal, setManualPortal] = useState<(typeof MANUAL_PORTALS)[number]["id"]>("shiprocket");
+  const [manualPortal, setManualPortal] = useState<string>("delhivery");
   const [manualAwb, setManualAwb] = useState("");
   const [manualCourier, setManualCourier] = useState("");
   const [deliveryWhen, setDeliveryWhen] = useState("");
   const [returnReason, setReturnReason] = useState(getOrderSettings().returns.reasons[0] ?? "");
-  const [refundDest, setRefundDest] = useState<"original" | "store_credit">("original");
+  const refundDest = "original" as const;
   const [editing, setEditing] = useState(false);
   const [editAddress, setEditAddress] = useState<DeliveryAddress>(order.deliveryAddress ?? { fullName: "", phone: "", email: "", line1: "", city: "", state: "", pincode: "", country: "India", countryCode: "IN" });
   const [editItems, setEditItems] = useState(order.items.map((item) => ({ ...item })));
+  const [addBookId, setAddBookId] = useState("");
+  const [addQty, setAddQty] = useState(1);
+  const [editShipping, setEditShipping] = useState(String(shippingSplit(order).courier));
+  const [editPacking, setEditPacking] = useState(String(order.packing ?? 0));
+  const catalogue = editing ? getLiveBooks().filter((book) => book.active !== false) : [];
+  const addProduct = () => {
+    const book = catalogue.find((row) => row.id === addBookId);
+    if (!book || addQty < 1) return;
+    setEditItems((list) =>
+      list.some((row) => row.bookId === book.id)
+        ? list.map((row) => (row.bookId === book.id ? { ...row, quantity: row.quantity + addQty } : row))
+        : [
+            ...list,
+            {
+              bookId: book.id,
+              title: book.title,
+              quantity: addQty,
+              price: book.price,
+              originalPrice: book.originalPrice,
+              currency: book.currency,
+              sku: book.sku,
+              batchNo: book.batchNo,
+              preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
+            },
+          ]
+    );
+    setAddBookId("");
+    setAddQty(1);
+  };
+  const saveEdit = () =>
+    run("save", () => {
+      const items = editItems.filter((item) => item.quantity > 0);
+      if (!items.length) throw new Error("Keep at least one product in the order.");
+      const courier = Number(editShipping || 0);
+      if (!Number.isFinite(courier) || courier < 0) throw new Error("Enter a shipping charge of ₹0 or more.");
+      const packing = Number(editPacking || 0);
+      if (!Number.isFinite(packing) || packing < 0) throw new Error("Enter a packing charge of ₹0 or more.");
+      const shipping = Math.round((courier + packing) * 100) / 100;
+      const next = resaveOrder(order.id, { items, deliveryAddress: editAddress, shipping, packing });
+      setEditing(false);
+      const due = remainingDue(next);
+      return next.paymentStatus === "Partially Paid" && due > 0
+        ? `Order saved. New total ${rupees(next.total)}. ${rupees(due)} is due from the customer: send a payment link for "Remaining" below.`
+        : `Order saved. New total ${rupees(next.total)}.`;
+    });
+  const editSubtotal = editItems.reduce((sum, item) => sum + item.price * Math.max(0, item.quantity), 0);
+
+  // An open Razorpay link (order, pre-order balance or courier charge) is checked when the order is open and every minute, so a payment shows without pressing "Check status".
+  const openLink =
+    order.preorderPayment?.link?.provider === "razorpay" && order.preorderPayment.link.id && !order.preorderPayment.balancePaidAt
+      ? "balance"
+      : order.courierUpgrade?.link?.provider === "razorpay" && order.courierUpgrade.link.id && !order.courierUpgrade.paidAt
+        ? "courier"
+        : order.paymentLink?.provider === "razorpay" && order.paymentLink.id && order.paymentStatus !== "Paid"
+          ? "order"
+          : "";
+  useEffect(() => {
+    if (!openLink) return;
+    let stopped = false;
+    const check = async () => {
+      try {
+        const before = JSON.stringify(getStoredOrder(order.id) ?? null);
+        const result =
+          openLink === "balance" ? await refreshBalancePaymentLink(order.id) : openLink === "courier" ? await refreshCourierPaymentLink(order.id) : await refreshPaymentLink(order.id);
+        // Re-render only when the check changed the order; the remount re-runs this check, so an unchanged order would loop.
+        if (!stopped && result && !result.startsWith("Razorpay link status") && !result.startsWith("Demo") && JSON.stringify(getStoredOrder(order.id) ?? null) !== before) {
+          setMessage(result);
+          onChanged();
+        }
+      } catch {
+        /* the server also checks open links every minute */
+      }
+    };
+    void check();
+    const timer = setInterval(() => void check(), 60_000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.id, openLink]);
 
   const run = async (label: string, task: () => Promise<string | void> | string | void) => {
     setBusy(label);
@@ -659,7 +1273,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     try {
       const result = await task();
       if (result) setMessage(result);
-      onChanged();
+      // Loading rates changes nothing on the order; refreshing would reopen the panel and wipe the rate list.
+      if (label !== "rates") onChanged();
     } catch (error) {
       setProblem(error instanceof Error ? error.message : "Something went wrong.");
     } finally {
@@ -675,39 +1290,40 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         return "Order cancelled. The shipment was removed from the desk.";
       }
       setOrderStatus(order.id, status);
-      if (status === "Packed" && order.deliveryMode === "delivery" && !shipment && integrations.shipping.autoBookOnPack) {
-        const booking = await bookShipment(order.id);
-        return `Status set to Packed. ${booking.message}`;
+      if ((status === "Packed" || status === "Ready to Ship") && order.deliveryMode === "delivery" && !shipment && isPreorderOrder(order)) {
+        return `Status set to ${status}. This is a pre-order: create the shipment below once it is packed.`;
       }
-      if (status === "Ready to Ship" && order.deliveryMode === "delivery") {
-        const booking = await bookShipment(order.id);
-        return `Ready to ship. ${booking.message}`;
+      // Couriers are never booked from a status change: Admin picks a courier and clicks Book.
+      if ((status === "Packed" || status === "Ready to Ship") && order.deliveryMode === "delivery" && !shipment) {
+        return `Status set to ${status}. Show couriers & rates below, pick one and click Book.`;
       }
       return `Status set to ${status}. The customer is notified.`;
     });
 
   const loadRates = () =>
     run("rates", async () => {
-      const result = await fetchCourierRates({
+      const result = await fetchCourierRates({ admin: true,
         deliveryPincode: order.deliveryAddress?.pincode ?? "",
+        shipFrom: getStoredOrder(order.id)?.shipFrom ?? order.shipFrom,
         weightKg: orderWeightKg(order),
         declaredValue: order.total,
         cod: order.paymentMethod === "Cash on delivery" && order.paymentStatus !== "Paid",
         bookIds: order.items.map((item) => item.bookId),
+        dims: orderDims(order),
       });
       setQuote(result);
-      const current = order.courierChoice ? result.rates.findIndex((rate) => rate.courierId === order.courierChoice?.courierId && rate.provider === order.courierChoice?.provider) : -1;
-      setPicked(current >= 0 ? current : result.rates.length ? 0 : undefined);
+      setPicked(undefined);
     });
 
   const paid = order.paymentStatus === "Paid";
-  const refundable = paid && (order.refundAmount ?? 0) < order.total;
+  const collected = paid || order.paymentStatus === "Partially Paid" || order.paymentStatus === "Partially Refunded";
+  const refundable = collected && refundCap > 0;
   const margin = shipment ? (shipment.customerPaid ?? order.shipping) - (shipment.courierCost ?? shipment.charges) : 0;
 
   return (
     <Panel
       title={`Order #${order.id}`}
-      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${order.channel ? ` · ${order.channel}` : ""}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
+      description={`${formatDateTime(order.date)} · ${order.deliveryMode === "store_pickup" ? "Store pickup" : "Courier delivery"}${` · ordered on ${orderPlatform(order).label}`}${order.createdBy ? ` · created by ${order.createdBy}` : ""}`}
       action={
         <span className="flex gap-1">
           <StatusBadge status={order.status} mapping={ORDER_STATUS_TONES} />
@@ -716,7 +1332,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       }
     >
       {order.replacementOf && <p className="mb-3 rounded-lg bg-warm-cream px-3 py-2 text-xs text-text-muted">Replacement for order #{order.replacementOf}</p>}
-      {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
+      <SplitOrderInfo order={order} />
+      {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><LinkText text={message} /></p>}
       {problem && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -728,7 +1345,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 setEditing(false);
                 setEditAddress(order.deliveryAddress ?? editAddress);
                 setEditItems(order.items.map((item) => ({ ...item })));
-              } else setEditing(true);
+              } else {
+                setEditShipping(String(shippingSplit(order).courier));
+                setEditPacking(String(order.packing ?? 0));
+                setEditing(true);
+              }
             }}
             >
               {editing ? "Cancel edit" : "Edit order"}
@@ -738,16 +1359,44 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <ul className="space-y-2">
             {(editing ? editItems : order.items).map((item, index) => (
               <li key={item.bookId} className="flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  {currentProductTitle(item)}
+                  {orderItemBatch(item) ? <span className="ml-1 text-xs text-text-muted">· Batch {orderItemBatch(item)}</span> : null}
+                </span>
                 {editing ? (
-                  <div className="w-16">
-                    <TextInput
-                      type="number"
-                      min={1}
-                      value={item.quantity}
-                      onChange={(event) => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: Number(event.target.value) } : row)))}
-                    />
-                  </div>
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Less"
+                      className="h-8 w-8 rounded-lg border border-border font-bold"
+                      onClick={() => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: Math.max(0, row.quantity - 1) } : row)))}
+                    >
+                      −
+                    </button>
+                    <span className="w-16">
+                      <TextInput
+                        type="number"
+                        min={0}
+                        value={item.quantity}
+                        onChange={(event) => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: Math.max(0, Math.floor(Number(event.target.value) || 0)) } : row)))}
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="More"
+                      className="h-8 w-8 rounded-lg border border-border font-bold"
+                      onClick={() => setEditItems((list) => list.map((row, i) => (i === index ? { ...row, quantity: row.quantity + 1 } : row)))}
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="ml-1 text-xs font-semibold text-red-600"
+                      onClick={() => setEditItems((list) => list.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </button>
+                  </span>
                 ) : (
                   <span className="text-text-muted">× {item.quantity}</span>
                 )}
@@ -755,21 +1404,82 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               </li>
             ))}
           </ul>
+          {editing && (
+            <div className="mt-3 space-y-2 rounded-lg border border-dashed border-border p-3">
+              <p className="text-xs font-semibold text-text-primary">Add a product</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 flex-1">
+                  <SelectInput value={addBookId} onChange={(event) => setAddBookId(event.target.value)}>
+                    <option value="">Choose a product…</option>
+                    {catalogue.map((book) => (
+                      <option key={book.id} value={book.id}>
+                        {book.title}
+                        {book.language ? ` · ${book.language}` : ""} · {rupees(book.price)}
+                        {book.stock <= 0 ? (book.preorder?.enabled ? " · pre-order" : " · out of stock") : ` · ${book.stock} in stock`}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </span>
+                <span className="w-20">
+                  <TextInput type="number" min={1} value={addQty} onChange={(event) => setAddQty(Math.max(1, Math.floor(Number(event.target.value) || 1)))} />
+                </span>
+                <Button variant="ghost" onClick={addProduct} disabled={!addBookId}>
+                  Add
+                </Button>
+              </div>
+              <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-text-primary">
+                Shipping charge ₹
+                <span className="w-28">
+                  <TextInput type="number" min={0} step="0.01" value={editShipping} onChange={(event) => setEditShipping(event.target.value)} />
+                </span>
+                <span className="font-normal text-text-muted">courier only, was {shippingSplit(order).courier === 0 ? "₹0" : rupees(shippingSplit(order).courier)}. Raise it if the courier costs more.</span>
+              </label>
+              <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-text-primary">
+                Packing charge ₹
+                <span className="w-28">
+                  <TextInput type="number" min={0} step="0.01" value={editPacking} onChange={(event) => setEditPacking(event.target.value)} />
+                </span>
+                <span className="font-normal text-text-muted">was {rupees(shippingSplit(order).packing)}. Shows to the customer as its own &quot;Packing charge&quot; line. Shipping + packing together make the delivery charge in the total.</span>
+              </label>
+              <p className="text-xs text-text-muted">
+                New items subtotal {rupees(editSubtotal)} (was {rupees(order.subtotal)}). GST and fees are worked out again when you save. If the new total is more than the customer paid, the difference shows as Remaining for a payment link.
+              </p>
+              <Button onClick={saveEdit} disabled={busy === "save"}>
+                {busy === "save" ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          )}
           <dl className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
             <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(order.subtotal)}</dd></div>
-            <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div>
-            <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{order.shipping === 0 ? "Free" : rupees(order.shipping)}</dd></div>
+            {order.discount ? <div className="flex justify-between text-emerald-700"><dt>Discount</dt><dd>−{rupees(order.discount)}</dd></div> : null}
+            {order.gst ? <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(order.gst)}</dd></div> : null}
+            {order.platformFee ? <div className="flex justify-between"><dt className="text-text-muted">Platform fee</dt><dd>{rupees(order.platformFee)}</dd></div> : null}
+            {!hideShipping(order) && <div className="flex justify-between"><dt className="text-text-muted">Shipping{order.paymentMethod === "Cash on delivery" ? " + COD" : ""}</dt><dd>{shippingSplit(order).courier > 0 ? rupees(shippingSplit(order).courier) : order.deliveryMode === "store_pickup" ? "Store pickup" : order.shippingDue || order.preorderPayment?.shippingDue ? "Calculated once packed" : "Free"}</dd></div>}
+            {shippingSplit(order).packing > 0 && <div className="flex justify-between"><dt className="text-text-muted">Packing charge</dt><dd>{rupees(shippingSplit(order).packing)}</dd></div>}
             {order.storeCreditUsed ? <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(order.storeCreditUsed)}</dd></div> : null}
             <div className="flex justify-between text-sm font-bold"><dt>Total</dt><dd className="text-burgundy">{rupees(order.total)}</dd></div>
             {order.refundAmount ? <div className="flex justify-between text-red-600"><dt>Refunded</dt><dd>−{rupees(order.refundAmount)}</dd></div> : null}
           </dl>
         </Section>
 
+        <ChargesBreakdown order={order} />
         <Section title="Customer">
+          {!editing && order.deliveryMode === "delivery" && !["Shipped", "Out for Delivery", "Delivered", "Cancelled", "Failed"].includes(order.status) && (
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              {order.addressRequest && !order.addressRequest.doneAt ? (
+                <span className="rounded-lg bg-amber-50 px-2 py-1 font-semibold text-amber-800">Waiting for the customer to {order.addressRequest.fix ? "correct" : "add"} the address · booking blocked</span>
+              ) : null}
+              <Button variant="outline" disabled={busy === "fix-address"} onClick={() => run("fix-address", () => requestAddressCorrection(order.id))}>
+                {order.addressRequest && !order.addressRequest.doneAt ? "Resend address request" : "Ask customer to correct address"}
+              </Button>
+              <span className="text-text-muted">Or fix it yourself with Edit order.</span>
+            </div>
+          )}
           {editing ? (
             <div className="grid gap-2 sm:grid-cols-2">
               <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Name" />
               <TextInput value={editAddress.phone} onChange={(event) => setEditAddress({ ...editAddress, phone: event.target.value })} placeholder="Phone" />
+              <TextInput value={editAddress.altPhone ?? ""} onChange={(event) => setEditAddress({ ...editAddress, altPhone: event.target.value })} placeholder="Alternative phone" />
               <TextInput value={editAddress.email ?? ""} onChange={(event) => setEditAddress({ ...editAddress, email: event.target.value })} placeholder="Email" />
               <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="Postal code" />
               <TextInput value={editAddress.line1} onChange={(event) => setEditAddress({ ...editAddress, line1: event.target.value })} placeholder="Address" />
@@ -802,11 +1512,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           )}
           {editing && (
             <div className="mt-3">
-              <Button onClick={() => run("save", () => {
-                resaveOrder(order.id, { items: editItems.filter((item) => item.quantity > 0), deliveryAddress: editAddress });
-                setEditing(false);
-                return "Order saved.";
-              })}>
+              <Button onClick={saveEdit} disabled={busy === "save"}>
                 Save changes
               </Button>
             </div>
@@ -827,13 +1533,49 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           <div className="flex flex-wrap gap-2">
             <div className="min-w-44 flex-1">
               <SelectInput value={status} onChange={(event) => setStatus(event.target.value as Order["status"])}>
-                {ALL_STATUSES.map((item) => <option key={item}>{item}</option>)}
+                {order.deliveryMode === "store_pickup"
+                  ? PICKUP_STATUSES.map((item) => <option key={item.status} value={item.status}>{orderStatusText(item.label)}</option>)
+                  : ALL_STATUSES.map((item) => <option key={item} value={item}>{orderStatusText(item)}</option>)}
               </SelectInput>
             </div>
             <Button onClick={applyStatus} disabled={busy === "status" || status === order.status}>{busy === "status" ? "Saving…" : "Update status"}</Button>
           </div>
+          {extraStatuses.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <div className="min-w-44 flex-1">
+                <SelectInput value={extraId} onChange={(event) => setExtraId(event.target.value)}>
+                  <option value="">Add a tracking update…</option>
+                  {extraStatuses.map((row) => <option key={row.id} value={row.id}>{row.label}</option>)}
+                </SelectInput>
+              </div>
+              <Button
+                disabled={!extraId || busy === "extra"}
+                onClick={() =>
+                  run("extra", () => {
+                    const row = extraStatuses.find((item) => item.id === extraId);
+                    if (!row) return;
+                    const latest = getStoredOrder(order.id) ?? order;
+                    patchStoredOrder(order.id, { history: [...(latest.history ?? []), { at: new Date().toISOString(), status: row.label, by: "admin", custom: row.stage }] });
+                    setExtraId("");
+                    return `Tracking update "${row.label}" added. The customer sees it in their tracking.`;
+                  })
+                }
+              >
+                Add update
+              </Button>
+            </div>
+          )}
           {order.status !== "Cancelled" && (
             <div className="mt-3 rounded-lg border border-red-100 bg-red-50/60 p-3">
+              {(() => {
+                const hold = getOrderSettings().cancellation.pickupHoldDays;
+                const ready = order.history?.slice().reverse().find((entry) => entry.status === "Packed")?.at;
+                const days = ready ? Math.floor((Date.now() - Date.parse(ready)) / 864e5) : 0;
+                return order.deliveryMode === "store_pickup" && order.status === "Packed" && hold > 0 && days >= hold ? (
+                  <p className="mb-2 text-xs font-semibold text-red-800">Not collected for {days} days (limit {hold}). You may cancel and refund; the platform fee is kept.</p>
+                ) : null;
+              })()}
+              {preorderLate(order) && <p className="mb-2 text-xs font-semibold text-red-800">This pre-order is past its announced date by more than {getOrderSettings().cancellation.delayDays} days: refund in full, including the platform fee.</p>}
               <p className="text-xs font-semibold text-red-800">Cancel this order</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <div className="min-w-48 flex-1"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
@@ -859,7 +1601,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             <div className="mt-2"><TextInput placeholder="Reason for cancellation" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} /></div>
           )}
           {status === "Packed" && order.deliveryMode === "delivery" && !shipment && (
-            <p className="mt-2 text-xs text-text-muted">{integrations.shipping.autoBookOnPack ? "Setting Packed books the courier automatically." : "Auto-booking on Packed is off. Book the courier below."}</p>
+            <p className="mt-2 text-xs text-text-muted">Couriers are never booked automatically. Pick a courier below and click Book.</p>
           )}
           {status === "Ready to Ship" && order.deliveryMode === "delivery" && (
             <p className="mt-2 text-xs text-text-muted">Ready to Ship books the courier and requests pickup on Shiprocket, Nimbuspost or iThink Logistics, including Porter / Shadowfax / Flash last-mile.</p>
@@ -881,11 +1623,58 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           </p>
           {order.paidAt && <p className="text-xs text-text-muted">Paid {formatDateTime(order.paidAt)}</p>}
           {order.razorpayPaymentId && <p className="font-mono text-xs text-text-muted">{order.razorpayPaymentId}</p>}
+          {order.paymentStatus === "Partially Paid" && <p className="text-xs text-text-muted">Paid {rupees(Math.max(0, Math.round((order.total - remainingDue(order)) * 100) / 100))} · due {rupees(remainingDue(order))}</p>}
+          {order.extraCharges?.map((charge) => (
+            <p key={charge.at} className="text-xs text-text-muted">
+              Extra {charge.kind === "shipping" ? "courier charge" : "charge"} {rupees(charge.amount)} · {charge.reason} · {formatDateTime(charge.at)}
+            </p>
+          ))}
+          {order.status !== "Cancelled" && (
+            <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[7rem_9rem_1fr_auto]">
+              <TextInput type="number" min={1} placeholder="₹ extra" aria-label="Extra amount" value={extraAmount} onChange={(event) => setExtraAmount(event.target.value)} />
+              <SelectInput aria-label="Extra charge type" value={extraKind} onChange={(event) => setExtraKind(event.target.value as "shipping" | "other")}>
+                <option value="shipping">Courier charge</option>
+                <option value="other">Other charge</option>
+              </SelectInput>
+              <TextInput placeholder="Reason the customer sees (e.g. courier was shown free by mistake)" aria-label="Extra charge reason" value={extraReason} onChange={(event) => setExtraReason(event.target.value)} />
+              <Button variant="outline" disabled={busy === "extra"} onClick={() => {
+                if (!window.confirm(`Add ₹${extraAmount || 0} to this order?`)) return;
+                run("extra", () => {
+                  const result = addExtraCharge(order.id, { amount: Number(extraAmount), reason: extraReason, kind: extraKind });
+                  if (result.startsWith("Added")) { setExtraAmount(""); setExtraReason(""); setLinkMode("remaining"); }
+                  return result;
+                });
+              }}>Add extra charge</Button>
+            </div>
+          )}
+
+          {order.paymentStatus === "Paid" && order.status !== "Cancelled" && (
+            <div className="mt-3 grid gap-2 border-t border-border pt-3 sm:grid-cols-[1fr_auto]">
+              <TextInput type="number" min={1} aria-label="Amount actually received" placeholder={`Amount actually received (total ${rupees(order.total)})`} value={partAmount} onChange={(event) => setPartAmount(event.target.value)} />
+              <Button variant="outline" disabled={!partAmount} onClick={() => {
+                if (!window.confirm(`Mark this order partially paid with ₹${partAmount} received?`)) return;
+                run("mark-partial", () => { const note = markPartiallyPaid(order.id, Number(partAmount)); if (note.startsWith("Marked")) setPartAmount(""); return note; });
+              }}>Mark as partially paid</Button>
+              <p className="text-[11px] text-text-muted sm:col-span-2">For an order taken as fully paid by mistake. To charge courier on top, use Add extra charge above instead; it turns the order Partially Paid by itself.</p>
+            </div>
+          )}
 
           {!paid && order.status !== "Cancelled" && (
             <div className="mt-3 space-y-3">
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" disabled={busy === "link"} onClick={() => run("link", async () => { const link = await createPaymentLink(order.id); return `Payment link sent: ${link.url}`; })}>
+                <SelectInput aria-label="Link amount" value={linkMode} onChange={(event) => setLinkMode(event.target.value as typeof linkMode)}>
+                  <option value="remaining">Remaining {rupees(remainingDue(order))}</option>
+                  <option value="full">Full amount {rupees(order.total)}</option>
+                  <option value="custom">Custom amount</option>
+                </SelectInput>
+                {linkMode === "custom" && (
+                  <TextInput className="w-28" type="number" min={1} placeholder="₹ amount" value={linkAmount} onChange={(event) => setLinkAmount(event.target.value)} />
+                )}
+                <Button variant="outline" disabled={busy === "link"} onClick={() => run("link", async () => {
+                  const amount = linkMode === "full" ? order.total : linkMode === "custom" ? Number(linkAmount) : remainingDue(order);
+                  const link = await createPaymentLink(order.id, amount, linkUntil || undefined);
+                  return `Payment link for ${rupees(link.amount ?? amount)} sent, valid until ${formatDateTime(link.expiresAt ?? "")}: ${link.url}`;
+                })}>
                   {order.paymentLink ? "Resend payment link" : "Send payment link"}
                 </Button>
                 {order.paymentLink && (
@@ -895,6 +1684,15 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </>
                 )}
               </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                <label htmlFor={`link-until-${order.id}`}>Link valid until</label>
+                <TextInput id={`link-until-${order.id}`} className="w-52" type="datetime-local" value={linkUntil} onChange={(event) => setLinkUntil(event.target.value)} />
+                <span>{linkUntil ? "" : "Blank = default validity from Settings."}</span>
+                {order.paymentLink && linkUntil && (
+                  <Button variant="ghost" disabled={busy === "expiry"} onClick={() => run("expiry", () => changeOrderLinkExpiry(order.id, linkUntil))}>Change current link&apos;s expiry</Button>
+                )}
+                {order.paymentLink?.expiresAt && <span>Current link valid till {formatDateTime(order.paymentLink.expiresAt)}</span>}
+              </div>
               {order.paymentLink && <p className="break-all rounded bg-warm-cream px-2 py-1 font-mono text-[11px] text-text-muted">{order.paymentLink.url}</p>}
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                 <SelectInput value={method} onChange={(event) => setMethod(event.target.value)}>
@@ -903,31 +1701,206 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 <TextInput placeholder="Reference / UTR" value={reference} onChange={(event) => setReference(event.target.value)} />
                 <Button variant="success" onClick={() => run("record", () => { recordPayment(order.id, { method, reference }); return "Payment recorded. The order is confirmed."; })}>Record payment</Button>
               </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <TextInput type="number" min={1} placeholder={`Part amount received (₹${remainingDue(order)} due)`} value={partAmount} onChange={(event) => setPartAmount(event.target.value)} />
+                <Button variant="outline" disabled={!partAmount} onClick={() => run("partial", () => { const note = recordPartialPayment(order.id, { amount: Number(partAmount), method, reference }); setPartAmount(""); return note; })}>Mark partially paid</Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <TextInput placeholder="Paid on Razorpay but not showing? Paste payment ID (pay_…)" aria-label="Razorpay payment ID" value={rzpPaymentId} onChange={(event) => setRzpPaymentId(event.target.value)} />
+                <Button variant="outline" disabled={busy === "rzp-fetch" || !rzpPaymentId.trim()} onClick={() => run("rzp-fetch", async () => {
+                  const result = await fetchRazorpayPayment(order.id, rzpPaymentId);
+                  setRzpPaymentId("");
+                  return result;
+                })}>{busy === "rzp-fetch" ? "Checking…" : "Fetch from Razorpay"}</Button>
+              </div>
             </div>
           )}
 
           {refundable && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
               <div className="w-28"><TextInput type="number" min={1} max={refundCap} value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} /></div>
-              <SelectInput value={refundDest} onChange={(event) => setRefundDest(event.target.value as "original" | "store_credit")}>
-                <option value="original">Original payment method</option>
-                <option value="store_credit">Store credit</option>
-              </SelectInput>
+              <span className="text-sm font-semibold text-slate-700">To original payment method</span>
               <Button variant="danger" disabled={busy === "refund"} onClick={() => {
-                if (!window.confirm(`Refund ₹${refundAmount} to ${refundDest === "store_credit" ? "store credit" : "the original method"}?`)) return;
-                run("refund", () => refundDest === "store_credit"
-                  ? (refundToStoreCredit(order.id, Number(refundAmount)), "Store credit issued.")
-                  : refundThroughGateway(order.id, Number(refundAmount)));
+                if (!window.confirm(`Refund ₹${refundAmount} to the original payment method?`)) return;
+                run("refund", () => refundThroughGateway(order.id, Number(refundAmount), { withPlatformFee: refundFee }));
               }}>
-                {busy === "refund" ? "Refunding…" : refundDest === "store_credit" ? "Refund to store credit" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund via Razorpay" : "Record refund"}
+                {busy === "refund" ? "Refunding…" : order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") ? "Refund to original payment method" : "Record refund"}
               </Button>
-              {(order.platformFee ?? 0) > 0 && !getOrderSettings().platformFee.refundable && (
-                <p className="w-full text-xs text-slate-500">Platform fee of ₹{order.platformFee} is kept. Switch on “Allow the desk to refund the platform fee” to include it.</p>
+              {(order.platformFee ?? 0) > 0 && (
+                <label className="flex w-full items-center gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={refundFee} onChange={(event) => { const on = event.target.checked; setRefundFee(on); setRefundAmount(String(maxRefundable(order, { withPlatformFee: on }))); }} />
+                  Also refund the platform fee (₹{order.platformFee}). Left unticked, the platform fee is kept.
+                </label>
               )}
             </div>
           )}
+          <RefundDetails order={order} busyId={busy} onCheck={(refund) => run(refund.id, () => refreshRefundStatus(order.id, refund.id))} onCreditDate={(refund, date) => { setRefundCreditDate(order.id, refund.id, date); onChanged(); }} />
         </Section>
       </div>
+
+      {order.deliveryMode === "store_pickup" && order.status !== "Cancelled" && order.status !== "Delivered" && (
+        <div className="mt-4">
+          <PickupWindowSection order={order} busy={busy} run={run} />
+        </div>
+      )}
+
+      {order.deliveryMode === "store_pickup" && order.status !== "Cancelled" && order.status !== "Delivered" && (
+        <div className="mt-4">
+          <Section
+            title="Switch to courier delivery"
+            action={<Button variant="outline" onClick={loadRates} disabled={busy === "rates"}>{busy === "rates" ? "Checking…" : "Show couriers & rates"}</Button>}
+          >
+            <p className="text-sm text-text-muted">
+              If the customer cannot come to the store, convert it to shipping: the customer gets an email and app notification to add the delivery address in My Orders, and the courier charge is added after packing as a balance due. Or send a link to pay only the courier charge first.
+            </p>
+            <div className="mt-2">
+              <Button
+                disabled={busy === "to-shipping"}
+                onClick={() => {
+                  if (!window.confirm("Convert this store-pickup order to courier delivery? The customer will be asked to add the delivery address, and the courier charge will be due as a balance after packing.")) return;
+                  run("to-shipping", () => convertToShipping(order.id));
+                }}
+              >
+                {busy === "to-shipping" ? "Converting…" : "Convert to shipping"}
+              </Button>
+            </div>
+            {rawQuote && <AggregatorPicks rates={rawQuote.rates} skipped={skipAggregators} onChange={(next) => { setSkipAggregators(next); setPicked(undefined); }} />}
+            {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                disabled={busy === "courier-link" || picked === undefined || !quote}
+                onClick={() => run("courier-link", async () => {
+                  const rate = picked !== undefined ? quote?.rates[picked] : undefined;
+                  if (!rate) throw new Error("Pick a courier first.");
+                  const link = await createCourierPaymentLink(order.id, rate);
+                  return `Courier payment link sent: ${link.url}`;
+                })}
+              >
+                {busy === "courier-link" ? "Creating…" : picked !== undefined && quote ? `Send link to pay ${rupees(quote.rates[picked]?.rate ?? 0)} for ${quote.rates[picked]?.courierName}` : "Send courier payment link"}
+              </Button>
+              {order.courierUpgrade?.link && (
+                <>
+                  <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(order.courierUpgrade!.link!.url); setMessage("Link copied."); }}>Copy link</Button>
+                  <Button variant="ghost" onClick={() => run("courier-check", () => refreshCourierPaymentLink(order.id))}>Check status</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => run("courier-paid", () => {
+                      recordCourierPayment(order.id, { method, reference: reference || undefined });
+                      return "Courier charge recorded. The order is now a courier delivery; book the courier below.";
+                    })}
+                  >
+                    Record courier charge paid ({method})
+                  </Button>
+                </>
+              )}
+            </div>
+            {order.courierUpgrade?.link && (
+              <p className="mt-2 break-all rounded bg-warm-cream px-2 py-1 font-mono text-[11px] text-text-muted">
+                {order.courierUpgrade.rate.courierName} · {rupees(order.courierUpgrade.amount)} · {order.courierUpgrade.link.url}
+              </p>
+            )}
+          </Section>
+        </div>
+      )}
+
+      {order.preorderPayment && order.status !== "Cancelled" && (
+        <div className="mt-4">
+          <Section title="Pre-order balance">
+            <p className="text-sm text-text-muted">
+              Advance {rupees(order.preorderPayment.advance)} {order.preorderPayment.advancePaidAt ? "paid" : "pending"} · balance {rupees(order.preorderPayment.balance)}{" "}
+              {order.preorderPayment.balancePaidAt
+                ? `paid ${formatDateTime(order.preorderPayment.balancePaidAt)}${order.preorderPayment.balanceRef ? ` · ${order.preorderPayment.balanceRef}` : ""}`
+                : `due ${order.preorderPayment.balanceWhen === "on_ready" ? "when the item is ready" : "before dispatch"}`}
+            </p>
+            {!order.preorderPayment.balancePaidAt && order.preorderPayment.link && (
+              <p className="mt-2 break-all text-sm">
+                Payment link:{" "}
+                <a href={order.preorderPayment.link.url} target="_blank" rel="noreferrer" className="font-semibold text-primary underline">{order.preorderPayment.link.url}</a>
+                <span className="text-text-muted">
+                  {" "}· sent {formatDateTime(order.preorderPayment.link.createdAt)}
+                  {order.preorderPayment.link.expiresAt ? ` · valid till ${formatDateTime(order.preorderPayment.link.expiresAt)}` : ""}
+                </span>
+              </p>
+            )}
+            {!order.preorderPayment.balancePaidAt && order.preorderPayment.link && (
+              <LinkExpiryEditor
+                current={order.preorderPayment.link.expiresAt}
+                busy={busy === "balance-expiry"}
+                onSave={(value) => run("balance-expiry", () => changeBalanceLinkExpiry(order.id, value))}
+              />
+            )}
+            {!order.preorderPayment.balancePaidAt && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button disabled={busy === "balance-link"} onClick={() => run("balance-link", async () => {
+                  const link = await createBalancePaymentLink(order.id);
+                  return `Balance payment link sent: ${link.url}`;
+                })}>
+                  {busy === "balance-link" ? "Creating…" : `${order.preorderPayment.link ? "Resend new 2-day link" : "Send link"} to pay ${rupees(order.preorderPayment.balance)}`}
+                </Button>
+                {order.preorderPayment.link && (
+                  <>
+                    <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(order.preorderPayment!.link!.url); setMessage("Link copied."); }}>Copy link</Button>
+                    <Button variant="ghost" onClick={() => run("balance-check", () => refreshBalancePaymentLink(order.id))}>Check status</Button>
+                  </>
+                )}
+                <Button variant="outline" onClick={() => run("balance-paid", () => {
+                  recordBalancePayment(order.id, { method, reference: reference || undefined });
+                  return "Balance recorded. The order is fully paid.";
+                })}>
+                  Record balance paid ({method})
+                </Button>
+              </div>
+            )}
+          </Section>
+        </div>
+      )}
+
+      {(!isPreorderOrder(order) || (!order.preorderPayment && order.paymentStatus === "Paid" && order.deliveryMode === "delivery")) && !shipment && !["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-warm-cream/50 p-3 text-sm">
+          <span>Book not in stock yet?</span>
+          <Button
+            variant="outline"
+            disabled={busy === "to-preorder"}
+            onClick={() => {
+              const date = window.prompt("Change this order to a pre-order. Expected date (YYYY-MM-DD), or leave blank if not announced:", "");
+              if (date === null) return;
+              const releaseDate = date.trim();
+              if (releaseDate && !/^\d{4}-\d{2}-\d{2}$/.test(releaseDate)) {
+                window.alert("Enter the date as YYYY-MM-DD, for example 2026-12-31.");
+                return;
+              }
+              run("to-preorder", () => convertToPreorder(order.id, releaseDate || undefined));
+            }}
+          >
+            Change to pre-order
+          </Button>
+        </div>
+      )}
+
+      {order.deliveryMode === "delivery" && order.shipping === 0 && !order.shippingDue && !order.preorderPayment?.shippingDue && !["Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled"].includes(order.status) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-warm-cream/50 p-3 text-sm">
+          <span>Shipping shown free by mistake?</span>
+          <Button variant="outline" disabled={busy === "shipping-due"} onClick={() => run("shipping-due", () => markShippingDue(order.id))}>
+            Charge courier once packed
+          </Button>
+        </div>
+      )}
+
+      {order.deliveryMode === "delivery" && !shipment && !["Shipped", "Out for Delivery", "Delivered", "Cancelled"].includes(order.status) && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-warm-cream/50 p-3 text-sm">
+          <span>Customer will collect from the clinic instead?</span>
+          <Button
+            variant="outline"
+            disabled={busy === "to-pickup"}
+            onClick={() => {
+              if (!window.confirm("Change this order to store pickup? The courier charge comes off the total.")) return;
+              run("to-pickup", () => convertToStorePickup(order.id));
+            }}
+          >
+            Change to store pickup
+          </Button>
+        </div>
+      )}
 
       {order.deliveryMode === "delivery" && order.status !== "Cancelled" && (
         <div className="mt-4">
@@ -939,37 +1912,74 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <div>
                 <p className="text-sm text-text-muted">
                   {order.courierChoice
-                    ? <>Customer chose <b className="text-text-primary">{order.courierChoice.courierName}</b> ({rupees(order.courierChoice.rate)}, {order.courierChoice.etaDays} days).</>
+                    ? <>Customer chose <b className="text-text-primary">{order.courierChoice.courierName}</b> <span className="text-xs">{bookedViaLabel(order.courierChoice.provider)}</span> ({rupees(order.courierChoice.rate)}, {order.courierChoice.etaDays} days).</>
                     : "No courier chosen yet. The cheapest or fastest is picked by the rule in Shipping APIs."}
                 </p>
+                <ShipFromPicker order={order} onChange={() => { setQuote(null); setPicked(undefined); setMessage("Ship-from address saved for this order. Click Show couriers & rates for rates from it."); }} />
+                <ParcelEditor key={`${order.id}:${order.weightKg ?? ""}:${order.parcel ? JSON.stringify(order.parcel) : ""}`} order={order} onSaved={() => { setQuote(null); setPicked(undefined); setMessage("Package saved. Click Show couriers & rates for rates with this package."); }} />
+                {rawQuote && <AggregatorPicks rates={rawQuote.rates} skipped={skipAggregators} onChange={(next) => { setSkipAggregators(next); setPicked(undefined); }} />}
                 {quote && <RatesTable quote={quote} picked={picked} onPick={setPicked} />}
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {order.preorderPayment && !order.preorderPayment.balancePaidAt ? (
+                    <>
+                      <Button
+                        disabled={busy === "preorder-courier" || !quote}
+                        onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, undefined, undefined, quote?.rates ?? []))}
+                      >
+                        {!quote ? "Click Show couriers & rates first" : order.preorderPayment.link ? "Revise quote: charge highest & send new link" : "Charge highest quote & send balance link"}
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <TextInput className="w-32" inputMode="decimal" placeholder="Charge ₹" value={typedCharge} onChange={(event) => setTypedCharge(event.target.value)} />
+                        <Button variant="outline" disabled={busy === "preorder-courier" || typedCharge.trim() === ""} onClick={() => run("preorder-courier", () => selectPreorderCourier(order.id, undefined, Number(typedCharge)))}>
+                          {order.preorderPayment.link ? "Revise charge & send new link" : "Add charge & send link"}
+                        </Button>
+                      </div>
+                      {order.preorderPayment.link && (
+                        <p className="w-full text-xs text-text-muted">A balance link was already sent ({new Date(order.preorderPayment.link.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}). Revising cancels that link, so only the new one can be paid. If the customer already paid it, the balance is marked paid instead.</p>
+                      )}
+                      <p className="w-full text-xs text-text-muted">Pre-order: no courier is picked now. The customer is charged the highest live quote from the aggregators ticked above for this package (+ markup, up to the maximum in Settings → Orders), plus packing. Once the balance is paid, book any courier within that quote. Nothing is booked automatically.</p>
+                    </>
+                  ) : (
                   <Button
-                    disabled={busy === "book"}
-                    onClick={() => run("book", async () => (await bookShipment(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
+                    disabled={busy === "book" || picked === undefined || !quote}
+                    onClick={() => run("book", async () => (await bookPickedCourier(order.id, picked !== undefined ? quote?.rates[picked] : undefined)).message)}
                   >
-                    {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Pack & book courier"}
+                    {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Show rates and pick a courier to book"}
                   </Button>
+                  )}
                 </div>
+                <SplitOrderBox order={order} onDone={(text) => { setMessage(text); onChanged(); }} />
                 <p className="mt-2 text-xs text-text-muted">
-                  Pack & book sends the order to the courier account the customer chose. Tookan, Shipday, Shiprocket, Nimbuspost, iThink and Shipyaari are booked for real when their API key is saved.
+                  Click a courier row, then Book: the shipment goes at once to that row&apos;s aggregator (Shiprocket, Ekart Elite, GoSwift, Nimbuspost, iThink, Shipyaari, Tookan or Shipday), which creates the AWB and charges its wallet. Nothing is sent before you click Book, and booking stays blocked until the order is fully paid.
                 </p>
                 <div className="mt-4 rounded-xl border border-border p-3">
                   <p className="text-sm font-semibold text-text-primary">Shipped with another courier</p>
                   <p className="mt-1 text-xs text-text-muted">
-                    Paste the tracking id and choose the portal that has the parcel. The site asks that portal for the scans and the delivery date and time, then keeps them updated.
+                    Choose the courier and paste its tracking id. Status is fetched from the courier&apos;s own tracking site (or the tracking service in Shipping APIs); connected portals also send the delivery date.
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
-                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value as (typeof MANUAL_PORTALS)[number]["id"])}>
-                      {MANUAL_PORTALS.map((portal) => (
-                        <option key={portal.id} value={portal.id}>{portal.label}</option>
-                      ))}
+                    <SelectInput value={manualPortal} onChange={(event) => setManualPortal(event.target.value)}>
+                      <optgroup label="Courier (opens its tracking page)">
+                        {DIRECT_COURIERS.map((courier) => (
+                          <option key={courier.id} value={courier.id}>{courier.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Connected portal (live scans)">
+                        {MANUAL_PORTALS.map((portal) => (
+                          <option key={portal.id} value={portal.id}>{portal.label}</option>
+                        ))}
+                      </optgroup>
                     </SelectInput>
                     <TextInput placeholder="Tracking id" value={manualAwb} onChange={(event) => setManualAwb(event.target.value)} />
                     <TextInput placeholder="Courier name, if you know it" value={manualCourier} onChange={(event) => setManualCourier(event.target.value)} />
                     <Button
                       disabled={busy === "manual"}
-                      onClick={() => run("manual", () => attachManualTracking(order.id, manualPortal, manualAwb, manualCourier))}
+                      onClick={() =>
+                        run("manual", async () => {
+                          const portal = MANUAL_PORTALS.find((item) => item.id === manualPortal);
+                          return portal ? attachManualTracking(order.id, portal.id, manualAwb, manualCourier) : attachDirectTracking(order.id, manualPortal, manualAwb, manualCourier);
+                        })
+                      }
                     >
                       {busy === "manual" ? "Fetching…" : "Fetch tracking"}
                     </Button>
@@ -979,9 +1989,10 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
             ) : (
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-1 text-sm">
-                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="text-xs font-normal uppercase text-text-muted">{shipment.provider || "courier"}{shipment.live ? " · live" : ""}</span></p>
+                  <p className="font-semibold text-text-primary">{shipment.courier} <span className="block text-xs font-normal text-text-muted">{bookedViaLabel(shipment.provider) || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
+                  {shipment.awb ? <AwbPhotos order={order} awb={shipment.awb} /> : null}
                   <p className="text-xs text-text-muted">Delivery date: {deliveryDatePhrase(shipment.expectedBy) || "Waiting for the courier"}</p>
                   {shipment.pickupScheduledFor && <p className="text-xs text-text-muted">Pickup: {formatDate(shipment.pickupScheduledFor)}{shipment.pickupSlot ? `, ${shipment.pickupSlot}` : ""}{shipment.pickupReference ? ` · ref ${shipment.pickupReference}` : ""}</p>}
                   {shipment.note && <p className="text-xs text-text-muted">{shipment.note}</p>}
@@ -993,7 +2004,9 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </div>
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" onClick={() => run("label", () => downloadLabel(shipment.id))}>Download AWB label</Button>
+                    <LabelSizePicker />
+                    <Button variant="outline" onClick={() => run("label", () => downloadLabel(shipment.id))}>{shipment.labelLink ? "Make new label link" : "Make label link"}</Button>
+                    {shipment.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
                     {shipment.provider === "shiprocket" && shipment.live && (
                       <>
                         <Button variant="outline" onClick={() => run("invoice", () => downloadInvoice(shipment.id))}>Courier invoice</Button>
@@ -1001,16 +2014,27 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>Track</Button>
+                    {(shipment.provider === "goswift" || shipment.provider === "ekart" || shipment.provider === "shadowfax") && shipment.live && shipment.status !== "Delivered" && shipment.status !== "Booked" && (
+                      <>
+                        {(shipment.status === "Failed" || (shipment.tracking ?? []).some((scan) => isFailedAttempt(scan.status))) && (
+                          <Button variant="outline" onClick={() => run("ndr-reattempt", () => goswiftNdrRequest(shipment.id, "Re-Attempt", { date: new Date(Date.now() + 864e5).toISOString() }))}>
+                            Ask {shipment.provider === "ekart" ? "Ekart" : shipment.provider === "shadowfax" ? "Shadowfax" : "GoSwift"} to re-attempt
+                          </Button>
+                        )}
+                        <Button variant="outline" onClick={() => run("ndr-rto", () => goswiftNdrRequest(shipment.id, "RTO"))}>Return to us via {shipment.provider === "ekart" ? "Ekart" : shipment.provider === "shadowfax" ? "Shadowfax" : "GoSwift"} (RTO)</Button>
+                      </>
+                    )}
                     <Button variant="outline" onClick={() => run("realloc", async () => {
-                      const quoteResult = quote ?? await fetchCourierRates({
+                      const quoteResult = quote ?? await fetchCourierRates({ admin: true,
                         deliveryPincode: order.deliveryAddress?.pincode ?? "",
                         weightKg: orderWeightKg(order),
                         declaredValue: order.total,
                         bookIds: order.items.map((item) => item.bookId),
+                        dims: orderDims(order),
                       });
                       if (!quote) {
                         setQuote(quoteResult);
-                        setPicked(0);
+                        setPicked(undefined);
                         return "Rates loaded. Pick a courier, then click Reallocate again.";
                       }
                       const choice = picked !== undefined ? quote.rates[picked] : undefined;
@@ -1034,6 +2058,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {isOwnFleet(shipment.provider) && shipment.status !== "Delivered" && (
                     <div className="rounded-xl border border-border p-3">
                       <p className="text-sm font-semibold text-text-primary">Reschedule Gogate Products delivery</p>
+                      {shipment.taskBarcode ? <p className="mt-1 text-xs text-text-muted">Tookan barcode: <b className="font-mono text-text-primary">{shipment.taskBarcode}</b></p> : null}
                       <p className="mt-1 text-xs text-text-muted">Customers see the date only. The time is sent to the courier task and kept for the tracking line.</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <TextInput type="datetime-local" value={deliveryWhen} onChange={(event) => setDeliveryWhen(event.target.value)} />
@@ -1059,17 +2084,31 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 </div>
                 <div className="lg:col-span-2 rounded-xl border border-border bg-warm-cream/40 p-3 text-xs">
                   <p className="font-semibold text-text-primary">Advanced courier tracking</p>
-                  <p className="mt-1 text-text-muted">Provider {shipment.provider || "courier"} · order {shipment.providerOrderId || "—"} · shipment {shipment.providerShipmentId || "—"} · AWB {shipment.awb}</p>
                   <p className="mt-1 text-text-muted">
-                    Agent {shipment.agentName || "not allotted"}
-                    {shipment.agentPhone ? ` · ${shipment.agentPhone}` : ""}
-                    {shipment.deliveryOtp ? ` · OTP ${shipment.deliveryOtp}` : ""}
-                    {shipment.agentLeg ? ` · ${shipment.agentLeg}` : ""}
+                    {[
+                      shipment.directCourier ? `${shipment.courier} (tracked from the courier's site)` : `${shipment.provider || "Courier"} · ${shipment.courier}`,
+                      shipment.providerOrderId ? `order ${shipment.providerOrderId}` : "",
+                      shipment.providerShipmentId ? `shipment ${shipment.providerShipmentId}` : "",
+                      `AWB ${shipment.awb}`,
+                      `status ${shipment.status}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
-                  <p className="mt-1 text-text-muted">
-                    Pickup {shipment.pickupLat ?? "—"}, {shipment.pickupLng ?? "—"} · drop {shipment.dropLat ?? "—"}, {shipment.dropLng ?? "—"}
-                    {shipment.agentLat != null ? ` · rider ${shipment.agentLat}, ${shipment.agentLng}` : ""}
-                  </p>
+                  {shipment.agentName || shipment.agentPhone ? (
+                    <p className="mt-1 text-text-muted">
+                      Agent {shipment.agentName || ""}
+                      {shipment.agentPhone ? ` · ${shipment.agentPhone}` : ""}
+                      {shipment.deliveryOtp ? ` · OTP ${shipment.deliveryOtp}` : ""}
+                      {shipment.agentLeg ? ` · ${shipment.agentLeg}` : ""}
+                    </p>
+                  ) : null}
+                  {shipment.pickupLat != null || shipment.dropLat != null || shipment.agentLat != null ? (
+                    <p className="mt-1 text-text-muted">
+                      Pickup {shipment.pickupLat ?? "—"}, {shipment.pickupLng ?? "—"} · drop {shipment.dropLat ?? "—"}, {shipment.dropLng ?? "—"}
+                      {shipment.agentLat != null ? ` · rider ${shipment.agentLat}, ${shipment.agentLng}` : ""}
+                    </p>
+                  ) : null}
                   <p className="mt-2 break-all font-mono text-[11px] text-burgundy">
                     {typeof window !== "undefined" ? `${window.location.origin}/track/${order.trackToken || ""}` : `/track/${order.trackToken || ""}`}
                   </p>
@@ -1085,8 +2124,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   </div>
                   {shipment.tracking && shipment.tracking.length > 0 ? (
                     <ol className="mt-3 space-y-1 border-t border-border pt-3">
-                      {shipment.tracking.slice().reverse().map((event, index) => (
-                        <li key={index} className="flex gap-3"><span className="w-44 shrink-0 text-text-muted">{statusStamp(event.at)}</span><span>{event.status}{event.location ? ` · ${event.location}` : ""}</span></li>
+                      {shipment.tracking.filter((event) => !isDeskScan(event)).reverse().map((event, index) => (
+                        <li key={index} className="flex gap-3"><span className="w-44 shrink-0 text-text-muted">{statusStamp(event.at)}</span><span className="flex-1">{event.status}{event.location ? ` · ${event.location}` : ""}</span><button type="button" className="text-xs text-red-600 hover:underline" title="Remove this wrong update" onClick={() => { if (window.confirm(`Remove "${event.status}" from this shipment's tracking?`)) { setMessage(hideShipmentScan(shipment.id, event)); onChanged(); } }}>Remove</button></li>
                       ))}
                     </ol>
                   ) : <p className="mt-2 text-text-muted">No courier scans yet.</p>}
@@ -1102,6 +2141,45 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
       {(order.status === "Delivered" || returnRequest || order.returnShipment || getOrderSettings().adminActions.processAfterDelivery) && order.status !== "Cancelled" && (
         <div className="mt-4">
+          <OrderFeedback orderId={order.id} readOnly />
+          {order.packPhotos?.length ? (
+            <Section title="Packing photos (desk only)">
+              <div className="flex flex-wrap gap-2">
+                {order.packPhotos.map((photo) => (
+                  <a key={photo.url} href={photo.url} target="_blank" rel="noreferrer" title={`${photo.by} · ${formatDateTime(photo.at)}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.url} alt="Packed items" className="h-20 w-20 rounded-lg border border-border object-cover" />
+                  </a>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-text-muted">Taken by the packer as proof of what was packed. Customers never see these.</p>
+            </Section>
+          ) : null}
+          <Section title="Senior approval">
+            {order.approval ? (
+              <p className={`mb-2 rounded-lg p-2 text-xs ${order.approval.status === "Pending" ? "bg-amber-50 text-amber-900" : order.approval.status === "Approved" ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900"}`}>
+                {APPROVAL_LABELS[order.approval.kind]}{order.approval.amount ? ` ${rupees(order.approval.amount)}` : ""} · {order.approval.status === "Pending" ? `waiting for approval (sent by ${order.approval.requestedBy}, ${formatDateTime(order.approval.requestedAt)})` : `${order.approval.status} by ${order.approval.decidedBy ?? "reviewer"}${order.approval.decisionNote ? ` · ${order.approval.decisionNote}` : ""}`}
+              </p>
+            ) : null}
+            {order.approval?.status === "Pending" ? null : (
+              <div className="flex flex-wrap gap-2">
+                <SelectInput value={approvalKind} onChange={(event) => setApprovalKind(event.target.value as ApprovalRequest["kind"])}>
+                  {Object.entries(APPROVAL_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                </SelectInput>
+                <div className="min-w-48 flex-1"><TextInput placeholder="Why it needs approval" value={approvalNote} onChange={(event) => setApprovalNote(event.target.value)} /></div>
+                <Button variant="outline" disabled={busy === "approval"} onClick={() => run("approval", () => {
+                  requestApproval(order.id, {
+                    kind: approvalKind,
+                    note: approvalNote.trim() || undefined,
+                    ...(approvalKind === "refund" ? { amount: Number(refundAmount) || refundCap, destination: refundDest } : {}),
+                  });
+                  setApprovalNote("");
+                  return "Sent for approval. It waits in Commerce → Approvals.";
+                })}>Send for approval</Button>
+              </div>
+            )}
+            {approvalKind === "refund" && order.approval?.status !== "Pending" ? <p className="mt-1 text-xs text-text-muted">The refund amount and destination are taken from the refund box below.</p> : null}
+          </Section>
           <Section title="Returns, refunds & replacements">
             {getOrderSettings().adminActions.processAfterDelivery ? (
               <p className="mb-2 text-xs text-text-muted">Customers cannot cancel or return. The desk can cancel, modify, refund, open a return, or place a free replacement. Damaged-item requests from the customer wait here for accept or reject.</p>
@@ -1111,11 +2189,16 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 Return AWB {order.returnShipment.awb || "pending"} · {order.returnShipment.courierName} · {order.returnShipment.live ? "live" : "demo"}
               </p>
             )}
+            {order.returnShipment?.awb ? <ReturnChargeBox order={order} run={run} /> : null}
             {returnRequest ? (
               <div className="space-y-2 text-sm">
                 <p><b>{returnRequest.kind === "replacement" ? "Replacement" : "Return"}</b> · {returnRequest.status}{returnRequest.source ? ` · ${returnRequest.source}` : ""}</p>
                 <p className="text-xs text-text-muted">Reason: {returnRequest.reason} · requested {formatDateTime(returnRequest.requestedAt)}</p>
+                {returnRequest.items?.length ? <p className="text-xs">Products: <b>{returnRequest.items.map((item) => `${item.quantity} × ${item.title}`).join(", ")}</b></p> : null}
+                {returnRequest.resolution && <p className="text-xs">Customer wants: <b>{returnRequest.resolution === "refund" ? "Refund without return" : returnRequest.resolution === "return_refund" ? "Return for refund" : "Free replacement"}</b></p>}
+                {returnRequest.replacementAddress && <p className="text-xs">Replacement address: {[returnRequest.replacementAddress.fullName, returnRequest.replacementAddress.phone, returnRequest.replacementAddress.line1, returnRequest.replacementAddress.city, returnRequest.replacementAddress.pincode].filter(Boolean).join(", ")}</p>}
                 {returnRequest.note && <p className="text-xs text-text-muted">{returnRequest.note}</p>}
+                {returnRequest.evidence?.video?.length ? <video src={returnRequest.evidence.video[0]} controls className="h-32 rounded-lg" /> : null}
                 {returnRequest.images?.length ? (
                   <div className="flex flex-wrap gap-2">
                     {returnRequest.images.map((src, index) => (
@@ -1124,14 +2207,30 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     ))}
                   </div>
                 ) : null}
-                {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)} after ₹{returnRequest.returnCharges} pickup charge.</p>}
+                {returnRequest.kind === "return" && <p className="text-xs text-text-muted">Refund {rupees(returnRequest.refundAmount ?? 0)}{returnRequest.returnCharges ? ` after ₹${returnRequest.returnCharges} pickup charge` : " · no charge to the customer"}.</p>}
                 <div className="flex flex-wrap gap-2">
-                  {returnRequest.status === "Pending Review" && returnRequest.kind === "replacement" && (
+                  {(returnRequest.status === "Pending Review" || returnRequest.status === "Rejected") && returnRequest.kind === "return" && (
                     <>
                       <Button variant="success" onClick={() => run("rt", () => {
-                        const next = reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
-                        return `Accepted. Free replacement order ${next.replacementOrderId} placed.`;
-                      })}>Accept & place free order</Button>
+                        reviewReplacementRequest(order.id, { accept: true, note: "Return accepted." });
+                        return "Return accepted and the customer emailed. Arrange the free pickup next.";
+                      })}>Accept return</Button>
+                      <Button variant="danger" onClick={() => {
+                        const reason = window.prompt("Reason for cancelling this return request? (sent to the customer)");
+                        if (reason === null) return;
+                        run("rt", () => {
+                          reviewReplacementRequest(order.id, { accept: false, note: reason });
+                          return "Return request cancelled and the customer emailed.";
+                        });
+                      }}>Cancel return</Button>
+                    </>
+                  )}
+                  {(returnRequest.status === "Pending Review" || returnRequest.status === "Rejected") && returnRequest.kind === "replacement" && (
+                    <>
+                      <Button variant="success" onClick={() => run("rt", () => {
+                        reviewReplacementRequest(order.id, { accept: true, note: "Accepted after reviewing photos." });
+                        return "Accepted. Create the return AWB next; the replacement ships after the item is back and checked.";
+                      })}>Accept & ask for the item back</Button>
                       <Button variant="danger" onClick={() => {
                         const reason = window.prompt("Reason for rejecting this replacement request?");
                         if (reason === null) return;
@@ -1145,40 +2244,123 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {returnRequest.status === "Return Requested" && (
                     <Button variant="outline" onClick={() => run("rt", () => { updateReturnRequest(order.id, { status: "Return Approved" }); return "Return approved."; })}>Approve</Button>
                   )}
-                  {returnRequest.status === "Return Approved" && (
+                  {returnRequest.status === "Return Approved" && returnRequest.resolution !== "refund" && (
                     <Button variant="outline" onClick={() => run("rt", async () => {
                       const created = await createReturnShipment(order.id);
                       patchOrder(order.id, {
                         returnShipment: {
-                          provider: "shiprocket",
+                          provider: created.provider,
                           live: created.live,
                           awb: created.awb,
                           courierName: created.courierName,
                           createdAt: new Date().toISOString(),
                           note: created.note,
+                          labelUrl: created.labelUrl,
+                          charge: created.courierCost,
                         },
                       }, "Return pickup booked");
-                      updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                      try {
+                        emailReturnLabel(order.id);
+                      } catch {
+                        /* the label can be emailed from the return box */
+                      }
+                      if (returnRequest.kind === "replacement") {
+                        advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${created.awb} · ${created.courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                      } else {
+                        updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                      }
                       return created.note ?? `Return pickup booked. AWB ${created.awb}.`;
-                    })}>Book reverse pickup</Button>
+                    })}>Create return AWB & label</Button>
+                  )}
+                  {returnRequest.status === "Return Approved" && (
+                    <Button variant="ghost" onClick={() => {
+                      const awb = window.prompt("Return AWB / tracking number")?.trim();
+                      if (!awb) return;
+                      const courierName = window.prompt("Courier for the return (e.g. India Post, DTDC)")?.trim() || "Courier";
+                      const labelUrl = window.prompt("Link to the return label (optional)")?.trim() || undefined;
+                      run("rt", () => {
+                        patchOrder(order.id, { returnShipment: { provider: "local", live: false, awb, courierName, createdAt: new Date().toISOString(), labelUrl } }, `Return AWB ${awb} entered`);
+                        if (returnRequest.kind === "replacement") advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${awb} · ${courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                        else updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                        try {
+                          emailReturnLabel(order.id);
+                        } catch {
+                          /* the label can be emailed from the return box */
+                        }
+                        return `Return AWB ${awb} shared with the customer.`;
+                      });
+                    }}>Enter return AWB manually</Button>
                   )}
                   {returnRequest.status === "Pickup Scheduled" && (
                     <Button variant="outline" onClick={() => run("rt", async () => {
-                      updateReturnRequest(order.id, { status: "Picked Up" });
-                      if (returnRequest.kind === "return" && getOrderSettings().refunds.autoRefundOnReturnPickup && paid) {
+                      if (returnRequest.kind === "replacement") {
+                        advanceReturnRequest(order.id, "Picked Up", "return-pickup", "The courier collected the defective item.");
+                        return "Marked as picked up. Check the item when it arrives, then send the replacement.";
+                      }
+                      advanceReturnRequest(order.id, "Picked Up", "pickup", "The courier collected the item.");
+                      if (returnRequest.kind === "return" && getOrderSettings().refunds.autoRefundOnReturnPickup && paid && returnRequest.inspection) {
                         const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
-                        updateReturnRequest(order.id, { status: "Refunded" });
+                        advanceReturnRequest(order.id, "Refunded", "refund", text || undefined);
                         return `Picked up. ${text}`;
                       }
                       return "Marked as picked up.";
                     })}>Mark picked up</Button>
                   )}
-                  {returnRequest.kind === "return" && returnRequest.status === "Picked Up" && paid && (
-                    <Button variant="danger" onClick={() => run("rt", async () => {
-                      const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
-                      updateReturnRequest(order.id, { status: "Refunded" });
-                      return text;
-                    })}>Refund {rupees(returnRequest.refundAmount ?? 0)}</Button>
+                  {order.returnShipment?.awb && !returnRequest.claim && (
+                    <Button variant="ghost" onClick={() => {
+                      const note = window.prompt("Claim reason (e.g. wrong item returned, item missing, damaged in transit)")?.trim();
+                      if (!note) return;
+                      const amount = Number(window.prompt("Claim amount ₹ (optional)") || 0) || undefined;
+                      run("rt", () => {
+                        updateReturnRequest(order.id, { claim: { at: new Date().toISOString(), note, status: "Open", amount } });
+                        return `Claim recorded. Raise it on the ${bookedViaLabel(order.returnShipment?.provider)} portal for AWB ${order.returnShipment?.awb} with the photos.`;
+                      });
+                    }}>Raise claim</Button>
+                  )}
+                  {returnRequest.claim && (
+                    <span className="flex flex-wrap items-center gap-2 text-xs">
+                      <b>Claim {returnRequest.claim.status}</b> · {returnRequest.claim.note}{returnRequest.claim.amount ? ` · ₹${returnRequest.claim.amount}` : ""}
+                      {returnRequest.claim.status === "Open" && (
+                        <>
+                          <Button variant="ghost" onClick={() => run("rt", () => { updateReturnRequest(order.id, { claim: { ...returnRequest.claim!, status: "Settled" } }); return "Claim marked settled."; })}>Mark settled</Button>
+                          <Button variant="ghost" onClick={() => run("rt", () => { updateReturnRequest(order.id, { claim: { ...returnRequest.claim!, status: "Rejected" } }); return "Claim marked rejected."; })}>Mark rejected</Button>
+                        </>
+                      )}
+                    </span>
+                  )}
+                  {returnRequest.returnMethod && <span className="text-xs text-text-muted">Customer chose: {returnRequest.returnMethod === "self" ? "ships it back themselves" : "Foundation pickup"}</span>}
+                  {["Picked Up", "Pickup Scheduled", "Return Approved"].includes(returnRequest.status) && returnRequest.resolution !== "refund" && (
+                    <Button variant="outline" onClick={() => {
+                      const answer = window.prompt("Condition of the returned item: good, damaged, wrong, or missing", returnRequest.inspection?.condition ?? "good")?.trim().toLowerCase();
+                      if (!answer) return;
+                      const condition = answer.startsWith("g") ? "Good" : answer.startsWith("d") ? "Damaged" : answer.startsWith("w") ? "Wrong item" : answer.startsWith("m") ? "Missing" : null;
+                      if (!condition) { window.alert("Type good, damaged, wrong or missing."); return; }
+                      const note = window.prompt("Inspection notes (optional)") ?? "";
+                      run("rt", () => {
+                        recordReturnInspection(order.id, condition, note);
+                        return condition === "Good" ? "Inspection saved. The copy goes back into stock when the return is closed." : `Inspection saved (${condition}). It will not be restocked.${condition === "Wrong item" || condition === "Missing" ? " Raise a claim if needed." : ""}`;
+                      });
+                    }}>{returnRequest.inspection ? `Inspected: ${returnRequest.inspection.condition} · edit` : "Record inspection"}</Button>
+                  )}
+                  {returnRequest.kind === "replacement" && ["Picked Up", "Pickup Scheduled"].includes(returnRequest.status) && !returnRequest.replacementOrderId && returnRequest.inspection && (
+                    <Button variant="success" onClick={() => {
+                      if (!window.confirm("This places the free replacement order.")) return;
+                      run("rt", () => {
+                        const next = sendReplacementAfterInspection(order.id);
+                        return `Checked. Free replacement order ${next.replacementOrderId} placed.`;
+                      });
+                    }}>Item received & checked — send replacement</Button>
+                  )}
+                  {returnRequest.kind === "return" && ((returnRequest.status === "Picked Up" && returnRequest.inspection) || (returnRequest.status === "Return Approved" && returnRequest.resolution === "refund")) && paid && (
+                    <Button variant="danger" onClick={() => {
+                      const back = returnRequest.status === "Picked Up";
+                      if (back && !window.confirm(`Inspected: ${returnRequest.inspection?.condition}. Send the refund?`)) return;
+                      run("rt", async () => {
+                        const text = await refundThroughGateway(order.id, returnRequest.refundAmount);
+                        advanceReturnRequest(order.id, "Refunded", "refund", text || undefined);
+                        return text;
+                      });
+                    }}>{returnRequest.status === "Picked Up" ? "Item received & checked — refund" : "Send refund"} {rupees(returnRequest.refundAmount ?? 0)}</Button>
                   )}
                 </div>
               </div>
@@ -1188,22 +2370,32 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {getOrderSettings().returns.reasons.map((reason) => <option key={reason}>{reason}</option>)}
                 </SelectInput>
                 <div className="flex flex-wrap gap-2">
+                  {(order.deliveryMode !== "store_pickup" || getOrderSettings().returns.pickupReturns) && (
                   <Button variant="outline" onClick={() => run("rt", async () => {
                     initiateReturn(order, { kind: "return", reason: returnReason });
                     const created = await createReturnShipment(order.id);
                     patchOrder(order.id, {
                       returnShipment: {
-                        provider: "shiprocket",
+                        provider: created.provider,
                         live: created.live,
                         awb: created.awb,
                         courierName: created.courierName,
                         createdAt: new Date().toISOString(),
                         note: created.note,
+                        labelUrl: created.labelUrl,
+                        charge: created.courierCost,
                       },
                     }, "Return opened");
+                    try {
+                      emailReturnLabel(order.id);
+                    } catch {
+                      /* the label can be emailed from the return box */
+                    }
                     return created.note ?? "Return opened and reverse pickup requested.";
                   })}>Create return (reverse pickup)</Button>
-                  {(getOrderSettings().returns.replacementAllowed || getOrderSettings().adminActions.processAfterDelivery) && (
+                  )}
+                  {(getOrderSettings().returns.replacementAllowed || getOrderSettings().adminActions.processAfterDelivery) &&
+                    (order.deliveryMode !== "store_pickup" || getOrderSettings().returns.pickupReplacement) && (
                     <Button variant="outline" onClick={() => run("rt", () => {
                       const replacement = createReplacement(order.id);
                       return replacement ? `Replacement order ${replacement.id} created separately.` : "Could not create replacement.";
@@ -1219,15 +2411,22 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="ghost" onClick={() => printOrderInvoice(order, shipment)}>Print invoice</Button>
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
-        {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Print shipping label</Button>}
+        {shipment && <LabelSizePicker />}
+        {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Make label link</Button>}
+        {shipment?.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
           run("delete", async () => {
             await dropOrderShipments(order.id);
+            await cancelOrderPaymentLinks(order.id);
             deleteOrder(order.id);
             return "Order deleted. The shipment was removed from the desk.";
           });
         }}>Delete order</Button>
+      </div>
+
+      <div className="mt-4">
+        <OrderEmails orderId={order.id} />
       </div>
 
       {order.history && order.history.length > 0 && (
@@ -1237,7 +2436,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               {order.history.slice().reverse().map((entry, index) => (
                 <li key={index} className="flex gap-3">
                   <span className="w-36 shrink-0 text-text-muted">{formatDateTime(entry.at)}</span>
-                  <span><b>{entry.status}</b>{entry.note ? ` · ${entry.note}` : ""}{entry.by ? <span className="text-text-muted"> · {entry.by}</span> : null}</span>
+                  <span className="flex-1"><b>{entry.status}</b>{entry.note ? ` · ${entry.note}` : ""}{entry.by ? <span className="text-text-muted"> · {entry.by}</span> : null}</span>
+                  <button type="button" className="shrink-0 text-red-600 hover:underline" title="Remove this wrong update" onClick={() => { if (window.confirm(`Remove "${entry.status}" from this order's history? The customer stops seeing it.`)) { setMessage(removeHistoryEntry(order.id, entry)); onChanged(); } }}>Remove</button>
                 </li>
               ))}
             </ol>
@@ -1245,5 +2445,603 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </div>
       )}
     </Panel>
+  );
+}
+
+type PickupRow = { nickname: string; city: string; pincode: string; address?: string; phone?: string };
+const SHIP_FROM_PROVIDERS = [
+  { id: "shiprocket", label: "Shiprocket", setting: "Pickup location in Shipping APIs → Shiprocket" },
+  { id: "ekart", label: "Ekart Elite", setting: "Pickup address alias in Shipping APIs → Ekart" },
+  { id: "goswift", label: "GoSwift", setting: "Pickup address alias in Shipping APIs → GoSwift" },
+] as const;
+
+/** Per-order pickup: one address saved on each aggregator's own panel. Rates and the booking for that aggregator use it. */
+function ShipFromPicker({ order, onChange }: { order: Order; onChange: () => void }) {
+  const shipping = getIntegrations().shipping;
+  const enabled = SHIP_FROM_PROVIDERS.filter((row) => (shipping[row.id] as { enabled?: boolean } | undefined)?.enabled !== false);
+  const [lists, setLists] = useState<Partial<Record<(typeof SHIP_FROM_PROVIDERS)[number]["id"], { rows: PickupRow[]; error?: string }>>>({});
+  const [chosen, setChosen] = useState<NonNullable<Order["shipFrom"]>>(order.shipFrom ?? {});
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const results = await Promise.all(
+      enabled.map(async (row) => {
+        try {
+          return [row.id, { rows: (await listPickupLocations(row.id)).locations ?? [] }] as const;
+        } catch (error) {
+          return [row.id, { rows: [], error: (error as Error).message }] as const;
+        }
+      })
+    );
+    setLists(Object.fromEntries(results));
+    setLoading(false);
+  };
+
+  const pick = (id: keyof NonNullable<Order["shipFrom"]>, value: string) => {
+    const next = { ...chosen, [id]: value || undefined };
+    setChosen(next);
+    const label = SHIP_FROM_PROVIDERS.find((row) => row.id === id)?.label ?? id;
+    const row = lists[id]?.rows.find((item) => item.nickname === value);
+    const line = String(row?.address ?? "").trim();
+    const full = row ? [line, ...[row.city, row.pincode].filter((part) => part && !line.toLowerCase().includes(part.toLowerCase()))].filter(Boolean).join(", ") : "";
+    const addresses = { ...(getStoredOrder(order.id)?.shipFromAddress ?? order.shipFromAddress ?? {}) };
+    if (full) addresses[id] = { address: full, phone: row?.phone || undefined };
+    else delete addresses[id];
+    patchStoredOrder(order.id, { shipFrom: next, shipFromAddress: addresses }, `Ship from on ${label}: ${value ? full || value : "Shipping settings default"}`);
+    onChange();
+  };
+
+  if (!enabled.length) return null;
+  const loaded = Object.keys(lists).length > 0;
+  return (
+    <div className="mt-3 rounded-lg border border-border-light p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-text-primary">Ship from (this order)</p>
+        <Button variant="outline" disabled={loading} onClick={load}>{loading ? "Loading…" : loaded ? "Reload saved addresses" : "Load saved pickup addresses"}</Button>
+      </div>
+      <p className="mt-1 text-xs text-text-muted">Pick the address saved on each aggregator&apos;s panel. That aggregator&apos;s rates and booking for this order use it. Other aggregators use the Pickup address in Shipping settings.</p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {enabled.map((row) => {
+          const list = lists[row.id];
+          const current = chosen[row.id] ?? "";
+          const options = list?.rows ?? [];
+          return (
+            <Field key={row.id} label={row.label}>
+              <SelectInput value={current} disabled={!loaded} onChange={(event) => pick(row.id, event.target.value)}>
+                <option value="">Default ({row.setting})</option>
+                {current && !options.some((item) => item.nickname === current) && <option value={current}>{current}</option>}
+                {options.map((item) => (
+                  <option key={item.nickname} value={item.nickname}>
+                    {item.nickname} · {[item.city, item.pincode].filter(Boolean).join(" ")}
+                  </option>
+                ))}
+              </SelectInput>
+              {list?.error && <p className="mt-1 text-xs text-red-600">{list.error}</p>}
+              {current && options.find((item) => item.nickname === current)?.address && <p className="mt-1 text-xs text-text-muted">{options.find((item) => item.nickname === current)?.address}</p>}
+            </Field>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Box size, weight and count for this shipment; rates and the booking sent to the aggregator use these. */
+function ParcelEditor({ order, onSaved }: { order: Order; onSaved: () => void }) {
+  const box = getIntegrations().shipping.packageCm;
+  const [form, setForm] = useState({
+    kind: order.parcel?.kind ?? (order.items.reduce((sum, item) => sum + item.quantity, 0) > 1 ? "bulk" : "single"),
+    boxes: String(order.parcel?.boxes ?? 1),
+    length: String(order.parcel?.length ?? box.length),
+    breadth: String(order.parcel?.breadth ?? box.breadth),
+    height: String(order.parcel?.height ?? box.height),
+    weight: String(orderWeightKg(order)),
+    contents: order.parcel?.contents ?? "",
+  });
+  const [error, setError] = useState("");
+  const set = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
+  const save = () => {
+    const length = Number(form.length);
+    const breadth = Number(form.breadth);
+    const height = Number(form.height);
+    const weightKg = Number(form.weight);
+    const boxes = Math.max(1, Math.floor(Number(form.boxes) || 1));
+    if (![length, breadth, height].every((value) => value > 0)) return setError("Enter length, breadth and height in cm.");
+    if (!(weightKg > 0)) return setError("Enter the packed weight in kg.");
+    setError("");
+    patchOrder(
+      order.id,
+      { weightKg, parcel: { kind: form.kind === "bulk" ? "bulk" : "single", boxes, length, breadth, height, contents: form.contents.trim() || undefined } },
+      `Package ${length}×${breadth}×${height} cm · ${weightKg} kg${boxes > 1 ? ` · ${boxes} boxes` : ""}`
+    );
+    onSaved();
+  };
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Package for this shipment</p>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <Field label="Type">
+          <SelectInput value={form.kind} onChange={(event) => set({ kind: event.target.value === "bulk" ? "bulk" : "single" })}>
+            <option value="single">Single</option>
+            <option value="bulk">Bulk</option>
+          </SelectInput>
+        </Field>
+        <Field label="Boxes"><TextInput type="number" min={1} value={form.boxes} onChange={(event) => set({ boxes: event.target.value })} /></Field>
+        <Field label="Length (cm)"><TextInput type="number" min={1} value={form.length} onChange={(event) => set({ length: event.target.value })} /></Field>
+        <Field label="Breadth (cm)"><TextInput type="number" min={1} value={form.breadth} onChange={(event) => set({ breadth: event.target.value })} /></Field>
+        <Field label="Height (cm)"><TextInput type="number" min={1} value={form.height} onChange={(event) => set({ height: event.target.value })} /></Field>
+        <Field label="Weight (kg)"><TextInput type="number" min={0.01} step={0.01} value={form.weight} onChange={(event) => set({ weight: event.target.value })} /></Field>
+        <Field label="Contents"><TextInput placeholder="e.g. Books" value={form.contents} onChange={(event) => set({ contents: event.target.value })} /></Field>
+      </div>
+      <p className="mt-1 text-xs text-text-muted">For several boxes, enter the total packed weight and the size of the largest box. Aggregators charge on the higher of actual and volumetric weight (L×B×H ÷ 5000).</p>
+      {error ? <p className="mt-1 text-xs text-red-700">{error}</p> : null}
+      <Button variant="outline" onClick={save}>Save package</Button>
+    </div>
+  );
+}
+
+/** Pre-orders are never booked automatically: the desk creates the shipment after packing. */
+function isPreorderOrder(order?: Order | null) {
+  return Boolean(order && (order.preorderPayment || order.items.some((item) => item.preorder)));
+}
+
+/** Every rupee on the order, and where the courier charge came from. */
+function ChargesBreakdown({ order }: { order: Order }) {
+  const quote = order.courierQuote;
+  const plan = order.preorderPayment;
+  const extras = order.extraCharges ?? [];
+  const courierExtras = extras.filter((row) => row.kind === "shipping").reduce((sum, row) => sum + row.amount, 0);
+  // Older quotes saved only the courier price: the rest of the shipping charge is packing.
+  const shippingBase = Math.max(0, (order.shipping ?? 0) - courierExtras);
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const packing =
+    order.packing ??
+    quote?.packing ??
+    (quote && shippingBase > quote.charged
+      ? Math.round((shippingBase - quote.charged) * 100) / 100
+      : order.deliveryMode === "delivery" && shippingBase > 0
+        ? Math.min(shippingBase, packingChargeFor(units))
+        : 0);
+  const courier = Math.max(0, Math.round(((order.shipping ?? 0) - courierExtras - packing) * 100) / 100);
+  const booked = getShipments().filter((item) => item.orderId === order.id && item.note !== "Cancelled");
+  const paid = Math.max(0, Math.round((order.total - remainingDue(order)) * 100) / 100);
+  const rows: [string, number, string?][] = [
+    ...order.items.map((item) => [`${currentProductTitle(item)} × ${item.quantity} @ ${rupees(item.price)}`, item.price * item.quantity] as [string, number]),
+    ...(order.promo?.amount ? [[`Coupon / gift card ${order.promo.code}`, -order.promo.amount] as [string, number]] : []),
+    ...(order.storeCreditUsed ? [["Store credit used", -order.storeCreditUsed] as [string, number]] : []),
+    ...(order.gst ? [["GST", order.gst] as [string, number]] : []),
+    ...(order.platformFee ? [["Platform fee (once per order)", order.platformFee] as [string, number]] : []),
+    ...(packing ? [["Packing", packing] as [string, number]] : []),
+    ...(courier || order.deliveryMode === "delivery"
+      ? quote && quote.highest > 0 && courier > quote.highest
+        ? ([[`Courier: aggregator rate${quote.courierName ? ` (${quote.courierName})` : ""}`, quote.highest], ["Courier markup (ours)", Math.round((courier - quote.highest) * 100) / 100]] as [string, number][])
+        : [[order.shippingDue || plan?.shippingDue ? "Courier (not charged yet)" : "Courier", courier] as [string, number]]
+      : []),
+    ...extras.map((row) => [`Extra: ${row.reason}`, row.amount, row.by] as [string, number, string?]),
+  ];
+  return (
+    <div className="mt-4">
+      <Section title="Charges breakdown (Admin only)">
+        <table className="w-full text-xs">
+          <tbody>
+            {rows.map(([label, amount, by], index) => (
+              <tr key={index} className="border-b border-border/60"><td className="py-1">{label}{by ? <span className="text-text-muted"> · {by}</span> : null}</td><td className="py-1 text-right">{amount < 0 ? "−" : ""}{rupees(Math.abs(amount))}</td></tr>
+            ))}
+            <tr className="font-semibold"><td className="py-1">Total</td><td className="py-1 text-right">{rupees(order.total)}</td></tr>
+            {plan ? <tr><td className="py-1">Advance {plan.advancePaidAt ? `paid ${formatDateTime(plan.advancePaidAt)}` : "(not paid)"}</td><td className="py-1 text-right">{rupees(plan.advance)}</td></tr> : null}
+            {plan ? <tr><td className="py-1">Balance {plan.balancePaidAt ? `paid ${formatDateTime(plan.balancePaidAt)}` : "due"}</td><td className="py-1 text-right">{rupees(plan.balance)}</td></tr> : null}
+            <tr className="font-semibold text-emerald-800"><td className="py-1">Paid so far</td><td className="py-1 text-right">{rupees(paid)}</td></tr>
+            <tr className="font-semibold text-amber-800"><td className="py-1">Still due</td><td className="py-1 text-right">{rupees(remainingDue(order))}</td></tr>
+          </tbody>
+        </table>
+        {quote ? (
+          <div className="mt-3 rounded-lg bg-warm-cream/50 p-2 text-xs">
+            <p className="font-semibold">Courier quote sent {formatDateTime(quote.at)}: {quote.courierName ?? "courier and aggregator not saved (quoted before 17 Nov, 9 pm)"}{quote.provider ? ` (${bookedViaLabel(quote.provider as CourierRate["provider"])})` : ""} · {rupees(quote.charged)}{quote.fee ? ` → charged ${rupees(quote.fee)} incl. packing ${rupees(quote.packing ?? 0)}` : ""}</p>
+            <p className="text-text-muted">{quote.source === "typed" ? "Typed by the desk" : quote.source === "chosen" ? "Courier picked by the desk" : `Highest of ${quote.couriers} live quote${quote.couriers === 1 ? "" : "s"}`} · package {quote.weightKg} kg{quote.parcel ? ` · ${quote.parcel.length}×${quote.parcel.breadth}×${quote.parcel.height} cm` : ""}</p>
+            {quote.quotes?.length ? <p className="text-text-muted">All quotes: {quote.quotes.map((row) => `${row.name} ${rupees(row.rate)}`).join(" · ")}</p> : null}
+          </div>
+        ) : null}
+        {booked.map((item) => (
+          <p key={item.id} className="mt-2 text-xs">Booked: {item.courier} · AWB {item.awb} · courier cost {rupees(item.charges)}</p>
+        ))}
+      </Section>
+    </div>
+  );
+}
+
+/** Split order: part of the items go to a second order; both child orders then run as normal orders. */
+function SplitOrderBox({ order, onDone }: { order: Order; onDone: (message: string) => void }) {
+  const units = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const [open, setOpen] = useState(false);
+  const [second, setSecond] = useState<Record<string, number>>(() =>
+    Object.fromEntries(order.items.map((item, index) => [item.bookId, order.items.length > 1 ? (index % 2 ? item.quantity : 0) : Math.floor(item.quantity / 2)]))
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (units < 2 || order.splitFrom || order.splitInto?.length) return null;
+  const blocker = splitBlocker(order, false);
+  const split = async () => {
+    if (!window.confirm(`Split order ${order.id} into ${order.id}-1 and ${order.id}-2? The customer is emailed, and each part then needs its own packing, courier charge and payment.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await cancelOrderPaymentLinks(order.id);
+      onDone(splitOrder(order.id, second));
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not split this order.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-4 rounded-xl border border-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-text-primary">Split order</p>
+        <Button variant="ghost" onClick={() => setOpen(!open)}>{open ? "Hide" : "Split order"}</Button>
+      </div>
+      {open && (
+        <div className="mt-2 space-y-2 text-sm">
+          <p className="text-xs text-text-muted">Send what is ready now and the rest later. This order stays as the parent record, and its items move to two new orders, {order.id}-1 and {order.id}-2. Each new order has its own picker/packer, package size, packing + courier charge, payment link, booking, tracking, invoice and returns. A paid pre-order advance is shared by book, and the platform fee stays paid on this order, so it is not charged again.</p>
+          {order.items.map((item) => (
+            <div key={item.bookId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warm-cream/40 px-3 py-2">
+              <span className="font-medium">{currentProductTitle(item)} × {item.quantity}</span>
+              <span className="flex items-center gap-2 text-xs">
+                {order.id}-1: <b>{item.quantity - (second[item.bookId] ?? 0)}</b> · {order.id}-2:
+                <input
+                  type="number"
+                  min={0}
+                  max={item.quantity}
+                  className="w-16 rounded-lg border border-border px-2 py-1"
+                  value={second[item.bookId] ?? 0}
+                  onChange={(event) => setSecond((current) => ({ ...current, [item.bookId]: Math.max(0, Math.min(item.quantity, Math.floor(Number(event.target.value) || 0))) }))}
+                  aria-label={`Copies of ${item.title} in order 2`}
+                />
+              </span>
+            </div>
+          ))}
+          {blocker ? <p className="text-xs text-amber-800">{blocker}</p> : null}
+          <Button disabled={busy || Boolean(blocker)} onClick={() => void split()}>{busy ? "Splitting…" : "Split into 2 orders"}</Button>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Parent ↔ child links, and the parent's consolidated ledger. */
+function SplitOrderInfo({ order }: { order: Order }) {
+  const link = (id: string) => <a key={id} className="font-semibold text-burgundy underline" href={`/admin/commerce/orders?order=${encodeURIComponent(id)}`}>#{id}</a>;
+  if (order.splitFrom) {
+    return <p className="mb-3 rounded-lg bg-warm-cream px-3 py-2 text-xs text-text-muted">Order {order.splitPart ?? ""} of a split order · parent {link(order.splitFrom)}{order.splitAdvance ? ` · advance ₹${order.splitAdvance} allocated from the parent` : ""}. The platform fee is on the parent.</p>;
+  }
+  if (!order.splitInto?.length) return null;
+  const children = order.splitInto.map((row) => getStoredOrder(row.id)).filter((child): child is Order => Boolean(child));
+  const ledger = splitLedger(order, children, collectedAmount);
+  return (
+    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-slate-800">
+      <p className="font-semibold">Split{order.splitAt ? ` on ${formatDateTime(order.splitAt)}` : ""} into {order.splitInto.map((row, index) => <span key={row.id}>{index ? " and " : ""}{link(row.id)}</span>)}. This parent is kept as the record: book, charge and pack the child orders.</p>
+      <table className="mt-2 w-full text-left">
+        <thead><tr className="text-slate-500"><th className="py-1">Order</th><th>Items</th><th>Status</th><th className="text-right">Total</th><th className="text-right">Advance</th><th className="text-right">Packing</th><th className="text-right">Courier</th><th className="text-right">Extra</th><th className="text-right">Paid</th><th className="text-right">Due</th></tr></thead>
+        <tbody>
+          {ledger.rows.map((row) => (
+            <tr key={row.id} className="border-t border-amber-200">
+              <td className="py-1">{link(row.id)}</td><td>{row.label}</td><td>{row.status}</td><td className="text-right">₹{row.total}</td><td className="text-right">₹{row.advance}</td><td className="text-right">₹{row.packing}</td><td className="text-right">₹{row.courier}</td><td className="text-right">₹{row.extra}</td><td className="text-right">₹{row.collected}</td><td className="text-right">₹{row.due}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2">Original order ₹{ledger.original}{ledger.advance ? ` · advance received ₹${ledger.advance}` : ""}{ledger.fee ? ` · platform fee ₹${ledger.fee} ${ledger.feePaidOnParent ? "paid once on this order" : "carried by the first child order"}` : ""} · child orders ₹{ledger.childTotal} · collected ₹{ledger.collected} · still due ₹{ledger.due}</p>
+    </div>
+  );
+}
+
+/** Where the order was placed, shown as a badge in Admin. */
+function orderPlatform(order: { createdBy?: string; channel?: string }) {
+  if (order.createdBy === "WhatsApp") return { label: "WhatsApp", tone: "bg-emerald-600" };
+  if (isAppOrder(order)) return { label: "App", tone: "bg-indigo-600" };
+  if (order.channel === "pos") return { label: "Store / POS", tone: "bg-amber-600" };
+  if (order.channel === "admin" || order.channel === "shipment") return { label: "Admin", tone: "bg-slate-600" };
+  if (/-sync$/.test(order.createdBy ?? "")) return { label: "Partner site", tone: "bg-sky-600" };
+  return { label: "Website", tone: "bg-burgundy" };
+}
+
+/** Placed from the Android/iOS app (mobile checkout stamps createdBy "Android app"). */
+function isAppOrder(order: { createdBy?: string }) {
+  return /\bapp\b/i.test(order.createdBy ?? "");
+}
+
+/** Admin ticks which aggregators to quote from; the highest valid quote is taken only among those. */
+function AggregatorPicks({ rates, skipped, onChange }: { rates: CourierRate[]; skipped: string[]; onChange: (next: string[]) => void }) {
+  const providers = [...new Set(rates.map((rate) => rate.provider))];
+  if (providers.length < 2) return null;
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-white p-3 text-sm">
+      <span className="font-semibold text-text-primary">Quote from:</span>
+      {providers.map((provider) => {
+        const count = rates.filter((rate) => rate.provider === provider).length;
+        return (
+          <label key={provider} className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={!skipped.includes(provider)}
+              onChange={(event) => onChange(event.target.checked ? skipped.filter((row) => row !== provider) : [...skipped, provider])}
+            />
+            {bookedViaLabel(provider).replace(/^via /, "")} <span className="text-xs text-text-muted">({count})</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Admin moves the expiry of an open payment link to any date and time (IST). */
+function LinkExpiryEditor({ current, busy, onSave }: { current?: string; busy: boolean; onSave: (iso: string) => void }) {
+  const toLocal = (iso?: string) => {
+    const ms = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(ms) ? new Date(ms + 5.5 * 3600_000).toISOString().slice(0, 16) : "";
+  };
+  const [value, setValue] = useState(toLocal(current));
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-text-muted">Link valid till (IST)</span>
+      <input type="datetime-local" className="rounded-lg border border-border bg-white px-2 py-1" value={value} onChange={(event) => setValue(event.target.value)} />
+      <Button variant="outline" disabled={busy || !value} onClick={() => onSave(new Date(`${value}:00+05:30`).toISOString())}>
+        {busy ? "Saving…" : "Change expiry"}
+      </Button>
+    </div>
+  );
+}
+
+function AwbPhotos({ order, awb }: { order: Order; awb: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const photos = order.awbPhotos ?? [];
+  const add = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBusy(true);
+    setError("");
+    try {
+      const session = getSession();
+      const by = session?.email ?? "admin";
+      const byName = session ? `${session.firstName ?? ""} ${session.lastName ?? ""}`.trim() || undefined : undefined;
+      const added: NonNullable<Order["awbPhotos"]> = [];
+      for (const file of Array.from(files)) added.push({ url: await uploadMediaFile(file), at: new Date().toISOString(), by, byName, awb });
+      patchStoredOrder(order.id, { awbPhotos: [...(getStoredOrder(order.id)?.awbPhotos ?? []), ...added] }, `${added.length} AWB / parcel photo${added.length === 1 ? "" : "s"} added`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not upload the photo.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-2 rounded-lg border border-border p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800">
+          {busy ? "Uploading…" : `Take AWB label / parcel photos${photos.length ? ` (${photos.length})` : ""}`}
+          <input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={busy} onChange={(event) => { void add(event.target.files); event.target.value = ""; }} />
+        </label>
+        <span className="text-[11px] text-text-muted">Proof of the label and sealed parcel. Customers never see these.</span>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+      {photos.length ? (
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {photos.map((photo) => (
+            <figure key={photo.url} className="min-w-0 rounded-lg border border-border bg-white p-1.5">
+              <a href={photo.url} target="_blank" rel="noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt="AWB label or parcel" className="aspect-square w-full rounded-md object-cover" />
+              </a>
+              <figcaption className="mt-1 space-y-0.5 text-[11px] leading-4 text-text-muted">
+                <p className="truncate font-semibold text-ink">Taken by {photo.byName || photo.by}</p>
+                {photo.byName && photo.by ? <p className="truncate">{photo.by}</p> : null}
+                <p>{formatDateTime(photo.at)}</p>
+                {photo.awb ? <p className="truncate">AWB {photo.awb}</p> : null}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type GatewaySummary = {
+  ok: boolean;
+  error?: string;
+  gateway?: {
+    name: string;
+    collected: number;
+    count: number;
+    onOrders: number;
+    notOnOrders: number;
+    fullyRefunded: { count: number; amount: number };
+    refunded: number;
+    refundCount: number;
+  } | null;
+  orderRefunds?: { toBank: number; toStoreCredit: number; count: number };
+  unmatched?: { id: string; amount: number; refunded: number; status: string; at: string; orderId: string; orderDeleted: boolean }[];
+};
+
+/** Payments and refunds as the gateway records them, so the Orders tab matches the Razorpay dashboard. */
+type OrderEmailRow = { id?: string; at: string; to: string; subject: string; ok: boolean; error?: string; resendable?: boolean };
+
+/** Emails the server sent about this order: what, to whom, when, and whether it went out. */
+function OrderEmails({ orderId }: { orderId: string }) {
+  const [data, setData] = useState<{ emails: OrderEmailRow[]; earlier: { label: string; at?: string }[]; whatsapp: { key: string; label: string }[] } | null>(null);
+  const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+  const [waNote, setWaNote] = useState<Record<string, string>>({});
+  const resendWhatsApp = async (key: string) => {
+    setWaNote((prev) => ({ ...prev, [key]: "Sending…" }));
+    const body = await fetch("/api/admin/order-emails", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId, key }) })
+      .then((response) => response.json())
+      .catch(() => ({ ok: false, error: "Could not reach the server." }));
+    setWaNote((prev) => ({ ...prev, [key]: body?.ok ? "Sent on WhatsApp" : body?.error || "Not sent" }));
+  };
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/admin/order-emails?orderId=${encodeURIComponent(orderId)}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((body) => {
+        if (!live) return;
+        if (body?.ok) {
+          setData({ emails: body.emails ?? [], earlier: body.earlier ?? [], whatsapp: body.whatsapp ?? [] });
+          setError("");
+        } else setError(body?.error || "Could not load the emails.");
+      })
+      .catch(() => live && setError("Could not reach the server."));
+    return () => {
+      live = false;
+    };
+  }, [orderId, tick]);
+  const emails = data?.emails ?? [];
+  const earlier = data?.earlier ?? [];
+  return (
+    <Section title={`Emails sent${data ? ` (${emails.length})` : ""}`} action={<button type="button" className="text-xs font-medium text-primary" onClick={() => setTick((value) => value + 1)}>Refresh</button>}>
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      {!data && !error ? <p className="text-xs text-text-muted">Loading…</p> : null}
+      {data && emails.length === 0 && earlier.length === 0 ? <p className="text-xs text-text-muted">No emails sent for this order yet.</p> : null}
+      {data && data.whatsapp.length > 0 && (
+        <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800">Resend on WhatsApp</p>
+          <ul className="mt-1 space-y-1 text-xs">
+            {data.whatsapp.map((item) => (
+              <li key={item.key} className="flex flex-wrap items-center gap-2">
+                <span>{item.label}</span>
+                <button type="button" className="font-medium text-primary" onClick={() => void resendWhatsApp(item.key)}>Resend WhatsApp</button>
+                {waNote[item.key] ? <span className={waNote[item.key].startsWith("Sent") ? "text-green-700" : "text-text-muted"}>{waNote[item.key]}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {emails.length > 0 && (
+        <ol className="space-y-1.5 text-xs">
+          {emails.map((entry, index) => (
+            <li key={index} className="flex gap-3">
+              <span className="w-36 shrink-0 text-text-muted">{formatDateTime(entry.at)}</span>
+              <span>
+                <b>{entry.subject}</b> · {entry.to}{" "}
+                {entry.ok ? <span className="text-green-700">· Sent</span> : <span className="text-red-600">· Not sent{entry.error ? `: ${entry.error}` : ""}</span>}{" "}
+                {entry.resendable && <ResendEmailButton id={entry.id} to={entry.to} onSent={() => setTick((value) => value + 1)} />}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {earlier.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sent before this list started (no time recorded)</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-text-muted">
+            {earlier.map((item, index) => <li key={index}>{item.label}{item.at ? ` · ${formatDateTime(item.at)}` : ""}</li>)}
+          </ul>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function PickupWindowSection({ order, busy, run }: { order: Order; busy: string; run: (label: string, task: () => Promise<string | void> | string | void) => Promise<void> }) {
+  const slots = getOrderSettings().pickupSlots;
+  const [date, setDate] = useState(order.pickupWindow?.date ?? "");
+  const [slot, setSlot] = useState(order.pickupWindow?.slot ?? slots[0] ?? "");
+  const saved = order.pickupWindow;
+  const same = saved && saved.date === date && saved.slot === slot;
+  return (
+    <Section title="Pickup slot">
+      <p className="mb-2 text-xs text-text-muted">
+        Give the customer a date and time to collect the order. Saving emails and notifies them; the slot shows in their order. Edit the slot list in Settings → Order settings.
+      </p>
+      {saved && <p className="mb-2 text-xs font-medium text-text-primary">Current: {saved.date} · {saved.slot} · email sent {formatDateTime(saved.at)}</p>}
+      <div className="flex flex-wrap gap-2">
+        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="rounded-lg border border-border px-3 py-2 text-sm" aria-label="Pickup date" />
+        <div className="min-w-44 flex-1">
+          <SelectInput value={slot} onChange={(event) => setSlot(event.target.value)} aria-label="Pickup time slot">
+            {slot && !slots.includes(slot) && <option value={slot}>{slot}</option>}
+            {slots.map((item) => <option key={item} value={item}>{item}</option>)}
+          </SelectInput>
+        </div>
+        <Button disabled={!date || !slot || busy === "pickup-window"} onClick={() => run("pickup-window", () => setPickupWindow(order.id, date, slot))}>
+          {busy === "pickup-window" ? "Sending…" : same ? "Resend pickup email" : "Save slot & email customer"}
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
+function GatewaySummaryCard() {
+  const [days, setDays] = useState(7);
+  const [summary, setSummary] = useState<GatewaySummary | null>(null);
+  const [showUnmatched, setShowUnmatched] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/admin/gateway-summary?days=${days}`, { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: GatewaySummary) => live && setSummary(data))
+      .catch(() => live && setSummary({ ok: false, error: "Could not reach the server." }));
+    return () => {
+      live = false;
+    };
+  }, [days]);
+  const gateway = summary?.gateway;
+  const refunds = summary?.orderRefunds;
+  const unmatched = summary?.unmatched ?? [];
+  return (
+    <div className="rounded-xl border border-border bg-white p-4 text-left sm:col-span-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Payments &amp; refunds{gateway ? ` · ${gateway.name}` : ""}</p>
+        <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="rounded-md border border-border bg-white px-2 py-1 text-xs">
+          <option value={1}>Last 24 hours</option>
+          <option value={7}>Last 7 days</option>
+          <option value={30}>Last 30 days</option>
+          <option value={90}>Last 90 days</option>
+        </select>
+      </div>
+      {!summary ? (
+        <p className="mt-2 text-xs text-text-muted">Loading from the gateway…</p>
+      ) : (
+        <>
+          {gateway ? (
+            <>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{rupees(gateway.collected)}</p>
+              <p className="text-xs text-text-muted">
+                Collected from {gateway.count} captured payments · on orders <b>{rupees(gateway.onOrders)}</b>
+                {gateway.notOnOrders ? <> · not on any order <b className="text-amber-700">{rupees(gateway.notOnOrders)}</b></> : null}
+              </p>
+              <p className="mt-1 text-xs text-text-muted">
+                Refunded via {gateway.name} <b className="text-rose-700">{rupees(gateway.refunded)}</b> ({gateway.refundCount})
+                {gateway.fullyRefunded.count ? <> · {gateway.fullyRefunded.count} fully refunded payments ({rupees(gateway.fullyRefunded.amount)}) are not in Collected</> : null}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-xs text-text-muted">{summary.error || "No payment gateway keys are saved."}</p>
+          )}
+          {refunds && (
+            <p className="mt-1 text-xs text-text-muted">
+              Refunds on orders: to bank <b>{rupees(refunds.toBank)}</b> · to store credit <b>{rupees(refunds.toStoreCredit)}</b> ({refunds.count})
+            </p>
+          )}
+          {unmatched.length > 0 && (
+            <div className="mt-2">
+              <button type="button" onClick={() => setShowUnmatched((open) => !open)} className="text-xs font-semibold text-burgundy underline">
+                {showUnmatched ? "Hide" : "Show"} {unmatched.length} gateway payments not on any order
+              </button>
+              {showUnmatched && (
+                <ul className="mt-1 space-y-0.5 text-xs text-text-muted">
+                  {unmatched.map((payment) => (
+                    <li key={payment.id}>
+                      {payment.id} · {rupees(payment.amount)} · {formatDateTime(payment.at)}
+                      {payment.orderId ? ` · order #${payment.orderId}${payment.orderDeleted ? " (deleted)" : ""}` : ""}
+                      {payment.refunded ? ` · refunded ${rupees(payment.refunded)}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

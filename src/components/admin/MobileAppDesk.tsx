@@ -12,7 +12,7 @@ import {
   type MobileAppConfig,
   type MobileModuleId,
 } from "@/lib/mobile-config";
-import { collectMobileSnapshot, publishLiveSite } from "@/lib/mobile-publish";
+import { publishLiveSite } from "@/lib/mobile-publish";
 import { ImageField } from "@/components/admin/ImageField";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
@@ -53,11 +53,11 @@ export function MobileAppDesk() {
     setBusy(true);
     setNote("Publishing the live website snapshot to the app…");
     try {
-      const snapshot = collectMobileSnapshot();
+      await publishLiveSite();
       const response = await fetch("/api/mobile/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...snapshot, email: getIntegrations().email }),
+        body: JSON.stringify({ partial: true, sections: {}, email: getIntegrations().email }),
       });
       const data = (await response.json()) as {
         ok?: boolean;

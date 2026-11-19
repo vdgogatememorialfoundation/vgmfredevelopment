@@ -1,7 +1,10 @@
 import { books } from "@/data/books";
 import type { AdminCategory, Book, Order, ProductOverride } from "@/types";
+import { logAudit } from "@/lib/audit";
 import { queueNotification } from "@/lib/notify";
 import { pushInbox } from "@/lib/inbox";
+import { stockLabelCode, stripUnitSuffix } from "@/lib/barcode";
+import { isPublishedNow } from "@/lib/schedule";
 
 const OVERRIDES_KEY = "vgmf_admin_products";
 const CUSTOM_KEY = "vgmf_custom_books";
@@ -25,6 +28,44 @@ function writeJSON(key: string, value: unknown) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(key, JSON.stringify(value));
   window.dispatchEvent(new Event("vgmf-cms"));
+}
+
+const PENDING_KEY = "vgmf_unpublished_products";
+const PENDING_FIELDS_KEY = "vgmf_unpublished_product_fields";
+
+/** The fields each unpublished product changed here; the live site applies only these over its own copy. */
+export function pendingProductFields(): Record<string, string[]> {
+  return readJSON<Record<string, string[]>>(PENDING_FIELDS_KEY, {});
+}
+
+/** Products saved in this browser that the live site has not received yet. */
+export function pendingProductIds(): string[] {
+  return readJSON<string[]>(PENDING_KEY, []);
+}
+
+export function clearPendingProducts(ids: string[]) {
+  if (typeof window === "undefined" || !ids.length) return;
+  const sent = new Set(ids);
+  window.localStorage.setItem(PENDING_KEY, JSON.stringify(pendingProductIds().filter((id) => !sent.has(id))));
+  const fields = pendingProductFields();
+  for (const id of ids) delete fields[id];
+  window.localStorage.setItem(PENDING_FIELDS_KEY, JSON.stringify(fields));
+}
+
+const UNTRACKED = new Set(["updatedAt", "createdAt"]);
+
+function markProductPending(id: string, before: Book | undefined, after: Book) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PENDING_KEY, JSON.stringify(Array.from(new Set([id, ...pendingProductIds()])).slice(0, 500)));
+  const fields = pendingProductFields();
+  const changed = before
+    ? Array.from(new Set([...Object.keys(before), ...Object.keys(after)])).filter(
+        (key) => !UNTRACKED.has(key) && JSON.stringify((before as unknown as Record<string, unknown>)[key]) !== JSON.stringify((after as unknown as Record<string, unknown>)[key])
+      )
+    : ["*"];
+  const merged = Array.from(new Set([...(fields[id] ?? []), ...changed]));
+  fields[id] = merged.includes("*") ? ["*"] : merged;
+  window.localStorage.setItem(PENDING_FIELDS_KEY, JSON.stringify(fields));
 }
 
 export function getOverrides(): ProductOverride[] {
@@ -57,6 +98,14 @@ export function isPurchasable(book: Pick<Book, "stock" | "stockStatus">) {
 
 export function canPreorder(book: Pick<Book, "stock" | "stockStatus" | "preorder">) {
   return !isPurchasable(book) && Boolean(book.preorder?.enabled);
+}
+
+/** Pre-orders: expected release (or today, if none or already past) plus 10 days for packing and delivery. */
+export function preorderDeliveryDate(book: Pick<Book, "preorder">, now = new Date()) {
+  const release = book.preorder?.releaseDate ? new Date(`${book.preorder.releaseDate}T00:00:00+05:30`) : null;
+  const start = release && !Number.isNaN(release.getTime()) && release > now ? release : now;
+  const date = new Date(start.getTime() + 10 * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
 export function canOrder(book: Pick<Book, "stock" | "stockStatus" | "preorder">) {
@@ -105,8 +154,17 @@ export function getAllProducts(): Book[] {
 }
 
 /** Products visible in the shop. */
+let titleCache: { at: number; titles: Map<string, string> } | null = null;
+
+/** The product's current name for an order line, so renamed products show their new name on orders. */
+export function currentProductTitle(item: { bookId?: string; sku?: string; title: string }) {
+  if (typeof window === "undefined") return item.title;
+  if (!titleCache || Date.now() - titleCache.at > 5000) titleCache = { at: Date.now(), titles: new Map(getAllProducts().flatMap((book) => [[book.id, book.title], ...(book.sku ? [[`sku:${book.sku}`, book.title]] : [])] as [string, string][])) };
+  return (item.bookId && titleCache.titles.get(item.bookId)) || (item.sku && titleCache.titles.get(`sku:${item.sku}`)) || item.title;
+}
+
 export function getLiveBooks(): Book[] {
-  return getAllProducts().filter((book) => book.active !== false);
+  return getAllProducts().filter((book) => book.active !== false && isPublishedNow(book));
 }
 
 export function getLiveBook(id: string): Book | undefined {
@@ -118,7 +176,7 @@ export function getLiveBookBySlug(slug: string): Book | undefined {
 }
 
 export function getProductByCode(code: string): Book | undefined {
-  const value = code.trim().toLowerCase();
+  const value = stripUnitSuffix(code).toLowerCase();
   if (!value) return undefined;
   return getAllProducts().find((book) =>
     [book.productCode, book.sku, book.barcode, book.isbn?.replace(/-/g, ""), book.id]
@@ -128,15 +186,33 @@ export function getProductByCode(code: string): Book | undefined {
 }
 
 /** Saves a full product record. Sends back-in-stock emails when it becomes orderable from stock again. */
+function uniqueSlug(base: string, id: string) {
+  const taken = new Set(getLiveBooks().filter((item) => item.id !== id).map((item) => item.slug));
+  let next = base;
+  for (let index = 2; taken.has(next); index += 1) next = `${base}-${index}`;
+  return next;
+}
+
 export function saveProduct(book: Book) {
+  logAudit("Product saved", book.sku || book.id, book.title);
   const before = getLiveBook(book.id);
+  // The link always follows the product name; old links are kept so they redirect.
+  const wanted = slug(book.title);
+  const follows = !wanted || book.slug === wanted || new RegExp(`^${wanted}-\\d+$`).test(book.slug);
+  const nextSlug = follows ? book.slug : uniqueSlug(wanted, book.id);
+  const oldSlugs = [before?.slug, book.slug].filter((old): old is string => Boolean(old) && old !== nextSlug);
+  const previousSlugs = oldSlugs.length ? Array.from(new Set([...(book.previousSlugs ?? []), ...oldSlugs])).filter((old) => old !== nextSlug) : book.previousSlugs;
   const record = normalize({
     ...book,
+    slug: nextSlug,
+    previousSlugs,
     barcode: book.barcode?.trim() || generateBarcode(),
     createdAt: book.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   });
   const list = getCustomBooks().filter((item) => item.id !== book.id);
   list.unshift(record);
+  markProductPending(record.id, before, record);
   writeJSON(CUSTOM_KEY, list);
   writeJSON(OVERRIDES_KEY, getOverrides().filter((o) => o.bookId !== book.id));
   writeJSON(DELETED_KEY, getDeletedIds().filter((id) => id !== book.id));
@@ -156,6 +232,7 @@ export function saveProduct(book: Book) {
 }
 
 export function deleteProduct(id: string) {
+  logAudit("Product deleted", id);
   writeJSON(CUSTOM_KEY, getCustomBooks().filter((book) => book.id !== id));
   writeJSON(OVERRIDES_KEY, getOverrides().filter((o) => o.bookId !== id));
   writeJSON(DELETED_KEY, Array.from(new Set([...getDeletedIds(), id])));
@@ -179,6 +256,18 @@ export function saveProductOverride(override: ProductOverride) {
   saveProduct(applyOverride(book, override));
 }
 
+/** Reserves `count` new numbered stock labels for a product and returns their codes. */
+export function issueStockLabels(bookId: string, count: number) {
+  const book = getLiveBook(bookId);
+  if (!book) return [];
+  const total = Math.max(1, Math.min(500, Math.floor(count) || 1));
+  const base = book.productCode || book.barcode || book.sku || book.id;
+  const start = Math.max(1, book.stockLabelNext ?? 1);
+  const codes = Array.from({ length: total }, (_, index) => stockLabelCode(base, start + index));
+  saveProduct({ ...book, stockLabelNext: start + total });
+  return codes;
+}
+
 export function updateStock(bookId: string, stock: number) {
   const book = getLiveBook(bookId);
   if (!book) return;
@@ -199,17 +288,26 @@ export function restockProduct(bookId: string, add: number) {
   return getLiveBook(bookId);
 }
 
-/** Takes the ordered units out of stock once per order. */
+/** Takes the ordered units out of stock once per order; pre-order items wait until they are packed. */
 export function commitStockForOrder(order: Pick<Order, "items" | "stockCommitted">) {
   if (order.stockCommitted) return false;
-  for (const item of order.items) adjustStock(item.bookId, -item.quantity);
+  for (const item of order.items) if (!item.preorder) adjustStock(item.bookId, -item.quantity);
+  return true;
+}
+
+/** Takes pre-order items out of stock once the product is in stock and the order is packed. */
+export function commitPreorderStock(order: Pick<Order, "items" | "preorderStockCommitted">) {
+  if (order.preorderStockCommitted || !order.items.some((item) => item.preorder)) return false;
+  for (const item of order.items) if (item.preorder) adjustStock(item.bookId, -item.quantity);
   return true;
 }
 
 /** Puts the units back, for cancelled orders that were never shipped. */
-export function releaseStockForOrder(order: Pick<Order, "items" | "stockCommitted">) {
-  if (!order.stockCommitted) return false;
-  for (const item of order.items) adjustStock(item.bookId, item.quantity);
+export function releaseStockForOrder(order: Pick<Order, "items" | "stockCommitted" | "preorderStockCommitted">) {
+  if (!order.stockCommitted && !order.preorderStockCommitted) return false;
+  for (const item of order.items) {
+    if (item.preorder ? order.preorderStockCommitted : order.stockCommitted) adjustStock(item.bookId, item.quantity);
+  }
   return true;
 }
 
@@ -244,14 +342,33 @@ export function ensureProductBarcodes() {
 }
 
 /** SKU like VGMF-CLI-0007: category prefix and the next free running number. */
-export function generateSku(category: string, ignoreId?: string) {
-  const prefix = (category.replace(/[^a-z]/gi, "").slice(0, 3) || "GEN").toUpperCase();
-  const used = new Set(getAllProducts().filter((book) => book.id !== ignoreId).map((book) => book.sku?.toUpperCase()));
-  let n = getAllProducts().length + 1;
+/** Unique 10-digit numeric SKU. */
+export function generateSku(_category?: string, ignoreId?: string) {
+  void _category;
+  const used = new Set(getAllProducts().filter((book) => book.id !== ignoreId).flatMap((book) => [book.sku, book.productCode]));
   let sku = "";
-  do sku = `VGMF-${prefix}-${String(n++).padStart(4, "0")}`;
+  do sku = String(Math.floor(1000000000 + Math.random() * 9000000000));
   while (used.has(sku));
   return sku;
+}
+
+/** Numeric batch number: date (YYMMDD) and a 3-digit serial. */
+export function generateBatchNo() {
+  const day = new Intl.DateTimeFormat("en-GB", { year: "2-digit", month: "2-digit", day: "2-digit", timeZone: "Asia/Kolkata" })
+    .format(new Date())
+    .split("/")
+    .reverse()
+    .join("");
+  const used = new Set(getAllProducts().map((book) => book.batchNo));
+  let batch = "";
+  do batch = `${day}${String(Math.floor(Math.random() * 1000)).padStart(3, "0")}`;
+  while (used.has(batch));
+  return batch;
+}
+
+/** Batch number for an order line: the one saved on the order, else the product's current batch. */
+export function orderItemBatch(item: { bookId?: string; batchNo?: string }) {
+  return item.batchNo || (item.bookId ? getAllProducts().find((book) => book.id === item.bookId)?.batchNo : "") || "";
 }
 
 /** Unique 10-digit numeric product code. */

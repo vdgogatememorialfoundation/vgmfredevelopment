@@ -17,6 +17,7 @@ import { TBA, compareEventDates, eventDateText, eventFeeText, eventPlaceText, ev
 import { isEventPast, isRegistrationClosed, resolvedRegistrationStatus } from "@/lib/event-status";
 import { EventRegistration } from "@/components/events/EventRegistration";
 import PartnerRegister from "@/components/events/PartnerRegister";
+import { SpeakerPhoto } from "@/components/events/EventSchedules";
 import { configuredWindows, registrationBadge } from "@/lib/registration-windows";
 import { isPublishedNow } from "@/lib/schedule";
 import { useScheduleTick } from "@/lib/use-schedule";
@@ -133,24 +134,12 @@ export function LiveEventPage({ slug }: { slug: string }) {
       <section className="section bg-background">
         <div className="container grid gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            {event.tbd?.schedule ? (
+            {event.description?.trim() ? (
               <div>
-                <h2 className="heading-3">Schedule</h2>
-                <p className="mt-3 rounded-xl border border-dashed border-border bg-warm-cream p-4 text-sm text-text-muted">The programme schedule is {TBA.toLowerCase()}.</p>
+                <h2 className="heading-3">About this event</h2>
+                <p className="mt-3 whitespace-pre-line text-text-secondary">{event.description}</p>
               </div>
-            ) : event.schedule.length > 0 && (
-              <div>
-                <h2 className="heading-3">Schedule</h2>
-                <ul className="mt-4 space-y-3">
-                  {event.schedule.map((item) => (
-                    <li key={item.id} className="rounded-xl border border-border bg-white p-4">
-                      <p className="text-sm font-semibold text-burgundy">{item.time}</p>
-                      <p className="font-semibold">{item.title}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            ) : null}
             {event.tbd?.speakers ? (
               <div>
                 <h2 className="heading-3">Speakers</h2>
@@ -161,14 +150,23 @@ export function LiveEventPage({ slug }: { slug: string }) {
                 <h2 className="heading-3">Speakers</h2>
                 <ul className="mt-4 space-y-3">
                   {event.speakers.map((speaker) => (
-                    <li key={speaker.id} className="rounded-xl border border-border bg-white p-4">
-                      <p className="font-semibold">{speaker.name}</p>
-                      <p className="text-sm text-text-muted">{speaker.designation} · {speaker.topic}</p>
+                    <li key={speaker.id} className="flex items-center gap-4 rounded-xl border border-border bg-white p-4">
+                      <SpeakerPhoto speaker={speaker} />
+                      <div>
+                        <p className="font-semibold">{speaker.name}</p>
+                        {speaker.designation ? <p className="text-sm text-text-muted">{speaker.designation}</p> : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
+            {event.termsConditions?.trim() ? (
+              <details className="rounded-xl border border-border bg-white p-4">
+                <summary className="cursor-pointer font-semibold text-text-primary">Terms &amp; conditions</summary>
+                <p className="mt-3 whitespace-pre-line text-sm text-text-secondary">{event.termsConditions}</p>
+              </details>
+            ) : null}
           </div>
           <aside className="rounded-2xl border border-border bg-white p-6">
             <p className="text-sm text-text-muted">Registration fee</p>
@@ -176,9 +174,9 @@ export function LiveEventPage({ slug }: { slug: string }) {
             <EventRegistration event={event} />
             <dl className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Dates</dt><dd className="text-right font-medium">{eventDateText(event)}</dd></div>
-              {eventTimeText(event) && <div className="flex justify-between gap-3"><dt className="text-text-muted">Time</dt><dd className="text-right font-medium">{eventTimeText(event)}</dd></div>}
               <div className="flex justify-between gap-3"><dt className="text-text-muted">Where</dt><dd className="text-right font-medium">{eventPlaceText(event)}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-text-muted">Mode</dt><dd className="text-right font-medium">{event.mode}</dd></div>
+              {registrationDay(event.registrationStart) ? <div className="flex justify-between gap-3"><dt className="text-text-muted">Registration opens</dt><dd className="text-right font-medium">{registrationDay(event.registrationStart)}</dd></div> : null}
+              {registrationDay(event.registrationEnd) ? <div className="flex justify-between gap-3"><dt className="text-text-muted">Registration closes</dt><dd className="text-right font-medium">{registrationDay(event.registrationEnd)}</dd></div> : null}
             </dl>
             {configuredWindows(event).length ? null : event.source && event.source !== "vgmf" && Number(String(event.id).split("-").pop()) > 0 && !isRegistrationClosed(event, now) ? (
               <PartnerRegister portal={event.source} seminarId={Number(String(event.id).split("-").pop())} />
@@ -209,4 +207,11 @@ export function LiveEventPage({ slug }: { slug: string }) {
       </section>
     </main>
   );
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function registrationDay(value?: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ""));
+  return match ? `${Number(match[3])} ${MONTHS[Number(match[2]) - 1]} ${match[1]}` : "";
 }

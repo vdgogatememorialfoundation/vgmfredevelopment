@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { moduleOn } from "../../src/api";
 import { useFeed } from "../../src/feed";
@@ -19,12 +19,17 @@ export default function TabsLayout() {
           headerShown: false,
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.muted,
-          tabBarLabelStyle: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6, marginBottom: Platform.OS === "android" ? 4 : 0 },
+          tabBarLabelStyle: { fontSize: 11, fontWeight: "800", letterSpacing: 0.4, marginBottom: Platform.OS === "android" ? 4 : 0 },
           tabBarStyle: {
             backgroundColor: theme.colors.paper,
             borderTopColor: theme.colors.border,
             borderTopWidth: 1,
-            height: Platform.OS === "android" ? 62 : 84,
+            height: Platform.OS === "android" ? 68 : 88,
+            elevation: 12,
+            shadowColor: "#3B2A14",
+            shadowOpacity: 0.08,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: -3 },
             paddingTop: 6,
             paddingBottom: Platform.OS === "android" ? 8 : 20,
           },
@@ -37,8 +42,10 @@ export default function TabsLayout() {
             name={tabFile(tab.id)}
             options={{
               title: tab.title,
-              tabBarIcon: ({ color, size, focused }) => (
-                <Ionicons name={(focused ? tab.icon : `${tab.icon}-outline`) as never} color={color} size={size} />
+              tabBarIcon: ({ color, focused }) => (
+                <View style={{ minWidth: 48, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: focused ? "#F3E6E1" : "transparent" }}>
+                  <Ionicons name={(focused ? tab.icon : `${tab.icon}-outline`) as never} color={color} size={22} />
+                </View>
               ),
             }}
           />
@@ -57,7 +64,7 @@ function tabFile(id: string) {
 }
 
 function hiddenFiles(visible: string[]) {
-  const all = ["index", "events", "shop", "clinics", "account", "support", "certificates"];
+  const all = ["index", "articles", "events", "shop", "clinics", "account", "support", "certificates"];
   const shown = visible.map(tabFile);
   return all.filter((name) => !shown.includes(name));
 }

@@ -1,11 +1,16 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
+import { dataFile } from "@/lib/server/paths";
 import { certificates as seededCertificates } from "@/data/content";
 import type { IssuedCertificate } from "@/lib/cms";
 
 export type StoredCertificate = IssuedCertificate & { updatedAt: string };
 
-const FILE = join("/tmp", "vgmf-certificates.json");
+const LEGACY_FILE = "/tmp/vgmf-certificates.json";
+
+function file() {
+  return dataFile("certificates.json");
+}
 
 function seed(): StoredCertificate[] {
   return seededCertificates.map((certificate) => ({
@@ -16,23 +21,28 @@ function seed(): StoredCertificate[] {
   }));
 }
 
-function read(): StoredCertificate[] {
+function readList(path: string): StoredCertificate[] | null {
   try {
-    const raw = readFileSync(FILE, "utf8");
-    const parsed = JSON.parse(raw) as StoredCertificate[];
-    if (Array.isArray(parsed) && parsed.length) return parsed;
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as StoredCertificate[];
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
   } catch {
-    /* first run */
+    return null;
   }
-  const next = seed();
+}
+
+function read(): StoredCertificate[] {
+  const saved = readList(file());
+  if (saved) return saved;
+  const next = readList(LEGACY_FILE) ?? seed();
   write(next);
   return next;
 }
 
 function write(records: StoredCertificate[]) {
   try {
-    mkdirSync(dirname(FILE), { recursive: true });
-    writeFileSync(FILE, JSON.stringify(records));
+    const path = file();
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(records));
   } catch {
     /* ephemeral host */
   }

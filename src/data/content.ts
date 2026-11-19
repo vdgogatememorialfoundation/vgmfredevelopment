@@ -27,7 +27,7 @@ export const flyers: Flyer[] = [
   },
   {
     id: "slide-shop",
-    title: "Books and study materials from VGMF",
+    title: "Books and study materials from Vaidya Gogate Memorial Foundation",
     event: "Publications",
     date: "2026-01-01",
     image: "/slides/shop.svg",

@@ -6,6 +6,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { Button, EmptyState, Panel, SelectInput } from "@/components/admin/AdminUI";
 import { displayName, listSupportAgents } from "@/lib/admin-store";
 import { formatDateTime } from "@/lib/utils";
+import { CustomerOrders } from "@/components/admin/CustomerOrders";
 
 const DEPARTMENTS = ["Support", "Shop", "Clinic", "Events", "Accounts"] as const;
 
@@ -16,11 +17,16 @@ type WaMessage = {
   provider: "meta" | "aisensy";
   text: string;
   status?: string;
+  error?: string;
   by?: string;
   system?: boolean;
 };
 
 type WaThread = {
+  ref?: string;
+  closedAt?: string;
+  closedBy?: string;
+  ticketId?: string;
   id: string;
   phone: string;
   name: string;
@@ -37,7 +43,7 @@ type WaThread = {
   messages: WaMessage[];
 };
 
-type DeskFilter = "all" | "mine" | "waiting" | (typeof DEPARTMENTS)[number];
+type DeskFilter = "all" | "mine" | "waiting" | "closed" | (typeof DEPARTMENTS)[number];
 
 function providerLabel(provider: WaThread["provider"]) {
   return provider === "aisensy" ? "AiSensy" : "Meta";
@@ -86,12 +92,14 @@ export function WhatsAppInboxDesk() {
   const agents = listSupportAgents();
   const visible = threads.filter((thread) => {
     if (line !== "all" && thread.provider !== line) return false;
+    if (filter === "closed") return Boolean(thread.closedAt);
+    if (thread.closedAt) return false;
     if (filter === "mine") return (thread.assignedTo || "").toLowerCase() === (user?.email || "").toLowerCase();
     if (filter === "waiting") return !thread.assignedTo;
     if (filter !== "all") return thread.department === filter;
     return true;
   });
-  const active = threads.find((thread) => thread.id === activeId) ?? visible[0];
+  const active = visible.find((thread) => thread.id === activeId) ?? visible[0];
 
   const load = useCallback(async () => {
     const response = await fetch("/api/whatsapp/inbox", { credentials: "same-origin", cache: "no-store" });
@@ -105,7 +113,7 @@ export function WhatsAppInboxDesk() {
       return;
     }
     setThreads(data.threads);
-    setActiveId((current) => current || data.threads?.[0]?.id || "");
+    setActiveId((current) => current || data.threads?.find((thread) => !thread.closedAt)?.id || "");
   }, []);
 
   useEffect(() => {
@@ -149,6 +157,54 @@ export function WhatsAppInboxDesk() {
       setNote((error as Error).message);
     } finally {
       setSending(false);
+    }
+  };
+
+  const closeChat = async () => {
+    if (!active || moving || !window.confirm("Close this chat? The customer is told it is closed.")) return;
+    setMoving(true);
+    setNote("");
+    try {
+      const response = await fetch("/api/whatsapp/inbox", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "close", threadId: active.id, name: deskName(user) }),
+      });
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "The chat could not be closed.");
+      setNote(data.error ? `Chat closed. The customer was not notified: ${data.error}` : "Chat closed. The customer was told.");
+      setActiveId("");
+      await load();
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  const raiseTicket = async () => {
+    if (!active || moving) return;
+    const subject = window.prompt("Ticket subject", `WhatsApp chat ${active.ref ?? ""}`.trim());
+    if (subject === null) return;
+    const customerEmail = window.prompt("Customer email (leave blank to use the email on their account)", "") ?? "";
+    setMoving(true);
+    setNote("");
+    try {
+      const response = await fetch("/api/whatsapp/inbox", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "ticket", threadId: active.id, subject, customerEmail, name: deskName(user) }),
+      });
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string; ticket?: { id: string } } | null;
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "The ticket could not be created.");
+      setNote(`Ticket ${data.ticket?.id} created and the customer was told on WhatsApp.`);
+      await load();
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setMoving(false);
     }
   };
 
@@ -209,6 +265,7 @@ export function WhatsAppInboxDesk() {
               <Chip pressed={filter === "all"} onClick={() => setFilter("all")}>All</Chip>
               <Chip pressed={filter === "mine"} onClick={() => setFilter("mine")}>Mine</Chip>
               <Chip pressed={filter === "waiting"} onClick={() => setFilter("waiting")}>Waiting</Chip>
+              <Chip pressed={filter === "closed"} onClick={() => setFilter("closed")}>Closed</Chip>
               {DEPARTMENTS.map((item) => (
                 <Chip key={item} pressed={filter === item} onClick={() => setFilter(item)}>{item}</Chip>
               ))}
@@ -248,7 +305,11 @@ export function WhatsAppInboxDesk() {
                 <div className="flex min-h-[420px] flex-col rounded-xl border border-border bg-white p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="font-semibold text-text-primary">{active.name}</p>
+                      <p className="font-semibold text-text-primary">
+                        {active.name}
+                        {active.ref ? <span className="ml-2 font-mono text-xs text-text-muted">{active.ref}</span> : null}
+                        {active.ticketId ? <span className="ml-2 text-xs text-burgundy">Ticket {active.ticketId}</span> : null}
+                      </p>
                       <p className="text-xs text-text-muted">
                         Customer +{active.phone} · {providerLabel(active.provider)} number{active.lineNumber ? ` +${active.lineNumber}` : ""}
                         {active.windowOpen ? " · reply window open" : " · outside 24-hour window"}
@@ -273,10 +334,24 @@ export function WhatsAppInboxDesk() {
                     <Button variant="outline" disabled={moving || (!department && !staffEmail)} onClick={() => void move("transfer")}>
                       {moving ? "Moving…" : "Transfer"}
                     </Button>
-                    <Button variant="outline" disabled={moving} onClick={() => void move("take")}>
+                    <Button variant="outline" disabled={moving || Boolean(active.closedAt)} onClick={() => void move("take")}>
                       Take this chat
                     </Button>
+                    <Button variant="outline" disabled={moving} onClick={() => void raiseTicket()}>
+                      {active.ticketId ? "Create another ticket" : "Create ticket"}
+                    </Button>
+                    {active.closedAt ? (
+                      <span className="self-center text-xs text-text-muted">Closed {formatDateTime(active.closedAt)}{active.closedBy ? ` by ${active.closedBy}` : ""}</span>
+                    ) : (
+                      <Button variant="outline" disabled={moving} onClick={() => void closeChat()}>
+                        Close chat
+                      </Button>
+                    )}
                   </div>
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer font-semibold text-burgundy">Customer orders · cancel, return, refund</summary>
+                    <CustomerOrders phone={active.phone} />
+                  </details>
                   <div className="mt-3 flex max-h-[360px] flex-1 flex-col gap-2 overflow-y-auto rounded-lg bg-warm-cream/60 p-3">
                     {active.messages.map((message) =>
                       message.system ? (
@@ -289,7 +364,7 @@ export function WhatsAppInboxDesk() {
                           <p className="whitespace-pre-wrap">{message.text}</p>
                           <p className={`mt-1 text-[10px] ${message.direction === "out" ? "text-white/80" : "text-text-muted"}`}>
                             {message.direction === "out" ? message.by || "Desk" : "Customer"} · {formatDateTime(message.at)}
-                            {message.status ? ` · ${message.status}` : ""}
+                            {message.status ? ` · ${message.status}` : ""}{message.error ? ` · ${message.error}` : ""}
                           </p>
                         </div>
                       )

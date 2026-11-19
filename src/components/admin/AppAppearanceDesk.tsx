@@ -14,7 +14,7 @@ import {
   type HomeSectionConfig,
   type MobileAppearance,
 } from "@/lib/mobile-appearance";
-import { collectMobileSnapshot } from "@/lib/mobile-publish";
+
 import { canOpen } from "@/lib/roles";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
@@ -78,11 +78,10 @@ export function AppAppearanceDesk() {
       const next = publishAppearanceDraft(draft);
       setDraft(next);
       setPublished(next);
-      const snapshot = collectMobileSnapshot();
       const response = await fetch("/api/mobile/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...snapshot, appearance: next }),
+        body: JSON.stringify({ partial: true, sections: { appearance: next } }),
       });
       const data = (await response.json()) as { ok?: boolean; error?: string; publishedAt?: string };
       if (!data.ok) {

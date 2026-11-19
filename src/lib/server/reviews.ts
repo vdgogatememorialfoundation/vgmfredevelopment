@@ -6,6 +6,7 @@ export type StoredProductReview = Review & {
   productId: string;
   email: string;
   verified: boolean;
+  media?: { url: string; kind: "image" | "video" }[];
 };
 
 type Store = {

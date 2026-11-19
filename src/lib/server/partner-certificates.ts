@@ -17,6 +17,7 @@ import {
   type PartnerEvent,
   type UnifiedCertificate,
 } from "@/lib/partner-certificates";
+import { findSeminarCertificate, findSeminarCertificateByTicket, seminarRowToCertificate } from "@/lib/server/seminar-certificates";
 
 const FETCH_MS = 4000;
 
@@ -139,7 +140,20 @@ function enrichAutism(mapped: UnifiedCertificate, events: PartnerEvent[]): Unifi
   };
 }
 
+/** Seminar public API first; then the seminar database, which also finds a person's second (e.g. volunteer) certificate. */
 async function verifySeminar(id: string, events: PartnerEvent[]) {
+  const api = await verifySeminarApi(id, events);
+  if (api.certificate || api.status === "invalid_id") return api;
+  const row = (await findSeminarCertificate(seminarDigits(id))) ?? (await findSeminarCertificateByTicket(seminarDigits(id)));
+  if (!row) return api;
+  if (!row.enabled) return { status: "not_issued", certificate: null };
+  const certificate = seminarRowToCertificate(row);
+  const matched = matchEvent(events, undefined, certificate.event);
+  if (matched) certificate.eventDetails = matched;
+  return { status: "valid" as const, certificate };
+}
+
+async function verifySeminarApi(id: string, events: PartnerEvent[]) {
   const digits = seminarDigits(id);
   if (digits.length !== 12) return { status: "invalid_id" as const, certificate: null };
   const encoded = encodeURIComponent(digits);

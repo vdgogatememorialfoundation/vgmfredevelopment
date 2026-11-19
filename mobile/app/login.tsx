@@ -97,13 +97,13 @@ export default function LoginScreen() {
       <View style={{ alignItems: "center", marginTop: 4, marginBottom: 18 }}>
         <BrandMark name={SITE.shortName} size={72} />
         <Kicker>{SITE.name}</Kicker>
-        <Text style={{ textAlign: "center", fontSize: 24, lineHeight: 30, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily, marginTop: 6 }}>
+        <Text style={{ textAlign: "center", fontSize: 24, lineHeight: 30, fontWeight: "600", color: theme.colors.primary, fontFamily: theme.fontFamily, marginTop: 6 }}>
           One Foundation account
         </Text>
         <Muted>The same Create Account and Sign In used on the website — name, email, phone, OTP and a 12-digit Account ID.</Muted>
       </View>
 
-      <View style={{ flexDirection: "row", backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 14, padding: 5, marginBottom: 16 }}>
+      <View style={{ flexDirection: "row", backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, padding: 5, marginBottom: 16 }}>
         {([
           ["signup", "Create Account"],
           ["signin", "Sign In"],
@@ -132,9 +132,9 @@ export default function LoginScreen() {
         signUpStep === "success" ? (
           <Card featured>
             <Kicker>Account created</Kicker>
-            <Text style={{ fontSize: 22, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily }}>Welcome, {firstName}</Text>
+            <Text style={{ fontSize: 22, fontWeight: "600", color: theme.colors.primary, fontFamily: theme.fontFamily }}>Welcome, {firstName}</Text>
             <Muted>Your Vaidya Gogate Memorial Foundation account has been created. Use this 12-digit Account ID on the website and in the app.</Muted>
-            <View style={{ marginTop: 16, padding: 18, borderRadius: 16, backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center" }}>
+            <View style={{ marginTop: 16, padding: 18, borderRadius: 10, backgroundColor: theme.colors.background, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center" }}>
               <Kicker>Your Account ID</Kicker>
               <Text style={{ fontSize: 26, fontWeight: "800", letterSpacing: 2, color: theme.colors.primary }}>{accountId}</Text>
             </View>
@@ -186,7 +186,7 @@ export default function LoginScreen() {
         ) : (
           <Card>
             <Kicker>Create Account</Kicker>
-            <Text style={{ fontSize: 20, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily, marginBottom: 6 }}>Welcome to Vaidya Gogate Memorial Foundation</Text>
+            <Text style={{ fontSize: 20, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily, marginBottom: 6 }}>Welcome to Vaidya Gogate Memorial Foundation</Text>
             <Muted>Create your account to register for events, manage tickets, shop orders and your profile. We verify the email with a one-time code. Each email and phone number can be used for only one account.</Muted>
             <View style={{ height: 12 }} />
             <Text style={{ color: theme.colors.muted, marginBottom: 6, fontSize: 12, fontWeight: "700" }}>Salutation</Text>
@@ -260,7 +260,7 @@ export default function LoginScreen() {
       ) : signInStep === "complete" ? (
         <Card featured>
           <Kicker>Signed in</Kicker>
-          <Text style={{ fontSize: 22, fontWeight: "700", color: theme.colors.primary, fontFamily: theme.fontFamily }}>Welcome back</Text>
+          <Text style={{ fontSize: 22, fontWeight: "600", color: theme.colors.primary, fontFamily: theme.fontFamily }}>Welcome back</Text>
           <Muted>You can use this same account on the Foundation website.</Muted>
         </Card>
       ) : signInStep === "forgot" || signInStep === "forgot-code" || signInStep === "forgot-password" ? (
@@ -268,7 +268,7 @@ export default function LoginScreen() {
           <Kicker>Reset password</Kicker>
           {signInStep === "forgot" ? (
             <>
-              <Text style={{ fontSize: 20, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily }}>Forgot your password?</Text>
+              <Text style={{ fontSize: 20, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily }}>Forgot your password?</Text>
               <Muted>Enter the email, phone or Account ID. We send a reset code for this Foundation account. Seminar, Autism and Fellowship passwords are not used here.</Muted>
               <Field label="Email, phone or Account ID" value={identifier} onChange={setIdentifier} placeholder="name@example.com / +91 / 12-digit Account ID" />
               <Button
@@ -368,7 +368,7 @@ export default function LoginScreen() {
       ) : (
         <Card>
           <Kicker>Sign In</Kicker>
-          <Text style={{ fontSize: 20, fontWeight: "700", color: theme.colors.text, fontFamily: theme.fontFamily, marginBottom: 6 }}>Welcome back</Text>
+          <Text style={{ fontSize: 20, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily, marginBottom: 6 }}>Welcome back</Text>
           <Muted>
             {method === "otp"
               ? "Use the same email, phone or 12-digit Account ID as the website. We email a one-time code."

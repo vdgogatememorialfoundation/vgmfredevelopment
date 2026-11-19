@@ -3,9 +3,9 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { mediaUrl } from "./api";
+import { hrefOn, mediaUrl } from "./api";
 import { useAuth } from "./auth";
-import { useBrand } from "./feed";
+import { useBrand, useFeed } from "./feed";
 import { SITE } from "./site-content";
 import { useTheme } from "./theme";
 import { BrandMark } from "./ui";
@@ -18,11 +18,24 @@ const MENU: { title: string; items: DrawerItem[] }[] = [
     items: [
       { href: "/", label: "Home", icon: "home-outline" },
       { href: "/about", label: "About", icon: "people-outline" },
+      { href: "/about-page/legacy", label: "Legacy of Vd. R. B. Gogate", icon: "library-outline" },
+      { href: "/about-page/anagha", label: "Dr. Anagha Gogate", icon: "person-outline" },
+      { href: "/about-page/history", label: "History", icon: "time-outline" },
+      { href: "/about-page/foundation", label: "The Foundation", icon: "business-outline" },
+      { href: "/about-page/trustees", label: "Trustees", icon: "people-circle-outline" },
+      { href: "/about-page/awards", label: "Awards", icon: "trophy-outline" },
+      { href: "/about-page/scholarship", label: "Books & research", icon: "book-outline" },
+      { href: "/shop", label: "Books library", icon: "library-outline" },
+      { href: "/speakers", label: "Speakers", icon: "mic-outline" },
+      { href: "/schedules", label: "Schedules", icon: "calendar-number-outline" },
+      { href: "/application-status", label: "Application status", icon: "trail-sign-outline" },
       { href: "/events", label: "Events", icon: "calendar-outline" },
       { href: "/gallery", label: "Gallery", icon: "images-outline" },
       { href: "/videos", label: "Videos", icon: "play-circle-outline" },
       { href: "/articles", label: "Articles", icon: "newspaper-outline" },
       { href: "/notices", label: "Notices", icon: "notifications-outline" },
+      { href: "/announcements", label: "Announcements", icon: "megaphone-outline" },
+      { href: "/search", label: "Search", icon: "search-outline" },
       { href: "/account/notifications", label: "Notifications", icon: "notifications" },
       { href: "/account/registrations", label: "My registrations", icon: "calendar-outline" },
     ],
@@ -32,10 +45,19 @@ const MENU: { title: string; items: DrawerItem[] }[] = [
     items: [
       { href: "/shop", label: "Shop", icon: "bag-handle-outline" },
       { href: "/clinics", label: "Clinics", icon: "medical-outline" },
+      { href: "/account/orders", label: "My orders", icon: "receipt-outline" },
+      { href: "/track", label: "Track a shipment", icon: "navigate-outline" },
       { href: "/certificates", label: "Certificates", icon: "ribbon-outline" },
       { href: "/contact", label: "Contact", icon: "mail-outline" },
       { href: "/chat", label: "Chat", icon: "chatbubbles-outline" },
       { href: "/faq", label: "FAQ", icon: "help-circle-outline" },
+      { href: "/policy/returns", label: "Return policy", icon: "return-down-back-outline" },
+      { href: "/policy/refund", label: "Refund policy", icon: "cash-outline" },
+      { href: "/policy/shipping", label: "Shipping policy", icon: "cube-outline" },
+      { href: "/policy/privacy", label: "Privacy policy", icon: "shield-checkmark-outline" },
+      { href: "/policy/terms", label: "Terms", icon: "document-text-outline" },
+      { href: "/policy/cancellation", label: "Cancellation policy", icon: "close-circle-outline" },
+      { href: "/legal", label: "Legal", icon: "scale-outline" },
     ],
   },
 ];
@@ -79,6 +101,12 @@ export function AppDrawer() {
   const brand = useBrand();
   const { session, signOut } = useAuth();
   const { open, closeDrawer } = useDrawer();
+  const { feed } = useFeed();
+  const customPages = (feed?.pages ?? []).filter((page) => page.enabled !== false && String(page.slug ?? ""));
+  const base = MENU.map((section) => ({ ...section, items: section.items.filter((item) => hrefOn(feed, item.href)) })).filter((section) => section.items.length);
+  const menu = customPages.length
+    ? [...base, { title: "Pages", items: customPages.map((page): DrawerItem => ({ href: `/page/${String(page.slug)}`, label: String(page.title ?? page.slug), icon: "document-text-outline" })) }]
+    : base;
 
   const go = (href: string) => {
     closeDrawer();
@@ -92,7 +120,7 @@ export function AppDrawer() {
           <View style={{ paddingHorizontal: 18, paddingTop: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border, flexDirection: "row", alignItems: "center", gap: 12 }}>
             <BrandMark uri={mediaUrl(brand.logoUrl) || undefined} name={brand.name} size={44} />
             <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.primary, fontWeight: "800", fontFamily: theme.fontFamily, fontSize: 15 }} numberOfLines={2}>{SITE.name}</Text>
+              <Text style={{ color: theme.colors.primary, fontWeight: "600", fontFamily: theme.fontFamily, fontSize: 15 }} numberOfLines={2}>{SITE.name}</Text>
               <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
                 {session?.name || SITE.name}
               </Text>
@@ -103,7 +131,7 @@ export function AppDrawer() {
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-            {MENU.map((section) => (
+            {menu.map((section) => (
               <View key={section.title} style={{ marginBottom: 18 }}>
                 <Text style={{ color: theme.colors.primary, fontSize: 10, fontWeight: "800", letterSpacing: 1.4, textTransform: "uppercase", marginBottom: 8 }}>{section.title}</Text>
                 {section.items.map((item) => (

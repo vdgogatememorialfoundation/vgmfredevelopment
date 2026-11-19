@@ -12,6 +12,24 @@ function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: { ...corsHeaders, "cache-control": "no-store" } });
 }
 
+const FAQ_STOP = new Set(["the", "and", "for", "are", "was", "this", "that", "with", "from", "your", "you", "our", "what", "when", "where", "which", "have", "has", "can", "how", "who", "why", "any", "all", "does", "will", "should", "there", "about", "please"]);
+
+/** Best Admin FAQ for the question, when enough of its words match. */
+function faqAnswer(question: string) {
+  const tokens = question.toLowerCase().split(/[^a-z0-9\u0900-\u0d7f]+/i).filter((token) => token.length >= 3 && !FAQ_STOP.has(token));
+  if (!tokens.length) return "";
+  const faqs = (readMobileFeed().faqs ?? []) as { question?: string; answer?: string; active?: boolean }[];
+  let best = { score: 0, answer: "" };
+  for (const item of faqs) {
+    if (item.active === false || !item.question?.trim() || !item.answer?.trim()) continue;
+    const asked = item.question.toLowerCase();
+    const body = item.answer.toLowerCase();
+    const score = tokens.reduce((sum, token) => sum + (asked.includes(token) ? token.length : body.includes(token) ? token.length / 3 : 0), 0);
+    if (score > best.score) best = { score, answer: item.answer.trim() };
+  }
+  return best.score >= Math.max(6, tokens.join("").length * 0.4) ? best.answer : "";
+}
+
 function answer(question: string) {
   const q = question.toLowerCase();
   const feed = readMobileFeed();
@@ -31,7 +49,7 @@ function answer(question: string) {
     if (!clinics.length) return "No clinics are in the published feed yet. Open Clinics once the Foundation publishes hours.";
     return `Foundation clinics: ${clinics.slice(0, 3).map((item) => `“${String((item as { name?: string }).name)}”`).join("; ")}.`;
   }
-  if (/certificate|verify/.test(q)) return "Open Certificates in the app menu and enter your VGMF certificate number to verify workshop, fellowship or seminar credentials.";
+  if (/certificate|verify/.test(q)) return "Open Certificates in the app menu and enter your Vaidya Gogate Memorial Foundation certificate number to verify workshop, fellowship or seminar credentials.";
   if (/account|login|sign ?in|sign ?up|otp|password/.test(q)) {
     return "Create one Foundation account from Sign up with your name, email and phone. We verify email with a 6-digit OTP and issue a 12-digit Account ID. Sign in uses the same email, phone or Account ID plus your Foundation password and email OTP — the same flow as the website.";
   }
@@ -49,5 +67,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { message?: string } | null;
   const message = String(body?.message ?? "").trim().slice(0, 500);
   if (!message) return json({ ok: false, error: "Type a question." }, 400);
+  const faq = faqAnswer(message);
+  if (faq) return json({ ok: true, reply: faq, source: "faq" });
   return json({ ok: true, reply: answer(message) });
 }

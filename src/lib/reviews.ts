@@ -13,6 +13,8 @@ export type ProductReview = Review & {
   verified: boolean;
   hidden?: boolean;
   reply?: { text: string; date: string; author?: string };
+  /** Customer photos and videos of the item. */
+  media?: { url: string; kind: "image" | "video" }[];
 };
 
 const SEMINAR_KEY = "vgmf_seminar_reviews";
@@ -166,6 +168,7 @@ export function saveProductReview(input: {
   verified?: boolean;
   hidden?: boolean;
   reply?: ProductReview["reply"];
+  media?: ProductReview["media"];
 }) {
   const current = getProductReviews();
   const email = input.email.trim().toLowerCase();
@@ -183,6 +186,7 @@ export function saveProductReview(input: {
     verified: input.verified ?? existing?.verified ?? true,
     hidden: input.hidden ?? existing?.hidden ?? false,
     reply: input.reply ?? existing?.reply,
+    media: input.media ?? existing?.media,
   };
   writeJSON(
     PRODUCT_KEY,

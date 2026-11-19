@@ -73,7 +73,7 @@ export default function AddressBook() {
       {draft && (
         <div className="mb-5 rounded-2xl border border-border bg-white p-5 sm:p-6">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-ink">
-            <Glyph name="pin" className="h-4 w-4 text-burgundy" />
+            <Glyph name="address" className="h-4 w-4 text-burgundy" />
             {editing ? "Edit address" : "New address"}
           </div>
           <AddressFields value={draft} onChange={setDraft} idPrefix="account-address" />
@@ -88,7 +88,7 @@ export default function AddressBook() {
       {addresses.length === 0 && !draft && (
         <div className="rounded-2xl border border-dashed border-border bg-white px-6 py-14 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-warm-cream text-burgundy">
-            <Glyph name="pin" className="h-6 w-6" />
+            <Glyph name="address" className="h-6 w-6" />
           </div>
           <h2 className="mt-4 font-semibold text-text-primary">No saved addresses</h2>
           <p className="mx-auto mt-2 max-w-sm text-sm text-text-muted">Add a home or office address. Checkout can use it the next time you order.</p>
