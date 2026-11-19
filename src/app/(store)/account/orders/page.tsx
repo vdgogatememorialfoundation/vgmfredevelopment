@@ -78,7 +78,23 @@ export default function OrdersPage() {
                         </span>
                       )}
                     </span>
-                    <OrderTrackingPreview order={order} />
+                    {order.splitInto?.length ? (
+                      // A split order is tracked on its parts: show where each part is.
+                      <span className="mt-1 block space-y-0.5 text-sm">
+                        {order.splitInto.map((row, index) => {
+                          const part = orders.find((item) => item.id === row.id);
+                          const state = part ? (part.status === "Delivered" ? "Delivered" : part.status === "Cancelled" ? "Cancelled" : part.status === "Out for Delivery" ? "Out for delivery" : part.status === "Shipped" ? "Shipped" : part.status === "Packed" ? "Packed" : "Ordered") : "Ordered";
+                          return (
+                            <span key={row.id} className="block">
+                              <span className="text-text-muted">Part {index + 1}:</span>{" "}
+                              <b className={state === "Delivered" ? "text-emerald-700" : state === "Cancelled" ? "text-red-700" : "text-burgundy"}>{state}</b>
+                            </span>
+                          );
+                        })}
+                      </span>
+                    ) : (
+                      <OrderTrackingPreview order={order} />
+                    )}
                     <span className="mt-1 block text-xs text-text-muted">
                       Order ID: {order.id} · {formatDate(order.date)}
                       {order.splitFrom ? ` · Part ${order.splitPart ?? ""} of order ${order.splitFrom}` : ""}

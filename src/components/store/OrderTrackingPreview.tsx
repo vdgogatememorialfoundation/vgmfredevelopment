@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { getShipments } from "@/lib/admin-store";
 import { rememberOrder, rememberShipment } from "@/lib/commerce-sync";
-import { buildTrackingStages, customerOrderStatus, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
+import { buildTrackingStages, customerOrderStatus, isHyperlocalProvider, shipmentScans, type TrackingStageId } from "@/lib/order-pipeline";
 import { agreedDelivery, clockZone, deliveryExpectation } from "@/lib/delivery-expectation";
 import { useOrderSettings } from "@/lib/use-cms";
 import type { Order, ShipmentRecord } from "@/types";
@@ -30,6 +30,17 @@ const STEP_OF: Partial<Record<Order["status"], number>> = {
   Shipped: 2,
   "Out for Delivery": 3,
   Delivered: 4,
+};
+
+/** Hyperlocal (own riders): no Shipped step; pickup from the store is out for delivery. */
+const HYPERLOCAL_STEPS = ["Ordered", "Packed", "Out for delivery", "Delivered"];
+const HYPERLOCAL_STEP_OF: Partial<Record<Order["status"], number>> = {
+  Packed: 1,
+  "Ready to Ship": 1,
+  "To Ship": 1,
+  Shipped: 2,
+  "Out for Delivery": 2,
+  Delivered: 3,
 };
 
 const FINAL = new Set<Order["status"]>(["Delivered", "Cancelled", "Failed"]);
@@ -155,16 +166,20 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
       : 8;
   const returnRequest = order.returnRequest && order.returnRequest.status !== "Rejected" ? order.returnRequest : undefined;
   const returnStages = returnRequest?.stages ?? [];
+  const hyperlocal = isHyperlocalProvider(shipment?.provider ?? order.courierChoice?.provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
+  const stepMap = hyperlocal ? HYPERLOCAL_STEP_OF : STEP_OF;
   const steps = returnRequest && returnStages.length
     ? returnStages.map((stage) => stage.title)
     : pickup || status === "Cancelled"
       ? stages.map((stage) => stage.label)
-      : STEPS;
+      : hyperlocal
+        ? HYPERLOCAL_STEPS
+        : STEPS;
   const stepIdx = returnRequest && returnStages.length
     ? Math.max(0, returnStages.map((stage) => Boolean(stage.reached)).lastIndexOf(true))
     : pickup || status === "Cancelled"
       ? currentIdx
-      : Math.max(STEP_OF[status] ?? 0, STEP_OF[order.status] ?? 0);
+      : Math.max(stepMap[status] ?? 0, stepMap[order.status] ?? 0);
   if (returnRequest) {
     headline = `${returnRequest.kind === "replacement" ? "Replacement" : "Return"} · ${returnRequest.status}${
       returnRequest.replacementOrderId ? ` · new order ${returnRequest.replacementOrderId}` : ""
