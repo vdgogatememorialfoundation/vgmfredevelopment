@@ -85,14 +85,14 @@ function connectedCourierRates(deliveryPincode: string, admin = false): CourierR
   const rates: CourierRate[] = [];
   if (hasShippingCredentials("tookan", settings)) {
     const tookan = settings.shipping.tookan;
-    if (tookan.hyperlocal && (sameCity || admin)) {
-      rates.push({ provider: "tookan", courierId: "tookan", courierName: fleetCourierLabel("tookan"), rate: 39, etaDays: 0, live: true });
+    if (admin || (tookan.hyperlocal && sameCity)) {
+      rates.push({ provider: "tookan", courierId: "tookan", courierName: admin ? "Tookan Hyperlocal (live GPS)" : fleetCourierLabel("tookan"), rate: 39, etaDays: 0, live: true });
     }
-    if (tookan.parcel && (admin || !sameCity || !tookan.hyperlocal)) {
+    if (admin || (tookan.parcel && (!sameCity || !tookan.hyperlocal))) {
       rates.push({
         provider: "tookan-parcel",
         courierId: "tookan-parcel",
-        courierName: fleetCourierLabel("tookan-parcel"),
+        courierName: admin ? "Tookan Parcel" : fleetCourierLabel("tookan-parcel"),
         rate: 45,
         etaDays: sameCity ? 1 : 3,
         live: true,
@@ -100,7 +100,7 @@ function connectedCourierRates(deliveryPincode: string, admin = false): CourierR
     }
   }
   if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && (sameCity || admin)) {
-    rates.push({ provider: "shipday", courierId: "shipday", courierName: fleetCourierLabel("shipday"), rate: 49, etaDays: 0, live: true });
+    rates.push({ provider: "shipday", courierId: "shipday", courierName: admin ? "Shipday Hyperlocal (live GPS)" : fleetCourierLabel("shipday"), rate: 49, etaDays: 0, live: true });
   }
   return rates;
 }
