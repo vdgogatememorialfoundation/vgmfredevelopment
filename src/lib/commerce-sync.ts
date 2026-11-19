@@ -138,24 +138,37 @@ async function publishSecrets() {
   }
 }
 
+/** Sends only the orders and shipments changed on this browser since its last push, a few at a time. */
 async function pushLocalCommerce() {
-  const orders = getOrders();
-  const shipments = getShipments();
+  const orders = getOrders().slice(0, 200);
+  const shipments = getShipments().slice(0, 200);
   if (!orders.length && !shipments.length) return;
-  const stamp = `${orders.length}:${shipments.length}:${orderActivityAt(orders[0] ?? {})}:${shipmentActivityAt(shipments[0] ?? {})}`;
-  if (window.sessionStorage.getItem("vgmf_commerce_push") === stamp) return;
-  const send = (url: string, body: unknown) =>
-    fetch(url, {
+  const SENT = "vgmf_commerce_sent";
+  let sent: Record<string, number> = {};
+  try {
+    sent = JSON.parse(window.localStorage.getItem(SENT) || "{}") as Record<string, number>;
+  } catch {
+    sent = {};
+  }
+  const jobs: { key: string; stamp: number; url: string; body: unknown }[] = [
+    ...orders.map((order) => ({ key: `o:${order.id}`, stamp: orderActivityAt(order), url: "/api/shop/orders", body: { order: withAccountEmail(order) } })),
+    ...shipments.map((shipment) => ({ key: `s:${shipment.id}`, stamp: shipmentActivityAt(shipment), url: "/api/shop/shipments", body: { shipment } })),
+  ].filter((job) => sent[job.key] !== job.stamp);
+  if (!jobs.length) return;
+  const send = (job: (typeof jobs)[number]) =>
+    fetch(job.url, {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }).catch(() => undefined);
-  await Promise.all([
-    ...orders.slice(0, 200).map((order) => send("/api/shop/orders", { order: withAccountEmail(order) })),
-    ...shipments.slice(0, 200).map((shipment) => send("/api/shop/shipments", { shipment })),
-  ]);
-  window.sessionStorage.setItem("vgmf_commerce_push", stamp);
+      body: JSON.stringify(job.body),
+    })
+      .then((response) => {
+        if (response.ok) sent[job.key] = job.stamp;
+      })
+      .catch(() => undefined);
+  for (let i = 0; i < jobs.length; i += 4) await Promise.all(jobs.slice(i, i + 4).map(send));
+  const keep = new Set([...orders.map((order) => `o:${order.id}`), ...shipments.map((shipment) => `s:${shipment.id}`)]);
+  window.localStorage.setItem(SENT, JSON.stringify(Object.fromEntries(Object.entries(sent).filter(([key]) => keep.has(key)))));
 }
 
 async function pullCommerce() {

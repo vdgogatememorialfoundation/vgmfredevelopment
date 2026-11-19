@@ -43,7 +43,7 @@ echo "Commit: $COMMIT"
 
 cd "$SRC"
 say "Installing dependencies"
-npm ci --no-audit --no-fund
+nice -n 19 ionice -c3 npm ci --no-audit --no-fund
 
 restart() {
   local env="$1"
@@ -73,7 +73,8 @@ for ENV in "${ENVS[@]}"; do
       done < "$ENVFILE"
     fi
     rm -rf .next
-    NODE_OPTIONS=--max-old-space-size=4096 NEXT_TELEMETRY_DISABLED=1 npx next build
+    # Lowest CPU and disk priority, so the live sites stay fast while a build runs on this 2-core box.
+    NODE_OPTIONS=--max-old-space-size=4096 NEXT_TELEMETRY_DISABLED=1 nice -n 19 ionice -c3 npx next build
   )
 
   SERVER_JS="$(find .next/standalone -maxdepth 4 -name server.js -not -path '*/node_modules/*' | head -1)"
