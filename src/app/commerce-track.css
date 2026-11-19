@@ -432,3 +432,11 @@
   line-height: 1.45;
   color: #1f2a44;
 }
+
+/* Call button on the rider card: white text on the burgundy button. */
+.vgmf-map-card .vgmf-map-agent a,
+.vgmf-map-card .vgmf-map-agent a:visited,
+.vgmf-map-card .vgmf-map-agent a:hover,
+.vgmf-map-agent a[href^="tel:"] {
+  color: #fff !important;
+}

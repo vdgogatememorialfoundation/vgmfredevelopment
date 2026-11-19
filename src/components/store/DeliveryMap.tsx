@@ -237,6 +237,9 @@ export default function DeliveryMap({
     progress: number;
     last?: LatLng;
     swept?: boolean;
+    route?: { setDirections: (result: unknown) => void; setMap: (map: object | null) => void };
+    routeFrom?: LatLng;
+    routeLeg?: Leg;
   } | null>(null);
   const [resolved, setResolved] = useState<{ store?: LatLng; drop?: LatLng }>({});
   const [mapReady, setMapReady] = useState(false);
@@ -444,6 +447,8 @@ export default function DeliveryMap({
             };
           };
           marker?: { AdvancedMarkerElement: new (opts: object) => { position?: LatLng; map?: object | null } };
+          DirectionsService?: new () => { route: (request: object) => Promise<unknown> };
+          DirectionsRenderer?: new (opts: object) => { setDirections: (result: unknown) => void; setMap: (map: object | null) => void };
         };
       };
     };
@@ -478,8 +483,40 @@ export default function DeliveryMap({
     live.map.setHeading(-18);
     if (!accepted || !agent) {
       if (live.bike) live.bike.map = null;
+      live.route?.setMap(null);
+      live.route = undefined;
+      live.routeFrom = undefined;
+      live.line?.setMap(live.map);
     } else {
       moveBike(path);
+      roadRoute(agent);
+    }
+
+    /** Live road route: rider → store → customer while picking up, rider → customer after. Replaces the dotted line. */
+    function roadRoute(rider: LatLng) {
+      const Service = maps?.DirectionsService;
+      const Renderer = maps?.DirectionsRenderer;
+      if (!Service || !Renderer || !resolved.drop) return;
+      const moved = !live.routeFrom || Math.abs(live.routeFrom.lat - rider.lat) + Math.abs(live.routeFrom.lng - rider.lng) > 0.0006;
+      if (!moved && live.routeLeg === leg && live.route) return;
+      live.routeFrom = rider;
+      live.routeLeg = leg;
+      const waypoints = leg === "pickup" && resolved.store ? [{ location: resolved.store, stopover: true }] : [];
+      new Service()
+        .route({ origin: rider, destination: resolved.drop, waypoints, travelMode: "DRIVING" })
+        .then((result) => {
+          if (!live.route) {
+            live.route = new Renderer({
+              map: live.map,
+              suppressMarkers: true,
+              preserveViewport: true,
+              polylineOptions: { strokeColor: ROAD, strokeOpacity: 0.9, strokeWeight: 5 },
+            });
+          }
+          live.route.setDirections(result);
+          live.line?.setMap(null);
+        })
+        .catch(() => live.line?.setMap(live.map));
     }
 
     function moveBike(path: LatLng[]) {
