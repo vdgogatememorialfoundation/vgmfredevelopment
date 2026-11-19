@@ -138,7 +138,8 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
       fromSite = true;
     }
   }
-  hit.events = await withScanPlaces(hit.events ?? []).catch(() => hit?.events ?? []);
+  // India Post scans name the post office ("A.R. Shala S.O"); a town lookup would misplace it.
+  if (direct !== "india-post") hit.events = await withScanPlaces(hit.events ?? []).catch(() => hit?.events ?? []);
 
   // Courier tracking pages show only the latest scans, so keep earlier ones; drop anything dated in the future.
   const latestOk = Date.now() + 10 * 60_000;
