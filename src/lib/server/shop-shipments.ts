@@ -79,9 +79,25 @@ export function upsertShopShipment(shipment: ShipmentRecord) {
     writeAll(next);
     return next[0];
   }
-  next.unshift(prev ? { ...prev, ...shipment } : shipment);
+  next.unshift(prev ? { ...prev, ...shipment, tracking: mergeScans(prev.tracking, shipment.tracking) } : shipment);
   writeAll(next);
   return next[0];
+}
+
+/** One scan per time + text: the server's copy wins, so a stale browser copy can't bring back a corrected place or a duplicate. */
+function mergeScans(server?: ShipmentRecord["tracking"], incoming?: ShipmentRecord["tracking"]) {
+  if (!incoming) return server;
+  const key = (scan: { at: string; status: string }) => `${scan.at}|${scan.status.trim().toLowerCase()}`;
+  const kept = new Map((server ?? []).map((scan) => [key(scan), scan]));
+  const seen = new Set<string>();
+  return incoming
+    .map((scan) => kept.get(key(scan)) ?? scan)
+    .filter((scan) => {
+      const id = key(scan);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
 }
 
 export function deleteShopShipments(orderId: string) {
