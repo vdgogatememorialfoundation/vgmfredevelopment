@@ -3,22 +3,23 @@
 import { deliveryDatePhrase } from "@/lib/delivery-expectation";
 import type { Order, ShipmentRecord } from "@/types";
 
-const STEPS = ["Order placed", "Rider assigned", "Picked up", "On the way", "Delivered"] as const;
+const STEPS = ["Confirmed", "Dispatched", "Picked up", "Out for delivery", "Delivered"] as const;
 
 function stepFor(order: Order, shipment?: ShipmentRecord | null) {
   const text = `${shipment?.status ?? ""} ${[...(shipment?.tracking ?? [])].reverse().find((scan) => scan.status)?.status ?? ""}`.toLowerCase();
   if (order.status === "Delivered" || shipment?.status === "Delivered" || /\bdelivered|successful|completed\b/.test(text)) return 4;
   if (order.status === "Out for Delivery" || shipment?.status === "Out for Delivery" || /on the way|out for delivery|started|arriv/.test(text)) return 3;
   if (shipment?.status === "Picked Up" || shipment?.status === "In Transit" || /picked up|collected/.test(text)) return 2;
-  if (shipment?.agentName?.trim() || /assigned|accepted/.test(text)) return 1;
+  // Dispatched as soon as we ship it (task booked); no "finding a partner" step for customers.
+  if (shipment?.awb || shipment?.agentName?.trim() || /assigned|accepted/.test(text)) return 1;
   return 0;
 }
 
 const HEADLINES = [
-  "Your order is confirmed. Finding a delivery partner…",
-  "Rider assigned and heading to the store",
-  "Rider has picked up your order",
-  "Your order is on the way",
+  "Your order is confirmed",
+  "Your order has been dispatched",
+  "Picked up from the store",
+  "Your order is out for delivery",
   "Delivered. Enjoy your order!",
 ];
 
