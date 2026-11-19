@@ -365,7 +365,10 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
         </div>
       ) : showLiveMap(order, shipment) ? (
         <div className="vgmf-hl">
-          <div className="vgmf-hl-sheet"><HyperlocalStatus order={order} shipment={shipment} /></div>
+          <div className="vgmf-hl-sheet">
+            <HyperlocalStatus order={order} shipment={shipment} />
+            <div className="mt-4">{pipe}</div>
+          </div>
           <div className="vgmf-hl-map">
             <LiveTracking order={order} shipment={shipment} />
           </div>
