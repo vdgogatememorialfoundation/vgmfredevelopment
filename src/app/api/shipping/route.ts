@@ -301,7 +301,7 @@ export async function POST(request: NextRequest) {
                                     : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
-        const events = "events" in result && Array.isArray(result.events) ? await withScanPlaces(result.events as { location?: string }[]) : undefined;
+        const events = "events" in result && Array.isArray(result.events) ? await withScanPlaces(result.events as { location?: string }[], [String((creds as { tookan?: { pickup?: { state?: string } } }).tookan?.pickup?.state ?? ""), "Maharashtra"]) : undefined;
         return NextResponse.json({ ok: true, configured: true, ...result, ...(events ? { events } : {}) });
       }
       case "cancel": {

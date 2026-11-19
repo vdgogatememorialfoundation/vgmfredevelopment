@@ -1723,6 +1723,7 @@ export function ShippingApisDesk() {
         <LabelDesignFields design={labelDesign(value)} onChange={(patch) => set({ labelDesign: { ...labelDesign(value), ...patch } })} />
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Text label="Minimum wallet (₹) to allow booking" type="number" value={value.minWalletRupees} onChange={(min) => set({ minWalletRupees: Number(min) || 0 })} hint="Shiprocket, Nimbuspost, iThink and Shipyaari bookings stop if credits are below this or below the courier rate." />
+          <Text label="Google Map ID (3D live map)" value={value.mapId ?? ""} onChange={(mapId) => set({ mapId: mapId.trim() })} hint="Google Cloud → Map Management → a vector Map ID. Blank uses Google's demo map." />
           <Text label="Hyperlocal map ping (seconds)" type="number" value={value.hyperlocalPingSeconds} onChange={(seconds) => set({ hyperlocalPingSeconds: Math.min(15, Math.max(8, Number(seconds) || 8)) })} hint="How often the live map asks Tookan or Shipday for the rider. 8 to 15 seconds." />
         </div>
         <div className="mt-4">

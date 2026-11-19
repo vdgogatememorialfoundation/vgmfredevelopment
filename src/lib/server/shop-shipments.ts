@@ -58,8 +58,17 @@ export function upsertShopShipment(shipment: ShipmentRecord) {
   if (!shipment?.id || !shipment.orderId || isDeleted(shipment)) return;
   const all = readAll();
   const prev = all.find((item) => item.id === shipment.id || sameShipmentSlot(item, shipment));
-  if (prev && shipmentActivityAt(prev) > shipmentActivityAt(shipment)) return prev;
+  // A desk "remove this scan" carries older scans than the server copy; still apply the removal.
+  const hides = (shipment.hiddenScans ?? []).filter((key) => !(prev?.hiddenScans ?? []).includes(key));
+  if (prev && shipmentActivityAt(prev) > shipmentActivityAt(shipment) && !hides.length) return prev;
   const next = all.filter((item) => item.id !== shipment.id && !sameShipmentSlot(item, shipment));
+  if (prev && hides.length && shipmentActivityAt(prev) > shipmentActivityAt(shipment)) {
+    const hidden = new Set([...(prev.hiddenScans ?? []), ...hides]);
+    const keyOf = (scan: { at: string; status: string }) => `${scan.at}|${scan.status.trim().toLowerCase()}`;
+    next.unshift({ ...prev, hiddenScans: [...hidden], tracking: (prev.tracking ?? []).filter((scan) => !hidden.has(keyOf(scan))) });
+    writeAll(next);
+    return next[0];
+  }
   next.unshift(prev ? { ...prev, ...shipment } : shipment);
   writeAll(next);
   return next[0];

@@ -232,6 +232,8 @@ export interface IntegrationSettings {
     /** Fallback tracking service for couriers without an API account (their own site is read first). */
     tracker: { service: "aftership" | "trackingmore" | "17track"; apiKey: string; enabled: boolean };
     scooterImage: string;
+    /** Google Cloud Map ID (vector) for the tilted 3D live map; blank = Google's demo map ID. */
+    mapId: string;
     hyperlocalPingSeconds: number;
     minWalletRupees: number;
     connection: Partial<Record<ShippingProviderId, ShippingConnection>>;
@@ -510,6 +512,7 @@ export const defaultIntegrations: IntegrationSettings = {
     shipday: { apiKey: "", enabled: true },
     tracker: { service: "aftership", apiKey: "", enabled: true },
     scooterImage: "",
+    mapId: "",
     hyperlocalPingSeconds: 8,
     minWalletRupees: 50,
     connection: {},

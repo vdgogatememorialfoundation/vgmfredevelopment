@@ -23,6 +23,7 @@ import { readShippingCreds } from "@/lib/server/shipping-vault";
 import type { Order, ShipmentRecord } from "@/types";
 import { inviteOrderFeedback } from "@/lib/server/forms";
 import { withScanPlaces } from "@/lib/server/place-lookup";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 
 /** Same scan when the text and town match, whatever the case ("PUNE" and "Pune, Maharashtra, India"). */
 const placeKey = (location?: string) => (location ?? "").split(",")[0].trim().toLowerCase();
@@ -139,7 +140,9 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     }
   }
   // India Post scans name the post office ("A.R. Shala S.O"); a town lookup would misplace it.
-  if (direct !== "india-post") hit.events = await withScanPlaces(hit.events ?? []).catch(() => hit?.events ?? []);
+  const pickupState = String(((savedAdminIntegrations() as { settings?: { shipping?: { pickup?: { state?: string } } } }).settings?.shipping?.pickup?.state) ?? "");
+  const prefer = [pickupState, findShopOrder(orderId)?.deliveryAddress?.state ?? ""];
+  if (direct !== "india-post") hit.events = await withScanPlaces(hit.events ?? [], prefer).catch(() => hit?.events ?? []);
 
   // Courier tracking pages show only the latest scans, so keep earlier ones; drop anything dated in the future.
   const latestOk = Date.now() + 10 * 60_000;

@@ -62,6 +62,7 @@ export default function LiveTracking({
   return (
     <DeliveryMap
       mapsKey={mapsKey}
+      mapId={getIntegrations().shipping.mapId}
       partner={partner}
       status={status}
       accepted={accepted}
