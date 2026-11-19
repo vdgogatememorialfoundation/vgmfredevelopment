@@ -378,15 +378,13 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       ) : showLiveMap(order, shipment) ? (
         <div className="vgmf-hl">
           <div className="vgmf-hl-sheet">
-            <HyperlocalStatus order={order} shipment={shipment} />
+            <HyperlocalStatus order={order} shipment={shipment} riderOnly />
             <div className="mt-4">{pipe}</div>
           </div>
           <div className="vgmf-hl-map">
             <LiveTracking order={order} shipment={shipment} />
           </div>
         </div>
-      ) : hyperlocal && order.deliveryMode === "delivery" && !["Cancelled", "Failed", "Delivered"].includes(order.status) ? (
-        <HyperlocalStatus order={order} shipment={shipment} />
       ) : (
         pipe
       )}
