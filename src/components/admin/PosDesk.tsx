@@ -22,7 +22,8 @@ import { getPickupLocation } from "@/lib/fulfillment";
 import { payOnPaytmEdc, payOnRazorpayEdc, payWithRazorpay, waitForRazorpay } from "@/lib/payments-client";
 import { generateOrderId } from "@/lib/store";
 import { useLiveBooks } from "@/lib/use-cms";
-import type { Book, DeliveryAddress, Order } from "@/types";
+import type { Book, CourierRate, DeliveryAddress, Order } from "@/types";
+import { fetchCourierRates, orderDims, orderWeightKg } from "@/lib/shipping-client";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
 import { canOrder, getProductByCode, isPurchasable } from "@/lib/product-data";
@@ -74,6 +75,9 @@ export function PosDesk() {
   const [scanOpen, setScanOpen] = useState(false);
   const [fulfil, setFulfil] = useState<"counter" | "delivery">("counter");
   const [deliveryCharge, setDeliveryCharge] = useState("0");
+  const [deliveryRates, setDeliveryRates] = useState<CourierRate[]>([]);
+  const [deliveryChoice, setDeliveryChoice] = useState<CourierRate | undefined>();
+  const [ratesNote, setRatesNote] = useState("");
   const [preorderPay, setPreorderPay] = useState<"advance" | "full">("advance");
   const [wallet, setWallet] = useState<{ email: string; balance: number; expiring: WalletExpiry | null; error?: string } | null>(null);
 
@@ -301,6 +305,7 @@ export function PosDesk() {
         razorpayPaymentId,
         channel: "pos",
         shippingOverride: charge,
+        courierChoice: fulfil === "delivery" ? deliveryChoice : undefined,
         preorder: asPreorder,
       });
       if (creditApplied > 0 && payNow > 0) paymentMethod = `Store credit ${rupees(creditApplied)} + ${paymentMethod}`;
@@ -564,6 +569,58 @@ export function PosDesk() {
                     <TextInput type="number" min={0} value={deliveryCharge} onChange={(event) => setDeliveryCharge(event.target.value)} />
                   </Field>
                   <p className="self-end text-xs text-text-muted">Ships to the address above. The order goes to Orders for picking, packing and courier booking.</p>
+                  <div className="sm:col-span-2">
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!/^\d{6}$/.test(address.pincode)) {
+                          setRatesNote("Enter the 6-digit pincode in the address first.");
+                          return;
+                        }
+                        setRatesNote("Checking delivery options…");
+                        const items = cart.map((line) => ({ ...line, title: "", currency: "INR" })) as unknown as Order["items"];
+                        const quote = await fetchCourierRates({
+                          admin: true,
+                          deliveryPincode: address.pincode,
+                          weightKg: orderWeightKg({ items }),
+                          dims: orderDims({ items }),
+                          declaredValue: subtotal,
+                          bookIds: cart.map((line) => line.bookId),
+                        }).catch(() => null);
+                        setDeliveryRates(quote?.rates ?? []);
+                        setDeliveryChoice(undefined);
+                        setRatesNote(quote?.rates.length ? "" : quote?.notes?.[0] || "No delivery option for this pincode.");
+                      }}
+                    >
+                      Delivery options (hyperlocal and couriers)
+                    </Button>
+                    {ratesNote ? <p className="mt-1 text-xs text-text-muted">{ratesNote}</p> : null}
+                    {deliveryRates.length ? (
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {deliveryRates.map((rate) => {
+                          const on = deliveryChoice?.provider === rate.provider && deliveryChoice?.courierId === rate.courierId;
+                          return (
+                            <li key={`${rate.provider}:${rate.courierId}`}>
+                              <label className="flex cursor-pointer items-center gap-2">
+                                <input
+                                  type="radio"
+                                  className="accent-burgundy"
+                                  checked={on}
+                                  onChange={() => {
+                                    setDeliveryChoice(rate);
+                                    setDeliveryCharge(String(Math.round(rate.rate)));
+                                  }}
+                                />
+                                <span className="flex-1">{rate.courierName}</span>
+                                <span className="text-text-muted">{rate.etaDays === 0 ? "Today" : `${rate.etaDays} day${rate.etaDays === 1 ? "" : "s"}`}</span>
+                                <span className="w-16 text-right">{rupees(rate.rate)}</span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </div>
