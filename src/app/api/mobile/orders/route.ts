@@ -3,7 +3,7 @@ import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { appOrdersFor } from "@/lib/server/mobile-shop";
-import { listShopShipments } from "@/lib/server/shop-shipments";
+import { customerShipment, listShopShipments } from "@/lib/server/shop-shipments";
 import { forCustomer } from "@/lib/server/shop-orders";
 import { addOrder, bearerToken, listOrders, requestMobileReplacement, sessionFromToken } from "@/lib/server/mobile-store";
 import { buildTrackingStages, customerOrderStatus, shipmentScans } from "@/lib/order-pipeline";
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
       ...shown,
       status: customerOrderStatus(shown.status),
       history: shown.history?.map((step) => ({ ...step, status: customerOrderStatus(step.status) })),
-      shipments: own, tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
+      shipments: own.map((item) => customerShipment(item, order.status)), tracking: trackersFor(order as Order, own as ShipmentRecord[]) };
   });
   const ids = new Set(shop.map((order) => order.id));
   const legacy = listOrders(session.email).filter((order) => !ids.has(order.id));

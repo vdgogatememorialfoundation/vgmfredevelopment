@@ -54,6 +54,16 @@ export function findShopShipment(orderId: string, shipmentId = "") {
   return readAll().find((item) => item.orderId === orderId && item.note !== "Cancelled") ?? readAll().find((item) => item.orderId === orderId);
 }
 
+/** Customer copy of a shipment: once it is delivered (or over), the rider's name, phone, GPS and OTP stay with Admin only. */
+export function customerShipment<T extends ShipmentRecord | null | undefined>(shipment: T, orderStatus = ""): T {
+  if (!shipment) return shipment;
+  const over = ["Delivered", "Cancelled", "Failed", "Returned"].includes(shipment.status) || ["Delivered", "Cancelled", "Failed"].includes(orderStatus);
+  if (!over) return shipment;
+  const { agentName: _name, agentPhone: _phone, agentLat: _lat, agentLng: _lng, deliveryOtp: _otp, ...rest } = shipment as ShipmentRecord;
+  void _name; void _phone; void _lat; void _lng; void _otp;
+  return rest as T;
+}
+
 export function upsertShopShipment(shipment: ShipmentRecord) {
   if (!shipment?.id || !shipment.orderId || isDeleted(shipment)) return;
   const all = readAll();

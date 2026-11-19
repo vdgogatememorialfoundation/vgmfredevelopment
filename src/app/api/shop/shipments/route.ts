@@ -4,7 +4,7 @@ import { commerceViewer } from "@/lib/server/commerce-viewer";
 import { refreshStoredShipment } from "@/lib/server/live-track";
 import { syncOpenRefunds } from "@/lib/server/shipment-sync";
 import { findShopOrder, orderPhoneMatches } from "@/lib/server/shop-orders";
-import { deleteShopShipments, deletedShopShipmentIds, findShopShipment, listShopShipments, upsertShopShipment } from "@/lib/server/shop-shipments";
+import { customerShipment, deleteShopShipments, deletedShopShipmentIds, findShopShipment, listShopShipments, upsertShopShipment } from "@/lib/server/shop-shipments";
 import type { Order, ShipmentRecord } from "@/types";
 
 export const runtime = "nodejs";
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         if (viewer.email && shipMail && shipMail === viewer.email) return true;
         return Boolean(viewer.phone && phonesMatch(shipment.toAddress?.phone, viewer.phone));
       });
-      return NextResponse.json({ ok: true, shipments: mine }, { headers: { "cache-control": "no-store" } });
+      return NextResponse.json({ ok: true, shipments: mine.map((item) => customerShipment(item, findShopOrder(item.orderId)?.status)) }, { headers: { "cache-control": "no-store" } });
     }
     return NextResponse.json({ ok: true, shipments: [] }, { headers: { "cache-control": "no-store" } });
   }
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   if (!allowed(request, order, shipment ?? undefined, phone)) {
     return NextResponse.json({ ok: false, error: "Sign in, or enter the mobile number on the order." }, { status: 403 });
   }
-  return NextResponse.json({ ok: true, shipment }, { headers: { "cache-control": "no-store" } });
+  return NextResponse.json({ ok: true, shipment: viewer.portal ? shipment : customerShipment(shipment, order?.status) }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: NextRequest) {
@@ -81,7 +81,9 @@ export async function POST(request: NextRequest) {
     if (stale) await syncOpenRefunds(orderId).catch(() => undefined);
     const result = await refreshStoredShipment(orderId, typeof body.shipmentId === "string" ? body.shipmentId : "");
     const latest = findShopOrder(orderId);
-    return NextResponse.json({ ...result, ...(latest ? { order: latest } : {}) }, { headers: { "cache-control": "no-store" } });
+    const portal = commerceViewer(request).portal;
+    const shown = !portal && "shipment" in result && result.shipment ? { ...result, shipment: customerShipment(result.shipment, latest?.status) } : result;
+    return NextResponse.json({ ...shown, ...(latest ? { order: latest } : {}) }, { headers: { "cache-control": "no-store" } });
   }
   const shipment = body?.shipment;
   if (!shipment || typeof shipment.id !== "string" || typeof shipment.orderId !== "string") {

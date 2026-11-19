@@ -1937,7 +1937,12 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
     agentLeg: pickupOpen ? "pickup" : "delivery",
     agentName: accepted ? String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "") : "",
     agentPhone: accepted ? String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? "") : "",
-    otp: String(job.job_otp ?? job.order_otp ?? delivery?.job.job_otp ?? ""),
+    // Delivery OTP: from the last delivery task (a parcel booking can hold several tasks), never the pickup task's.
+    otp: String(
+      [...details].reverse().find((item) => !item.pickupTask && String(item.job.job_otp ?? item.job.order_otp ?? "").trim())?.job.job_otp ??
+        [...details].reverse().find((item) => !item.pickupTask)?.job.order_otp ??
+        ""
+    ),
     lat: accepted ? lat : undefined,
     lng: accepted ? lng : undefined,
     pickupLat,
