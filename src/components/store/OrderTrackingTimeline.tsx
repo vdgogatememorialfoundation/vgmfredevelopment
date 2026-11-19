@@ -375,7 +375,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
             <LiveTracking order={order} shipment={shipment} />
           </div>
         </div>
-      ) : hyperlocal && order.deliveryMode === "delivery" && order.status !== "Cancelled" && order.status !== "Failed" ? (
+      ) : hyperlocal && order.deliveryMode === "delivery" && !["Cancelled", "Failed", "Delivered"].includes(order.status) ? (
         <HyperlocalStatus order={order} shipment={shipment} />
       ) : (
         pipe

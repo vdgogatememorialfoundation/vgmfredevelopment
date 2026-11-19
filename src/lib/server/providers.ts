@@ -1897,10 +1897,12 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   for (const id of ids) {
     const data = await call("https://api.tookanapp.com/v2/get_job_details", {
       method: "POST",
-      json: { api_key: apiKey, job_ids: [Number(id) || id], include_task_history: 1 },
+      // job_additional_info carries the Task OTP (job_otp) shown on the Tookan panel.
+      json: { api_key: apiKey, job_ids: [Number(id) || id], include_task_history: 1, job_additional_info: 1 },
     });
     const job = ((data.data as Json[]) ?? [])[0];
-    if (job) jobs.push(job);
+    const extra = (job?.job_additional_info ?? (data as Json).job_additional_info) as Json | undefined;
+    if (job) jobs.push(extra?.job_otp != null && job.job_otp == null ? { ...job, job_otp: extra.job_otp } : job);
   }
   const coord = (value: number) => (Number.isFinite(value) && Math.abs(value) > 0.001 ? value : undefined);
   const details = jobs.map((job) => {
