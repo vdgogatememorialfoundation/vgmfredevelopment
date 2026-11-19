@@ -1070,6 +1070,7 @@ type TrackHit = {
   agentName?: string;
   agentPhone?: string;
   otp?: string;
+  barcode?: string;
   pickupLat?: number;
   pickupLng?: number;
   dropLat?: number;
@@ -1106,6 +1107,7 @@ function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
   if (result.agentName) update.agentName = result.agentName;
   if (result.agentPhone) update.agentPhone = result.agentPhone;
   if (result.otp) update.deliveryOtp = result.otp;
+  if (result.barcode) update.taskBarcode = result.barcode;
   if (result.lat != null) update.agentLat = result.lat;
   if (result.lng != null) update.agentLng = result.lng;
   if (result.pickupLat != null) update.pickupLat = result.pickupLat;

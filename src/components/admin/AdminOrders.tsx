@@ -2058,6 +2058,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {isOwnFleet(shipment.provider) && shipment.status !== "Delivered" && (
                     <div className="rounded-xl border border-border p-3">
                       <p className="text-sm font-semibold text-text-primary">Reschedule Gogate Products delivery</p>
+                      {shipment.taskBarcode ? <p className="mt-1 text-xs text-text-muted">Tookan barcode: <b className="font-mono text-text-primary">{shipment.taskBarcode}</b></p> : null}
                       <p className="mt-1 text-xs text-text-muted">Customers see the date only. The time is sent to the courier task and kept for the tracking line.</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <TextInput type="datetime-local" value={deliveryWhen} onChange={(event) => setDeliveryWhen(event.target.value)} />

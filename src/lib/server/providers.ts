@@ -1927,16 +1927,33 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const pickupLng = coord(Number(storeJob.job_pickup_longitude ?? storeJob.pickup_longitude));
   const dropLat = coord(Number(dropSource.job_latitude ?? dropSource.customer_latitude ?? dropSource.delivery_latitude));
   const dropLng = coord(Number(dropSource.job_longitude ?? dropSource.customer_longitude ?? dropSource.delivery_longitude));
-  const lat = coord(Number(job.fleet_latitude ?? fleet.latitude));
-  const lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
+  let lat = coord(Number(job.fleet_latitude ?? fleet.latitude));
+  let lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
+  let riderName = String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "").trim();
+  let riderPhone = String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? "").trim();
+  // get_job_details carries only fleet_id: the rider's live GPS and name come from the agent endpoints.
+  const fleetId = Number(job.fleet_id ?? delivery?.job.fleet_id ?? pickup?.job.fleet_id) || 0;
+  if (accepted && fleetId > 0) {
+    const [where, profile] = await Promise.all([
+      lat == null ? call("https://api.tookanapp.com/v2/get_fleet_location", { method: "POST", json: { api_key: apiKey, fleet_id: fleetId } }).catch(() => null) : null,
+      !riderName || !riderPhone ? call("https://api.tookanapp.com/v2/view_fleet_profile", { method: "POST", json: { api_key: apiKey, fleet_id: fleetId } }).catch(() => null) : null,
+    ]);
+    const spot = ((where?.data as Json[]) ?? [])[0] ?? {};
+    lat = lat ?? coord(Number(spot.latitude));
+    lng = lng ?? coord(Number(spot.longitude));
+    const person = ((((profile?.data as Json) ?? {}).fleet_details as Json[]) ?? [])[0] ?? {};
+    riderName = riderName || String(person.username ?? [person.first_name, person.last_name].filter(Boolean).join(" ")).trim();
+    riderPhone = riderPhone || String(person.phone ?? "").trim();
+  }
   return {
     status: currentLabel,
     courierName: "Gogate Products-Tookan",
+    barcode: String(delivery?.job.barcode ?? job.barcode ?? pickup?.job.barcode ?? ""),
     awb: String(delivery?.job.job_id ?? jobId),
     accepted,
     agentLeg: pickupOpen ? "pickup" : "delivery",
-    agentName: accepted ? String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "") : "",
-    agentPhone: accepted ? String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? "") : "",
+    agentName: accepted ? riderName : "",
+    agentPhone: accepted ? riderPhone : "",
     // Delivery OTP: from the last delivery task (a parcel booking can hold several tasks), never the pickup task's.
     otp: String(
       [...details].reverse().find((item) => !item.pickupTask && String(item.job.job_otp ?? item.job.order_otp ?? "").trim())?.job.job_otp ??
