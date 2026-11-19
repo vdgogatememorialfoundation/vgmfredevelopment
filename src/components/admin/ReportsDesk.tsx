@@ -1,5 +1,6 @@
 "use client";
 
+import { withoutSplitParents } from "@/lib/split-order";
 import { displayName, getAccounts, getShipments, getTickets } from "@/lib/admin-store";
 import { getAllApplications } from "@/lib/applications";
 import { getEventRecords, getIssuedCertificates, getLiveArticles, getLiveClinics, getLiveEvents } from "@/lib/cms";
@@ -18,7 +19,7 @@ type Report = {
 
 function reports(): { group: string; items: Report[] }[] {
   const accounts = getAccounts();
-  const orders = getOrders();
+  const orders = withoutSplitParents(getOrders());
   const awbsFor = (order: (typeof orders)[number]) =>
     getShipments()
       .filter((shipment) => shipment.orderId === order.id)

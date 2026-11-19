@@ -1,5 +1,6 @@
 "use client";
 
+import { countsAsOrder, withoutSplitParents } from "@/lib/split-order";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { getSettings } from "@/lib/admin-store";
 import {
@@ -170,7 +171,7 @@ export function AnalyticsDesk({ focus = "overview" }: { focus?: "overview" | "us
   const day = hitsSince(24);
   const week = hitsSince(24 * 7);
   const settings = getSettings();
-  const orders = getOrders();
+  const orders = withoutSplitParents(getOrders());
   void version;
   const articles = getLiveArticles();
 
@@ -189,6 +190,7 @@ export function AnalyticsDesk({ focus = "overview" }: { focus?: "overview" | "us
     const months = new Map<string, number>();
     const states = new Map<string, number>();
     for (const order of live) {
+      if (!countsAsOrder(order)) continue;
       const month = new Date(order.date).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
       months.set(month, (months.get(month) ?? 0) + 1);
       const state = order.deliveryAddress?.state?.trim() || "Not given";
@@ -197,7 +199,7 @@ export function AnalyticsDesk({ focus = "overview" }: { focus?: "overview" | "us
     const trend = [...months.entries()].sort((a, b) => Date.parse(`1 ${a[0]}`) - Date.parse(`1 ${b[0]}`));
     return {
       totals: itemTotals(orders, getBookById),
-      cancelled: orders.length - live.length,
+      cancelled: orders.filter(countsAsOrder).length - live.filter(countsAsOrder).length,
       trend,
       states: [...states.entries()].sort((a, b) => b[1] - a[1]),
     };

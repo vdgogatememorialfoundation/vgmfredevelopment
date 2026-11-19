@@ -159,3 +159,14 @@ export function splitParentStatus(parts: { status: string }[]) {
   if (live.every((part) => ["Packed", "Ready to Ship", "To Ship"].includes(part.status))) return "Packed";
   return "Ordered";
 }
+
+/** Money, items and work: a split parent's amounts live on its parts, so drop the parent to avoid counting them twice. */
+export function withoutSplitParents<T extends { splitInto?: unknown[] }>(orders: T[]) {
+  return orders.filter((order) => !order.splitInto?.length);
+}
+
+/** Order counts: a split order is one customer order, counted on its first part. */
+export function countsAsOrder(order: { splitFrom?: string; splitPart?: number; splitInto?: unknown[] }) {
+  if (order.splitInto?.length) return false;
+  return !order.splitFrom || (order.splitPart ?? 1) === 1;
+}

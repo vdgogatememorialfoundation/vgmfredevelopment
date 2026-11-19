@@ -1,5 +1,6 @@
 "use client";
 
+import { countsAsOrder, withoutSplitParents } from "@/lib/split-order";
 import { useMemo, useState } from "react";
 import { EmptyState, Panel, TextInput } from "@/components/admin/AdminUI";
 import { useCommerceMirror } from "@/lib/commerce-sync";
@@ -55,7 +56,7 @@ function buildCustomers(orders: Order[]) {
         products: [],
         productMap: new Map<string, ProductLine>(),
       };
-    row.orders.push(order);
+    if (countsAsOrder(order)) row.orders.push(order);
     row.spent += Math.max(0, order.total - (order.refundAmount ?? 0));
     if (order.date < row.firstAt) row.firstAt = order.date;
     if (order.date >= row.lastAt) {
@@ -88,7 +89,7 @@ export function CustomerPurchasesDesk() {
   // version changes whenever the live order mirror updates
   const customers = useMemo(() => {
     void version;
-    return buildCustomers(getOrders());
+    return buildCustomers(withoutSplitParents(getOrders()));
   }, [version]);
 
   const needle = query.trim().toLowerCase();
