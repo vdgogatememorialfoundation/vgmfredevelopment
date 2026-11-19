@@ -1745,7 +1745,7 @@ export function ShippingApisDesk() {
             onClick={async () => {
               save();
               setBusy("rates");
-              setQuote(await fetchCourierRates({ deliveryPincode: pincode, weightKg: value.defaultWeightKg, declaredValue: 500 }));
+              setQuote(await fetchCourierRates({ admin: true, deliveryPincode: pincode, weightKg: value.defaultWeightKg, declaredValue: 500 }));
               setBusy("");
             }}
           >

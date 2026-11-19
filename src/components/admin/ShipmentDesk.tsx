@@ -66,7 +66,7 @@ function ReadyOrder({ order }: { order: Order }) {
             disabled={busy === "rates"}
             onClick={() =>
               run("rates", async () => {
-                const result = await fetchCourierRates({
+                const result = await fetchCourierRates({ admin: true,
                   deliveryPincode: address?.pincode ?? "",
                   weightKg: orderWeightKg(order),
                   declaredValue: order.total,

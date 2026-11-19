@@ -29,7 +29,7 @@ export function BulkShipCourier({ orderIds, onClose, onDone }: { orderIds: strin
           rows.push({ order, rates: [], note: "Store pickup, no courier" });
           continue;
         }
-        const quote = await fetchCourierRates({
+        const quote = await fetchCourierRates({ admin: true,
           deliveryPincode: order.deliveryAddress?.pincode ?? "",
           weightKg: orderWeightKg(order),
           declaredValue: order.total,

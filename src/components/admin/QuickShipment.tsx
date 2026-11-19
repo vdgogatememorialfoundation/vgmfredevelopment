@@ -118,7 +118,7 @@ export function QuickShipment() {
     if (!/^\d{6}$/.test(to.pincode)) return setError("Enter a 6-digit delivery pincode.");
     setBusy("rates");
     try {
-      const result = await fetchCourierRates({ deliveryPincode: to.pincode, pickupPincode: pickup?.pincode, weightKg, declaredValue: declared, cod: codAmount > 0, dims: parcel });
+      const result = await fetchCourierRates({ admin: true, deliveryPincode: to.pincode, pickupPincode: pickup?.pincode, weightKg, declaredValue: declared, cod: codAmount > 0, dims: parcel });
       setQuote(result);
       setPicked(undefined);
       if (!result.rates.length) setError("No courier returned a rate for this pincode.");

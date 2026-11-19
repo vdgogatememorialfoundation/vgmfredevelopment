@@ -770,7 +770,7 @@ function CreateOrderForm({ onDone }: { onDone: (orderId?: string) => void }) {
     setError("");
     setLoadingRates(true);
     const units = itemCount;
-    const result = await fetchCourierRates({
+    const result = await fetchCourierRates({ admin: true,
       deliveryPincode: customer.pincode,
       weightKg: orderWeightKg({ items: items.map((row) => ({ ...row, quantity: row.quantity })) as Order["items"] }),
       dims: orderDims({ items: items as Order["items"] }),
@@ -1302,7 +1302,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
   const loadRates = () =>
     run("rates", async () => {
-      const result = await fetchCourierRates({
+      const result = await fetchCourierRates({ admin: true,
         deliveryPincode: order.deliveryAddress?.pincode ?? "",
         shipFrom: getStoredOrder(order.id)?.shipFrom ?? order.shipFrom,
         weightKg: orderWeightKg(order),
@@ -2025,7 +2025,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       </>
                     )}
                     <Button variant="outline" onClick={() => run("realloc", async () => {
-                      const quoteResult = quote ?? await fetchCourierRates({
+                      const quoteResult = quote ?? await fetchCourierRates({ admin: true,
                         deliveryPincode: order.deliveryAddress?.pincode ?? "",
                         weightKg: orderWeightKg(order),
                         declaredValue: order.total,

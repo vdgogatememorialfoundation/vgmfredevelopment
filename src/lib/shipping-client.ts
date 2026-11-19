@@ -76,7 +76,8 @@ export function checkoutCourierRates(rates: CourierRate[]) {
   return rates.filter((rate) => REAL_CHECKOUT.has(rate.provider) && rate.live !== false);
 }
 
-function connectedCourierRates(deliveryPincode: string): CourierRate[] {
+/** Own fleet (Tookan, Shipday). Admin sees them on every order; customers only where they deliver. */
+function connectedCourierRates(deliveryPincode: string, admin = false): CourierRate[] {
   const settings = getIntegrations();
   const origin = (settings.shipping.pickup.pincode || "411002").replace(/\D/g, "").slice(0, 3);
   const pin = deliveryPincode.replace(/\D/g, "");
@@ -84,10 +85,10 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
   const rates: CourierRate[] = [];
   if (hasShippingCredentials("tookan", settings)) {
     const tookan = settings.shipping.tookan;
-    if (tookan.hyperlocal && sameCity) {
+    if (tookan.hyperlocal && (sameCity || admin)) {
       rates.push({ provider: "tookan", courierId: "tookan", courierName: fleetCourierLabel("tookan"), rate: 39, etaDays: 0, live: true });
     }
-    if (tookan.parcel && (!sameCity || !tookan.hyperlocal)) {
+    if (tookan.parcel && (admin || !sameCity || !tookan.hyperlocal)) {
       rates.push({
         provider: "tookan-parcel",
         courierId: "tookan-parcel",
@@ -98,7 +99,7 @@ function connectedCourierRates(deliveryPincode: string): CourierRate[] {
       });
     }
   }
-  if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && sameCity) {
+  if (hasShippingCredentials("shipday", settings) && settings.shipping.shipday.enabled !== false && (sameCity || admin)) {
     rates.push({ provider: "shipday", courierId: "shipday", courierName: fleetCourierLabel("shipday"), rate: 49, etaDays: 0, live: true });
   }
   return rates;
@@ -197,6 +198,8 @@ export async function fetchCourierRates(input: {
   pickupPincode?: string;
   dims?: { length: number; breadth: number; height: number };
   shipFrom?: ShipFrom;
+  /** Admin screens: also list Tookan and Shipday, which customers may not see. */
+  admin?: boolean;
 }): Promise<RateQuote> {
   const settings = getIntegrations();
   const { shipping } = settings;
@@ -231,7 +234,7 @@ export async function fetchCourierRates(input: {
       notes.push("Courier rate service could not be reached.");
     }
   }
-  const connected = connectedCourierRates(input.deliveryPincode);
+  const connected = connectedCourierRates(input.deliveryPincode, input.admin);
   const checkoutLive = checkoutCourierRates(live);
   const seen = new Set(checkoutLive.map((rate) => `${rate.provider}:${rate.courierId}`));
   const rates = [...checkoutLive, ...connected.filter((rate) => !seen.has(`${rate.provider}:${rate.courierId}`))];
