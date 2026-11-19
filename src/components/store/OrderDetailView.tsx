@@ -58,7 +58,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
           </p>
           {order.splitFrom ? (
             <p className="mt-3 rounded-xl bg-warm-cream px-4 py-3 text-sm text-text-muted">
-              Part {order.splitPart ?? ""} of your order{" "}
+              Shipment {order.splitPart ?? ""} of your order{" "}
               <Link className="font-semibold text-burgundy underline" href={`/account/orders/${encodeURIComponent(order.splitFrom)}`}>{order.splitFrom}</Link>
               , sent separately.{order.splitAdvance ? ` ₹${order.splitAdvance} of your advance is counted here.` : ""} The platform fee was paid once on the original order.
             </p>

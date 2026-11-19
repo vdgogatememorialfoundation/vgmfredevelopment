@@ -89,7 +89,7 @@ export function planOrderSplit(order: Order, secondQty: Record<string, number>, 
         {
           at: options.now,
           status: "Split order",
-          note: `Order ${part} of 2 from order ${order.id}: ${label(items)}.${openPlan ? ` Advance ₹${advances[index]} allocated from the advance paid on ${order.id}.` : ""}${fee && !feeOnChild ? ` Platform fee ₹${fee} was paid once on ${order.id} and is not charged again.` : ""} Packing, courier and the payment link are handled on this order.`,
+          note: `Shipment ${part} of 2 from order ${order.id}: ${label(items)}.${openPlan ? ` Advance ₹${advances[index]} allocated from the advance paid on ${order.id}.` : ""}${fee && !feeOnChild ? ` Platform fee ₹${fee} was paid once on ${order.id} and is not charged again.` : ""} Packing, courier and the payment link are handled on this order.`,
         },
       ],
     };

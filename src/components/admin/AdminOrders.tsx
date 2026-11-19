@@ -2718,7 +2718,7 @@ function SplitOrderBox({ order, onDone }: { order: Order; onDone: (message: stri
 function SplitOrderInfo({ order }: { order: Order }) {
   const link = (id: string) => <a key={id} className="font-semibold text-burgundy underline" href={`/admin/commerce/orders?order=${encodeURIComponent(id)}`}>#{id}</a>;
   if (order.splitFrom) {
-    return <p className="mb-3 rounded-lg bg-warm-cream px-3 py-2 text-xs text-text-muted">Order {order.splitPart ?? ""} of a split order · parent {link(order.splitFrom)}{order.splitAdvance ? ` · advance ₹${order.splitAdvance} allocated from the parent` : ""}. The platform fee is on the parent.</p>;
+    return <p className="mb-3 rounded-lg bg-warm-cream px-3 py-2 text-xs text-text-muted">Shipment {order.splitPart ?? ""} of a split order · parent {link(order.splitFrom)}{order.splitAdvance ? ` · advance ₹${order.splitAdvance} allocated from the parent` : ""}. The platform fee is on the parent.</p>;
   }
   if (!order.splitInto?.length) return null;
   const children = order.splitInto.map((row) => getStoredOrder(row.id)).filter((child): child is Order => Boolean(child));

@@ -101,7 +101,7 @@ export default function OrdersPage() {
                     )}
                     <span className="mt-1 block text-xs text-text-muted">
                       Order ID: {order.id} · {formatDate(order.date)}
-                      {order.splitFrom ? ` · Part ${order.splitPart ?? ""} of order ${order.splitFrom}` : ""}
+                      {order.splitFrom ? ` · Shipment ${order.splitPart ?? ""} of order ${order.splitFrom}` : ""}
                       {order.splitInto?.length ? ` · ${order.splitInto.length} shipments` : ""}
                     </span>
                   </span>
