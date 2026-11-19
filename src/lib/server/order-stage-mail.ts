@@ -96,8 +96,8 @@ function courierParams(order: Order, status: string, name: string) {
   const courier = order.courierName || shipment?.courier || "our courier";
   const awb = order.trackingId || shipment?.awb || "shared in My Orders shortly";
   if (status === "Shipped") {
-    // Always our own tracking page, never the courier's or aggregator's.
-    const url = order.trackToken ? `${siteConfig.url}/track/${order.trackToken}` : `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}`;
+    // The customer's order in My Orders (they sign in to track), never a courier, aggregator or personal tracking link.
+    const url = `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}`;
     return [name, order.id, courier, awb, day(shipment?.expectedBy) || "shared by the courier soon", url];
   }
   if (status === "Out for Delivery") return [name, order.id, courier, awb, isCod(order) ? `Please keep ${rupees(order.total)} ready to pay the courier.` : "No payment is due at the door."];
