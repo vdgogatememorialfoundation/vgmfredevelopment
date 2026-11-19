@@ -143,3 +143,19 @@ export function splitLedger(parent: Order, children: Order[], collected: (order:
     due: round(rows.reduce((sum, row) => sum + row.due, 0)),
   };
 }
+
+/** Customer-facing status of a split order, worked out from its parts (e.g. "Partially delivered"). */
+export function splitParentStatus(parts: { status: string }[]) {
+  const live = parts.filter((part) => part.status !== "Cancelled");
+  if (!parts.length) return "Ordered";
+  if (!live.length) return "Cancelled";
+  const delivered = live.filter((part) => part.status === "Delivered").length;
+  if (delivered === live.length) return "Delivered";
+  if (delivered > 0) return "Partially delivered";
+  if (live.some((part) => part.status === "Out for Delivery")) return "Out for delivery";
+  const shipped = live.filter((part) => ["Shipped", "Out for Delivery"].includes(part.status)).length;
+  if (shipped === live.length) return "Shipped";
+  if (shipped > 0) return "Partially shipped";
+  if (live.every((part) => ["Packed", "Ready to Ship", "To Ship"].includes(part.status))) return "Packed";
+  return "Ordered";
+}

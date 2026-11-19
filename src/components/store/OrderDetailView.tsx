@@ -4,6 +4,7 @@ import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
+import { splitParentStatus } from "@/lib/split-order";
 import ReturnSection from "@/components/store/ReturnSection";
 import CancelOrderSection from "@/components/store/CancelOrderSection";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -50,7 +51,10 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
         <>
           <h1 className="mt-4 text-xl font-semibold text-text-primary">Order {order.id}</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Placed {formatDate(order.date)} · {order.splitInto?.length ? `Split into ${order.splitInto.length} orders` : orderStatusText(customerOrderStatus(order.status))}
+            Placed {formatDate(order.date)} ·{" "}
+            {order.splitInto?.length
+              ? `${splitParentStatus(order.splitInto.map((row) => getOrdersForAccount(user).find((item) => item.id === row.id) ?? { status: "Ordered" }))} · ${order.splitInto.length} shipments`
+              : orderStatusText(customerOrderStatus(order.status))}
           </p>
           {order.splitFrom ? (
             <p className="mt-3 rounded-xl bg-warm-cream px-4 py-3 text-sm text-text-muted">
@@ -61,18 +65,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
           ) : null}
           {order.splitInto?.length ? (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-slate-800">
-              <p>This order is being sent in {order.splitInto.length} parts. Each part has its own packing, courier charge, payment and tracking:</p>
-              <ul className="mt-2 space-y-1">
-                {order.splitInto.map((row) => {
-                  const child = getOrdersForAccount(user).find((item) => item.id === row.id);
-                  return (
-                    <li key={row.id}>
-                      <Link className="font-semibold text-burgundy underline" href={`/account/orders/${encodeURIComponent(row.id)}`}>Order {row.id}</Link> · {row.label}
-                      {child ? ` · ${orderStatusText(customerOrderStatus(child.status))} · ${formatPrice(child.total)}` : ""}
-                    </li>
-                  );
-                })}
-              </ul>
+              <p>This is one order, sent in {order.splitInto.length} shipments. Each shipment is tracked below.</p>
               {(order.platformFee ?? 0) > 0 ? <p className="mt-2 text-xs text-slate-600">Platform fee {formatPrice(order.platformFee ?? 0)} was paid once on this order and is not charged again.</p> : null}
             </div>
           ) : null}
@@ -113,7 +106,24 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
             ) : null}
           </div>
 
-          {(() => {
+          {order.splitInto?.length
+            ? order.splitInto.map((row, index, list) => {
+                const child = getOrdersForAccount(user).find((item) => item.id === row.id);
+                return (
+                  <div key={row.id} className="mb-6 rounded-xl border border-border p-4 last:mb-0">
+                    <p className="text-sm font-semibold text-text-primary">
+                      Shipment {index + 1} of {list.length} · {child ? orderStatusText(customerOrderStatus(child.status)) : "Ordered"}
+                      {child?.eta && child.status !== "Delivered" ? <span className="font-normal text-text-muted"> · Expected by {child.eta}</span> : null}
+                    </p>
+                    <p className="mb-2 text-xs text-text-muted">
+                      {(child?.items ?? []).map((item) => `${currentProductTitle(item)} × ${item.quantity}`).join(", ") || row.label}
+                      {child && child.total > 0 ? ` · ${formatPrice(child.total)}` : ""}
+                    </p>
+                    {child ? <OrderTrackingTimeline order={child} /> : null}
+                  </div>
+                );
+              })
+            : (() => {
             const parts = getShipments()
               .filter((item) => item.orderId === order.id && item.part && item.note !== "Cancelled")
               .sort((a, b) => (a.part ?? 0) - (b.part ?? 0));

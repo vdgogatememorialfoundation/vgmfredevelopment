@@ -2006,7 +2006,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <div className="flex flex-wrap gap-2">
                     <LabelSizePicker />
                     <Button variant="outline" onClick={() => run("label", () => downloadLabel(shipment.id))}>{shipment.labelLink ? "Make new label link" : "Make label link"}</Button>
-                    {shipment.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
+                    {shipment.labelLink && <a href={shipment.labelLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
                     {shipment.provider === "shiprocket" && shipment.live && (
                       <>
                         <Button variant="outline" onClick={() => run("invoice", () => downloadInvoice(shipment.id))}>Courier invoice</Button>
@@ -2058,7 +2058,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   {isOwnFleet(shipment.provider) && shipment.status !== "Delivered" && (
                     <div className="rounded-xl border border-border p-3">
                       <p className="text-sm font-semibold text-text-primary">Reschedule Gogate Products delivery</p>
-                      {shipment.taskBarcode ? <p className="mt-1 text-xs text-text-muted">Tookan barcode: <b className="font-mono text-text-primary">{shipment.taskBarcode}</b></p> : null}
+                      {shipment.taskBarcode || shipment.pickupBarcode ? (
+                        <p className="mt-1 text-xs text-text-muted">
+                          {shipment.pickupBarcode && shipment.pickupBarcode !== shipment.taskBarcode ? <>Pickup barcode: <b className="font-mono text-text-primary">{shipment.pickupBarcode}</b> · </> : null}
+                          {shipment.taskBarcode ? <>Delivery barcode: <b className="font-mono text-text-primary">{shipment.taskBarcode}</b></> : null}
+                        </p>
+                      ) : null}
                       <p className="mt-1 text-xs text-text-muted">Customers see the date only. The time is sent to the courier task and kept for the tracking line.</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <TextInput type="datetime-local" value={deliveryWhen} onChange={(event) => setDeliveryWhen(event.target.value)} />
@@ -2413,7 +2418,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         <Button variant="ghost" onClick={() => printPackagingSlip(order)}>Print packing slip</Button>
         {shipment && <LabelSizePicker />}
         {shipment && <Button variant="ghost" onClick={() => run("label-print", () => downloadLabel(shipment.id))}>Make label link</Button>}
-        {shipment?.labelLink && <a href={shipment.labelLink} download className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
+        {shipment?.labelLink && <a href={shipment.labelLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-800 underline">Download label (PDF)</a>}
         <Button variant="danger" onClick={() => {
           if (!window.confirm(`Delete order ${order.id}? This cannot be undone.`)) return;
           run("delete", async () => {

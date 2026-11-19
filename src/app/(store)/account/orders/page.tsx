@@ -7,6 +7,7 @@ import SectionHeader from "@/components/account/SectionHeader";
 import EmptyState from "@/components/account/EmptyState";
 import MediaPlaceholder from "@/components/common/MediaPlaceholder";
 import OrderTrackingPreview from "@/components/store/OrderTrackingPreview";
+import { splitParentStatus } from "@/lib/split-order";
 import OrderAlertsToggle from "@/components/store/OrderAlertsToggle";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useCommerceMirror } from "@/lib/commerce-sync";
@@ -29,7 +30,9 @@ export default function OrdersPage() {
     return () => window.cancelAnimationFrame(frame);
   }, [router]);
 
-  const orders = mounted && ready ? getOrdersForAccount(user) : [];
+  const allOrders = mounted && ready ? getOrdersForAccount(user) : [];
+  // A split order is listed once, under its parent; the parts open inside it.
+  const orders = allOrders.filter((order) => !order.splitFrom || !allOrders.some((parent) => parent.id === order.splitFrom));
   void version;
 
   return (
@@ -81,12 +84,13 @@ export default function OrdersPage() {
                     {order.splitInto?.length ? (
                       // A split order is tracked on its parts: show where each part is.
                       <span className="mt-1 block space-y-0.5 text-sm">
+                        <b className="block text-burgundy">{splitParentStatus(order.splitInto.map((row) => allOrders.find((item) => item.id === row.id) ?? { status: "Ordered" }))}</b>
                         {order.splitInto.map((row, index) => {
-                          const part = orders.find((item) => item.id === row.id);
+                          const part = allOrders.find((item) => item.id === row.id);
                           const state = part ? (part.status === "Delivered" ? "Delivered" : part.status === "Cancelled" ? "Cancelled" : part.status === "Out for Delivery" ? "Out for delivery" : part.status === "Shipped" ? "Shipped" : part.status === "Packed" ? "Packed" : "Ordered") : "Ordered";
                           return (
                             <span key={row.id} className="block">
-                              <span className="text-text-muted">Part {index + 1}:</span>{" "}
+                              <span className="text-text-muted">Shipment {index + 1} of {order.splitInto?.length}:</span>{" "}
                               <b className={state === "Delivered" ? "text-emerald-700" : state === "Cancelled" ? "text-red-700" : "text-burgundy"}>{state}</b>
                             </span>
                           );
@@ -98,7 +102,7 @@ export default function OrdersPage() {
                     <span className="mt-1 block text-xs text-text-muted">
                       Order ID: {order.id} · {formatDate(order.date)}
                       {order.splitFrom ? ` · Part ${order.splitPart ?? ""} of order ${order.splitFrom}` : ""}
-                      {order.splitInto?.length ? ` · Split into ${order.splitInto.map((row) => row.id).join(" and ")}` : ""}
+                      {order.splitInto?.length ? ` · ${order.splitInto.length} shipments` : ""}
                     </span>
                   </span>
 

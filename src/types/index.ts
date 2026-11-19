@@ -1119,8 +1119,10 @@ export interface ShipmentRecord {
   deliveryOtp?: string;
   /** The rider entered the customer's OTP in the courier app. */
   deliveryOtpVerified?: boolean;
-  /** Tookan task barcode (same on the pickup and delivery task), scanned by the rider. */
+  /** Tookan task barcode (delivery task), scanned by the rider. */
   taskBarcode?: string;
+  /** Tookan parcel: barcode of the pickup (seller → hub) task. */
+  pickupBarcode?: string;
 }
 
 export interface SupportMessage {

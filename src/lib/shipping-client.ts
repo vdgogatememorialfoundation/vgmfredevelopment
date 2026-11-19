@@ -466,6 +466,8 @@ async function bookShipmentOnce(
     trackingUrl?: string;
     routingCode?: string;
     serviceMode?: string;
+    pickupBarcode?: string;
+    deliveryBarcode?: string;
   }>({
     action: "book",
     provider: choice.provider,
@@ -497,6 +499,8 @@ async function bookShipmentOnce(
     courierCost: result.courierCost ?? choice.rate,
     trackingUrl: result.trackingUrl || undefined,
     routingCode: result.routingCode || undefined,
+    taskBarcode: result.deliveryBarcode || undefined,
+    pickupBarcode: result.pickupBarcode || undefined,
     serviceMode: result.serviceMode || serviceModeOf(result.courierName, choice.courierName) || undefined,
     note: `Booked on ${label(choice.provider)}.`,
   };
@@ -1071,6 +1075,7 @@ type TrackHit = {
   agentPhone?: string;
   otp?: string;
   barcode?: string;
+  pickupBarcode?: string;
   pickupLat?: number;
   pickupLng?: number;
   dropLat?: number;
@@ -1108,6 +1113,7 @@ function applyTrackHit(shipment: ShipmentRecord, result: TrackHit) {
   if (result.agentPhone) update.agentPhone = result.agentPhone;
   if (result.otp) update.deliveryOtp = result.otp;
   if (result.barcode) update.taskBarcode = result.barcode;
+  if (result.pickupBarcode) update.pickupBarcode = result.pickupBarcode;
   if (result.lat != null) update.agentLat = result.lat;
   if (result.lng != null) update.agentLng = result.lng;
   if (result.pickupLat != null) update.pickupLat = result.pickupLat;

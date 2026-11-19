@@ -1027,6 +1027,9 @@ export type BookOut = {
   trackingUrl?: string;
   routingCode?: string;
   serviceMode?: string;
+  /** Tookan parcel: barcode on the pickup (seller → hub) task and on the delivery task. */
+  pickupBarcode?: string;
+  deliveryBarcode?: string;
 };
 
 export async function shiprocketBook(input: Json, order: BookInput): Promise<BookOut | null> {
@@ -1819,7 +1822,6 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             job_pickup_name: order.pickup.contactName,
             job_pickup_phone: order.pickup.phone,
             order_id: order.orderId,
-            barcode: order.orderId,
           },
         ],
         deliveries: [
@@ -1832,21 +1834,45 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
             customer_phone: order.customer.phone,
             customer_email: order.customer.email ?? "",
             order_id: order.orderId,
-            barcode: order.orderId,
           },
         ],
       },
     });
     if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the parcel task."));
+    // create_multiple_tasks answers with pickups[] / deliveries[]; read the task ids (and Tookan's own barcodes) back by order id if they are missing.
     const task = (data.data as Json) ?? {};
+    const first = (list: unknown) => (Array.isArray(list) ? ((list as Json[])[0] ?? {}) : {}) as Json;
+    let pickupJob = first(task.pickups);
+    let deliveryJob = first(task.deliveries);
+    let pickupId = String(pickupJob.job_id ?? task.pickup_job_id ?? "");
+    let deliveryId = String(deliveryJob.job_id ?? task.delivery_job_id ?? task.job_id ?? "");
+    const lookup = await call("https://api.tookanapp.com/v2/get_job_details_by_order_id", {
+      method: "POST",
+      json: { api_key: apiKey, order_ids: [order.orderId], include_task_history: 0 },
+    }).catch(() => null);
+    const jobs = ((lookup?.data as Json[]) ?? []).sort((a, b) => Number(b.job_id) - Number(a.job_id));
+    const latestPickup = jobs.find((job) => Number(job.job_type) === 0);
+    const latestDelivery = jobs.find((job) => Number(job.job_type) === 1);
+    if (latestPickup) {
+      pickupJob = { ...latestPickup, ...pickupJob };
+      pickupId = pickupId || String(latestPickup.job_id ?? "");
+    }
+    if (latestDelivery) {
+      deliveryJob = { ...latestDelivery, ...deliveryJob };
+      deliveryId = deliveryId || String(latestDelivery.job_id ?? "");
+    }
+    if (!deliveryId && !pickupId) throw new ProviderError("Tookan created the parcel but returned no task id. Check Tookan for order " + order.orderId + ".");
+    const deliveryBarcode = String(deliveryJob.barcode ?? "");
     return {
       provider: "tookan-parcel",
-      awb: String(task.delivery_job_id ?? task.job_id ?? ""),
+      awb: deliveryBarcode || deliveryId || pickupId,
       courierName: "Gogate Products-Tookan",
-      providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
-      providerShipmentId: String(task.delivery_job_id ?? ""),
-      trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
+      providerOrderId: pickupId || deliveryId,
+      providerShipmentId: deliveryId,
+      trackingUrl: String(deliveryJob.tracking_link ?? task.delivery_tracing_link ?? task.tracking_link ?? ""),
       pickupScheduledFor: pickupAt,
+      pickupBarcode: String(pickupJob.barcode ?? "") || undefined,
+      deliveryBarcode: deliveryBarcode || undefined,
     };
   }
 
@@ -1951,6 +1977,7 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
     status: currentLabel,
     courierName: "Gogate Products-Tookan",
     barcode: String(delivery?.job.barcode ?? job.barcode ?? pickup?.job.barcode ?? ""),
+    pickupBarcode: String(pickup?.job.barcode ?? ""),
     // The parcel barcode is the AWB customers and labels see; task ids stay in providerOrderId / providerShipmentId.
     awb: String(delivery?.job.barcode ?? pickup?.job.barcode ?? delivery?.job.job_id ?? jobId),
     accepted,
