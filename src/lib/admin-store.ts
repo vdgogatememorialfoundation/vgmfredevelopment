@@ -1562,6 +1562,9 @@ export function recordPayment(orderId: string, input: { method: string; referenc
     {
       ...order,
       paymentStatus: "Paid",
+      // Paid in full: the whole total (items, packing, courier already on it) is received, so booking is no longer blocked.
+      amountPaid: order.total,
+      shippingDue: order.shippingDue && !(order.shipping > 0) ? order.shippingDue : false,
       paymentMethod: input.method,
       paymentRef: input.reference,
       razorpayPaymentId: input.razorpayPaymentId ?? order.razorpayPaymentId,
