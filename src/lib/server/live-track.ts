@@ -39,6 +39,7 @@ type TrackHit = {
   agentName?: string;
   agentPhone?: string;
   otp?: string;
+  otpVerified?: boolean;
   barcode?: string;
   pickupLat?: number;
   pickupLng?: number;
@@ -206,6 +207,7 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     dropLat: hit.dropLat ?? shipment.dropLat,
     dropLng: hit.dropLng ?? shipment.dropLng,
     deliveryOtp: hit.otp || shipment.deliveryOtp,
+    deliveryOtpVerified: hit.otpVerified || shipment.deliveryOtpVerified,
     taskBarcode: hit.barcode || shipment.taskBarcode,
     expectedBy: stage === "delivered" ? "" : hit.expectedBy || shipment.expectedBy,
   };

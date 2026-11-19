@@ -1117,6 +1117,8 @@ export interface ShipmentRecord {
   dropLat?: number;
   dropLng?: number;
   deliveryOtp?: string;
+  /** The rider entered the customer's OTP in the courier app. */
+  deliveryOtpVerified?: boolean;
   /** Tookan task barcode (same on the pickup and delivery task), scanned by the rider. */
   taskBarcode?: string;
 }

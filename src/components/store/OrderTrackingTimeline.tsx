@@ -55,7 +55,7 @@ function courierHubShare(events: { title?: string; location?: string }[], fromCi
   return share;
 }
 
-function Tile({ label, value }: { label: string; value: string }) {
+function Tile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="vgmf-trk-tile">
       <b>{label}</b>
@@ -297,7 +297,17 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       <Tile label="Status" value={currentStatus} />
       {pickupDone ? <Tile label="Courier" value={courier} /> : null}
       {pickupDone && !delivered && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
-      {shipment?.deliveryOtp && !delivered ? <Tile label="Delivery OTP" value={shipment.deliveryOtp} /> : null}
+      {(shipment?.deliveryOtp && !delivered) || shipment?.deliveryOtpVerified ? (
+        <Tile
+          label="Delivery OTP"
+          value={
+            <>
+              {!delivered && shipment?.deliveryOtp ? <span className="mr-2">{shipment.deliveryOtp}</span> : null}
+              {shipment?.deliveryOtpVerified ? <span className="font-semibold text-emerald-700">✓ Verified</span> : null}
+            </>
+          }
+        />
+      ) : null}
       {pickupOtpReady(order) && order.status !== "Delivered" ? <Tile label="Pickup OTP" value={pickupOtp(order.id)} /> : null}
       {order.deliveryMode === "store_pickup" && order.status !== "Delivered" && order.status !== "Cancelled" ? (
         <>

@@ -1902,7 +1902,7 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
     });
     const job = ((data.data as Json[]) ?? [])[0];
     const extra = (job?.job_additional_info ?? (data as Json).job_additional_info) as Json | undefined;
-    if (job) jobs.push(extra?.job_otp != null && job.job_otp == null ? { ...job, job_otp: extra.job_otp } : job);
+    if (job) jobs.push({ ...job, ...(extra?.job_otp != null && job.job_otp == null ? { job_otp: extra.job_otp } : {}), otp_verified: Number(extra?.is_job_otp_verified) === 1 });
   }
   const coord = (value: number) => (Number.isFinite(value) && Math.abs(value) > 0.001 ? value : undefined);
   const details = jobs.map((job) => {
@@ -1957,6 +1957,7 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
     agentLeg: pickupOpen ? "pickup" : "delivery",
     agentName: accepted ? riderName : "",
     agentPhone: accepted ? riderPhone : "",
+    otpVerified: details.some((item) => !item.pickupTask && item.job.otp_verified === true),
     // Delivery OTP: from the last delivery task (a parcel booking can hold several tasks), never the pickup task's.
     otp: String(
       [...details].reverse().find((item) => !item.pickupTask && String(item.job.job_otp ?? item.job.order_otp ?? "").trim())?.job.job_otp ??
