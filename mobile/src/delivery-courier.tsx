@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { rider, type Job, type RiderSettings, type Runsheet } from "./delivery-api";
 import { PaymentStep } from "./delivery-pay";
+import { sounds } from "./delivery-sounds";
 import { Btn, callNumber, Card, CountChip, d, errorAlert, Field, KindTag, money, openMaps, PhotoStrip, Questionnaire } from "./delivery-ui";
 import { BarcodeScannerModal, P, StatusPill } from "./portal-ui";
 
@@ -18,11 +19,15 @@ export function CourierDuty({ settings }: { settings: RiderSettings }) {
   const [job, setJob] = useState<Job | null>(null);
   const [stop, setStop] = useState<{ job: Job; awbs: string[] } | null>(null);
   const [loading, setLoading] = useState(false);
+  const known = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setSheets((await rider.runsheets()).runsheets);
+      const next = (await rider.runsheets()).runsheets;
+      if (known.current && next.some((sheet) => !known.current?.has(sheet.id))) sounds.notify();
+      known.current = new Set(next.map((sheet) => sheet.id));
+      setSheets(next);
     } catch (e) {
       errorAlert(e);
     } finally {
@@ -323,6 +328,7 @@ function StopFlow({ job, awbs, sheet, settings, onDone, onBack }: { job: Job; aw
         const res = await rider.deliver({ awbs: open.map((j) => j.awb), otp, last4, payMode, answers, photos });
         setDone(res.delivered);
       }
+      sounds.success();
       setStep("done");
     } catch (e) {
       errorAlert(e);
@@ -452,7 +458,10 @@ function StopFlow({ job, awbs, sheet, settings, onDone, onBack }: { job: Job; aw
         onScanned={(code) => {
           setScanOpen(false);
           const hit = open.find((j) => j.awb.toUpperCase() === code.trim().toUpperCase() || j.orderId === code.trim());
-          if (!hit) return Alert.alert("Wrong parcel", `${code} is not on this stop.`);
+          if (!hit) {
+            sounds.scanError();
+            return Alert.alert("Wrong parcel", `${code} is not on this stop. Scan a parcel that belongs to this customer.`);
+          }
           setScanned((s) => [...new Set([...s, hit.awb])]);
         }}
       />

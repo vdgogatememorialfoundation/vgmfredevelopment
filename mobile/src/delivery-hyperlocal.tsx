@@ -4,6 +4,7 @@ import { Animated, Easing, Modal, Pressable, ScrollView, Text, View } from "reac
 import { WebView } from "react-native-webview";
 import { rider, type HyperJob, type HyperOffer, type RiderSettings } from "./delivery-api";
 import { PaymentStep } from "./delivery-pay";
+import { sounds } from "./delivery-sounds";
 import { Btn, callNumber, Card, d, errorAlert, Field, money, openMaps, PhotoStrip, Questionnaire, SwipeToAccept } from "./delivery-ui";
 import { BarcodeScannerModal, P, StatusPill } from "./portal-ui";
 
@@ -11,10 +12,13 @@ export function HyperlocalDuty({ settings }: { settings: RiderSettings }) {
   const [offers, setOffers] = useState<HyperOffer[]>([]);
   const [job, setJob] = useState<HyperJob | null>(null);
   const [finished, setFinished] = useState<HyperJob | null>(null);
+  const seen = useRef(new Set<string>());
 
   const poll = useCallback(async () => {
     try {
       const res = await rider.hyperOffers();
+      if (res.offers.some((offer) => !seen.current.has(offer.orderId))) sounds.newOrder();
+      res.offers.forEach((offer) => seen.current.add(offer.orderId));
       setOffers(res.offers);
       setJob(res.active[0] ?? null);
     } catch {
@@ -42,7 +46,7 @@ export function HyperlocalDuty({ settings }: { settings: RiderSettings }) {
     );
   }
 
-  if (job) return <HyperJobFlow job={job} settings={settings} onUpdate={setJob} onFinished={(j) => { setJob(null); setFinished(j); }} />;
+  if (job) return <HyperJobFlow job={job} settings={settings} onUpdate={setJob} onFinished={(j) => { sounds.success(); setJob(null); setFinished(j); }} />;
 
   return (
     <ScrollView contentContainerStyle={d.pad}>

@@ -26,6 +26,7 @@ import {
   type PortalOrder,
   type PortalSession,
 } from "./portal-api";
+import { sounds } from "./delivery-sounds";
 import type { Flavor } from "./flavor";
 import { Pipeline, type TrackStage } from "./tracker";
 
@@ -949,6 +950,7 @@ export function BarcodeScannerModal({
     const clean = manual.trim();
     if (!clean) return;
     setManual("");
+    sounds.scanOk();
     onScanned(clean);
   };
 
@@ -1005,6 +1007,7 @@ export function BarcodeScannerModal({
                   }
                 }
                 setTorchOn(false);
+                sounds.scanOk();
                 onScanned(raw);
               }}
             />

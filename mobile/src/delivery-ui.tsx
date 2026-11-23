@@ -4,6 +4,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Animated, Image, Linking, PanResponder, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { rider, type Question } from "./delivery-api";
 import { P } from "./portal-ui";
+import { sounds } from "./delivery-sounds";
 
 export const money = (value: number) => `₹${Math.round(Number(value || 0) * 100) / 100}`;
 
@@ -68,6 +69,7 @@ export function openMaps(address: string) {
 }
 
 export function errorAlert(e: unknown) {
+  sounds.scanError();
   Alert.alert("Couldn't complete", e instanceof Error ? e.message : String(e));
 }
 
