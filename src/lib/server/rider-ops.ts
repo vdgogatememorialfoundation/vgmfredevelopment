@@ -356,12 +356,19 @@ export function riderRunsheets(email: string) {
   const me = lower(email);
   const orders = new Map(listShopOrders().map((order) => [order.id, order]));
   const jobs: ReturnType<typeof jobCard>[] = [];
+  const pickupSheet = new Map<string, string>();
+  for (const pm of readAdvancedStore().pickupManifests) {
+    if (lower(pm.executiveEmail) !== me || !["Assigned", "In Progress"].includes(pm.status)) continue;
+    for (const awb of pm.expectedAwbs) if (!pickupSheet.has(awb)) pickupSheet.set(awb, pm.id);
+  }
   for (const shipment of listShopShipments()) {
     const raw = shipment as unknown as Record<string, unknown>;
-    if (!isVgmfOwnShipment(shipment) || lower(String(raw.assignedAgentEmail || "")) !== me) continue;
+    const assigned = lower(String(raw.assignedAgentEmail || ""));
+    const viaManifest = shipment.status === "Booked" && !assigned ? pickupSheet.get(String(shipment.awb || "")) : undefined;
+    if (!isVgmfOwnShipment(shipment) || (assigned !== me && !viaManifest)) continue;
     if (["Delivered", "Failed", "Cancelled", "Returned"].includes(shipment.status)) continue;
     const order = orders.get(shipment.orderId);
-    jobs.push(jobCard(store, String(raw.runsheetId || "RS-UNSORTED"), jobKind(order, shipment.status, store.settings), String(shipment.awb || shipment.orderId), shipment.orderId, order, shipment.status, raw));
+    jobs.push(jobCard(store, viaManifest || String(raw.runsheetId || "RS-UNSORTED"), jobKind(order, shipment.status, store.settings), String(shipment.awb || shipment.orderId), shipment.orderId, order, shipment.status, raw));
   }
   for (const ret of readLogisticsStore().returns) {
     if (lower(ret.assignedAgentEmail || "") !== me || !["Initiated", "Out for Return Pickup"].includes(ret.status)) continue;

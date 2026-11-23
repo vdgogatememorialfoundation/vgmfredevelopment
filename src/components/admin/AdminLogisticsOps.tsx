@@ -6,8 +6,8 @@ import { Button, SelectInput, TextInput } from "@/components/admin/AdminUI";
 type OpsTab = "shifts" | "pickup" | "hyperlocal" | "openbox";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default function AdminLogisticsOps() {
-  const [tab, setTab] = useState<OpsTab>("shifts");
+export default function AdminLogisticsOps({ only }: { only?: OpsTab } = {}) {
+  const [tab, setTab] = useState<OpsTab>(only ?? "shifts");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -28,7 +28,7 @@ export default function AdminLogisticsOps() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const t = new URLSearchParams(window.location.search).get("tab") as OpsTab | null;
-      if (t) setTab(t);
+      if (t && !only) setTab(t);
     }
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -64,9 +64,11 @@ export default function AdminLogisticsOps() {
     <div className="mx-auto max-w-[1440px] p-4 sm:p-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-extrabold text-text-primary">VGMF Shifts, Pickup Allocation, Hyperlocal &amp; Open-Box Ops</h1>
+          <h1 className="text-xl font-extrabold text-text-primary">{only === "pickup" ? "Pickups" : "Rider shifts, hyperlocal and open-box settings"}</h1>
           <p className="text-xs text-text-muted">
-            Configure executive shifts &amp; service modes (Normal / Hyperlocal / Both), customer delivery slots, automatic pickup manifests, and 3-layer Open-Box inspection.
+            {only === "pickup"
+              ? "Parcels booked with our own logistics that a rider must collect from the seller. Assign them to a rider and they appear in that rider's Delivery app."
+              : "Set rider shift times and delivery slots, choose how hyperlocal orders are routed, and configure open-box delivery checks."}
           </p>
         </div>
         <Button variant="outline" onClick={() => void load()}>Refresh</Button>
@@ -78,7 +80,7 @@ export default function AdminLogisticsOps() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      {only ? null : <div className="flex flex-wrap gap-2">
         {(
           [
             ["shifts", "Shift & Timeslot Management"],
@@ -96,7 +98,7 @@ export default function AdminLogisticsOps() {
             {lbl}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* 1. SHIFT & TIMESLOT MANAGEMENT */}
       {tab === "shifts" && (

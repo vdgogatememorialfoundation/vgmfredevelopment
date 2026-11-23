@@ -46,6 +46,13 @@ export const adminNavigation: AdminNavGroup[] = [
   },
 
   {
+    label: "VGMF Logistics · Pickups",
+    items: [
+      { label: "Pickups: assign to riders", href: "/admin/commerce/pickups" },
+    ],
+  },
+
+  {
     label: "VGMF Logistics · Hubs",
     items: [
       { label: "Hub overview", href: "/admin/commerce/hubs" },
@@ -65,7 +72,6 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "VGMF Logistics · Riders",
     items: [
-      { label: "Assign pickups to riders", href: "/admin/commerce/logistics-ops?tab=pickup" },
       { label: "Delivery runsheets", href: "/admin/commerce/hubs?tab=delivery" },
       { label: "Rider accounts and activation", href: "/admin/accounts/delivery-partners" },
       { label: "Rider shifts, cash and wallet", href: "/admin/delivery-partners/riders" },

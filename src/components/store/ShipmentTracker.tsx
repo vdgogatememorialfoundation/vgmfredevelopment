@@ -37,83 +37,111 @@ function untilText(expected: string) {
   return `Arriving in ${days} days`;
 }
 
-/** Horizontal green tracker: the line fills slowly up to the current step; each main status lists its own updates underneath. */
+/** Horizontal green tracker: the line fills slowly up to the current step; tap a step to see only that step's updates below. */
 function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageShape[]; expectedBy: string; live: boolean }) {
   const target = progress(stages);
   const [fill, setFill] = useState(0);
+  const current = Math.max(0, stages.map((s) => s.reached).lastIndexOf(true));
+  const [picked, setPicked] = useState<number | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => setFill(target), 150);
     return () => clearTimeout(timer);
   }, [target]);
   const n = Math.max(1, stages.length);
-  const current = stages.map((s) => s.reached).lastIndexOf(true);
   const inset = `${50 / n}%`;
+  const open = picked ?? current;
+  const stage = stages[open];
+  const events = stage ? [...stage.events.filter((event) => event.reached || event.at)].reverse() : [];
+  const isLast = open === n - 1;
   return (
-    <div className="overflow-x-auto pb-2">
+    <div>
       <style>{`@keyframes vgmf-flow{from{background-position:0 0}to{background-position:28px 0}}`}</style>
-      <div className="relative px-1" style={{ minWidth: `${n * 170}px` }}>
-        <div className="absolute top-[22px] h-2 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
-        <div className="absolute top-[22px] h-2" style={{ left: inset, right: inset }}>
-          <div
-            className="relative h-full rounded-full transition-[width] ease-out"
-            style={{
-              width: `${fill}%`,
-              transitionDuration: "3500ms",
-              backgroundImage: "repeating-linear-gradient(45deg,#059669 0 8px,#10b981 8px 14px)",
-              backgroundSize: "28px 100%",
-              animation: live ? "vgmf-flow 1.2s linear infinite" : undefined,
-            }}
-          >
-            {live && fill > 0 && fill < 100 ? (
-              <span className="absolute -right-3.5 -top-[10px] flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-600 shadow-md ring-2 ring-emerald-500">
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7zM6.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <ol className="relative grid items-start" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
-          {stages.map((stage, i) => {
-            const done = stage.reached;
-            const isCurrent = i === current && live;
-            const last = i === n - 1;
-            const events = stage.events.filter((event) => event.reached || event.at);
-            return (
-              <li key={stage.id} className="flex flex-col items-center px-1.5">
-                <span
-                  className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-[3px] text-sm font-bold shadow-sm transition-colors duration-700 ${
-                    done ? "border-emerald-500 bg-emerald-500 text-white" : stage.partial ? "border-emerald-400 bg-white text-emerald-600" : "border-slate-200 bg-white text-slate-400"
-                  }`}
-                  style={{ transitionDelay: `${i * 450}ms` }}
-                >
-                  {isCurrent ? <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" /> : null}
-                  {done ? <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg> : i + 1}
+      <div className="overflow-x-auto pb-1">
+        <div className="relative" style={{ minWidth: `${n * 104}px` }}>
+          <div className="absolute top-[22px] h-2 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
+          <div className="absolute top-[22px] h-2" style={{ left: inset, right: inset }}>
+            <div
+              className="relative h-full rounded-full transition-[width] ease-out"
+              style={{
+                width: `${fill}%`,
+                transitionDuration: "3500ms",
+                backgroundImage: "repeating-linear-gradient(45deg,#059669 0 8px,#10b981 8px 14px)",
+                backgroundSize: "28px 100%",
+                animation: live ? "vgmf-flow 1.2s linear infinite" : undefined,
+              }}
+            >
+              {live && fill > 0 && fill < 100 ? (
+                <span className="absolute -right-3.5 -top-[10px] flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-600 shadow-md ring-2 ring-emerald-500">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7zM6.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
                 </span>
-                <span className={`mt-3 text-center text-[13px] font-bold leading-tight ${done ? "text-slate-900" : "text-slate-400"}`}>{stage.label}</span>
-                {stage.caption ? <span className="mt-0.5 text-center text-[11px] leading-tight text-slate-500">{stage.caption}</span> : null}
-                {isCurrent ? <span className="mt-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-200">Current status</span> : null}
-                <div className="mt-3 w-full space-y-2">
-                  {events.length ? (
-                    [...events].reverse().map((event) => (
-                      <div key={event.id} className={`rounded-xl border p-2.5 text-left ${done ? "border-emerald-100 bg-emerald-50/50" : "border-slate-100 bg-slate-50"}`}>
-                        <p className="text-[12px] font-semibold leading-snug text-slate-800">{event.title}</p>
-                        {event.location ? <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{event.location}</p> : null}
-                        {event.at ? <p className="mt-0.5 text-[10.5px] font-medium text-emerald-700">{statusStamp(event.at)}</p> : null}
-                      </div>
-                    ))
-                  ) : last && expectedBy ? (
-                    <div className="rounded-xl border border-emerald-200 bg-white p-2.5 text-center">
-                      <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Expected delivery</p>
-                      <p className="mt-0.5 text-[13px] font-bold text-emerald-700">{expectedBy}</p>
-                    </div>
-                  ) : (
-                    <p className="text-center text-[11px] text-slate-400">{done ? "" : "Waiting for this step"}</p>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+              ) : null}
+            </div>
+          </div>
+          <ol className="relative grid items-start" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
+            {stages.map((st, i) => {
+              const done = st.reached;
+              const selected = i === open;
+              const stamp = [...st.events].reverse().find((event) => event.at)?.at;
+              return (
+                <li key={st.id} className="flex flex-col items-center px-1">
+                  <button
+                    type="button"
+                    onClick={() => setPicked(i)}
+                    aria-pressed={selected}
+                    className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-[3px] text-sm font-bold shadow-sm transition-all duration-700 ${
+                      done ? "border-emerald-500 bg-emerald-500 text-white" : st.partial ? "border-emerald-400 bg-white text-emerald-600" : "border-slate-200 bg-white text-slate-400"
+                    } ${selected ? "ring-4 ring-emerald-200 ring-offset-2" : "hover:ring-2 hover:ring-emerald-100"}`}
+                    style={{ transitionDelay: `${i * 450}ms` }}
+                  >
+                    {i === current && live ? <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" /> : null}
+                    {done ? <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg> : i + 1}
+                  </button>
+                  <span className={`mt-2.5 text-center text-[12.5px] font-bold leading-tight ${selected ? "text-emerald-700" : done ? "text-slate-900" : "text-slate-400"}`}>{st.label}</span>
+                  <span className="mt-0.5 text-center text-[10.5px] leading-tight text-slate-500">
+                    {stamp ? statusStamp(stamp) : i === n - 1 && expectedBy ? `Expected ${expectedBy}` : ""}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       </div>
+      {stage ? (
+        <section className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-extrabold text-slate-900">
+              {stage.label}
+              {stage.caption ? <span className="ml-2 font-medium text-slate-500">{stage.caption}</span> : null}
+            </h3>
+            <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${stage.reached ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+              {open === current && live ? "Current step" : stage.reached ? "Completed" : "Not reached yet"}
+            </span>
+          </div>
+          {events.length ? (
+            <ul className="mt-3 divide-y divide-slate-200">
+              {events.map((event) => (
+                <li key={event.id} className="flex gap-3 py-2.5">
+                  <span className={`mt-1.5 h-2 w-2 flex-none rounded-full ${event.reached ? "bg-emerald-500" : "bg-slate-300"}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-800">{event.title}</p>
+                    {event.location ? <p className="text-xs text-slate-500">{event.location}</p> : null}
+                  </div>
+                  {event.at ? <time className="flex-none text-right text-xs font-medium text-slate-500">{statusStamp(event.at)}</time> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">
+              {isLast && expectedBy ? `Expected delivery: ${expectedBy}. Updates will appear here as soon as the courier scans the parcel.` : "No updates for this step yet. They will appear here as soon as the courier scans the parcel."}
+            </p>
+          )}
+          {!(picked === null || picked === current) ? (
+            <button type="button" onClick={() => setPicked(null)} className="mt-2 text-xs font-semibold text-emerald-700 hover:underline">
+              Back to the current step
+            </button>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
