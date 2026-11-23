@@ -11,7 +11,7 @@ const list = (value: unknown) => (Array.isArray(value) ? value.map(str).filter(B
 export async function handleRiderAction(action: string, body: Body, session: Session): Promise<Record<string, unknown>> {
   const email = session.email;
   const name = session.name || session.email;
-  const admin = ["admin", "superadmin"].includes(session.role);
+  const admin = ["admin", "coadmin"].includes(session.role);
   switch (action) {
     case "rider-home": {
       const enrollment = getAgentEnrollment(email, session.role);

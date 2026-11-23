@@ -65,6 +65,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Open-Box Delivery & Inspections", href: "/admin/commerce/logistics-ops?tab=openbox" },
       { label: "Logistics Settings (All Modules)", href: "/admin/commerce/logistics-settings" },
       { label: "Delivery Partner Accounts", href: "/admin/accounts/delivery-partners" },
+      { label: "Riders: shifts, cash & wallet", href: "/admin/delivery-partners/riders" },
       { label: "Courier Performance", href: "/admin/delivery-partners/performance" },
       { label: "Serviceability & Pincodes", href: "/admin/commerce/serviceability" },
       { label: "External Courier APIs", href: "/admin/settings/shipping-apis" },

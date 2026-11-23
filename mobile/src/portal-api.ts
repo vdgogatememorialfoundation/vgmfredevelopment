@@ -184,7 +184,7 @@ export async function savePortalSession(next: PortalSession | null) {
   }
 }
 
-async function callPortal<T = Record<string, unknown>>(action: string, payload: Record<string, unknown> = {}): Promise<T & { ok: boolean; error?: string }> {
+export async function callPortal<T = Record<string, unknown>>(action: string, payload: Record<string, unknown> = {}): Promise<T & { ok: boolean; error?: string }> {
   const headers: Record<string, string> = {
     accept: "application/json",
     "content-type": "application/json",

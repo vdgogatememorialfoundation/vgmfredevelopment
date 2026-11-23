@@ -92,8 +92,8 @@ android {
         applicationId 'org.vaidyagogate.customer'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 38
-        versionName "5.5.0"
+        versionCode 42
+        versionName "6.0.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -123,6 +123,11 @@ android {
             dimension "vgmf"
             applicationId "org.vaidyagogate.staff"
             resValue "string", "app_name", "VGMF Staff"
+        }
+        delivery {
+            dimension "vgmf"
+            applicationId "org.vaidyagogate.delivery"
+            resValue "string", "app_name", "VGMF Delivery"
         }
         support {
             dimension "vgmf"

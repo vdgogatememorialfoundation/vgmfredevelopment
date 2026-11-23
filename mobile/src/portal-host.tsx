@@ -4,6 +4,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import type { Flavor } from "./flavor";
 import { AdminAppShell } from "./portal-admin";
 import { loadPortalSession, portalLogout, type PortalSession } from "./portal-api";
+import { DeliveryAppShell, DeliveryAuth } from "./portal-delivery";
 import { PosAppShell } from "./portal-pos";
 import { ScannerAppShell } from "./portal-scanner";
 import { StaffAppShell } from "./portal-staff";
@@ -38,7 +39,7 @@ export function PortalAppHost({ flavor }: { flavor: Flavor }) {
     return (
       <>
         <StatusBar style="dark" backgroundColor={P.white} />
-        <PortalSignIn flavor={flavor} onSignedIn={setSession} />
+        {flavor.id === "delivery" ? <DeliveryAuth onSignedIn={setSession} /> : <PortalSignIn flavor={flavor} onSignedIn={setSession} />}
       </>
     );
   }
@@ -50,6 +51,8 @@ export function PortalAppHost({ flavor }: { flavor: Flavor }) {
         <AdminAppShell session={session} onSignOut={signOut} />
       ) : flavor.id === "scanner" ? (
         <ScannerAppShell session={session} onSignOut={signOut} />
+      ) : flavor.id === "delivery" ? (
+        <DeliveryAppShell session={session} onSignOut={signOut} />
       ) : flavor.id === "pos" ? (
         <PosAppShell session={session} onSignOut={signOut} />
       ) : (

@@ -160,6 +160,7 @@ export function readMobileFeed(): MobileFeed {
         staff: { ...base.mobile.apps.staff, ...snapshot.mobile?.apps?.staff },
         eventscanner: { ...base.mobile.apps.eventscanner, ...snapshot.mobile?.apps?.eventscanner },
         support: { ...base.mobile.apps.support, ...snapshot.mobile?.apps?.support },
+        delivery: { ...base.mobile.apps.delivery, ...snapshot.mobile?.apps?.delivery },
       },
       showPublicDownload: snapshot.mobile?.showPublicDownload === true,
       showDeveloperCredit: snapshot.mobile?.showDeveloperCredit !== false,
@@ -234,6 +235,7 @@ function persistFeedAssets(feed: MobileFeed): MobileFeed {
         staff: { ...apps.staff, logoUrl: persistDataUrl(apps.staff?.logoUrl, "app-staff") },
         eventscanner: { ...apps.eventscanner, logoUrl: persistDataUrl(apps.eventscanner?.logoUrl, "app-eventscanner") },
         support: { ...apps.support, logoUrl: persistDataUrl(apps.support?.logoUrl, "app-support") },
+        delivery: { ...apps.delivery, logoUrl: persistDataUrl(apps.delivery?.logoUrl, "app-delivery") },
       },
     },
   };

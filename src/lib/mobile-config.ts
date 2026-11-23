@@ -31,7 +31,7 @@ export const mobileModules: { id: MobileModuleId; label: string }[] = [
   { id: "account", label: "Account" },
 ];
 
-export type AppFlavorId = "customer" | "admin" | "scanner" | "pos" | "staff" | "eventscanner" | "support";
+export type AppFlavorId = "customer" | "admin" | "scanner" | "pos" | "staff" | "eventscanner" | "support" | "delivery";
 
 export type MobileAppBrand = {
   name: string;
@@ -54,6 +54,7 @@ export const appFlavors: {
   { id: "staff", label: "Staff app", defaultName: "VGMF Staff", androidPackage: "org.vaidyagogate.staff", iosBundle: "org.vaidyagogate.staff", startPath: "/staff", download: "/apps/vgmf-staff.apk" },
   { id: "eventscanner", label: "Event Scanner app (Seminar & Autism)", defaultName: "VGMF Event Scanner", androidPackage: "org.vaidyagogate.eventscanner", iosBundle: "org.vaidyagogate.eventscanner", startPath: "/scanner", download: "/apps/vgmf-eventscanner.apk" },
   { id: "support", label: "Support app", defaultName: "Foundation Support", androidPackage: "org.vaidyagogate.support", iosBundle: "org.vaidyagogate.support", startPath: "/account/tickets", download: "/apps/vgmf-support.apk" },
+  { id: "delivery", label: "Delivery & Hyperlocal Rider app", defaultName: "VGMF Delivery", androidPackage: "org.vaidyagogate.delivery", iosBundle: "org.vaidyagogate.delivery", startPath: "/", download: "/apps/vgmf-delivery.apk" },
 ];
 
 export const defaultAppBrands: Record<AppFlavorId, MobileAppBrand> = {
@@ -64,6 +65,7 @@ export const defaultAppBrands: Record<AppFlavorId, MobileAppBrand> = {
   staff: { name: "VGMF Staff", logoUrl: "" },
   eventscanner: { name: "VGMF Event Scanner", logoUrl: "" },
   support: { name: "Foundation Support", logoUrl: "" },
+  delivery: { name: "VGMF Delivery", logoUrl: "" },
 };
 
 export type MobileAppConfig = {
@@ -118,6 +120,7 @@ export function getMobileAppConfig(): MobileAppConfig {
         staff: { ...defaultAppBrands.staff, ...saved.apps?.staff },
         eventscanner: { ...defaultAppBrands.eventscanner, ...saved.apps?.eventscanner },
         support: { ...defaultAppBrands.support, ...saved.apps?.support },
+        delivery: { ...defaultAppBrands.delivery, ...saved.apps?.delivery },
       },
       showPublicDownload: saved.showPublicDownload === true,
       showDeveloperCredit: saved.showDeveloperCredit !== false,

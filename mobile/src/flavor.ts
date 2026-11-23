@@ -11,10 +11,11 @@ function flavorIdFromPackage(pkg: string): FlavorId {
   if (id.includes(".pos")) return "pos";
   if (id.includes(".staff")) return "staff";
   if (id.includes(".support")) return "support";
+  if (id.includes(".delivery")) return "delivery";
   return "customer";
 }
 
-export type FlavorId = "customer" | "admin" | "scanner" | "pos" | "staff" | "support";
+export type FlavorId = "customer" | "admin" | "scanner" | "pos" | "staff" | "support" | "delivery";
 
 export type TabId = "home" | "articles" | "events" | "shop" | "clinics" | "account" | "support" | "certificates";
 
@@ -87,6 +88,16 @@ const ALL: Record<FlavorId, Flavor> = {
       { id: "shop", title: "Orders", icon: "cube" },
       { id: "events", title: "Pick/Pack", icon: "barcode" },
       { id: "support", title: "Tickets", icon: "chatbubbles" },
+      { id: "account", title: "Account", icon: "person-circle" },
+    ],
+  },
+  delivery: {
+    id: "delivery",
+    displayName: "VGMF Delivery",
+    subtitle: "Delivery Executive & Hyperlocal Rider",
+    accent: "#8F2D2D",
+    tabs: [
+      { id: "home", title: "Duty", icon: "bicycle" },
       { id: "account", title: "Account", icon: "person-circle" },
     ],
   },
