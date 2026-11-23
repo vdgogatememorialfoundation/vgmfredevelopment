@@ -57,8 +57,8 @@ function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageSh
     <div>
       <div className="overflow-x-auto pb-1">
         <div className="relative" style={{ minWidth: `${n * 104}px` }}>
-          <div className="absolute top-[22px] h-2 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
-          <div className="absolute top-[22px] h-2" style={{ left: inset, right: inset }}>
+          <div className="absolute top-[18px] h-1 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
+          <div className="absolute top-[18px] h-1" style={{ left: inset, right: inset }}>
             <div className="h-full rounded-full bg-emerald-500 transition-[width] ease-out" style={{ width: `${fill}%`, transitionDuration: "1500ms" }} />
           </div>
           <ol className="relative grid items-start" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
@@ -72,12 +72,12 @@ function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageSh
                     type="button"
                     onClick={() => setPicked(i)}
                     aria-pressed={selected}
-                    className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-[3px] text-sm font-bold shadow-sm transition-all duration-700 ${
+                    className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-[3px] shadow-sm transition-all duration-700 ${
                       done ? "border-emerald-500 bg-emerald-500 text-white" : st.partial ? "border-emerald-400 bg-white text-emerald-600" : "border-slate-200 bg-white text-slate-400"
                     } ${selected ? "ring-4 ring-emerald-200 ring-offset-2" : "hover:ring-2 hover:ring-emerald-100"}`}
                     style={{ transitionDelay: `${i * 450}ms` }}
                   >
-                                        {done ? <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg> : i + 1}
+                                        {done ? <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg> : i === current && live ? <span className="h-3 w-3 animate-pulse rounded-full bg-emerald-500" /> : <span className={`h-2.5 w-2.5 rounded-full ${st.partial ? "bg-emerald-400" : "bg-slate-300"}`} />}
                   </button>
                   <span className={`mt-2.5 text-center text-[12.5px] font-bold leading-tight ${selected ? "text-emerald-700" : done ? "text-slate-900" : "text-slate-400"}`}>{st.label}</span>
                   <span className="mt-0.5 text-center text-[10.5px] leading-tight text-slate-500">
