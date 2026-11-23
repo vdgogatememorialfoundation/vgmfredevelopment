@@ -138,6 +138,11 @@ export const defaultMessageCopy: Record<NotificationEventId, MessageCopy> = {
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\n{body}\n\nWith warm regards,\n${SIGN}`,
     smsBody: `${SIGN} support: {body}`,
   },
+  "order-call-missed": {
+    emailSubject: `We tried to reach you about order {orderId}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: we tried to call you about order {orderId}. Please call us back.`,
+  },
   "ticket-update": {
     emailSubject: `Update on your support request`,
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\nYour support ticket has been updated. Sign in to your account to read the latest reply.\n\nWith warm regards,\n${SIGN}`,

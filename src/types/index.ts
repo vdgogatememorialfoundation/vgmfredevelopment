@@ -666,6 +666,8 @@ export interface Order {
   /** Store pickup changed to courier delivery: the customer is asked to add the delivery address in My Orders. */
   /** `fix`: the desk asked the customer to correct a wrong address (not a pickup → courier switch). */
   addressRequest?: { at: string; doneAt?: string; fix?: boolean };
+  /** The desk called the customer and could not reach them; sends the "We tried to reach you" WhatsApp and email. */
+  callAttempt?: { at: string; reason: string; action: string };
   /** Split order: the parent this child order was split from, and which part it is. */
   splitFrom?: string;
   splitPart?: number;

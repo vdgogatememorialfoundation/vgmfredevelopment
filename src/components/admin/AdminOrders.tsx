@@ -34,6 +34,8 @@ import {
   convertToStorePickup,
   convertToShipping,
   requestAddressCorrection,
+  notifyCallMissed,
+  CALL_REASONS,
   setPickupWindow,
   convertToPreorder,
   markPartiallyPaid,
@@ -1259,6 +1261,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const [message, setMessage] = useState("");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState("");
+  const [callReason, setCallReason] = useState("payment");
   const [status, setStatus] = useState<Order["status"]>(order.status);
   const [extraId, setExtraId] = useState("");
   const extraStatuses = getOrderSettings().customStatuses.filter((row) => row.label.trim());
@@ -1693,6 +1696,20 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               </div>
             )}
           </div>
+          {!editing && !["Delivered", "Cancelled"].includes(order.status) ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-semibold text-text-muted">Called, no answer?</span>
+              <select value={callReason} onChange={(event) => setCallReason(event.target.value)} className="rounded-lg border border-border bg-white px-2 py-1.5 text-xs">
+                {Object.entries(CALL_REASONS).map(([key, item]) => (
+                  <option key={key} value={key}>{item.reason}</option>
+                ))}
+              </select>
+              <Button variant="outline" disabled={busy === "call-missed"} onClick={() => run("call-missed", () => notifyCallMissed(order.id, callReason))}>
+                Send &quot;We tried to reach you&quot;
+              </Button>
+              {order.callAttempt ? <span className="text-text-muted">Last sent {new Date(order.callAttempt.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</span> : null}
+            </div>
+          ) : null}
           {editing ? (
             <div className="grid gap-2 sm:grid-cols-2">
               <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Full Name *" />

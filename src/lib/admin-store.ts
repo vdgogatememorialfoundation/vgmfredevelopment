@@ -1723,6 +1723,23 @@ export function requestAddressCorrection(orderId: string) {
   return "The customer got an email and app notification to correct the delivery address in My Orders. Book the courier once it is updated (or fix it yourself with Edit order).";
 }
 
+export const CALL_REASONS: Record<string, { reason: string; action: string }> = {
+  payment: { reason: "To complete the pending payment", action: "Please pay using the link in My Orders, or call us back" },
+  address: { reason: "To confirm your delivery address", action: "Please check your address in My Orders, or call us back" },
+  details: { reason: "To confirm your order details", action: "Please call us back or reply on WhatsApp" },
+  delivery: { reason: "About your delivery", action: "Please call us back so we can deliver your order" },
+};
+
+/** The desk called and the customer did not answer: sends the "We tried to reach you" WhatsApp and email. */
+export function notifyCallMissed(orderId: string, kind: string) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  if (!order.deliveryAddress?.phone && !order.accountEmail && !order.deliveryAddress?.email) return "This order has no phone or email.";
+  const pick = CALL_REASONS[kind] ?? CALL_REASONS.details;
+  updateOrderInStore(withHistory({ ...order, callAttempt: { at: new Date().toISOString(), ...pick } }, order.status, `Called the customer, no answer (${pick.reason.toLowerCase()}). Sent "We tried to reach you".`));
+  return "Sent the customer a \"We tried to reach you\" WhatsApp and email.";
+}
+
 /** Adds a charge the customer still owes (e.g. courier shown as free by mistake); what they already paid stays recorded, so only the difference is due. */
 /** Shipping shown free by mistake: the customer sees "calculated once packed" until the desk adds the courier charge. */
 export function markShippingDue(orderId: string) {

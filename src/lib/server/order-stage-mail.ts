@@ -11,6 +11,7 @@ import { readKv } from "@/lib/server/db";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { publicOrderSettings, whatsAppSenders, whatsAppTemplateFor, type OrderSettings } from "@/lib/integrations";
 import { findShopShipment } from "@/lib/server/shop-shipments";
+import { isOwnFleet } from "@/lib/courier-label";
 import { findShopOrder } from "@/lib/server/shop-orders";
 import { applyTemplateVars, defaultMessageCopy } from "@/lib/message-templates";
 import type { NotificationEventId } from "@/lib/integrations";
@@ -84,6 +85,7 @@ const STAGE_EVENTS: [RegExp, NotificationEventId][] = [
   [/^refund:.*:processed$/, "refund-processed"],
   [/^refund:.*:initiated$/, "refund"],
   [/^refund:.*:rrn$/, "refund-bank-reference"],
+  [/^call-missed:/, "order-call-missed"],
 ];
 
 /** Shipped, out for delivery and delivered carry the courier, tracking ID and dates; the general update is the fallback. */
@@ -118,7 +120,10 @@ function courierParams(order: Order, status: string, name: string): { params: st
     };
   }
   if (status === "Out for Delivery") {
-    const payNote = isCod(order) ? `Please keep ${rupees(order.total)} ready to pay the courier.` : "Paid — no payment due at the door.";
+    const basePay = isCod(order) ? `Please keep ${rupees(order.total)} ready to pay the courier.` : "Paid — no payment due at the door.";
+    const own = Boolean(shipment) && (isOwnFleet(shipment?.provider) || shipment?.provider === "local" || /vaidya gogate|vgmf express/i.test(String(shipment?.courier || "")));
+    const otp = own ? String(shipment?.deliveryOtp || "") : "";
+    const payNote = otp ? `${basePay} Delivery OTP: ${otp} (share it only with our delivery partner at your door).` : basePay;
     return {
       params: [name, order.id, items, courier, awb, payNote, url],
       legacy: [name, order.id, courier, awb, payNote],
@@ -249,6 +254,19 @@ async function refundAlert(key: string, order: Order, phone: string, name: strin
   }).catch(() => false);
 }
 
+function callMissedAlert(order: Order, phone: string, name: string) {
+  const call = order.callAttempt;
+  if (!call) return false;
+  const calledOn = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" }).format(Date.parse(call.at) || Date.now());
+  return sendWhatsAppAlert("order-call-missed", {
+    phone,
+    name,
+    params: [name, order.id, itemsSummary(order), call.reason, calledOn, call.action, trackLink(order)],
+    fallbackEvent: "order-status",
+    fallbackParams: [name, order.id, `We tried to call you: ${call.reason}. ${call.action}`],
+  }).catch(() => false);
+}
+
 /** Admin "Resend WhatsApp": sends that stage's WhatsApp update again for any order. */
 export async function resendWhatsAppStage(orderId: string, key: string) {
   const order = findShopOrder(orderId);
@@ -271,6 +289,7 @@ export async function resendWhatsAppStage(orderId: string, key: string) {
     );
   }
   if (key.startsWith("refund:")) return refundAlert(key, order, phone, name);
+  if (key.startsWith("call-missed:")) return callMissedAlert(order, phone, name);
   if (key.startsWith("return:")) {
     const retStatus = `Return ${order.returnRequest?.status ?? "updated"}`;
     return sendWhatsAppAlert("order-return-update", {
@@ -440,6 +459,15 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
             `Please add your full delivery address, phone and PIN code here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#add-address`,
             "We will pack it and send the courier charge as a balance payment link. The order ships once that is paid.",
           ],
+    });
+  }
+  const call = next.callAttempt;
+  if (call && call.at !== prev?.callAttempt?.at) {
+    stages.push({
+      key: `call-missed:${call.at}`,
+      subject: `We tried to reach you about order ${next.id}`,
+      intro: `Our team tried to call you about your order ${next.id}, but we could not reach you.`,
+      next: [`Reason for our call: ${call.reason}.`, `${call.action}.`],
     });
   }
   const pickup = next.deliveryMode === "store_pickup";
@@ -646,7 +674,7 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order, opt
     void sendWhatsAppAlert("refund", { phone, name, params: [name, next.id, rupees(refund.amount)] }).catch(() => false);
   }
   for (const stage of stagesFor(prev, next)) {
-    if (options.statusOnly && !/^(status|address-request|pickup-window):/.test(stage.key)) continue;
+    if (options.statusOnly && !/^(status|address-request|call-missed|pickup-window):/.test(stage.key)) continue;
     if (sent.has(stage.key)) continue;
     markSent(next.id, stage.key);
     const name = next.deliveryAddress?.fullName || "Reader";

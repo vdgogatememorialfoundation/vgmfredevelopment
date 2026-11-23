@@ -58,6 +58,12 @@ export async function GET(request: NextRequest) {
     if (order) {
       const ids = new Set([order.id, ...(order.splitInto ?? []).map((part) => part.id)]);
       found = all.filter((item) => ids.has(item.orderId));
+      const ownChoice = [order.courierChoice?.provider, ...(order.splitInto ?? []).map((part) => findShopOrder(part.id)?.courierChoice?.provider)].some(
+        (provider) => provider === "local" || isOwnFleet(provider) || isHyperlocalProvider(provider)
+      );
+      if (!found.length && (ownChoice || /vaidya gogate|vgmf express|tookan|shipday/i.test(order.courierName || ""))) {
+        return NextResponse.json({ ok: false, error: "This order is delivered by our own delivery team. Sign in and open My Orders to see live tracking.", ownFleet: true }, { status: 404, headers });
+      }
       if (!found.length) {
         return NextResponse.json({ ok: false, error: "This order hasn't been handed to a courier yet. You'll get the tracking number by WhatsApp and email once it ships.", orderFound: true }, { status: 404, headers });
       }

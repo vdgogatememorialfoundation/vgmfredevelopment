@@ -27,9 +27,80 @@ function progress(stages: PipelineStageShape[]) {
   return Math.min(100, Math.round(((reached - 1 + partial) / Math.max(1, stages.length - 1)) * 100));
 }
 
+function reachedAt(stage: PipelineStageShape) {
+  return [...stage.events].reverse().find((event) => event.at)?.at || "";
+}
+
+/** Horizontal green tracker: the line fills slowly up to the current step; the last step shows the expected delivery date. */
+function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageShape[]; expectedBy: string; live: boolean }) {
+  const target = progress(stages);
+  const [fill, setFill] = useState(0);
+  useEffect(() => {
+    const timer = setTimeout(() => setFill(target), 150);
+    return () => clearTimeout(timer);
+  }, [target]);
+  const n = Math.max(1, stages.length);
+  const current = stages.map((s) => s.reached).lastIndexOf(true);
+  const inset = `${50 / n}%`;
+  return (
+    <div className="mt-6 -mx-1 overflow-x-auto pb-1">
+      <style>{`@keyframes vgmf-flow{from{background-position:0 0}to{background-position:28px 0}}`}</style>
+      <div className="relative min-w-[560px] px-1">
+        <div className="absolute top-[18px] h-1.5 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
+        <div className="absolute top-[18px] h-1.5" style={{ left: inset, right: inset }}>
+          <div
+            className="relative h-full rounded-full transition-[width] ease-out"
+            style={{
+              width: `${fill}%`,
+              transitionDuration: "3500ms",
+              backgroundImage: "repeating-linear-gradient(45deg,#059669 0 8px,#10b981 8px 14px)",
+              backgroundSize: "28px 100%",
+              animation: live ? "vgmf-flow 1.2s linear infinite" : undefined,
+            }}
+          >
+            {live && fill > 0 && fill < 100 ? (
+              <span className="absolute -right-3 -top-[9px] flex h-6 w-6 items-center justify-center rounded-full bg-white text-emerald-600 shadow ring-2 ring-emerald-500">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7zM6.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <ol className="relative grid" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
+          {stages.map((stage, i) => {
+            const done = stage.reached;
+            const isCurrent = i === current && live;
+            const last = i === n - 1;
+            const at = reachedAt(stage);
+            return (
+              <li key={stage.id} className="flex flex-col items-center text-center">
+                <span
+                  className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors duration-700 ${
+                    done ? "border-emerald-500 bg-emerald-500 text-white" : stage.partial ? "border-emerald-400 bg-white text-emerald-600" : "border-slate-200 bg-white text-slate-400"
+                  }`}
+                  style={{ transitionDelay: `${i * 450}ms` }}
+                >
+                  {isCurrent ? <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" /> : null}
+                  {done ? (
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg>
+                  ) : (
+                    i + 1
+                  )}
+                </span>
+                <span className={`mt-2 text-[12px] font-bold leading-tight ${done ? "text-slate-900" : "text-slate-400"}`}>{stage.label}</span>
+                <span className="mt-0.5 text-[10.5px] leading-tight text-slate-500">
+                  {done && at ? statusStamp(at) : last && expectedBy ? <span className="font-semibold text-emerald-700">Expected {expectedBy}</span> : stage.partial ? "In progress" : ""}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 function ShipmentCard({ shipment, index, total }: { shipment: Shipment; index: number; total: number }) {
   const [copied, setCopied] = useState(false);
-  const pct = progress(shipment.stages);
   const current = Math.max(0, shipment.stages.map((s) => s.reached).lastIndexOf(true));
   const live = !["Delivered", "Cancelled", "Returned"].includes(shipment.status);
   const share = async () => {
@@ -70,23 +141,7 @@ function ShipmentCard({ shipment, index, total }: { shipment: Shipment; index: n
             </button>
           </div>
         </div>
-        <div className="mt-5">
-          <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            <span>Progress</span>
-            <span>{pct}%</span>
-          </div>
-          <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-gradient-to-r from-burgundy via-rose-500 to-amber-400 transition-[width] duration-1000" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="mt-3 hidden grid-flow-col gap-1 sm:grid" style={{ gridTemplateColumns: `repeat(${shipment.stages.length}, minmax(0, 1fr))` }}>
-            {shipment.stages.map((stage) => (
-              <div key={stage.id} className="text-center">
-                <span className={`mx-auto block h-2 w-2 rounded-full ${stage.reached ? "bg-burgundy" : stage.partial ? "bg-amber-400" : "bg-slate-200"}`} />
-                <span className={`mt-1 block text-[10.5px] font-semibold ${stage.reached ? "text-slate-800" : "text-slate-400"}`}>{stage.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <HorizontalTrack stages={shipment.stages} expectedBy={shipment.status === "Delivered" ? "" : shipment.expectedBy} live={live} />
         <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             ["Destination", shipment.destination || "—"],
@@ -101,17 +156,23 @@ function ShipmentCard({ shipment, index, total }: { shipment: Shipment; index: n
           ))}
         </dl>
       </div>
-      <div className="p-5 sm:p-6">
-        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Journey</p>
-        <VerticalPipeline
-          stages={shipment.stages}
-          currentIndex={current}
-          metaFor={(stage) => {
-            const at = [...stage.events].reverse().find((event) => event.at)?.at;
-            return stage.reached && at ? statusStamp(at) : "";
-          }}
-        />
-      </div>
+      <details className="group p-5 sm:p-6">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-500">
+          Every scan, step by step
+          <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 group-open:hidden">Show</span>
+          <span className="hidden rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 group-open:inline">Hide</span>
+        </summary>
+        <div className="mt-4">
+          <VerticalPipeline
+            stages={shipment.stages}
+            currentIndex={current}
+            metaFor={(stage) => {
+              const at = [...stage.events].reverse().find((event) => event.at)?.at;
+              return stage.reached && at ? statusStamp(at) : "";
+            }}
+          />
+        </div>
+      </details>
     </article>
   );
 }
