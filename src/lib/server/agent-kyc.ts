@@ -293,10 +293,10 @@ function stripDataUri(b64?: string): string {
 function mapAccuraCardCode(docType: string): string {
   const v = docType.toLowerCase();
   if (v.includes("passport") || v.includes("mrz")) return "MRZ";
-  if (v.includes("pan")) return "PAN";
-  if (v.includes("driving") || v.includes("dl")) return "DL";
-  if (v.includes("voter")) return "VOTER";
-  return "AADHAAR";
+  if (v.includes("pan")) return "PANCARD";
+  if (v.includes("driving") || v.includes("dl")) return "INDDLF";
+  if (v.includes("voter")) return "INDVID";
+  return "AADHARFF";
 }
 
 function extractNumericScore(obj: Record<string, unknown>, keys: string[]): number | undefined {
