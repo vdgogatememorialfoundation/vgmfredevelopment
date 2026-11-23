@@ -160,10 +160,10 @@ export default function Footer() {
                     </li>
                     <li>
                       <Link
-                        href="/courier-tracking"
+                        href="/track"
                         className="text-sm text-text-muted transition hover:text-burgundy"
                       >
-                        Track a courier shipment
+                        Track your shipment
                       </Link>
                     </li>
                   </>
@@ -189,10 +189,10 @@ export default function Footer() {
                     </li>
                     <li>
                       <Link
-                        href="/courier-tracking"
+                        href="/track"
                         className="text-sm text-text-muted transition hover:text-burgundy"
                       >
-                        Track a courier shipment
+                        Track your shipment
                       </Link>
                     </li>
                   </>

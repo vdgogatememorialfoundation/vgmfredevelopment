@@ -1,7 +1,5 @@
-import CourierTracker from "@/components/store/CourierTracker";
-
-export const metadata = { title: "Track a courier shipment" };
+import { redirect } from "next/navigation";
 
 export default function CourierTrackingPage() {
-  return <CourierTracker />;
+  redirect("/track");
 }
