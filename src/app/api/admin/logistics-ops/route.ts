@@ -10,8 +10,7 @@ import {
   startOpenBoxSession,
   updateExecutiveShiftStatus,
   writeAdvancedStore,
-  type ServiceModeChoice,
-} from "@/lib/server/vgmf-advanced-logistics";
+  type ServiceModeChoice, assignPickups, pendingPickupShipments, pickupRiders } from "@/lib/server/vgmf-advanced-logistics";
 import { readLogisticsStore } from "@/lib/server/vgmf-logistics";
 
 export async function GET() {
@@ -22,6 +21,8 @@ export async function GET() {
     ...adv,
     hubs: base.hubs,
     agentEnrollments: base.agentEnrollments,
+    pendingPickups: pendingPickupShipments(),
+    pickupRiders: pickupRiders(),
   });
 }
 
@@ -69,6 +70,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, attendance: rec, message: `Shift status: ${rec.status.replace(/_/g, " ")}.` });
     }
 
+    if (action === "assign-pickups") {
+      const pm = assignPickups({
+        awbs: Array.isArray(body.awbs) ? body.awbs.map(String) : [],
+        executiveEmail: String(body.executiveEmail || ""),
+        hubCode: body.hubCode ? String(body.hubCode) : undefined,
+        by,
+      });
+      return NextResponse.json({ ok: true, pickupManifest: pm, message: `${pm.expectedAwbs.length} pickup(s) assigned to ${pm.executiveName} on pickup runsheet ${pm.id}. They now show in the rider's Delivery app.` });
+    }
+
     if (action === "auto-allocate-pickup") {
       const pm = autoAllocatePickupManifest({
         hubCode: String(body.hubCode || ""),
@@ -76,7 +87,7 @@ export async function POST(req: NextRequest) {
         executiveEmail: body.executiveEmail ? String(body.executiveEmail) : undefined,
         by,
       });
-      return NextResponse.json({ ok: true, pickupManifest: pm, message: `Pickup Manifest ${pm.id} allocated (${pm.expectedAwbs.length} parcels → ${pm.executiveName}).` });
+      return NextResponse.json({ ok: true, pickupManifest: pm, message: `${pm.expectedAwbs.length} pickup(s) assigned to ${pm.executiveName} on pickup runsheet ${pm.id}. They now show in the rider's Delivery app.` });
     }
 
     if (action === "pickup-manifest-scan") {

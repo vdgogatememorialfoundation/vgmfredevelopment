@@ -8,6 +8,7 @@ import { sendMobileEmail } from "@/lib/server/mobile-mail";
 import {
   createHubException,
   findShipmentByCode,
+  isVgmfOwnShipment,
   readLogisticsStore,
   writeLogisticsStore,
 } from "@/lib/server/vgmf-logistics";
@@ -282,73 +283,99 @@ export function setExecutiveServiceMode(email: string, serviceMode: ServiceModeC
 }
 
 /** Auto-allocate ready VGMF shipments into a Pickup Manifest for a checked-in executive with remaining capacity. */
-export function autoAllocatePickupManifest(input: { hubCode: string; shiftWindow?: string; by: string; executiveEmail?: string }) {
+type PickupRider = { email: string; name: string; hubCode: string; onDuty: boolean };
+
+function onDutyRiderEmails() {
+  try {
+    const raw = JSON.parse(readFileSync(dataFile("rider-ops.json"), "utf8")) as { bookings?: { email: string; name?: string; status: string; mode: string }[] };
+    return new Map((raw.bookings ?? []).filter((b) => b.status === "on_duty" && b.mode !== "hyperlocal").map((b) => [b.email.toLowerCase(), b.name || b.email]));
+  } catch {
+    return new Map<string, string>();
+  }
+}
+
+/** Riders who can take pickups: activated delivery partners, with the ones on duty right now first. */
+export function pickupRiders(): PickupRider[] {
+  const onDuty = onDutyRiderEmails();
+  const rows = new Map<string, PickupRider>();
+  for (const e of readLogisticsStore().agentEnrollments) {
+    if (e.status !== "approved") continue;
+    rows.set(e.email.toLowerCase(), { email: e.email.toLowerCase(), name: e.name || e.email, hubCode: e.hubCode, onDuty: onDuty.has(e.email.toLowerCase()) });
+  }
+  for (const [email, name] of onDuty) if (!rows.has(email)) rows.set(email, { email, name, hubCode: "", onDuty: true });
+  return [...rows.values()].sort((x, y) => Number(y.onDuty) - Number(x.onDuty) || x.name.localeCompare(y.name));
+}
+
+/** Own-logistics shipments booked and waiting to be picked up from the seller. */
+export function pendingPickupShipments() {
+  return listShopShipments()
+    .filter((s) => isVgmfOwnShipment(s) && s.status === "Booked" && s.awb)
+    .map((s) => {
+      const raw = s as unknown as Record<string, unknown>;
+      return {
+        awb: String(s.awb),
+        orderId: s.orderId,
+        bookedAt: String(raw.createdAt || raw.bookedAt || ""),
+        assignedTo: String(raw.assignedAgentEmail || ""),
+        runsheetId: String(raw.runsheetId || ""),
+      };
+    });
+}
+
+/** Assigns pickups to one rider: creates a pickup runsheet and puts every parcel on the rider's app. */
+export function assignPickups(input: { awbs: string[]; executiveEmail: string; hubCode?: string; shiftWindow?: string; by: string; auto?: boolean }) {
+  const email = input.executiveEmail.trim().toLowerCase();
+  if (!email) throw new Error("Choose the rider who should pick up these parcels.");
+  const wanted = new Set(input.awbs.map((a) => a.trim()).filter(Boolean));
+  const shipments = listShopShipments().filter((s) => wanted.has(String(s.awb || "")) && isVgmfOwnShipment(s) && s.status === "Booked");
+  if (!shipments.length) throw new Error("None of the selected parcels are waiting for pickup. Only our own-logistics shipments in Booked status can be assigned.");
+  const rider = pickupRiders().find((r) => r.email === email);
   const adv = readAdvancedStore();
-  const shipments = listShopShipments().filter(
-    (s) => (s.provider === "local" || /^88\d{10}$/.test(String(s.awb || ""))) && s.status === "Booked"
-  );
-  const alreadyManifested = new Set(
-    adv.pickupManifests
-      .filter((m) => m.status === "Assigned" || m.status === "In Progress")
-      .flatMap((m) => m.expectedAwbs)
-  );
-  const eligibleAwbs = shipments
-    .map((s) => String(s.awb || ""))
-    .filter((awb) => awb && !alreadyManifested.has(awb));
-
-  if (!eligibleAwbs.length) {
-    throw new Error("No unallocated VGMF Booked shipments waiting for pickup.");
+  const awbs = shipments.map((s) => String(s.awb));
+  const busy = new Set(adv.pickupManifests.filter((m) => m.status === "Assigned" || m.status === "In Progress").map((m) => m.id));
+  for (const m of adv.pickupManifests) {
+    if (!busy.has(m.id) || m.executiveEmail.toLowerCase() === email) continue;
+    m.expectedAwbs = m.expectedAwbs.filter((awb) => !awbs.includes(awb));
   }
-
-  // Pick a checked-in executive with remaining capacity
-  const checkedIn = adv.attendance.filter(
-    (a) => a.status === "checked_in" && (!input.hubCode || !a.hubCode || a.hubCode === input.hubCode) && a.activeTasks < a.maxParcels
-  );
-  const chosen = input.executiveEmail
-    ? adv.attendance.find((a) => a.email.toLowerCase() === input.executiveEmail!.toLowerCase()) || {
-        email: input.executiveEmail.toLowerCase(),
-        name: input.executiveEmail,
-        maxParcels: 20,
-        activeTasks: 0,
-      }
-    : checkedIn.sort((a, b) => a.activeTasks - b.activeTasks)[0];
-
-  if (!chosen) {
-    throw new Error("No checked-in executive with available shift capacity found for this hub. Ask an executive to Check In or specify an executive email.");
-  }
-
-  const takeCount = Math.max(1, chosen.maxParcels - chosen.activeTasks);
-  const batch = eligibleAwbs.slice(0, takeCount);
   adv.seq.pm += 1;
   const d = new Date();
   const ymd = `${String(d.getFullYear()).slice(-2)}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const hubCode = input.hubCode || rider?.hubCode || "VGMF";
   const pm: PickupManifestRecord = {
-    id: `PM-${(input.hubCode || "HUB").replace(/[^A-Z0-9]/gi, "").slice(0, 6)}-${ymd}-${String(adv.seq.pm).padStart(3, "0")}`,
-    hubCode: input.hubCode || "VGMF",
-    executiveEmail: chosen.email,
-    executiveName: chosen.name,
-    shiftWindow: input.shiftWindow || "Current Shift",
-    expectedAwbs: batch,
+    id: `PM-${hubCode.replace(/[^A-Z0-9]/gi, "").slice(0, 6)}-${ymd}-${String(adv.seq.pm).padStart(3, "0")}`,
+    hubCode,
+    executiveEmail: email,
+    executiveName: rider?.name || email,
+    shiftWindow: input.shiftWindow || "Current shift",
+    expectedAwbs: awbs,
     scannedAwbs: [],
     missingDiscrepancies: [],
     status: "Assigned",
-    createdAt: new Date().toISOString(),
-    autoAllocated: !input.executiveEmail,
+    createdAt: d.toISOString(),
+    autoAllocated: Boolean(input.auto),
   };
   adv.pickupManifests.unshift(pm);
-  const att = adv.attendance.find((a) => a.email.toLowerCase() === chosen.email.toLowerCase());
-  if (att) att.activeTasks += batch.length;
   adv.allocationLogs.unshift({
     id: `al-${Date.now()}`,
-    at: new Date().toISOString(),
+    at: d.toISOString(),
     type: pm.autoAllocated ? "AUTO_PICKUP_ALLOCATED" : "MANUAL_PICKUP_ALLOCATED",
     ref: pm.id,
-    executive: chosen.email,
-    reason: `Allocated ${batch.length} shipments`,
+    executive: email,
+    reason: `${awbs.length} pickup parcel(s) assigned to ${pm.executiveName}.`,
     by: input.by,
   });
   writeAdvancedStore(adv);
+  for (const s of shipments) upsertShopShipment({ ...s, assignedAgentEmail: email, runsheetId: pm.id } as Parameters<typeof upsertShopShipment>[0]);
   return pm;
+}
+
+export function autoAllocatePickupManifest(input: { hubCode: string; shiftWindow?: string; by: string; executiveEmail?: string }) {
+  const waiting = pendingPickupShipments().filter((p) => !p.assignedTo);
+  if (!waiting.length) throw new Error("There are no unassigned pickups. Every booked own-logistics parcel already has a rider.");
+  const riders = pickupRiders().filter((r) => !input.hubCode || !r.hubCode || r.hubCode === input.hubCode);
+  const chosen = input.executiveEmail?.trim().toLowerCase() || riders.find((r) => r.onDuty)?.email;
+  if (!chosen) throw new Error("No rider is on duty for this hub right now. Choose a rider from the list and assign the pickups manually.");
+  return assignPickups({ awbs: waiting.map((p) => p.awb), executiveEmail: chosen, hubCode: input.hubCode, shiftWindow: input.shiftWindow, by: input.by, auto: !input.executiveEmail });
 }
 
 export function scanIntoPickupManifest(manifestId: string, awb: string) {

@@ -295,11 +295,6 @@ export default function VerticalPipeline({
                         {event.location ? <div className="where">{event.location}</div> : null}
                         {event.detail ? <div className="where"><CourierText text={event.detail} /></div> : null}
                         {event.notice ? <div className="vgmf-ship-notice">{event.notice}</div> : null}
-                        {event.agent?.name || event.agent?.phone ? (
-                          <div className="where">
-                            Agent: {[event.agent?.name, event.agent?.phone].filter(Boolean).join(" · ")}
-                          </div>
-                        ) : null}
                       </li>
                     ))}
                   </ul>

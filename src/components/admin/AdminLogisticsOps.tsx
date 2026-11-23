@@ -14,6 +14,7 @@ export default function AdminLogisticsOps() {
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [allocHub, setAllocHub] = useState("");
   const [allocExec, setAllocExec] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
 
   const load = async () => {
     const r = await fetch("/api/admin/logistics-ops", { cache: "no-store" });
@@ -81,7 +82,7 @@ export default function AdminLogisticsOps() {
         {(
           [
             ["shifts", "Shift & Timeslot Management"],
-            ["pickup", "Automatic Pickup Allocation"],
+            ["pickup", "Assign pickups to riders"],
             ["hyperlocal", "Hyperlocal Operations"],
             ["openbox", "Open-Box Delivery & Inspections"],
           ] as const
@@ -182,30 +183,93 @@ export default function AdminLogisticsOps() {
       {tab === "pickup" && (
         <div className="space-y-4">
           <div className="rounded-2xl border border-border bg-white p-4 shadow-sm space-y-3">
-            <h2 className="text-sm font-extrabold">Automatic Seller Pickup Allocation Engine</h2>
-            <p className="text-xs text-text-muted">Groups ready VGMF Booked shipments and automatically allocates them to a checked-in executive with remaining shift capacity.</p>
+            <div>
+              <h2 className="text-base font-extrabold">Assign pickups to a rider</h2>
+              <p className="text-xs text-text-muted">
+                These are our own-logistics parcels that are booked and waiting to be collected from the seller. Tick the parcels, choose a rider and click Assign. The parcels then appear as a
+                pickup runsheet in that rider&apos;s Delivery app.
+              </p>
+            </div>
+            {(data.pendingPickups || []).length === 0 ? (
+              <p className="rounded-xl bg-slate-50 p-3 text-sm text-text-muted">No parcels are waiting for pickup. Book an order with &quot;Vaidya Gogate Memorial Foundation&quot; logistics and it will appear here.</p>
+            ) : (
+              <>
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-text-muted">
+                      <tr>
+                        <th className="p-2.5">
+                          <input
+                            type="checkbox"
+                            checked={picked.length > 0 && picked.length === data.pendingPickups.length}
+                            onChange={(e) => setPicked(e.target.checked ? data.pendingPickups.map((p: { awb: string }) => p.awb) : [])}
+                          />
+                        </th>
+                        <th className="p-2.5">Tracking number (AWB)</th>
+                        <th className="p-2.5">Order ID</th>
+                        <th className="p-2.5">Currently assigned to</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.pendingPickups.map((p: { awb: string; orderId: string; assignedTo: string; runsheetId: string }) => (
+                        <tr key={p.awb} className="border-t border-border">
+                          <td className="p-2.5">
+                            <input type="checkbox" checked={picked.includes(p.awb)} onChange={(e) => setPicked((cur) => (e.target.checked ? [...cur, p.awb] : cur.filter((x) => x !== p.awb)))} />
+                          </td>
+                          <td className="p-2.5 font-mono font-semibold">{p.awb}</td>
+                          <td className="p-2.5">{p.orderId}</td>
+                          <td className="p-2.5">{p.assignedTo ? `${p.assignedTo} · ${p.runsheetId}` : <span className="font-semibold text-amber-700">Not assigned yet</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <SelectInput className="w-72" value={allocExec} onChange={(e) => setAllocExec(e.target.value)}>
+                    <option value="">Choose a rider…</option>
+                    {(data.pickupRiders || []).map((r: { email: string; name: string; hubCode: string; onDuty: boolean }) => (
+                      <option key={r.email} value={r.email}>
+                        {r.name}{r.hubCode ? ` · ${r.hubCode}` : ""} · {r.onDuty ? "On duty now" : "Not on duty"}
+                      </option>
+                    ))}
+                  </SelectInput>
+                  <Button
+                    disabled={busy || !picked.length || !allocExec}
+                    onClick={() => void act({ action: "assign-pickups", awbs: picked, executiveEmail: allocExec }).then((j) => j && setPicked([]))}
+                  >
+                    Assign {picked.length || ""} selected pickup{picked.length === 1 ? "" : "s"}
+                  </Button>
+                </div>
+                {!(data.pickupRiders || []).length ? <p className="text-xs text-amber-700">No activated riders yet. Activate a rider in Delivery partner accounts first.</p> : null}
+              </>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-border bg-white p-4 shadow-sm space-y-3">
+            <h2 className="text-sm font-extrabold">Or assign automatically</h2>
+            <p className="text-xs text-text-muted">Gives every unassigned pickup of the selected hub to the rider who is on duty right now.</p>
             <div className="flex flex-wrap gap-2">
               <SelectInput className="w-52" value={allocHub} onChange={(e) => setAllocHub(e.target.value)}>
-                <option value="">All Hubs</option>
+                <option value="">All hubs</option>
                 {(data.hubs || []).map((h: { code: string; name: string }) => (
                   <option key={h.code} value={h.code}>{h.code} — {h.name}</option>
                 ))}
               </SelectInput>
-              <TextInput className="w-56" placeholder="Override Executive Email (optional)" value={allocExec} onChange={(e) => setAllocExec(e.target.value)} />
-              <Button disabled={busy} onClick={() => void act({ action: "auto-allocate-pickup", hubCode: allocHub, executiveEmail: allocExec || undefined })}>
-                Auto-Allocate Pickup Manifest
+              <Button variant="outline" disabled={busy} onClick={() => void act({ action: "auto-allocate-pickup", hubCode: allocHub })}>
+                Assign all unassigned pickups automatically
               </Button>
             </div>
           </div>
 
           <div className="space-y-2">
+            <h2 className="text-sm font-extrabold">Pickup runsheets already assigned</h2>
             {(data.pickupManifests || []).map((pm: { id: string; hubCode: string; executiveName: string; shiftWindow: string; expectedAwbs: string[]; scannedAwbs: string[]; status: string; autoAllocated: boolean }) => (
               <div key={pm.id} className="rounded-xl border border-border bg-white p-3.5 text-xs space-y-1.5 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-sm font-bold">{pm.id} <span className="font-sans text-xs font-normal text-text-muted">({pm.autoAllocated ? "Auto-allocated" : "Manual"})</span></span>
-                  <span className="rounded-full bg-blue-100 px-2.5 py-0.5 font-bold text-blue-900">{pm.status} · {pm.scannedAwbs.length}/{pm.expectedAwbs.length} scanned</span>
+                  <span className="font-mono text-sm font-bold">{pm.id} <span className="font-sans text-xs font-normal text-text-muted">({pm.autoAllocated ? "Assigned automatically" : "Assigned by Admin"})</span></span>
+                  <span className="rounded-full bg-blue-100 px-2.5 py-0.5 font-bold text-blue-900">{pm.status} · {pm.scannedAwbs.length} of {pm.expectedAwbs.length} picked up</span>
                 </div>
-                <p className="text-text-muted">Executive: <b>{pm.executiveName}</b> · Hub {pm.hubCode} · Window: {pm.shiftWindow}</p>
+                <p className="text-text-muted">Rider: <b>{pm.executiveName}</b> · Hub {pm.hubCode} · {pm.shiftWindow}</p>
                 <p className="font-mono text-[11px] text-text-muted">AWBs: {pm.expectedAwbs.join(", ")}</p>
               </div>
             ))}
