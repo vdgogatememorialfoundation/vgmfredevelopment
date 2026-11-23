@@ -1,15 +1,47 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { Alert, Image, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CourierDuty } from "./delivery-courier";
 import { LocationGate, useRiderLocation } from "./delivery-location";
 import { rider, type Enrollment, type RiderSettings, type ShiftBooking, type ShiftOption, type ShiftSummary, type Wallet } from "./delivery-api";
-import { Btn, Card, d, errorAlert, Field, money, PhotoStrip } from "./delivery-ui";
+import { Btn, Card, d, errorAlert, Field, money } from "./delivery-ui";
 import { callPortal, portalLogin, savePortalSession, type PortalSession } from "./portal-api";
 import { P, PortalTabBar, PortalTopBar, StatusPill } from "./portal-ui";
 
 /* ---------------- Sign in / Sign up ---------------- */
+
+function KycShot({ label, hint, selfie, value, onTaken }: { label: string; hint: string; selfie?: boolean; value: string; onTaken: (base64: string) => void }) {
+  const take = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) throw new Error("Allow camera access to take your KYC photos.");
+      const shot = await ImagePicker.launchCameraAsync({
+        quality: 0.5,
+        base64: true,
+        allowsEditing: false,
+        cameraType: selfie ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
+      });
+      if (!shot.canceled && shot.assets?.[0]?.base64) onTaken(shot.assets[0].base64);
+    } catch (e) {
+      errorAlert(e);
+    }
+  };
+  return (
+    <Pressable onPress={take} style={{ flex: 1, gap: 6, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: value ? P.green : P.border, backgroundColor: P.white, alignItems: "center" }}>
+      {value ? (
+        <Image source={{ uri: `data:image/jpeg;base64,${value}` }} style={{ width: "100%", height: 110, borderRadius: 8 }} resizeMode="cover" />
+      ) : (
+        <View style={{ height: 110, width: "100%", borderRadius: 8, backgroundColor: P.brandSoft, alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name={selfie ? "person-circle" : "card"} size={40} color={P.brand} />
+        </View>
+      )}
+      <Text style={[d.body, { fontWeight: "700", textAlign: "center" }]}>{label}</Text>
+      <Text style={[d.muted, { textAlign: "center" }]}>{value ? "Tap to take it again." : hint}</Text>
+    </Pressable>
+  );
+}
 
 export function DeliveryAuth({ onSignedIn }: { onSignedIn: (session: PortalSession) => void }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -160,19 +192,45 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
   const [docNo, setDocNo] = useState("");
   const [vehicle, setVehicle] = useState("");
   const [phone, setPhone] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [idPhoto, setIdPhoto] = useState("");
+  const [selfie, setSelfie] = useState("");
+  const [useAccura, setUseAccura] = useState(true);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void callPortal<{ hubs: { code: string; name: string; city?: string; type?: string }[] }>("delivery-dashboard").then((res) => setHubs(res.hubs ?? [])).catch(() => undefined);
+    void callPortal<{ hubs: { code: string; name: string; city?: string; type?: string }[]; enabledKycProviders?: { accuraScanEnabled?: boolean; defaultProvider?: string } }>("delivery-dashboard")
+      .then((res) => {
+        setHubs(res.hubs ?? []);
+        const kp = res.enabledKycProviders;
+        if (kp) setUseAccura(Boolean(kp.accuraScanEnabled) && kp.defaultProvider === "accurascan");
+      })
+      .catch(() => undefined);
   }, []);
 
   const submit = async () => {
     setBusy(true);
     try {
-      await rider.kycSubmit({ documentType: docType, documentNumber: docNo, idPhotoUrl: photos[0] || "", phone, vehicleNo: vehicle });
-      await callPortal("delivery-request-hub", { hubCode, serviceMode });
-      Alert.alert("Submitted", "Go to your hub with your original ID. The hub manager activates your ID.");
+      const [idUp, selfieUp] = await Promise.all([
+        rider.uploadPhoto(`data:image/jpeg;base64,${idPhoto}`, "kyc"),
+        rider.uploadPhoto(`data:image/jpeg;base64,${selfie}`, "kyc"),
+      ]);
+      let result = "";
+      if (useAccura) {
+        const res = await callPortal<{ message?: string }>("delivery-kyc-accurascan-submit", {
+          documentType: docType,
+          documentNumber: docNo,
+          idPhotoBase64: idPhoto,
+          selfiePhotoBase64: selfie,
+          idPhotoUrl: idUp.url,
+          selfiePhotoUrl: selfieUp.url,
+        });
+        if (!res.ok) throw new Error(res.error || "AccuraScan KYC could not be submitted.");
+        result = res.message || "";
+      } else {
+        await rider.kycSubmit({ documentType: docType, documentNumber: docNo, idPhotoUrl: idUp.url, selfiePhotoUrl: selfieUp.url, phone, vehicleNo: vehicle });
+      }
+      await callPortal("delivery-request-hub", { hubCode, serviceMode, phone, vehicleNo: vehicle });
+      Alert.alert("KYC submitted", `${result ? `${result} ` : ""}Go to your hub with your original ID. The hub manager activates your account.`);
       onDone();
     } catch (e) {
       errorAlert(e);
@@ -206,10 +264,14 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
             </Pressable>
           ))}
         </View>
-        <Field label="Document number" value={docNo} onChangeText={setDocNo} autoCapitalize="characters" />
+        <Field label={useAccura ? "Document number (optional, AccuraScan reads it from the photo)" : "Document number"} value={docNo} onChangeText={setDocNo} autoCapitalize="characters" />
         <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
         <Field label="Vehicle number" value={vehicle} onChangeText={setVehicle} autoCapitalize="characters" placeholder="MH12AB1234" />
-        <PhotoStrip photos={photos} onAdd={(url) => setPhotos((p) => [...p, url])} kind="kyc" />
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <KycShot label="Photo of your ID" hint="Front side, all four corners visible." value={idPhoto} onTaken={setIdPhoto} />
+          <KycShot label="Live selfie" hint="Face the camera in good light." selfie value={selfie} onTaken={setSelfie} />
+        </View>
+        <Text style={d.muted}>{useAccura ? "AccuraScan checks your ID, matches your face and confirms the selfie is live." : "The hub manager checks your ID and selfie."}</Text>
       </Card>
       <Card>
         <Text style={d.h2}>Step 2 · Your hub</Text>
@@ -221,7 +283,7 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
           </Pressable>
         ))}
       </Card>
-      <Btn label="Submit KYC and request activation" icon="shield-checkmark" onPress={submit} busy={busy} disabled={!docNo || !hubCode || !photos.length} />
+      <Btn label="Submit KYC and request activation" icon="shield-checkmark" onPress={submit} busy={busy} disabled={(!useAccura && !docNo) || !hubCode || !idPhoto || !selfie} />
     </ScrollView>
   );
 }

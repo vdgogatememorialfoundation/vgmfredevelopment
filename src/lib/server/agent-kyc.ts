@@ -240,6 +240,51 @@ function accuraConfig() {
   };
 }
 
+async function accuraJpeg(b64: string): Promise<Blob> {
+  const original = Buffer.from(b64, "base64");
+  let out: Buffer = original;
+  try {
+    const sharp = (await import("sharp")).default;
+    for (const [size, quality] of [[1600, 82], [1280, 74], [1024, 66], [800, 58]] as const) {
+      out = await sharp(original).rotate().resize({ width: size, height: size, fit: "inside", withoutEnlargement: true }).jpeg({ quality }).toBuffer();
+      if (out.length < 950_000) break;
+    }
+  } catch {
+    out = original;
+  }
+  return new Blob([new Uint8Array(out)], { type: "image/jpeg" });
+}
+
+function accuraError(json: Record<string, unknown>): string {
+  const status = json.status ?? json.Status;
+  const message = String(json.message ?? json.Message ?? json.error ?? "").trim();
+  if (status === false || String(status).toLowerCase() === "fail" || (json.error !== undefined && status !== true)) {
+    return message || "Request failed";
+  }
+  return "";
+}
+
+export async function testAccuraScanKey(apiKeyOverride?: string) {
+  const cfg = accuraConfig();
+  const apiKey = (apiKeyOverride || cfg.apiKey).trim();
+  if (!apiKey) return { ok: false, message: "No AccuraScan API key is saved yet." };
+  const sharp = (await import("sharp")).default;
+  const img = await sharp({ create: { width: 96, height: 96, channels: 3, background: "#c8a080" } }).jpeg().toBuffer();
+  const form = new FormData();
+  form.append("liveness_image", new Blob([new Uint8Array(img)], { type: "image/jpeg" }), "test.jpg");
+  try {
+    const res = await fetch(`${cfg.apiBaseUrl}/v2/api/liveness`, { method: "POST", headers: { "Api-Key": apiKey }, body: form });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const err = accuraError(json);
+    if (err && /api ?key|unauthori[sz]ed|forbidden/i.test(err)) {
+      return { ok: false, message: `AccuraScan rejected this key: "${err}". Copy the Web API key from your AccuraScan account and save it again.` };
+    }
+    return { ok: true, message: "AccuraScan accepted the key. Rider KYC will be checked automatically." };
+  } catch (e) {
+    return { ok: false, message: `Could not reach AccuraScan: ${e instanceof Error ? e.message : "network error"}` };
+  }
+}
+
 function stripDataUri(b64?: string): string {
   if (!b64) return "";
   return b64.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "").trim();
@@ -311,9 +356,7 @@ export async function submitAccuraScanKyc(input: {
   ocrForm.append("country_code", cfg.countryCode);
   ocrForm.append("card_code", cardCode);
   if (idB64) {
-    const idBuf = Buffer.from(idB64, "base64");
-    ocrForm.append("scan_image", new Blob([idBuf], { type: "image/jpeg" }), "id-document.jpg");
-    ocrForm.append("scan_image_base64", idB64);
+    ocrForm.append("scan_image", await accuraJpeg(idB64), "id-document.jpg");
   } else if (input.idPhotoUrl) {
     ocrForm.append("scan_image_url", input.idPhotoUrl);
   }
@@ -321,15 +364,19 @@ export async function submitAccuraScanKyc(input: {
   let ocrJson: Record<string, unknown> = {};
   let ocrOk = false;
   let extractedPortraitB64 = "";
+  const vendorErrors: string[] = [];
   try {
     const ocrRes = await fetch(`${cfg.apiBaseUrl}/api/v4/ocr`, { method: "POST", headers, body: ocrForm });
     ocrJson = (await ocrRes.json().catch(() => ({}))) as Record<string, unknown>;
-    ocrOk = ocrRes.ok && (ocrJson.status === true || ocrJson.status === "success" || ocrJson.status === 200 || Boolean(ocrJson.data));
+    const ocrErr = accuraError(ocrJson);
+    if (ocrErr) vendorErrors.push(`ID scan: ${ocrErr}`);
+    ocrOk = ocrRes.ok && !ocrErr;
     const dataObj = (ocrJson.data || ocrJson) as Record<string, unknown>;
     if (typeof dataObj.face_image === "string") extractedPortraitB64 = stripDataUri(dataObj.face_image);
     else if (typeof dataObj.portrait === "string") extractedPortraitB64 = stripDataUri(dataObj.portrait);
   } catch (e) {
     ocrJson = { error: e instanceof Error ? e.message : "OCR request failed" };
+    vendorErrors.push("ID scan: could not reach AccuraScan");
   }
 
   // 2. Face Liveness (POST /v2/api/liveness)
@@ -338,15 +385,18 @@ export async function submitAccuraScanKyc(input: {
   try {
     const liveForm = new FormData();
     if (selfieB64) {
-      liveForm.append("liveness_image", new Blob([Buffer.from(selfieB64, "base64")], { type: "image/jpeg" }), "selfie.jpg");
+      liveForm.append("liveness_image", await accuraJpeg(selfieB64), "selfie.jpg");
     } else if (input.selfiePhotoUrl) {
       liveForm.append("liveness_image", input.selfiePhotoUrl);
     }
     const liveRes = await fetch(`${cfg.apiBaseUrl}/v2/api/liveness`, { method: "POST", headers, body: liveForm });
     livenessJson = (await liveRes.json().catch(() => ({}))) as Record<string, unknown>;
-    livenessScore = extractNumericScore(livenessJson, ["liveness_score", "score", "livenessScore", "probability"]);
+    const liveErr = accuraError(livenessJson);
+    if (liveErr) vendorErrors.push(`Liveness: ${liveErr}`);
+    else livenessScore = extractNumericScore(livenessJson, ["liveness_score", "score", "livenessScore", "probability"]);
   } catch (e) {
     livenessJson = { error: e instanceof Error ? e.message : "Liveness request failed" };
+    vendorErrors.push("Liveness: could not reach AccuraScan");
   }
 
   // 3. Face Match 1:1 (POST /v2/api/facematch)
@@ -356,16 +406,19 @@ export async function submitAccuraScanKyc(input: {
     const fmForm = new FormData();
     const idSourceB64 = extractedPortraitB64 || idB64;
     if (idSourceB64) {
-      fmForm.append("input_image", new Blob([Buffer.from(idSourceB64, "base64")], { type: "image/jpeg" }), "id-face.jpg");
+      fmForm.append("source_file", await accuraJpeg(idSourceB64), "id-face.jpg");
     }
     if (selfieB64) {
-      fmForm.append("target_image", new Blob([Buffer.from(selfieB64, "base64")], { type: "image/jpeg" }), "selfie.jpg");
+      fmForm.append("target_file", await accuraJpeg(selfieB64), "selfie.jpg");
     }
     const fmRes = await fetch(`${cfg.apiBaseUrl}/v2/api/facematch`, { method: "POST", headers, body: fmForm });
     fmJson = (await fmRes.json().catch(() => ({}))) as Record<string, unknown>;
-    faceMatchScore = extractNumericScore(fmJson, ["score", "match_score", "face_match_score", "similarity"]);
+    const fmErr = accuraError(fmJson);
+    if (fmErr) vendorErrors.push(`Face match: ${fmErr}`);
+    else faceMatchScore = extractNumericScore(fmJson, ["score", "match_score", "face_match_score", "similarity"]);
   } catch (e) {
     fmJson = { error: e instanceof Error ? e.message : "FaceMatch request failed" };
+    vendorErrors.push("Face match: could not reach AccuraScan");
   }
 
   const accuraOcrData: Record<string, string> = {};
@@ -381,7 +434,9 @@ export async function submitAccuraScanKyc(input: {
 
   let nextStatus: AgentKycStatus = "In Review";
   let note = `AccuraScan OCR (${ocrOk ? "OK" : "Manual Review"}) · Face: ${faceMatchScore ?? "N/A"}% · Liveness: ${livenessScore ?? "N/A"}%`;
-  if (cfg.autoApproveOnPass && facePassed && livenessPassed) {
+  if (vendorErrors.length) {
+    note = `AccuraScan could not verify (${Array.from(new Set(vendorErrors)).join("; ")}). Sent to the hub for manual review.`;
+  } else if (cfg.autoApproveOnPass && facePassed && livenessPassed) {
     nextStatus = "Approved";
     note = `Auto-approved by AccuraScan AI (Face ${faceMatchScore}% >= ${cfg.minFaceMatchScore}%, Liveness ${livenessScore}% >= ${cfg.minLivenessScore}%)`;
   }
@@ -411,5 +466,5 @@ export async function submitAccuraScanKyc(input: {
   };
   (rec as unknown as { kyc?: AgentKycData }).kyc = kyc;
   writeLogisticsStore(store);
-  return { kyc, pipeline: buildKycPipelineStages({ ...rec, kyc }), ocrOk, faceMatchScore, livenessScore };
+  return { kyc, pipeline: buildKycPipelineStages({ ...rec, kyc }), ocrOk, faceMatchScore, livenessScore, vendorErrors };
 }

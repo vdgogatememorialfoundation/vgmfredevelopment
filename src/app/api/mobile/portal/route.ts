@@ -2435,8 +2435,10 @@ export async function POST(request: NextRequest) {
         ok: true,
         ...res,
         message: res.kyc.status === "Approved"
-          ? `AccuraScan AI KYC Approved! Face Match ${res.faceMatchScore ?? "—"}% · Liveness ${res.livenessScore ?? "—"}%`
-          : "AccuraScan KYC submitted for review.",
+          ? "Your ID was verified by AccuraScan."
+          : res.vendorErrors.length
+            ? "AccuraScan could not check your ID right now, so your KYC was sent to the hub for review."
+            : "Your KYC was sent to the hub for review.",
       });
     } catch (e) {
       return json({ ok: false, error: e instanceof Error ? e.message : "Could not complete AccuraScan KYC." }, 400);

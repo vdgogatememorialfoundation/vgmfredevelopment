@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Button, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import type { LogisticsSettingsData } from "@/lib/server/vgmf-logistics-settings";
 
@@ -39,7 +40,11 @@ const NAV: { id: TabId; title: string; sub: string }[] = [
 ];
 
 export default function AdminLogisticsSettings() {
-  const [tab, setTab] = useState<TabId>("general");
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const [tab, setTab] = useState<TabId>(NAV.some((n) => n.id === urlTab) ? (urlTab as TabId) : "general");
+  const [accTest, setAccTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [accTesting, setAccTesting] = useState(false);
   const [cfg, setCfg] = useState<LogisticsSettingsData | null>(null);
   const [history, setHistory] = useState<{ version: number; at: string; by: string; note: string }[]>([]);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -381,6 +386,28 @@ export default function AdminLogisticsSettings() {
                   <p className="text-xs text-indigo-900/80">
                     Uses AccuraScan REST APIs: <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">/api/v4/ocr</code>, <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">/v2/api/liveness</code>, and <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">/v2/api/facematch</code> with <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">Api-Key</code> authentication.
                   </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={accTesting}
+                    onClick={async () => {
+                      setAccTesting(true);
+                      setAccTest(null);
+                      try {
+                        const r = await fetch("/api/admin/logistics-settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "test-accurascan", apiKey: cfg.accuraScan?.apiKey || "" }) });
+                        setAccTest(await r.json());
+                      } catch {
+                        setAccTest({ ok: false, message: "Could not run the test." });
+                      } finally {
+                        setAccTesting(false);
+                      }
+                    }}
+                    className="rounded-lg bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+                  >
+                    {accTesting ? "Testing…" : "Test AccuraScan key"}
+                  </button>
+                  {accTest ? <span className={`text-xs font-semibold ${accTest.ok ? "text-green-700" : "text-red-700"}`}>{accTest.message}</span> : null}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <label className="text-xs font-semibold">

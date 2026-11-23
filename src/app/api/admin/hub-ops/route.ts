@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { deleteDeliveryPartnerAccount } from "@/lib/server/portal-accounts";
 import { revokeAllPortalSessionsForEmail } from "@/lib/server/portal-auth";
 import { readLogisticsSettings } from "@/lib/server/vgmf-logistics-settings";
-import { buildKycPipelineStages, reviewManualKyc, reinitiateAgentKyc, type AgentKycData } from "@/lib/server/agent-kyc";
+import { buildKycPipelineStages, getEnabledKycProviders, reviewManualKyc, reinitiateAgentKyc, type AgentKycData } from "@/lib/server/agent-kyc";
 import {
   addAwbToBag,
   addCustomHub,
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     ...a,
     kycPipeline: buildKycPipelineStages(a as unknown as { status: "unassigned" | "pending" | "approved" | "rejected"; hubCode?: string; requestedAt?: string; reviewedAt?: string; reviewedBy?: string; kyc?: AgentKycData }),
   }));
-  return NextResponse.json({ ok: true, ...full, agentEnrollments: enrichedEnrollments });
+  return NextResponse.json({ ok: true, ...full, agentEnrollments: enrichedEnrollments, kycProviders: getEnabledKycProviders() });
 }
 
 export async function POST(req: NextRequest) {

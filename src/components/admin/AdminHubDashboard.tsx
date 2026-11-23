@@ -797,7 +797,11 @@ export default function AdminHubDashboard({ lockedHubCode, operatorName }: { loc
                     <p className="text-xs font-extrabold uppercase tracking-wider text-blue-950">
                       Delivery Agent KYC Pipeline &amp; Hub Activation ({(data?.agentEnrollments || []).length})
                     </p>
-                    <span className="text-[11px] font-semibold text-blue-800">Manual · AccuraScan AI KYC</span>
+                    <a href="/admin/commerce/logistics-settings?tab=partners" className="text-[11px] font-semibold text-blue-800 underline">
+                      {data?.kycProviders?.defaultProvider === "accurascan" && data?.kycProviders?.accuraScanEnabled
+                        ? data?.kycProviders?.accuraScanConfigured ? "KYC: AccuraScan (automatic) · settings" : "KYC: AccuraScan · API key missing · add it"
+                        : "KYC: manual check by hub · switch to AccuraScan"}
+                    </a>
                   </div>
                   {(data?.agentEnrollments || []).length === 0 ? (
                     <p className="text-xs text-text-muted">No delivery partner enrollments yet. When a partner signs up, selects a hub, and submits KYC in the app, their live 5-stage KYC pipeline will appear here.</p>
