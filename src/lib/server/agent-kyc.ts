@@ -1,6 +1,31 @@
 import crypto from "node:crypto";
 import { readLogisticsStore, writeLogisticsStore } from "@/lib/server/vgmf-logistics";
 import { readLogisticsSettings } from "@/lib/server/vgmf-logistics-settings";
+import { sendMobileEmail } from "@/lib/server/mobile-mail";
+
+export type RiderKycEmail = "instructions" | "submitted" | "approved" | "declined" | "reinitiated" | "activated" | "rejected";
+
+/** Emails the delivery agent about a KYC / activation change. Never throws. */
+export function emailRiderKyc(email: string, kind: RiderKycEmail, detail = "") {
+  const rec = readLogisticsStore().agentEnrollments.find((a) => a.email.toLowerCase() === email.trim().toLowerCase());
+  const name = rec?.name && !rec.name.includes("@") ? rec.name : "";
+  const link = (rec as { onboardingLink?: string } | undefined)?.onboardingLink;
+  const where = link
+    ? `Open your sign-up link: https://vaidyagogate.org/rider/join/${link}`
+    : "Open the VGMF Delivery app (https://vaidyagogate.org/apps/vgmf-delivery.apk) and sign in.";
+  const steps = `How to complete KYC:\n1. ${where}\n2. Keep your original ID ready (Aadhaar, PAN, driving licence, voter ID or passport).\n3. Allow camera access, photograph your ID, then take a live selfie in good light.\n4. Wait for the result. We email you when it changes.`;
+  const content: Record<RiderKycEmail, [string, string]> = {
+    instructions: ["Complete your KYC to start delivering", `Thank you for signing up as a delivery partner.\n\n${steps}`],
+    submitted: ["Your KYC is under review", `We received your KYC. It is being checked${detail ? ` (${detail})` : ""}. We will email you once it is reviewed.`],
+    approved: ["Your KYC is verified", `Your ID has been verified.${rec?.status === "approved" ? "" : ` Hub ${rec?.hubCode || ""} will now activate your account.`}`],
+    declined: ["Your KYC could not be verified", `Your KYC could not be verified.${detail ? `\nReason: ${detail}` : ""}\n\nPlease contact your hub, or wait for us to ask you to submit KYC again.`],
+    reinitiated: ["Please submit your KYC again", `We need you to complete KYC again.${detail ? `\nReason: ${detail}` : ""}\n\n${steps}`],
+    activated: ["Your delivery partner account is active", `Your account is now active at hub ${rec?.hubCode || ""}. Open the VGMF Delivery app, book a shift and check in to get work.`],
+    rejected: ["Your delivery partner application was not approved", `Your application was not approved.${detail ? `\nReason: ${detail}` : ""}\n\nContact your hub if you have questions.`],
+  };
+  const [subject, body] = content[kind];
+  void sendMobileEmail(rec?.email || email, `${subject} · VGMF Delivery`, `Namaste${name ? ` ${name}` : ""},\n\n${body}\n\nVaidya Gogate Memorial Foundation`).catch(() => false);
+}
 
 export type AgentKycStatus =
   | "Not Started"
@@ -100,7 +125,7 @@ export async function testVoveIdKey(override?: { apiKey?: string; environment?: 
   }
 }
 
-export async function startVoveIdKyc(input: { email: string; name?: string; documentType?: string; restart?: boolean }) {
+export async function startVoveIdKyc(input: { email: string; name?: string; documentType?: string; restart?: boolean; returnUrl?: string }) {
   const enabled = getEnabledKycProviders();
   if (!enabled.voveIdEnabled) throw new Error("VOVE ID KYC is switched off in Admin Logistics Settings.");
   const cfg = voveConfig();
@@ -145,8 +170,9 @@ export async function startVoveIdKyc(input: { email: string; name?: string; docu
   url.searchParams.set("environment", cfg.environment);
   url.searchParams.set("lg", "en");
   url.searchParams.set("showUI", "true");
-  url.searchParams.set("redirectURL", VOVE_DONE_URL);
-  return { refId, url: url.toString(), doneUrl: VOVE_DONE_URL };
+  const doneUrl = input.returnUrl?.startsWith("https://vaidyagogate.org/") ? input.returnUrl : VOVE_DONE_URL;
+  url.searchParams.set("redirectURL", doneUrl);
+  return { refId, url: url.toString(), doneUrl };
 }
 
 /** Reads the authoritative result from VOVE ID (GET /v2/users/{refId}) and updates the rider's KYC. */
@@ -203,6 +229,7 @@ export async function syncVoveIdKyc(input: { email?: string; refId?: string; web
   };
   (rec as unknown as { kyc?: AgentKycData }).kyc = kyc;
   writeLogisticsStore(store);
+  if (status !== "In Progress" && prev?.status !== status) emailRiderKyc(rec.email, status === "Approved" ? "approved" : "submitted");
   return kyc;
 }
 
@@ -330,6 +357,7 @@ export function submitManualKyc(input: {
   };
   (rec as unknown as { kyc?: AgentKycData }).kyc = kyc;
   writeLogisticsStore(store);
+  emailRiderKyc(rec.email, "submitted");
   return { kyc, pipeline: buildKycPipelineStages({ ...rec, kyc }) };
 }
 
@@ -347,7 +375,7 @@ export function reviewManualKyc(input: { email: string; approve: boolean; reason
   const nextStatus: AgentKycStatus = input.approve ? "Approved" : "Declined";
   const kyc: AgentKycData = {
     ...prev,
-    provider: prev.provider === "accurascan" ? "accurascan" : "manual",
+    provider: prev.provider || "manual",
     status: nextStatus,
     updatedAt: now,
     verifiedAt: input.approve ? now : prev.verifiedAt,
@@ -360,6 +388,7 @@ export function reviewManualKyc(input: { email: string; approve: boolean; reason
   };
   (rec as unknown as { kyc?: AgentKycData }).kyc = kyc;
   writeLogisticsStore(store);
+  emailRiderKyc(rec.email, input.approve ? "approved" : "declined", kyc.declinedReason || "");
   return { kyc, pipeline: buildKycPipelineStages({ ...rec, kyc }) };
 }
 
@@ -372,7 +401,7 @@ export function reinitiateAgentKyc(input: { email: string; reason?: string; by: 
   const prev = (rec as unknown as { kyc?: AgentKycData }).kyc;
   const enabled = getEnabledKycProviders();
   const kyc: AgentKycData = {
-    provider: "manual",
+    provider: enabled.defaultProvider,
     status: "Not Started",
     updatedAt: now,
     reviewedBy: input.by,
@@ -390,6 +419,7 @@ export function reinitiateAgentKyc(input: { email: string; reason?: string; by: 
     rec.status = "pending";
   }
   writeLogisticsStore(store);
+  emailRiderKyc(rec.email, "reinitiated", input.reason?.trim() || "");
   return { kyc, pipeline: buildKycPipelineStages({ ...rec, kyc }) };
 }
 
@@ -639,5 +669,6 @@ export async function submitAccuraScanKyc(input: {
   };
   (rec as unknown as { kyc?: AgentKycData }).kyc = kyc;
   writeLogisticsStore(store);
+  emailRiderKyc(rec.email, nextStatus === "Approved" ? "approved" : "submitted");
   return { kyc, pipeline: buildKycPipelineStages({ ...rec, kyc }), ocrOk, faceMatchScore, livenessScore, vendorErrors };
 }

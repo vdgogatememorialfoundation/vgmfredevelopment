@@ -23,6 +23,7 @@ import {
   checkPortalLogin,
   findPortalAccount,
   issuePortalOtp,
+  emailForRiderId,
   portalAccountBlocked,
   readPortalAccess,
   registerDeliveryPartnerAccount,
@@ -60,7 +61,7 @@ import {
   updateExecutiveShiftStatus,
   type ServiceModeChoice,
 } from "@/lib/server/vgmf-advanced-logistics";
-import { buildKycPipelineStages, submitManualKyc, submitAccuraScanKyc, getEnabledKycProviders, startVoveIdKyc, syncVoveIdKyc, type AgentKycData } from "@/lib/server/agent-kyc";
+import { buildKycPipelineStages, submitManualKyc, submitAccuraScanKyc, getEnabledKycProviders, startVoveIdKyc, syncVoveIdKyc, emailRiderKyc, type AgentKycData } from "@/lib/server/agent-kyc";
 import {
   addAwbToBag,
   addCustomHub,
@@ -180,6 +181,17 @@ function bookCodesMatch(book: Record<string, unknown> | undefined, item: Order["
   return candidates.some((c) => c === code || code.startsWith(`${c}-u`) || code.includes(c));
 }
 
+async function emailPortalOtp(account: Record<string, unknown>, portal: string) {
+  const code = issuePortalOtp(String(account.email));
+  if (!code) return null;
+  const sent = await sendMobileEmail(
+    String(account.email),
+    `${code} is your VGMF ${portal} app sign-in code`,
+    `${code} is your Vaidya Gogate Memorial Foundation sign-in code for the ${portal} app.\n\nIt expires in 10 minutes.`
+  ).catch(() => false);
+  return sent ? null : "Could not email the sign-in code right now.";
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const action = String(body?.action ?? "").trim();
@@ -201,6 +213,16 @@ export async function POST(request: NextRequest) {
     return json({ ok: true, token: session.token, session, account, access: readPortalAccess() });
   }
 
+  if (action === "delivery-login") {
+    const loginId = String(body?.email ?? "").trim();
+    const email = emailForRiderId(loginId) || loginId;
+    const account = checkPortalLogin(email, String(body?.password ?? ""));
+    if (!account) return json({ ok: false, error: "Incorrect email or password." }, 401);
+    const failed = await emailPortalOtp(account, "Delivery");
+    if (failed) return json({ ok: false, error: failed }, 502);
+    return json({ ok: true, otpRequired: true, email: String(account.email || email), message: `A 6-digit code was emailed to ${String(account.email || email)}.` });
+  }
+
   if (action === "delivery-signup") {
     try {
       const account = registerDeliveryPartnerAccount({
@@ -218,6 +240,13 @@ export async function POST(request: NextRequest) {
         staffRoleId: "delivery_partner",
       });
       ensureAgentEnrollmentOnSignup({ email: String(account.email), name: [account.firstName, account.lastName].filter(Boolean).join(" ").trim() || String(account.email), phone: String(account.phone || "") });
+      emailRiderKyc(String(account.email), "instructions");
+      if (body?.verifyEmail) {
+        revokePortalMobileSession(session.token);
+        const failed = await emailPortalOtp(account, "Delivery");
+        if (failed) return json({ ok: false, error: failed }, 502);
+        return json({ ok: true, otpRequired: true, email: String(account.email), message: `Account created. Enter the 6-digit code emailed to ${String(account.email)}.` });
+      }
       return json({ ok: true, token: session.token, session, account, access: readPortalAccess(), message: "Account created! Now select your VGMF Hub & complete KYC." });
     } catch (e) {
       return json({ ok: false, error: e instanceof Error ? e.message : "Sign up failed." }, 400);
@@ -2421,7 +2450,7 @@ export async function POST(request: NextRequest) {
 
   if (action === "delivery-kyc-voveid-start") {
     try {
-      const res = await startVoveIdKyc({ email: session.email, name: session.name || "", documentType: String(body?.documentType || ""), restart: Boolean(body?.restart) });
+      const res = await startVoveIdKyc({ email: session.email, name: session.name || "", documentType: String(body?.documentType || ""), restart: Boolean(body?.restart), returnUrl: String(body?.returnUrl || "") });
       return json({ ok: true, ...res });
     } catch (e) {
       return json({ ok: false, error: e instanceof Error ? e.message : "Could not start VOVE ID verification." }, 400);

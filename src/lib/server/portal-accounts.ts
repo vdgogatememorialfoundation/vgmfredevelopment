@@ -208,3 +208,35 @@ export function deleteDeliveryPartnerAccount(email: string): { deleted: boolean 
   try { revokeAllPortalSessionsForEmail(clean); } catch(e){}
   return { deleted: true };
 }
+
+/** Finds the account email for a 5-digit rider user ID. */
+export function emailForRiderId(riderId: string) {
+  const id = riderId.trim();
+  if (!/^\d{5}$/.test(id)) return "";
+  const row = load().find((r) => String(r.riderId || "") === id);
+  return row ? String(row.email) : "";
+}
+
+/** Gives a delivery partner a 5-digit user ID (kept if already set) and a new generated password. */
+export function issueRiderLogin(email: string) {
+  const clean = email.trim().toLowerCase();
+  const rows = load();
+  const row = rows.find((r) => String(r.email || "").toLowerCase() === clean);
+  if (!row) throw new Error("Account not found.");
+  const used = new Set(rows.map((r) => String(r.riderId || "")).filter(Boolean));
+  let riderId = String(row.riderId || "");
+  if (!riderId) {
+    let next = 10001;
+    for (const id of used) next = Math.max(next, Number(id) + 1);
+    if (next > 99999) do next = randomInt(10000, 100000); while (used.has(String(next)));
+    riderId = String(next);
+  }
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const password = Array.from({ length: 10 }, () => alphabet[randomInt(0, alphabet.length)]).join("");
+  row.riderId = riderId;
+  row.passwordSalt = randomBytes(16).toString("hex");
+  row.passwordHash = hash(password, row.passwordSalt);
+  row.updatedAt = new Date().toISOString();
+  save(rows);
+  return { riderId, password, email: String(row.email) };
+}

@@ -8,7 +8,7 @@ import { CourierDuty } from "./delivery-courier";
 import { LocationGate, useRiderLocation } from "./delivery-location";
 import { rider, type Enrollment, type RiderSettings, type ShiftBooking, type ShiftOption, type ShiftSummary, type Wallet } from "./delivery-api";
 import { Btn, Card, d, errorAlert, Field, money } from "./delivery-ui";
-import { callPortal, portalLogin, savePortalSession, type PortalSession } from "./portal-api";
+import { callPortal, portalOtpVerify, type PortalSession } from "./portal-api";
 import { P, PortalTabBar, PortalTopBar, StatusPill } from "./portal-ui";
 
 /* ---------------- Sign in / Sign up ---------------- */
@@ -51,24 +51,66 @@ export function DeliveryAuth({ onSignedIn }: { onSignedIn: (session: PortalSessi
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [info, setInfo] = useState("");
 
   const submit = async () => {
     setBusy(true);
     try {
-      if (mode === "signin") {
-        onSignedIn(await portalLogin(email.trim(), password));
-      } else {
-        const res = await callPortal<{ token: string; session: PortalSession }>("delivery-signup", { name, email: email.trim(), phone, password });
-        const session = { ...res.session, token: res.token };
-        await savePortalSession(session);
-        onSignedIn(session);
-      }
+      const res = mode === "signin"
+        ? await callPortal<{ email: string; message?: string }>("delivery-login", { email: email.trim(), password })
+        : await callPortal<{ email: string; message?: string }>("delivery-signup", { name, email: email.trim(), phone, password, verifyEmail: true });
+      setOtpEmail(res.email || email.trim());
+      setInfo(res.message || "A 6-digit code was emailed to you.");
+      setOtp("");
     } catch (e) {
       errorAlert(e);
     } finally {
       setBusy(false);
     }
   };
+
+  const verify = async () => {
+    setBusy(true);
+    try {
+      onSignedIn(await portalOtpVerify(otpEmail, otp.trim()));
+    } catch (e) {
+      errorAlert(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resend = async () => {
+    setBusy(true);
+    try {
+      const res = await callPortal<{ message?: string }>("otp-send", { email: otpEmail, portal: "Delivery" });
+      setInfo(res.message || "A new code was emailed to you.");
+    } catch (e) {
+      errorAlert(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (otpEmail) {
+    return (
+      <SafeAreaView style={[d.screen, { backgroundColor: P.white }]}>
+        <ScrollView contentContainerStyle={{ padding: 22, gap: 16 }} keyboardShouldPersistTaps="handled">
+          <View style={{ alignItems: "center", gap: 8, marginTop: 24 }}>
+            <Ionicons name="mail-open" size={44} color={P.brand} />
+            <Text style={d.h1}>Check your email</Text>
+            <Text style={[d.muted, { textAlign: "center" }]}>{info}</Text>
+          </View>
+          <Field label="6-digit code from the email" value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} />
+          <Btn label="Verify and continue" icon="checkmark-circle" onPress={verify} busy={busy} disabled={otp.length !== 6} />
+          <Btn label="Send the code again" icon="refresh" tone="outline" onPress={resend} disabled={busy} />
+          <Btn label="Use a different account" icon="arrow-back" tone="outline" onPress={() => setOtpEmail("")} disabled={busy} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={[d.screen, { backgroundColor: P.white }]}>
@@ -88,7 +130,7 @@ export function DeliveryAuth({ onSignedIn }: { onSignedIn: (session: PortalSessi
           ))}
         </View>
         {mode === "signup" ? <Field label="Full name (as on ID)" value={name} onChangeText={setName} /> : null}
-        <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+        <Field label={mode === "signin" ? "Email or 5-digit user ID" : "Email"} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType={mode === "signin" ? "default" : "email-address"} />
         {mode === "signup" ? <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={13} /> : null}
         <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
         <Btn label={mode === "signin" ? "Sign in" : "Create account"} icon={mode === "signin" ? "log-in" : "person-add"} onPress={submit} busy={busy} disabled={!email || password.length < 6 || (mode === "signup" && (!name || phone.replace(/\D/g, "").length < 10))} />
@@ -275,13 +317,15 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
     }
   };
 
-  if (enrollment.status === "pending") {
+  const kycStatus = enrollment.kyc?.status || "";
+  const kycSubmitted = ["In Review", "Approved", "Manual Review", "Submitted"].includes(kycStatus) || (kycStatus === "In Progress" && enrollment.kyc?.provider !== "voveid");
+  if (enrollment.status === "pending" && kycSubmitted) {
     return (
       <ScrollView contentContainerStyle={d.pad}>
         <Card>
           <Ionicons name="hourglass" size={34} color={P.amber} />
           <Text style={d.h2}>Waiting for activation</Text>
-          <Text style={d.body}>Your KYC is submitted. Visit hub {enrollment.hubCode || ""} with your original ID and vehicle papers. Once the hub manager activates you, pull to refresh.</Text>
+          <Text style={d.body}>{kycStatus === "Approved" ? `Your ID is verified. Hub ${enrollment.hubCode || ""} will activate your account. You may be asked to visit the hub once to collect your kit.` : `Your KYC is submitted and is being checked. Hub ${enrollment.hubCode || ""} will activate your account once it is approved.`} Pull to refresh to check.</Text>
           <Btn label="Check activation status" icon="refresh" tone="outline" onPress={onDone} />
         </Card>
       </ScrollView>

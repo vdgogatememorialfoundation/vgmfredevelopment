@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { deleteDeliveryPartnerAccount } from "@/lib/server/portal-accounts";
+import { sendRiderLoginAfterActivation } from "@/lib/server/rider-onboarding";
 import { revokeAllPortalSessionsForEmail } from "@/lib/server/portal-auth";
 import { readLogisticsSettings } from "@/lib/server/vgmf-logistics-settings";
-import { buildKycPipelineStages, getEnabledKycProviders, reviewManualKyc, reinitiateAgentKyc, type AgentKycData } from "@/lib/server/agent-kyc";
+import { buildKycPipelineStages, emailRiderKyc, getEnabledKycProviders, reviewManualKyc, reinitiateAgentKyc, type AgentKycData } from "@/lib/server/agent-kyc";
 import {
   addAwbToBag,
   addCustomHub,
@@ -187,7 +188,17 @@ try { revokeAllPortalSessionsForEmail(email); } catch(e){}
         reason: String(body.reason || ""),
         by,
       });
-      return NextResponse.json({ ok: true, agent: rec, message: action === "approve-agent" ? `Agent ${rec.name} activated for ${rec.hubCode}!` : `Agent ${rec.name} rejected.` });
+      const login = action === "approve-agent" ? await sendRiderLoginAfterActivation(rec.email) : null;
+      if (action === "reject-agent") emailRiderKyc(rec.email, "rejected", rec.rejectReason || "");
+      else if (!login) emailRiderKyc(rec.email, "activated");
+      const loginNote = login ? (login.emailed ? ` User ID ${login.riderId} and password emailed.` : ` User ID ${login.riderId} created, but the email could not be sent. Use "Send user ID and password" again.`) : "";
+      return NextResponse.json({ ok: true, agent: rec, message: action === "approve-agent" ? `Agent ${rec.name} activated for ${rec.hubCode}!${loginNote}` : `Agent ${rec.name} rejected.` });
+    }
+
+    if (action === "send-rider-login") {
+      const login = await sendRiderLoginAfterActivation(String(body.email || ""), true);
+      if (!login) return NextResponse.json({ ok: false, error: "Activate the agent first." }, { status: 400 });
+      return NextResponse.json({ ok: true, message: login.emailed ? `User ID ${login.riderId} and a new password were emailed.` : `User ID ${login.riderId} created, but the email could not be sent.` });
     }
 
     if (action === "remove-executive") {

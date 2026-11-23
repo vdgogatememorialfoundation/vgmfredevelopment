@@ -7,7 +7,7 @@ export type ShiftBooking = { id: string; date: string; shiftId: string; shiftNam
 export type Question = { id: string; text: string; options: string[] };
 export type RiderSettings = {
   checkInGraceMinutes?: number; rates: Record<string, number>; surge: Record<string, number>; openBoxThreshold: number; failReasons: string[]; obdQuestions: Question[]; returnQuestions: Question[] };
-export type Enrollment = { status: "unassigned" | "pending" | "approved" | "rejected"; hubCode?: string; kycPipeline?: { id: string; title: string; reached: boolean }[] };
+export type Enrollment = { status: "unassigned" | "pending" | "approved" | "rejected"; hubCode?: string; kyc?: { status?: string; provider?: string }; kycPipeline?: { id: string; title: string; reached: boolean }[] };
 
 export type Job = {
   runsheetId: string;

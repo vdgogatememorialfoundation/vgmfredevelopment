@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button, SelectInput, TextInput } from "@/components/admin/AdminUI";
+import AdminRiderOnboardingLinks from "@/components/admin/AdminRiderOnboardingLinks";
 
 function StatusBadge({ tone, children }: { tone: "emerald" | "blue" | "amber" | "red"; children: React.ReactNode }) {
   const cls = tone === "emerald" ? "bg-emerald-100 text-emerald-900" : tone === "blue" ? "bg-blue-100 text-blue-900" : tone === "red" ? "bg-red-100 text-red-900" : "bg-amber-100 text-amber-900";
@@ -792,6 +793,7 @@ export default function AdminHubDashboard({ lockedHubCode, operatorName }: { loc
           {section === "staff_gate" && (
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-2xl border border-border bg-white p-4 shadow-sm space-y-3">
+                <AdminRiderOnboardingLinks />
                 <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-extrabold uppercase tracking-wider text-blue-950">
@@ -834,6 +836,11 @@ export default function AdminHubDashboard({ lockedHubCode, operatorName }: { loc
                                 void act({ action: "delete-agent-account", email: ag.email });
                               }
                             }}>Delete Account</Button>
+                            {ag.status === "approved" && (
+                              <Button variant="ghost" disabled={busy} onClick={() => {
+                                if (window.confirm(`Email ${ag.name} a user ID and a new password? Their old password stops working.`)) void act({ action: "send-rider-login", email: ag.email });
+                              }}>Send user ID and password</Button>
+                            )}
                             {ag.status !== "approved" && (
                               <>
                                 <Button disabled={busy} onClick={() => void act({ action: "approve-agent", email: ag.email, role: "delivery_executive" })}>Approve &amp; Activate</Button>
