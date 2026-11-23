@@ -13,6 +13,7 @@ import {
   type ReminderChannel,
 } from "@/lib/server/balance-reminder";
 import { refreshStoredShipment } from "@/lib/server/live-track";
+import { handleRiderAction } from "@/lib/server/rider-api";
 import { storeUploadedFile } from "@/lib/server/media-upload";
 import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
@@ -2351,6 +2352,14 @@ export async function POST(request: NextRequest) {
     }
 
     return json({ ok: false, error: "Unknown store-pickup action." }, 400);
+  }
+
+  if (action.startsWith("rider-")) {
+    try {
+      return json({ ok: true, ...(await handleRiderAction(action, body, session)) });
+    } catch (e) {
+      return json({ ok: false, error: e instanceof Error ? e.message : "Request failed." }, 400);
+    }
   }
 
   if (action === "delivery-dashboard") {

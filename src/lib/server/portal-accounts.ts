@@ -167,7 +167,7 @@ export function registerDeliveryPartnerAccount(input: { name: string; email: str
   if (rows.some((r) => String(r.email || "").toLowerCase() === email)) {
     throw new Error("An account with this email already exists. Please sign in instead.");
   }
-  const parts = (input.name || email.split("@")[0]).trim().split(/s+/);
+  const parts = (input.name || email.split("@")[0]).trim().split(/\s+/);
   const firstName = parts[0] || "Delivery";
   const lastName = parts.slice(1).join(" ");
   const salt = randomBytes(16).toString("hex");
