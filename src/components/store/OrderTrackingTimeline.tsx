@@ -155,10 +155,8 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   const courier = customerCourierLabel({ provider, courier: shipment?.courier || order.courierName });
   const trackingId = shipment?.awb || order.trackingId || "";
   const placed = new Date(order.date);
-  // On time / Delayed is judged against the date the customer was given (courier's or promised), to the end of that day.
   const promisedOn = parseExpected(expectedText, placed.getTime());
   const expectedFrom = promisedOn ? new Date(promisedOn - 24 * 60 * 60 * 1000) : addDays(placed, storeConfig.orderPreparationDays + 2);
-  const expectedTo = promisedOn ? new Date(promisedOn + 24 * 60 * 60 * 1000) : addDays(placed, storeConfig.orderPreparationDays + storeConfig.defaultDeliveryDays);
   const packedStage = rawStages.find((stage) => stage.id === "packed");
   const shippedStage = rawStages.find((stage) => stage.id === "shipped");
   const deliveredStage = rawStages.find((stage) => stage.id === "delivered" || stage.id === "picked");
@@ -202,19 +200,6 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
 
   const stageTiming = (stage: PipelineStageShape): { label: string; tone: PipelineTone } | null => {
     if (stage.id === "failed") return { label: "Failed", tone: "red" };
-    if (hideDates && !courierBooked) return null;
-    if (stage.id === "shipped" || stage.id === "out") {
-      if (!stage.reached || !promisedOn) return null;
-      return now > expectedTo.getTime() ? { label: "Delayed", tone: "red" } : { label: "On time", tone: "emerald" };
-    }
-    if (stage.id === "delivered" && stage.reached && deliveredAt && promisedOn) {
-      const deliveredTime = new Date(deliveredAt).getTime();
-      return deliveredTime < expectedFrom.getTime()
-        ? { label: "Arriving early", tone: "emerald" }
-        : deliveredTime <= expectedTo.getTime()
-          ? { label: "On time", tone: "emerald" }
-          : { label: "Delayed", tone: "red" };
-    }
     return null;
   };
 
