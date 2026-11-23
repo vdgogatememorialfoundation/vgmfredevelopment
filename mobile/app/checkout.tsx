@@ -152,7 +152,11 @@ export default function CheckoutScreen() {
     }
     if (message.type !== "success") {
       setTone("error");
-      setNote(message.type === "dismiss" ? "Payment was cancelled. Your cart is still here." : message.error || "The payment did not go through.");
+      setNote(
+        message.type === "dismiss"
+          ? "Payment was cancelled. No order was placed and your cart is still saved."
+          : message.error || "Payment did not complete. No order was placed."
+      );
       return;
     }
     setBusy(true);
@@ -271,7 +275,9 @@ export default function CheckoutScreen() {
           {preorder ? (
             <Muted>{payNow < total ? `Pre-order: you pay an advance of ${money(payNow)} now. When your order is ready, the courier charge is added and you pay the balance from the order page.` : "Pre-order: you pay for the items now. When your order is ready, the courier charge is added and you pay the balance from the order page."}</Muted>
           ) : null}
-          <Muted>Pay securely with UPI, card or net banking through Razorpay. Damaged items can be replaced after delivery if you share photos.</Muted>
+          <Muted>
+            Pay securely with UPI, card or net banking through Razorpay. Your order is placed only after your {payNow < total ? "advance or full" : "full"} payment is confirmed.
+          </Muted>
           <Button label={busy ? "Please wait…" : `Pay ${money(payNow)}`} disabled={busy} onPress={() => void submit()} />
           <Button kind="ghost" label="Back to cart" onPress={() => router.replace("/cart")} />
         </>

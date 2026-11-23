@@ -37,6 +37,10 @@ export type StoredChatThread = {
   ref?: string;
   participants?: { email: string; name: string; joinedAt: string }[];
   firstJoinedAt?: string;
+  visitorTypingAt?: string;
+  visitorTypingPreview?: string;
+  staffTypingAt?: string;
+  staffTypingName?: string;
 };
 
 export type SupportDepartment = { name: string; agents: string[] };
@@ -155,6 +159,12 @@ export function postLiveMessage(input: {
     if (input.email) thread.email = input.email;
     if (input.phone) thread.phone = input.phone;
     if (input.page) thread.page = input.page;
+    if (input.from === "visitor") {
+      thread.visitorTypingAt = undefined;
+      thread.visitorTypingPreview = undefined;
+    } else {
+      thread.staffTypingAt = undefined;
+    }
   }
   write(store);
   return thread;
@@ -263,6 +273,44 @@ export function markThreadTicket(threadId: string, ticketId: string) {
   if (!thread) return null;
   thread.ticketId = ticketId;
   thread.updatedAt = new Date().toISOString();
+  write(store);
+  return thread;
+}
+
+export function setChatTyping(input: {
+  threadId: string;
+  from: "visitor" | "staff";
+  name?: string;
+  typing: boolean;
+  preview?: string;
+}) {
+  const store = read();
+  let thread = store.threads.find((item) => item.id === input.threadId);
+  const now = new Date().toISOString();
+  if (!thread && input.from === "visitor" && input.typing) {
+    thread = {
+      id: input.threadId,
+      name: input.name || "Visitor",
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+      status: "open",
+      visitorTypingAt: now,
+      visitorTypingPreview: (input.preview || "").slice(0, 180),
+    };
+    thread.ref = chatRef(thread);
+    store.threads.unshift(thread);
+    write(store);
+    return thread;
+  }
+  if (!thread) return null;
+  if (input.from === "visitor") {
+    thread.visitorTypingAt = input.typing ? now : undefined;
+    thread.visitorTypingPreview = input.typing ? (input.preview || "").slice(0, 180) : undefined;
+  } else {
+    thread.staffTypingAt = input.typing ? now : undefined;
+    thread.staffTypingName = input.typing ? (input.name || "Support Executive") : undefined;
+  }
   write(store);
   return thread;
 }

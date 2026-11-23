@@ -23,27 +23,27 @@ export default function ClinicsScreen() {
     <Screen refreshing={loading} onRefresh={refresh}>
       <TopBar />
       <PageHeader kicker="Care" title="Foundation clinics" subtitle="Consultation hours and directions for Foundation clinics, as published on the website." />
-      <View style={{ backgroundColor: theme.colors.primary, borderRadius: 20, padding: 18, marginBottom: 16 }}>
-        <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: "800", letterSpacing: 1.4, textTransform: "uppercase" }}>Foundation clinic</Text>
-        <Text style={{ color: theme.colors.onPrimary, fontSize: 19, fontWeight: "800", marginTop: 6 }}>{CLINIC.name}</Text>
-        <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 13, marginTop: 4 }}>{CLINIC.area}</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 }}>
-          <Ionicons name="time-outline" size={16} color={theme.colors.onPrimary} />
-          <Text style={{ color: theme.colors.onPrimary, fontWeight: "700", fontSize: 13 }}>{CLINIC.hours}</Text>
+      <View style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: "#E5E7EB" }}>
+        <Text style={{ color: "#8F2D2D", fontSize: 11, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase" }}>Foundation Clinic</Text>
+        <Text style={{ color: "#111827", fontSize: 19, fontWeight: "800", marginTop: 6 }}>{CLINIC.name}</Text>
+        <Text style={{ color: "#6B7280", fontSize: 13, marginTop: 4 }}>{CLINIC.area}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, backgroundColor: "#F8F9FB", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 }}>
+          <Ionicons name="time-outline" size={16} color="#067D62" />
+          <Text style={{ color: "#111827", fontWeight: "700", fontSize: 13 }}>{CLINIC.hours}</Text>
         </View>
         <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
           {[
-            { icon: "call" as const, label: "Call", href: `tel:${CLINIC.phone}` },
-            { icon: "mail" as const, label: "Email", href: `mailto:${CLINIC.email}` },
-            { icon: "navigate" as const, label: "Directions", href: Platform.OS === "ios" ? `http://maps.apple.com/?q=${encodeURIComponent(`${CLINIC.name}, ${CLINIC.area}`)}` : CLINIC.maps },
+            { icon: "call-outline" as const, label: "Call", href: `tel:${CLINIC.phone}` },
+            { icon: "mail-outline" as const, label: "Email", href: `mailto:${CLINIC.email}` },
+            { icon: "navigate-outline" as const, label: "Directions", href: Platform.OS === "ios" ? `http://maps.apple.com/?q=${encodeURIComponent(`${CLINIC.name}, ${CLINIC.area}`)}` : CLINIC.maps },
           ].map((action) => (
-            <Pressable key={action.label} onPress={() => void Linking.openURL(action.href)} accessibilityRole="button" accessibilityLabel={action.label} style={({ pressed }) => [{ flex: 1, backgroundColor: theme.colors.onPrimary, borderRadius: 12, paddingVertical: 10, alignItems: "center", gap: 4, opacity: pressed ? 0.85 : 1 }]}>
-              <Ionicons name={action.icon} size={18} color={theme.colors.primary} />
-              <Text style={{ color: theme.colors.primary, fontWeight: "800", fontSize: 12 }}>{action.label}</Text>
+            <Pressable key={action.label} onPress={() => void Linking.openURL(action.href)} accessibilityRole="button" accessibilityLabel={action.label} style={({ pressed }) => [{ flex: 1, backgroundColor: "#FDF2F4", borderWidth: 1, borderColor: "#F3D4D8", borderRadius: 10, paddingVertical: 11, alignItems: "center", gap: 4, opacity: pressed ? 0.85 : 1 }]}>
+              <Ionicons name={action.icon} size={18} color="#8F2D2D" />
+              <Text style={{ color: "#8F2D2D", fontWeight: "800", fontSize: 12 }}>{action.label}</Text>
             </Pressable>
           ))}
         </View>
-        <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 10 }}>{CLINIC.phoneLabel} · {CLINIC.email}</Text>
+        <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 12 }}>{CLINIC.phoneLabel} · {CLINIC.email}</Text>
       </View>
       <SearchBar value={query} onChange={setQuery} placeholder="Search clinics" />
       {filtered.map((item) => {

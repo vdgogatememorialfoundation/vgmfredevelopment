@@ -32,6 +32,14 @@ function SectionBody({ id, title, subtitle }: { id: string; title: string; subti
   if (id === "registrations" || id === "applications") return <PartnerSection title={title} subtitle={subtitle} kind="tickets" empty={emptyCopy(id)} />;
   if (id === "payments" || id === "receipts") return <PartnerSection title={title} subtitle={subtitle} kind="payments" empty={emptyCopy(id)} />;
   if (id === "notifications") return <InboxSection title={title} subtitle={subtitle} />;
+  if (id === "seminar-videos") {
+    return (
+      <Screen>
+        <PageHeader kicker="My Account" title={title} subtitle={subtitle} />
+        <Empty icon="play-circle-outline" label="Watch recorded national seminar sessions and lectures linked to your Foundation account." actionLabel="Open Seminar Videos" onAction={() => router.push("/seminar-videos")} />
+      </Screen>
+    );
+  }
   const empty = ACCOUNT_SECTIONS.find((item) => item.id === id);
   return (
     <Screen>

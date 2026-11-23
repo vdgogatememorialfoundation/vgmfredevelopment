@@ -5,15 +5,7 @@ import { useLiveThanks } from "@/lib/use-cms";
 export default function ThanksSection() {
   const credits = useLiveThanks().filter((item) => item.title.trim() || item.description.trim());
 
-  if (!credits.length) {
-    return (
-      <section className="section bg-white">
-        <div className="container">
-          <p className="text-sm text-text-muted">Credits published from the admin desk appear here.</p>
-        </div>
-      </section>
-    );
-  }
+  if (!credits.length) return null;
 
   return (
     <section className="section bg-white" aria-labelledby="special-thanks-heading">

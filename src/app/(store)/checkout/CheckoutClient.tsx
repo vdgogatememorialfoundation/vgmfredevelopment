@@ -91,6 +91,7 @@ export default function CheckoutClient() {
     ...EMPTY_ADDRESS,
     fullName: user ? `${user.firstName} ${user.lastName}`.trim() : "",
     email: user?.email ?? "",
+    phone: user?.phone ?? "",
   });
   const [courierId] = useState("");
   const [error, setError] = useState("");
@@ -179,12 +180,27 @@ export default function CheckoutClient() {
   }, [buyNow, buyQty]);
 
   useEffect(() => {
+    if (!user) return;
+    setAddress((prev) => ({
+      ...prev,
+      fullName: prev.fullName || `${user.firstName} ${user.lastName}`.trim(),
+      email: prev.email || user.email || "",
+      phone: prev.phone || user.phone || "",
+    }));
+  }, [user]);
+
+  useEffect(() => {
     if (addressSeeded.current || !savedAddresses.length) return;
     const chosen = savedAddresses.find((item) => item.isDefault) ?? savedAddresses[0];
     addressSeeded.current = true;
-    setAddress({ ...chosen, email: chosen.email || user?.email || "" });
+    setAddress({
+      ...chosen,
+      fullName: chosen.fullName || (user ? `${user.firstName} ${user.lastName}`.trim() : ""),
+      email: chosen.email || user?.email || "",
+      phone: chosen.phone || user?.phone || "",
+    });
     setAddressChoice(chosen.id);
-  }, [savedAddresses, user?.email]);
+  }, [savedAddresses, user]);
 
   useEffect(() => {
     void readyHostedGateways().then(setHostedGateways).catch(() => setHostedGateways([]));
@@ -413,7 +429,7 @@ export default function CheckoutClient() {
       return isIndia(address.countryCode)
         ? "Pincode must be a valid 6-digit number."
         : "Please enter a valid postal code.";
-    if (domestic && quote && !quote.serviceable)
+    if (deliveryMode === "delivery" && domestic && quote && !quote.serviceable)
       return quote.note || "Delivery is not available for this pincode.";
     if (!isValidPhone(address.phone))
       return "Please enter a valid international phone number, including country code.";
@@ -464,10 +480,12 @@ export default function CheckoutClient() {
     let payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean };
     let awaitingGateway = false;
     const hosted = hostedSelected;
-    const deliveryAddress =
-      deliveryMode === "delivery"
-        ? { ...address, fullName: address.fullName.trim() }
-        : { ...address, fullName: address.fullName.trim() || "Store pickup" };
+    const deliveryAddress = {
+      ...address,
+      fullName: address.fullName.trim() || (user ? `${user.firstName} ${user.lastName}`.trim() : "Customer"),
+      phone: address.phone.trim() || user?.phone || "",
+      email: (address.email || user?.email || "").trim(),
+    };
     const buildOrder = (payment: { paymentId?: string; razorpayOrderId?: string; method: string; paid: boolean }): Order => {
       const courierName = selectedCourier?.courierName;
       const now = new Date().toISOString();
@@ -774,8 +792,13 @@ export default function CheckoutClient() {
               </p>
             )}
 
-            {deliveryMode === "delivery" && (
+            {(deliveryMode === "delivery" || deliveryMode === "store_pickup") && (
               <>
+                {deliveryMode === "store_pickup" && (
+                  <p className="mb-3 rounded-xl border border-burgundy/20 bg-burgundy/5 px-4 py-2.5 text-xs font-semibold text-burgundy">
+                    Customer mobile number and billing/residential address are mandatory for store pickup orders too.
+                  </p>
+                )}
                 {user && savedAddresses.length > 0 && (
                   <div className="mb-5 grid gap-2">
                     {savedAddresses.map((item) => (
@@ -784,7 +807,7 @@ export default function CheckoutClient() {
                         type="button"
                         onClick={() => {
                           setAddressChoice(item.id);
-                          setAddress({ ...item, email: item.email || user.email });
+                          setAddress({ ...item, email: item.email || user.email, phone: item.phone || user.phone || "" });
                         }}
                         className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-left ${addressChoice === item.id ? "border-burgundy bg-burgundy/5" : "border-border bg-white"}`}
                       >
@@ -828,47 +851,32 @@ export default function CheckoutClient() {
                   </label>
                 )}
 
-                {!domestic ? (
+                {deliveryMode === "delivery" && !domestic ? (
                   <p className="mt-5 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-ink">
                     International dispatch is available. Courier rates for India do not apply; shipping is confirmed after the order is placed.
                   </p>
                 ) : null}
 
-                {domestic && preorderBook && !preorderDatesHidden(orderSettings) && (
+                {deliveryMode === "delivery" && domestic && preorderBook && !preorderDatesHidden(orderSettings) && (
                   <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                     <b>Tentative delivery by</b> {preorderDeliveryDate(preorderBook)}
                   </p>
                 )}
-                {domestic && !hasPreorder && !orderSettings.hideDeliveryDates && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
+                {deliveryMode === "delivery" && domestic && !hasPreorder && !orderSettings.hideDeliveryDates && orderSettings.showCourierChoice && (selectedOffer || loadingRates) && (
                   <p className="mt-5 rounded-xl border border-border bg-white px-4 py-3 text-sm text-text-primary">
                     <b>Expected delivery by</b> {selectedOffer ? selectedOffer.deliverBy : <span className="text-text-muted">checking…</span>}
                   </p>
                 )}
-                {domestic && quote && !quote.serviceable && pincodeValid && (
+                {deliveryMode === "delivery" && domestic && quote && !quote.serviceable && pincodeValid && (
                   <p className="mt-3 text-sm text-red-700">{quote.note}</p>
                 )}
               </>
             )}
 
-            {deliveryMode === "store_pickup" && !user && (
-              <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                <label className="text-sm font-medium text-text-primary">
-                  Full name
-                  <input className="input-field mt-1" value={address.fullName} onChange={(event) => setAddress({ ...address, fullName: event.target.value })} autoComplete="name" />
-                </label>
-                <label className="text-sm font-medium text-text-primary">
-                  Phone
-                  <input className="input-field mt-1" type="tel" value={address.phone} onChange={(event) => setAddress({ ...address, phone: event.target.value })} autoComplete="tel" placeholder="+91 98765 43210" />
-                </label>
-                <label className="text-sm font-medium text-text-primary">
-                  Email
-                  <input className="input-field mt-1" type="email" value={address.email ?? ""} onChange={(event) => setAddress({ ...address, email: event.target.value })} autoComplete="email" />
-                </label>
-              </div>
-            )}
+
 
             {deliveryMode === "store_pickup" && (
-              <div className="rounded-xl border border-gold/40 bg-warm-cream p-5 text-sm">
+              <div className="mt-5 rounded-xl border border-gold/40 bg-warm-cream p-5 text-sm">
                 <p className="font-semibold text-text-primary">Pickup from store</p>
                 <p className="mt-1 text-text-primary">{pickupLocation.name}</p>
                 <p className="mt-1 text-text-muted">{pickupLocation.address}</p>
@@ -897,7 +905,7 @@ export default function CheckoutClient() {
               type="button"
               disabled={!canReview}
               onClick={() => {
-                const problem = (deliveryMode === "delivery" ? validateAddress() : "") || guestContactProblem();
+                const problem = validateAddress() || guestContactProblem();
                 if (problem) {
                   setError(problem);
                   return;
@@ -1115,6 +1123,11 @@ export default function CheckoutClient() {
                 {preorderShippingLater ? (
                   <p className="mt-1 text-xs text-text-muted">
                     Pre-order: the courier charge is worked out when your order is ready and added to the balance you pay then.
+                  </p>
+                ) : null}
+                {(payNow < totals.total || preorderShippingLater) && orderSettings.preorderPayment?.disclaimerEnabled !== false ? (
+                  <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-950">
+                    {orderSettings.preorderPayment?.disclaimerText || "Pre-Order Notice: Shipping and delivery for pre-order items will begin by the end of December."}
                   </p>
                 ) : null}
               </div>

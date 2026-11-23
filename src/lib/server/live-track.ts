@@ -1,3 +1,4 @@
+import { deliveryDatePhrase, parseExpected } from "@/lib/delivery-expectation";
 import { customerCourierLabel } from "@/lib/courier-label";
 import { classifyCourierScan, classifyScanSequence, cleanScanText, courierStageRank, isCourierInfoLine, isHyperlocalProvider, onlyRoutingScans, usableScan } from "@/lib/order-pipeline";
 import {
@@ -13,6 +14,7 @@ import {
   daaklyTrack,
   rapidshypTrack,
   vamashipTrack,
+  shipwayTrack,
   tookanTrack,
 } from "@/lib/server/providers";
 import { courierWebTrack, type TrackerCreds } from "@/lib/server/courier-web-track";
@@ -24,6 +26,26 @@ import type { Order, ShipmentRecord } from "@/types";
 import { inviteOrderFeedback } from "@/lib/server/forms";
 import { withScanPlaces } from "@/lib/server/place-lookup";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+
+
+function detectCourierSiteId(provider?: string, courierName?: string, awb?: string): string {
+  const hay = `${provider ?? ""} ${courierName ?? ""}`.toLowerCase();
+  const code = String(awb ?? "").trim();
+  if (hay.includes("ekart") || /^(tdsp|luap|fmpc|ekart)/i.test(code)) return "ekart";
+  if (hay.includes("delhivery")) return "delhivery";
+  if (hay.includes("india post") || hay.includes("speed post") || hay.includes("daakly") || /^[A-Z]{2}\d{9}IN$/i.test(code)) return "india-post";
+  if (hay.includes("amazon")) return "amazon-shipping";
+  if (hay.includes("bluedart") || hay.includes("blue dart")) return "bluedart";
+  if (hay.includes("dtdc")) return "dtdc";
+  if (hay.includes("xpressbees")) return "xpressbees";
+  if (hay.includes("shadowfax")) return "shadowfax";
+  if (hay.includes("ecom express") || hay.includes("ecom")) return "ecom-express";
+  if (hay.includes("gati")) return "gati";
+  if (hay.includes("trackon")) return "trackon";
+  if (hay.includes("maruti")) return "shree-maruti";
+  if (hay.includes("professional")) return "professional";
+  return "";
+}
 
 /** Same scan when the text and town match, whatever the case ("PUNE" and "Pune, Maharashtra, India"). */
 const placeKey = (location?: string) => (location ?? "").split(",")[0].trim().toLowerCase();
@@ -84,6 +106,7 @@ async function track(
   if (provider === "daakly") return daaklyTrack(creds.daakly ?? own, awb);
   if (provider === "rapidshyp") return rapidshypTrack(creds.rapidshyp ?? own, awb);
   if (provider === "vamaship") return vamashipTrack(creds.vamaship ?? own, awb);
+  if (provider === "shipway") return shipwayTrack(creds.shipway ?? own, awb);
   if (provider === "shadowfax") return shadowfaxTrack(creds.shadowfax ?? own, awb, String(extraId ?? "") === "reverse");
   if (provider === "tookan" || provider === "tookan-parcel") {
     return tookanTrack(creds.tookan ?? own, String(providerOrderId || awb), String(extraId || awb));
@@ -137,18 +160,26 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     return { ok: true as const, live: false as const, shipment };
   }
   if (!hit) return { ok: true as const, live: false as const, shipment };
-  // Ekart is read from one source only: ekartlogistics.com (clean wording, hub scans first); the Ekart Elite API only when the site gives nothing.
-  const ekartSite = !direct && provider === "ekart" && Boolean(shipment.awb);
+  // Ekart is read from ekartlogistics.com (clean wording, hub scans first), whether booked via Ekart Elite or an aggregator (Envia, Shiprocket, etc.).
+  const siteCourierId = !direct && shipment.awb ? detectCourierSiteId(provider, String(hit?.courierName || shipment.courier || ""), shipment.awb) : "";
+  const isEkartCourier = siteCourierId === "ekart";
   let fromSite = false;
-  if (ekartSite) {
-    const site = await courierWebTrack("ekart", shipment.awb, (creds.tracker ?? {}) as TrackerCreds).catch(() => null);
-    if (site?.events?.length) {
-      fromSite = true;
+  if (siteCourierId) {
+    const site = await courierWebTrack(siteCourierId, shipment.awb, (creds.tracker ?? {}) as TrackerCreds).catch(() => null);
+    if (site?.expectedBy) {
+      hit = { ...hit, expectedBy: site.expectedBy };
+    }
+    if (isEkartCourier) {
+      if (site?.events?.length) {
+        fromSite = true;
+        hit = { ...hit, events: site.events.map((event) => ({ ...event, src: "site" as const })), expectedBy: site.expectedBy || hit.expectedBy };
+      } else if ((shipment.tracking ?? []).some((event) => event.src === "site")) {
+        // The site was briefly unreachable: keep its saved list rather than mixing in API codes.
+        hit = { ...hit, events: [] };
+        fromSite = true;
+      }
+    } else if (!hit.events?.length && site?.events?.length) {
       hit = { ...hit, events: site.events.map((event) => ({ ...event, src: "site" as const })) };
-    } else if ((shipment.tracking ?? []).some((event) => event.src === "site")) {
-      // The site was briefly unreachable: keep its saved list rather than mixing in API codes.
-      hit = { ...hit, events: [] };
-      fromSite = true;
     }
   }
   // India Post scans name the post office ("A.R. Shala S.O"); a town lookup would misplace it.
@@ -163,11 +194,7 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     x.status.trim().toLowerCase() === y.status.trim().toLowerCase() && placeKey(x.location) === placeKey(y.location);
   // A re-read scan replaces the stored copy, so an earlier wrong timestamp is corrected rather than duplicated.
   const kept = (shipment.tracking ?? []).filter((old) => !fromSite || old.src === "site");
-  const merged = direct || provider === "ekart"
-    ? [...kept.filter((old) => !fresh.some((event) => sameScan(event, old))), ...fresh]
-    : fresh.length
-      ? fresh
-      : shipment.tracking ?? [];
+  const merged = [...kept.filter((old) => !fresh.some((event) => sameScan(event, old))), ...fresh];
   const events = dedupe(
     merged
       .filter((event) => (Date.parse(event.at) || 0) <= latestOk && !(shipment.hiddenScans ?? []).includes(`${event.at}|${event.status.trim().toLowerCase()}`))
@@ -211,7 +238,7 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
     deliveryOtpVerified: hit.otpVerified || shipment.deliveryOtpVerified,
     taskBarcode: hit.barcode || shipment.taskBarcode,
     pickupBarcode: hit.pickupBarcode || shipment.pickupBarcode,
-    expectedBy: stage === "delivered" ? "" : hit.expectedBy || shipment.expectedBy,
+    expectedBy: stage === "delivered" ? "" : (hit.expectedBy && parseExpected(hit.expectedBy, Date.now()) != null ? hit.expectedBy : shipment.expectedBy && parseExpected(shipment.expectedBy, Date.now()) != null ? shipment.expectedBy : ""),
   };
   replaceShopShipment(next);
   const order = orderForLeg;
@@ -240,10 +267,13 @@ export async function refreshStoredShipment(orderId: string, shipmentId = "") {
       Boolean(target) &&
       isCourierInfoLine([...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.note ?? "");
     const move = Boolean(target && (wrongDelivered || ((rank[target] ?? 0) >= (rank[order.status] ?? 0) && order.status !== target)));
-    if (move || order.courierName !== courier || (awb && order.trackingId !== awb)) {
+    const pickedUpStage = stage === "shipped" || stage === "out";
+    const liveEtaPhrase = pickedUpStage && next.expectedBy ? deliveryDatePhrase(next.expectedBy) : "";
+    if (move || order.courierName !== courier || (awb && order.trackingId !== awb) || (liveEtaPhrase && order.eta !== liveEtaPhrase)) {
       patchShopOrder(orderId, {
         courierName: courier,
         trackingId: awb || order.trackingId,
+        ...(liveEtaPhrase ? { eta: liveEtaPhrase } : {}),
         ...(move ? { status: target, history: [...(order.history ?? []), { at: new Date().toISOString(), status: target!, note: wrongDelivered ? `Corrected from courier: ${latestStatus}` : latestStatus }] } : {}),
       });
     }

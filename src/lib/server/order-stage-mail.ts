@@ -5,6 +5,7 @@ import { siteConfig } from "@/lib/constants";
 import { dataFile } from "@/lib/server/paths";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
 import { pushToCustomer } from "@/lib/server/fcm";
+import { renderOrderStageNotification, stageKeyFromEvent } from "@/lib/server/mobile-notifications";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { readKv } from "@/lib/server/db";
 import { readMobileFeed } from "@/lib/server/mobile-feed";
@@ -80,6 +81,8 @@ const STAGE_EVENTS: [RegExp, NotificationEventId][] = [
   [/^status:Cancelled$/, "order-cancelled"],
   [/^status:Failed$/, "order-delivery-failed"],
   [/^return:/, "order-return-update"],
+  [/^refund:.*:processed$/, "refund-processed"],
+  [/^refund:.*:initiated$/, "refund"],
   [/^refund:.*:rrn$/, "refund-bank-reference"],
 ];
 
@@ -91,21 +94,45 @@ function day(iso?: string) {
   return Number.isFinite(time) ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(time) : "";
 }
 
-function courierParams(order: Order, status: string, name: string) {
+function itemsSummary(order: Order) {
+  const list = (order.items ?? []).map((item) => `${item.title} × ${item.quantity}`).filter(Boolean);
+  const joined = list.join(", ") || "VGMF Publication";
+  return joined.length > 115 ? `${joined.slice(0, 112)}…` : joined;
+}
+
+function trackLink(order: Order) {
+  return `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}`;
+}
+
+function courierParams(order: Order, status: string, name: string): { params: string[]; legacy: string[] } {
   const shipment = findShopShipment(order.id);
   const courier = order.courierName || shipment?.courier || "our courier";
   const awb = order.trackingId || shipment?.awb || "shared in My Orders shortly";
+  const items = itemsSummary(order);
+  const url = trackLink(order);
   if (status === "Shipped") {
-    // The customer's order in My Orders (they sign in to track), never a courier, aggregator or personal tracking link.
-    const url = `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}`;
-    return [name, order.id, courier, awb, day(shipment?.expectedBy) || "shared by the courier soon", url];
+    const exp = day(shipment?.expectedBy) || order.eta || "shared by the courier soon";
+    return {
+      params: [name, order.id, items, courier, awb, exp, url],
+      legacy: [name, order.id, courier, awb, exp, url],
+    };
   }
-  if (status === "Out for Delivery") return [name, order.id, courier, awb, isCod(order) ? `Please keep ${rupees(order.total)} ready to pay the courier.` : "No payment is due at the door."];
+  if (status === "Out for Delivery") {
+    const payNote = isCod(order) ? `Please keep ${rupees(order.total)} ready to pay the courier.` : "Paid — no payment due at the door.";
+    return {
+      params: [name, order.id, items, courier, awb, payNote, url],
+      legacy: [name, order.id, courier, awb, payNote],
+    };
+  }
   const delivered = [...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.at;
-  return [name, order.id, day(delivered) || day(new Date().toISOString()), courier, awb, `${siteConfig.url}/account/orders/${encodeURIComponent(order.id)}#feedback`];
+  const deliveredDate = day(delivered) || day(new Date().toISOString());
+  const feedbackUrl = `${url}#feedback`;
+  return {
+    params: [name, order.id, items, deliveredDate, `${courier} · ${awb}`, feedbackUrl],
+    legacy: [name, order.id, deliveredDate, courier, awb, feedbackUrl],
+  };
 }
 
-/** The status line for the general update templates, with courier, tracking ID and expected date once a courier has them. */
 function statusText(order: Order, status: string) {
   if (!COURIER_STAGES[status]) return status;
   const shipment = findShopShipment(order.id);
@@ -113,25 +140,40 @@ function statusText(order: Order, status: string) {
   const awb = order.trackingId || shipment?.awb;
   if (!courier || !awb) return status;
   if (status === "Shipped") {
-    const expected = day(shipment?.expectedBy);
+    const expected = day(shipment?.expectedBy) || order.eta;
     return `Shipped with ${courier}, tracking ID ${awb}${expected ? `, expected delivery ${expected}` : ""}`;
   }
   return status === "Out for Delivery" ? `Out for delivery with ${courier}, tracking ID ${awb}` : `Delivered by ${courier}, tracking ID ${awb}`;
+}
+
+function statusDetail(order: Order, status: string) {
+  if (status === "Packed") {
+    return order.preorderPayment && !order.preorderPayment.balancePaidAt
+      ? "Please complete the pre-order balance so we can dispatch your parcel."
+      : "Packed and waiting for courier pickup.";
+  }
+  if (status === "Cancelled") {
+    return order.paymentStatus === "Paid" || order.paymentStatus === "Partially Paid" || order.paymentStatus === "Refunded"
+      ? "Any online payment will be refunded to your original payment method."
+      : "Order cancelled. No payment was collected.";
+  }
+  if (status === "Failed") return "The courier could not deliver your parcel. Please contact care@vaidyagogate.org to reschedule.";
+  return statusText(order, status);
 }
 
 /** Sends the courier-detail template when one is mapped for this status; null when the status has none. */
 async function courierAlert(order: Order, phone: string, name: string, status: string) {
   const event = COURIER_STAGES[status];
   if (!event) return null;
-  const params = courierParams(order, status, name);
+  const { params, legacy } = courierParams(order, status, name);
   const wa = savedAdminIntegrations().whatsapp as (Parameters<typeof whatsAppTemplateFor>[0] & { templates?: { name: string; variables?: number }[] }) | undefined;
   const dedicated = Boolean(wa) && whatsAppSenders(wa!).some((provider) => {
     const template = whatsAppTemplateFor(wa!, provider, event);
     const saved = (wa!.templates ?? []).find((item) => item.name === template);
-    return Boolean(template) && Number(saved?.variables) >= params.length;
+    return Boolean(template) && Number(saved?.variables) >= legacy.length;
   });
   if (!dedicated) return null;
-  return sendWhatsAppAlert(event, { phone, name, params, fallbackEvent: "order-status", fallbackParams: [name, order.id, statusText(order, status)] }).catch(() => false);
+  return sendWhatsAppAlert(event, { phone, name, params, fallbackEvent: "order-status", fallbackParams: legacy }).catch(() => false);
 }
 
 /** Pre-orders get their own WhatsApp templates (advance and balance shown); false when none is mapped, so the normal one goes instead. */
@@ -139,11 +181,72 @@ async function preorderAlert(kind: "placed" | "update", order: Order, phone: str
   const plan = order.preorderPayment;
   if (!plan || (kind === "placed" && !plan.advancePaidAt)) return false;
   const due = plan.balancePaidAt
-    ? "nil (fully paid)"
-    : `${rupees(plan.balance + (plan.shipping ?? 0))}${plan.shippingDue && !plan.shipping ? " plus courier" : ""}`;
+    ? "Nil (fully paid)"
+    : `${rupees(plan.balance + (plan.shipping ?? 0))}${plan.shippingDue && !plan.shipping ? " + courier when ready" : ""}`;
+  const items = itemsSummary(order);
+  const url = trackLink(order);
   return kind === "placed"
-    ? sendWhatsAppAlert("preorder-placed", { phone, name, params: [name, order.id, rupees(plan.advance), due] }).catch(() => false)
-    : sendWhatsAppAlert("preorder-update", { phone, name, params: [name, order.id, status, due] }).catch(() => false);
+    ? sendWhatsAppAlert("preorder-placed", {
+        phone,
+        name,
+        params: [name, order.id, items, rupees(plan.advance), due, url],
+        fallbackParams: [name, order.id, rupees(plan.advance), due],
+      }).catch(() => false)
+    : sendWhatsAppAlert("preorder-update", {
+        phone,
+        name,
+        params: [name, order.id, items, status, due, url],
+        fallbackParams: [name, order.id, status, due],
+      }).catch(() => false);
+}
+
+/** Sends detailed WhatsApp notifications for refund initiated, refund processed (refunded), bank reference (RRN/ARN), and refund failed. */
+async function refundAlert(key: string, order: Order, phone: string, name: string) {
+  const refund = (order.refunds ?? []).find((item) => key.startsWith(`refund:${item.id}`)) ?? order.refunds?.at(-1);
+  if (!refund) return false;
+  const amount = rupees(refund.amount);
+  const dest = refund.destination === "store_credit" ? "Foundation Wallet (Store Credit)" : "Original payment method";
+  const bankRef = refund.arn || refund.rrn || refund.utr || "";
+  const refId = refund.gatewayRefundId || refund.vgmfId || refund.id;
+  const url = trackLink(order);
+  const legacy = [name, order.id, amount];
+
+  if (key.endsWith(":rrn") && bankRef) {
+    return sendWhatsAppAlert("refund-bank-reference", {
+      phone,
+      name,
+      params: [name, order.id, amount, bankRef, refund.vgmfId || refId, url],
+      fallbackEvent: "refund",
+      fallbackParams: legacy,
+    }).catch(() => false);
+  }
+  if (key.endsWith(":processed") || refund.status === "processed") {
+    const creditNote = refund.destination === "store_credit"
+      ? "Credited immediately to your wallet"
+      : `By ${creditDay(refund)} (5–7 working days)`;
+    return sendWhatsAppAlert("refund-processed", {
+      phone,
+      name,
+      params: [name, order.id, amount, dest, bankRef || refId, creditNote, url],
+      fallbackEvent: "refund",
+      fallbackParams: legacy,
+    }).catch(() => false);
+  }
+  if (key.endsWith(":failed") || refund.status === "failed") {
+    return sendWhatsAppAlert("order-status", {
+      phone,
+      name,
+      params: [name, order.id, itemsSummary(order), "Refund Attention Needed", `Automatic refund of ${amount} could not complete. Our team will contact you.`, url],
+      fallbackParams: [name, order.id, `Refund of ${amount} failed — our team will contact you`],
+    }).catch(() => false);
+  }
+  const timeline = refund.destination === "store_credit" ? "Instant credit to wallet" : "5–7 working days";
+  return sendWhatsAppAlert("refund", {
+    phone,
+    name,
+    params: [name, order.id, amount, dest, refId, timeline, url],
+    fallbackParams: legacy,
+  }).catch(() => false);
 }
 
 /** Admin "Resend WhatsApp": sends that stage's WhatsApp update again for any order. */
@@ -154,19 +257,50 @@ export async function resendWhatsAppStage(orderId: string, key: string) {
   if (!phone) throw new Error("This order has no phone number.");
   const name = order.deliveryAddress?.fullName || "Reader";
   const event = STAGE_EVENTS.find(([pattern]) => pattern.test(key))?.[1];
-  if (key === "placed") return (await preorderAlert("placed", order, phone, name)) || sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] });
-  if (key.startsWith("refund:")) {
-    const refund = (order.refunds ?? []).find((item) => key.startsWith(`refund:${item.id}`)) ?? order.refunds?.at(-1);
-    if (refund) return sendWhatsAppAlert("refund", { phone, name, params: [name, order.id, rupees(refund.amount)] });
+  const items = itemsSummary(order);
+  const url = trackLink(order);
+  if (key === "placed") {
+    return (
+      (await preorderAlert("placed", order, phone, name)) ||
+      sendWhatsAppAlert("order-placed", {
+        phone,
+        name,
+        params: [name, order.id, items, rupees(order.total), order.paymentStatus || "Pending", url],
+        fallbackParams: [name, order.id, rupees(order.total)],
+      })
+    );
   }
+  if (key.startsWith("refund:")) return refundAlert(key, order, phone, name);
   if (key.startsWith("return:")) {
-    return sendWhatsAppAlert("order-return-update", { phone, name, params: [name, order.id, `return ${order.returnRequest?.status ?? "updated"}`], fallbackEvent: "order-status" });
+    const retStatus = `Return ${order.returnRequest?.status ?? "updated"}`;
+    return sendWhatsAppAlert("order-return-update", {
+      phone,
+      name,
+      params: [name, order.id, items, retStatus, order.returnRequest?.note || "Check My Orders for the latest return details.", url],
+      fallbackEvent: "order-status",
+      fallbackParams: [name, order.id, retStatus],
+    });
   }
   const status = key.startsWith("status:") ? key.slice(7) : order.status;
   const courier = await courierAlert(order, phone, name, status);
   if (courier !== null) return courier;
   if (await preorderAlert("update", order, phone, name, statusText(order, status))) return true;
-  return sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, statusText(order, status)], fallbackEvent: "order-status" });
+  if (status === "Packed") {
+    return sendWhatsAppAlert("order-packed", {
+      phone,
+      name,
+      params: [name, order.id, items, statusDetail(order, status), url],
+      fallbackEvent: "order-status",
+      fallbackParams: [name, order.id, statusText(order, status)],
+    });
+  }
+  return sendWhatsAppAlert(event ?? "order-status", {
+    phone,
+    name,
+    params: [name, order.id, items, status, statusDetail(order, status), url],
+    fallbackEvent: "order-status",
+    fallbackParams: [name, order.id, statusText(order, status)],
+  });
 }
 
 /** WhatsApp update for an order stage, using the template mapped to that event (or to "Order status changed"). */
@@ -174,21 +308,56 @@ async function whatsAppStage(key: string, order: Order, name: string) {
   const phone = order.deliveryAddress?.phone;
   if (!phone) return;
   const event = STAGE_EVENTS.find(([pattern]) => pattern.test(key))?.[1];
+  const items = itemsSummary(order);
+  const url = trackLink(order);
   // Website checkout sends its own "order placed" alert from the browser; app and chat orders get it here.
   if (key === "placed") {
     if (order.createdBy !== "WhatsApp" && order.createdBy !== "Android app") return;
     if (await preorderAlert("placed", order, phone, name)) return;
-    await sendWhatsAppAlert("order-placed", { phone, name, params: [name, order.id, rupees(order.total)] }).catch(() => false);
+    await sendWhatsAppAlert("order-placed", {
+      phone,
+      name,
+      params: [name, order.id, items, rupees(order.total), order.paymentStatus || "Pending", url],
+      fallbackParams: [name, order.id, rupees(order.total)],
+    }).catch(() => false);
+    return;
+  }
+  if (key.startsWith("refund:")) {
+    await refundAlert(key, order, phone, name);
     return;
   }
   if (key.startsWith("status:") && key !== "status:split") {
-    if ((await courierAlert(order, phone, name, key.slice(7))) !== null) return;
-    if (await preorderAlert("update", order, phone, name, statusText(order, order.status))) return;
-    await sendWhatsAppAlert(event ?? "order-status", { phone, name, params: [name, order.id, statusText(order, order.status)], fallbackEvent: "order-status" }).catch(() => false);
+    const status = key.slice(7);
+    if ((await courierAlert(order, phone, name, status)) !== null) return;
+    if (await preorderAlert("update", order, phone, name, statusText(order, status))) return;
+    if (status === "Packed") {
+      await sendWhatsAppAlert("order-packed", {
+        phone,
+        name,
+        params: [name, order.id, items, statusDetail(order, status), url],
+        fallbackEvent: "order-status",
+        fallbackParams: [name, order.id, statusText(order, status)],
+      }).catch(() => false);
+      return;
+    }
+    await sendWhatsAppAlert(event ?? "order-status", {
+      phone,
+      name,
+      params: [name, order.id, items, status, statusDetail(order, status), url],
+      fallbackEvent: "order-status",
+      fallbackParams: [name, order.id, statusText(order, status)],
+    }).catch(() => false);
     return;
   }
   if (key.startsWith("return:")) {
-    await sendWhatsAppAlert("order-return-update", { phone, name, params: [name, order.id, `return ${order.returnRequest?.status ?? "updated"}`], fallbackEvent: "order-status" }).catch(() => false);
+    const retStatus = `Return ${order.returnRequest?.status ?? "updated"}`;
+    await sendWhatsAppAlert("order-return-update", {
+      phone,
+      name,
+      params: [name, order.id, items, retStatus, order.returnRequest?.note || "Check My Orders for the latest return details.", url],
+      fallbackEvent: "order-status",
+      fallbackParams: [name, order.id, retStatus],
+    }).catch(() => false);
   }
 }
 
@@ -501,10 +670,14 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order, opt
         ...stage.vars,
       };
       const subject = applyTemplateVars(edited.subject, vars);
-      void pushToCustomer(
-        { email: to || undefined, phone: next.deliveryAddress?.phone, accountId: next.userId },
-        { title: subject, body: stage.intro, url: `/account/orders/${encodeURIComponent(next.id)}` }
-      ).catch(() => undefined);
+      const appStage = stageKeyFromEvent(stage.key);
+      const appCopy = appStage ? renderOrderStageNotification(appStage, next) : { enabled: true, title: subject, body: stage.intro };
+      if (appCopy.enabled) {
+        void pushToCustomer(
+          { email: to || undefined, phone: next.deliveryAddress?.phone, accountId: next.userId },
+          { title: appCopy.title, body: appCopy.body, url: `/account/orders/${encodeURIComponent(next.id)}` }
+        ).catch(() => undefined);
+      }
       if (to) await sendMobileEmail(to, subject, applyTemplateVars(edited.body, vars)).catch(() => undefined);
       continue;
     }
@@ -524,10 +697,14 @@ export async function notifyOrderStage(prev: Order | undefined, next: Order, opt
       "With warm regards,",
       SIGN,
     ].join("\n");
-    void pushToCustomer(
-      { email: to || undefined, phone: next.deliveryAddress?.phone, accountId: next.userId },
-      { title: stage.subject, body: stage.intro, url: `/account/orders/${encodeURIComponent(next.id)}` }
-    ).catch(() => undefined);
+    const appStage = stageKeyFromEvent(stage.key);
+    const appCopy = appStage ? renderOrderStageNotification(appStage, next) : { enabled: true, title: stage.subject, body: stage.intro };
+    if (appCopy.enabled) {
+      void pushToCustomer(
+        { email: to || undefined, phone: next.deliveryAddress?.phone, accountId: next.userId },
+        { title: appCopy.title, body: appCopy.body, url: `/account/orders/${encodeURIComponent(next.id)}` }
+      ).catch(() => undefined);
+    }
     if (to) await sendMobileEmail(to, stage.subject, body).catch(() => undefined);
   }
 }

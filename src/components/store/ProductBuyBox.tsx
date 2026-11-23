@@ -264,6 +264,12 @@ export default function ProductBuyBox({ book }: { book: Book }) {
             Tentative delivery by {preorderDeliveryDate(book)}
           </p>
         )}
+        {preorder && orderSettings.preorderPayment?.disclaimerEnabled !== false && (
+          <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold text-amber-950">
+            <span className="font-extrabold uppercase tracking-wider text-amber-800">Pre-Order Disclaimer: </span>
+            {orderSettings.preorderPayment?.disclaimerText || "Shipping and delivery for pre-order items will begin by the end of December."}
+          </div>
+        )}
         {!preorder && !orderSettings.hideDeliveryDates && checked && estimate?.serviceable && (
           <div className="mt-3 rounded-lg bg-white p-3 text-xs">
             <p className="font-semibold text-text-primary">

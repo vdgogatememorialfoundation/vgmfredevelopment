@@ -288,24 +288,42 @@ export function restockProduct(bookId: string, add: number) {
   return getLiveBook(bookId);
 }
 
-/** Takes the ordered units out of stock once per order; pre-order items wait until they are packed. */
+/** Takes the ordered units out of stock once per order; pre-order items or 0-stock items do not commit stock. */
 export function commitStockForOrder(order: Pick<Order, "items" | "stockCommitted">) {
   if (order.stockCommitted) return false;
-  for (const item of order.items) if (!item.preorder) adjustStock(item.bookId, -item.quantity);
-  return true;
+  let committedAny = false;
+  for (const item of order.items) {
+    if (item.preorder) continue;
+    const book = getLiveBook(item.bookId);
+    if (book && book.stock > 0 && book.stockStatus !== "out_of_stock") {
+      adjustStock(item.bookId, -item.quantity);
+      committedAny = true;
+    }
+  }
+  return committedAny;
 }
 
-/** Takes pre-order items out of stock once the product is in stock and the order is packed. */
+/** Takes pre-order items out of stock once the product is actually in stock and the order is packed. */
 export function commitPreorderStock(order: Pick<Order, "items" | "preorderStockCommitted">) {
   if (order.preorderStockCommitted || !order.items.some((item) => item.preorder)) return false;
-  for (const item of order.items) if (item.preorder) adjustStock(item.bookId, -item.quantity);
-  return true;
+  let committedAny = false;
+  for (const item of order.items) {
+    if (!item.preorder) continue;
+    const book = getLiveBook(item.bookId);
+    if (book && book.stock > 0 && book.stockStatus !== "out_of_stock") {
+      adjustStock(item.bookId, -item.quantity);
+      committedAny = true;
+    }
+  }
+  return committedAny;
 }
 
-/** Puts the units back, for cancelled orders that were never shipped. */
+/** Puts the units back, for cancelled orders that were never shipped — never adds stock to a 0-stock pre-order book. */
 export function releaseStockForOrder(order: Pick<Order, "items" | "stockCommitted" | "preorderStockCommitted">) {
   if (!order.stockCommitted && !order.preorderStockCommitted) return false;
   for (const item of order.items) {
+    const book = getLiveBook(item.bookId);
+    if (!book || (book.preorder?.enabled && book.stock <= 0)) continue;
     if (item.preorder ? order.preorderStockCommitted : order.stockCommitted) adjustStock(item.bookId, item.quantity);
   }
   return true;

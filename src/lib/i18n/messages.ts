@@ -234,7 +234,7 @@ const en = {
   "shop.empty": "No products are listed yet.",
   "videos.eyebrow": "Media",
   "videos.title": "Videos",
-  "videos.desc": "Lectures, seminar recordings and films published from the admin console.",
+  "videos.desc": "Lectures, seminar recordings and films from Vaidya Gogate Memorial Foundation.",
   "videos.empty": "No videos in this category yet.",
   "videos.all": "All",
   "clinic.pageEyebrow": "Clinics",

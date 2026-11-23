@@ -195,6 +195,27 @@ function cityName(value?: string) {
 
 /** Plain names for parcel scans from Tookan parcel, Shiprocket, and the other courier portals. */
 /** Lines the desk wrote when a tracking id was attached; not a courier scan. */
+
+/** For "Dispatched to <next hub>" scans (e.g. Ekart), replace the destination hub's city with the previous facility's city it departed from. */
+export function normalizeDispatchedScanLocations<T extends { at: string; status: string; location?: string }>(scans: T[]): T[] {
+  const DISPATCHED_TO = /\b(dispatched|despatched|forwarded|connected|departed)\s+to\b/i;
+  const indexed = scans.map((scan, idx) => ({ scan, idx, ts: Date.parse(scan.at) || 0 }));
+  const chronological = [...indexed].sort((a, b) => a.ts - b.ts || a.idx - b.idx);
+  const resolvedByIdx = new Map<number, string | undefined>();
+  for (let i = 0; i < chronological.length; i++) {
+    const cur = chronological[i];
+    if (DISPATCHED_TO.test(cur.scan.status)) {
+      const prev = chronological.slice(0, i).reverse().find((item) => item.scan.location && !DISPATCHED_TO.test(item.scan.status));
+      resolvedByIdx.set(cur.idx, prev?.scan.location || cur.scan.location);
+    } else {
+      resolvedByIdx.set(cur.idx, cur.scan.location);
+    }
+  }
+  return scans.map((scan, idx) => {
+    const loc = resolvedByIdx.get(idx);
+    return loc !== scan.location ? { ...scan, location: loc } : scan;
+  });
+}
 export function isDeskScan(scan: { status: string; location?: string }) {
   return !scan.location && /^(handed to [^·]+|tracking id added\b.*)$/i.test(scan.status.trim());
 }
@@ -295,7 +316,8 @@ function makeStage(
 export function buildTrackingStages(
   order: Order,
   scans: CourierScan[] = [],
-  shipment?: Pick<ShipmentRecord, "generatedAt" | "courier" | "awb" | "status" | "tracking" | "note" | "provider" | "pickupScheduledFor"> | null
+  shipment?: Pick<ShipmentRecord, "generatedAt" | "courier" | "awb" | "status" | "tracking" | "note" | "provider" | "pickupScheduledFor"> | null,
+  detailed = false
 ): {
   stages: TrackingStage[];
   reachedEvents: number;
@@ -512,24 +534,25 @@ export function buildTrackingStages(
     return before === "shipped" || before === "out" ? before : null;
   });
   // Ekart logs "Dispatched to <next hub>" at the next hub's city; the parcel left the facility it last reached.
-  const leftFrom = (index: number) => {
-    const scan = liveScans[index];
-    if (!/\bdispatched to\b/i.test(scan.status)) return scan;
-    const before = liveScans.slice(0, index).reverse().find((item) => item.location && !/\bdispatched to\b/i.test(item.status));
-    return before?.location ? { ...scan, location: before.location } : scan;
-  };
+  const normalizedScans = normalizeDispatchedScanLocations(liveScans);
+  const leftFrom = (index: number) => normalizedScans[index] ?? liveScans[index];
   const shippedEvents = liveScans
     .map((scan, index) => ({ scan, mapped: scanStages[index], index }))
-    .filter((item) => item.mapped === "shipped" && !routingOnly)
+    .filter((item) => item.mapped === "shipped" && (!routingOnly || detailed))
     .map((item) => {
       const scan = hyperlocal ? item.scan : leftFrom(item.index);
-      return scanEvent(scan, item.index, shippedReached, hyperlocal ? scan.status : courierEventTitle(scan.status, scan.location, courier));
+      const friendly = hyperlocal ? scan.status : courierEventTitle(scan.status, scan.location, courier);
+      const ev = scanEvent(scan, item.index, shippedReached, detailed ? cleanScanText(scan.status) : friendly);
+      if (detailed && friendly && friendly.toLowerCase() !== cleanScanText(scan.status).toLowerCase()) {
+        ev.detail = friendly;
+      }
+      return ev;
     })
-    // Customers see only: picked up, arrived at / left a courier facility (every courier's raw scans stay in Admin).
-    .filter((event) => hyperlocal || event.title === PICKUP_TITLE || /^Shipment (arrived at|left) courier facility/.test(event.title))
-    // Couriers often log one pickup as several scans ("Pickup From Seller", "Picked Up"); show it once.
-    .filter((event, index, list) => event.title !== PICKUP_TITLE || list.findIndex((other) => other.title === PICKUP_TITLE) === index)
-    .filter((event, index, list) => hyperlocal || index === 0 || list[index - 1].title !== event.title);
+    // Customers see only: picked up, arrived at / left a courier facility; Admin (detailed=true) sees every single raw hub scan!
+    .filter((event) => detailed || hyperlocal || event.title === PICKUP_TITLE || /^Shipment (arrived at|left) courier facility/.test(event.title))
+    // Couriers often log one pickup as several scans ("Pickup From Seller", "Picked Up"); show it once for customers.
+    .filter((event, index, list) => detailed || event.title !== PICKUP_TITLE || list.findIndex((other) => other.title === PICKUP_TITLE) === index)
+    .filter((event, index, list) => detailed || hyperlocal || index === 0 || list[index - 1].title !== event.title);
 
   if (shippedReached && shippedEvents.length === 0) {
     shippedEvents.push({

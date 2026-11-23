@@ -91,11 +91,23 @@ export async function GET(request: NextRequest) {
   const session = sessionOf(request);
   if (!session) return json({ ok: false, error: "Sign in to view orders." }, 401);
   const shipments = listShopShipments().filter((item) => item.note !== "Cancelled");
+  const books = (readMobileFeed().books ?? []) as Array<{ id?: string; slug?: string; title?: string; coverImage?: string; author?: string; category?: string }>;
   const shop = appOrdersFor(session.email).map((order) => {
     const own = shipments.filter((item) => item.orderId === order.id);
     const shown = forCustomer(order as Order);
+    const enrichedItems = (shown.items ?? []).map((it) => {
+      const book = books.find((b) => String(b.id) === String(it.bookId) || String(b.slug) === String(it.bookId) || String(b.title || "").toLowerCase() === String(it.title || "").toLowerCase());
+      return {
+        ...it,
+        coverImage: (it as { coverImage?: string }).coverImage || book?.coverImage || "",
+        author: (it as { author?: string }).author || book?.author || "",
+        category: (it as { category?: string }).category || book?.category || "",
+        slug: book?.slug || String(it.bookId || ""),
+      };
+    });
     return {
       ...shown,
+      items: enrichedItems,
       status: customerOrderStatus(shown.status),
       history: shown.history?.map((step) => ({ ...step, status: customerOrderStatus(step.status) })),
       shipments: own.map((item) => customerShipment(item, order.status)), tracking: trackersFor(order as Order, own as ShipmentRecord[]) };

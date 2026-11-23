@@ -31,7 +31,7 @@ export const mobileModules: { id: MobileModuleId; label: string }[] = [
   { id: "account", label: "Account" },
 ];
 
-export type AppFlavorId = "customer" | "admin" | "staff" | "support";
+export type AppFlavorId = "customer" | "admin" | "scanner" | "pos" | "staff" | "eventscanner" | "support";
 
 export type MobileAppBrand = {
   name: string;
@@ -48,15 +48,21 @@ export const appFlavors: {
   download: string;
 }[] = [
   { id: "customer", label: "Customer app", defaultName: "Vaidya Gogate Memorial Foundation", androidPackage: "org.vaidyagogate.customer", iosBundle: "org.vaidyagogate.customer", startPath: "/", download: "/apps/vgmf-customer.apk" },
-  { id: "admin", label: "Admin app", defaultName: "VGMF Admin", androidPackage: "org.vaidyagogate.admin", iosBundle: "org.vaidyagogate.admin", startPath: "/admin", download: "/apps/vgmf-admin.apk" },
+  { id: "admin", label: "Admin app", defaultName: "VGMF Admin", androidPackage: "org.vaidyagogate.admin.v2", iosBundle: "org.vaidyagogate.admin", startPath: "/admin", download: "/apps/vgmf-admin.apk" },
+  { id: "scanner", label: "Picker & Packer Scanner", defaultName: "VGMF Scanner", androidPackage: "org.vaidyagogate.scanner", iosBundle: "org.vaidyagogate.scanner", startPath: "/scanner", download: "/apps/vgmf-scanner.apk" },
+  { id: "pos", label: "Store POS app", defaultName: "VGMF Store POS", androidPackage: "org.vaidyagogate.pos", iosBundle: "org.vaidyagogate.pos", startPath: "/admin/commerce/pos", download: "/apps/vgmf-pos.apk" },
   { id: "staff", label: "Staff app", defaultName: "VGMF Staff", androidPackage: "org.vaidyagogate.staff", iosBundle: "org.vaidyagogate.staff", startPath: "/staff", download: "/apps/vgmf-staff.apk" },
+  { id: "eventscanner", label: "Event Scanner app (Seminar & Autism)", defaultName: "VGMF Event Scanner", androidPackage: "org.vaidyagogate.eventscanner", iosBundle: "org.vaidyagogate.eventscanner", startPath: "/scanner", download: "/apps/vgmf-eventscanner.apk" },
   { id: "support", label: "Support app", defaultName: "Foundation Support", androidPackage: "org.vaidyagogate.support", iosBundle: "org.vaidyagogate.support", startPath: "/account/tickets", download: "/apps/vgmf-support.apk" },
 ];
 
 export const defaultAppBrands: Record<AppFlavorId, MobileAppBrand> = {
   customer: { name: "Vaidya Gogate Memorial Foundation", logoUrl: "" },
   admin: { name: "VGMF Admin", logoUrl: "" },
+  scanner: { name: "VGMF Picker & Packer", logoUrl: "" },
+  pos: { name: "VGMF Store POS", logoUrl: "" },
   staff: { name: "VGMF Staff", logoUrl: "" },
+  eventscanner: { name: "VGMF Event Scanner", logoUrl: "" },
   support: { name: "Foundation Support", logoUrl: "" },
 };
 
@@ -107,7 +113,10 @@ export function getMobileAppConfig(): MobileAppConfig {
       apps: {
         customer: { ...defaultAppBrands.customer, ...saved.apps?.customer },
         admin: { ...defaultAppBrands.admin, ...saved.apps?.admin },
+        scanner: { ...defaultAppBrands.scanner, ...saved.apps?.scanner },
+        pos: { ...defaultAppBrands.pos, ...saved.apps?.pos },
         staff: { ...defaultAppBrands.staff, ...saved.apps?.staff },
+        eventscanner: { ...defaultAppBrands.eventscanner, ...saved.apps?.eventscanner },
         support: { ...defaultAppBrands.support, ...saved.apps?.support },
       },
       showPublicDownload: saved.showPublicDownload === true,

@@ -6,19 +6,22 @@ const colors = defaultAppearance.colors;
 
 function flavorIdFromPackage(pkg: string): FlavorId {
   const id = pkg.toLowerCase();
-  if (id.endsWith(".admin")) return "admin";
-  if (id.endsWith(".staff")) return "staff";
-  if (id.endsWith(".support")) return "support";
+  if (id.includes(".admin")) return "admin";
+  if (id.includes(".scanner")) return "scanner";
+  if (id.includes(".pos")) return "pos";
+  if (id.includes(".staff")) return "staff";
+  if (id.includes(".support")) return "support";
   return "customer";
 }
 
-export type FlavorId = "customer" | "admin" | "staff" | "support";
+export type FlavorId = "customer" | "admin" | "scanner" | "pos" | "staff" | "support";
 
 export type TabId = "home" | "articles" | "events" | "shop" | "clinics" | "account" | "support" | "certificates";
 
 export type Flavor = {
   id: FlavorId;
   displayName: string;
+  subtitle: string;
   accent: string;
   tabs: { id: TabId; title: string; icon: string }[];
 };
@@ -27,6 +30,7 @@ const ALL: Record<FlavorId, Flavor> = {
   customer: {
     id: "customer",
     displayName: "Vaidya Gogate Memorial Foundation",
+    subtitle: "Ayurveda Publications, Seminars & Clinics",
     accent: colors.secondary,
     tabs: [
       { id: "home", title: "Home", icon: "home" },
@@ -39,33 +43,60 @@ const ALL: Record<FlavorId, Flavor> = {
   admin: {
     id: "admin",
     displayName: "VGMF Admin",
-    accent: colors.primary,
+    subtitle: "Operations, Orders & Balance Reminders",
+    accent: "#8F2D2D",
     tabs: [
-      { id: "home", title: "Desk", icon: "grid" },
-      { id: "events", title: "Events", icon: "calendar" },
-      { id: "shop", title: "Shop", icon: "cube" },
+      { id: "home", title: "Dashboard", icon: "grid" },
+      { id: "shop", title: "Orders", icon: "cube" },
+      { id: "events", title: "Packed", icon: "archive" },
       { id: "support", title: "Tickets", icon: "chatbubbles" },
+      { id: "account", title: "Account", icon: "person-circle" },
+    ],
+  },
+  scanner: {
+    id: "scanner",
+    displayName: "VGMF Picker & Packer",
+    subtitle: "Warehouse Barcode & QR Scanner",
+    accent: "#067D62",
+    tabs: [
+      { id: "home", title: "Pick", icon: "barcode" },
+      { id: "shop", title: "Pack", icon: "cube" },
+      { id: "events", title: "Scan", icon: "qr-code" },
+      { id: "account", title: "Account", icon: "person-circle" },
+    ],
+  },
+  pos: {
+    id: "pos",
+    displayName: "VGMF Store POS",
+    subtitle: "In-Store Counter Billing & Receipts",
+    accent: "#8F2D2D",
+    tabs: [
+      { id: "home", title: "Counter", icon: "storefront" },
+      { id: "shop", title: "Bill", icon: "receipt" },
+      { id: "events", title: "Sales", icon: "stats-chart" },
       { id: "account", title: "Account", icon: "person-circle" },
     ],
   },
   staff: {
     id: "staff",
     displayName: "VGMF Staff",
+    subtitle: "Daily Desk, Orders & Support",
     accent: "#1F4A32",
     tabs: [
-      { id: "home", title: "Home", icon: "home" },
-      { id: "events", title: "Events", icon: "calendar" },
-      { id: "clinics", title: "Clinics", icon: "medical" },
+      { id: "home", title: "Desk", icon: "briefcase" },
+      { id: "shop", title: "Orders", icon: "cube" },
+      { id: "events", title: "Pick/Pack", icon: "barcode" },
       { id: "support", title: "Tickets", icon: "chatbubbles" },
-      { id: "account", title: "Account", icon: "person" },
+      { id: "account", title: "Account", icon: "person-circle" },
     ],
   },
   support: {
     id: "support",
     displayName: "VGMF Support",
+    subtitle: "Customer Helpdesk & Tickets",
     accent: "#8A6A2A",
     tabs: [
-      { id: "home", title: "Home", icon: "home" },
+      { id: "home", title: "Desk", icon: "headset" },
       { id: "support", title: "Tickets", icon: "chatbubbles" },
       { id: "certificates", title: "Certificates", icon: "ribbon" },
       { id: "account", title: "Account", icon: "person" },

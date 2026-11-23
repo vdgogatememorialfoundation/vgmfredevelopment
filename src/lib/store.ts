@@ -455,14 +455,43 @@ function persistReturnRequest(orderId: string, request: ReturnRequest) {
   const orders = getOrders();
   const index = orders.findIndex((order) => order.id === orderId);
   if (index !== -1) {
-    orders[index] = { ...orders[index], returnRequest: request };
+    const existingApproval = orders[index].approval;
+    const isPendingReq = request.status === "Pending Review" || request.status === "Return Requested";
+    const isRejectedReq = request.status === "Rejected";
+    const syncedApproval = isPendingReq
+      ? {
+          id: existingApproval?.id || request.id,
+          kind: (request.kind === "replacement" ? "replacement" : "return") as "replacement" | "return",
+          status: "Pending" as const,
+          requestedAt: request.requestedAt,
+          requestedBy: orders[index].deliveryAddress?.fullName || orders[index].accountEmail || "Customer",
+          note: [request.reason, request.note].filter(Boolean).join(" — "),
+        }
+      : existingApproval
+        ? {
+            ...existingApproval,
+            status: (isRejectedReq ? "Rejected" : "Approved") as "Rejected" | "Approved",
+            decidedAt: request.decidedAt || existingApproval.decidedAt || new Date().toISOString(),
+            decidedBy: request.decidedBy || existingApproval.decidedBy || "Approver",
+            decisionNote: request.decisionNote || existingApproval.decisionNote,
+          }
+        : undefined;
+    const stamp = new Date().toISOString();
+    const noteText = `${request.kind === "replacement" ? "Replacement" : "Return"} ${request.id}: ${request.status}`;
+    orders[index] = {
+      ...orders[index],
+      returnRequest: request,
+      ...(syncedApproval ? { approval: syncedApproval } : {}),
+      history: [...(orders[index].history ?? []), { at: stamp, status: orders[index].status, note: noteText, by: request.decidedBy || "Customer" }],
+    };
     window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+    publishShopOrder(orders[index]);
   }
   window.dispatchEvent(new Event("vgmf-cms"));
 }
 
 function returnRequestId() {
-  return `RTN${Math.floor(100000000000 + Math.random() * 900000000000)}`;
+  return `${Math.floor(100000000000 + Math.random() * 900000000000)}`;
 }
 
 function generateReplacementOrder(source: Order, request?: ReturnRequest): Order {
@@ -684,7 +713,7 @@ export function submitCustomerRequest(order: Order, input: CustomerRequestInput)
     input.resolution === "replacement"
       ? withReplacementStages([
           step("requested", "Replacement requested", "Evidence received. The Foundation desk will review this request.", true),
-          step("review", "Under review", "You will get an email once the desk accepts or rejects it."),
+          step("review", "Under review", "You will get an email once the desk accepts or rejects it.", true),
         ])
       : [
           step("requested", "Return requested", "Evidence received. The Foundation desk will review this request.", true),
@@ -784,9 +813,11 @@ export function reviewReplacementRequest(
       decidedBy: input.by,
       decisionNote: input.note?.trim() || "Rejected after reviewing the photos.",
       stages: current.stages.map((stage) =>
-        stage.id === "decision"
-          ? { ...stage, at: now, reached: true, detail: input.note?.trim() || "The replacement request was rejected." }
-          : stage
+        stage.id === "review"
+          ? { ...stage, at: stage.at || now, reached: true }
+          : stage.id === "decision"
+            ? { ...stage, at: now, reached: true, detail: input.note?.trim() || "The replacement request was rejected." }
+            : stage
       ),
     };
     persistReturnRequest(orderId, request);
@@ -803,7 +834,11 @@ export function reviewReplacementRequest(
     decidedBy: input.by,
     decisionNote: input.note?.trim() || "Accepted. Send the defective item back with the return label; the replacement ships after the check.",
     stages: withReplacementStages(current.stages ?? []).map((stage) =>
-      stage.id === "decision" ? { ...stage, at: now, reached: true, detail: "Accepted after reviewing the photos. A return label follows." } : stage
+      stage.id === "review"
+        ? { ...stage, at: stage.at || now, reached: true }
+        : stage.id === "decision"
+          ? { ...stage, at: now, reached: true, detail: "Accepted after reviewing the photos. A return label follows." }
+          : stage
     ),
   };
   persistReturnRequest(orderId, request);

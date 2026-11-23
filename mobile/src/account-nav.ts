@@ -8,21 +8,22 @@ export type AccountSection = {
 };
 
 export const ACCOUNT_SECTIONS: AccountSection[] = [
-  { id: "registrations", title: "My Event Registrations", subtitle: "Seminar, Autism and Fellowship programmes", icon: "calendar-outline" },
-  { id: "applications", title: "Application Status", subtitle: "Track Foundation applications", icon: "trail-sign-outline" },
-  { id: "notifications", title: "Notifications", subtitle: "Messages from the Foundation desk", icon: "notifications-outline" },
-  { id: "orders", title: "My Orders", subtitle: "Publication orders and delivery", icon: "receipt-outline" },
-  { id: "subscriptions", title: "Subscriptions", subtitle: "Newsletter and content updates", icon: "newspaper-outline" },
+  { id: "orders", title: "My Orders", subtitle: "Live courier tracking, invoices & replacements", icon: "cube-outline" },
+  { id: "wallet", title: "My Wallet", subtitle: "Store credit from refunds and the Foundation desk", icon: "wallet-outline" },
   { id: "payments", title: "My Payments", subtitle: "Payment history for shop and programmes", icon: "card-outline" },
-  { id: "receipts", title: "Payment Receipts", subtitle: "Receipts for completed payments", icon: "document-text-outline" },
-  { id: "tickets", title: "Support Tickets", subtitle: "Raise and follow Foundation tickets", icon: "help-buoy-outline" },
+  { id: "receipts", title: "Payment Receipts", subtitle: "Downloadable receipts for completed payments", icon: "document-text-outline" },
   { id: "wishlist", title: "My Wishlist", subtitle: "Publications saved for later", icon: "heart-outline" },
-  { id: "cards", title: "My Saved Cards", subtitle: "Cards saved after a successful order", icon: "wallet-outline" },
-  { id: "addresses", title: "Addresses", subtitle: "Delivery addresses for shop orders", icon: "home-outline" },
-  { id: "profile", title: "Edit Profile", subtitle: "Name, email, phone and Account ID", icon: "person-outline" },
-  { id: "wallet", title: "Wallet", subtitle: "Store credit from refunds and the Foundation desk", icon: "wallet-outline" },
-  { id: "loyalty", title: "Loyalty Points", subtitle: "Points from shop orders and registrations", icon: "star-outline" },
-  { id: "faq", title: "FAQ", subtitle: "Answers published on the website", icon: "help-circle-outline" },
+  { id: "cards", title: "Saved Cards", subtitle: "Cards saved after a successful order", icon: "card-outline" },
+  { id: "addresses", title: "Saved Addresses", subtitle: "Home and clinic delivery addresses", icon: "location-outline" },
+  { id: "loyalty", title: "Loyalty Points", subtitle: "Points earned from orders and seminars", icon: "star-outline" },
+  { id: "registrations", title: "My Event Registrations", subtitle: "Seminar, Autism and Fellowship programmes", icon: "calendar-outline" },
+  { id: "applications", title: "Application Status", subtitle: "Track Foundation applications step by step", icon: "trail-sign-outline" },
+  { id: "seminar-videos", title: "Seminar Videos", subtitle: "Recorded sessions and talks from your seminars", icon: "play-circle-outline" },
+  { id: "notifications", title: "Notifications", subtitle: "Messages and alerts from the Foundation desk", icon: "notifications-outline" },
+  { id: "subscriptions", title: "Subscriptions", subtitle: "Newsletter and publication updates", icon: "newspaper-outline" },
+  { id: "profile", title: "Edit Profile", subtitle: "Name, email, phone and 12-digit Account ID", icon: "person-outline" },
+  { id: "tickets", title: "Support Tickets", subtitle: "Raise and track help desk tickets", icon: "headset-outline" },
+  { id: "faq", title: "FAQ", subtitle: "Frequently asked questions", icon: "help-circle-outline" },
 ];
 
 export function accountSection(id: string) {

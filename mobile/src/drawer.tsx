@@ -17,6 +17,8 @@ const MENU: { title: string; items: DrawerItem[] }[] = [
     title: "Foundation",
     items: [
       { href: "/", label: "Home", icon: "home-outline" },
+      { href: "/explore", label: "Explore Foundation", icon: "grid-outline" },
+      { href: "/seminar-videos", label: "Seminar Videos", icon: "play-circle-outline" },
       { href: "/about", label: "About", icon: "people-outline" },
       { href: "/about-page/legacy", label: "Legacy of Vd. R. B. Gogate", icon: "library-outline" },
       { href: "/about-page/anagha", label: "Dr. Anagha Gogate", icon: "person-outline" },

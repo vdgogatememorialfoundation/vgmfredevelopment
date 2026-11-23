@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { orderActivityAt, orderBelongsTo, phonesMatch, uniqueHistory, type AccountRef } from "@/lib/commerce-stamp";
 import { dataFile } from "@/lib/server/paths";
+import { findAccount } from "@/lib/server/accounts";
 import { notifyOrderStage } from "@/lib/server/order-stage-mail";
 import { vgmfTxnId } from "@/lib/transactions";
 import type { Order } from "@/types";
@@ -73,7 +74,16 @@ export function ordersForEmail(email: string) {
 
 export function ordersForAccount(account: AccountRef) {
   if (!account.email && !account.phone && !account.id) return [];
-  return readAll().filter((order) => orderBelongsTo(order, account));
+  const all = readAll();
+  const allIds = new Set(all.map((order) => order.id));
+  const gone = new Set(deletedShopOrderIds());
+  return all.filter((order) => {
+    if (gone.has(order.id)) return false;
+    if (order.splitInto?.length && order.splitInto.every((child) => gone.has(child.id) || !allIds.has(child.id))) {
+      return false;
+    }
+    return orderBelongsTo(order, account);
+  });
 }
 
 export function orderPhoneMatches(order: Order, phone: string) {
@@ -99,6 +109,16 @@ export function upsertShopOrder(order: Order, options: { quiet?: boolean } = {})
   const orders = all.filter((item) => item.id !== order.id);
   const trackToken = prev?.trackToken || order.trackToken || randomBytes(18).toString("base64url");
   const merged: Order = prev ? { ...prev, ...order, trackToken } : { ...order, trackToken };
+  if (merged.deliveryAddress && !merged.deliveryAddress.phone) {
+    const acct = findAccount(merged.accountEmail || merged.deliveryAddress.email || merged.createdBy || merged.userId || "");
+    if (acct?.phone) {
+      merged.deliveryAddress = {
+        ...merged.deliveryAddress,
+        phone: acct.phone,
+        altPhone: merged.deliveryAddress.altPhone || acct.alternatePhone || acct.whatsapp || acct.phone,
+      };
+    }
+  }
   // A field sent as null was cleared on the desk (e.g. Cancel picking); JSON drops undefined, so null is the "remove it" signal.
   for (const key of Object.keys(merged) as (keyof Order)[]) if (merged[key] === null) delete merged[key];
   // A split parent is never picked; an old browser copy must not bring its pick record back.
@@ -127,9 +147,31 @@ export function deletedShopOrderIds(): string[] {
 export function deleteShopOrder(id: string) {
   const clean = id.trim();
   if (!clean) return;
-  writeAll(readAll().filter((order) => order.id !== clean));
-  const gone = deletedShopOrderIds().filter((item) => item !== clean);
-  writeFileSync(deletedFile(), JSON.stringify([clean, ...gone].slice(0, 2000)));
+  const all = readAll();
+  const target = all.find((order) => order.id === clean);
+  const toRemove = new Set<string>([clean]);
+  if (target?.splitInto?.length) {
+    for (const child of target.splitInto) {
+      if (child?.id) toRemove.add(child.id);
+    }
+  }
+  let next = all.filter((order) => !toRemove.has(order.id));
+  if (target?.splitFrom) {
+    const parentIdx = next.findIndex((order) => order.id === target.splitFrom);
+    if (parentIdx !== -1) {
+      const parent = next[parentIdx];
+      const remaining = (parent.splitInto ?? []).filter((child) => !toRemove.has(child.id) && next.some((o) => o.id === child.id));
+      if (remaining.length === 0) {
+        toRemove.add(parent.id);
+        next = next.filter((order) => order.id !== parent.id);
+      } else {
+        next[parentIdx] = { ...parent, splitInto: remaining };
+      }
+    }
+  }
+  writeAll(next);
+  const gone = deletedShopOrderIds().filter((item) => !toRemove.has(item));
+  writeFileSync(deletedFile(), JSON.stringify([...toRemove, ...gone].slice(0, 2000)));
 }
 
 export function patchShopOrder(id: string, update: Partial<Order>) {

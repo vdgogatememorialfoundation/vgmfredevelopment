@@ -7,6 +7,7 @@ import ClientOnly from "@/components/common/ClientOnly";
 import { useAuth } from "@/components/auth/AuthContext";
 import { PortalLogin } from "@/components/admin/PortalLogin";
 import { LiveChatDesk, SupportSection } from "@/components/admin/AdminSupport";
+import { WhatsAppInboxDesk } from "@/components/admin/WhatsAppInbox";
 import { addTicket, displayName, setOrderStatus, type OrderStatus } from "@/lib/admin-store";
 import { isSupportAgent } from "@/lib/roles";
 import { useOrders } from "@/lib/use-cms";
@@ -20,7 +21,7 @@ const ORDER_STATUSES: OrderStatus[] = [
   "Pending", "Paid", "Processing", "Accepted", "Packed", "Ready to Ship", "Shipped", "Out for Delivery", "Delivered", "Failed", "Cancelled",
 ];
 
-type Tab = "chats" | "tickets" | "new" | "orders";
+type Tab = "chats" | "whatsapp" | "tickets" | "new" | "orders";
 const field = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
 
 export function SupportWorkspace() {
@@ -38,7 +39,8 @@ export function SupportWorkspace() {
   }
   const tabs: { id: Tab; label: string }[] = [
     { id: "chats", label: "Live chats" },
-    { id: "tickets", label: "Support tickets" },
+    { id: "whatsapp", label: "WhatsApp chat" },
+    { id: "tickets", label: "Support tickets (View & Update Status)" },
     { id: "new", label: "Create ticket" },
     { id: "orders", label: "Customer orders" },
   ];
@@ -60,6 +62,7 @@ export function SupportWorkspace() {
       <div className="mx-auto max-w-7xl">
         <ClientOnly>
           {tab === "chats" && <LiveChatDesk />}
+          {tab === "whatsapp" && <WhatsAppInboxDesk />}
           {tab === "tickets" && <SupportSection />}
           {tab === "new" && <CreateTicket agent={user.email} onCreated={() => setTab("tickets")} />}
           {tab === "orders" && <OrderLookup />}

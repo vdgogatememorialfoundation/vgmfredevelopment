@@ -38,6 +38,8 @@ import {
   fetchDepartments,
   saveDepartments,
   inviteAgent,
+  isRecentlyTyping,
+  notifyChatTyping,
   type SupportDepartment,
 } from "@/lib/live-chat";
 import type { FAQItem, SupportTicket } from "@/types";
@@ -54,7 +56,7 @@ import {
 } from "@/components/admin/AdminUI";
 import { classNames, formatDateTime } from "@/lib/utils";
 import { WhatsAppInboxDesk } from "@/components/admin/WhatsAppInbox";
-import { CustomerOrders, DeskApprovals } from "@/components/admin/CustomerOrders";
+import { CustomerOrders, CustomerTickets, DeskApprovals } from "@/components/admin/CustomerOrders";
 
 const TICKET_TONES: Record<string, string> = {
   Open: "bg-burgundy/10 text-burgundy",
@@ -256,7 +258,7 @@ function TicketOrder({ orderId }: { orderId: string }) {
             <b>Courier:</b> {order.courierName || "Not booked yet"}
             {order.trackingId ? ` · AWB ${order.trackingId}` : ""}
             {order.eta ? ` · expected ${formatDateTime(order.eta)}` : ""}
-            {order.trackToken ? <> · <Link href={`/track/${order.trackToken}`} target="_blank" className="text-burgundy underline">Live tracking</Link></> : null}
+            <> · <Link href={`/account/orders/${encodeURIComponent(order.id)}`} target="_blank" className="text-burgundy underline">Order tracking</Link></>
           </p>
         </div>
       )}
@@ -409,7 +411,7 @@ export function LiveChatDesk() {
                   <span className="font-semibold text-text-primary">{thread.name}</span>
                   {thread.ref && <span className="block font-mono text-[11px] text-burgundy">{thread.ref}</span>}
                   <span className="mt-0.5 block text-xs text-text-muted">
-                    {thread.status === "closed" ? "Closed" : thread.assignedName || "Waiting"} · {thread.messages.length} messages
+                    {isRecentlyTyping(thread.visitorTypingAt) ? "🟢 Customer is typing…" : `${thread.status === "closed" ? "Closed" : thread.assignedName || "Waiting"} · ${thread.messages.length} messages`}
                   </span>
                 </button>
               </li>
@@ -433,6 +435,13 @@ export function LiveChatDesk() {
               {active.ticketId ? ` · ticket ${active.ticketId}` : ""}
               {active.status === "closed" ? " · closed" : ""}
             </p>
+            {isRecentlyTyping(active.visitorTypingAt) ? (
+              <div className="mt-2 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+                <span className="h-2.5 w-2.5 animate-ping rounded-full bg-emerald-600" />
+                <span>Customer ({active.name}) is typing{active.visitorTypingPreview ? `: "${active.visitorTypingPreview}"` : "…"}</span>
+              </div>
+            ) : null}
+            <CustomerTickets email={active.email} phone={active.phone} ticketId={active.ticketId} />
             <CustomerOrders email={active.email} phone={active.phone} />
             {ticketDraft ? (
               <div className="mt-3 space-y-2 rounded-xl border border-dashed border-border p-3">
@@ -536,7 +545,15 @@ export function LiveChatDesk() {
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <TextInput value={reply} onChange={(event) => setReply(event.target.value)} placeholder={`Reply as ${agentName}`} className="flex-1" />
+              <TextInput
+                value={reply}
+                onChange={(event) => {
+                  setReply(event.target.value);
+                  notifyChatTyping(active.id, "staff", agentName, event.target.value);
+                }}
+                placeholder={`Reply as ${agentName}`}
+                className="flex-1"
+              />
               <Button
                 onClick={() => {
                   postChatMessage({ threadId: active.id, from: "staff", name: agentName, text: reply });

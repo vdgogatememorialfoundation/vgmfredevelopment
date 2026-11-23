@@ -259,6 +259,27 @@ let productAll: Book[] = seededBooks;
 let productLive: Book[] = seededBooks;
 
 function readProducts() {
+  if (typeof window !== "undefined" && !window.localStorage.getItem("vgmf_kannada_stock_zeroed_v1")) {
+    try {
+      const customRaw = window.localStorage.getItem("vgmf_custom_books");
+      if (customRaw) {
+        const list = JSON.parse(customRaw) as Book[];
+        let fixed = false;
+        for (const b of list) {
+          if (b.id === "bks-1794329394346" || /kannada/i.test(b.title || "")) {
+            if (b.stock !== 0 || b.stockStatus !== "out_of_stock") {
+              b.stock = 0;
+              b.stockStatus = "out_of_stock";
+              b.availability = "Pre-order";
+              fixed = true;
+            }
+          }
+        }
+        if (fixed) window.localStorage.setItem("vgmf_custom_books", JSON.stringify(list));
+      }
+      window.localStorage.setItem("vgmf_kannada_stock_zeroed_v1", "1");
+    } catch {}
+  }
   const local = productKeys.map((key) => window.localStorage.getItem(key) ?? "").join("|");
   const raw = `${local}|${publishedStamp()}`;
   if (raw !== productRaw) {

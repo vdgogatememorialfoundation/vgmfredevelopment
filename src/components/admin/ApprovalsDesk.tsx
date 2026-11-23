@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button, EmptyState, Panel, TextInput } from "@/components/admin/AdminUI";
-import { cancelOrder, maxRefundable, refundToStoreCredit } from "@/lib/admin-store";
+import { cancelOrder, maxRefundable, refundToStoreCredit , patchOrder } from "@/lib/admin-store";
 import { APPROVAL_LABELS, decideApproval } from "@/lib/approvals";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { refundThroughGateway } from "@/lib/payments-client";
@@ -63,19 +63,53 @@ export default function ApprovalsDesk() {
       window.clearInterval(timer);
     };
   }, []);
-  const orders = getOrders().filter((order) => order.approval);
-  const pending = orders.filter((order) => order.approval?.status === "Pending");
+  const effectiveApproval = (order: Order) => {
+    if (order.approval) return order.approval;
+    const req = getReturnRequest(order.id) ?? order.returnRequest;
+    if (!req) return undefined;
+    const isPending = req.status === "Pending Review" || req.status === "Return Requested";
+    const isRejected = req.status === "Rejected";
+    return {
+      id: req.id,
+      kind: (req.kind === "replacement" ? "replacement" : "return") as "replacement" | "return",
+      status: (isPending ? "Pending" : isRejected ? "Rejected" : "Approved") as "Pending" | "Rejected" | "Approved",
+      requestedAt: req.requestedAt,
+      requestedBy: order.deliveryAddress?.fullName || order.accountEmail || "Customer",
+      note: [req.reason, req.note].filter(Boolean).join(" — "),
+      decidedAt: req.decidedAt,
+      decidedBy: req.decidedBy,
+      decisionNote: req.decisionNote,
+    };
+  };
+
+  const orders = getOrders().filter((order) => Boolean(effectiveApproval(order)));
+  const pending = orders.filter((order) => effectiveApproval(order)?.status === "Pending");
   const decided = orders
-    .filter((order) => order.approval?.status !== "Pending")
-    .sort((a, b) => String(b.approval?.decidedAt).localeCompare(String(a.approval?.decidedAt)))
+    .filter((order) => effectiveApproval(order)?.status !== "Pending")
+    .sort((a, b) => String(effectiveApproval(b)?.decidedAt).localeCompare(String(effectiveApproval(a)?.decidedAt)))
     .slice(0, 30);
 
   const decide = async (order: Order, approve: boolean) => {
     setBusy(order.id);
     setMessage("");
     try {
-      const done = approve ? await carryOut(order) : "Request rejected. The desk can see your note.";
-      decideApproval(order.id, approve, notes[order.id]);
+      const eff = effectiveApproval(order);
+      if (!order.approval && eff) {
+        patchOrder(order.id, { approval: eff });
+      }
+      let done = "Request rejected. The desk can see your note.";
+      if (approve) {
+        done = await carryOut({ ...order, approval: eff });
+      } else {
+        const req = getReturnRequest(order.id) ?? order.returnRequest;
+        if (req && (req.status === "Pending Review" || req.status === "Return Requested")) {
+          reviewReplacementRequest(order.id, { accept: false, note: notes[order.id] || "Rejected after review.", by: "approver" });
+          done = `${req.kind === "replacement" ? "Replacement" : "Return"} request rejected and customer notified.`;
+        }
+      }
+      if ((getOrders().find((o) => o.id === order.id)?.approval ?? eff)?.status === "Pending") {
+        decideApproval(order.id, approve, notes[order.id]);
+      }
       setMessage(`Order ${order.id}: ${done}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not complete this.");
@@ -85,7 +119,8 @@ export default function ApprovalsDesk() {
   };
 
   const row = (order: Order, open: boolean) => {
-    const approval = order.approval!;
+    const approval = effectiveApproval(order)!;
+    const req = getReturnRequest(order.id) ?? order.returnRequest;
     return (
       <li key={order.id} className="rounded-xl border border-border p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -100,7 +135,18 @@ export default function ApprovalsDesk() {
         <p className="mt-1 text-sm text-text-muted">
           Sent by {approval.requestedBy} · {formatDateTime(approval.requestedAt)} · {order.deliveryAddress?.fullName || order.accountEmail || ""} · {rupees(order.total)} · {order.status}
         </p>
-        {approval.note ? <p className="mt-1 text-sm">Desk note: {approval.note}</p> : null}
+        {approval.note ? <p className="mt-1 text-sm">Reason / Note: {approval.note}</p> : null}
+        {req?.items?.length ? <p className="mt-1 text-xs text-text-muted">Items: {req.items.map((it) => `${it.quantity} × ${it.title}`).join(", ")}</p> : null}
+        {req?.images?.length ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {req.images.map((img, i) => (
+              <a key={`${order.id}-img-${i}`} href={img} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={img} alt={`Evidence ${i + 1}`} className="h-14 w-14 rounded-lg border border-border object-cover" />
+              </a>
+            ))}
+          </div>
+        ) : null}
         {open ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <div className="min-w-56 flex-1">

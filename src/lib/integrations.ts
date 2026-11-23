@@ -47,7 +47,7 @@ export function whatsAppTemplateFor(whatsapp: WhatsAppAlertSettings, provider: s
   return whatsapp.provider === provider || !whatsapp.mappingByProvider?.[provider as WhatsAppSender] ? (whatsapp.mapping[event as NotificationEventId] ?? "").trim() : "";
 }
 export type SmsProvider = "none" | "msg91";
-export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly" | "rapidshyp" | "vamaship";
+export type AggregatorId = "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly" | "rapidshyp" | "vamaship" | "shipway";
 export type HyperlocalId = "tookan" | "shipday";
 export type ShippingProviderId = AggregatorId | HyperlocalId;
 export type ShippingConnection = { status: "success" | "failed" | "untested"; message: string; at: string };
@@ -65,7 +65,8 @@ export const notificationEvents = [
   { id: "order-placed", label: "Order placed" },
   { id: "order-status", label: "Order status changed" },
   { id: "payment-link", label: "Payment link" },
-  { id: "refund", label: "Refund issued" },
+  { id: "refund", label: "Refund initiated" },
+  { id: "refund-processed", label: "Refund processed (refunded)" },
   { id: "shipment-booked", label: "Shipment booked" },
   { id: "account-created", label: "Account created" },
   { id: "account-details", label: "Account details resent" },
@@ -227,6 +228,8 @@ export interface IntegrationSettings {
     rapidshyp: { apiKey: string; pickupName: string; enabled: boolean };
     /** Vamaship (docs.vamaship.com): Bearer API key; environment live or sandbox. */
     vamaship: { apiToken: string; environment: string; enabled: boolean };
+    /** Shipway (apidocs.shipway.com): Basic Auth / JSON username + licenseKey; optional default carrierId. */
+    shipway: { username: string; licenseKey: string; carrierId: string; enabled: boolean };
     tookan: { apiKey: string; teamId: string; hyperlocal: boolean; parcel: boolean };
     shipday: { apiKey: string; enabled: boolean };
     /** Fallback tracking service for couriers without an API account (their own site is read first). */
@@ -356,7 +359,9 @@ export interface OrderSettings {
     mode: "full" | "advance";
     advanceType: "percent" | "amount";
     advanceValue: number;
-    balanceWhen: "on_ready" | "before_dispatch";
+    balanceWhen: "before_dispatch" | "on_ready";
+    disclaimerEnabled?: boolean;
+    disclaimerText?: string;
   };
   returns: {
     enabled: boolean;
@@ -508,6 +513,7 @@ export const defaultIntegrations: IntegrationSettings = {
     daakly: { apiKey: "", services: "", enabled: false },
     rapidshyp: { apiKey: "", pickupName: "", enabled: false },
     vamaship: { apiToken: "", environment: "live", enabled: false },
+    shipway: { username: "", licenseKey: "", carrierId: "", enabled: false },
     tookan: { apiKey: "", teamId: "", hyperlocal: true, parcel: true },
     shipday: { apiKey: "", enabled: true },
     tracker: { service: "aftership", apiKey: "", enabled: true },
@@ -593,7 +599,7 @@ export const defaultOrderSettings: OrderSettings = {
   promoCodes: { coupons: false, giftCards: false },
   statusLabels: {},
   customStatuses: [],
-  preorderPayment: { mode: "advance", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch" },
+  preorderPayment: { mode: "advance", advanceType: "percent", advanceValue: 50, balanceWhen: "before_dispatch", disclaimerEnabled: true, disclaimerText: "Pre-Order Notice: Shipping and delivery for pre-order items will begin by the end of December." },
   returns: {
     enabled: false,
     windowDays: 7,
@@ -603,7 +609,7 @@ export const defaultOrderSettings: OrderSettings = {
     pickupReplacement: false,
     reasons: ["Damaged or defective item"],
     reasonRules: DEFAULT_RETURN_REASONS,
-    returnForRefund: false,
+    returnForRefund: true,
     replacementAddressChange: true,
   },
   refunds: { enabled: true, method: "original", processingDays: 7, creditDays: 5, autoRefundOnReturnPickup: false, creditExpiryDays: 0 },
@@ -646,7 +652,7 @@ function merge<T extends object>(base: T, saved: Partial<T> | null | undefined):
 
 export function shippingProviderId(id: string): ShippingProviderId | null {
   if (id === "tookan-parcel") return "tookan";
-  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "shipyaari" || id === "goswift" || id === "ekart" || id === "shadowfax" || id === "envia" || id === "daakly" || id === "rapidshyp" || id === "vamaship" || id === "tookan" || id === "shipday") return id;
+  if (id === "shiprocket" || id === "nimbuspost" || id === "ithink" || id === "shipyaari" || id === "goswift" || id === "ekart" || id === "shadowfax" || id === "envia" || id === "daakly" || id === "rapidshyp" || id === "vamaship" || id === "shipway" || id === "tookan" || id === "shipday") return id;
   return null;
 }
 
@@ -662,6 +668,7 @@ function credentialFingerprint(shipping: IntegrationSettings["shipping"], provid
   if (provider === "daakly") return shipping.daakly?.apiKey ?? "";
   if (provider === "rapidshyp") return shipping.rapidshyp?.apiKey ?? "";
   if (provider === "vamaship") return `${shipping.vamaship?.apiToken ?? ""}\0${shipping.vamaship?.environment ?? ""}`;
+  if (provider === "shipway") return `${shipping.shipway?.username ?? ""}\0${shipping.shipway?.licenseKey ?? ""}`;
   if (provider === "tookan") return `${shipping.tookan.apiKey}\0${shipping.tookan.teamId}`;
   return shipping.shipday.apiKey;
 }
@@ -679,6 +686,7 @@ export function hasShippingCredentials(provider: ShippingProviderId, settings = 
   if (provider === "daakly") return Boolean(shipping.daakly?.apiKey);
   if (provider === "rapidshyp") return Boolean(shipping.rapidshyp?.apiKey);
   if (provider === "vamaship") return Boolean(shipping.vamaship?.apiToken);
+  if (provider === "shipway") return Boolean(shipping.shipway?.username && shipping.shipway?.licenseKey);
   if (provider === "tookan") return Boolean(shipping.tookan.apiKey);
   if (provider === "shipday") return Boolean(shipping.shipday.apiKey);
   return false;
@@ -755,7 +763,7 @@ function persistMailStatus(settings: IntegrationSettings): Promise<boolean> {
 export function saveIntegrations(settings: IntegrationSettings): Promise<boolean> {
   const previous = getIntegrations();
   const next = merge(defaultIntegrations, settings);
-  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship", "tookan", "shipday"];
+  const providers: ShippingProviderId[] = ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship", "shipway", "tookan", "shipday"];
   const connection = { ...next.shipping.connection, ...previous.shipping.connection };
   for (const provider of providers) {
     if (credentialFingerprint(previous.shipping, provider) !== credentialFingerprint(next.shipping, provider)) {
@@ -923,6 +931,8 @@ export function publicOrderSettings(input?: Partial<OrderSettings> | null): Orde
           ? Math.max(1, Math.round(finiteNumber(merged.preorderPayment?.advanceValue, 100)))
           : Math.min(99, Math.max(1, Math.round(finiteNumber(merged.preorderPayment?.advanceValue, defaultOrderSettings.preorderPayment.advanceValue)))),
       balanceWhen: merged.preorderPayment?.balanceWhen === "on_ready" ? "on_ready" : "before_dispatch",
+      disclaimerEnabled: merged.preorderPayment?.disclaimerEnabled !== false,
+      disclaimerText: String(merged.preorderPayment?.disclaimerText ?? "Pre-Order Notice: Shipping and delivery for pre-order items will begin by the end of December.").trim() || "Pre-Order Notice: Shipping and delivery for pre-order items will begin by the end of December.",
     },
     returns: {
       enabled: Boolean(merged.returns?.enabled),

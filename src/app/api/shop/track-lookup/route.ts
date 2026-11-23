@@ -38,7 +38,7 @@ export function GET(request: NextRequest) {
       order: forCustomer(owned),
       shipment: shipment ?? null,
       shipments: orderShipments,
-      link: owned.trackToken ? `/track/${owned.trackToken}` : "",
+      link: `/account/orders/${encodeURIComponent(owned.id)}`,
     },
     { headers }
   );

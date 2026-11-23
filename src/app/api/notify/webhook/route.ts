@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   }
   let accepted = { messages: 0, statuses: 0, threads: 0 };
   try {
-    accepted = applyWhatsAppWebhook("meta", body);
+    accepted = await applyWhatsAppWebhook("meta", body);
   } catch {
     /* a bad payload must still return 200 so Meta does not retry forever */
   }

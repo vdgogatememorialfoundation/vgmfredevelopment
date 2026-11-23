@@ -26,6 +26,10 @@ import {
   vamashipCancel,
   vamashipRates,
   vamashipTrack,
+  shipwayBook,
+  shipwayCancel,
+  shipwayRates,
+  shipwayTrack,
   enviaBook,
   enviaCancel,
   enviaRates,
@@ -119,7 +123,7 @@ export async function POST(request: NextRequest) {
         const switchedOn = (id: string) => saved.settings?.shipping?.[id]?.enabled !== false;
         const wanted = (Array.isArray(body.providers)
           ? (body.providers as string[])
-          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship"]
+          : ["shiprocket", "nimbuspost", "ithink", "shipyaari", "goswift", "ekart", "shadowfax", "envia", "daakly", "rapidshyp", "vamaship", "shipway"]
         ).filter(switchedOn);
         // Customers' browsers never hold courier keys: fall back to the keys the admin saved on this host.
         const stored = readShippingCreds() as typeof creds;
@@ -137,6 +141,7 @@ export async function POST(request: NextRequest) {
             if (id === "daakly") return { provider: id, rates: await daaklyRates(keys("daakly"), parcel) };
             if (id === "rapidshyp") return { provider: id, rates: await rapidshypRates(keys("rapidshyp"), parcel) };
             if (id === "vamaship") return { provider: id, rates: await vamashipRates(keys("vamaship"), parcel) };
+            if (id === "shipway") return { provider: id, rates: await shipwayRates(keys("shipway"), parcel) };
             return { provider: id, rates: null };
           } catch (error) {
             return { provider: id, rates: [], error: (error as Error).message };
@@ -180,7 +185,9 @@ export async function POST(request: NextRequest) {
                                     ? await rapidshypBook(creds.rapidshyp ?? own, order)
                                     : provider === "vamaship"
                                       ? await vamashipBook(creds.vamaship ?? own, order)
-                                      : undefined;
+                                      : provider === "shipway"
+                                        ? await shipwayBook(creds.shipway ?? own, order)
+                                        : undefined;
         if (booked === undefined) return unsupported(provider);
         if (booked === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         if (provider === "shiprocket" && booked.providerShipmentId && body.schedulePickup) {
@@ -298,7 +305,9 @@ export async function POST(request: NextRequest) {
                                   ? await rapidshypTrack(creds.rapidshyp ?? own, awb)
                                   : provider === "vamaship"
                                     ? await vamashipTrack(creds.vamaship ?? own, awb)
-                                    : undefined;
+                                    : provider === "shipway"
+                                      ? await shipwayTrack(creds.shipway ?? own, awb)
+                                      : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         const events = "events" in result && Array.isArray(result.events) ? await withScanPlaces(result.events as { location?: string }[], [String((creds as { tookan?: { pickup?: { state?: string } } }).tookan?.pickup?.state ?? ""), "Maharashtra"]) : undefined;
@@ -332,7 +341,9 @@ export async function POST(request: NextRequest) {
                                   ? await rapidshypCancel(creds.rapidshyp ?? own, String(body.providerOrderId || ""))
                                   : provider === "vamaship"
                                     ? await vamashipCancel(creds.vamaship ?? own, String(body.providerOrderId || ""))
-                                    : undefined;
+                                    : provider === "shipway"
+                                      ? await shipwayCancel(creds.shipway ?? own, String(body.providerOrderId || body.awb || ""))
+                                      : undefined;
         if (result === undefined) return unsupported(provider);
         if (result === null) return NextResponse.json({ ok: false, configured: false, error: `${provider} credentials are not configured.` });
         return NextResponse.json({ ok: true, configured: true, ...result });

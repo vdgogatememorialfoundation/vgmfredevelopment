@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -46,7 +46,7 @@ export function Card({
   children,
   onPress,
   featured,
-  pad = 16,
+  pad = 18,
 }: {
   children: ReactNode;
   onPress?: () => void;
@@ -59,15 +59,15 @@ export function Card({
       style={{
         backgroundColor: theme.colors.paper,
         borderColor: featured ? theme.colors.accent : theme.colors.border,
-        borderWidth: 1,
-        borderRadius: 16,
+        borderWidth: featured ? 1.5 : 1,
+        borderRadius: 20,
         padding: pad,
         marginBottom: 14,
-        shadowColor: "#3B2A14",
-        shadowOpacity: 0.07,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 2,
+        shadowColor: "#16181D",
+        shadowOpacity: featured ? 0.09 : 0.05,
+        shadowRadius: 14,
+        shadowOffset: { width: 0, height: 5 },
+        elevation: featured ? 4 : 2,
       }}
     >
       {children}
@@ -75,7 +75,7 @@ export function Card({
   );
   if (!onPress) return body;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [pressed && { opacity: 0.92 }]}>
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [pressed && { opacity: 0.94, transform: [{ scale: 0.985 }] }]}>
       {body}
     </Pressable>
   );
@@ -172,10 +172,10 @@ export function Button({
 }) {
   const theme = useTheme();
   const palette = {
-    primary: { bg: theme.colors.primary, border: theme.colors.primary, text: theme.colors.onPrimary },
-    ghost: { bg: theme.colors.paper, border: theme.colors.border, text: theme.colors.text },
-    soft: { bg: theme.colors.surface, border: theme.colors.accent, text: theme.colors.primary },
-    ink: { bg: theme.colors.secondary, border: theme.colors.secondary, text: theme.colors.onPrimary },
+    primary: { bg: theme.colors.primary, border: theme.colors.primary, text: theme.colors.onPrimary, shadow: true },
+    ghost: { bg: theme.colors.paper, border: theme.colors.border, text: theme.colors.text, shadow: false },
+    soft: { bg: theme.colors.surface, border: "#E8D2CD", text: theme.colors.primary, shadow: false },
+    ink: { bg: theme.colors.secondary, border: theme.colors.secondary, text: theme.colors.onPrimary, shadow: true },
   }[kind];
   return (
     <Pressable
@@ -187,22 +187,26 @@ export function Button({
         {
           marginTop: 10,
           backgroundColor: palette.bg,
-          borderRadius: 12,
-          paddingVertical: 13,
-          paddingHorizontal: 16,
+          borderRadius: 14,
+          paddingVertical: 14,
+          paddingHorizontal: 18,
           alignItems: "center",
           justifyContent: "center",
           flexDirection: "row",
           gap: 8,
           borderWidth: 1,
           borderColor: palette.border,
-          minHeight: 48,
-          opacity: disabled ? 0.45 : pressed ? 0.9 : 1,
+          minHeight: 50,
+          opacity: disabled ? 0.45 : pressed ? 0.92 : 1,
+          transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
+          ...(palette.shadow && !disabled
+            ? { shadowColor: palette.bg, shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3 }
+            : {}),
         },
       ]}
     >
-      {icon ? <Ionicons name={icon} size={16} color={palette.text} /> : null}
-      <Text style={{ color: palette.text, fontWeight: "800", fontSize: 14, letterSpacing: 0.2 }}>{label}</Text>
+      {icon ? <Ionicons name={icon} size={17} color={palette.text} /> : null}
+      <Text style={{ color: palette.text, fontWeight: "800", fontSize: 14.5, letterSpacing: 0.2 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -227,30 +231,34 @@ export function Field({
   placeholder?: string;
 }) {
   const theme = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
-    <View style={{ marginBottom: 12 }}>
-      <Text style={{ color: theme.colors.muted, marginBottom: 6, fontSize: 12, fontWeight: "700", letterSpacing: 0.3 }}>{label}</Text>
+    <View style={{ marginBottom: 14 }}>
+      <Text style={{ color: focused ? theme.colors.primary : theme.colors.muted, marginBottom: 6, fontSize: 12, fontWeight: "700", letterSpacing: 0.3 }}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChange}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         autoCapitalize={autoCapitalize ?? "none"}
         autoCorrect={false}
         secureTextEntry={secret}
         keyboardType={keyboard ?? "default"}
         multiline={multiline}
         placeholder={placeholder}
-        placeholderTextColor={theme.colors.muted}
+        placeholderTextColor="#9CA3AF"
         accessibilityLabel={label}
         style={{
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          borderRadius: 12,
-          padding: 13,
-          minHeight: 48,
-          backgroundColor: theme.colors.paper,
+          borderWidth: focused ? 1.5 : 1,
+          borderColor: focused ? theme.colors.primary : theme.colors.border,
+          borderRadius: 14,
+          paddingHorizontal: 14,
+          paddingVertical: 13,
+          minHeight: 50,
+          backgroundColor: focused ? "#FFFFFF" : "#FCFBF8",
           color: theme.colors.text,
           fontSize: 15,
-          ...(multiline ? { minHeight: 110, textAlignVertical: "top" as const } : {}),
+          ...(multiline ? { minHeight: 112, textAlignVertical: "top" as const } : {}),
         }}
       />
     </View>
@@ -385,15 +393,29 @@ export function SectionHeader({ title, subtitle, actionLabel, onAction }: { titl
   const theme = useTheme();
   if (!title && !subtitle) return null;
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 12, marginTop: 8 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14, marginTop: 8 }}>
       <View style={{ flex: 1, paddingRight: 12 }}>
-        {title ? <Text style={{ fontSize: 21, fontWeight: "600", color: theme.colors.text, fontFamily: theme.fontFamily, letterSpacing: -0.3 }}>{title}</Text> : null}
-        {title ? <View style={{ width: 32, height: 3, borderRadius: 2, backgroundColor: theme.colors.accent, marginTop: 4 }} /> : null}
-        {subtitle ? <Text style={{ color: theme.colors.muted, marginTop: 3, fontSize: 12 }}>{subtitle}</Text> : null}
+        {title ? <Text style={{ fontSize: 20, fontWeight: "800", color: theme.colors.text, fontFamily: theme.fontFamily, letterSpacing: -0.4 }}>{title}</Text> : null}
+        {subtitle ? <Text style={{ color: theme.colors.muted, marginTop: 2, fontSize: 12.5 }}>{subtitle}</Text> : null}
       </View>
       {actionLabel && onAction ? (
-        <Pressable onPress={onAction} accessibilityRole="button" hitSlop={8}>
-          <Text style={{ color: theme.colors.primary, fontWeight: "700", fontSize: 13 }}>{actionLabel}</Text>
+        <Pressable
+          onPress={onAction}
+          accessibilityRole="button"
+          hitSlop={8}
+          style={({ pressed }) => ({
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            backgroundColor: theme.colors.surface,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 999,
+            opacity: pressed ? 0.78 : 1,
+          })}
+        >
+          <Text style={{ color: theme.colors.primary, fontWeight: "800", fontSize: 12 }}>{actionLabel}</Text>
+          <Ionicons name="chevron-forward" size={13} color={theme.colors.primary} />
         </Pressable>
       ) : null}
     </View>
@@ -429,12 +451,12 @@ export function IconTile({ label, icon, onPress }: { label: string; icon: keyof 
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [{ width: "23%", minWidth: 70, alignItems: "center", paddingVertical: 10, opacity: pressed ? 0.88 : 1 }]}
+      style={({ pressed }) => [{ width: "25%", alignItems: "center", paddingVertical: 10, paddingHorizontal: 4, opacity: pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.95 : 1 }] }]}
     >
-      <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: theme.colors.surface, alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-        <Ionicons name={icon} size={21} color={theme.colors.primary} />
+      <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, alignItems: "center", justifyContent: "center", marginBottom: 7 }}>
+        <Ionicons name={icon} size={22} color={theme.colors.primary} />
       </View>
-      <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 11, textAlign: "center" }} numberOfLines={1}>
+      <Text style={{ color: theme.colors.text, fontWeight: "700", fontSize: 11, textAlign: "center" }} numberOfLines={1}>
         {label}
       </Text>
     </Pressable>
@@ -681,6 +703,10 @@ export function Hero({ kicker, title, subtitle, children }: { kicker?: string; t
 
 export function ProductTile({ title, author, price, original, uri, badge, line, onPress, ribbons = [] }: { ribbons?: { label: string; color: string }[]; title: string; author?: string; price: string; original?: string; uri?: string; badge?: { label: string; tone: "gold" | "green" | "red" | "ink" }; line?: string; onPress: () => void }) {
   const theme = useTheme();
+  const numPrice = Number(String(price).replace(/[^\d.]/g, "")) || 0;
+  const numOriginal = Number(String(original ?? "").replace(/[^\d.]/g, "")) || 0;
+  const pctOff = numOriginal > numPrice && numPrice > 0 ? Math.round(((numOriginal - numPrice) / numOriginal) * 100) : 0;
+
   return (
     <Pressable
       onPress={onPress}
@@ -688,40 +714,45 @@ export function ProductTile({ title, author, price, original, uri, badge, line, 
       accessibilityLabel={title}
       style={({ pressed }) => [
         {
-          width: "48%",
+          width: "48.2%",
           backgroundColor: theme.colors.paper,
-          borderRadius: 16,
+          borderRadius: 20,
           borderWidth: 1,
           borderColor: theme.colors.border,
           padding: 10,
           marginBottom: 14,
-          shadowColor: "#3B2A14",
-          shadowOpacity: 0.07,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 4 },
+          shadowColor: "#16181D",
+          shadowOpacity: 0.06,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 5 },
           elevation: 2,
-          opacity: pressed ? 0.92 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
         },
       ]}
     >
       <View style={{ position: "relative" }}>
-        <CoverArt uri={uri} title={title} ratio={0.78} />
+        <CoverArt uri={uri} title={title} ratio={0.78} radius={14} />
         {ribbons.length ? (
-          <View style={{ position: "absolute", left: -10, top: 8, gap: 4, alignItems: "flex-start" }}>
+          <View style={{ position: "absolute", left: 6, top: 8, gap: 4, alignItems: "flex-start" }}>
             {ribbons.map((ribbon) => (
-              <Text key={ribbon.label} style={{ backgroundColor: ribbon.color, color: "#FFFFFF", fontSize: 10, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase", paddingHorizontal: 8, paddingVertical: 2, borderTopRightRadius: 999, borderBottomRightRadius: 999, overflow: "hidden" }}>
+              <Text key={ribbon.label} style={{ backgroundColor: ribbon.color, color: "#FFFFFF", fontSize: 9.5, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, overflow: "hidden" }}>
                 {ribbon.label}
               </Text>
             ))}
           </View>
         ) : null}
+        {pctOff >= 5 ? (
+          <View style={{ position: "absolute", right: 6, bottom: 6, backgroundColor: "#0F7B5F", borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 }}>
+            <Text style={{ color: "#FFFFFF", fontSize: 9.5, fontWeight: "900" }}>{pctOff}% OFF</Text>
+          </View>
+        ) : null}
       </View>
       <View style={{ marginTop: 10, gap: 4 }}>
         {badge ? <Tag label={badge.label} tone={badge.tone} /> : null}
-        <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "600", fontSize: 15, fontFamily: theme.fontFamily, marginTop: 2 }}>{title}</Text>
-        {author ? <Text numberOfLines={1} style={{ color: theme.colors.muted, fontSize: 12 }}>{author}</Text> : null}
+        <Text numberOfLines={2} style={{ color: theme.colors.text, fontWeight: "700", fontSize: 14.5, lineHeight: 19, fontFamily: theme.fontFamily, marginTop: 2 }}>{title}</Text>
+        {author ? <Text numberOfLines={1} style={{ color: theme.colors.muted, fontSize: 11.5 }}>{author}</Text> : null}
         <Price value={price} original={original} />
-        {line ? <Text style={{ color: "#1F6B3A", fontSize: 12, fontWeight: "800", marginTop: 2 }}>{line}</Text> : null}
+        {line ? <Text numberOfLines={1} style={{ color: "#0F7B5F", fontSize: 11, fontWeight: "700", marginTop: 2 }}>{line}</Text> : null}
       </View>
     </Pressable>
   );

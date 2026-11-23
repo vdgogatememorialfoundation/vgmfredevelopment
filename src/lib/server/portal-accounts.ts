@@ -157,3 +157,52 @@ export function verifyPortalOtp(email: string, code: string) {
   writeJson(OTP_FILE, all);
   return null;
 }
+
+export function registerDeliveryPartnerAccount(input: { name: string; email: string; phone?: string; password: string }) {
+  const email = input.email.trim().toLowerCase();
+  const password = input.password;
+  if (!email || !email.includes("@")) throw new Error("Enter a valid email address.");
+  if (!password || password.length < 6) throw new Error("Password must be at least 6 characters.");
+  const rows = load();
+  if (rows.some((r) => String(r.email || "").toLowerCase() === email)) {
+    throw new Error("An account with this email already exists. Please sign in instead.");
+  }
+  const parts = (input.name || email.split("@")[0]).trim().split(/s+/);
+  const firstName = parts[0] || "Delivery";
+  const lastName = parts.slice(1).join(" ");
+  const salt = randomBytes(16).toString("hex");
+  const passwordHash = hash(password, salt);
+  const record: PortalAccountRecord = {
+    id: `dp-${Date.now()}`,
+    email,
+    firstName,
+    lastName,
+    phone: (input.phone || "").trim(),
+    role: "staff",
+    staffRoleId: "delivery_partner",
+    active: true,
+    status: "active",
+    passwordSalt: salt,
+    passwordHash,
+    updatedAt: new Date().toISOString(),
+  };
+  rows.push(record);
+  save(rows);
+  return record;
+}
+
+
+export function deleteDeliveryPartnerAccount(email: string): { deleted: boolean } {
+  const clean = email.trim().toLowerCase();
+  if (!clean) return { deleted: false };
+  const rows = load();
+  const idx = rows.findIndex((r) => String(r.email || "").toLowerCase() === clean);
+  if (idx === -1) return { deleted: false };
+  const role = String(rows[idx].role || "").toLowerCase();
+  if (role === "admin" || role === "superadmin") {
+    throw new Error("Cannot delete an Admin portal account from Delivery Logistics.");
+  }
+  rows.splice(idx, 1);
+  save(rows);
+  return { deleted: true };
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { getPickupLocation } from "@/lib/fulfillment";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/utils";
 import { agreedDelivery, deliveryDatePhrase, parseExpected, statusStamp } from "@/lib/delivery-expectation";
@@ -64,7 +65,7 @@ function Tile({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export default function OrderTrackingTimeline({ order, phone = "", shipmentId = "" }: { order: Order; phone?: string; shipmentId?: string }) {
+export default function OrderTrackingTimeline({ order, phone = "", shipmentId = "", detailed = false }: { order: Order; phone?: string; shipmentId?: string; detailed?: boolean }) {
   const orderSettings = useOrderSettings();
   useEffect(() => {
     if (order.status !== "Delivered") return;
@@ -80,15 +81,18 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   const [remote, setRemote] = useState<ShipmentRecord | null>(null);
   const shipment = remote ?? localShipment;
   const provider = shipment?.provider ?? order.courierChoice?.provider;
-  const hyperlocal = isHyperlocalProvider(provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
+  const isVgmfExpress = /vgmf express/i.test(shipment?.courier || order.courierName || "") || /^8[89]\d{10}$/.test(String(shipment?.awb || order.trackingId || ""));
+  const hyperlocal = !isVgmfExpress && isHyperlocalProvider(provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
   const preorder = Boolean(order.preorderPayment) || order.items.some((item) => item.preorder);
   const courierBooked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.courier));
   // Hidden dates (or a pre-order with dates off) only show once a courier is booked, and then only the courier's own date.
   const hideDates = orderSettings.hideDeliveryDates || (preorder && !orderSettings.showPreorderStepDates);
-  const expectedText = hideDates
-    ? courierBooked ? shipment?.expectedBy || "" : ""
-    : agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date) || now);
+  const orderAround = Date.parse(order.date) || now;
+  const validCourierExpected = shipment?.expectedBy && parseExpected(shipment.expectedBy, orderAround) != null ? shipment.expectedBy : "";
+  const rawExpectedText = validCourierExpected || (hideDates
+    ? courierBooked ? agreedDelivery(order.eta, validCourierExpected, orderAround) : ""
+    : agreedDelivery(order.eta, validCourierExpected, orderAround));
 
   useEffect(() => {
     let cancelled = false;
@@ -150,13 +154,11 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       ? { ...scan, agent: { name: shipment.agentName, phone: shipment.agentPhone }, otp: shipment.deliveryOtp || scan.otp }
       : scan
   );
-  const { stages: rawStages } = useMemo(() => buildTrackingStages(order, shownScans, shipment), [order, shownScans, shipment]);
+  const { stages: rawStages } = useMemo(() => buildTrackingStages(order, shownScans, shipment, detailed), [order, shownScans, shipment, detailed]);
   const returnRequest = order.returnRequest;
   const courier = customerCourierLabel({ provider, courier: shipment?.courier || order.courierName });
   const trackingId = shipment?.awb || order.trackingId || "";
   const placed = new Date(order.date);
-  const promisedOn = parseExpected(expectedText, placed.getTime());
-  const expectedFrom = promisedOn ? new Date(promisedOn - 24 * 60 * 60 * 1000) : addDays(placed, storeConfig.orderPreparationDays + 2);
   const packedStage = rawStages.find((stage) => stage.id === "packed");
   const shippedStage = rawStages.find((stage) => stage.id === "shipped");
   const deliveredStage = rawStages.find((stage) => stage.id === "delivered" || stage.id === "picked");
@@ -170,6 +172,10 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   const pickupDone = hyperlocal
     ? rawStages.some((stage) => stage.id === "out" && stage.reached)
     : Boolean(shippedStage?.reached);
+  // Only display the delivery date after the order has been picked up by the courier partner.
+  const expectedText = pickupDone ? rawExpectedText : "";
+  const promisedOn = parseExpected(expectedText, placed.getTime());
+  const expectedFrom = promisedOn ? new Date(promisedOn - 24 * 60 * 60 * 1000) : addDays(placed, storeConfig.orderPreparationDays + 2);
 
   const stages: PipelineStageShape[] = rawStages.map((stage) => {
     const next: PipelineStageShape = { ...stage };
@@ -192,7 +198,13 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
     }
     const alreadyDelivered = order.status === "Delivered" || shipment?.status === "Delivered" || stage.reached;
     if (stage.id === "delivered" && !alreadyDelivered) {
-      next.expected = expectedText ? `Expected by ${deliveryDatePhrase(expectedText)}` : hideDates ? undefined : "Expected delivery date is pending from the courier";
+      next.expected = pickupDone && expectedText
+        ? `Expected by ${deliveryDatePhrase(expectedText)}`
+        : !pickupDone
+          ? "Delivery date displayed after pickup by courier partner"
+          : hideDates
+            ? undefined
+            : "Expected delivery date is pending from the courier";
     }
     if (stage.id === "ready" && stage.reached) next.caption = order.status === "Delivered" ? "OTP verified" : `Pickup OTP: ${pickupOtp(order.id)}`;
     return next;
@@ -282,7 +294,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       <Tile label="Status" value={currentStatus} />
       {pickupDone ? <Tile label="Courier" value={courier} /> : null}
       {pickupDone && !delivered && shipment?.agentPhone ? <Tile label="Rider" value={[shipment.agentName, shipment.agentPhone].filter(Boolean).join(" · ")} /> : null}
-      {(shipment?.deliveryOtp && !delivered) || shipment?.deliveryOtpVerified ? (
+      {((shipment?.deliveryOtp && !delivered && (currentStatus === "Out for Delivery" || shipment?.status === "Out for Delivery" || order.status === "Out for Delivery")) || shipment?.deliveryOtpVerified) ? (
         <Tile
           label="Delivery OTP"
           value={
@@ -314,16 +326,64 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
     </div>
   );
 
-  const returnPipeline = returnRequest
-    ? {
-        stages: returnRequest.stages.map((event) => ({
-          id: event.id,
-          label: event.title,
-          caption: event.location,
-          reached: !!event.reached,
+  const returnBack = order.returnShipment;
+  const returnRejected = returnRequest?.status === "Rejected";
+  const rawReturnLastReached = returnRequest ? returnRequest.stages.map((s) => Boolean(s.reached)).lastIndexOf(true) : -1;
+  const returnStageTimestamps = new Map<string, string>();
+  const returnStages: PipelineStageShape[] = returnRequest
+    ? returnRequest.stages.map((st, idx) => {
+        const isReached = Boolean(st.reached) || (rawReturnLastReached >= 0 && idx <= rawReturnLastReached);
+        const stageId = st.id || `ret-${idx}`;
+        if (isReached && (st.at || returnRequest.requestedAt)) {
+          returnStageTimestamps.set(stageId, st.at || returnRequest.requestedAt);
+        }
+        const isPickupStage = /pickup|courier|transit|shipped|picked/i.test(st.title || st.id);
+        const isReplacementStage = /replacement/i.test(st.title || st.id) && !/requested/i.test(st.title || st.id);
+        const stageObj: PipelineStageShape = {
+          id: stageId,
+          label: st.title,
+          caption: st.detail || st.location || undefined,
+          reached: isReached,
           partial: false,
-          events: [event],
-        })),
+          events: [],
+        };
+        if (isPickupStage && returnBack?.awb && st.reached) {
+          stageObj.courierNote = {
+            title: `Return via ${returnBack.courierName || "VGMF Express"}`,
+            detail: `Return AWB: ${returnBack.awb}`,
+          };
+        }
+        if (isReplacementStage && returnRequest.replacementOrderId && st.reached) {
+          stageObj.courierNote = {
+            title: `Replacement Order #${returnRequest.replacementOrderId}`,
+            detail: "Free replacement created & queued for dispatch",
+          };
+        }
+        return stageObj;
+      })
+    : [];
+  const returnCurrentIdx = Math.max(0, returnStages.map((s) => s.reached).lastIndexOf(true));
+  const returnPipeline = returnRequest && returnStages.length
+    ? {
+        stages: returnStages,
+        currentIndex: returnCurrentIdx,
+        failed: Boolean(returnRejected),
+        metaFor: (stage: PipelineStageShape) => {
+          const stamp = returnStageTimestamps.get(stage.id);
+          return stage.reached && stamp ? statusStamp(stamp, order.deliveryAddress?.country) : "";
+        },
+        timingFor: (stage: PipelineStageShape): { label: string; tone: PipelineTone } | null => {
+          if (returnRejected && stage.id === returnStages[returnCurrentIdx]?.id) {
+            return { label: "Rejected", tone: "red" };
+          }
+          if (stage.reached && stage.id === returnStages[returnStages.length - 1]?.id) {
+            return { label: "Completed", tone: "emerald" };
+          }
+          if (stage.reached && stage.id === returnStages[returnCurrentIdx]?.id) {
+            return { label: returnRequest.status, tone: "emerald" };
+          }
+          return null;
+        },
       }
     : null;
 
@@ -332,9 +392,14 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   return (
     <div className="vgmf-trk">
       {tiles}
-      {(!hideDates || expectedText) && order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
+      {preorder && orderSettings.preorderPayment?.disclaimerEnabled !== false && order.status !== "Delivered" && order.status !== "Cancelled" ? (
+        <div className="my-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-950">
+          {orderSettings.preorderPayment?.disclaimerText || "Pre-Order Notice: Shipping and delivery for pre-order items will begin by the end of December."}
+        </div>
+      ) : null}
+      {pickupDone && expectedText && order.deliveryMode === "delivery" && !["Delivered", "Cancelled"].includes(order.status) && shipment?.status !== "Delivered" ? (
         <p className="vgmf-trk-note">
-          <b>Expected delivery by</b> {expectedText ? deliveryDatePhrase(expectedText) : "— shown once the courier confirms the booking"}
+          <b>Expected delivery by</b> {deliveryDatePhrase(expectedText)}
         </p>
       ) : null}
       {(() => {
@@ -353,12 +418,55 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       })()}
       <RefundDetails order={order} />
       {returnActive && returnRequest && returnPipeline ? (
-        <div>
-          <p className="vgmf-trk-note">
-            {returnRequest.kind === "replacement" ? "Replacement tracking" : "Return tracking"} · {returnRequest.status}
-            {returnRequest.replacementOrderId ? ` · New order ${returnRequest.replacementOrderId}` : ""}
-          </p>
-          <VerticalPipeline stages={returnPipeline.stages} />
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 pb-3">
+              <div>
+                <p className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">
+                  {returnRequest.kind === "replacement" ? "Replacement Tracking" : "Return Tracking"} · #{String(returnRequest.id || "").replace(/^RTN/i, "")}
+                </p>
+                <p className="text-sm font-bold text-slate-900">
+                  {returnRequest.reason || (returnRequest.kind === "replacement" ? "Free Replacement" : "Return & Refund")}
+                </p>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-extrabold text-emerald-800">
+                {returnRequest.status}
+              </span>
+            </div>
+            {(returnBack?.awb || returnRequest.replacementOrderId) ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {returnBack?.awb ? (
+                  <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-mono font-semibold text-slate-800">
+                    Return AWB: {returnBack.awb}
+                  </span>
+                ) : null}
+                {returnBack?.awb && /^(88|89)\d{10}$/.test(returnBack.awb) ? (
+                  <Link href={`/track-shipment?awb=${encodeURIComponent(returnBack.awb)}`} style={{ color: "#ffffff" }} className="rounded-lg bg-emerald-700 px-3 py-1 font-bold text-white hover:bg-emerald-800">
+                    Track Reverse AWB →
+                  </Link>
+                ) : null}
+                {returnRequest.replacementOrderId ? (
+                  <Link href={`/account/orders/${encodeURIComponent(returnRequest.replacementOrderId)}`} style={{ color: "#ffffff" }} className="rounded-lg bg-burgundy px-3 py-1 font-bold text-white hover:opacity-90">
+                    Track Replacement Order #{returnRequest.replacementOrderId} →
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
+            <VerticalPipeline
+              stages={returnPipeline.stages}
+              currentIndex={returnPipeline.currentIndex}
+              failed={returnPipeline.failed}
+              metaFor={returnPipeline.metaFor}
+              timingFor={returnPipeline.timingFor}
+              country={order.deliveryAddress?.country}
+            />
+          </div>
+          <details className="rounded-xl border border-slate-200 bg-white/70 p-3">
+            <summary className="cursor-pointer text-xs font-bold text-slate-600">
+              View Original Delivery Timeline
+            </summary>
+            <div className="mt-3">{pipe}</div>
+          </details>
         </div>
       ) : showLiveMap(order, shipment) ? (
         <div className="vgmf-hl">
@@ -375,11 +483,18 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
       )}
 
       {returnPipeline && returnRequest && !returnActive ? (
-        <div className="mt-6">
-          <p className="vgmf-trk-note">
-            {returnRequest.kind === "replacement" ? "Replacement tracking" : "Return tracking"} · {returnRequest.status}
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50/40 p-4 space-y-2">
+          <p className="text-xs font-extrabold uppercase tracking-wider text-red-700">
+            {returnRequest.kind === "replacement" ? "Replacement Request" : "Return Request"} · {returnRequest.status}
           </p>
-          <VerticalPipeline stages={returnPipeline.stages} />
+          <VerticalPipeline
+            stages={returnPipeline.stages}
+            currentIndex={returnPipeline.currentIndex}
+            failed={returnPipeline.failed}
+            metaFor={returnPipeline.metaFor}
+            timingFor={returnPipeline.timingFor}
+            country={order.deliveryAddress?.country}
+          />
         </div>
       ) : null}
     </div>

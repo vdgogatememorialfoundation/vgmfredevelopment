@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vaidya Gogate Memorial Foundation",
     "slug": "vgmf-foundation",
-    "version": "3.3.0",
+    "version": "5.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F6F4F0"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
@@ -22,10 +22,10 @@
     },
     "android": {
       "package": "org.vaidyagogate.app",
-      "versionCode": 29,
+      "versionCode": 38,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#8F2D2D",
+        "backgroundColor": "#FFFFFF",
         "monochromeImage": "./assets/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -33,7 +33,7 @@
     },
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#F6F4F0",
+      "backgroundColor": "#FFFFFF",
       "translucent": false
     },
     "androidNavigationBar": {

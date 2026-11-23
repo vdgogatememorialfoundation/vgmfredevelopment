@@ -2,7 +2,8 @@ import { addTicket } from "@/lib/server/mobile-store";
 import { findAccount } from "@/lib/server/accounts";
 import { NextRequest, NextResponse } from "next/server";
 import { denyUnlessPortal, portalSessionFrom } from "@/lib/server/portal-auth";
-import { closeWhatsApp, findWhatsAppThread, listWhatsAppThreads, markWhatsAppRead, markWhatsAppTicket, replyOnWhatsApp, transferWhatsApp, waRef } from "@/lib/server/whatsapp-inbox";
+import { addWhatsAppInternalNote, closeWhatsApp, findWhatsAppThread, listWhatsAppThreads, markWhatsAppRead, markWhatsAppTicket, replyOnWhatsApp, sendOrderingFlowFromDesk, startNewWhatsAppChat, transferWhatsApp, waRef } from "@/lib/server/whatsapp-inbox";
+import { buildMetaOrderingFlowJson } from "@/lib/server/whatsapp-bot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,27 @@ export async function POST(request: NextRequest) {
   const threadId = String(body?.threadId || "");
   const byName = String(body?.name || portal.email || "Desk");
   try {
+    if (body?.action === "flow-json") {
+      return NextResponse.json({ ok: true, flowJson: buildMetaOrderingFlowJson() });
+    }
+    if (body?.action === "send-flow") {
+      const thread = await sendOrderingFlowFromDesk(threadId, byName);
+      return NextResponse.json({ ok: true, thread });
+    }
+    if (body?.action === "note") {
+      const thread = addWhatsAppInternalNote(threadId, String(body.text || ""), byName);
+      return NextResponse.json({ ok: true, thread });
+    }
+    if (body?.action === "start-chat") {
+      const thread = await startNewWhatsAppChat({
+        phone: String((body as Record<string, unknown>).phone || ""),
+        name: String(body.name || ""),
+        text: String(body.text || ""),
+        sendFlow: Boolean((body as Record<string, unknown>).sendFlow),
+        by: byName,
+      });
+      return NextResponse.json({ ok: true, thread });
+    }
     if (body?.action === "read") {
       return NextResponse.json({ ok: true, thread: markWhatsAppRead(threadId) });
     }
