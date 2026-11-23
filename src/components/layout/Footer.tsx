@@ -158,6 +158,14 @@ export default function Footer() {
                         {t("nav.certificates")}
                       </Link>
                     </li>
+                    <li>
+                      <Link
+                        href="/courier-tracking"
+                        className="text-sm text-text-muted transition hover:text-burgundy"
+                      >
+                        Track a courier shipment
+                      </Link>
+                    </li>
                   </>
                 ) : (
                   <>
@@ -177,6 +185,14 @@ export default function Footer() {
                         className="text-sm text-text-muted transition hover:text-burgundy"
                       >
                         {t("nav.certificates")}
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        href="/courier-tracking"
+                        className="text-sm text-text-muted transition hover:text-burgundy"
+                      >
+                        Track a courier shipment
                       </Link>
                     </li>
                   </>
