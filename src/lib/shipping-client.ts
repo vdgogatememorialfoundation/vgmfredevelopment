@@ -88,7 +88,7 @@ function connectedCourierRates(deliveryPincode: string, admin = false): CourierR
     rates.push({
       provider: "vgmf-hyperlocal",
       courierId: "vgmf-hyperlocal",
-      courierName: "VGMF Express Hyperlocal (Same-Day)",
+      courierName: "Vaidya Gogate Memorial Foundation Hyperlocal (Same-Day)",
       rate: 30,
       etaDays: 0,
       live: true,
@@ -97,7 +97,7 @@ function connectedCourierRates(deliveryPincode: string, admin = false): CourierR
   rates.push({
     provider: "vgmf-express",
     courierId: "vgmf-express",
-    courierName: "VGMF Express (Own Logistics)",
+    courierName: "Vaidya Gogate Memorial Foundation (Own Logistics)",
     rate: sameCity ? 35 : 55,
     etaDays: sameCity ? 1 : 2,
     live: true,

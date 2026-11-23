@@ -5,8 +5,8 @@ export const GOGATE_COURIER = "Gogate Products";
 const OWN_FLEET = new Set(["vgmf-express", "vgmf-hyperlocal", "tookan", "tookan-parcel", "shipday"]);
 
 const AGGREGATOR_NAMES: Record<string, string> = {
-  "vgmf-express": "VGMF Express",
-  "vgmf-hyperlocal": "VGMF Express",
+  "vgmf-express": "Vaidya Gogate Memorial Foundation",
+  "vgmf-hyperlocal": "Vaidya Gogate Memorial Foundation",
   shiprocket: "Shiprocket",
   nimbuspost: "Nimbuspost",
   ithink: "iThink Logistics",

@@ -411,7 +411,7 @@ function recordSellerUpdate(
 
 export function isVgmfOwnShipment(s: { provider?: string; courier?: string; awb?: string } | null | undefined) {
   if (!s) return false;
-  return s.provider === "local" || /vgmf express/i.test(String(s.courier || "")) || /^8[89]\d{10}$/.test(String(s.awb || ""));
+  return s.provider === "local" || /vgmf express|vaidya gogate memorial foundation/i.test(String(s.courier || "")) || /^8[89]\d{10}$/.test(String(s.awb || ""));
 }
 
 export function findShipmentByCode(code: string) {
@@ -449,7 +449,7 @@ export function generateVgmfAwb(orderId: string, hubCode: string, by: string) {
   const shipment = {
     id: `vgmf-${Date.now()}`,
     orderId: order.id,
-    courier: "VGMF Express",
+    courier: "Vaidya Gogate Memorial Foundation",
     provider: "local" as const,
     awb,
     charges: Number(order.shipping || 0),
@@ -480,11 +480,11 @@ export function generateVgmfAwb(orderId: string, hubCode: string, by: string) {
 
   upsertShopShipment(shipment as unknown as Parameters<typeof upsertShopShipment>[0]);
   patchShopOrder(order.id, {
-    courierName: "VGMF Express",
+    courierName: "Vaidya Gogate Memorial Foundation",
     trackingId: awb,
     history: [
       ...(order.history ?? []),
-      { at, status: order.status, by, note: `VGMF Express 12-digit AWB generated: ${awb} (${hub.name})` },
+      { at, status: order.status, by, note: `Vaidya Gogate Memorial Foundation 12-digit AWB generated: ${awb} (${hub.name})` },
     ],
   });
 
@@ -1120,7 +1120,7 @@ export function applyReturnEvent(input: {
       }
     }
     rec.status = "Return Picked Up";
-    scanText = `Shipment picked up from customer by VGMF Express (${input.by})`;
+    scanText = `Shipment picked up from customer by Vaidya Gogate Memorial Foundation (${input.by})`;
   } else if (input.event === "return_hub_inscan") {
     rec.status = "At Return Hub";
     rec.hubCode = hub.code;
@@ -1200,7 +1200,7 @@ export function applyReturnEvent(input: {
             at,
             condition: "Good",
             restock: false,
-            note: "Delivered to Seller via VGMF Express (Return AWB verified).",
+            note: "Delivered to Seller via Vaidya Gogate Memorial Foundation (Return AWB verified).",
             by: input.by,
           },
           stages,
@@ -1292,7 +1292,7 @@ export function buildDeliveryDashboard(agentEmail = "", selectedHubCode = "") {
       if (o.deliveryMode === "store_pickup") return false;
       if (o.status === "Delivered" || o.status === "Cancelled" || o.status === "Failed") return false;
       const s = shipByOrder.get(o.id);
-      if (!s) return /vgmf express/i.test(String(o.courierName || "")) && ["Packed", "Ready to Ship"].includes(o.status);
+      if (!s) return /vgmf express|vaidya gogate memorial foundation/i.test(String(o.courierName || "")) && ["Packed", "Ready to Ship"].includes(o.status);
       return isVgmfOwnShipment(s) && s.status === "Booked";
     })
     .slice(0, 80)
@@ -1332,7 +1332,7 @@ export function buildDeliveryDashboard(agentEmail = "", selectedHubCode = "") {
         shipmentId: s.id,
         orderId: s.orderId,
         awb: s.awb || s.orderId,
-        courier: s.courier || "VGMF Express",
+        courier: s.courier || "Vaidya Gogate Memorial Foundation",
         provider: s.provider || "local",
         status: s.status || "In Transit",
         agentName: s.agentName || (raw.assignedAgentName as string) || "",

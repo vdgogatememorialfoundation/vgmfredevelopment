@@ -2443,11 +2443,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                         body: JSON.stringify({ action: "generate-awb", orderId: order.id }),
                       });
                       const data = await res.json();
-                      if (!data.ok) throw new Error(data.error || "Could not book with VGMF Express.");
-                      return `Booked with VGMF Express! 12-Digit AWB: ${data.shipment?.awb}. Print label: ${window.location.origin}${data.labelUrl}`;
+                      if (!data.ok) throw new Error(data.error || "Could not book with Vaidya Gogate Memorial Foundation.");
+                      return `Booked with Vaidya Gogate Memorial Foundation! 12-Digit AWB: ${data.shipment?.awb}. Print label: ${window.location.origin}${data.labelUrl}`;
                     })}
                   >
-                    {busy === "vgmf-book" ? "Generating 12-Digit AWB…" : "Book with VGMF Express (Own Logistics · 12-Digit AWB)"}
+                    {busy === "vgmf-book" ? "Generating 12-Digit AWB…" : "Book with Vaidya Gogate Memorial Foundation (Own Logistics · 12-Digit AWB)"}
                   </Button>
                 </div>
                 <SplitOrderBox order={order} onDone={(text) => { setMessage(text); onChanged(); }} />
@@ -2751,7 +2751,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                         value={returnCourierChoice}
                         onChange={(e) => setReturnCourierChoice(e.target.value as "vgmf-express" | "shiprocket" | "ithink")}
                       >
-                        <option value="vgmf-express">VGMF Express (Own Logistics · 12-Digit AWB)</option>
+                        <option value="vgmf-express">Vaidya Gogate Memorial Foundation (Own Logistics · 12-Digit AWB)</option>
                         <option value="shiprocket">Shiprocket (Reverse Pickup)</option>
                         <option value="ithink">iThink Logistics (Reverse Pickup)</option>
                       </SelectInput>
@@ -2769,7 +2769,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                           });
                           const j = await res.json();
                           if (!res.ok || !j?.ok || !j?.returnRecord?.returnAwb) {
-                            throw new Error(j?.error || "Could not create VGMF Express return AWB.");
+                            throw new Error(j?.error || "Could not create Vaidya Gogate Memorial Foundation return AWB.");
                           }
                           const retAwb = String(j.returnRecord.returnAwb);
                           const labelUrl = `https://vaidyagogate.org/api/admin/vgmf-label?awb=${encodeURIComponent(retAwb)}`;
@@ -2778,20 +2778,20 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                               provider: "vgmf-express",
                               live: true,
                               awb: retAwb,
-                              courierName: "VGMF Express (Return)",
+                              courierName: "Vaidya Gogate Memorial Foundation (Return)",
                               createdAt: new Date().toISOString(),
-                              note: `VGMF Express Return AWB ${retAwb}`,
+                              note: `Vaidya Gogate Memorial Foundation Return AWB ${retAwb}`,
                               labelUrl,
                               charge: 0,
                             },
-                          }, "VGMF Express return pickup booked");
+                          }, "Vaidya Gogate Memorial Foundation return pickup booked");
                           try { emailReturnLabel(order.id); } catch { /* optional */ }
                           if (returnRequest.kind === "replacement") {
-                            advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${retAwb} · VGMF Express. Download the label, paste it on the parcel and hand it to our executive.`);
+                            advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${retAwb} · Vaidya Gogate Memorial Foundation. Download the label, paste it on the parcel and hand it to our executive.`);
                           } else {
                             updateReturnRequest(order.id, { status: "Pickup Scheduled" });
                           }
-                          return `VGMF Express Return AWB ${retAwb} created & added to Delivery Partner Return Runsheet.`;
+                          return `Vaidya Gogate Memorial Foundation Return AWB ${retAwb} created & added to Delivery Partner Return Runsheet.`;
                         }
                         const created = await createReturnShipment(order.id, returnCourierChoice);
                         patchOrder(order.id, {

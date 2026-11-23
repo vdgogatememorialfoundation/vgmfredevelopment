@@ -81,7 +81,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
   const [remote, setRemote] = useState<ShipmentRecord | null>(null);
   const shipment = remote ?? localShipment;
   const provider = shipment?.provider ?? order.courierChoice?.provider;
-  const isVgmfExpress = /vgmf express/i.test(shipment?.courier || order.courierName || "") || /^8[89]\d{10}$/.test(String(shipment?.awb || order.trackingId || ""));
+  const isVgmfExpress = /vgmf express|vaidya gogate memorial foundation/i.test(shipment?.courier || order.courierName || "") || /^8[89]\d{10}$/.test(String(shipment?.awb || order.trackingId || ""));
   const hyperlocal = !isVgmfExpress && isHyperlocalProvider(provider, order.courierChoice?.lastMile, shipment?.courier || order.courierName);
   const [scans, setScans] = useState<CourierScan[]>(() => shipmentScans(shipment));
   const preorder = Boolean(order.preorderPayment) || order.items.some((item) => item.preorder);
@@ -349,7 +349,7 @@ export default function OrderTrackingTimeline({ order, phone = "", shipmentId = 
         };
         if (isPickupStage && returnBack?.awb && st.reached) {
           stageObj.courierNote = {
-            title: `Return via ${returnBack.courierName || "VGMF Express"}`,
+            title: `Return via ${returnBack.courierName || "Vaidya Gogate Memorial Foundation"}`,
             detail: `Return AWB: ${returnBack.awb}`,
           };
         }

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     const stages = [
       { id: "ordered", title: ret.kind === "rto" ? "RTO Shipment Booked" : "Return Shipment Booked", reached: rank >= 0, current: rank === 0, at: ret.createdAt, detail: `Return AWB ${ret.returnAwb} · ${ret.reason}` },
       { id: "out_pickup", title: "Out for Pickup from Customer", reached: rank >= 1, current: rank === 1, at: ret.tracking.find((t) => /out for return/i.test(t.status))?.at || (rank >= 1 ? ret.createdAt : undefined), detail: "Pickup executive assigned" },
-      { id: "picked", title: "Picked Up from Customer", reached: rank >= 2, current: rank === 2, at: ret.tracking.find((t) => /picked up/i.test(t.status))?.at, detail: "Shipped via VGMF Express" },
+      { id: "picked", title: "Picked Up from Customer", reached: rank >= 2, current: rank === 2, at: ret.tracking.find((t) => /picked up/i.test(t.status))?.at, detail: "Shipped via Vaidya Gogate Memorial Foundation" },
       { id: "shipped", title: "In Transit via VGMF Hubs", reached: rank >= 3, current: rank === 3, at: ret.tracking.find((t) => /facility|inward|transit|hub/i.test(t.status))?.at, detail: ret.hubCode ? `Processed at Hub ${ret.hubCode}` : "Moving through VGMF Hub network" },
       { id: "out", title: "Out for Delivery to Seller", reached: rank >= 4, current: rank === 4, at: ret.tracking.find((t) => /out for delivery to seller|returned to seller|delivered to seller/i.test(t.status))?.at, detail: "Executive en route to Seller / Foundation warehouse" },
       { id: "delivered", title: "Delivered to Seller", reached: rank >= 5, current: rank === 5, at: ret.tracking.find((t) => /returned to seller|delivered to seller/i.test(t.status))?.at, detail: rank >= 5 ? "Received & verified by Seller" : "Awaiting seller delivery" },
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       kind: "return",
       awb: ret.returnAwb,
       orderId: ret.originalOrderId,
-      courier: "VGMF Express (Return)",
+      courier: "Vaidya Gogate Memorial Foundation (Return)",
       status: ret.status,
       destination: [ret.city, ret.pincode].filter(Boolean).join(" "),
       stages,
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: `"${raw}" is not a VGMF Logistics shipment. Only shipments booked with VGMF Express (12-digit AWB) are tracked here — track external courier orders at /track.`,
+        error: `"${raw}" is not a VGMF Logistics shipment. Only Vaidya Gogate Memorial Foundation shipments (12-digit AWB) are tracked here. Track orders sent with other couriers in My Orders or at /track.`,
       },
       { status: 404 }
     );
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   const rawScans = normalizeDispatchedScanLocations((shipment.tracking || []).filter((e) => !isDeskScan(e)));
   const cleanScans = rawScans.map((e) => ({
     at: e.at,
-    title: courierEventTitle(e.status, e.location, shipment.courier || "VGMF Express"),
+    title: courierEventTitle(e.status, e.location, shipment.courier || "Vaidya Gogate Memorial Foundation"),
     location: e.location || "",
   }));
 
@@ -75,12 +75,12 @@ export async function GET(req: NextRequest) {
     paymentStatus: order?.paymentStatus || "Paid",
     total: order?.total || 0,
     items: (order?.items || []).map((it) => ({ ...it, price: 0 })),
-    courierName: shipment.courier || "VGMF Express",
+    courierName: shipment.courier || "Vaidya Gogate Memorial Foundation",
     trackingId: shipment.awb,
     eta: shipment.expectedBy || order?.eta || "",
     deliveryAddress: addr ? { city: addr.city || "", state: addr.state || "", pincode: addr.pincode || "" } : undefined,
     pick: order?.pick ? { packedAt: order.pick.packedAt } : undefined,
-    courierChoice: { provider: shipment.provider || "vgmf-express", courierName: shipment.courier || "VGMF Express" },
+    courierChoice: { provider: shipment.provider || "vgmf-express", courierName: shipment.courier || "Vaidya Gogate Memorial Foundation" },
   };
   const isOutForDelivery = shipment.status === "Out for Delivery" || order?.status === "Out for Delivery";
   const publicShipment = {
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
     kind: "forward",
     awb: shipment.awb || "",
     orderId: publicOrder.id,
-    courier: shipment.courier || "VGMF Express",
+    courier: shipment.courier || "Vaidya Gogate Memorial Foundation",
     status: shipment.status || publicOrder.status,
     expectedBy: shipment.expectedBy || order?.eta || "",
     destination: [addr?.city, addr?.state, addr?.pincode].filter(Boolean).join(", "),

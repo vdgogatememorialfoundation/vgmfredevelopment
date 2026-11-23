@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     .btn { border: 1px solid #047857; background: #047857; color: #fff; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; }
     .label { width: 4in; min-height: 6in; margin: 0 auto; background: #fff; border: 2px solid #111827; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
     .head { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 6px; }
-    .brand { font-size: 15px; font-weight: 900; letter-spacing: 0.4px; }
+    .brand { font-size: 12px; font-weight: 900; letter-spacing: 0.2px; }
     .sub { font-size: 10px; color: #4b5563; font-weight: 600; }
     .badge { padding: 4px 8px; font-size: 11px; font-weight: 900; border: 2px solid #111827; background: #fde68a; }
     .route { display: flex; justify-content: space-between; align-items: center; background: #111827; color: #fff; padding: 6px 10px; font-weight: 800; font-size: 12.5px; letter-spacing: 0.5px; }
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
   <div class="label">
     <div class="head">
       <div>
-        <div class="brand">VGMF EXPRESS · RETURN</div>
+        <div class="brand">VAIDYA GOGATE MEMORIAL FOUNDATION · RETURN</div>
         <div class="sub">Vaidya Gogate Memorial Foundation · Reverse Pickup</div>
       </div>
       <div class="badge">${esc(retRecord.kind === "rto" ? "RTO RETURN" : "REVERSE PICKUP")}</div>
@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
     .btn { border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff; padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; }
     .label { width: 4in; min-height: 6in; margin: 0 auto; background: #fff; border: 2px solid #111827; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
     .head { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #111827; padding-bottom: 6px; }
-    .brand { font-size: 15px; font-weight: 900; letter-spacing: 0.4px; }
+    .brand { font-size: 12px; font-weight: 900; letter-spacing: 0.2px; }
     .sub { font-size: 10px; color: #4b5563; font-weight: 600; }
     .badge { padding: 4px 8px; font-size: 12px; font-weight: 900; border: 2px solid #111827; background: ${isCod ? "#fef3c7" : "#dbeafe"}; }
     .route { display: flex; justify-content: space-between; align-items: center; background: #111827; color: #fff; padding: 6px 10px; font-weight: 800; font-size: 13px; letter-spacing: 0.5px; }
@@ -178,7 +178,7 @@ export async function GET(req: NextRequest) {
   <div class="label">
     <div class="head">
       <div>
-        <div class="brand">VGMF EXPRESS</div>
+        <div class="brand">VAIDYA GOGATE MEMORIAL FOUNDATION</div>
         <div class="sub">Vaidya Gogate Memorial Foundation · Own Fleet</div>
       </div>
       <div class="badge">${esc(payBadge)}</div>

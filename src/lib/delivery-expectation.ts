@@ -181,7 +181,7 @@ export function deliveryExpectation(status: string, expectedText?: string, now =
   const today = istDay(now, zone);
   const due = istDay(expected, zone);
   const tomorrow = istDay(now + 24 * 60 * 60 * 1000, zone);
-  if (status === "Out for Delivery" && due > today) return "Arriving early";
+  if (status === "Out for Delivery") return "Out for delivery";
   if (due === today) return "Arriving today";
   if (due === tomorrow) return "Arriving tomorrow";
   const dateLabel = new Intl.DateTimeFormat("en-IN", {

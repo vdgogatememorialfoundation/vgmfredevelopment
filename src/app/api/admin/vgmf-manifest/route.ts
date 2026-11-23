@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
   <div class="page">
     <div class="top">
       <div>
-        <h1 class="h1">VGMF EXPRESS — ${esc(TYPE_LABELS[manifest.type] || manifest.type)}</h1>
+        <h1 class="h1">VAIDYA GOGATE MEMORIAL FOUNDATION — ${esc(TYPE_LABELS[manifest.type] || manifest.type)}</h1>
         <div class="sub">Vaidya Gogate Memorial Foundation · Internal Courier Operations</div>
         <div class="sub">Created: ${esc(new Date(manifest.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))} · By: ${esc(manifest.createdBy)}</div>
       </div>

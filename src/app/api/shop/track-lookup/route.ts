@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findShopOrder, forCustomer, orderPhoneMatches } from "@/lib/server/shop-orders";
 import { listShopShipments } from "@/lib/server/shop-shipments";
 import { isOwnFleet } from "@/lib/courier-label";
+import { isVgmfOwnShipment } from "@/lib/server/vgmf-logistics";
 import { isHyperlocalProvider } from "@/lib/order-pipeline";
 
 export const runtime = "nodejs";
@@ -25,10 +26,16 @@ export function GET(request: NextRequest) {
   const orderShipments = shipments.filter((shipment) => shipment.orderId === owned.id);
   const shipment = byAwb && byAwb.orderId === owned.id ? byAwb : orderShipments[0];
   const provider = shipment?.provider ?? owned.courierChoice?.provider;
-  const inHouse = provider === "local" || isOwnFleet(provider) || isHyperlocalProvider(provider, undefined, shipment?.courier ?? owned.courierName);
+  const inHouse = provider === "local" || isVgmfOwnShipment(shipment) || isOwnFleet(provider) || isHyperlocalProvider(provider, undefined, shipment?.courier ?? owned.courierName);
   if (inHouse) {
+    const vgmfExpress = isVgmfOwnShipment(shipment);
     return NextResponse.json(
-      { ok: false, error: "This order is delivered by our own team. Sign in and open it in My Orders to track it live." },
+      {
+        ok: false,
+        error: vgmfExpress
+          ? "This order ships with Vaidya Gogate Memorial Foundation. Track it with its 12-digit AWB on the VGMF Logistics tracker (/track-shipment), or in My Orders."
+          : "This order is delivered by our own team. Sign in and open it in My Orders to track it live.",
+      },
       { status: 404, headers }
     );
   }

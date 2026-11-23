@@ -362,7 +362,7 @@ export default function AdminReturnsDesk({ defaultSection = "both" }: { defaultS
                 value={courierChoice}
                 onChange={(e) => setCourierMap((m) => ({ ...m, [order.id]: e.target.value as "vgmf-express" | "shiprocket" | "ithink" }))}
               >
-                <option value="vgmf-express">VGMF Express (Own Logistics · 12-Digit Return AWB)</option>
+                <option value="vgmf-express">Vaidya Gogate Memorial Foundation (Own Logistics · 12-Digit Return AWB)</option>
                 <option value="shiprocket">Shiprocket (Reverse Pickup)</option>
                 <option value="ithink">iThink Logistics (Reverse Pickup)</option>
               </SelectInput>
@@ -382,7 +382,7 @@ export default function AdminReturnsDesk({ defaultSection = "both" }: { defaultS
                     });
                     const j = await res.json();
                     if (!res.ok || !j?.ok || !j?.returnRecord?.returnAwb) {
-                      throw new Error(j?.error || "Could not create VGMF Express return AWB.");
+                      throw new Error(j?.error || "Could not create Vaidya Gogate Memorial Foundation return AWB.");
                     }
                     const retAwb = String(j.returnRecord.returnAwb);
                     const labelUrl = `https://vaidyagogate.org/api/admin/vgmf-label?awb=${encodeURIComponent(retAwb)}`;
@@ -391,20 +391,20 @@ export default function AdminReturnsDesk({ defaultSection = "both" }: { defaultS
                         provider: "vgmf-express",
                         live: true,
                         awb: retAwb,
-                        courierName: "VGMF Express (Return)",
+                        courierName: "Vaidya Gogate Memorial Foundation (Return)",
                         createdAt: new Date().toISOString(),
-                        note: `VGMF Express Return AWB ${retAwb}`,
+                        note: `Vaidya Gogate Memorial Foundation Return AWB ${retAwb}`,
                         labelUrl,
                         charge: 0,
                       },
-                    }, "VGMF Express return pickup booked");
+                    }, "Vaidya Gogate Memorial Foundation return pickup booked");
                     try { emailReturnLabel(order.id); } catch { /* optional */ }
                     if (request.kind === "replacement") {
-                      advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${retAwb} · VGMF Express. Download the label, paste it on the parcel and hand it to our executive.`);
+                      advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${retAwb} · Vaidya Gogate Memorial Foundation. Download the label, paste it on the parcel and hand it to our executive.`);
                     } else {
                       updateReturnRequest(order.id, { status: "Pickup Scheduled" });
                     }
-                    return `VGMF Express 12-Digit Return AWB ${retAwb} created & added to Delivery Partner Return Runsheet.`;
+                    return `Vaidya Gogate Memorial Foundation 12-Digit Return AWB ${retAwb} created & added to Delivery Partner Return Runsheet.`;
                   }
                   const created = await createReturnShipment(order.id, courierChoice);
                   patchOrder(order.id, {
