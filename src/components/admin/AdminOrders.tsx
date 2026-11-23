@@ -133,14 +133,24 @@ const CLOSED_OR_SENT: Order["status"][] = ["Shipped", "Out for Delivery", "Deliv
 /** The Paid chip lists paid orders still to be packed or booked; To Ship and later have their own chips. */
 const PAID_CHIP_HIDES: Order["status"][] = [...CLOSED_OR_SENT, "Ready to Ship", "To Ship"];
 /** Status chip/filter match: the Packed chip leaves out paid orders (they are listed under Paid and To Ship). */
-const inStatus = (order: Order, status: string) => order.status === status && !(status === "Packed" && order.paymentStatus === "Paid");
+const inStatus = (order: Order, status: string) =>
+  order.status === status && !(status === "Packed" && order.paymentStatus === "Paid") && !((status === "Out for Delivery" || status === "Shipped") && orderHasFailedAttempt(order));
+/** Undelivered / reattempt: the latest courier scan is a failed attempt (not later out for delivery or delivered). */
 export function orderHasFailedAttempt(order: Order, allShipments?: ShipmentRecord[]) {
+  if (order.status === "Delivered" || order.status === "Cancelled") return false;
   if (order.status === "Failed") return true;
-  if ((order.history ?? []).some((h) => isFailedAttempt(h.note || h.status || ""))) return true;
   const storeShipments = (allShipments ?? getShipments()).filter((s) => s.orderId === order.id && s.note !== "Cancelled");
-  return storeShipments.some(
-    (s) => s.status === "Failed" || (s.tracking ?? []).some((scan: { status?: string }) => isFailedAttempt(scan.status || ""))
-  );
+  const open = storeShipments.filter((s) => s.status !== "Delivered");
+  if (open.some((s) => s.status === "Failed" || latestScanFailed(s.tracking ?? []))) return true;
+  if (storeShipments.some((s) => (s.tracking ?? []).length)) return false;
+  return latestScanFailed((order.history ?? []).map((h) => ({ status: h.note || h.status || "", at: h.at })));
+}
+
+function latestScanFailed(scans: { status?: string; at?: string }[]) {
+  const dated = scans.filter((scan) => scan.status && scan.at && !Number.isNaN(Date.parse(scan.at)));
+  if (!dated.length) return false;
+  const latest = dated.reduce((a, b) => (Date.parse(b.at!) >= Date.parse(a.at!) ? b : a));
+  return isFailedAttempt(latest.status || "");
 }
 
 export function getLatestFailedScan(order: Order, allShipments?: ShipmentRecord[]): { status: string; at: string; location?: string } | null {
@@ -163,7 +173,7 @@ const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boo
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
   "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) && order.paymentStatus !== "Paid" },
   "group:to-ship": { label: "To Ship (fully paid · book courier / waiting for pickup)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
-  "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => order.status === "Shipped" || order.status === "Out for Delivery" },
+  "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => (order.status === "Shipped" || order.status === "Out for Delivery") && !orderHasFailedAttempt(order) },
   "group:undelivered": { label: "⚠️ Undelivered / Delivery attempt unsuccessful (NDR)", test: (order) => orderHasFailedAttempt(order) },
 };
 /** Store pickup has its own steps; the stored status stays canonical. */
@@ -276,7 +286,7 @@ export function OrdersDashboard() {
   const packedPaymentDue = orders.filter(STATUS_GROUPS["group:payment-due"].test).length;
   const awaitingPayment = orders.filter((order) => order.paymentStatus === "Pending" && order.status !== "Cancelled" && order.paymentMethod !== "Cash on delivery" && order.paymentMethod !== "Cash at Store").length;
   const toShip = orders.filter(STATUS_GROUPS["group:to-ship"].test).length;
-  const outForDelivery = orders.filter((order) => order.status === "Out for Delivery").length;
+  const outForDelivery = orders.filter((order) => inStatus(order, "Out for Delivery")).length;
   const delivered = orders.filter((order) => order.status === "Delivered").length;
   const inTransit = orders.filter(STATUS_GROUPS["group:in-transit"].test).length;
   const returns = orders.filter((order) => getReturnRequest(order.id) && !["Refunded", "Replacement Created"].includes(getReturnRequest(order.id)!.status)).length;
@@ -848,6 +858,7 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
 function sentState(order: Order, booked: boolean) {
   if (order.deliveryMode === "store_pickup") return order.status === "Delivered" ? { sent: true, label: "Collected from store" } : { sent: false, label: "Store pickup · not collected yet" };
   if (order.status === "Delivered") return { sent: true, label: "Shipped · delivered" };
+  if ((order.status === "Shipped" || order.status === "Out for Delivery") && orderHasFailedAttempt(order)) return { sent: true, label: "Shipped · undelivered, reattempt pending" };
   if (order.status === "Shipped" || order.status === "Out for Delivery") return { sent: true, label: `Shipped · ${order.status === "Shipped" ? "in transit" : "out for delivery"}` };
   if (booked) return { sent: false, label: "Not shipped yet · courier booked, waiting for pickup" };
   return { sent: false, label: `Not shipped yet · ${order.status === "Packed" ? "packed, courier not booked" : "not packed"}` };

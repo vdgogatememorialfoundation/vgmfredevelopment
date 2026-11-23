@@ -38,7 +38,11 @@ const SHIPMENT_TONES: Record<string, string> = {
 
 function shipmentHasFailedAttempt(shipment: ShipmentRecord) {
   if (shipment.status === "Failed") return true;
-  return (shipment.tracking ?? []).some((scan) => isFailedAttempt(scan.status || ""));
+  if (shipment.status === "Delivered") return false;
+  const dated = (shipment.tracking ?? []).filter((scan) => scan.status && scan.at && !Number.isNaN(Date.parse(scan.at)));
+  if (!dated.length) return false;
+  const latest = dated.reduce((a, b) => (Date.parse(b.at) >= Date.parse(a.at) ? b : a));
+  return isFailedAttempt(latest.status || "");
 }
 
 export function ShipmentsSection() {
@@ -52,7 +56,7 @@ export function ShipmentsSection() {
   const [query, setQuery] = useState("");
 
   const undeliveredCount = useMemo(() => shipments.filter(shipmentHasFailedAttempt).length, [shipments]);
-  const ofdCount = useMemo(() => shipments.filter((s) => s.status === "Out for Delivery").length, [shipments]);
+  const ofdCount = useMemo(() => shipments.filter((s) => s.status === "Out for Delivery" && !shipmentHasFailedAttempt(s)).length, [shipments]);
   const inTransitCount = useMemo(() => shipments.filter((s) => s.status === "In Transit").length, [shipments]);
   const deliveredCount = useMemo(() => shipments.filter((s) => s.status === "Delivered").length, [shipments]);
   const bookedCount = useMemo(() => shipments.filter((s) => s.status === "Booked" || s.status === "Picked Up").length, [shipments]);
@@ -63,6 +67,7 @@ export function ShipmentsSection() {
         if (statusFilter === "All") return true;
         if (statusFilter === "undelivered") return shipmentHasFailedAttempt(s);
         if (statusFilter === "Booked") return s.status === "Booked" || s.status === "Picked Up";
+        if (statusFilter === "Out for Delivery") return s.status === statusFilter && !shipmentHasFailedAttempt(s);
         return s.status === statusFilter;
       })
       .filter((s) => {
