@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
+import type { PipelineStageShape } from "@/components/tracking/VerticalPipeline";
 import { statusStamp } from "@/lib/delivery-expectation";
 
 type Shipment = {
@@ -27,11 +27,17 @@ function progress(stages: PipelineStageShape[]) {
   return Math.min(100, Math.round(((reached - 1 + partial) / Math.max(1, stages.length - 1)) * 100));
 }
 
-function reachedAt(stage: PipelineStageShape) {
-  return [...stage.events].reverse().find((event) => event.at)?.at || "";
+function untilText(expected: string) {
+  const t = Date.parse(expected);
+  if (!Number.isFinite(t)) return "";
+  const days = Math.ceil((t - Date.now()) / 86_400_000);
+  if (days < 0) return "Running late — the courier is updating the date";
+  if (days === 0) return "Arriving today";
+  if (days === 1) return "Arriving tomorrow";
+  return `Arriving in ${days} days`;
 }
 
-/** Horizontal green tracker: the line fills slowly up to the current step; the last step shows the expected delivery date. */
+/** Horizontal green tracker: the line fills slowly up to the current step; each main status lists its own updates underneath. */
 function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageShape[]; expectedBy: string; live: boolean }) {
   const target = progress(stages);
   const [fill, setFill] = useState(0);
@@ -43,11 +49,11 @@ function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageSh
   const current = stages.map((s) => s.reached).lastIndexOf(true);
   const inset = `${50 / n}%`;
   return (
-    <div className="mt-6 -mx-1 overflow-x-auto pb-1">
+    <div className="overflow-x-auto pb-2">
       <style>{`@keyframes vgmf-flow{from{background-position:0 0}to{background-position:28px 0}}`}</style>
-      <div className="relative min-w-[560px] px-1">
-        <div className="absolute top-[18px] h-1.5 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
-        <div className="absolute top-[18px] h-1.5" style={{ left: inset, right: inset }}>
+      <div className="relative px-1" style={{ minWidth: `${n * 170}px` }}>
+        <div className="absolute top-[22px] h-2 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
+        <div className="absolute top-[22px] h-2" style={{ left: inset, right: inset }}>
           <div
             className="relative h-full rounded-full transition-[width] ease-out"
             style={{
@@ -59,37 +65,50 @@ function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageSh
             }}
           >
             {live && fill > 0 && fill < 100 ? (
-              <span className="absolute -right-3 -top-[9px] flex h-6 w-6 items-center justify-center rounded-full bg-white text-emerald-600 shadow ring-2 ring-emerald-500">
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7zM6.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
+              <span className="absolute -right-3.5 -top-[10px] flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-600 shadow-md ring-2 ring-emerald-500">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7zM6.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
               </span>
             ) : null}
           </div>
         </div>
-        <ol className="relative grid" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
+        <ol className="relative grid items-start" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
           {stages.map((stage, i) => {
             const done = stage.reached;
             const isCurrent = i === current && live;
             const last = i === n - 1;
-            const at = reachedAt(stage);
+            const events = stage.events.filter((event) => event.reached || event.at);
             return (
-              <li key={stage.id} className="flex flex-col items-center text-center">
+              <li key={stage.id} className="flex flex-col items-center px-1.5">
                 <span
-                  className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors duration-700 ${
+                  className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-[3px] text-sm font-bold shadow-sm transition-colors duration-700 ${
                     done ? "border-emerald-500 bg-emerald-500 text-white" : stage.partial ? "border-emerald-400 bg-white text-emerald-600" : "border-slate-200 bg-white text-slate-400"
                   }`}
                   style={{ transitionDelay: `${i * 450}ms` }}
                 >
                   {isCurrent ? <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" /> : null}
-                  {done ? (
-                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg>
+                  {done ? <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg> : i + 1}
+                </span>
+                <span className={`mt-3 text-center text-[13px] font-bold leading-tight ${done ? "text-slate-900" : "text-slate-400"}`}>{stage.label}</span>
+                {stage.caption ? <span className="mt-0.5 text-center text-[11px] leading-tight text-slate-500">{stage.caption}</span> : null}
+                {isCurrent ? <span className="mt-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-200">Current status</span> : null}
+                <div className="mt-3 w-full space-y-2">
+                  {events.length ? (
+                    [...events].reverse().map((event) => (
+                      <div key={event.id} className={`rounded-xl border p-2.5 text-left ${done ? "border-emerald-100 bg-emerald-50/50" : "border-slate-100 bg-slate-50"}`}>
+                        <p className="text-[12px] font-semibold leading-snug text-slate-800">{event.title}</p>
+                        {event.location ? <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{event.location}</p> : null}
+                        {event.at ? <p className="mt-0.5 text-[10.5px] font-medium text-emerald-700">{statusStamp(event.at)}</p> : null}
+                      </div>
+                    ))
+                  ) : last && expectedBy ? (
+                    <div className="rounded-xl border border-emerald-200 bg-white p-2.5 text-center">
+                      <p className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">Expected delivery</p>
+                      <p className="mt-0.5 text-[13px] font-bold text-emerald-700">{expectedBy}</p>
+                    </div>
                   ) : (
-                    i + 1
+                    <p className="text-center text-[11px] text-slate-400">{done ? "" : "Waiting for this step"}</p>
                   )}
-                </span>
-                <span className={`mt-2 text-[12px] font-bold leading-tight ${done ? "text-slate-900" : "text-slate-400"}`}>{stage.label}</span>
-                <span className="mt-0.5 text-[10.5px] leading-tight text-slate-500">
-                  {done && at ? statusStamp(at) : last && expectedBy ? <span className="font-semibold text-emerald-700">Expected {expectedBy}</span> : stage.partial ? "In progress" : ""}
-                </span>
+                </div>
               </li>
             );
           })}
@@ -101,8 +120,9 @@ function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageSh
 
 function ShipmentCard({ shipment, index, total }: { shipment: Shipment; index: number; total: number }) {
   const [copied, setCopied] = useState(false);
-  const current = Math.max(0, shipment.stages.map((s) => s.reached).lastIndexOf(true));
   const live = !["Delivered", "Cancelled", "Returned"].includes(shipment.status);
+  const pct = progress(shipment.stages);
+  const scans = shipment.stages.reduce((sum, stage) => sum + stage.events.filter((event) => event.at).length, 0);
   const share = async () => {
     const url = `${window.location.origin}/track?q=${encodeURIComponent(shipment.awb)}`;
     try {
@@ -116,63 +136,51 @@ function ShipmentCard({ shipment, index, total }: { shipment: Shipment; index: n
       /* cancelled */
     }
   };
+  const tiles: [string, string, string?][] = [
+    ["Courier partner", shipment.courier],
+    ["Destination", shipment.destination || "—"],
+    ["Expected delivery", shipment.status === "Delivered" ? "Delivered" : shipment.expectedBy || "Updating soon", shipment.status === "Delivered" ? "" : untilText(shipment.expectedBy)],
+    ["Latest update", shipment.lastEvent ? shipment.lastEvent.status : "—", shipment.lastEvent ? `${shipment.lastEvent.location ? `${shipment.lastEvent.location} · ` : ""}${statusStamp(shipment.lastEvent.at)}` : ""],
+  ];
   return (
-    <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_10px_40px_-20px_rgba(15,23,42,0.25)]">
-      <div className="border-b border-slate-100 bg-gradient-to-r from-burgundy/[0.06] via-white to-sky-50 p-5 sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            {total > 1 ? <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-burgundy">Shipment {index + 1} of {total}</p> : null}
-            <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-500">{shipment.courier}</p>
-            <p className="mt-0.5 font-mono text-2xl font-bold tracking-wide text-slate-900">{shipment.awb}</p>
-            <p className="mt-1 text-xs text-slate-500">Order {shipment.orderId}</p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold ring-1 ${tone(shipment.status)}`}>
-              {live ? (
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
-                </span>
-              ) : null}
-              {shipment.status}
-            </span>
-            <button onClick={share} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-burgundy hover:text-burgundy">
+    <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_50px_-24px_rgba(15,23,42,0.35)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-emerald-50 via-white to-white px-5 py-4 sm:px-7">
+        <div className="min-w-0">
+          {total > 1 ? <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-burgundy">Shipment {index + 1} of {total}</p> : null}
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Tracking number (AWB)</p>
+          <p className="font-mono text-2xl font-bold tracking-wide text-slate-900">{shipment.awb}</p>
+          <p className="text-xs text-slate-500">Order {shipment.orderId} · {scans} scan{scans === 1 ? "" : "s"} recorded</p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <span className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-bold ring-1 ${tone(shipment.status)}`}>
+            {live ? (
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-current" />
+              </span>
+            ) : null}
+            {shipment.status}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-500">{pct}% complete</span>
+            <button onClick={share} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-emerald-500 hover:text-emerald-700">
               {copied ? "Link copied" : "Share tracking"}
             </button>
           </div>
         </div>
-        <HorizontalTrack stages={shipment.stages} expectedBy={shipment.status === "Delivered" ? "" : shipment.expectedBy} live={live} />
-        <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {[
-            ["Destination", shipment.destination || "—"],
-            ["Expected delivery", shipment.status === "Delivered" ? "Delivered" : shipment.expectedBy || "Updating"],
-            ["Latest scan", shipment.lastEvent ? `${shipment.lastEvent.status}${shipment.lastEvent.location ? ` · ${shipment.lastEvent.location}` : ""}` : "—"],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-2xl border border-slate-100 bg-white/80 p-3">
-              <dt className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">{label}</dt>
-              <dd className="mt-1 text-sm font-semibold text-slate-800">{value}</dd>
-              {label === "Latest scan" && shipment.lastEvent ? <dd className="text-[11px] text-slate-500">{statusStamp(shipment.lastEvent.at)}</dd> : null}
-            </div>
-          ))}
-        </dl>
       </div>
-      <details className="group p-5 sm:p-6">
-        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-500">
-          Every scan, step by step
-          <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 group-open:hidden">Show</span>
-          <span className="hidden rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 group-open:inline">Hide</span>
-        </summary>
-        <div className="mt-4">
-          <VerticalPipeline
-            stages={shipment.stages}
-            currentIndex={current}
-            metaFor={(stage) => {
-              const at = [...stage.events].reverse().find((event) => event.at)?.at;
-              return stage.reached && at ? statusStamp(at) : "";
-            }}
-          />
-        </div>
-      </details>
+      <dl className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
+        {tiles.map(([label, value, sub]) => (
+          <div key={label} className="bg-white px-5 py-3.5">
+            <dt className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400">{label}</dt>
+            <dd className="mt-1 text-sm font-semibold text-slate-800">{value}</dd>
+            {sub ? <dd className="mt-0.5 text-[11px] text-emerald-700">{sub}</dd> : null}
+          </div>
+        ))}
+      </dl>
+      <div className="px-3 py-6 sm:px-6">
+        <HorizontalTrack stages={shipment.stages} expectedBy={shipment.status === "Delivered" ? "" : shipment.expectedBy} live={live} />
+      </div>
     </article>
   );
 }
@@ -219,7 +227,7 @@ export default function ShipmentTracker() {
   return (
     <div className="relative">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-[radial-gradient(ellipse_at_top,rgba(143,45,45,0.10),transparent_60%)]" />
-      <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:py-14">
         <div className="text-center">
           <span className="inline-flex items-center gap-2 rounded-full border border-burgundy/20 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-burgundy shadow-sm">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Live shipment tracking
@@ -233,7 +241,7 @@ export default function ShipmentTracker() {
             e.preventDefault();
             void run(query);
           }}
-          className="mt-7 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_12px_40px_-18px_rgba(143,45,45,0.35)] focus-within:border-burgundy"
+          className="mx-auto mt-7 flex max-w-2xl items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_12px_40px_-18px_rgba(143,45,45,0.35)] focus-within:border-burgundy"
         >
           <svg viewBox="0 0 24 24" className="ml-2 h-5 w-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input
