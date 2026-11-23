@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { readLogisticsStore, writeLogisticsStore } from "@/lib/server/vgmf-logistics";
 import { readLogisticsSettings } from "@/lib/server/vgmf-logistics-settings";
 
@@ -16,7 +17,8 @@ export type AgentKycEvent = {
 };
 
 export type AgentKycData = {
-  provider: "manual" | "accurascan";
+  provider: "manual" | "accurascan" | "voveid";
+  voveStatus?: string;
   sessionId?: string;
   status: AgentKycStatus;
   updatedAt?: string;
@@ -42,13 +44,182 @@ export function getEnabledKycProviders() {
     mandatoryBeforeActivation: true,
   };
   const accuraScanConfigured = Boolean((s.accuraScan?.apiKey || process.env.ACCURASCAN_API_KEY || "").trim());
+  const vc = voveConfig();
   return {
     manualEnabled: kp.manualEnabled !== false,
     accuraScanEnabled: kp.accuraScanEnabled !== false,
-    defaultProvider: (kp.defaultProvider === "accurascan" ? "accurascan" : "manual") as "manual" | "accurascan",
+    voveIdEnabled: kp.voveIdEnabled === true,
+    defaultProvider: (kp.defaultProvider === "accurascan" || kp.defaultProvider === "voveid" ? kp.defaultProvider : "manual") as "manual" | "accurascan" | "voveid",
     mandatoryBeforeActivation: kp.mandatoryBeforeActivation !== false,
     accuraScanConfigured,
+    voveIdConfigured: Boolean(vc.apiKey && vc.publicKey),
+    voveIdEnvironment: vc.environment,
   };
+}
+
+/* ---------------- VOVE ID (docs.voveid.com) ---------------- */
+
+function voveConfig() {
+  const v = readLogisticsSettings().current.voveId;
+  const environment: "Sandbox" | "Production" = v?.environment === "Sandbox" ? "Sandbox" : "Production";
+  const tld = environment === "Sandbox" ? "net" : "com";
+  return {
+    environment,
+    apiBase: `https://api.voveid.${tld}`,
+    hostedBase: `https://web.voveid.${tld}`,
+    apiKey: (v?.apiKey || process.env.VOVE_API_KEY || "").trim(),
+    publicKey: (v?.publicKey || process.env.VOVE_PUBLIC_KEY || "").trim(),
+    webhookSecret: (v?.webhookSecret || process.env.VOVE_WEBHOOK_SECRET || "").trim(),
+    flowId: (v?.flowId || "").trim(),
+    autoApproveOnSuccess: v?.autoApproveOnSuccess !== false,
+  };
+}
+
+export const VOVE_DONE_URL = "https://vaidyagogate.org/kyc/voveid-done";
+
+function voveRefId(email: string) {
+  return `vgmf-rider-${crypto.createHash("sha256").update(email.trim().toLowerCase()).digest("hex").slice(0, 20)}`;
+}
+
+function findEnrollment(store: ReturnType<typeof readLogisticsStore>, email: string) {
+  return store.agentEnrollments.find((a) => a.email.toLowerCase() === email);
+}
+
+export async function testVoveIdKey(override?: { apiKey?: string; environment?: string }) {
+  const cfg = voveConfig();
+  const apiKey = (override?.apiKey || cfg.apiKey).trim();
+  if (!apiKey) return { ok: false, message: "No VOVE ID API key is saved yet." };
+  const base = override?.environment === "Sandbox" ? "https://api.voveid.net" : override?.environment === "Production" ? "https://api.voveid.com" : cfg.apiBase;
+  try {
+    const res = await fetch(`${base}/v2/users/${encodeURIComponent("vgmf-key-check")}`, { headers: { "x-api-key": apiKey, accept: "application/json" } });
+    if (res.status === 401 || res.status === 403) return { ok: false, message: `VOVE ID rejected this key (HTTP ${res.status}). Check that the key and the Sandbox/Production setting match.` };
+    if (res.ok || res.status === 404) return { ok: true, message: "VOVE ID accepted the key." };
+    return { ok: false, message: `VOVE ID answered HTTP ${res.status}. Try again in a minute.` };
+  } catch {
+    return { ok: false, message: "Could not reach VOVE ID from the server." };
+  }
+}
+
+export async function startVoveIdKyc(input: { email: string; name?: string; documentType?: string; restart?: boolean }) {
+  const enabled = getEnabledKycProviders();
+  if (!enabled.voveIdEnabled) throw new Error("VOVE ID KYC is switched off in Admin Logistics Settings.");
+  const cfg = voveConfig();
+  if (!cfg.apiKey || !cfg.publicKey) throw new Error("VOVE ID keys are not set yet. Ask Admin to add them in Logistics Settings -> Delivery Partners.");
+  const email = input.email.trim().toLowerCase();
+  const refId = voveRefId(email);
+  const [firstName, ...rest] = (input.name || "").trim().split(/\s+/);
+  const body: Record<string, unknown> = { refId, forceCreation: Boolean(input.restart) };
+  if (cfg.flowId) body.flowId = cfg.flowId;
+  if (firstName && !firstName.includes("@")) body.user = { firstName, lastName: rest.join(" ") || undefined };
+  const res = await fetch(`${cfg.apiBase}/v2/sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json", "x-api-key": cfg.apiKey },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as { token?: string; message?: string; error?: string };
+  if (!res.ok || !json.token) {
+    throw new Error(res.status === 401 || res.status === 403 ? "VOVE ID rejected the API key. Ask Admin to check it." : `VOVE ID could not start verification (${json.message || json.error || `HTTP ${res.status}`}).`);
+  }
+  const store = readLogisticsStore();
+  const now = new Date().toISOString();
+  let rec = findEnrollment(store, email);
+  if (!rec) {
+    rec = { email, name: input.name || email, hubCode: "", status: "pending", requestedAt: now };
+    store.agentEnrollments.unshift(rec);
+  }
+  const prev = (rec as unknown as { kyc?: AgentKycData }).kyc;
+  const keep = prev?.provider === "voveid" && prev.status === "Approved" && !input.restart;
+  (rec as unknown as { kyc?: AgentKycData }).kyc = keep ? prev : {
+    ...(prev?.provider === "voveid" ? prev : {}),
+    provider: "voveid",
+    sessionId: refId,
+    status: "In Progress",
+    documentType: input.documentType || prev?.documentType || "Aadhaar Card",
+    updatedAt: now,
+    events: [...(prev?.events || []), { at: now, status: "VOVE ID verification started" }],
+  };
+  writeLogisticsStore(store);
+  const url = new URL("/", cfg.hostedBase);
+  url.searchParams.set("authToken", json.token);
+  url.searchParams.set("publicKey", cfg.publicKey);
+  url.searchParams.set("environment", cfg.environment);
+  url.searchParams.set("lg", "en");
+  url.searchParams.set("showUI", "true");
+  url.searchParams.set("redirectURL", VOVE_DONE_URL);
+  return { refId, url: url.toString(), doneUrl: VOVE_DONE_URL };
+}
+
+/** Reads the authoritative result from VOVE ID (GET /v2/users/{refId}) and updates the rider's KYC. */
+export async function syncVoveIdKyc(input: { email?: string; refId?: string; webhookStatus?: string }) {
+  const cfg = voveConfig();
+  if (!cfg.apiKey) throw new Error("VOVE ID API key is not set.");
+  const store = readLogisticsStore();
+  const email = input.email?.trim().toLowerCase();
+  const rec = email
+    ? findEnrollment(store, email)
+    : store.agentEnrollments.find((a) => (a as unknown as { kyc?: AgentKycData }).kyc?.sessionId === input.refId);
+  if (!rec) return null;
+  const refId = input.refId || voveRefId(rec.email);
+  const res = await fetch(`${cfg.apiBase}/v2/users/${encodeURIComponent(refId)}`, { headers: { "x-api-key": cfg.apiKey, accept: "application/json" } });
+  if (res.status === 404) return (rec as unknown as { kyc?: AgentKycData }).kyc || null;
+  if (!res.ok) throw new Error(`VOVE ID result could not be read (HTTP ${res.status}).`);
+  const v = (await res.json().catch(() => ({}))) as {
+    status?: string;
+    documents?: Array<Record<string, unknown>>;
+  };
+  const voveStatus = String(v.status || "");
+  const doc = v.documents?.[0] || {};
+  const docData: Record<string, string> = {};
+  for (const k of ["type", "fullName", "firstName", "lastName", "idNumber", "dateOfBirth", "issuingCountry", "digitalIDSpoof", "faceOnDocumentSpoof", "textOnDocumentSpoof", "matchLevel"]) {
+    const val = doc[k];
+    if (val !== undefined && val !== null && String(val).trim()) docData[k] = String(val).trim();
+  }
+  const prev = (rec as unknown as { kyc?: AgentKycData }).kyc;
+  let status: AgentKycStatus;
+  let note: string;
+  if (voveStatus === "successful" && input.webhookStatus !== "suspected") {
+    status = cfg.autoApproveOnSuccess ? "Approved" : "In Review";
+    note = cfg.autoApproveOnSuccess ? "Verified by VOVE ID (ID document and liveness passed)." : "VOVE ID passed. Waiting for hub review.";
+  } else if (voveStatus === "open" || voveStatus === "in-progress") {
+    status = input.webhookStatus === "pending" || input.webhookStatus === "suspected" ? "In Review" : "In Progress";
+    note = input.webhookStatus === "suspected" ? "VOVE ID flagged this verification as suspected. Hub must review." : `VOVE ID status: ${voveStatus}.`;
+  } else {
+    status = "In Review";
+    note = `VOVE ID status "${voveStatus || input.webhookStatus || "unknown"}". Sent to the hub for review.`;
+  }
+  if (prev?.status === status && prev?.voveStatus === voveStatus) return prev;
+  const now = new Date().toISOString();
+  const kyc: AgentKycData = {
+    ...(prev || { events: [] }),
+    provider: "voveid",
+    sessionId: refId,
+    status,
+    voveStatus,
+    documentNumber: prev?.documentNumber || docData.idNumber || "",
+    accuraOcrData: Object.keys(docData).length ? docData : prev?.accuraOcrData,
+    updatedAt: now,
+    verifiedAt: status === "Approved" ? now : prev?.verifiedAt,
+    events: [...(prev?.events || []), { at: now, status: `VOVE ID KYC: ${status}`, note }],
+  };
+  (rec as unknown as { kyc?: AgentKycData }).kyc = kyc;
+  writeLogisticsStore(store);
+  return kyc;
+}
+
+/** Svix signature check for VOVE ID webhooks (svix-id.svix-timestamp.body, HMAC-SHA256). */
+export function verifyVoveWebhook(raw: string, headers: { id: string; timestamp: string; signature: string }) {
+  const secret = voveConfig().webhookSecret;
+  if (!secret || !headers.id || !headers.timestamp || !headers.signature) return false;
+  const ts = Number(headers.timestamp);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+  const key = Buffer.from(secret.startsWith("whsec_") ? secret.slice(6) : secret, "base64");
+  const expected = crypto.createHmac("sha256", key).update(`${headers.id}.${headers.timestamp}.${raw}`).digest();
+  return headers.signature.split(" ").some((part) => {
+    const [version, sig] = part.split(",");
+    if (version !== "v1" || !sig) return false;
+    const got = Buffer.from(sig, "base64");
+    return got.length === expected.length && crypto.timingSafeEqual(got, expected);
+  });
 }
 
 export function buildKycPipelineStages(enrollment: {
@@ -78,7 +249,7 @@ export function buildKycPipelineStages(enrollment: {
     },
     {
       id: "kyc_session",
-      title: kyc?.provider === "accurascan" ? "AccuraScan AI KYC Submitted" : "KYC Documents Submitted",
+      title: kyc?.provider === "accurascan" ? "AccuraScan AI KYC Submitted" : kyc?.provider === "voveid" ? "VOVE ID Verification Started" : "KYC Documents Submitted",
       state: submitted ? "done" : hasHub ? "current" : "pending",
       at: kyc?.events?.[0]?.at || undefined,
       detail: kyc?.sessionId ? `Ref ${kyc.sessionId}` : "Submit ID & Selfie verification",
@@ -91,7 +262,9 @@ export function buildKycPipelineStages(enrollment: {
       detail:
         kyc?.provider === "accurascan" && (kyc.faceMatchScore !== undefined || kyc.livenessScore !== undefined)
           ? `AccuraScan · Face ${kyc.faceMatchScore ?? "—"}% · Liveness ${kyc.livenessScore ?? "—"}% (${kycStatus})`
-          : kycStatus === "In Review"
+          : kyc?.provider === "voveid"
+            ? `VOVE ID · ${kyc.voveStatus || "in progress"} (${kycStatus})`
+            : kycStatus === "In Review"
             ? "Under Admin verification review"
             : kycStatus,
     },
@@ -199,7 +372,7 @@ export function reinitiateAgentKyc(input: { email: string; reason?: string; by: 
   const prev = (rec as unknown as { kyc?: AgentKycData }).kyc;
   const enabled = getEnabledKycProviders();
   const kyc: AgentKycData = {
-    provider: enabled.defaultProvider || "manual",
+    provider: "manual",
     status: "Not Started",
     updatedAt: now,
     reviewedBy: input.by,

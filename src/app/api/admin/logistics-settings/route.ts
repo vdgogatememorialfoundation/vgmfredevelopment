@@ -4,7 +4,7 @@ import {
   restoreLogisticsSettingsVersion,
   saveLogisticsSettings,
 } from "@/lib/server/vgmf-logistics-settings";
-import { testAccuraScanKey } from "@/lib/server/agent-kyc";
+import { testAccuraScanKey, testVoveIdKey } from "@/lib/server/agent-kyc";
 
 export async function GET() {
   return NextResponse.json({ ok: true, ...readLogisticsSettings() });
@@ -16,6 +16,10 @@ export async function POST(req: NextRequest) {
     const by = String(body?.by || "Admin");
     if (body?.action === "test-accurascan") {
       const result = await testAccuraScanKey(String(body?.apiKey || ""));
+      return NextResponse.json(result);
+    }
+    if (body?.action === "test-voveid") {
+      const result = await testVoveIdKey({ apiKey: String(body?.apiKey || ""), environment: String(body?.environment || "") });
       return NextResponse.json(result);
     }
     if (body?.action === "restore") {

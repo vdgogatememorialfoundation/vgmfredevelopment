@@ -60,7 +60,7 @@ import {
   updateExecutiveShiftStatus,
   type ServiceModeChoice,
 } from "@/lib/server/vgmf-advanced-logistics";
-import { buildKycPipelineStages, submitManualKyc, submitAccuraScanKyc, getEnabledKycProviders, type AgentKycData } from "@/lib/server/agent-kyc";
+import { buildKycPipelineStages, submitManualKyc, submitAccuraScanKyc, getEnabledKycProviders, startVoveIdKyc, syncVoveIdKyc, type AgentKycData } from "@/lib/server/agent-kyc";
 import {
   addAwbToBag,
   addCustomHub,
@@ -2416,6 +2416,32 @@ export async function POST(request: NextRequest) {
       return json({ ok: true, ...res, message: "Manual KYC submitted! Awaiting Admin verification." });
     } catch (e) {
       return json({ ok: false, error: e instanceof Error ? e.message : "Could not submit manual KYC." }, 400);
+    }
+  }
+
+  if (action === "delivery-kyc-voveid-start") {
+    try {
+      const res = await startVoveIdKyc({ email: session.email, name: session.name || "", documentType: String(body?.documentType || ""), restart: Boolean(body?.restart) });
+      return json({ ok: true, ...res });
+    } catch (e) {
+      return json({ ok: false, error: e instanceof Error ? e.message : "Could not start VOVE ID verification." }, 400);
+    }
+  }
+
+  if (action === "delivery-kyc-voveid-sync") {
+    try {
+      const kyc = await syncVoveIdKyc({ email: session.email });
+      return json({
+        ok: true,
+        kyc,
+        message: kyc?.status === "Approved"
+          ? "Your ID was verified by VOVE ID."
+          : kyc?.status === "In Progress"
+            ? "VOVE ID is still checking your ID. Your KYC will update automatically."
+            : "Your KYC was sent to the hub for review.",
+      });
+    } catch (e) {
+      return json({ ok: false, error: e instanceof Error ? e.message : "Could not read the VOVE ID result." }, 400);
     }
   }
 

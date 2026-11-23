@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import * as ImagePicker from "expo-image-picker";
-import { Alert, Image, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Alert, Image, Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CourierDuty } from "./delivery-courier";
 import { LocationGate, useRiderLocation } from "./delivery-location";
@@ -194,22 +195,57 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
   const [phone, setPhone] = useState("");
   const [idPhoto, setIdPhoto] = useState("");
   const [selfie, setSelfie] = useState("");
-  const [useAccura, setUseAccura] = useState(true);
+  const [provider, setProvider] = useState<"manual" | "accurascan" | "voveid">("accurascan");
+  const useAccura = provider === "accurascan";
+  const useVove = provider === "voveid";
+  const [vove, setVove] = useState<{ url: string; doneUrl: string } | null>(null);
+  const [voveDone, setVoveDone] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void callPortal<{ hubs: { code: string; name: string; city?: string; type?: string }[]; enabledKycProviders?: { accuraScanEnabled?: boolean; defaultProvider?: string } }>("delivery-dashboard")
+    void callPortal<{ hubs: { code: string; name: string; city?: string; type?: string }[]; enabledKycProviders?: { accuraScanEnabled?: boolean; voveIdEnabled?: boolean; defaultProvider?: string } }>("delivery-dashboard")
       .then((res) => {
         setHubs(res.hubs ?? []);
         const kp = res.enabledKycProviders;
-        if (kp) setUseAccura(Boolean(kp.accuraScanEnabled) && kp.defaultProvider === "accurascan");
+        if (kp) setProvider(kp.defaultProvider === "voveid" && kp.voveIdEnabled ? "voveid" : kp.defaultProvider === "accurascan" && kp.accuraScanEnabled ? "accurascan" : "manual");
       })
       .catch(() => undefined);
   }, []);
 
+  const startVove = async () => {
+    setBusy(true);
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) throw new Error("Allow camera access to verify your ID.");
+      const res = await callPortal<{ url: string; doneUrl: string }>("delivery-kyc-voveid-start", { documentType: docType, restart: Boolean(voveDone) });
+      if (!res.ok || !res.url) throw new Error(res.error || "VOVE ID verification could not be started.");
+      setVove({ url: res.url, doneUrl: res.doneUrl });
+    } catch (e) {
+      errorAlert(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finishVove = async () => {
+    setVove(null);
+    try {
+      const res = await callPortal<{ message?: string }>("delivery-kyc-voveid-sync");
+      setVoveDone(res.message || "Your verification was sent.");
+    } catch {
+      setVoveDone("Your verification was sent. Your KYC status updates automatically.");
+    }
+  };
+
   const submit = async () => {
     setBusy(true);
     try {
+      if (useVove) {
+        await callPortal("delivery-request-hub", { hubCode, serviceMode, phone, vehicleNo: vehicle });
+        Alert.alert("KYC submitted", `${voveDone} Go to your hub with your original ID. The hub manager activates your account.`);
+        onDone();
+        return;
+      }
       const [idUp, selfieUp] = await Promise.all([
         rider.uploadPhoto(`data:image/jpeg;base64,${idPhoto}`, "kyc"),
         rider.uploadPhoto(`data:image/jpeg;base64,${selfie}`, "kyc"),
@@ -267,11 +303,19 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
         <Field label={useAccura ? "Document number (optional, AccuraScan reads it from the photo)" : "Document number"} value={docNo} onChangeText={setDocNo} autoCapitalize="characters" />
         <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
         <Field label="Vehicle number" value={vehicle} onChangeText={setVehicle} autoCapitalize="characters" placeholder="MH12AB1234" />
+        {useVove ? (
+          <View style={{ gap: 8 }}>
+            <Text style={d.muted}>VOVE ID checks your ID document and takes a live selfie. It opens inside this app.</Text>
+            {voveDone ? <Text style={[d.body, { color: P.green, fontWeight: "700" }]}>{voveDone}</Text> : null}
+            <Btn label={voveDone ? "Verify again with VOVE ID" : "Verify my ID with VOVE ID"} icon="scan" tone={voveDone ? "outline" : undefined} onPress={startVove} busy={busy && !vove} />
+          </View>
+        ) : (
         <View style={{ flexDirection: "row", gap: 10 }}>
           <KycShot label="Photo of your ID" hint="Front side, all four corners visible." value={idPhoto} onTaken={setIdPhoto} />
           <KycShot label="Live selfie" hint="Face the camera in good light." selfie value={selfie} onTaken={setSelfie} />
         </View>
-        <Text style={d.muted}>{useAccura ? "AccuraScan checks your ID, matches your face and confirms the selfie is live." : "The hub manager checks your ID and selfie."}</Text>
+        )}
+        {useVove ? null : <Text style={d.muted}>{useAccura ? "AccuraScan checks your ID, matches your face and confirms the selfie is live." : "The hub manager checks your ID and selfie."}</Text>}
       </Card>
       <Card>
         <Text style={d.h2}>Step 2 · Your hub</Text>
@@ -283,7 +327,35 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
           </Pressable>
         ))}
       </Card>
-      <Btn label="Submit KYC and request activation" icon="shield-checkmark" onPress={submit} busy={busy} disabled={(!useAccura && !docNo) || !hubCode || !idPhoto || !selfie} />
+      <Btn label="Submit KYC and request activation" icon="shield-checkmark" onPress={submit} busy={busy && !vove} disabled={useVove ? !voveDone || !hubCode : (!useAccura && !docNo) || !hubCode || !idPhoto || !selfie} />
+      <Modal visible={Boolean(vove)} animationType="slide" onRequestClose={() => void finishVove()}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: P.white }}>
+          <View style={[d.between, { padding: 12, borderBottomWidth: 1, borderColor: P.border }]}>
+            <Text style={d.h2}>Verify your ID</Text>
+            <Pressable onPress={() => void finishVove()} hitSlop={12}>
+              <Ionicons name="close" size={26} color={P.ink} />
+            </Pressable>
+          </View>
+          {vove ? (
+            <WebView
+              source={{ uri: vove.url }}
+              javaScriptEnabled
+              domStorageEnabled
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+              mediaCapturePermissionGrantType="grant"
+              onShouldStartLoadWithRequest={(req) => {
+                if (req.url.startsWith(vove.doneUrl)) {
+                  void finishVove();
+                  return false;
+                }
+                return true;
+              }}
+              style={{ flex: 1 }}
+            />
+          ) : null}
+        </SafeAreaView>
+      </Modal>
     </ScrollView>
   );
 }

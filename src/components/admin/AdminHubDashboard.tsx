@@ -798,7 +798,9 @@ export default function AdminHubDashboard({ lockedHubCode, operatorName }: { loc
                       Delivery Agent KYC Pipeline &amp; Hub Activation ({(data?.agentEnrollments || []).length})
                     </p>
                     <a href="/admin/commerce/logistics-settings?tab=partners" className="text-[11px] font-semibold text-blue-800 underline">
-                      {data?.kycProviders?.defaultProvider === "accurascan" && data?.kycProviders?.accuraScanEnabled
+                      {data?.kycProviders?.defaultProvider === "voveid" && data?.kycProviders?.voveIdEnabled
+                        ? data?.kycProviders?.voveIdConfigured ? "KYC: VOVE ID (automatic) · settings" : "KYC: VOVE ID · keys missing · add them"
+                        : data?.kycProviders?.defaultProvider === "accurascan" && data?.kycProviders?.accuraScanEnabled
                         ? data?.kycProviders?.accuraScanConfigured ? "KYC: AccuraScan (automatic) · settings" : "KYC: AccuraScan · API key missing · add it"
                         : "KYC: manual check by hub · switch to AccuraScan"}
                     </a>
@@ -811,7 +813,7 @@ export default function AdminHubDashboard({ lockedHubCode, operatorName }: { loc
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <p className="font-bold text-sm text-text-primary">{ag.name} <span className="font-normal text-text-muted">({ag.email})</span></p>
-                            <p className="text-text-muted">Hub: <b className="font-mono">{ag.hubCode || "Unassigned"}</b>{hubs.find((h: { code: string; name: string }) => h.code === ag.hubCode)?.name ? ` (${hubs.find((h: { code: string; name: string }) => h.code === ag.hubCode)?.name})` : ""}{ag.phone ? ` · ${ag.phone}` : ""}{ag.vehicleNo ? ` · ${ag.vehicleNo}` : ""} · {ag.kyc?.provider === "accurascan" ? "AccuraScan AI KYC" : "Manual KYC"}: <b>{ag.kyc?.status || "Not Started"}</b>{ag.kyc?.provider === "accurascan" && (ag.kyc?.faceMatchScore !== undefined || ag.kyc?.livenessScore !== undefined) ? ` (Face ${ag.kyc?.faceMatchScore ?? "—"}% · Liveness ${ag.kyc?.livenessScore ?? "—"}%)` : ""}</p>
+                            <p className="text-text-muted">Hub: <b className="font-mono">{ag.hubCode || "Unassigned"}</b>{hubs.find((h: { code: string; name: string }) => h.code === ag.hubCode)?.name ? ` (${hubs.find((h: { code: string; name: string }) => h.code === ag.hubCode)?.name})` : ""}{ag.phone ? ` · ${ag.phone}` : ""}{ag.vehicleNo ? ` · ${ag.vehicleNo}` : ""} · {ag.kyc?.provider === "accurascan" ? "AccuraScan AI KYC" : ag.kyc?.provider === "voveid" ? "VOVE ID KYC" : "Manual KYC"}: <b>{ag.kyc?.status || "Not Started"}</b>{ag.kyc?.provider === "accurascan" && (ag.kyc?.faceMatchScore !== undefined || ag.kyc?.livenessScore !== undefined) ? ` (Face ${ag.kyc?.faceMatchScore ?? "—"}% · Liveness ${ag.kyc?.livenessScore ?? "—"}%)` : ""}</p>
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             {ag.kyc?.status !== "Approved" && (

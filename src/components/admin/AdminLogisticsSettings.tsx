@@ -45,6 +45,8 @@ export default function AdminLogisticsSettings() {
   const [tab, setTab] = useState<TabId>(NAV.some((n) => n.id === urlTab) ? (urlTab as TabId) : "general");
   const [accTest, setAccTest] = useState<{ ok: boolean; message: string } | null>(null);
   const [accTesting, setAccTesting] = useState(false);
+  const [voveTest, setVoveTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [voveTesting, setVoveTesting] = useState(false);
   const [cfg, setCfg] = useState<LogisticsSettingsData | null>(null);
   const [history, setHistory] = useState<{ version: number; at: string; by: string; note: string }[]>([]);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -361,6 +363,11 @@ export default function AdminLogisticsSettings() {
                     onChange={(v) => setCfg({ ...cfg, kycProviders: { ...(cfg.kycProviders || { manualEnabled: true, accuraScanEnabled: true, defaultProvider: "manual", mandatoryBeforeActivation: true }), accuraScanEnabled: v } })}
                   />
                   <Toggle
+                    label="Enable VOVE ID KYC (docs.voveid.com)"
+                    checked={cfg.kycProviders?.voveIdEnabled === true}
+                    onChange={(v) => setCfg({ ...cfg, kycProviders: { ...(cfg.kycProviders || { manualEnabled: true, accuraScanEnabled: true, defaultProvider: "manual", mandatoryBeforeActivation: true }), voveIdEnabled: v } })}
+                  />
+                  <Toggle
                     label="Require KYC Approved Before Hub Manager Activation"
                     checked={cfg.kycProviders?.mandatoryBeforeActivation !== false}
                     onChange={(v) => setCfg({ ...cfg, kycProviders: { ...(cfg.kycProviders || { manualEnabled: true, accuraScanEnabled: true, defaultProvider: "manual", mandatoryBeforeActivation: true }), mandatoryBeforeActivation: v } })}
@@ -371,13 +378,75 @@ export default function AdminLogisticsSettings() {
                     Default KYC Provider in Delivery App
                     <SelectInput
                       value={cfg.kycProviders?.defaultProvider || "manual"}
-                      onChange={(e) => setCfg({ ...cfg, kycProviders: { ...(cfg.kycProviders || { manualEnabled: true, accuraScanEnabled: true, defaultProvider: "manual", mandatoryBeforeActivation: true }), defaultProvider: e.target.value as "manual" | "accurascan" } })}
+                      onChange={(e) => setCfg({ ...cfg, kycProviders: { ...(cfg.kycProviders || { manualEnabled: true, accuraScanEnabled: true, defaultProvider: "manual", mandatoryBeforeActivation: true }), defaultProvider: e.target.value as "manual" | "accurascan" | "voveid" } })}
                     >
                       <option value="manual">Manual KYC (Admin Review)</option>
                       <option value="accurascan">AccuraScan AI KYC (OCR + Face Match + Liveness)</option>
+                      <option value="voveid">VOVE ID (ID document + liveness)</option>
                     </SelectInput>
                   </label>
                 </div>
+              </div>
+
+              <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-extrabold text-teal-950">VOVE ID KYC Configuration (docs.voveid.com)</h3>
+                  <p className="text-xs text-teal-900/80">
+                    Riders verify their ID and a live selfie inside the Delivery app. Copy the private API key and public key from the VOVE ID dashboard (Settings → General). Add the Android package <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">org.vaidyagogate.delivery</code> and the domain <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">vaidyagogate.org</code> there. Webhook URL: <code className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px]">https://vaidyagogate.org/api/logistics/voveid-webhook</code>
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={voveTesting}
+                    onClick={async () => {
+                      setVoveTesting(true);
+                      setVoveTest(null);
+                      try {
+                        const r = await fetch("/api/admin/logistics-settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "test-voveid", apiKey: cfg.voveId?.apiKey || "", environment: cfg.voveId?.environment || "Production" }) });
+                        setVoveTest(await r.json());
+                      } catch {
+                        setVoveTest({ ok: false, message: "Could not run the test." });
+                      } finally {
+                        setVoveTesting(false);
+                      }
+                    }}
+                    className="rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+                  >
+                    {voveTesting ? "Testing…" : "Test VOVE ID key"}
+                  </button>
+                  {voveTest ? <span className={`text-xs font-semibold ${voveTest.ok ? "text-green-700" : "text-red-700"}`}>{voveTest.message}</span> : null}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="text-xs font-semibold">
+                    Environment
+                    <SelectInput value={cfg.voveId?.environment || "Production"} onChange={(e) => setCfg({ ...cfg, voveId: { ...(cfg.voveId || { environment: "Production" as const, apiKey: "", publicKey: "", webhookSecret: "", flowId: "", autoApproveOnSuccess: true }), environment: e.target.value as "Sandbox" | "Production" } })}>
+                      <option value="Production">Production (api.voveid.com)</option>
+                      <option value="Sandbox">Sandbox (api.voveid.net, test data)</option>
+                    </SelectInput>
+                  </label>
+                  <label className="text-xs font-semibold">
+                    Private API key (x-api-key)
+                    <TextInput type="password" placeholder="Paste VOVE ID API key" value={cfg.voveId?.apiKey || ""} onChange={(e) => setCfg({ ...cfg, voveId: { ...(cfg.voveId || { environment: "Production" as const, apiKey: "", publicKey: "", webhookSecret: "", flowId: "", autoApproveOnSuccess: true }), apiKey: e.target.value.trim() } })} />
+                  </label>
+                  <label className="text-xs font-semibold">
+                    Public SDK key
+                    <TextInput placeholder="Paste VOVE ID public key" value={cfg.voveId?.publicKey || ""} onChange={(e) => setCfg({ ...cfg, voveId: { ...(cfg.voveId || { environment: "Production" as const, apiKey: "", publicKey: "", webhookSecret: "", flowId: "", autoApproveOnSuccess: true }), publicKey: e.target.value.trim() } })} />
+                  </label>
+                  <label className="text-xs font-semibold">
+                    Webhook signing secret
+                    <TextInput type="password" placeholder="whsec_…" value={cfg.voveId?.webhookSecret || ""} onChange={(e) => setCfg({ ...cfg, voveId: { ...(cfg.voveId || { environment: "Production" as const, apiKey: "", publicKey: "", webhookSecret: "", flowId: "", autoApproveOnSuccess: true }), webhookSecret: e.target.value.trim() } })} />
+                  </label>
+                  <label className="text-xs font-semibold">
+                    KYC flow ID (optional)
+                    <TextInput placeholder="Leave empty to use your default flow" value={cfg.voveId?.flowId || ""} onChange={(e) => setCfg({ ...cfg, voveId: { ...(cfg.voveId || { environment: "Production" as const, apiKey: "", publicKey: "", webhookSecret: "", flowId: "", autoApproveOnSuccess: true }), flowId: e.target.value.trim() } })} />
+                  </label>
+                </div>
+                <Toggle
+                  label="Approve rider KYC automatically when VOVE ID returns successful"
+                  checked={cfg.voveId?.autoApproveOnSuccess !== false}
+                  onChange={(v) => setCfg({ ...cfg, voveId: { ...(cfg.voveId || { environment: "Production" as const, apiKey: "", publicKey: "", webhookSecret: "", flowId: "", autoApproveOnSuccess: true }), autoApproveOnSuccess: v } })}
+                />
               </div>
 
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">

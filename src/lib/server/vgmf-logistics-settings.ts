@@ -170,8 +170,17 @@ export type LogisticsSettingsData = {
   kycProviders: {
     manualEnabled: boolean;
     accuraScanEnabled: boolean;
-    defaultProvider: "manual" | "accurascan";
+    voveIdEnabled?: boolean;
+    defaultProvider: "manual" | "accurascan" | "voveid";
     mandatoryBeforeActivation: boolean;
+  };
+  voveId?: {
+    environment: "Sandbox" | "Production";
+    apiKey: string;
+    publicKey: string;
+    webhookSecret: string;
+    flowId: string;
+    autoApproveOnSuccess: boolean;
   };
   accuraScan: {
     apiKey: string;
@@ -339,6 +348,14 @@ const DEFAULT_SETTINGS: LogisticsSettingsData = {
     minLivenessScore: 55,
     autoApproveOnPass: true,
   },
+  voveId: {
+    environment: "Production",
+    apiKey: "",
+    publicKey: "",
+    webhookSecret: "",
+    flowId: "",
+    autoApproveOnSuccess: true,
+  },
   routes: [],
   vehicles: [],
   pincodes: [],
@@ -368,6 +385,7 @@ export function readLogisticsSettings(): SettingsStore {
         emergency: { ...DEFAULT_SETTINGS.emergency, ...(raw.current?.emergency || {}) },
         kycProviders: { ...DEFAULT_SETTINGS.kycProviders, ...(raw.current?.kycProviders || {}) },
         accuraScan: { ...DEFAULT_SETTINGS.accuraScan, ...(raw.current?.accuraScan || {}) },
+        voveId: { ...DEFAULT_SETTINGS.voveId!, ...(raw.current?.voveId || {}) },
         routes: Array.isArray(raw.current?.routes) ? raw.current.routes : [],
         vehicles: Array.isArray(raw.current?.vehicles) ? raw.current.vehicles : [],
         pincodes: Array.isArray(raw.current?.pincodes) ? raw.current.pincodes : [],

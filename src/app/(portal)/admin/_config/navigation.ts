@@ -85,7 +85,7 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "VGMF Logistics · Settings",
     items: [
       { label: "Logistics settings", href: "/admin/commerce/logistics-settings" },
-      { label: "AccuraScan KYC (rider ID check)", href: "/admin/commerce/logistics-settings?tab=partners" },
+      { label: "Rider KYC (VOVE ID / AccuraScan)", href: "/admin/commerce/logistics-settings?tab=partners" },
       { label: "Delivery pincodes", href: "/admin/commerce/serviceability" },
       { label: "Outside courier APIs", href: "/admin/settings/shipping-apis" },
       { label: "Courier performance", href: "/admin/delivery-partners/performance" },
