@@ -1,7 +1,3 @@
+import { Suspense } from "react";
 import AdminLogisticsOps from "@/components/admin/AdminLogisticsOps";
-
-export const metadata = { title: "Pickups" };
-
-export default function PickupsPage() {
-  return <AdminLogisticsOps only="pickup" />;
-}
+export default function PickupsPage() { return <Suspense fallback={<div className="p-6 text-sm">Loading...</div>}><AdminLogisticsOps only="pickup" /></Suspense>; }

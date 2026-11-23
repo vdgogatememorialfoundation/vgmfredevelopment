@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CourierDuty } from "./delivery-courier";
-import { HyperlocalDuty } from "./delivery-hyperlocal";
 import { LocationGate, useRiderLocation } from "./delivery-location";
 import { rider, type Enrollment, type RiderSettings, type ShiftBooking, type ShiftOption, type ShiftSummary, type Wallet } from "./delivery-api";
 import { Btn, Card, d, errorAlert, Field, money, PhotoStrip } from "./delivery-ui";
@@ -46,7 +45,7 @@ export function DeliveryAuth({ onSignedIn }: { onSignedIn: (session: PortalSessi
             <Ionicons name="bicycle" size={38} color={P.brand} />
           </View>
           <Text style={d.h1}>VGMF Delivery</Text>
-          <Text style={[d.muted, { textAlign: "center" }]}>Vaidya Gogate Memorial Foundation · Delivery executives and hyperlocal riders</Text>
+          <Text style={[d.muted, { textAlign: "center" }]}>Vaidya Gogate Memorial Foundation · Delivery executives</Text>
         </View>
         <View style={{ flexDirection: "row", backgroundColor: P.bg, borderRadius: 12, padding: 4 }}>
           {(["signin", "signup"] as const).map((m) => (
@@ -60,7 +59,7 @@ export function DeliveryAuth({ onSignedIn }: { onSignedIn: (session: PortalSessi
         {mode === "signup" ? <Field label="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={13} /> : null}
         <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry />
         <Btn label={mode === "signin" ? "Sign in" : "Create account"} icon={mode === "signin" ? "log-in" : "person-add"} onPress={submit} busy={busy} disabled={!email || password.length < 6 || (mode === "signup" && (!name || phone.replace(/\D/g, "").length < 10))} />
-        {mode === "signup" ? <Text style={[d.muted, { textAlign: "center" }]}>Next you'll do KYC and get activated at your hub or dark store.</Text> : null}
+        {mode === "signup" ? <Text style={[d.muted, { textAlign: "center" }]}>Next you'll do KYC and get activated at your hub.</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -95,19 +94,19 @@ export function DeliveryAppShell({ session, onSignOut }: { session: PortalSessio
   const location = useRiderLocation(Boolean(active));
   const tabs = [
     { id: "duty", label: "Home", icon: "home" },
-    { id: "work", label: active?.mode === "hyperlocal" ? "Orders" : "Runsheets", icon: active?.mode === "hyperlocal" ? "flash" : "list" },
+    { id: "work", label: "Runsheets", icon: "list" },
     { id: "wallet", label: "Earnings", icon: "wallet" },
     { id: "account", label: "Account", icon: "person-circle" },
   ];
 
   return (
     <SafeAreaView style={d.screen} edges={["top"]}>
-      <PortalTopBar title={tab === "work" ? (active?.mode === "hyperlocal" ? "Hyperlocal" : "Runsheets") : tab === "wallet" ? "Earnings & wallet" : tab === "account" ? "Account" : "Home · my shifts"} subtitle={session.name} onRefresh={load} refreshing={loading} />
+      <PortalTopBar title={tab === "work" ? "Runsheets" : tab === "wallet" ? "Earnings & wallet" : tab === "account" ? "Account" : "Home · my shifts"} subtitle={session.name} onRefresh={load} refreshing={loading} />
       {home && activated ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: active ? "#E7F6EC" : "#F2F4F5", borderBottomWidth: 1, borderBottomColor: "#D5D9D9" }}>
           <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: active ? P.green : P.muted }} />
           <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "700", color: "#0F1111" }}>
-            {active ? `On duty · ${active.mode === "hyperlocal" ? "Hyperlocal" : "Normal orders"} · ${active.shiftName} until ${active.end}` : "Off duty · book a shift and check in to get work"}
+            {active ? `On duty · ${active.shiftName} shift until ${active.end}` : "Off duty · book a shift and check in to get work"}
           </Text>
         </View>
       ) : null}
@@ -127,8 +126,6 @@ export function DeliveryAppShell({ session, onSignOut }: { session: PortalSessio
                 <Btn label="Go to Duty" icon="time" onPress={() => setTab("duty")} />
               </Card>
             </ScrollView>
-          ) : active.mode === "hyperlocal" ? (
-            <HyperlocalDuty settings={home.settings} />
           ) : (
             <CourierDuty settings={home.settings} />
           )
@@ -158,7 +155,7 @@ export function DeliveryAppShell({ session, onSignOut }: { session: PortalSessio
 function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: () => void }) {
   const [hubs, setHubs] = useState<{ code: string; name: string; city?: string; type?: string }[]>([]);
   const [hubCode, setHubCode] = useState(enrollment.hubCode || "");
-  const [serviceMode, setServiceMode] = useState<"normal" | "hyperlocal" | "both">("normal");
+  const serviceMode = "normal";
   const [docType, setDocType] = useState("Aadhaar");
   const [docNo, setDocNo] = useState("");
   const [vehicle, setVehicle] = useState("");
@@ -175,7 +172,7 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
     try {
       await rider.kycSubmit({ documentType: docType, documentNumber: docNo, idPhotoUrl: photos[0] || "", phone, vehicleNo: vehicle });
       await callPortal("delivery-request-hub", { hubCode, serviceMode });
-      Alert.alert("Submitted", "Go to your hub / dark store with your original ID. The hub manager activates your ID.");
+      Alert.alert("Submitted", "Go to your hub with your original ID. The hub manager activates your ID.");
       onDone();
     } catch (e) {
       errorAlert(e);
@@ -190,7 +187,7 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
         <Card>
           <Ionicons name="hourglass" size={34} color={P.amber} />
           <Text style={d.h2}>Waiting for activation</Text>
-          <Text style={d.body}>Your KYC is submitted. Visit hub / dark store {enrollment.hubCode || ""} with your original ID and vehicle papers. Once the hub manager activates you, pull to refresh.</Text>
+          <Text style={d.body}>Your KYC is submitted. Visit hub {enrollment.hubCode || ""} with your original ID and vehicle papers. Once the hub manager activates you, pull to refresh.</Text>
           <Btn label="Check activation status" icon="refresh" tone="outline" onPress={onDone} />
         </Card>
       </ScrollView>
@@ -215,15 +212,8 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
         <PhotoStrip photos={photos} onAdd={(url) => setPhotos((p) => [...p, url])} kind="kyc" />
       </Card>
       <Card>
-        <Text style={d.h2}>Step 2 · Work type and hub</Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {([["normal", "Courier delivery"], ["hyperlocal", "Hyperlocal"], ["both", "Both"]] as const).map(([id, label]) => (
-            <Pressable key={id} onPress={() => setServiceMode(id)} style={[d.filter, { flex: 1, alignItems: "center" }, serviceMode === id && d.filterOn]}>
-              <Text style={[d.filterText, serviceMode === id && { color: P.white }]}>{label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={d.label}>{serviceMode === "hyperlocal" ? "Dark store" : "Hub"}</Text>
+        <Text style={d.h2}>Step 2 · Your hub</Text>
+        <Text style={d.label}>Choose your hub</Text>
         {hubs.map((hub) => (
           <Pressable key={hub.code} onPress={() => setHubCode(hub.code)} style={[d.between, { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: hubCode === hub.code ? P.brand : P.border, backgroundColor: hubCode === hub.code ? P.brandSoft : P.white }]}>
             <Text style={d.body}>{hub.name} {hub.city ? `· ${hub.city}` : ""}</Text>
@@ -281,7 +271,7 @@ function DutyScreen({ home, reload, openWork }: { home: Home; reload: () => void
             <Text style={d.label}>Shift confirmation ID</Text>
             <Text style={d.big}>{duty.id}</Text>
             <View style={{ flexDirection: "row", gap: 8 }}>
-              {[["Delivered", home.summary.delivered ?? 0], ["Pickups", home.summary.pickups ?? 0], ["Returns", home.summary.returns ?? 0], ["Failed", home.summary.failed ?? 0]].map(([label, value]) => (
+              {(hyper ? [["Orders delivered", home.summary.hyperlocal ?? 0], ["Earned today", `₹${Math.round(home.summary.earned ?? 0)}`], ["Failed", home.summary.failed ?? 0]] : [["Delivered", home.summary.delivered ?? 0], ["Pickups", home.summary.pickups ?? 0], ["Returns", home.summary.returns ?? 0], ["Failed", home.summary.failed ?? 0]]).map(([label, value]) => (
                 <View key={String(label)} style={[d.chip, { backgroundColor: P.white }]}>
                   <Text style={d.chipValue}>{value}</Text>
                   <Text style={d.chipLabel}>{label}</Text>
@@ -336,7 +326,6 @@ function DutyScreen({ home, reload, openWork }: { home: Home; reload: () => void
   return (
     <ScrollView contentContainerStyle={d.pad} refreshControl={<RefreshControl refreshing={false} onRefresh={reload} />}>
       {section("courier")}
-      {section("hyperlocal")}
     </ScrollView>
   );
 }

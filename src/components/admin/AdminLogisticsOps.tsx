@@ -1,13 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, SelectInput, TextInput } from "@/components/admin/AdminUI";
 
-type OpsTab = "shifts" | "pickup" | "hyperlocal" | "openbox";
+type OpsTab = "shifts" | "pickup" | "openbox";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function AdminLogisticsOps({ only }: { only?: OpsTab } = {}) {
-  const [tab, setTab] = useState<OpsTab>(only ?? "shifts");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const urlTab = searchParams.get("tab") as OpsTab | null;
+  const [tab, setTab] = useState<OpsTab>(only ?? (urlTab && ["shifts","pickup","openbox"].includes(urlTab) ? urlTab : "shifts"));
+
+  useEffect(() => {
+    if (only) return;
+    const t = searchParams.get("tab") as OpsTab | null;
+    if (t && ["shifts","pickup","openbox"].includes(t)) setTab(t);
+  }, [searchParams, only]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -56,7 +66,7 @@ export default function AdminLogisticsOps({ only }: { only?: OpsTab } = {}) {
     }
   };
 
-  if (!data) return <div className="p-8 text-sm text-text-muted">Loading VGMF Shift, Pickup, Hyperlocal &amp; Open-Box Operations…</div>;
+  if (!data) return <div className="p-8 text-sm text-text-muted">Loading VGMF Shift, Pickup &amp; Open-Box Operations…</div>;
 
   const ob = data.openBoxSettings;
 
@@ -64,7 +74,7 @@ export default function AdminLogisticsOps({ only }: { only?: OpsTab } = {}) {
     <div className="mx-auto max-w-[1440px] p-4 sm:p-6 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-4 shadow-sm">
         <div>
-          <h1 className="text-xl font-extrabold text-text-primary">{only === "pickup" ? "Pickups" : "Rider shifts, hyperlocal and open-box settings"}</h1>
+          <h1 className="text-xl font-extrabold text-text-primary">{only === "pickup" ? "Pickups" : "Rider shifts, pickups and open-box settings"}</h1>
           <p className="text-xs text-text-muted">
             {only === "pickup"
               ? "Parcels booked with our own logistics that a rider must collect from the seller. Assign them to a rider and they appear in that rider's Delivery app."
@@ -85,14 +95,14 @@ export default function AdminLogisticsOps({ only }: { only?: OpsTab } = {}) {
           [
             ["shifts", "Shift & Timeslot Management"],
             ["pickup", "Assign pickups to riders"],
-            ["hyperlocal", "Hyperlocal Operations"],
+            
             ["openbox", "Open-Box Delivery & Inspections"],
           ] as const
         ).map(([id, lbl]) => (
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => { setTab(id); router.replace(`/admin/commerce/logistics-ops?tab=${id}`, { scroll: false }); }}
             className={`rounded-xl px-4 py-2 text-xs font-bold transition ${tab === id ? "bg-burgundy text-white" : "border border-border bg-white text-text-primary hover:bg-warm-cream"}`}
           >
             {lbl}
@@ -276,34 +286,6 @@ export default function AdminLogisticsOps({ only }: { only?: OpsTab } = {}) {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* 3. HYPERLOCAL OPERATIONS */}
-      {tab === "hyperlocal" && (
-        <div className="rounded-2xl border border-border bg-white p-5 shadow-sm space-y-4">
-          <h2 className="text-base font-extrabold">Hyperlocal Routing Mode</h2>
-          <p className="text-xs text-text-muted">Choose whether hyperlocal orders route directly from Seller → Customer without forced hub stops, or via a local Micro-Hub.</p>
-          <div className="flex flex-wrap gap-3">
-            {(
-              [
-                ["direct_seller_to_customer", "Direct Seller → Customer (No Hub Stop)"],
-                ["micro_hub", "Seller → Local Micro-Hub → Customer"],
-              ] as const
-            ).map(([val, lbl]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() => void act({ action: "save-open-box-settings", openBoxSettings: { ...ob, hyperlocalRouteMode: val } })}
-                className={`rounded-xl border px-4 py-3 text-xs font-bold ${ob.hyperlocalRouteMode === val ? "border-burgundy bg-burgundy text-white" : "border-border bg-white text-text-primary"}`}
-              >
-                {lbl}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-emerald-800 font-semibold">
-            Active Hyperlocal-Eligible Executives: {(data.attendance || []).filter((a: { serviceMode: string; status: string }) => a.status === "checked_in" && (a.serviceMode === "hyperlocal" || a.serviceMode === "both")).length} checked in right now.
-          </p>
         </div>
       )}
 

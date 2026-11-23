@@ -174,6 +174,7 @@ export type AgentEnrollmentRecord = {
   reviewedAt?: string;
   reviewedBy?: string;
   rejectReason?: string;
+  lastLocation?: { lat: number; lng: number; accuracy?: number; at: string; note?: string };
 };
 
 type LogisticsStore = {
@@ -1894,4 +1895,21 @@ export function deleteAgentEnrollment(email: string, by: string) {
   recordAudit(store, store.hubs[0]?.code || "ADMIN", "AGENT_ACCOUNT_DELETED", cleanEmail, by, `Deleted delivery agent account ${cleanEmail}`);
   writeLogisticsStore(store);
   return { removedEnrollment: before !== store.agentEnrollments.length };
+}
+
+export function updateAgentLocation(input: { email: string; lat: number; lng: number; accuracy?: number; note?: string }) {
+  const clean = input.email.trim().toLowerCase();
+  if (!clean || !Number.isFinite(input.lat) || !Number.isFinite(input.lng)) return null;
+  const store = readLogisticsStore();
+  const rec = store.agentEnrollments.find((a) => a.email.toLowerCase() === clean);
+  if (!rec) return null;
+  rec.lastLocation = {
+    lat: input.lat,
+    lng: input.lng,
+    accuracy: input.accuracy,
+    at: new Date().toISOString(),
+    note: input.note,
+  };
+  writeLogisticsStore(store);
+  return rec.lastLocation;
 }

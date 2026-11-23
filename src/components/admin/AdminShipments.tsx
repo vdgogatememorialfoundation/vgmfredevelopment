@@ -24,7 +24,7 @@ import {
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { bookedViaLabel, customerCourierLabel } from "@/lib/courier-label";
 import { deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
-import { isDeskScan } from "@/lib/order-pipeline";
+import { isDeskScan, isFailedAttempt } from "@/lib/order-pipeline";
 import { formatDate } from "@/lib/utils";
 
 const SHIPMENT_TONES: Record<string, string> = {
@@ -36,6 +36,11 @@ const SHIPMENT_TONES: Record<string, string> = {
   Failed: "bg-red-50 text-red-700",
 };
 
+function shipmentHasFailedAttempt(shipment: ShipmentRecord) {
+  if (shipment.status === "Failed") return true;
+  return (shipment.tracking ?? []).some((scan) => isFailedAttempt(scan.status || ""));
+}
+
 export function ShipmentsSection() {
   const { version } = useCommerceMirror();
   const [extra, setExtra] = useState(0);
@@ -43,6 +48,40 @@ export function ShipmentsSection() {
   const refresh = () => setExtra((value) => value + 1);
   const [labelNote, setLabelNote] = useState("");
   const [trackingBusyId, setTrackingBusyId] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [query, setQuery] = useState("");
+
+  const undeliveredCount = useMemo(() => shipments.filter(shipmentHasFailedAttempt).length, [shipments]);
+  const ofdCount = useMemo(() => shipments.filter((s) => s.status === "Out for Delivery").length, [shipments]);
+  const inTransitCount = useMemo(() => shipments.filter((s) => s.status === "In Transit").length, [shipments]);
+  const deliveredCount = useMemo(() => shipments.filter((s) => s.status === "Delivered").length, [shipments]);
+  const bookedCount = useMemo(() => shipments.filter((s) => s.status === "Booked" || s.status === "Picked Up").length, [shipments]);
+
+  const filteredShipments = useMemo(() => {
+    return shipments
+      .filter((s) => {
+        if (statusFilter === "All") return true;
+        if (statusFilter === "undelivered") return shipmentHasFailedAttempt(s);
+        if (statusFilter === "Booked") return s.status === "Booked" || s.status === "Picked Up";
+        return s.status === statusFilter;
+      })
+      .filter((s) => {
+        const q = query.trim().toLowerCase();
+        if (!q) return true;
+        return [
+          s.awb,
+          s.orderId,
+          s.toAddress?.fullName,
+          s.toAddress?.city,
+          s.toAddress?.phone,
+          s.courier,
+          ...(s.tracking ?? []).map((t) => t.status),
+          ...(s.tracking ?? []).map((t) => t.location),
+        ]
+          .filter(Boolean)
+          .some((val) => String(val).toLowerCase().includes(q));
+      });
+  }, [shipments, statusFilter, query]);
 
   const handleTrackRefresh = async (shipment: ShipmentRecord) => {
     setTrackingBusyId(shipment.id);
@@ -72,9 +111,47 @@ export function ShipmentsSection() {
       {shipments.length === 0 ? (
         <Panel title="Shipments"><EmptyState text="Book a shipment from an order to see it here." /></Panel>
       ) : (
-        <Panel title={`${shipments.length} shipments`}>
+        <Panel title={`${filteredShipments.length} of ${shipments.length} shipments`}>
+          <div className="mb-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                ["All", `All (${shipments.length})`],
+                ...(undeliveredCount > 0 ? [["undelivered", `⚠️ Undelivered / Reattempt (${undeliveredCount})`]] : []),
+                ["Out for Delivery", `Out for Delivery (${ofdCount})`],
+                ["In Transit", `In Transit (${inTransitCount})`],
+                ["Delivered", `Delivered (${deliveredCount})`],
+                ["Booked", `Booked / Picked (${bookedCount})`],
+              ].map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setStatusFilter(val)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                    statusFilter === val
+                      ? val === "undelivered"
+                        ? "border-amber-600 bg-amber-600 text-white"
+                        : "border-burgundy bg-burgundy text-white"
+                      : val === "undelivered"
+                        ? "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                        : "border-border text-text-primary hover:bg-warm-cream/30"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div>
+              <input
+                type="text"
+                placeholder="Search AWB, order ID, recipient name, city, phone, courier..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-burgundy focus:outline-none"
+              />
+            </div>
+          </div>
           <ul className="space-y-4">
-            {shipments.map((shipment) => {
+            {filteredShipments.map((shipment) => {
               const order = getOrder(shipment.orderId);
               const rawScans = (shipment.tracking ?? []).filter((event) => !isDeskScan(event));
               const latestScan = [...rawScans].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
@@ -112,12 +189,22 @@ export function ShipmentsSection() {
                     </p>
                   ) : null}
 
+                  {shipmentHasFailedAttempt(shipment) && (
+                    <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span>⚠️ Delivery attempt unsuccessful · The courier will reattempt delivery.</span>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-amber-200 text-amber-950 px-2.5 py-0.5 rounded-full">
+                        NDR Reattempt Scheduled
+                      </span>
+                    </div>
+                  )}
                   {latestScan ? (
-                    <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2 text-xs">
-                      <span className="font-semibold text-blue-950">Latest Courier Scan:</span>{" "}
-                      <span className="font-bold text-blue-900">{latestScan.status}</span>
-                      {latestScan.location ? <span className="text-blue-800"> · {latestScan.location}</span> : null}
-                      <span className="ml-2 text-blue-700">({statusStamp(latestScan.at)})</span>
+                    <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${isFailedAttempt(latestScan.status) ? "border-amber-300 bg-amber-50/90 text-amber-950" : "border-blue-200 bg-blue-50/60 text-blue-950"}`}>
+                      <span className="font-semibold">Latest Courier Scan:</span>{" "}
+                      <span className="font-bold">{latestScan.status}</span>
+                      {latestScan.location ? <span> · {latestScan.location}</span> : null}
+                      <span className="ml-2 text-slate-500">({statusStamp(latestScan.at)})</span>
                     </div>
                   ) : null}
 

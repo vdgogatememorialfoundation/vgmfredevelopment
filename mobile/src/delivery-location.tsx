@@ -50,7 +50,7 @@ export function LocationGate({ state, retry }: { state: LocationState; retry: ()
         <Ionicons name="location" size={40} color={P.brand} />
         <Text style={d.h2}>{off ? "Turn on your phone's location" : "Allow location access to continue"}</Text>
         <Text style={d.body}>
-          VGMF Delivery needs your location during your shift. It is used to confirm that you have arrived at the customer or dark store, to show customers where their order is, and to calculate your
+          VGMF Delivery needs your location during your shift. It is used to confirm that you have arrived at the customer or hub, to show customers where their order is, and to calculate your
           trips and earnings correctly. Your location is shared only while you are on duty.
         </Text>
         <Btn label={off ? "I have turned location on" : "Allow location access"} icon="navigate" onPress={retry} />

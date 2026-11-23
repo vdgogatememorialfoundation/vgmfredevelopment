@@ -42,6 +42,8 @@ export type ShiftSummary = {
   delivered?: number;
   pickups?: number;
   returns?: number;
+  hyperlocal?: number;
+  earned?: number;
   failed?: number;
   cashExpected?: number;
   qrCollected?: number;
@@ -49,7 +51,7 @@ export type ShiftSummary = {
   handover?: { id: string; declared: number; expected: number; difference: number; status: string } | null;
 };
 
-export type HyperOffer = { orderId: string; customerName: string; address: string; amount: number; payment: string; items: number; earning: number };
+export type HyperOffer = { orderId: string; customerName: string; address: string; amount: number; payment: string; items: number; earning: number; pickupFrom?: string };
 export type HyperJob = {
   id: string;
   orderId: string;

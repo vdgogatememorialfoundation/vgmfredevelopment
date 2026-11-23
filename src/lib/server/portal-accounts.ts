@@ -1,3 +1,4 @@
+import { revokeAllPortalSessionsForEmail } from "@/lib/server/portal-auth";
 import { randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -204,5 +205,6 @@ export function deleteDeliveryPartnerAccount(email: string): { deleted: boolean 
   }
   rows.splice(idx, 1);
   save(rows);
+  try { revokeAllPortalSessionsForEmail(clean); } catch(e){}
   return { deleted: true };
 }

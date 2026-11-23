@@ -76,6 +76,7 @@ import {
   ensureAgentEnrollmentOnSignup,
   generateVgmfAwb,
   getAgentEnrollment,
+  updateAgentLocation,
   requestAgentHubEnrollment,
   lookupInternalTracking,
   receiveBagTransfer,
@@ -268,6 +269,15 @@ export async function POST(request: NextRequest) {
   // --- Authenticated portal actions ---
   const session = portalSessionFrom(request);
   if (!session) return json({ ok: false, error: "Please sign in with your VGMF portal account." }, 401);
+
+  const existingAccount = findPortalAccount(session.email);
+  const deliveryRole = session.role === "delivery" || session.staffRoleId === "delivery_partner";
+  if (deliveryRole && (!existingAccount || portalAccountBlocked(existingAccount))) {
+    try {
+      revokePortalMobileSession(extractBearerToken(request) || "");
+    } catch {}
+    return json({ ok: false, error: "ACCOUNT_DELETED", message: "This delivery partner account has been deleted or deactivated." }, 401);
+  }
 
   if (action === "me") {
     const account = findPortalAccount(session.email);
@@ -2360,6 +2370,17 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       return json({ ok: false, error: e instanceof Error ? e.message : "Request failed." }, 400);
     }
+  }
+
+  if (action === "delivery-update-location") {
+    const loc = updateAgentLocation({
+      email: session.email,
+      lat: Number(body?.lat),
+      lng: Number(body?.lng),
+      accuracy: body?.accuracy !== undefined ? Number(body.accuracy) : undefined,
+      note: body?.note ? String(body.note) : undefined,
+    });
+    return json({ ok: true, lastLocation: loc });
   }
 
   if (action === "delivery-dashboard") {

@@ -268,6 +268,12 @@ export function bookShift(input: { email: string; name: string; role: string; sh
   const clash = store.bookings.find(
     (row) => lower(row.email) === lower(input.email) && row.date === date && row.shiftId === shift.id && row.status !== "cancelled"
   );
+  if (clash && clash.mode !== input.mode) {
+    if (clash.status !== "booked") throw new Error(`You already worked this shift for ${clash.mode === "hyperlocal" ? "Hyperlocal" : "Normal (courier)"} orders.`);
+    clash.mode = input.mode;
+    write(store);
+    return clash;
+  }
   if (clash) return clash;
   const booking: ShiftBooking = {
     id: nextId(store, "SHF"),
@@ -609,6 +615,8 @@ export function shiftSummary(email: string) {
     delivered: rows.filter((row) => row.result === "success" && row.kind !== "pickup" && row.kind !== "return").length,
     pickups: rows.filter((row) => row.result === "success" && row.kind === "pickup").length,
     returns: rows.filter((row) => row.result === "success" && row.kind === "return").length,
+    hyperlocal: rows.filter((row) => row.result === "success" && row.kind === "hyperlocal").length,
+    earned: rows.filter((row) => row.result === "success").reduce((sum, row) => sum + Number(store.settings.rates[row.kind] ?? 0) * (store.settings.surge[booking.shiftId] ?? 1), 0),
     failed: rows.filter((row) => row.result === "failed").length,
     cashExpected: shiftCashExpected(store, booking.id),
     qrCollected: byMode("qr").reduce((sum, row) => sum + Number(row.amount || 0), 0),
@@ -720,6 +728,7 @@ export function hyperlocalOffers(email: string) {
       payment: balanceDue(order) > 0 ? "COD" : "Prepaid",
       items: (order.items ?? []).reduce((sum, item) => sum + item.quantity, 0),
       earning: store.settings.rates.hyperlocal,
+      pickupFrom: getAgentEnrollment(email).hubCode || "",
     }));
   return { offers, active: [] };
 }

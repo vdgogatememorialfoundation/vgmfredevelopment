@@ -56,8 +56,15 @@ export default function Footer() {
     () => "",
   );
   const visibility = getSiteVisibility();
-  const explore = visiblePublicNav(visibility);
   const custom = getLiveCmsPages().filter((page) => page.showInFooter);
+  const dedicatedHrefs = new Set([
+    ...ABOUT_NAV.map((page) => page.href),
+    "/contact",
+    "/certificate-verification",
+    "/track",
+    ...custom.map((page) => `/p/${page.slug}`),
+  ]);
+  const explore = visiblePublicNav(visibility).filter((link) => !dedicatedHrefs.has(link.href));
   const chrome = cleanChrome(settings?.chrome);
   const shell = footerShell[footerStyleOf(chrome)];
 
@@ -140,63 +147,40 @@ export default function Footer() {
                 {t("footer.pages")}
               </p>
               <ul className="mt-3 space-y-1.5">
-                {custom.length === 0 ? (
-                  <>
-                    <li>
-                      <Link
-                        href="/contact"
-                        className="text-sm text-text-muted transition hover:text-burgundy"
-                      >
-                        {t("nav.contact")}
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/certificate-verification"
-                        className="text-sm text-text-muted transition hover:text-burgundy"
-                      >
-                        {t("nav.certificates")}
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/track"
-                        className="text-sm text-text-muted transition hover:text-burgundy"
-                      >
-                        Track your shipment
-                      </Link>
-                    </li>
-                  </>
-                ) : (
-                  <>
-                    {custom.map((page) => (
-                      <li key={page.id}>
-                        <Link
-                          href={`/p/${page.slug}`}
-                          className="text-sm text-text-muted transition hover:text-burgundy"
-                        >
-                          {page.title}
-                        </Link>
-                      </li>
-                    ))}
-                    <li>
-                      <Link
-                        href="/certificate-verification"
-                        className="text-sm text-text-muted transition hover:text-burgundy"
-                      >
-                        {t("nav.certificates")}
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/track"
-                        className="text-sm text-text-muted transition hover:text-burgundy"
-                      >
-                        Track your shipment
-                      </Link>
-                    </li>
-                  </>
-                )}
+                {custom.map((page) => (
+                  <li key={page.id}>
+                    <Link
+                      href={`/p/${page.slug}`}
+                      className="text-sm text-text-muted transition hover:text-burgundy"
+                    >
+                      {page.title}
+                    </Link>
+                  </li>
+                ))}
+                <li>
+                  <Link
+                    href="/contact"
+                    className="text-sm text-text-muted transition hover:text-burgundy"
+                  >
+                    {t("nav.contact")}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/certificate-verification"
+                    className="text-sm text-text-muted transition hover:text-burgundy"
+                  >
+                    {t("nav.certificates")}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/track"
+                    className="text-sm text-text-muted transition hover:text-burgundy"
+                  >
+                    Track your shipment
+                  </Link>
+                </li>
               </ul>
               <div className="mt-5">
                 {configuredSocial(settings?.social).length > 0 ? (

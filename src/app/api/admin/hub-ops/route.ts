@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { deleteDeliveryPartnerAccount } from "@/lib/server/portal-accounts";
+import { revokeAllPortalSessionsForEmail } from "@/lib/server/portal-auth";
 import { readLogisticsSettings } from "@/lib/server/vgmf-logistics-settings";
 import { buildKycPipelineStages, reviewManualKyc, reinitiateAgentKyc, type AgentKycData } from "@/lib/server/agent-kyc";
 import {
@@ -161,6 +162,7 @@ export async function POST(req: NextRequest) {
       if (!email) return NextResponse.json({ ok: false, error: "Email is required." }, { status: 400 });
       deleteAgentEnrollment(email, by);
       const acct = deleteDeliveryPartnerAccount(email);
+try { revokeAllPortalSessionsForEmail(email); } catch(e){}
       return NextResponse.json({
         ok: true,
         deletedPortalAccount: acct.deleted,

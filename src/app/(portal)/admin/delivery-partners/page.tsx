@@ -1,5 +1,2 @@
-﻿import { redirect } from "next/navigation";
-
-export default function Page() {
-  redirect("/admin/settings/shipping-apis");
-}
+import AdminRiderLocatorDesk from "@/components/admin/AdminRiderLocatorDesk";
+export default function Page() { return <AdminRiderLocatorDesk />; }

@@ -79,6 +79,13 @@ export function portalSessionFromToken(token?: string | null): PortalSessionUser
   };
 }
 
+
+export function revokeAllPortalSessionsForEmail(email: string) {
+  const clean = String(email || "").trim().toLowerCase();
+  if (!clean) return;
+  savePortalSessions(loadPortalSessions().filter((item) => item.email.toLowerCase() !== clean));
+}
+
 export function revokePortalMobileSession(token?: string | null) {
   const clean = String(token || "").trim();
   if (!clean) return;

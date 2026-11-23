@@ -9,7 +9,7 @@ import { DIRECT_COURIERS } from "@/lib/couriers";
 import { isDeskScan, isFailedAttempt, normalizeDispatchedScanLocations } from "@/lib/order-pipeline";
 import { splitBlocker, splitLedger } from "@/lib/split-order";
 import { collectedAmount } from "@/lib/transactions";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   cancelOrder,
   createAdminOrder,
@@ -74,7 +74,7 @@ import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
 import { deliveryDatePhrase, statusStamp } from "@/lib/delivery-expectation";
 import { isOwnFleet, bookedViaLabel } from "@/lib/courier-label";
-import type { CourierRate, DeliveryAddress, Order, User } from "@/types";
+import type { CourierRate, DeliveryAddress, Order, ShipmentRecord, User } from "@/types";
 import { Button, EmptyState, Field, ORDER_STATUS_TONES, Panel, SelectInput, StatusBadge, TextInput, LinkText } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
 import { accountToDelivery } from "@/lib/account-search";
@@ -134,11 +134,37 @@ const CLOSED_OR_SENT: Order["status"][] = ["Shipped", "Out for Delivery", "Deliv
 const PAID_CHIP_HIDES: Order["status"][] = [...CLOSED_OR_SENT, "Ready to Ship", "To Ship"];
 /** Status chip/filter match: the Packed chip leaves out paid orders (they are listed under Paid and To Ship). */
 const inStatus = (order: Order, status: string) => order.status === status && !(status === "Packed" && order.paymentStatus === "Paid");
+export function orderHasFailedAttempt(order: Order, allShipments?: ShipmentRecord[]) {
+  if (order.status === "Failed") return true;
+  if ((order.history ?? []).some((h) => isFailedAttempt(h.note || h.status || ""))) return true;
+  const storeShipments = (allShipments ?? getShipments()).filter((s) => s.orderId === order.id && s.note !== "Cancelled");
+  return storeShipments.some(
+    (s) => s.status === "Failed" || (s.tracking ?? []).some((scan: { status?: string }) => isFailedAttempt(scan.status || ""))
+  );
+}
+
+export function getLatestFailedScan(order: Order, allShipments?: ShipmentRecord[]): { status: string; at: string; location?: string } | null {
+  const storeShipments = (allShipments ?? getShipments()).filter((s) => s.orderId === order.id && s.note !== "Cancelled");
+  const scans = storeShipments.flatMap((s) => s.tracking ?? []);
+  const failed = scans.filter((scan: { status?: string }) => isFailedAttempt(scan.status || ""));
+  if (failed.length > 0) {
+    const top = [...failed].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+    return { status: top.status, at: top.at, location: top.location };
+  }
+  const histFailed = (order.history ?? []).filter((h) => isFailedAttempt(h.note || h.status || ""));
+  if (histFailed.length > 0) {
+    const latest = [...histFailed].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+    return { status: latest.note || latest.status, at: latest.at, location: "" };
+  }
+  return null;
+}
+
 const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boolean }> = {
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
   "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) && order.paymentStatus !== "Paid" },
   "group:to-ship": { label: "To Ship (fully paid · book courier / waiting for pickup)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
   "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => order.status === "Shipped" || order.status === "Out for Delivery" },
+  "group:undelivered": { label: "⚠️ Undelivered / Delivery attempt unsuccessful (NDR)", test: (order) => orderHasFailedAttempt(order) },
 };
 /** Store pickup has its own steps; the stored status stays canonical. */
 const PICKUP_STATUSES: { status: Order["status"]; label: string }[] = [
@@ -186,6 +212,7 @@ export function OrdersDashboard() {
   const [bulkNote, setBulkNote] = useState("");
 
   const allOrders = getOrders();
+  const allShipments = useMemo(() => getShipments().filter((s) => s.note !== "Cancelled"), [version, remoteVersion]);
   // Split parents are audit records (their child orders do the work), so they stay out of the working lists and counts.
   const orders = allOrders.filter((order) => !order.splitInto?.length);
   const splitParents = allOrders.filter((order) => order.splitInto?.length);
@@ -590,6 +617,24 @@ export function OrdersDashboard() {
               ] as [string, () => void, boolean][]).map(([label, apply, on]) => (
                 <button key={label} type="button" onClick={apply} className={classNames("rounded-full border px-3 py-1 text-xs font-semibold", on ? "border-burgundy bg-burgundy text-white" : "border-border text-text-primary")}>{label}</button>
               ))}
+              {(() => {
+                const count = orders.filter((order) => orderHasFailedAttempt(order, allShipments)).length;
+                if (!count) return null;
+                const on = statusFilter === "group:undelivered";
+                return (
+                  <button
+                    key="group:undelivered"
+                    type="button"
+                    onClick={() => { setPaymentFilter("All"); setStatusFilter("group:undelivered"); }}
+                    className={classNames(
+                      "rounded-full border px-3 py-1 text-xs font-semibold flex items-center gap-1",
+                      on ? "border-amber-600 bg-amber-600 text-white" : "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                    )}
+                  >
+                    <span>⚠️ Undelivered / Reattempt ({count})</span>
+                  </button>
+                );
+              })()}
               <a href="/admin/payments/refunds" className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-burgundy">Refunds module →</a>
             </div>
             <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-9">
@@ -663,6 +708,11 @@ export function OrdersDashboard() {
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${isPreorderOrder(order) ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
                             {isPreorderOrder(order) ? "Pre-order" : "Normal"}
                           </span>
+                          {orderHasFailedAttempt(order, allShipments) ? (
+                            <span className="rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-900 animate-pulse">
+                              ⚠️ Undelivered / Reattempt
+                            </span>
+                          ) : null}
                           {(() => { const platform = orderPlatform(order); return <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ${platform.tone}`}>{platform.label}</span>; })()}
                         </span>
                         <span className="block truncate text-xs text-text-muted">
@@ -670,6 +720,17 @@ export function OrdersDashboard() {
                           {order.channel === "pos" ? " · POS" : ""}
                         </span>
                         <OrderRowPreview order={order} />
+                        {(() => {
+                          const failedScan = getLatestFailedScan(order, allShipments);
+                          if (!failedScan) return null;
+                          return (
+                            <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-800">
+                              <span>⚠️ Delivery attempt unsuccessful:</span>
+                              <span className="truncate">{failedScan.status}</span>
+                              {failedScan.location ? <span>({failedScan.location})</span> : null}
+                            </span>
+                          );
+                        })()}
                       </span>
                       <span className="flex shrink-0 flex-col items-end gap-1">
                         <span className="flex gap-1">

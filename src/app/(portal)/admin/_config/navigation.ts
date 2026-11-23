@@ -73,10 +73,10 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "VGMF Logistics · Riders",
     items: [
       { label: "Delivery runsheets", href: "/admin/commerce/hubs?tab=delivery" },
-      { label: "Rider accounts and activation", href: "/admin/accounts/delivery-partners" },
+      { label: "Locate riders & live map", href: "/admin/accounts/delivery-partners" },
+      { label: "Rider accounts and activation", href: "/admin/accounts/delivery-partners?tab=accounts" },
       { label: "Rider shifts, cash and wallet", href: "/admin/delivery-partners/riders" },
       { label: "Shift times and delivery slots", href: "/admin/commerce/logistics-ops?tab=shifts" },
-      { label: "Hyperlocal deliveries", href: "/admin/commerce/logistics-ops?tab=hyperlocal" },
       { label: "Open-box delivery checks", href: "/admin/commerce/logistics-ops?tab=openbox" },
     ],
   },

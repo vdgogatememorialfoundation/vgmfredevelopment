@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Button, SelectInput, TextInput } from "@/components/admin/AdminUI";
 
 function StatusBadge({ tone, children }: { tone: "emerald" | "blue" | "amber" | "red"; children: React.ReactNode }) {
@@ -61,7 +63,20 @@ const SIDEBAR_GROUPS: { group: string; items: { id: HubSection; label: string }[
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function AdminHubDashboard({ lockedHubCode, operatorName }: { lockedHubCode?: string; operatorName?: string } = {}) {
-  const [section, setSection] = useState<HubSection>("overview");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const validSections: HubSection[] = ["overview","inward","sorting","bagging","manifests","transfers","delivery","returns","exceptions","staff_gate","reports"];
+  const tabParam = searchParams.get("tab") as HubSection | null;
+  const [section, setSection] = useState<HubSection>(tabParam && validSections.includes(tabParam) ? tabParam : "overview");
+
+  useEffect(() => {
+    const t = searchParams.get("tab") as HubSection | null;
+    if (t && validSections.includes(t)) {
+      setSection(t);
+    } else if (!t) {
+      setSection("overview");
+    }
+  }, [searchParams]);
   const [hubCode, setHubCode] = useState(lockedHubCode || "");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [data, setData] = useState<any>(null);
@@ -229,6 +244,7 @@ export default function AdminHubDashboard({ lockedHubCode, operatorName }: { loc
             ))}
           </SelectInput>}
           {!lockedHubCode && <Button variant="outline" onClick={() => setShowAddHub((v) => !v)}>+ Add Hub</Button>}
+          <Link href="/admin/accounts/delivery-partners" className="rounded-xl bg-burgundy px-3 py-2 text-xs font-bold text-white hover:opacity-90">📍 Locate Riders</Link>
           <Button variant="outline" onClick={() => void load(hubCode)} disabled={loading}>Refresh</Button>
         </div>
       </div>
@@ -298,7 +314,7 @@ export default function AdminHubDashboard({ lockedHubCode, operatorName }: { loc
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setSection(item.id)}
+                      onClick={() => { setSection(item.id); router.replace(item.id === "overview" ? "/admin/commerce/hubs" : `/admin/commerce/hubs?tab=${item.id}`, { scroll: false }); }}
                       className={`w-full rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition ${
                         section === item.id
                           ? "bg-burgundy text-white"
