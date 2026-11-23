@@ -55,27 +55,11 @@ function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageSh
   const isLast = open === n - 1;
   return (
     <div>
-      <style>{`@keyframes vgmf-flow{from{background-position:0 0}to{background-position:28px 0}}`}</style>
       <div className="overflow-x-auto pb-1">
         <div className="relative" style={{ minWidth: `${n * 104}px` }}>
           <div className="absolute top-[22px] h-2 rounded-full bg-slate-200" style={{ left: inset, right: inset }} />
           <div className="absolute top-[22px] h-2" style={{ left: inset, right: inset }}>
-            <div
-              className="relative h-full rounded-full transition-[width] ease-out"
-              style={{
-                width: `${fill}%`,
-                transitionDuration: "3500ms",
-                backgroundImage: "repeating-linear-gradient(45deg,#059669 0 8px,#10b981 8px 14px)",
-                backgroundSize: "28px 100%",
-                animation: live ? "vgmf-flow 1.2s linear infinite" : undefined,
-              }}
-            >
-              {live && fill > 0 && fill < 100 ? (
-                <span className="absolute -right-3.5 -top-[10px] flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-600 shadow-md ring-2 ring-emerald-500">
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7zM6.5 18.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" /></svg>
-                </span>
-              ) : null}
-            </div>
+            <div className="h-full rounded-full bg-emerald-500 transition-[width] ease-out" style={{ width: `${fill}%`, transitionDuration: "1500ms" }} />
           </div>
           <ol className="relative grid items-start" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
             {stages.map((st, i) => {
@@ -93,8 +77,7 @@ function HorizontalTrack({ stages, expectedBy, live }: { stages: PipelineStageSh
                     } ${selected ? "ring-4 ring-emerald-200 ring-offset-2" : "hover:ring-2 hover:ring-emerald-100"}`}
                     style={{ transitionDelay: `${i * 450}ms` }}
                   >
-                    {i === current && live ? <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" /> : null}
-                    {done ? <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg> : i + 1}
+                                        {done ? <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 12 5 5 9-10" /></svg> : i + 1}
                   </button>
                   <span className={`mt-2.5 text-center text-[12.5px] font-bold leading-tight ${selected ? "text-emerald-700" : done ? "text-slate-900" : "text-slate-400"}`}>{st.label}</span>
                   <span className="mt-0.5 text-center text-[10.5px] leading-tight text-slate-500">
