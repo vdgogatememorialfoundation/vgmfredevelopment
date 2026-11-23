@@ -10,7 +10,7 @@ export async function GET(_request: Request, context: { params: Promise<{ flavor
   const { flavor: raw } = await context.params;
   const flavor = raw as AppFlavorId;
   if (!FLAVORS.has(flavor)) {
-    return NextResponse.json({ ok: false, error: "Unknown app. Use customer, admin, staff or support." }, { status: 404 });
+    return NextResponse.json({ ok: false, error: "Unknown app. Use customer, admin, scanner, pos, staff or support." }, { status: 404 });
   }
 
   // Serve from /public/apps via the CDN. Reading the APK inside this route 404s on

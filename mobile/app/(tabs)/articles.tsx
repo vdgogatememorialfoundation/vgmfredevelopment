@@ -20,17 +20,17 @@ export function ArticleCard({ item }: { item: Row }) {
       style={({ pressed }) => [
         {
           backgroundColor: theme.colors.paper,
-          borderRadius: 10,
+          borderRadius: 18,
           borderWidth: 1,
           borderColor: theme.colors.border,
           marginBottom: 14,
           overflow: "hidden",
-          shadowColor: "#3B2A14",
-          shadowOpacity: 0,
-          shadowRadius: 10,
+          shadowColor: "#0B1F3A",
+          shadowOpacity: 0.05,
+          shadowRadius: 12,
           shadowOffset: { width: 0, height: 4 },
-          elevation: 0,
-          opacity: pressed ? 0.92 : 1,
+          elevation: 2,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
         },
       ]}
     >

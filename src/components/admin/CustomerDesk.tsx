@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   adjustStoreCredit,
   createCustomerAccount,
@@ -13,12 +14,13 @@ import {
   setAccountStatus,
   updateCustomer,
 } from "@/lib/admin-store";
-import { useAccounts } from "@/lib/use-cms";
+import { useAccounts, useOrders } from "@/lib/use-cms";
+import { hydratePartnerFeed } from "@/lib/partner-hydrate";
 import { matchesAccountQuery } from "@/lib/account-search";
+import { activitiesFor } from "@/lib/activity";
 import type { AccountStatus, User } from "@/types";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AdminModal } from "@/components/admin/AdminModal";
-import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
 import { SignupFormsPanel } from "@/components/admin/SignupFormsPanel";
 import { EmailComposer } from "@/components/admin/EmailComposer";
 import { COUNTRIES, countryByCode, isIndia, isValidPhone, statesFor } from "@/lib/geo";
@@ -27,6 +29,10 @@ import { downloadCsv, downloadExcel } from "@/lib/export-file";
 import { col, readSheetFile } from "@/lib/import-file";
 
 ensureBootstrapped();
+
+type MainSiteAccount = User & {
+  passwordHistory?: Array<{ password: string; at: string; source?: string }>;
+};
 
 const emptyForm = {
   salutation: "Dr.",
@@ -57,15 +63,21 @@ function customerRow(account: User): string[] {
 }
 
 export function CustomerDesk() {
-  const allAccounts = useAccounts();
+  const allAccounts = useAccounts() as MainSiteAccount[];
+  useEffect(() => {
+    void hydratePartnerFeed({ full: true, force: true });
+  }, []);
+
   const accounts = useMemo(
     () =>
       allAccounts.filter((account) => {
         if (account.role === "admin" || account.role === "coadmin" || account.role === "staff") return false;
-        return !account.role || account.role === "customer" || account.role === "doctor" || Boolean(account.partnerPortals?.length);
+        if (/^(seminar|autism|fellowship)-usr-/i.test(String(account.id || ""))) return false;
+        return !account.role || account.role === "customer";
       }),
     [allAccounts]
   );
+
   const [limit, setLimit] = useState(PAGE);
   const [importing, setImporting] = useState(false);
   const [query, setQuery] = useState("");
@@ -121,7 +133,7 @@ export function CustomerDesk() {
 
   const exportCustomers = () => {
     const list = selectedEmails.length ? shown.filter((account) => picked[account.email]) : shown;
-    downloadExcel(`customers-${new Date().toISOString().slice(0, 10)}`, "Customers", ["Account ID", ...CUSTOMER_COLUMNS, "Status", "Created"], list.map((account) => [account.accountId ?? "", ...customerRow(account), account.status ?? "active", account.createdAt ?? ""]));
+    downloadExcel(`website-customers-${new Date().toISOString().slice(0, 10)}`, "Customers", ["Account ID", ...CUSTOMER_COLUMNS, "Password", "Status", "Created"], list.map((account) => [account.accountId ?? "", ...customerRow(account), account.password ?? "", account.status ?? "active", account.createdAt ?? ""]));
   };
 
   const importCustomers = async (file: File) => {
@@ -181,10 +193,10 @@ export function CustomerDesk() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Customers</h1>
           <p className="text-sm text-text-muted">
-            Seminar doctors, Autism applicants, Fellowship applicants and website customers in one list. Search, update details, and resend login information.
+            Main website registered customers and shoppers. Search, view passwords, track website activity and orders, update details, and resend login information.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={() => setCreating(true)}>+ Create customer</Button>
           <Button variant="outline" onClick={() => downloadCsv("customer-import-template", CUSTOMER_COLUMNS, [["Dr.", "Asha", "", "Patil", "asha@example.com", "+91 98765 43210", "", "12 MG Road", "Near temple", "Pune", "Maharashtra", "411001", "India", "IN"]])}>
             Customer template
@@ -231,17 +243,17 @@ export function CustomerDesk() {
       <SignupFormsPanel />
 
       {selected ? (
-        <AdminModal title={`${displayName(selected, true)} · ${selected.accountId}`} wide onClose={() => setSelectedEmail(null)}>
+        <AdminModal title={`${displayName(selected, true)} · ${selected.accountId || "Account"}`} wide onClose={() => setSelectedEmail(null)}>
           <CustomerDetail key={selected.email} account={selected} onNote={setNote} />
         </AdminModal>
       ) : null}
 
       <div className="grid gap-5">
         <div>
-          <Panel title={`Accounts (${shown.length})`}>
-            <TextInput placeholder="Search name, email, phone or 12-digit ID" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(PAGE); }} />
+          <Panel title={`Website Registered Customers (${shown.length})`}>
+            <TextInput placeholder="Search name, email, phone or 12-digit Account ID" value={query} onChange={(event) => { setQuery(event.target.value); setLimit(PAGE); }} />
             {shown.length === 0 ? (
-              <EmptyState text="No customers match." />
+              <EmptyState text="No website customers match." />
             ) : (
               <ul className="mt-3 max-h-[70vh] divide-y divide-border overflow-y-auto">
                 {shown.slice(0, limit).map((account) => (
@@ -255,12 +267,16 @@ export function CustomerDesk() {
                     <div className="min-w-0 flex-1">
                       <button type="button" className="w-full text-left" onClick={() => setSelectedEmail(account.email)}>
                         <p className="font-semibold text-text-primary">{displayName(account, true) || account.email}</p>
-                        <PartnerPortalBadges user={account} className="mt-1" />
-                        <p className="font-mono text-xs text-text-muted">{account.accountId} · {account.email}</p>
-                        <p className="text-xs text-text-muted">{account.phone}{account.alternatePhone && account.alternatePhone !== account.phone ? ` · Alt ${account.alternatePhone}` : ""} · {(account.status ?? "active")}</p>
+                        <p className="mt-0.5 font-mono text-xs text-text-muted">{account.accountId} · {account.email}</p>
+                        <p className="text-xs text-text-muted">
+                          {account.phone || "No phone"}{account.alternatePhone && account.alternatePhone !== account.phone ? ` · Alt ${account.alternatePhone}` : ""} · {(account.status ?? "active")}
+                        </p>
                       </button>
                       <PasswordReveal account={account} />
                     </div>
+                    <Button variant="outline" onClick={() => setSelectedEmail(account.email)}>
+                      View / Edit Account
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -396,29 +412,86 @@ function CustomerFields({
   );
 }
 
-function PasswordReveal({ account }: { account: User }) {
+function PasswordReveal({ account }: { account: MainSiteAccount }) {
   const [open, setOpen] = useState(false);
-  const sisterOnly = Boolean(account.partnerPortals?.length && !account.foundationPasswordSet);
+  const hasPass = Boolean(account.password);
   return (
     <p className="mt-1 text-xs text-text-muted">
       Password:{" "}
-      {sisterOnly ? (
-        <span>not set on this website. Seminar / Autism / Fellowship passwords are not used here — the customer must use Forgot password on this site.</span>
-      ) : open ? (
-        <span className="font-mono">{account.password || "Not set"}</span>
+      {hasPass ? (
+        open ? (
+          <span className="font-mono font-semibold text-text-primary">{account.password}</span>
+        ) : (
+          "••••••••"
+        )
       ) : (
-        "••••••••"
+        <span>Not set yet (Signs in via OTP / Google)</span>
       )}{" "}
-      {!sisterOnly && (
-        <button type="button" className="font-semibold text-burgundy" onClick={() => setOpen((value) => !value)}>
+      {hasPass ? (
+        <button type="button" className="ml-1 font-semibold text-burgundy underline" onClick={() => setOpen((value) => !value)}>
           {open ? "Hide" : "Show"}
         </button>
-      )}
+      ) : null}
     </p>
   );
 }
 
-function CustomerDetail({ account, onNote }: { account: User; onNote: (text: string) => void }) {
+type ServerCustomerIntel = {
+  ok?: boolean;
+  websitePassword?: string;
+  passwordHistory?: Array<{ password: string; at: string; source: string }>;
+  signupForms?: Array<{
+    formId: string;
+    acknowledgementId: string;
+    accountId: string;
+    method: string;
+    createdAt: string;
+    ip: string;
+    userAgent: string;
+  }>;
+  activeCart?: { items?: Array<{ bookId: string; quantity: number }>; at?: number } | null;
+  timeline?: Array<{ id: string; at: string; category: string; title: string; detail: string }>;
+};
+
+function CustomerDetail({ account, onNote }: { account: MainSiteAccount; onNote: (text: string) => void }) {
+  const allOrders = useOrders();
+  const [modalTab, setModalTab] = useState<"profile" | "activity">("profile");
+  const [intel, setIntel] = useState<ServerCustomerIntel | null>(null);
+  const [loadingIntel, setLoadingIntel] = useState(false);
+  const [newPassword, setNewPassword] = useState(account.password ?? "");
+  const [savingServer, setSavingServer] = useState(false);
+
+  const loadIntel = () => {
+    setLoadingIntel(true);
+    fetch(`/api/admin/customer-activity?email=${encodeURIComponent(account.email)}`, { cache: "no-store", credentials: "same-origin" })
+      .then((res) => res.json() as Promise<ServerCustomerIntel>)
+      .then((data) => {
+        if (data?.ok) {
+          setIntel(data);
+          if (data.websitePassword && !newPassword) setNewPassword(data.websitePassword);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setLoadingIntel(false));
+  };
+
+  useEffect(() => {
+    loadIntel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account.email]);
+
+  const customerOrders = useMemo(() => {
+    const email = (account.email || "").trim().toLowerCase();
+    const digits = (account.phone || "").replace(/\D/g, "").slice(-10);
+    return allOrders.filter((ord) => {
+      const oEmail = (ord.accountEmail || ord.deliveryAddress?.email || ord.createdBy || "").trim().toLowerCase();
+      const oPhone = (ord.deliveryAddress?.phone || "").replace(/\D/g, "").slice(-10);
+      return (email && oEmail === email) || (digits.length >= 10 && oPhone === digits) || (account.id && ord.userId === account.id);
+    });
+  }, [allOrders, account.email, account.phone, account.id]);
+
+  const localActivities = useMemo(() => activitiesFor(account.email), [account.email]);
+
   const [form, setForm] = useState({
     salutation: account.salutation ?? "Dr.",
     firstName: account.firstName,
@@ -440,67 +513,284 @@ function CustomerDetail({ account, onNote }: { account: User; onNote: (text: str
   const ledger = getStoreCreditLedger(account.email);
   const status = (account.status ?? "active") as AccountStatus;
 
+  const allPasswords = intel?.passwordHistory?.length
+    ? intel.passwordHistory
+    : account.passwordHistory?.length
+      ? account.passwordHistory
+      : account.password
+        ? [{ password: account.password, at: account.createdAt || "", source: "Website Account" }]
+        : [];
+
+  const handleSaveAll = async () => {
+    if (!isValidPhone(form.phone) || (form.alternatePhone && !isValidPhone(form.alternatePhone))) {
+      onNote("Enter a valid international phone number, including the country code.");
+      return;
+    }
+    setSavingServer(true);
+    try {
+      const addressObj = {
+        line1: form.line1,
+        landmark: form.landmark,
+        city: form.city,
+        state: form.state,
+        pincode: form.pincode,
+        country: form.country,
+        countryCode: form.countryCode,
+      };
+      updateCustomer(account.email, {
+        salutation: form.salutation,
+        firstName: form.firstName,
+        middleName: form.middleName,
+        lastName: form.lastName,
+        phone: form.phone,
+        alternatePhone: form.alternatePhone || form.phone,
+        email: form.email,
+        address: addressObj,
+        ...(newPassword.trim() ? { password: newPassword.trim(), foundationPasswordSet: true } : {}),
+      });
+      await fetch("/api/admin/customer-activity", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          currentEmail: account.email,
+          salutation: form.salutation,
+          firstName: form.firstName,
+          middleName: form.middleName,
+          lastName: form.lastName,
+          phone: form.phone,
+          alternatePhone: form.alternatePhone || form.phone,
+          email: form.email,
+          address: addressObj,
+          newPassword: newPassword.trim() || undefined,
+        }),
+      });
+      await hydratePartnerFeed({ full: true, force: true });
+      loadIntel();
+      onNote("Customer details, address, and website password saved.");
+    } catch (e) {
+      onNote(e instanceof Error ? e.message : "Could not save customer changes.");
+    } finally {
+      setSavingServer(false);
+    }
+  };
+
   return (
-    <Panel title={`${displayName(account, true)} · ${account.accountId}`} description={`Store credit ${formatInr(getStoreCredit(account.email))}`}>
-      <CustomerFields form={form} setForm={setForm} />
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          onClick={() => {
-            if (!isValidPhone(form.phone) || (form.alternatePhone && !isValidPhone(form.alternatePhone))) {
-              onNote("Enter a valid international phone number, including the country code.");
-              return;
-            }
-            updateCustomer(account.email, {
-              salutation: form.salutation,
-              firstName: form.firstName,
-              middleName: form.middleName,
-              lastName: form.lastName,
-              phone: form.phone,
-              alternatePhone: form.alternatePhone || form.phone,
-              email: form.email,
-              address: { line1: form.line1, landmark: form.landmark, city: form.city, state: form.state, pincode: form.pincode, country: form.country, countryCode: form.countryCode },
-            });
-            onNote("Customer details saved.");
-          }}
-        >
-          Save changes
-        </Button>
-        <PasswordReveal account={account} />
-        <Button variant="outline" onClick={() => { sendAccountDetails(account.email); onNote(`Login details emailed to ${account.email}.`); }}>
-          Resend login details
-        </Button>
-        {status === "active" ? (
-          <>
-            <Button variant="outline" onClick={() => { setAccountStatus(account.email, "disabled"); onNote("Customer disabled."); }}>Disable</Button>
-            <Button variant="danger" onClick={() => { setAccountStatus(account.email, "banned", "Banned by admin"); onNote("Customer banned."); }}>Ban</Button>
-          </>
-        ) : (
-          <Button variant="outline" onClick={() => { setAccountStatus(account.email, "active"); onNote("Customer reactivated."); }}>Reactivate</Button>
-        )}
-      </div>
-      <div className="mt-6 rounded-xl border border-border p-4">
-        <p className="text-sm font-semibold text-text-primary">Store credit</p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-          <TextInput type="number" placeholder="Amount ₹" value={credit} onChange={(event) => setCredit(event.target.value)} />
-          <TextInput placeholder="Note" value={creditNote} onChange={(event) => setCreditNote(event.target.value)} />
-          <Button
-            onClick={() => {
-              const amount = Number(credit);
-              if (!amount) return;
-              adjustStoreCredit(account.email, amount, creditNote || "Admin adjustment");
-              setCredit("");
-              onNote(`Store credit ${amount > 0 ? "added" : "deducted"}.`);
-            }}
-          >
-            Apply
-          </Button>
+    <Panel
+      title={`${displayName(account, true)} · ${account.accountId || "No ID"}`}
+      description={`Store credit ${formatInr(getStoreCredit(account.email))} · Status: ${status} · Orders: ${customerOrders.length}`}
+    >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-warm-cream/50 px-4 py-3 text-xs">
+        <div className="space-y-1">
+          <p className="font-semibold text-text-primary">
+            Account ID: <span className="font-mono">{account.accountId || "—"}</span> · Email: <span className="font-mono">{account.email}</span>
+          </p>
+          <p className="text-text-muted">
+            Phone: {account.phone || "—"}{account.alternatePhone && account.alternatePhone !== account.phone ? ` · Alt: ${account.alternatePhone}` : ""}
+            {account.createdAt ? ` · Joined: ${account.createdAt.slice(0, 10)}` : ""}
+          </p>
         </div>
-        <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
-          {ledger.slice(0, 8).map((entry) => (
-            <li key={entry.id}>{entry.at.slice(0, 16).replace("T", " ")} · {entry.amount > 0 ? "+" : ""}{formatInr(entry.amount)} · {entry.note}</li>
-          ))}
-        </ul>
+        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
+          Website Registered Customer
+        </span>
       </div>
+
+      <div className="mb-4 flex flex-wrap gap-2 border-b border-border pb-3">
+        <button
+          type="button"
+          onClick={() => setModalTab("profile")}
+          className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
+            modalTab === "profile" ? "bg-burgundy text-white" : "bg-surface text-text-primary hover:bg-border/50"
+          }`}
+        >
+          1. Edit Info, Password &amp; Store Credit
+        </button>
+        <button
+          type="button"
+          onClick={() => setModalTab("activity")}
+          className={`rounded-lg px-4 py-2 text-xs font-bold transition ${
+            modalTab === "activity" ? "bg-burgundy text-white" : "bg-surface text-text-primary hover:bg-border/50"
+          }`}
+        >
+          2. Website Activity &amp; Orders ({(intel?.timeline?.length || 0) + localActivities.length})
+        </button>
+      </div>
+
+      {modalTab === "profile" ? (
+        <>
+          <div className="mb-5 rounded-xl border border-burgundy/25 bg-burgundy/5 p-4">
+            <p className="text-sm font-bold text-text-primary">Website Account Password</p>
+            <div className="mt-2 rounded-lg border border-border bg-white p-2.5 text-xs">
+              <span className="block text-[11px] font-semibold uppercase text-text-muted">Current Website Password</span>
+              <span className="mt-0.5 block font-mono text-sm font-bold text-burgundy">
+                {intel?.websitePassword || account.password || "Not set yet (OTP / Google Login)"}
+              </span>
+            </div>
+
+            {allPasswords.length > 0 ? (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-text-muted">Website Password History ({allPasswords.length}):</p>
+                <ul className="mt-1.5 flex flex-wrap gap-2">
+                  {allPasswords.map((item, idx) => (
+                    <li key={`${item.password}-${idx}`} className="rounded-lg border border-border bg-white px-2.5 py-1 text-xs">
+                      <span className="font-mono font-bold text-text-primary">{item.password}</span>
+                      <span className="ml-1.5 text-[11px] text-text-muted">({item.source || "Website"}{item.at ? ` · ${item.at.slice(0, 10)}` : ""})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] items-end">
+              <Field label="Set / Update Website Password">
+                <TextInput
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new website password"
+                />
+              </Field>
+              <Button onClick={() => void handleSaveAll()} disabled={savingServer}>
+                {savingServer ? "Updating…" : "Update Password"}
+              </Button>
+            </div>
+          </div>
+
+          <CustomerFields form={form} setForm={setForm} />
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={() => void handleSaveAll()} disabled={savingServer}>
+              {savingServer ? "Saving…" : "Save All Customer Changes"}
+            </Button>
+            <Button variant="outline" onClick={() => { sendAccountDetails(account.email); onNote(`Login details emailed to ${account.email}.`); }}>
+              Resend login details
+            </Button>
+            {status === "active" ? (
+              <>
+                <Button variant="outline" onClick={() => { setAccountStatus(account.email, "disabled"); onNote("Customer disabled."); }}>Disable</Button>
+                <Button variant="danger" onClick={() => { setAccountStatus(account.email, "banned", "Banned by admin"); onNote("Customer banned."); }}>Ban</Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => { setAccountStatus(account.email, "active"); onNote("Customer reactivated."); }}>Reactivate</Button>
+            )}
+          </div>
+
+          <div className="mt-6 rounded-xl border border-border p-4">
+            <p className="text-sm font-semibold text-text-primary">Store credit</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <TextInput type="number" placeholder="Amount ₹" value={credit} onChange={(event) => setCredit(event.target.value)} />
+              <TextInput placeholder="Note" value={creditNote} onChange={(event) => setCreditNote(event.target.value)} />
+              <Button
+                onClick={() => {
+                  const amount = Number(credit);
+                  if (!amount) return;
+                  adjustStoreCredit(account.email, amount, creditNote || "Admin adjustment");
+                  setCredit("");
+                  onNote(`Store credit ${amount > 0 ? "added" : "deducted"}.`);
+                }}
+              >
+                Apply
+              </Button>
+            </div>
+            <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto text-xs text-text-muted">
+              {ledger.slice(0, 8).map((entry) => (
+                <li key={entry.id}>{entry.at.slice(0, 16).replace("T", " ")} · {entry.amount > 0 ? "+" : ""}{formatInr(entry.amount)} · {entry.note}</li>
+              ))}
+            </ul>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-5">
+          {intel?.signupForms && intel.signupForms.length > 0 ? (
+            <div className="rounded-xl border border-border p-4">
+              <p className="text-sm font-semibold text-text-primary">Signup Acknowledgement Form</p>
+              {intel.signupForms.map((sf) => (
+                <div key={sf.formId} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div>
+                    <p className="font-semibold text-text-primary">
+                      Form ID: <span className="font-mono">{sf.formId}</span> · Acknowledgement ID: <span className="font-mono">{sf.acknowledgementId}</span>
+                    </p>
+                    <p className="text-text-muted">
+                      Accepted: {sf.createdAt.slice(0, 16).replace("T", " ")} · Method: {sf.method} · IP: {sf.ip || "—"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(`/api/admin/signup-forms?format=html&ids=${encodeURIComponent(sf.formId)}`, "_blank", "noopener")}
+                  >
+                    Download Form PDF
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="rounded-xl border border-border p-4">
+            <p className="text-sm font-semibold text-text-primary">Website Shop Orders ({customerOrders.length})</p>
+            {customerOrders.length === 0 ? (
+              <p className="mt-2 text-xs text-text-muted">No shop orders placed with this email or mobile number yet.</p>
+            ) : (
+              <ul className="mt-3 divide-y divide-border text-xs">
+                {customerOrders.map((ord) => (
+                  <li key={ord.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                    <div>
+                      <p className="font-semibold text-text-primary">
+                        Order #{ord.id} · {formatInr(ord.total)} · <span className="text-burgundy">{ord.status}</span>
+                      </p>
+                      <p className="text-text-muted">
+                        {ord.date?.slice(0, 10)} · {ord.deliveryMode === "store_pickup" ? "Store Pickup" : "Home Delivery"} · Payment: {ord.paymentStatus} ({ord.paymentMethod})
+                      </p>
+                      <p className="text-text-muted">
+                        {(ord.items ?? []).map((it) => `${it.title} × ${it.quantity}`).join(", ")}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/admin/commerce/orders?order=${encodeURIComponent(ord.id)}`}
+                      className="rounded-lg border border-burgundy/30 bg-burgundy/5 px-3 py-1.5 font-semibold text-burgundy hover:bg-burgundy/10"
+                    >
+                      Open Order →
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-text-primary">Website Customer Activity Timeline</p>
+              <Button variant="outline" onClick={loadIntel} disabled={loadingIntel}>
+                {loadingIntel ? "Refreshing…" : "Refresh Activity"}
+              </Button>
+            </div>
+            {loadingIntel && !intel ? (
+              <p className="mt-3 text-xs text-text-muted">Loading customer activity log…</p>
+            ) : (intel?.timeline?.length || 0) === 0 && localActivities.length === 0 ? (
+              <p className="mt-3 text-xs text-text-muted">No recorded activity events yet.</p>
+            ) : (
+              <ul className="mt-3 max-h-96 divide-y divide-border overflow-y-auto text-xs">
+                {localActivities.map((act) => (
+                  <li key={act.id} className="py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-text-primary">Account {act.kind}</span>
+                      <span className="font-mono text-[11px] text-text-muted">{act.at.slice(0, 16).replace("T", " ")}</span>
+                    </div>
+                    <p className="text-text-muted">{act.detail || act.email}{act.by ? ` · By: ${act.by}` : ""}</p>
+                  </li>
+                ))}
+                {(intel?.timeline ?? []).map((ev) => (
+                  <li key={ev.id} className="py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-text-primary">{ev.title}</span>
+                      <span className="font-mono text-[11px] text-text-muted">{ev.at ? ev.at.slice(0, 16).replace("T", " ") : "—"}</span>
+                    </div>
+                    <p className="text-text-muted">{ev.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
     </Panel>
   );
 }

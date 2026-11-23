@@ -6,7 +6,7 @@ import { uploadMediaFile } from "@/lib/media-client";
 import { getSession } from "@/lib/auth";
 import OrderFeedback from "@/components/store/OrderFeedback";
 import { DIRECT_COURIERS } from "@/lib/couriers";
-import { isDeskScan, isFailedAttempt } from "@/lib/order-pipeline";
+import { isDeskScan, isFailedAttempt, normalizeDispatchedScanLocations } from "@/lib/order-pipeline";
 import { splitBlocker, splitLedger } from "@/lib/split-order";
 import { collectedAmount } from "@/lib/transactions";
 import { useEffect, useRef, useState } from "react";
@@ -66,7 +66,7 @@ import {
   type RateQuote,
 } from "@/lib/shipping-client";
 import RefundDetails from "@/components/store/RefundDetails";
-import { changeBalanceLinkExpiry, changeOrderLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
+import { changeBalanceLinkExpiry, changeOrderLinkExpiry, fetchRazorpayPayment, recordPartialPayment, createPaymentLink, cancelOrderPaymentLinks, remainingDue, paymentMode, refreshPaymentLink, refundThroughGateway, refreshRefundStatus, createCourierPaymentLink, refreshCourierPaymentLink, createBalancePaymentLink, refreshBalancePaymentLink, cancelBalancePaymentLink, retireOpenPaymentLinksBeforeEdit, createReturnChargeLink, emailReturnLabel } from "@/lib/payments-client";
 import { RatesTable } from "@/components/admin/SettingsDesks";
 import OrderTrackingTimeline from "@/components/store/OrderTrackingTimeline";
 import { formatDate } from "@/lib/utils";
@@ -395,6 +395,50 @@ export function OrdersDashboard() {
           }}
         />
       )}
+      {packedPaymentDue > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+          <div>
+            <p className="font-semibold">
+              {packedPaymentDue} packed order{packedPaymentDue === 1 ? "" : "s"} still ha{packedPaymentDue === 1 ? "s" : "ve"} unpaid balance due
+            </p>
+            <p className="text-xs text-amber-800">
+              Send a WhatsApp &amp; Email payment reminder so customers can clear their balance and their packed items can be shipped and delivered soon.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setStatusFilter("group:payment-due")}
+            >
+              View packed due ({packedPaymentDue})
+            </Button>
+            <Button
+              disabled={Boolean(bulkBusy)}
+              onClick={async () => {
+                if (!window.confirm(`Send WhatsApp & Email balance due reminder to all ${packedPaymentDue} packed unpaid order(s)?`)) return;
+                setBulkBusy("Sending balance reminders…");
+                setBulkNote("");
+                try {
+                  const res = await fetch("/api/admin/balance-reminder", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ allPackedUnpaid: true, channels: ["whatsapp", "email"] }),
+                  });
+                  const data = await res.json();
+                  setBulkNote(data.ok ? `Balance due reminder sent via WhatsApp & Email to ${data.sentCount}/${data.total} packed order(s).` : (data.error || "Could not send reminders."));
+                  refresh();
+                } catch (err) {
+                  setBulkNote(err instanceof Error ? err.message : "Could not send reminders.");
+                } finally {
+                  setBulkBusy("");
+                }
+              }}
+            >
+              {bulkBusy === "Sending balance reminders…" ? "Sending…" : "Remind all (WhatsApp + Email)"}
+            </Button>
+          </div>
+        </div>
+      )}
       {bulkNote && <p className="whitespace-pre-line rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><LinkText text={bulkNote} /></p>}
       {selectedIds.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white p-3">
@@ -423,6 +467,30 @@ export function OrdersDashboard() {
             setOrderStatus(id, "To Ship");
           })}>To Ship</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => void readyForPickup()}>Ready to pickup</Button>
+          <Button
+            variant="outline"
+            disabled={Boolean(bulkBusy)}
+            onClick={async () => {
+              setBulkBusy("Balance reminder");
+              setBulkNote("");
+              try {
+                const res = await fetch("/api/admin/balance-reminder", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ orderIds: selectedIds, channels: ["whatsapp", "email"] }),
+                });
+                const data = await res.json();
+                setBulkNote(data.ok ? `Balance reminder sent via WhatsApp & Email to ${data.sentCount}/${data.total} order(s).` : (data.error || "No unpaid balance found on selected orders."));
+                refresh();
+              } catch (err) {
+                setBulkNote(err instanceof Error ? err.message : "Could not send reminders.");
+              } finally {
+                setBulkBusy("");
+              }
+            }}
+          >
+            Remind balance (WA + Email)
+          </Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => setShipOne(true)}>Ship with one courier</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Out for Delivery", (id) => setOrderStatus(id, "Out for Delivery"))}>Out for Delivery</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Delivered", (id) => setOrderStatus(id, "Delivered"))}>Delivered</Button>
@@ -607,8 +675,48 @@ export function OrdersDashboard() {
                           <StatusBadge status={order.paymentStatus} mapping={PAYMENT_TONES} />
                         </span>
                         <span className="text-sm font-bold text-text-primary">{rupees(order.total)}</span>
+                        {PACKED_STATUSES.includes(order.status) && remainingDue(order) > 0 && (
+                          <span className="text-[11px] font-semibold text-amber-800">
+                            Due {rupees(remainingDue(order))}
+                            {order.balanceReminder?.lastAt ? ` · reminded ${order.balanceReminder.count}×` : ""}
+                          </span>
+                        )}
                       </span>
                     </button>
+                    {PACKED_STATUSES.includes(order.status) && remainingDue(order) > 0 && (
+                      <div className="flex items-center pr-2">
+                        <Button
+                          variant="outline"
+                          disabled={Boolean(bulkBusy)}
+                          onClick={async () => {
+                            setBulkBusy(`remind:${order.id}`);
+                            setBulkNote("");
+                            try {
+                              const res = await fetch("/api/admin/balance-reminder", {
+                                method: "POST",
+                                headers: { "content-type": "application/json" },
+                                body: JSON.stringify({ orderId: order.id, channels: ["whatsapp", "email"] }),
+                              });
+                              const data = await res.json();
+                              setBulkNote(
+                                data.ok
+                                  ? data.alreadyPaid
+                                    ? `#${order.id} already paid! Marked Paid.`
+                                    : `Fresh 2-day balance link & reminder sent for #${order.id} (WhatsApp: ${data.whatsapp}, Email: ${data.email}).`
+                                  : (data.error || `Could not send reminder for #${order.id}.`)
+                              );
+                              refresh();
+                            } catch (err) {
+                              setBulkNote(err instanceof Error ? err.message : "Could not send reminder.");
+                            } finally {
+                              setBulkBusy("");
+                            }
+                          }}
+                        >
+                          {bulkBusy === `remind:${order.id}` ? "Sending…" : "Remind (WA + Email)"}
+                        </Button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -660,7 +768,12 @@ function OrderRowPreview({ order }: { order: ReturnType<typeof getOrders>[number
           <span><span className="text-text-muted">Pickup by:</span> {rowDate(shipment.pickupScheduledFor) ?? "not scheduled"}{shipment.pickupSlot ? ` (${shipment.pickupSlot})` : ""}</span>
           <span><span className="text-text-muted">Delivery:</span> {rowDate(shipment.expectedBy) ?? "not given"}</span>
           <span>
-            <span className="text-text-muted">Status:</span> {[...(shipment.tracking ?? [])].sort((x, y) => y.at.localeCompare(x.at))[0]?.status ?? shipment.status} · {shipment.courier}
+            <span className="text-text-muted">Courier Update ({(shipment.tracking ?? []).length} scans):</span>{" "}
+            {(() => {
+              const latest = [...(shipment.tracking ?? [])].sort((x, y) => (Date.parse(y.at) || 0) - (Date.parse(x.at) || 0))[0];
+              return latest ? `${latest.status}${latest.location ? ` [${latest.location}]` : ""} (${statusStamp(latest.at)})` : shipment.status;
+            })()}{" "}
+            · {shipment.courier}
             {bookedViaLabel(shipment.provider) ? ` (${bookedViaLabel(shipment.provider)})` : ""}
           </span>
         </span>
@@ -1142,6 +1255,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const integrations = getIntegrations();
   const shipment = getShipments().find((item) => item.orderId === order.id && item.note !== "Cancelled");
   const returnRequest = getReturnRequest(order.id);
+  const [returnCourierChoice, setReturnCourierChoice] = useState<"vgmf-express" | "shiprocket" | "ithink">("vgmf-express");
   const [message, setMessage] = useState("");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState("");
@@ -1213,8 +1327,44 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
     setAddBookId("");
     setAddQty(1);
   };
-  const saveEdit = () =>
-    run("save", () => {
+  const swapProduct = (index: number, newBookId: string) => {
+    const book = catalogue.find((row) => row.id === newBookId);
+    if (!book) return;
+    setEditItems((list) => {
+      const current = list[index];
+      if (!current || current.bookId === book.id) return list;
+      const existingIdx = list.findIndex((row, i) => i !== index && row.bookId === book.id);
+      if (existingIdx !== -1) {
+        return list
+          .map((row, i) => (i === existingIdx ? { ...row, quantity: row.quantity + current.quantity } : row))
+          .filter((_, i) => i !== index);
+      }
+      return list.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              bookId: book.id,
+              title: book.title,
+              price: book.price,
+              originalPrice: book.originalPrice,
+              currency: book.currency,
+              sku: book.sku,
+              batchNo: book.batchNo,
+              preorder: Boolean(book.preorder?.enabled && book.stock <= 0),
+            }
+          : row
+      );
+    });
+  };
+  const openEditMode = () => {
+    setEditShipping(String(shippingSplit(order).courier));
+    setEditPacking(String(order.packing ?? 0));
+    setEditItems(order.items.map((item) => ({ ...item })));
+    setEditing(true);
+    document.getElementById(`order-items-${order.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+  const saveEdit = (sendNewBalanceLink = false) =>
+    run("save", async () => {
       const items = editItems.filter((item) => item.quantity > 0);
       if (!items.length) throw new Error("Keep at least one product in the order.");
       const courier = Number(editShipping || 0);
@@ -1222,12 +1372,31 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       const packing = Number(editPacking || 0);
       if (!Number.isFinite(packing) || packing < 0) throw new Error("Enter a packing charge of ₹0 or more.");
       const shipping = Math.round((courier + packing) * 100) / 100;
-      const next = resaveOrder(order.id, { items, deliveryAddress: editAddress, shipping, packing });
+      const itemsChanged = JSON.stringify(order.items.map((r) => [r.bookId, r.quantity])) !== JSON.stringify(items.map((r) => [r.bookId, r.quantity]));
+      const retired = await retireOpenPaymentLinksBeforeEdit(order.id);
+      const next = resaveOrder(order.id, {
+        items,
+        deliveryAddress: editAddress,
+        shipping,
+        packing,
+        clearBalanceLink: retired.cancelledBalanceLink,
+        clearPaymentLink: retired.cancelledOrderLink,
+      });
       setEditing(false);
+      const repickNote = itemsChanged && (order.pick?.pickedAt || order.pick?.packedAt) ? " Items changed after picking/packing — please re-pick/re-pack the updated book." : "";
+      const cancelNote = retired.cancelledBalanceLink
+        ? " Earlier balance payment link was cancelled on Razorpay."
+        : retired.cancelledOrderLink
+          ? " Earlier payment link was cancelled on Razorpay."
+          : "";
+      if (sendNewBalanceLink && next.preorderPayment && !next.preorderPayment.balancePaidAt && next.preorderPayment.balance > 0 && !next.preorderPayment.shippingDue) {
+        const newLink = await createBalancePaymentLink(order.id);
+        return `Order updated. New total ${rupees(next.total)}.${cancelNote} New balance payment link sent: ${newLink.url}${repickNote}`;
+      }
       const due = remainingDue(next);
       return next.paymentStatus === "Partially Paid" && due > 0
-        ? `Order saved. New total ${rupees(next.total)}. ${rupees(due)} is due from the customer: send a payment link for "Remaining" below.`
-        : `Order saved. New total ${rupees(next.total)}.`;
+        ? `Order saved. New total ${rupees(next.total)}.${cancelNote} ${rupees(due)} is due from the customer — send a fresh balance/remaining payment link below.${repickNote}`
+        : `Order saved. New total ${rupees(next.total)}.${cancelNote}${repickNote}`;
     });
   const editSubtotal = editItems.reduce((sum, item) => sum + item.price * Math.max(0, item.quantity), 0);
 
@@ -1336,7 +1505,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
       {message && <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800"><LinkText text={message} /></p>}
       {problem && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{problem}</p>}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div id={`order-items-${order.id}`} className="grid gap-4 lg:grid-cols-2">
         <Section
           title="Items & totals"
           action={
@@ -1358,11 +1527,30 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         >
           <ul className="space-y-2">
             {(editing ? editItems : order.items).map((item, index) => (
-              <li key={item.bookId} className="flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 flex-1 truncate">
-                  {currentProductTitle(item)}
-                  {orderItemBatch(item) ? <span className="ml-1 text-xs text-text-muted">· Batch {orderItemBatch(item)}</span> : null}
-                </span>
+              <li key={`${item.bookId}-${index}`} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                {editing ? (
+                  <span className="min-w-[200px] flex-1">
+                    <SelectInput
+                      aria-label="Change book"
+                      value={item.bookId}
+                      onChange={(event) => swapProduct(index, event.target.value)}
+                    >
+                      {!catalogue.some((b) => b.id === item.bookId) && (
+                        <option value={item.bookId}>{currentProductTitle(item)} · {rupees(item.price)}</option>
+                      )}
+                      {catalogue.map((book) => (
+                        <option key={book.id} value={book.id}>
+                          {book.title}{book.language ? ` · ${book.language}` : ""} · {rupees(book.price)}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate">
+                    {currentProductTitle(item)}
+                    {orderItemBatch(item) ? <span className="ml-1 text-xs text-text-muted">· Batch {orderItemBatch(item)}</span> : null}
+                  </span>
+                )}
                 {editing ? (
                   <span className="flex items-center gap-1">
                     <button
@@ -1444,9 +1632,21 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               <p className="text-xs text-text-muted">
                 New items subtotal {rupees(editSubtotal)} (was {rupees(order.subtotal)}). GST and fees are worked out again when you save. If the new total is more than the customer paid, the difference shows as Remaining for a payment link.
               </p>
-              <Button onClick={saveEdit} disabled={busy === "save"}>
-                {busy === "save" ? "Saving…" : "Save changes"}
-              </Button>
+              {order.preorderPayment?.link && !order.preorderPayment.balancePaidAt && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  A balance payment link was already sent. Saving changes will <strong>automatically cancel that old link on Razorpay</strong> so the customer cannot pay the wrong amount.
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => saveEdit(false)} disabled={busy === "save"}>
+                  {busy === "save" ? "Saving…" : order.preorderPayment?.link && !order.preorderPayment.balancePaidAt ? "Save & cancel old link" : "Save changes"}
+                </Button>
+                {order.preorderPayment && !order.preorderPayment.balancePaidAt && !order.preorderPayment.shippingDue && (
+                  <Button variant="outline" onClick={() => saveEdit(true)} disabled={busy === "save"}>
+                    {busy === "save" ? "Updating…" : order.preorderPayment.link ? "Save, cancel old link & send new link" : "Save & send new balance link"}
+                  </Button>
+                )}
+              </div>
             </div>
           )}
           <dl className="mt-3 space-y-1 border-t border-border pt-3 text-xs">
@@ -1464,27 +1664,46 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
 
         <ChargesBreakdown order={order} />
         <Section title="Customer">
-          {!editing && order.deliveryMode === "delivery" && !["Shipped", "Out for Delivery", "Delivered", "Cancelled", "Failed"].includes(order.status) && (
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-              {order.addressRequest && !order.addressRequest.doneAt ? (
-                <span className="rounded-lg bg-amber-50 px-2 py-1 font-semibold text-amber-800">Waiting for the customer to {order.addressRequest.fix ? "correct" : "add"} the address · booking blocked</span>
-              ) : null}
-              <Button variant="outline" disabled={busy === "fix-address"} onClick={() => run("fix-address", () => requestAddressCorrection(order.id))}>
-                {order.addressRequest && !order.addressRequest.doneAt ? "Resend address request" : "Ask customer to correct address"}
-              </Button>
-              <span className="text-text-muted">Or fix it yourself with Edit order.</span>
-            </div>
-          )}
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!editing) {
+                  setEditShipping(String(shippingSplit(order).courier));
+                  setEditPacking(String(order.packing ?? 0));
+                  setEditItems(order.items.map((item) => ({ ...item })));
+                  setEditAddress({
+                    ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "Maharashtra", pincode: "", country: "India", countryCode: "IN" }),
+                    email: order.deliveryAddress?.email || order.accountEmail || "",
+                  });
+                }
+                setEditing(!editing);
+              }}
+            >
+              {editing ? "Cancel Edit" : "Edit Customer & Address Info"}
+            </Button>
+            {!editing && order.deliveryMode === "delivery" && !["Shipped", "Out for Delivery", "Delivered", "Cancelled", "Failed"].includes(order.status) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {order.addressRequest && !order.addressRequest.doneAt ? (
+                  <span className="rounded-lg bg-amber-50 px-2 py-1 font-semibold text-amber-800">Waiting for the customer to {order.addressRequest.fix ? "correct" : "add"} the address · booking blocked</span>
+                ) : null}
+                <Button variant="outline" disabled={busy === "fix-address"} onClick={() => run("fix-address", () => requestAddressCorrection(order.id))}>
+                  {order.addressRequest && !order.addressRequest.doneAt ? "Resend address request" : "Ask customer to correct address"}
+                </Button>
+              </div>
+            )}
+          </div>
           {editing ? (
             <div className="grid gap-2 sm:grid-cols-2">
-              <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Name" />
-              <TextInput value={editAddress.phone} onChange={(event) => setEditAddress({ ...editAddress, phone: event.target.value })} placeholder="Phone" />
-              <TextInput value={editAddress.altPhone ?? ""} onChange={(event) => setEditAddress({ ...editAddress, altPhone: event.target.value })} placeholder="Alternative phone" />
-              <TextInput value={editAddress.email ?? ""} onChange={(event) => setEditAddress({ ...editAddress, email: event.target.value })} placeholder="Email" />
-              <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="Postal code" />
-              <TextInput value={editAddress.line1} onChange={(event) => setEditAddress({ ...editAddress, line1: event.target.value })} placeholder="Address" />
-              <TextInput value={editAddress.city} onChange={(event) => setEditAddress({ ...editAddress, city: event.target.value })} placeholder="City" />
-              <TextInput value={editAddress.state} onChange={(event) => setEditAddress({ ...editAddress, state: event.target.value })} placeholder="State" />
+              <TextInput value={editAddress.fullName} onChange={(event) => setEditAddress({ ...editAddress, fullName: event.target.value })} placeholder="Full Name *" />
+              <TextInput value={editAddress.phone} onChange={(event) => setEditAddress({ ...editAddress, phone: event.target.value })} placeholder="Mobile Number *" />
+              <TextInput value={editAddress.altPhone ?? ""} onChange={(event) => setEditAddress({ ...editAddress, altPhone: event.target.value })} placeholder="Alternative Phone" />
+              <TextInput value={editAddress.email ?? ""} onChange={(event) => setEditAddress({ ...editAddress, email: event.target.value })} placeholder="Email Address *" />
+              <TextInput value={editAddress.line1} onChange={(event) => setEditAddress({ ...editAddress, line1: event.target.value })} placeholder="House, Building, Street, Area *" />
+              <TextInput value={editAddress.landmark ?? ""} onChange={(event) => setEditAddress({ ...editAddress, landmark: event.target.value })} placeholder="Landmark (optional)" />
+              <TextInput value={editAddress.city} onChange={(event) => setEditAddress({ ...editAddress, city: event.target.value })} placeholder="City *" />
+              <TextInput value={editAddress.state} onChange={(event) => setEditAddress({ ...editAddress, state: event.target.value })} placeholder="State *" />
+              <TextInput value={editAddress.pincode} onChange={(event) => setEditAddress({ ...editAddress, pincode: event.target.value })} placeholder="PIN Code *" />
               <SelectInput
                 value={editAddress.countryCode || "IN"}
                 onChange={(event) => {
@@ -1500,20 +1719,26 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           ) : (
             <>
               <p className="text-sm font-semibold text-text-primary">{order.deliveryAddress?.fullName}</p>
-              <p className="text-xs text-text-muted">{order.deliveryAddress?.phone} · {order.deliveryAddress?.email || "no email"}</p>
-              {order.deliveryMode === "delivery" ? (
+              <p className="text-xs text-text-muted">
+                {order.deliveryAddress?.phone || "No mobile number"}
+                {order.deliveryAddress?.altPhone && order.deliveryAddress.altPhone !== order.deliveryAddress.phone ? ` · Alt: ${order.deliveryAddress.altPhone}` : ""}
+                {" · "}
+                {order.deliveryAddress?.email || order.accountEmail || "no email"}
+              </p>
+              {(order.deliveryAddress?.line1 || order.deliveryAddress?.city || order.deliveryAddress?.pincode) ? (
                 <p className="mt-2 text-xs text-text-muted">
                   {order.deliveryAddress?.line1}{order.deliveryAddress?.landmark ? `, ${order.deliveryAddress.landmark}` : ""}, {order.deliveryAddress?.city}, {order.deliveryAddress?.state} {order.deliveryAddress?.pincode}{order.deliveryAddress?.country ? `, ${order.deliveryAddress.country}` : ""}
                 </p>
-              ) : (
-                <p className="mt-2 text-xs text-text-muted">Collects from the store.</p>
+              ) : null}
+              {order.deliveryMode === "store_pickup" && (
+                <p className="mt-1 text-xs font-semibold text-burgundy">Store pickup order · Collects from the Foundation office</p>
               )}
             </>
           )}
           {editing && (
-            <div className="mt-3">
-              <Button onClick={saveEdit} disabled={busy === "save"}>
-                Save changes
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button onClick={() => saveEdit(false)} disabled={busy === "save"}>
+                {busy === "save" ? "Saving…" : "Save Customer & Order Changes"}
               </Button>
             </div>
           )}
@@ -1610,7 +1835,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
           {order.status === "Cancelled" && (
             <div className="mt-4">
               <p className="mb-2 text-xs font-semibold text-text-primary">Cancellation tracking</p>
-              <OrderTrackingTimeline order={order} />
+              <OrderTrackingTimeline order={order} detailed />
             </div>
           )}
         </Section>
@@ -1812,6 +2037,11 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                 ? `paid ${formatDateTime(order.preorderPayment.balancePaidAt)}${order.preorderPayment.balanceRef ? ` · ${order.preorderPayment.balanceRef}` : ""}`
                 : `due ${order.preorderPayment.balanceWhen === "on_ready" ? "when the item is ready" : "before dispatch"}`}
             </p>
+            {order.balanceReminder?.lastAt && (
+              <p className="mt-1 text-xs font-medium text-amber-800">
+                Last balance reminder sent {formatDateTime(order.balanceReminder.lastAt)} via {order.balanceReminder.channels.join(" & ")} ({order.balanceReminder.count}×).
+              </p>
+            )}
             {!order.preorderPayment.balancePaidAt && order.preorderPayment.link && (
               <p className="mt-2 break-all text-sm">
                 Payment link:{" "}
@@ -1841,8 +2071,39 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <>
                     <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(order.preorderPayment!.link!.url); setMessage("Link copied."); }}>Copy link</Button>
                     <Button variant="ghost" onClick={() => run("balance-check", () => refreshBalancePaymentLink(order.id))}>Check status</Button>
+                    <Button
+                      variant="outline"
+                      disabled={busy === "balance-cancel"}
+                      onClick={() => {
+                        if (!window.confirm("Cancel the sent balance payment link on Razorpay? The customer will no longer be able to pay the old link.")) return;
+                        run("balance-cancel", () => cancelBalancePaymentLink(order.id));
+                      }}
+                    >
+                      {busy === "balance-cancel" ? "Cancelling…" : "Cancel balance link"}
+                    </Button>
                   </>
                 )}
+                <Button variant="outline" onClick={openEditMode}>
+                  Change book / Edit order
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={busy === "balance-remind"}
+                  onClick={() => run("balance-remind", async () => {
+                    const res = await fetch("/api/admin/balance-reminder", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ orderId: order.id, channels: ["whatsapp", "email"] }),
+                    });
+                    const data = await res.json();
+                    if (!data.ok) throw new Error(data.error || "Reminder could not be sent.");
+                    return data.alreadyPaid
+                      ? "Customer already paid the balance link! Marked paid."
+                      : `Balance reminder sent (WhatsApp: ${data.whatsapp}, Email: ${data.email}) so the packed order can ship soon.`;
+                  })}
+                >
+                  {busy === "balance-remind" ? "Sending reminder…" : "Remind balance (WhatsApp + Email)"}
+                </Button>
                 <Button variant="outline" onClick={() => run("balance-paid", () => {
                   recordBalancePayment(order.id, { method, reference: reference || undefined });
                   return "Balance recorded. The order is fully paid.";
@@ -1902,6 +2163,231 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         </div>
       )}
 
+      {/* Detailed Statuses — Split into Order End & Courier End (right above Tracking) */}
+      <div className="mt-4">
+        <Section
+          title="Detailed Statuses"
+          action={
+            shipment ? (
+              <Button variant="outline" disabled={busy === "track"} onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>
+                {busy === "track" ? "Fetching scans…" : `🔄 Refresh Courier Scans (${(shipment.tracking ?? []).filter((e) => !isDeskScan(e)).length})`}
+              </Button>
+            ) : undefined
+          }
+        >
+          {(() => {
+            const rawScans = normalizeDispatchedScanLocations((shipment?.tracking ?? []).filter((e) => !isDeskScan(e)));
+            const sortedScans = [...rawScans].sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
+            const latestScan = sortedScans[0];
+            const dueAmt = remainingDue(order);
+            const pick = order.pick;
+            const pickLabel = pick?.packedAt
+              ? `Packed (${formatDateTime(pick.packedAt)})`
+              : pick?.pickedAt
+                ? `Picked (${formatDateTime(pick.pickedAt)}) · Awaiting Pack`
+                : pick?.acceptedAt
+                  ? `Picking in progress (${pick.assignee || "Staff"})`
+                  : pick?.assignee
+                    ? `Assigned to ${pick.assignee}`
+                    : "Unassigned";
+            const awbPhotosCount = order.awbPhotos?.length ?? 0;
+            const packPhotosCount = order.packPhotos?.length ?? 0;
+            const pickPhotosCount = (order as unknown as { pickPhotos?: unknown[] }).pickPhotos?.length ?? 0;
+
+            const isCourierHistoryEntry = (entry: { status?: string; note?: string }) => {
+              const text = `${entry.status || ""} ${entry.note || ""}`.toLowerCase();
+              return /(courier|awb|shipment|shipped|dispatch|manifest|waybill|in transit|out for delivery|rto|carrier|shipping label|label uploaded|label verified|envia|shiprocket|ekart|delhivery|dtdc|bluedart|xpressbees|pickup booked|pickup scheduled)/.test(text);
+            };
+
+            const allHistory = [...(order.history ?? [])].reverse();
+            const orderEndHistory = allHistory.filter((entry) => !isCourierHistoryEntry(entry));
+            const courierHistoryEntries = allHistory.filter((entry) => isCourierHistoryEntry(entry));
+
+            type CourierFeedItem = {
+              at: string;
+              status: string;
+              detail?: string;
+              by?: string;
+              source: "Live Scan" | "Courier Event";
+            };
+            const courierEndFeed: CourierFeedItem[] = [
+              ...sortedScans.map((scan) => ({
+                at: scan.at,
+                status: scan.status,
+                detail: scan.location || undefined,
+                source: "Live Scan" as const,
+              })),
+              ...courierHistoryEntries.map((entry) => ({
+                at: entry.at,
+                status: entry.status,
+                detail: entry.note || undefined,
+                by: entry.by || undefined,
+                source: "Courier Event" as const,
+              })),
+            ].sort((a, b) => (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0));
+
+            const orderEndCards = [
+              {
+                label: "Order Stage",
+                value: order.status,
+                sub: `Placed ${formatDateTime(order.date)} · ${orderPlatform(order).label}`,
+                tone: order.status === "Delivered" ? "border-emerald-200 bg-emerald-50/60 text-emerald-900" : order.status === "Cancelled" || order.status === "Failed" ? "border-red-200 bg-red-50/60 text-red-900" : "border-blue-200 bg-blue-50/60 text-blue-950",
+              },
+              {
+                label: "Payment Status",
+                value: order.paymentStatus,
+                sub: dueAmt > 0 ? `Paid ${rupees(collectedAmount(order))} · Due ${rupees(dueAmt)}` : `Paid ${rupees(order.total)}${order.paymentMethod ? ` · ${order.paymentMethod}` : ""}`,
+                tone: order.paymentStatus === "Paid" && dueAmt <= 0 ? "border-emerald-200 bg-emerald-50/60 text-emerald-900" : "border-amber-200 bg-amber-50/60 text-amber-900",
+              },
+              {
+                label: "Picker & Packer Status",
+                value: pick?.packedAt ? "Packed & Verified" : pick?.pickedAt ? "Picked · Ready to Pack" : pick?.assignee ? "In Picking" : "Pending Assignment",
+                sub: `${pickLabel} · Photos: Pick(${pickPhotosCount}), Pack(${packPhotosCount})`,
+                tone: pick?.packedAt ? "border-emerald-200 bg-emerald-50/60 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-900",
+              },
+            ];
+
+            const courierEndCards = [
+              {
+                label: "Courier & AWB Status",
+                value: shipment ? `${shipment.status} · ${shipment.courier}` : order.deliveryMode === "store_pickup" ? (order.pickupArrivedAt ? "Store Pickup · Customer Arrived" : "Store Pickup") : "Not Booked Yet",
+                sub: shipment
+                  ? `AWB ${shipment.awb}${shipment.expectedBy ? ` · ETA ${deliveryDatePhrase(shipment.expectedBy) || shipment.expectedBy}` : ""} · AWB Proof: ${awbPhotosCount}`
+                  : order.deliveryMode === "store_pickup"
+                    ? (order.status === "Delivered" ? "OTP Verified & Handed Over" : "Verify 6-digit Pickup OTP at counter")
+                    : "Book courier after packing & full payment",
+                tone: shipment?.status === "Delivered" ? "border-emerald-200 bg-emerald-50/60 text-emerald-900" : shipment ? "border-blue-200 bg-blue-50/60 text-blue-950" : "border-slate-200 bg-slate-50 text-slate-900",
+              },
+              {
+                label: "Latest Courier Update",
+                value: latestScan ? latestScan.status : (shipment ? "Awaiting first courier scan" : "No courier scans"),
+                sub: latestScan ? `${statusStamp(latestScan.at)}${latestScan.location ? ` · ${latestScan.location}` : ""}` : (shipment ? `${rawScans.length} scans recorded` : "—"),
+                tone: latestScan ? "border-blue-200 bg-blue-50/50 text-blue-950" : "border-slate-200 bg-slate-50 text-slate-700",
+              },
+              {
+                label: "Delivery / Return Status",
+                value: returnRequest ? `${returnRequest.kind === "replacement" ? "Replacement" : "Return"}: ${returnRequest.status}` : order.status === "Delivered" ? "Completed" : "Active",
+                sub: order.deliveryMode === "store_pickup" ? "Store Pickup Counter" : `${order.deliveryAddress?.city || ""}${order.deliveryAddress?.state ? `, ${order.deliveryAddress.state}` : ""} ${order.deliveryAddress?.pincode || ""}`,
+                tone: returnRequest ? "border-amber-200 bg-amber-50/60 text-amber-900" : "border-slate-200 bg-slate-50 text-slate-900",
+              },
+            ];
+
+            return (
+              <div className="space-y-4">
+                {/* 1. ORDER END SECTION */}
+                <div className="rounded-xl border border-amber-200/80 bg-warm-cream/40 p-3.5">
+                  <div className="mb-2.5 flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-amber-950">Order End Statuses</p>
+                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-900">
+                      {orderEndHistory.length} {orderEndHistory.length === 1 ? "update" : "updates"}
+                    </span>
+                  </div>
+                  <div className="grid gap-2.5 sm:grid-cols-3">
+                    {orderEndCards.map((card) => (
+                      <div key={card.label} className={`rounded-xl border p-3 text-xs ${card.tone}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</p>
+                        <p className="mt-1 text-sm font-bold leading-snug">{card.value}</p>
+                        <p className="mt-1 text-[11px] opacity-85">{card.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {orderEndHistory.length > 0 ? (
+                    <div className="mt-3 rounded-lg border border-border bg-white/80 p-3 text-xs">
+                      <p className="font-semibold text-text-primary">Order &amp; Warehouse History ({orderEndHistory.length})</p>
+                      <ol className="mt-2 max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                        {orderEndHistory.map((entry, idx) => (
+                          <li key={`ord-hist-${entry.at}-${idx}`} className="flex flex-wrap items-baseline gap-2 border-b border-border/60 pb-1 last:border-0">
+                            <span className="w-40 shrink-0 font-mono text-[11px] text-text-muted">{statusStamp(entry.at)}</span>
+                            <span className="font-semibold text-text-primary">{entry.status}</span>
+                            {entry.note ? <span className="flex-1 text-text-muted">— {entry.note}</span> : null}
+                            {entry.by ? <span className="text-[11px] text-text-muted">({entry.by})</span> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : (
+                    <p className="mt-2.5 text-xs text-text-muted">No order-end status history recorded yet.</p>
+                  )}
+                </div>
+
+                {/* 2. COURIER END SECTION */}
+                <div className="rounded-xl border border-blue-200/80 bg-blue-50/35 p-3.5">
+                  <div className="mb-2.5 flex items-center justify-between gap-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-blue-950">Courier End Statuses</p>
+                    <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-900">
+                      {courierEndFeed.length} {courierEndFeed.length === 1 ? "update" : "updates"}
+                    </span>
+                  </div>
+                  <div className="grid gap-2.5 sm:grid-cols-3">
+                    {courierEndCards.map((card) => (
+                      <div key={card.label} className={`rounded-xl border p-3 text-xs ${card.tone}`}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider opacity-75">{card.label}</p>
+                        <p className="mt-1 text-sm font-bold leading-snug">{card.value}</p>
+                        <p className="mt-1 text-[11px] opacity-85">{card.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {courierEndFeed.length > 0 ? (
+                    <div className="mt-3 rounded-lg border border-blue-100 bg-white/85 p-3 text-xs">
+                      <p className="font-semibold text-blue-950">
+                        Courier End History ({courierEndFeed.length})
+                        {shipment ? <span className="ml-2 font-normal text-blue-800">· {shipment.courier} · AWB <span className="font-mono">{shipment.awb}</span></span> : null}
+                      </p>
+                      <ol className="mt-2 max-h-52 space-y-1.5 overflow-y-auto pr-1">
+                        {courierEndFeed.map((item, idx) => (
+                          <li key={`cour-hist-${item.at}-${idx}`} className="flex flex-wrap items-baseline gap-2 border-b border-blue-100/80 pb-1 last:border-0">
+                            <span className="w-40 shrink-0 font-mono text-[11px] text-blue-800">{statusStamp(item.at)}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${item.source === "Live Scan" ? "bg-blue-100 text-blue-900" : "bg-slate-100 text-slate-700"}`}>
+                              {item.source}
+                            </span>
+                            <span className="font-semibold text-text-primary">{item.status}</span>
+                            {item.detail ? <span className="flex-1 text-text-muted">— {item.detail}</span> : null}
+                            {item.by ? <span className="text-[11px] text-text-muted">({item.by})</span> : null}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : (
+                    <p className="mt-2.5 text-xs text-text-muted">
+                      {shipment
+                        ? "No courier-end scans recorded yet. Click Refresh Courier Scans to fetch live updates."
+                        : order.deliveryMode === "store_pickup"
+                          ? "Store pickup order — no courier shipping required."
+                          : "No courier-end updates yet. Book a courier to begin tracking carrier scans."}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </Section>
+      </div>
+
+      {/* Live Order & Courier Tracking in the middle section (works for both Courier Delivery and Store Pickup) */}
+      {order.status !== "Cancelled" && (
+        <div className="mt-4">
+          <Section
+            title="Live Order & Courier Tracking"
+            action={
+              <div className="flex flex-wrap items-center gap-2">
+                {shipment ? (
+                  <Button variant="outline" disabled={busy === "track"} onClick={() => run("track", async () => `Tracking: ${await trackShipment(shipment.id)}`)}>
+                    {busy === "track" ? "Fetching scans…" : `🔄 Refresh Live Scans (${(shipment.tracking ?? []).filter((e) => !isDeskScan(e)).length})`}
+                  </Button>
+                ) : null}
+                <Button variant="ghost" onClick={() => {
+                  const url = `${window.location.origin}/admin/commerce/orders/${encodeURIComponent(order.id)}/track`;
+                  void navigator.clipboard?.writeText(url);
+                  setMessage("Order tracking link copied.");
+                }}>Copy Track Link</Button>
+              </div>
+            }
+          >
+            <OrderTrackingTimeline order={order} detailed />
+          </Section>
+        </div>
+      )}
+
       {order.deliveryMode === "delivery" && order.status !== "Cancelled" && (
         <div className="mt-4">
           <Section
@@ -1947,6 +2433,22 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     {busy === "book" ? "Booking…" : picked !== undefined && quote ? `Book ${quote.rates[picked]?.courierName}` : "Show rates and pick a courier to book"}
                   </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    disabled={busy === "vgmf-book"}
+                    onClick={() => run("vgmf-book", async () => {
+                      const res = await fetch("/api/admin/hub-ops", {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ action: "generate-awb", orderId: order.id }),
+                      });
+                      const data = await res.json();
+                      if (!data.ok) throw new Error(data.error || "Could not book with VGMF Express.");
+                      return `Booked with VGMF Express! 12-Digit AWB: ${data.shipment?.awb}. Print label: ${window.location.origin}${data.labelUrl}`;
+                    })}
+                  >
+                    {busy === "vgmf-book" ? "Generating 12-Digit AWB…" : "Book with VGMF Express (Own Logistics · 12-Digit AWB)"}
+                  </Button>
                 </div>
                 <SplitOrderBox order={order} onDone={(text) => { setMessage(text); onChanged(); }} />
                 <p className="mt-2 text-xs text-text-muted">
@@ -1992,7 +2494,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   <p className="font-semibold text-text-primary">{shipment.courier} <span className="block text-xs font-normal text-text-muted">{bookedViaLabel(shipment.provider) || "courier"}{shipment.live ? " · live" : ""}</span></p>
                   <p className="font-mono text-burgundy">AWB {shipment.awb}</p>
                   <p className="text-xs text-text-muted">Status: <b>{shipment.status}</b></p>
-                  {shipment.awb ? <AwbPhotos order={order} awb={shipment.awb} /> : null}
+                  {shipment.awb ? <AwbPhotos order={order} awb={shipment.awb} courier={shipment.courier} shipmentId={shipment.id} onChanged={onChanged} /> : null}
                   <p className="text-xs text-text-muted">Delivery date: {deliveryDatePhrase(shipment.expectedBy) || "Waiting for the courier"}</p>
                   {shipment.pickupScheduledFor && <p className="text-xs text-text-muted">Pickup: {formatDate(shipment.pickupScheduledFor)}{shipment.pickupSlot ? `, ${shipment.pickupSlot}` : ""}{shipment.pickupReference ? ` · ref ${shipment.pickupReference}` : ""}</p>}
                   {shipment.note && <p className="text-xs text-text-muted">{shipment.note}</p>}
@@ -2114,18 +2616,12 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                       {shipment.agentLat != null ? ` · rider ${shipment.agentLat}, ${shipment.agentLng}` : ""}
                     </p>
                   ) : null}
-                  <p className="mt-2 break-all font-mono text-[11px] text-burgundy">
-                    {typeof window !== "undefined" ? `${window.location.origin}/track/${order.trackToken || ""}` : `/track/${order.trackToken || ""}`}
-                  </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button variant="outline" onClick={() => {
-                      const token = order.trackToken || crypto.randomUUID().replace(/-/g, "");
-                      if (!order.trackToken) patchOrder(order.id, { trackToken: token });
-                      const url = `${window.location.origin}/track/${token}`;
+                      const url = `${window.location.origin}/admin/commerce/orders/${encodeURIComponent(order.id)}/track`;
                       void navigator.clipboard?.writeText(url);
-                      setMessage("Tracking link copied. Anyone with this link can follow the shipment.");
-                      onChanged();
-                    }}>Copy tracking link</Button>
+                      setMessage("Admin tracking link copied.");
+                    }}>Copy Admin Track Link</Button>
                   </div>
                   {shipment.tracking && shipment.tracking.length > 0 ? (
                     <ol className="mt-3 space-y-1 border-t border-border pt-3">
@@ -2135,9 +2631,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     </ol>
                   ) : <p className="mt-2 text-text-muted">No courier scans yet.</p>}
                 </div>
-                <div className="lg:col-span-2 space-y-4">
-                  <OrderTrackingTimeline order={order} />
-                </div>
+
               </div>
             )}
           </Section>
@@ -2250,32 +2744,81 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                     <Button variant="outline" onClick={() => run("rt", () => { updateReturnRequest(order.id, { status: "Return Approved" }); return "Return approved."; })}>Approve</Button>
                   )}
                   {returnRequest.status === "Return Approved" && returnRequest.resolution !== "refund" && (
-                    <Button variant="outline" onClick={() => run("rt", async () => {
-                      const created = await createReturnShipment(order.id);
-                      patchOrder(order.id, {
-                        returnShipment: {
-                          provider: created.provider,
-                          live: created.live,
-                          awb: created.awb,
-                          courierName: created.courierName,
-                          createdAt: new Date().toISOString(),
-                          note: created.note,
-                          labelUrl: created.labelUrl,
-                          charge: created.courierCost,
-                        },
-                      }, "Return pickup booked");
-                      try {
-                        emailReturnLabel(order.id);
-                      } catch {
-                        /* the label can be emailed from the return box */
-                      }
-                      if (returnRequest.kind === "replacement") {
-                        advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${created.awb} · ${created.courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
-                      } else {
-                        updateReturnRequest(order.id, { status: "Pickup Scheduled" });
-                      }
-                      return created.note ?? `Return pickup booked. AWB ${created.awb}.`;
-                    })}>Create return AWB & label</Button>
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-2">
+                      <label className="text-[11px] font-bold text-emerald-950">Return Courier:</label>
+                      <SelectInput
+                        className="w-60"
+                        value={returnCourierChoice}
+                        onChange={(e) => setReturnCourierChoice(e.target.value as "vgmf-express" | "shiprocket" | "ithink")}
+                      >
+                        <option value="vgmf-express">VGMF Express (Own Logistics · 12-Digit AWB)</option>
+                        <option value="shiprocket">Shiprocket (Reverse Pickup)</option>
+                        <option value="ithink">iThink Logistics (Reverse Pickup)</option>
+                      </SelectInput>
+                      <Button variant="outline" onClick={() => run("rt", async () => {
+                        if (returnCourierChoice === "vgmf-express") {
+                          const res = await fetch("/api/admin/hub-ops", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              action: "return-create",
+                              code: order.id,
+                              kind: "customer_return",
+                              reason: returnRequest.reason || (returnRequest.kind === "replacement" ? "Customer replacement pickup" : "Customer return"),
+                            }),
+                          });
+                          const j = await res.json();
+                          if (!res.ok || !j?.ok || !j?.returnRecord?.returnAwb) {
+                            throw new Error(j?.error || "Could not create VGMF Express return AWB.");
+                          }
+                          const retAwb = String(j.returnRecord.returnAwb);
+                          const labelUrl = `https://vaidyagogate.org/api/admin/vgmf-label?awb=${encodeURIComponent(retAwb)}`;
+                          patchOrder(order.id, {
+                            returnShipment: {
+                              provider: "vgmf-express",
+                              live: true,
+                              awb: retAwb,
+                              courierName: "VGMF Express (Return)",
+                              createdAt: new Date().toISOString(),
+                              note: `VGMF Express Return AWB ${retAwb}`,
+                              labelUrl,
+                              charge: 0,
+                            },
+                          }, "VGMF Express return pickup booked");
+                          try { emailReturnLabel(order.id); } catch { /* optional */ }
+                          if (returnRequest.kind === "replacement") {
+                            advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${retAwb} · VGMF Express. Download the label, paste it on the parcel and hand it to our executive.`);
+                          } else {
+                            updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                          }
+                          return `VGMF Express Return AWB ${retAwb} created & added to Delivery Partner Return Runsheet.`;
+                        }
+                        const created = await createReturnShipment(order.id, returnCourierChoice);
+                        patchOrder(order.id, {
+                          returnShipment: {
+                            provider: created.provider,
+                            live: created.live,
+                            awb: created.awb,
+                            courierName: created.courierName,
+                            createdAt: new Date().toISOString(),
+                            note: created.note,
+                            labelUrl: created.labelUrl,
+                            charge: created.courierCost,
+                          },
+                        }, "Return pickup booked");
+                        try {
+                          emailReturnLabel(order.id);
+                        } catch {
+                          /* the label can be emailed from the return box */
+                        }
+                        if (returnRequest.kind === "replacement") {
+                          advanceReturnRequest(order.id, "Pickup Scheduled", "return-label", `Return AWB ${created.awb} · ${created.courierName}. Download the label, paste it on the parcel and hand it to the courier.`);
+                        } else {
+                          updateReturnRequest(order.id, { status: "Pickup Scheduled" });
+                        }
+                        return created.note ?? `Return pickup booked. AWB ${created.awb}.`;
+                      })}>Create return AWB &amp; label</Button>
+                    </div>
                   )}
                   {returnRequest.status === "Return Approved" && (
                     <Button variant="ghost" onClick={() => {
@@ -2798,53 +3341,149 @@ function LinkExpiryEditor({ current, busy, onSave }: { current?: string; busy: b
   );
 }
 
-function AwbPhotos({ order, awb }: { order: Order; awb: string }) {
+function AwbPhotos({ order, awb, courier, shipmentId, onChanged }: { order: Order; awb: string; courier?: string; shipmentId?: string; onChanged?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [okMsg, setOkMsg] = useState("");
   const photos = order.awbPhotos ?? [];
+  const normAwb = (v?: string) => String(v || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  const expectedKey = normAwb(awb);
+  const activePhotoForCurrentAwb = photos.find((p) => {
+    const pKey = normAwb(p.awb);
+    return (shipmentId && p.shipmentId === shipmentId) || (expectedKey && pKey === expectedKey);
+  });
+  const canUpload = Boolean(expectedKey) && !activePhotoForCurrentAwb;
+
   const add = async (files: FileList | null) => {
-    if (!files?.length) return;
+    const file = files?.[0];
+    if (!file) return;
+    if (!expectedKey) {
+      setError("No courier-allotted AWB found on this shipment.");
+      return;
+    }
+    if (activePhotoForCurrentAwb) {
+      setError(`An AWB image is already uploaded for ${courier || "this courier"} (AWB ${awb}). Delete it first or reassign the courier to upload a new one.`);
+      return;
+    }
     setBusy(true);
     setError("");
+    setOkMsg("");
     try {
       const session = getSession();
-      const by = session?.email ?? "admin";
-      const byName = session ? `${session.firstName ?? ""} ${session.lastName ?? ""}`.trim() || undefined : undefined;
-      const added: NonNullable<Order["awbPhotos"]> = [];
-      for (const file of Array.from(files)) added.push({ url: await uploadMediaFile(file), at: new Date().toISOString(), by, byName, awb });
-      patchStoredOrder(order.id, { awbPhotos: [...(getStoredOrder(order.id)?.awbPhotos ?? []), ...added] }, `${added.length} AWB / parcel photo${added.length === 1 ? "" : "s"} added`);
+      const byEmail = session?.email ?? "admin";
+      const byName = session ? `${session.firstName ?? ""} ${session.lastName ?? ""}`.trim() || byEmail : "Admin";
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("orderId", order.id);
+      fd.append("byEmail", byEmail);
+      fd.append("byName", byName);
+      const res = await fetch("/api/admin/verify-awb-label", {
+        method: "POST",
+        credentials: "same-origin",
+        body: fd,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+        photo?: NonNullable<Order["awbPhotos"]>[number];
+      };
+      if (!res.ok || !data.ok || !data.photo) {
+        throw new Error(data.error || "Label auto-verification failed.");
+      }
+      const current = getStoredOrder(order.id)?.awbPhotos ?? [];
+      patchStoredOrder(order.id, { awbPhotos: [...current.filter((p) => p.url !== data.photo!.url), data.photo] }, data.message || `AWB ${awb} auto-verified & uploaded`);
+      setOkMsg(data.message || `AWB ${awb} automatically read & verified!`);
+      onChanged?.();
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : "Could not upload the photo.");
+      setError(problem instanceof Error ? problem.message : "Could not verify/upload the label photo.");
     } finally {
       setBusy(false);
     }
   };
+
+  const removePhoto = (photoUrl: string, photoAwb?: string) => {
+    if (!window.confirm(`Delete this AWB image${photoAwb ? ` (AWB ${photoAwb})` : ""}? You will be able to upload a new image for this courier afterwards.`)) return;
+    const current = getStoredOrder(order.id)?.awbPhotos ?? [];
+    const next = current.filter((p) => p.url !== photoUrl);
+    patchStoredOrder(order.id, { awbPhotos: next }, `Deleted AWB photo${photoAwb ? ` (AWB ${photoAwb})` : ""}`);
+    setError("");
+    setOkMsg("");
+    onChanged?.();
+  };
+
   return (
-    <div className="mt-2 rounded-lg border border-border p-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800">
-          {busy ? "Uploading…" : `Take AWB label / parcel photos${photos.length ? ` (${photos.length})` : ""}`}
-          <input type="file" accept="image/*" capture="environment" multiple className="hidden" disabled={busy} onChange={(event) => { void add(event.target.files); event.target.value = ""; }} />
-        </label>
-        <span className="text-[11px] text-text-muted">Proof of the label and sealed parcel. Customers never see these.</span>
+    <div className="mt-2 rounded-lg border border-border bg-white p-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-text-primary">
+          AWB Label Auto-Verify &amp; Upload · Allotted AWB: <span className="font-mono text-burgundy">{awb}</span>
+          {courier ? <span className="ml-1 font-normal text-text-muted">({courier})</span> : null}
+        </p>
+        <span className="text-[11px] text-text-muted">1 upload per courier AWB (reassignment unlocks a new slot)</span>
       </div>
-      {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
+
+      {canUpload ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <label className={classNames(
+            "inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold",
+            !busy
+              ? "cursor-pointer border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              : "cursor-wait border-slate-200 bg-slate-100 text-slate-400"
+          )}>
+            {busy ? "Reading & Verifying Label AWB…" : "Click / Upload Pasted Label Photo (Auto-Verify AWB)"}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              disabled={busy}
+              onChange={(event) => { void add(event.target.files); event.target.value = ""; }}
+            />
+          </label>
+          <span className="text-[11px] text-text-muted">
+            Automatically reads barcode &amp; printed AWB from the photo and verifies it matches {awb}.
+          </span>
+        </div>
+      ) : (
+        <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50/70 px-2.5 py-1.5 text-[11px] font-medium text-emerald-800">
+          ✓ Verified AWB image uploaded for <span className="font-mono font-bold">{awb}</span> ({courier || "current courier"}). Delete it below to replace, or reassign courier to upload a new AWB label.
+        </div>
+      )}
+
+      {okMsg && <p className="mt-1.5 text-xs font-semibold text-emerald-700">{okMsg}</p>}
+      {error && <p className="mt-1.5 text-xs font-medium text-red-700">{error}</p>}
+
       {photos.length ? (
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          {photos.map((photo) => (
-            <figure key={photo.url} className="min-w-0 rounded-lg border border-border bg-white p-1.5">
-              <a href={photo.url} target="_blank" rel="noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.url} alt="AWB label or parcel" className="aspect-square w-full rounded-md object-cover" />
-              </a>
-              <figcaption className="mt-1 space-y-0.5 text-[11px] leading-4 text-text-muted">
-                <p className="truncate font-semibold text-ink">Taken by {photo.byName || photo.by}</p>
-                {photo.byName && photo.by ? <p className="truncate">{photo.by}</p> : null}
-                <p>{formatDateTime(photo.at)}</p>
-                {photo.awb ? <p className="truncate">AWB {photo.awb}</p> : null}
-              </figcaption>
-            </figure>
-          ))}
+        <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {photos.map((photo) => {
+            const isCurrent = (shipmentId && photo.shipmentId === shipmentId) || (expectedKey && normAwb(photo.awb) === expectedKey);
+            return (
+              <figure key={photo.url} className={classNames("min-w-0 rounded-lg border bg-white p-1.5", isCurrent ? "border-emerald-400" : "border-border opacity-80")}>
+                <a href={photo.url} target="_blank" rel="noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.url} alt="AWB label or parcel" className="aspect-square w-full rounded-md object-cover" />
+                </a>
+                <figcaption className="mt-1 space-y-0.5 text-[11px] leading-4 text-text-muted">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className={classNames("rounded px-1 py-0.5 text-[10px] font-bold uppercase", isCurrent ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600")}>
+                      {isCurrent ? "Verified AWB" : "Previous Courier"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(photo.url, photo.awb)}
+                      className="text-[11px] font-semibold text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <p className="truncate font-semibold text-ink">By {photo.byName || photo.by}</p>
+                  <p>{formatDateTime(photo.at)}</p>
+                  {photo.courier ? <p className="truncate font-medium text-slate-700">{photo.courier}</p> : null}
+                  {photo.awb ? <p className="truncate font-mono text-burgundy">AWB {photo.awb}</p> : null}
+                </figcaption>
+              </figure>
+            );
+          })}
         </div>
       ) : null}
     </div>

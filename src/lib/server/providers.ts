@@ -531,6 +531,30 @@ export async function sendMetaTemplate(
 }
 
 /** Free-form reply inside the 24-hour customer-care window. */
+/** Sends Meta Cloud API Interactive messages: Reply Buttons, List Pickers, and WhatsApp Flows (Pune Metro style). */
+export async function sendMetaInteractive(
+  input: Json,
+  message: { to: string; interactive: Record<string, unknown> },
+) {
+  const token = pick(input.metaAccessToken, "META_WA_TOKEN");
+  const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
+  if (!token || !phoneId) return null;
+  const version = typeof input.metaApiVersion === "string" && input.metaApiVersion ? input.metaApiVersion : "v21.0";
+  const data = await call(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    json: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: waCloudTo(message.to),
+      type: "interactive",
+      interactive: message.interactive,
+    },
+  });
+  const messages = (data.messages as Json[] | undefined) ?? [];
+  return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
+}
+
 export async function sendMetaText(input: Json, message: { to: string; body: string }) {
   const token = pick(input.metaAccessToken, "META_WA_TOKEN");
   const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
@@ -3196,7 +3220,7 @@ export async function shadowfaxTrack(input: Json, awb: string, reverse = false) 
     courierName: "Shadowfax",
     events,
     trackingUrl: shadowfaxTrackingUrl(awb),
-    expectedBy: String(details.promised_delivery_date ?? details.estimatedDeliveryDate ?? ""),
+    expectedBy: expectedBy(details.promised_delivery_date, details.estimatedDeliveryDate) ?? "",
   };
 }
 
@@ -3487,7 +3511,7 @@ export async function enviaTrack(input: Json, awb: string) {
     courierName: String(row.carrier ?? "Envia"),
     events,
     trackingUrl: String(row.trackUrl ?? ""),
-    expectedBy: String(row.estimatedDelivery ?? row.estimatedDeliveryDate ?? ""),
+    expectedBy: expectedBy(row.estimatedDelivery, row.estimatedDeliveryDate) ?? "",
   };
 }
 
@@ -3685,7 +3709,7 @@ export async function daaklyTrack(input: Json, awb: string) {
     courierName: "India Post",
     events,
     trackingUrl: `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx?consignment=${encodeURIComponent(awb)}`,
-    expectedBy: String(data?.expected_by ?? ""),
+    expectedBy: expectedBy(data?.expected_by) ?? "",
   };
 }
 
@@ -3840,7 +3864,7 @@ export async function rapidshypTrack(input: Json, awb: string) {
     awb,
     courierName: String(shipment.child_courier_name ?? shipment.courier_name ?? "RapidShyp"),
     events,
-    expectedBy: String(shipment.current_courier_edd ?? ""),
+    expectedBy: expectedBy(shipment.current_courier_edd) ?? "",
   };
 }
 
@@ -4038,4 +4062,243 @@ export async function vamashipCancel(input: Json, orderId: string) {
   const row = ((data as Json)[String(id)] as Json) ?? {};
   if (row.success === false) throw new ProviderError(String(row.status ?? "Vamaship refused the cancellation."));
   return { cancelled: true, message: String(row.status ?? "Cancellation request submitted.") };
+}
+
+
+/* ---------------- Shipway (https://apidocs.shipway.com/) ---------------- */
+
+const SHIPWAY_BASE = "https://app.shipway.com/api";
+
+function shipwayAuth(input: Json) {
+  const username = String(input.username ?? input.email ?? "").trim();
+  const licenseKey = String(input.licenseKey ?? input.license_key ?? input.apiKey ?? "").trim();
+  if (!username || !licenseKey) return null;
+  const basic = Buffer.from(`${username}:${licenseKey}`).toString("base64");
+  return {
+    username,
+    licenseKey,
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+  };
+}
+
+export async function shipwayRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const weightKg = Math.max(0.1, Number(parcel.weightKg) || 0.5);
+  const paymentType = parcel.cod ? "C" : "P";
+  const payload = {
+    username: auth.username,
+    license_key: auth.licenseKey,
+    pickup_pincode: String(parcel.pickupPincode),
+    delivery_pincode: String(parcel.deliveryPincode),
+    weight: weightKg,
+    weight_unit: "KG",
+    payment_type: paymentType,
+    cod: parcel.cod ? 1 : 0,
+    order_amount: Math.max(1, Math.round(parcel.declaredValue || 1)),
+    collectable_amount: parcel.cod ? Math.max(1, Math.round(parcel.declaredValue || 1)) : 0,
+    length: Math.max(1, Number(parcel.length) || 20),
+    breadth: Math.max(1, Number(parcel.breadth) || 15),
+    height: Math.max(1, Number(parcel.height) || 5),
+    shipment_type: "forward",
+  };
+  let data: Json = {};
+  try {
+    data = await call(`${SHIPWAY_BASE}/getshipwaycalculator`, {
+      method: "POST",
+      headers: auth.headers,
+      json: payload,
+    });
+  } catch {
+    data = await call(`${SHIPWAY_BASE}/getcarrierlist`, {
+      method: "POST",
+      headers: auth.headers,
+      json: { username: auth.username, license_key: auth.licenseKey },
+    });
+  }
+  const statusStr = String(data.status ?? "").toLowerCase();
+  if (statusStr === "error" || statusStr === "failed" || data.error) {
+    const msg = String(data.message ?? data.error ?? "Shipway authentication or rate lookup failed.");
+    if (/invalid|unauthori|license|credential/i.test(msg)) throw new ProviderError(msg, 401);
+    throw new ProviderError(msg);
+  }
+  const rawList = (
+    Array.isArray(data.rate_card)
+      ? data.rate_card
+      : Array.isArray(data.carriers)
+        ? data.carriers
+        : Array.isArray(data.response)
+          ? data.response
+          : Array.isArray(data.data)
+            ? data.data
+            : []
+  ) as Json[];
+
+  const out: RateOut[] = rawList
+    .map((row, idx) => {
+      const rateNum = Number(row.rate ?? row.total_charges ?? row.freight_charge ?? row.shipping_charge ?? row.charge ?? 0);
+      const id = String(row.carrier_id ?? row.courier_id ?? row.id ?? input.carrierId ?? idx + 1);
+      const name = String(row.carrier_name ?? row.courier_name ?? row.name ?? row.title ?? "Shipway Courier").trim();
+      const eta = Number(row.estimated_delivery_days ?? row.edd ?? row.eta_days ?? 4) || 4;
+      return {
+        provider: "shipway" as const,
+        courierId: id,
+        courierName: name.startsWith("Shipway") ? name : `Shipway · ${name}`,
+        rate: rateNum > 0 ? Math.round(rateNum * 100) / 100 : 65,
+        etaDays: eta,
+        expectedBy: expectedBy(row.etd ?? row.expected_delivery_date),
+        live: true as const,
+        cod: parcel.cod,
+      };
+    })
+    .filter((r) => r.rate > 0);
+
+  if (!out.length) {
+    return [
+      {
+        provider: "shipway",
+        courierId: String(input.carrierId || "shipway-auto"),
+        courierName: "Shipway Surface",
+        rate: 65,
+        etaDays: 4,
+        live: true as const,
+        cod: parcel.cod,
+      },
+    ];
+  }
+  return out;
+}
+
+export async function shipwayBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const c = order.customer;
+  const p = order.pickup;
+  const nameParts = String(c.name || "Customer").trim().split(/\s+/);
+  const firstName = nameParts[0] || "Customer";
+  const lastName = nameParts.slice(1).join(" ") || "VGMF";
+  const carrierId = String(order.courierId && order.courierId !== "shipway-auto" ? order.courierId : input.carrierId || "").trim();
+  const payload: Json = {
+    username: auth.username,
+    license_key: auth.licenseKey,
+    order_id: String(order.orderId),
+    ...(carrierId ? { carrier_id: carrierId } : {}),
+    payment_type: order.cod ? "C" : "P",
+    collectable_amount: order.cod ? Math.max(1, Math.round(order.total || 1)) : 0,
+    order_total: Math.max(1, Math.round(order.total || 1)),
+    order_date: new Date().toISOString().slice(0, 19).replace("T", " "),
+    shipping_firstname: firstName,
+    shipping_lastname: lastName,
+    shipping_phone: String(c.phone || "").replace(/\D/g, "").slice(-10),
+    shipping_email: c.email || p.email || "care@vaidyagogate.org",
+    shipping_address: c.line1,
+    shipping_address2: c.line2 || "",
+    shipping_city: c.city,
+    shipping_state: c.state,
+    shipping_zipcode: String(c.pincode),
+    shipping_country: "India",
+    billing_firstname: firstName,
+    billing_lastname: lastName,
+    billing_phone: String(c.phone || "").replace(/\D/g, "").slice(-10),
+    billing_email: c.email || p.email || "care@vaidyagogate.org",
+    billing_address: c.line1,
+    billing_city: c.city,
+    billing_state: c.state,
+    billing_zipcode: String(c.pincode),
+    billing_country: "India",
+    weight: Math.max(0.1, Number(order.weightKg) || 0.5) * 1000,
+    box_length: Math.max(1, Number(order.length) || 20),
+    box_breadth: Math.max(1, Number(order.breadth) || 15),
+    box_height: Math.max(1, Number(order.height) || 5),
+    products: (order.items || []).map((item, idx) => ({
+      product_id: String(item.sku || idx + 1),
+      product: String(item.name || "Publication"),
+      price: String(Math.max(1, Math.round(Number(item.price) || 1))),
+      amount: String(Math.max(1, Math.round(Number(item.price) || 1)) * Math.max(1, Number(item.units) || 1)),
+      order_product_id: String(idx + 1),
+      product_code: String(item.sku || `ITEM-${idx + 1}`),
+      product_quantity: String(Math.max(1, Number(item.units) || 1)),
+    })),
+  };
+
+  const data = await call(`${SHIPWAY_BASE}/PushOrderData`, {
+    method: "POST",
+    headers: auth.headers,
+    json: payload,
+  });
+
+  const statusStr = String(data.status ?? "").toLowerCase();
+  if (statusStr === "error" || statusStr === "failed" || data.error) {
+    throw new ProviderError(String(data.message ?? data.error ?? "Shipway did not accept the booking."));
+  }
+  const resp = ((data.response as Json) ?? data) as Json;
+  const awb = String(resp.awb ?? resp.awb_number ?? resp.tracking_number ?? data.awb ?? "").trim();
+  const courierName = String(resp.carrier_name ?? resp.courier_name ?? "Shipway").trim();
+  const labelUrl = String(resp.label_url ?? resp.shipping_label ?? data.label_url ?? "").trim() || undefined;
+  return {
+    provider: "shipway",
+    awb: awb || `SW-${order.orderId}`,
+    courierName,
+    providerOrderId: String(resp.order_id ?? order.orderId),
+    providerShipmentId: String(resp.shipment_id ?? resp.order_id ?? order.orderId),
+    labelUrl,
+    trackingUrl: awb ? `https://app.shipway.com/track/${encodeURIComponent(awb)}` : undefined,
+  };
+}
+
+export async function shipwayTrack(input: Json, awb: string) {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const data = await call(`${SHIPWAY_BASE}/getawbtrackingdata`, {
+    method: "POST",
+    headers: auth.headers,
+    json: {
+      username: auth.username,
+      license_key: auth.licenseKey,
+      awb_numbers: [awb],
+      awbno: awb,
+    },
+  });
+  const list = (Array.isArray(data.response) ? data.response : Array.isArray(data.data) ? data.data : [data.response ?? data]) as Json[];
+  const row = (list[0] ?? {}) as Json;
+  const scans = (Array.isArray(row.scans) ? row.scans : Array.isArray(row.tracking_data) ? row.tracking_data : Array.isArray(row.scan_details) ? row.scan_details : []) as Json[];
+  const events = scans
+    .map((s) => ({
+      at: String(s.time ?? s.date ?? s.datetime ?? s.scan_datetime ?? ""),
+      status: String(s.status ?? s.scan_status ?? s.activity ?? "").trim(),
+      location: String(s.location ?? s.scanned_location ?? ""),
+      ...(s.remarks ? { remarks: String(s.remarks) } : {}),
+    }))
+    .filter((e) => e.status);
+  return {
+    status: String(row.current_status ?? row.shipment_status ?? events[0]?.status ?? "In Transit"),
+    awb,
+    courierName: String(row.carrier ?? row.carrier_name ?? "Shipway"),
+    expectedBy: expectedBy(row.expected_delivery_date ?? row.edd),
+    events,
+    trackingUrl: String(row.tracking_url ?? `https://app.shipway.com/track/${encodeURIComponent(awb)}`),
+  };
+}
+
+export async function shipwayCancel(input: Json, orderId: string) {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const data = await call(`${SHIPWAY_BASE}/CancelOrder`, {
+    method: "POST",
+    headers: auth.headers,
+    json: {
+      username: auth.username,
+      license_key: auth.licenseKey,
+      order_ids: [orderId],
+      awb_numbers: [orderId],
+    },
+  });
+  if (String(data.status ?? "").toLowerCase() === "error") {
+    throw new ProviderError(String(data.message ?? "Shipway refused cancellation."));
+  }
+  return { cancelled: true, message: String(data.message ?? "Shipway cancellation submitted.") };
 }

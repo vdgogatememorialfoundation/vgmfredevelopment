@@ -6,116 +6,189 @@ import { useAuth } from "../../src/auth";
 import { useCart } from "../../src/cart";
 import { ChatFab, TopBar } from "../../src/chrome";
 import { useFeed } from "../../src/feed";
-import { useTheme } from "../../src/theme";
 import { useWishlist } from "../../src/wishlist";
-import { Button, Loading, Screen, SiteFooter } from "../../src/ui";
+import { Loading, Screen, SiteFooter } from "../../src/ui";
 
+const BRAND = "#8F2D2D";
+const TEXT = "#111827";
+const MUTED = "#6B7280";
+const BORDER = "#E5E7EB";
+
+/** ALL 16 website account options organized cleanly into 3 white edge-to-edge bands. */
 const GROUPS: { title: string; ids: string[] }[] = [
-  { title: "Foundation", ids: ["registrations", "applications", "notifications", "subscriptions"] },
-  { title: "Orders & payments", ids: ["orders", "payments", "receipts", "wishlist", "cards", "addresses", "loyalty"] },
-  { title: "Help & profile", ids: ["tickets", "faq", "profile"] },
+  { title: "Orders, Wallet & Payments", ids: ["orders", "wallet", "payments", "receipts", "wishlist", "cards", "addresses", "loyalty"] },
+  { title: "Programmes & Content", ids: ["registrations", "applications", "seminar-videos", "notifications", "subscriptions"] },
+  { title: "Profile & Support", ids: ["profile", "tickets", "faq"] },
 ];
 
-const QUICK = [
-  { id: "orders", label: "Orders", icon: "cube-outline" },
-  { id: "registrations", label: "Registrations", icon: "calendar-outline" },
-  { id: "wishlist", label: "Wishlist", icon: "heart-outline" },
-  { id: "tickets", label: "Support", icon: "help-buoy-outline" },
-] as const;
+const QUICK_2X2 = [
+  { id: "orders", label: "My Orders", icon: "cube-outline" as const },
+  { id: "wallet", label: "Wallet", icon: "wallet-outline" as const },
+  { id: "wishlist", label: "Wishlist", icon: "heart-outline" as const },
+  { id: "registrations", label: "Events", icon: "calendar-outline" as const },
+];
 
 function go(id: string) {
-  if (id === "privacy" || id === "terms") router.push(`/policy/${id}`);
-  else router.push(id === "faq" ? "/faq" : `/account/${id}`);
+  if (id === "privacy" || id === "terms" || id === "returns" || id === "refund" || id === "shipping" || id === "cancellation") {
+    router.push(`/policy/${id}` as never);
+  } else if (id === "faq") {
+    router.push("/faq");
+  } else if (id === "seminar-videos") {
+    router.push("/seminar-videos");
+  } else {
+    router.push(`/account/${id}` as never);
+  }
 }
 
 export default function AccountScreen() {
-  const theme = useTheme();
   const { feed, loading, refresh } = useFeed();
   const { session, signOut } = useAuth();
   const wishlist = useWishlist();
   const cart = useCart();
   if (loading && !feed) return <Loading />;
+
   const name = session?.name || "Member";
-  const initials = name.split(/\s+/).map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
   const byId = (id: string) => ACCOUNT_SECTIONS.find((item) => item.id === id);
 
-  const row = (item: AccountSection, last: boolean) => (
+  const renderRow = (item: AccountSection, last: boolean) => (
     <Pressable
       key={item.id}
       onPress={() => go(item.id)}
       accessibilityRole="button"
       accessibilityLabel={item.title}
-      style={({ pressed }) => [{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 13, borderBottomWidth: last ? 0 : 1, borderBottomColor: theme.colors.border, opacity: pressed ? 0.7 : 1 }]}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 13,
+        paddingVertical: 13,
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: "#F3F4F6",
+        opacity: pressed ? 0.72 : 1,
+      })}
     >
-      <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: theme.colors.background, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name={item.id === "wishlist" && wishlist.ids.length ? "heart" : item.icon} size={18} color={theme.colors.primary} />
+      <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: "#FDF2F4", alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name={item.id === "wishlist" && wishlist.ids.length ? "heart" : item.icon} size={18} color={BRAND} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ color: theme.colors.text, fontWeight: "700", fontSize: 14 }}>{item.title}</Text>
-        <Text numberOfLines={1} style={{ color: theme.colors.muted, fontSize: 12, marginTop: 2 }}>
-          {item.id === "wishlist" && wishlist.ids.length ? `${wishlist.ids.length} saved` : item.subtitle}
+        <Text style={{ color: TEXT, fontWeight: "700", fontSize: 14 }}>{item.title}</Text>
+        <Text numberOfLines={1} style={{ color: MUTED, fontSize: 12, marginTop: 1 }}>
+          {item.id === "wishlist" && wishlist.ids.length ? `${wishlist.ids.length} saved items` : item.subtitle}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={theme.colors.muted} />
+      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
     </Pressable>
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: "#F8F9FB" }}>
       <Screen refreshing={loading} onRefresh={refresh}>
-        <TopBar bag />
-        <View style={{ backgroundColor: theme.colors.secondary, borderRadius: 10, padding: 18, marginBottom: 16, overflow: "hidden" }}>
-          <View style={{ position: "absolute", right: -40, top: -40, width: 150, height: 150, borderRadius: 75, backgroundColor: "rgba(255,255,255,0.07)" }} />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-            <View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: theme.colors.paper, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: theme.colors.accent }}>
-              <Text style={{ color: theme.colors.primary, fontWeight: "800", fontSize: 20 }}>{initials || "VG"}</Text>
-            </View>
+        <TopBar bag compact />
+
+        {/* Pure White Greeting + 2x2 Outlined Quick Grid */}
+        <View style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, marginBottom: 8, borderBottomWidth: 1, borderColor: BORDER }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ color: theme.colors.onPrimary, fontWeight: "600", fontSize: 19, fontFamily: theme.fontFamily }}>{name}</Text>
-              {session?.email ? <Text numberOfLines={1} style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, marginTop: 2 }}>{session.email}</Text> : null}
-              <Text style={{ color: theme.colors.accent, fontSize: 12, fontWeight: "800", marginTop: 4 }}>
-                {session?.accountId ? `Account ID ${session.accountId}` : "Account ID appears after first verified sign-in"}
+              <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: "800", color: TEXT }}>
+                Namaste, {name}
+              </Text>
+              <Text numberOfLines={1} style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+                {session?.email || "Vaidya Gogate Memorial Foundation"}
+              </Text>
+            </View>
+            <View style={{ backgroundColor: "#FDF2F4", borderWidth: 1, borderColor: "#F3D4D8", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 }}>
+              <Text style={{ color: BRAND, fontSize: 11, fontWeight: "800" }}>
+                {session?.accountId ? `ID ${session.accountId}` : "VGMF Account"}
               </Text>
             </View>
           </View>
-        </View>
 
-        <View style={{ flexDirection: "row", gap: 10, marginBottom: 16 }}>
-          {QUICK.map((tile) => (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 10 }}>
+            {QUICK_2X2.map((tile) => (
+              <Pressable
+                key={tile.id}
+                onPress={() => go(tile.id)}
+                style={({ pressed }) => ({
+                  width: "48.6%",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: "#FFFFFF",
+                  borderWidth: 1,
+                  borderColor: BORDER,
+                  borderRadius: 10,
+                  paddingVertical: 12,
+                  paddingHorizontal: 13,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <View style={{ width: 32, height: 32, borderRadius: 9, backgroundColor: "#FDF2F4", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name={tile.icon} size={17} color={BRAND} />
+                </View>
+                <Text numberOfLines={1} style={{ color: TEXT, fontSize: 13.5, fontWeight: "700", flex: 1 }}>
+                  {tile.label}
+                  {tile.id === "wishlist" && wishlist.ids.length ? ` (${wishlist.ids.length})` : ""}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {cart.count ? (
             <Pressable
-              key={tile.id}
-              onPress={() => go(tile.id)}
-              accessibilityRole="button"
-              accessibilityLabel={tile.label}
-              style={({ pressed }) => [{ flex: 1, backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 14, alignItems: "center", gap: 6, opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => router.push("/cart")}
+              style={{ marginTop: 12, backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#BBF7D0", borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
             >
-              <Ionicons name={tile.icon} size={22} color={theme.colors.primary} />
-              <Text numberOfLines={1} style={{ color: theme.colors.text, fontSize: 11, fontWeight: "700" }}>{tile.label}</Text>
-              {tile.id === "wishlist" && wishlist.ids.length ? <Text style={{ color: theme.colors.primary, fontSize: 11, fontWeight: "800" }}>{wishlist.ids.length}</Text> : null}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Ionicons name="cart-outline" size={18} color="#067D62" />
+                <Text style={{ color: "#067D62", fontWeight: "800", fontSize: 13 }}>
+                  {cart.count} item{cart.count === 1 ? "" : "s"} in your Cart
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#067D62" />
             </Pressable>
-          ))}
+          ) : null}
         </View>
 
-        {cart.count ? <Button kind="soft" icon="bag-handle-outline" label={`Bag · ${cart.count} item${cart.count === 1 ? "" : "s"}`} onPress={() => router.push("/cart")} /> : null}
-        <View style={{ height: 8 }} />
-
+        {/* All Account Sections */}
         {GROUPS.map((group) => {
           const items = group.ids.map(byId).filter(Boolean) as AccountSection[];
           return (
-            <View key={group.title} style={{ marginBottom: 16 }}>
-              <Text style={{ color: theme.colors.muted, fontSize: 11, fontWeight: "800", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8, marginLeft: 4 }}>{group.title}</Text>
-              <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 14 }}>
-                {items.map((item, index) => row(item, index === items.length - 1))}
-              </View>
+            <View key={group.title} style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4, marginBottom: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: BORDER }}>
+              <Text style={{ color: TEXT, fontSize: 14.5, fontWeight: "800", marginBottom: 4 }}>{group.title}</Text>
+              {items.map((item, index) => renderRow(item, index === items.length - 1))}
             </View>
           );
         })}
 
-        <View style={{ backgroundColor: theme.colors.paper, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, paddingHorizontal: 14, marginBottom: 8 }}>
-          {row({ id: "privacy", title: "Privacy policy", subtitle: "How the Foundation handles your data", icon: "shield-checkmark-outline" }, false)}
-          {row({ id: "terms", title: "Terms of use", subtitle: "Terms for the website and app", icon: "document-text-outline" }, true)}
+        {/* Policies & Legal Band */}
+        <View style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4, marginBottom: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: BORDER }}>
+          <Text style={{ color: TEXT, fontSize: 14.5, fontWeight: "800", marginBottom: 4 }}>Policies &amp; Legal</Text>
+          {renderRow({ id: "returns", title: "Return Policy", subtitle: "Replacement and return guidelines", icon: "return-down-back-outline" }, false)}
+          {renderRow({ id: "refund", title: "Refund Policy", subtitle: "Refund timelines and bank credit", icon: "cash-outline" }, false)}
+          {renderRow({ id: "shipping", title: "Shipping Policy", subtitle: "Delivery charges and store pickup", icon: "cube-outline" }, false)}
+          {renderRow({ id: "cancellation", title: "Cancellation Policy", subtitle: "Order cancellation rules", icon: "close-circle-outline" }, false)}
+          {renderRow({ id: "privacy", title: "Privacy Policy", subtitle: "How VGMF protects your data", icon: "shield-checkmark-outline" }, false)}
+          {renderRow({ id: "terms", title: "Terms of Use", subtitle: "Website and app terms", icon: "document-text-outline" }, true)}
         </View>
-        <Button kind="ghost" icon="log-out-outline" label="Sign out" onPress={() => void signOut()} />
+
+        <Pressable
+          onPress={() => void signOut()}
+          style={({ pressed }) => ({
+            backgroundColor: "#FFFFFF",
+            borderWidth: 1,
+            borderColor: BORDER,
+            borderRadius: 10,
+            paddingVertical: 13,
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "row",
+            gap: 8,
+            opacity: pressed ? 0.8 : 1,
+          })}
+        >
+          <Ionicons name="log-out-outline" size={18} color={BRAND} />
+          <Text style={{ color: BRAND, fontWeight: "800", fontSize: 14 }}>Sign Out</Text>
+        </Pressable>
+
         <SiteFooter />
       </Screen>
       <ChatFab />

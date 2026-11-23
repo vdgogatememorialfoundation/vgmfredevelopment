@@ -145,10 +145,10 @@ export default function OrderTrackingPreview({ order, live = true }: { order: Or
   } else if (pickup && current?.id === "ready") {
     headline = "Ready for pickup at the Foundation office";
   } else {
-    const courierBooked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.courier));
-    const expected = hideDates
-      ? courierBooked ? shipment?.expectedBy || "" : ""
-      : agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date));
+    const pickupDone = Boolean(stages.find((stage) => stage.id === "shipped" || stage.id === "out")?.reached) || status === "Shipped" || status === "Out for Delivery";
+    const expected = pickupDone
+      ? (shipment?.expectedBy || (!hideDates ? agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date)) : ""))
+      : "";
     headline = deliveryExpectation(status, expected, now, country);
   }
 

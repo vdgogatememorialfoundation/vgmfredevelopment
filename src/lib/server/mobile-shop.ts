@@ -6,7 +6,7 @@ import { redeemPromo } from "@/lib/server/promotions";
 import { packingChargeFor, preorderAdvance, publicOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { findShopOrder, ordersForEmail, patchShopOrder, upsertShopOrder } from "@/lib/server/shop-orders";
 import type { MobileOrder } from "@/lib/server/mobile-store";
-import { daaklyRates, ekartRates, enviaRates, goswiftRates, ithinkRates, nimbusRates, rapidshypRates, shadowfaxRates, shipyaariRates, shiprocketRates, vamashipRates } from "@/lib/server/providers";
+import { daaklyRates, ekartRates, enviaRates, goswiftRates, ithinkRates, nimbusRates, rapidshypRates, shadowfaxRates, shipyaariRates, shiprocketRates, vamashipRates, shipwayRates } from "@/lib/server/providers";
 import { readShippingCreds } from "@/lib/server/shipping-vault";
 import { itemsParcel } from "@/lib/item-parcel";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
@@ -65,10 +65,17 @@ function preorderPlan(total: number, copies: number, platformFee: number) {
 }
 
 /** Writes an app order into the main shop order list, so admin Orders, picking, couriers and tracking all see it. */
-export function recordAppOrder(
-  draft: MobileOrder,
-  input: { name: string; phone: string; address: { line1: string; landmark?: string; city: string; state: string; pincode: string; country?: string; countryCode?: string }; pickup: boolean; promo?: { code: string; kind: "coupon" | "gift"; amount: number; label: string }; courierFee?: number | null }
-) {
+export type AppOrderCheckoutInput = {
+  name: string;
+  phone: string;
+  address: { line1: string; landmark?: string; city: string; state: string; pincode: string; country?: string; countryCode?: string };
+  pickup: boolean;
+  promo?: { code: string; kind: "coupon" | "gift"; amount: number; label: string };
+  courierFee?: number | null;
+};
+
+/** Builds the Order payload for preview/payment calculation WITHOUT saving it to shop-orders.json. */
+export function buildAppOrderDraft(draft: MobileOrder, input: AppOrderCheckoutInput): Order {
   const books = (readMobileFeed().books ?? []) as FeedBook[];
   const quantity = draft.items.reduce((sum, item) => sum + item.quantity, 0);
   const preorder = draft.items.some((item) => feedPreorderable(books.find((row) => String(row.id) === item.id)));
@@ -117,6 +124,12 @@ export function recordAppOrder(
     createdBy: "Android app",
     history: [{ at: now, status: "Pending", note: "Placed in the Android app; awaiting payment." }],
   };
+  return order;
+}
+
+/** Writes an app order into the main shop order list (only called once partial or full payment is verified). */
+export function recordAppOrder(draft: MobileOrder, input: AppOrderCheckoutInput) {
+  const order = buildAppOrderDraft(draft, input);
   return upsertShopOrder(order) ?? order;
 }
 
@@ -225,6 +238,7 @@ export async function appCourierEstimate(subtotal: number, units: number, delive
     daaklyRates(keys("daakly"), parcel).catch(() => null),
     rapidshypRates(keys("rapidshyp"), parcel).catch(() => null),
     vamashipRates(keys("vamaship"), parcel).catch(() => null),
+    shipwayRates(keys("shipway"), parcel).catch(() => null),
   ]);
   const rates = results.flatMap((list) => list ?? []).filter((rate) => Number(rate.rate) > 0) as unknown as CourierRate[];
   const settings = publicOrderSettings(readMobileFeed().orderSettings as Partial<OrderSettings> | undefined);

@@ -15,6 +15,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
   const body = await request.json().catch(() => null);
-  const result = applyWhatsAppWebhook("aisensy", body);
+  const result = await applyWhatsAppWebhook("aisensy", body);
   return NextResponse.json({ ok: true, ...result });
 }

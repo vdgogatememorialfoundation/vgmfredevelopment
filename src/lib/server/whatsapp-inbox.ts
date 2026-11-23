@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 import { readKv } from "@/lib/server/db";
-import { chatBotReply, pauseChatBot, recordWhatsAppPayment, resumeChatBot } from "@/lib/server/whatsapp-bot";
+import { chatBotReply, pauseChatBot, recordWhatsAppPayment, resumeChatBot, sendWhatsAppOrderingFlowMenu } from "@/lib/server/whatsapp-bot";
 import { sendAiSensy, sendAiSensySession, sendMetaTemplate, sendMetaText, sendZohoCpaas } from "@/lib/server/providers";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { whatsAppSenders, whatsAppTemplateFor, type IntegrationSettings } from "@/lib/integrations";
@@ -349,6 +349,23 @@ function textOf(value: unknown): string {
   return "";
 }
 
+function metaInteractiveId(message: Record<string, unknown>): string | undefined {
+  if (String(message.type) !== "interactive") return undefined;
+  const interactive = asRecord(message.interactive);
+  const button = asRecord(interactive?.button_reply);
+  const list = asRecord(interactive?.list_reply);
+  const id = String(button?.id || list?.id || "").trim();
+  return id || undefined;
+}
+
+function metaFlowResponseJson(message: Record<string, unknown>): string | undefined {
+  if (String(message.type) !== "interactive") return undefined;
+  const interactive = asRecord(message.interactive);
+  const nfm = asRecord(interactive?.nfm_reply);
+  const jsonStr = typeof nfm?.response_json === "string" ? nfm.response_json.trim() : "";
+  return jsonStr || undefined;
+}
+
 function metaMessageText(message: Record<string, unknown>) {
   const type = String(message.type || "text");
   if (type === "text") return textOf(message.text);
@@ -357,7 +374,9 @@ function metaMessageText(message: Record<string, unknown>) {
     const interactive = asRecord(message.interactive);
     const button = asRecord(interactive?.button_reply);
     const list = asRecord(interactive?.list_reply);
-    return String(button?.title || list?.title || interactive?.type || "Button");
+    const nfm = asRecord(interactive?.nfm_reply);
+    if (nfm?.response_json) return "[WhatsApp Ordering Flow Submitted]";
+    return String(button?.title || list?.title || button?.id || list?.id || interactive?.type || "Button");
   }
   const media = asRecord(message[type]);
   const caption = textOf(media?.caption);
@@ -377,6 +396,8 @@ export type InboundWa = {
   lineNumber?: string;
   /** Items from a WhatsApp catalogue cart (retailer id = book id). */
   cart?: { id: string; quantity: number }[];
+  interactiveId?: string;
+  flowJson?: string;
 };
 
 function metaCart(message: Record<string, unknown>) {
@@ -421,6 +442,8 @@ export function parseMetaWebhook(body: unknown): { messages: InboundWa[]; status
           name: names.get(phone),
           text: String(message.type) === "order" ? "[Cart from the WhatsApp catalogue]" : metaMessageText(message),
           cart: metaCart(message),
+          interactiveId: metaInteractiveId(message),
+          flowJson: metaFlowResponseJson(message),
           externalId: String(message.id || ""),
           at: Number.isFinite(stamp) && stamp > 0 ? new Date(stamp * 1000).toISOString() : undefined,
           direction: "in",
@@ -499,7 +522,7 @@ export function parseAiSensyWebhook(body: unknown): InboundWa[] {
   ];
 }
 
-export function applyWhatsAppWebhook(kind: "meta" | "aisensy", body: unknown) {
+export async function applyWhatsAppWebhook(kind: "meta" | "aisensy", body: unknown) {
   if (kind === "meta") {
     const parsed = parseMetaWebhook(body);
     for (const status of parsed.statuses) {
@@ -507,13 +530,13 @@ export function applyWhatsAppWebhook(kind: "meta" | "aisensy", body: unknown) {
       markWhatsAppExternalStatus(status.id, status.status, status.error);
     }
     const threads = parsed.messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
-    for (const message of parsed.messages) void runChatBot(message);
+    for (const message of parsed.messages) await runChatBot(message);
     for (const payment of parsed.payments) void recordWhatsAppPayment(payment).catch(() => undefined);
     return { messages: parsed.messages.length, statuses: parsed.statuses.length, threads: threads.length };
   }
   const messages = parseAiSensyWebhook(body);
   const threads = messages.map((message) => ingestWhatsAppMessage(message)).filter(Boolean);
-  for (const message of messages) void runChatBot(message);
+  for (const message of messages) await runChatBot(message);
   return { messages: messages.length, statuses: 0, threads: threads.length };
 }
 
@@ -522,7 +545,7 @@ async function runChatBot(message: InboundWa) {
   if (message.direction !== "in" || !message.phone) return;
   try {
     const key = threadKey(message.provider, waPhone(message.phone));
-    const reply = await chatBotReply(key, message.phone, message.text, message.name, message.cart);
+    const reply = await chatBotReply(key, message.phone, message.interactiveId || message.text, message.name, message.cart, message.flowJson);
     if (!reply) return;
     const creds = await loadWhatsAppCreds();
     const sent = message.provider === "aisensy" ? await sendAiSensySession(creds, { to: message.phone, body: reply }) : await sendMetaText(creds, { to: message.phone, body: reply });
@@ -555,14 +578,19 @@ export async function sendWhatsAppAlert(event: string, input: { phone?: string; 
   let delivered = false;
   for (const provider of whatsAppSenders(wa)) {
     const primary = whatsAppTemplateFor(wa, provider, event);
-    const template = primary || (input.fallbackEvent ? whatsAppTemplateFor(wa, provider, input.fallbackEvent) : "");
+    const primarySaved = (wa.templates ?? []).find((item) => item.name === primary);
+    const primaryApproved = Boolean(primary) && (!primarySaved?.status || primarySaved.status === "APPROVED");
+    const fallback = input.fallbackEvent ? whatsAppTemplateFor(wa, provider, input.fallbackEvent) : "";
+    const template = primaryApproved ? primary : fallback || primary;
     if (!template) continue;
     try {
       const saved = (wa.templates ?? []).find((item) => item.name === template);
       const language = saved?.language || "en";
-      // A shorter template (e.g. the general order update) gets the short parameter list.
-      const short = Boolean(input.fallbackParams) && (template !== primary || (Number(saved?.variables) > 0 && Number(saved?.variables) < input.params.length));
-      const params = short ? (input.fallbackParams ?? input.params) : input.params;
+      const expectedVars = Number(saved?.variables) || 0;
+      // Match parameter count to the active template (detailed v2 vs legacy fallback).
+      const useFallback = Boolean(input.fallbackParams) && (template !== primary || (expectedVars > 0 && expectedVars < input.params.length));
+      let params = (useFallback ? (input.fallbackParams ?? input.params) : input.params).map((p) => String(p).replace(/https?:\/\/vaidyagogate\.org\/track\/[A-Za-z0-9_-]+/g, "https://vaidyagogate.org/account/orders"));
+      if (expectedVars > 0 && params.length > expectedVars) params = params.slice(0, expectedVars);
       const sent =
         provider === "aisensy"
           ? await sendAiSensy(creds, { to: phone, campaign: template, name: input.name, params })
@@ -700,7 +728,12 @@ export async function replyOnWhatsApp(threadId: string, text: string, by: string
   });
   if (updated && !options?.keepUnread) updated.unread = 0;
   writeStore(store);
-  if (by !== "Auto menu") pauseChatBot(existing.id);
+  const invitesBotCommand = /typing \*[123456]\*|reply \*[123456]\*|type \*menu\*|📘 \*Choose a Publication\*/i.test(body);
+  if ( invitesBotCommand ) {
+    resumeChatBot(existing.id);
+  } else if (by !== "Auto menu") {
+    pauseChatBot(existing.id);
+  }
   return updated;
 }
 
@@ -782,4 +815,68 @@ export async function transferWhatsApp(input: {
   }
   const latest = readStore().threads.find((item) => item.id === thread.id) ?? thread;
   return { thread: latest, noticeSent, noticeError };
+}
+
+/** Adds a staff-only internal note inside a WhatsApp thread (not sent to the customer). */
+export function addWhatsAppInternalNote(threadId: string, noteText: string, by: string) {
+  const clean = noteText.trim();
+  if (!clean) throw new Error("Type a note first.");
+  const store = readStore();
+  const thread = store.threads.find((item) => item.id === threadId);
+  if (!thread) throw new Error("Chat thread not found.");
+  const updated = upsert(store, {
+    provider: thread.provider,
+    phone: thread.phone,
+    name: thread.name,
+    text: `📝 [Internal Note by ${by}]: ${clean}`,
+    direction: "out",
+    by,
+    system: true,
+  });
+  writeStore(store);
+  return updated;
+}
+
+/** Sends the Pune Metro-style Interactive Book Ordering Flow / Catalogue directly from the WhatsApp Desk. */
+export async function sendOrderingFlowFromDesk(threadId: string, by: string) {
+  const existing = readStore().threads.find((item) => item.id === threadId);
+  if (!existing) throw new Error("Chat thread not found.");
+  resumeChatBot(existing.id);
+  await sendWhatsAppOrderingFlowMenu(existing.phone, existing.id);
+  const reply = await chatBotReply(existing.id, existing.phone, "1", existing.name);
+  if (reply) {
+    await replyOnWhatsApp(existing.id, reply, by);
+    resumeChatBot(existing.id);
+  }
+  return findWhatsAppThread(existing.id);
+}
+
+/** Starts or opens a WhatsApp thread with any customer phone number from the desk. */
+export async function startNewWhatsAppChat(input: { phone: string; name?: string; text?: string; sendFlow?: boolean; by: string }) {
+  const phone = waPhone(input.phone);
+  if (phone.length < 10) throw new Error("Enter a valid 10-digit mobile number.");
+  const store = readStore();
+  const id = threadKey("meta", phone);
+  let thread = store.threads.find((t) => t.id === id);
+  if (!thread) {
+    const now = new Date().toISOString();
+    thread = {
+      id,
+      phone,
+      name: input.name?.trim() || `+${phone}`,
+      provider: "meta",
+      createdAt: now,
+      updatedAt: now,
+      unread: 0,
+      messages: [],
+    };
+    store.threads.unshift(thread);
+    writeStore(store);
+  }
+  if (input.sendFlow) {
+    await sendOrderingFlowFromDesk(thread.id, input.by);
+  } else if (input.text?.trim()) {
+    await replyOnWhatsApp(thread.id, input.text.trim(), input.by);
+  }
+  return findWhatsAppThread(thread.id);
 }

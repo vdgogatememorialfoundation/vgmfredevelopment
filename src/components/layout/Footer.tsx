@@ -80,7 +80,7 @@ export default function Footer() {
                 </div>
               </div>
               <p className="mt-4 max-w-md font-serif text-lg leading-7 text-ink/80">
-                {chrome.footerText || t("footer.tagline")}
+                {chrome.footerText || settings?.tagline || t("footer.tagline")}
               </p>
               <p className="mt-3 max-w-sm text-sm leading-6 text-text-muted">
                 {siteConfig.address}

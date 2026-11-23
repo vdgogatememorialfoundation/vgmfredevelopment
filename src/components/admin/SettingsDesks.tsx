@@ -208,7 +208,7 @@ export function GeneralSettingsDesk() {
           <ImageField label="Favicon / app icon" value={settings.faviconUrl} maxWidth={128} hint="Shown in the browser tab." onChange={(faviconUrl) => set({ faviconUrl })} />
           <Text label="Site name" value={settings.siteName} onChange={(siteName) => set({ siteName })} />
           <Text label="Logo text (when no logo image)" value={settings.logoText} onChange={(logoText) => set({ logoText })} />
-          <Text label="Tagline" value={settings.tagline} onChange={(tagline) => set({ tagline })} />
+          <Text label="Site & Footer Tagline" value={settings.tagline} placeholder="Ayurveda education, publications and clinical care." onChange={(tagline) => set({ tagline })} />
           <Text label="Support email" value={settings.supportEmail} onChange={(supportEmail) => set({ supportEmail })} />
           <Text label="Support phone" value={settings.supportPhone} onChange={(supportPhone) => set({ supportPhone })} />
         </div>
@@ -955,6 +955,42 @@ export function WhatsAppSettingsDesk() {
           Take orders on WhatsApp (Order books menu and catalogue carts). Off: customers get the website link instead.
         </label>
       </Card>
+      <Card title="Pune Metro-Style WhatsApp Online Ordering & Meta Flows" text="Customers can order books right inside WhatsApp using Interactive List Pickers, Quick-Reply Buttons, and Meta WhatsApp Flows (v5.0), and pay via in-chat Razorpay Review & Pay or 24-hour UPI link.">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Text
+            label="Meta WhatsApp Ordering Flow ID (optional)"
+            value={(value as unknown as Record<string, string>).metaOrderingFlowId ?? ""}
+            onChange={(metaOrderingFlowId) => set({ ...value, metaOrderingFlowId } as never)}
+            hint="Paste your published Flow ID from Meta WhatsApp Manager → Flows. Blank = uses native Interactive Book List Drawer + Reply Buttons automatically."
+          />
+          <Text
+            label="Flow CTA Button Text"
+            value={(value as unknown as Record<string, string>).metaOrderingFlowCta ?? "Order Books Now"}
+            onChange={(metaOrderingFlowCta) => set({ ...value, metaOrderingFlowCta } as never)}
+            hint="Shown on the Flow launch button (max 20 chars)"
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={ghost}
+            onClick={async () => {
+              const res = await fetch("/api/whatsapp/inbox", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ action: "flow-json" }),
+              });
+              const data = (await res.json().catch(() => null)) as { flowJson?: unknown } | null;
+              if (data?.flowJson) {
+                await navigator.clipboard?.writeText(JSON.stringify(data.flowJson, null, 2));
+                setNote("Copied Meta WhatsApp Ordering Flow JSON (v5.0) to clipboard! Paste it in Meta WhatsApp Manager → Flows → Create Flow.");
+              }
+            }}
+          >
+            Copy Meta WhatsApp Flow JSON (v5.0)
+          </button>
+        </div>
+      </Card>
       <Card title="Providers for alerts" text="Switch on one or more. Each provider keeps its own inbox; this only chooses which numbers send order and account alerts.">
         <div className="grid gap-3 md:grid-cols-3">
           {([
@@ -1615,6 +1651,16 @@ export function ShippingApisDesk() {
             <button type="button" className={primary} disabled={busy === "vamaship"} onClick={() => test("vamaship")}>{busy === "vamaship" ? "Checking live…" : "Save & test"}</button>
           </div>
         </Card>
+        <Card title="Shipway" text="apidocs.shipway.com — Shipway login Username/Email and License Key. Supports live rate calculation, order push & AWB generation (PushOrderData), live AWB scan tracking (getawbtrackingdata) and shipment cancellation." badge={<ProviderStatus id="shipway" />} right={<Check label="Use" checked={value.shipway?.enabled ?? false} onChange={(enabled) => set({ shipway: { ...(value.shipway ?? { username: "", licenseKey: "", carrierId: "" }), enabled } })} />}>
+          <div className="grid gap-3 md:grid-cols-3">
+            <Text label="Username / Email" value={value.shipway?.username ?? ""} onChange={(username) => set({ shipway: { ...(value.shipway ?? { licenseKey: "", carrierId: "", enabled: false }), username } })} />
+            <Secret label="License Key" value={value.shipway?.licenseKey ?? ""} onChange={(licenseKey) => set({ shipway: { ...(value.shipway ?? { username: "", carrierId: "", enabled: false }), licenseKey } })} />
+            <Text label="Default Carrier ID (optional)" value={value.shipway?.carrierId ?? ""} onChange={(carrierId) => set({ shipway: { ...(value.shipway ?? { username: "", licenseKey: "", enabled: false }), carrierId } })} hint="Blank = auto-select / customer choice" />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={primary} disabled={busy === "shipway"} onClick={() => test("shipway")}>{busy === "shipway" ? "Checking live…" : "Save & test"}</button>
+          </div>
+        </Card>
       </div>
 
       <Card
@@ -1925,6 +1971,19 @@ export function OrderSettingsDesk() {
                   <option value="on_ready">When the item is ready</option>
                 </select>
               </label>
+              <Check
+                label="Show pre-order shipping & delivery disclaimer banner to customers"
+                checked={value.preorderPayment.disclaimerEnabled !== false}
+                onChange={(disclaimerEnabled) => set({ preorderPayment: { ...value.preorderPayment, disclaimerEnabled } })}
+              />
+              <div className="md:col-span-2">
+                <Text
+                  label="Pre-order shipping & delivery disclaimer text (shown on product page, checkout & order tracking)"
+                  placeholder="Pre-Order Notice: Shipping and delivery for pre-order items will begin by the end of December."
+                  value={value.preorderPayment.disclaimerText ?? "Pre-Order Notice: Shipping and delivery for pre-order items will begin by the end of December."}
+                  onChange={(disclaimerText) => set({ preorderPayment: { ...value.preorderPayment, disclaimerText } })}
+                />
+              </div>
         </div>
       </Card>
       <Card title="Order status names & extra tracking statuses" text="Rename any status or tracking step the customer sees (leave blank to keep the built-in name). Extra statuses are added by the desk from an order's Status box and show inside the chosen tracking step.">

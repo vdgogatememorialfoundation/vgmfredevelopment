@@ -27,6 +27,7 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
   const orderSettings = useOrderSettings();
   const { ready, version } = useCommerceMirror();
   const [mounted, setMounted] = useState(false);
+  const [editingCustomerInfo, setEditingCustomerInfo] = useState(false);
 
   useEffect(() => {
     purgeSampleOrders();
@@ -265,43 +266,57 @@ export default function OrderDetailView({ orderId }: { orderId: string }) {
               ) : (
                 <dl className="space-y-2 text-sm">
                   <div className="flex justify-between gap-4">
-                    <dt className="text-text-muted">Deliver to</dt>
+                    <dt className="text-text-muted">Customer</dt>
                     <dd className="text-right font-medium text-text-primary">
-                      {order.deliveryAddress?.fullName} ·{" "}
-                      {order.deliveryAddress?.phone}
+                      {order.deliveryAddress?.fullName}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt className="text-text-muted">Address</dt>
-                    <dd className="text-right text-text-primary">
-                      {customerAddressLine(order.deliveryAddress)}
+                    <dt className="text-text-muted">Mobile Number</dt>
+                    <dd className="text-right font-medium text-text-primary">
+                      {order.deliveryAddress?.phone || user?.phone || "Not added"}
+                      {order.deliveryAddress?.altPhone && order.deliveryAddress.altPhone !== order.deliveryAddress.phone
+                        ? ` · Alt: ${order.deliveryAddress.altPhone}`
+                        : ""}
                     </dd>
                   </div>
-                  {order.status === "Delivered" || shipment?.status === "Delivered" ? (
+                  {(order.deliveryAddress?.email || order.accountEmail) ? (
                     <div className="flex justify-between gap-4">
-                      <dt className="text-text-muted">Delivered</dt>
-                      <dd className="text-right font-medium text-emerald-700">
-                        {(() => {
-                          const at = [...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.at || shipment?.tracking?.at(-1)?.at;
-                          return at ? statusStamp(at, order.deliveryAddress?.country) : "Delivered";
-                        })()}
+                      <dt className="text-text-muted">Email</dt>
+                      <dd className="text-right text-text-primary break-all">
+                        {order.deliveryAddress?.email || order.accountEmail}
                       </dd>
                     </div>
-                  ) : (
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-text-muted">Expected delivery</dt>
-                      <dd className="text-right font-medium text-emerald-700">
-                        {(() => {
-                          const preorder = Boolean(order.preorderPayment) || order.items.some((item) => item.preorder);
-                          const booked = Boolean(shipment && shipment.note !== "Cancelled" && (shipment.awb || shipment.courier));
-                          // Same rule as the tracking timeline: pre-order dates stay hidden until a courier is booked when "show pre-order dates" is off.
-                          if (orderSettings.hideDeliveryDates || (preorder && !orderSettings.showPreorderStepDates)) {
-                            return (booked && deliveryDatePhrase(shipment?.expectedBy ?? "")) || "Shared once the order is dispatched";
-                          }
-                          return deliveryDatePhrase(agreedDelivery(order.eta, shipment?.expectedBy, Date.parse(order.date))) || (preorder ? "Shared once the book is ready" : "Within 5 business days");
-                        })()}
-                      </dd>
-                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-text-muted">Address</dt>
+                    <dd className="text-right text-text-primary">
+                      {customerAddressLine(order.deliveryAddress) || "Not added"}
+                    </dd>
+                  </div>
+                  {order.deliveryMode === "delivery" && (
+                    order.status === "Delivered" || shipment?.status === "Delivered" ? (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-text-muted">Delivered</dt>
+                        <dd className="text-right font-medium text-emerald-700">
+                          {(() => {
+                            const at = [...(order.history ?? [])].reverse().find((entry) => entry.status === "Delivered")?.at || shipment?.tracking?.at(-1)?.at;
+                            return at ? statusStamp(at, order.deliveryAddress?.country) : "Delivered";
+                          })()}
+                        </dd>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-text-muted">Expected delivery</dt>
+                        <dd className="text-right font-medium text-emerald-700">
+                          {(() => {
+                            const pickedUp = ["Shipped", "Out for Delivery"].includes(customerOrderStatus(order.status)) || ["In Transit", "Out for Delivery"].includes(shipment?.status ?? "");
+                            if (!pickedUp) return "Displayed after pickup by courier partner";
+                            return deliveryDatePhrase(shipment?.expectedBy || order.eta) || "Pending from courier";
+                          })()}
+                        </dd>
+                      </div>
+                    )
                   )}
                 </dl>
               )}
@@ -362,21 +377,35 @@ function AdjustmentNotes({ token }: { token: string }) {
   );
 }
 
-function AddAddressForm({ orderId, initial, fix }: { orderId: string; initial?: DeliveryAddress; fix?: boolean }) {
+function AddAddressForm({
+  orderId,
+  initial,
+  fix,
+  isStorePickup,
+  onSaved,
+}: {
+  orderId: string;
+  initial?: Partial<DeliveryAddress>;
+  fix?: boolean;
+  isStorePickup?: boolean;
+  onSaved?: () => void;
+}) {
   const [form, setForm] = useState({
     fullName: initial?.fullName ?? "",
     phone: initial?.phone ?? "",
     altPhone: initial?.altPhone ?? "",
+    email: initial?.email ?? "",
     line1: initial?.line1 ?? "",
     landmark: initial?.landmark ?? "",
     city: initial?.city ?? "",
-    state: initial?.state ?? "",
+    state: initial?.state || "Maharashtra",
     pincode: initial?.pincode ?? "",
   });
   const [busy, setBusy] = useState(false);
+  const [savedMsg, setSavedMsg] = useState(false);
   const [error, setError] = useState("");
   const field = (key: keyof typeof form, label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
-    <label className="block text-xs text-text-muted">
+    <label className="block text-xs font-medium text-text-muted">
       {label}
       <input
         {...props}
@@ -394,35 +423,44 @@ function AddAddressForm({ orderId, initial, fix }: { orderId: string; initial?: 
         event.preventDefault();
         setBusy(true);
         setError("");
+        setSavedMsg(false);
         try {
-          await addMyDeliveryAddress(orderId, form, initial?.phone);
+          await addMyDeliveryAddress(orderId, form, initial?.phone || form.phone);
+          setSavedMsg(true);
+          if (onSaved) window.setTimeout(() => onSaved(), 600);
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Could not save the address.");
+          setError(err instanceof Error ? err.message : "Could not save the customer details.");
         } finally {
           setBusy(false);
         }
       }}
     >
-      <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+      <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
         {fix
           ? "Your delivery address looks incomplete or incorrect, so we are holding the parcel. Please correct it below and we will send your order."
-          : "This order will now be sent by courier instead of store pickup. Please add your delivery address. The courier charge is sent as a balance payment link after packing."}
+          : isStorePickup
+            ? "Mobile number and full customer address are required for all store pickup orders. Update and save your details below."
+            : "Update and save your customer contact information and address below."}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {field("fullName", "Full name", { required: true, autoComplete: "name" })}
-        {field("phone", "Phone", { required: true, inputMode: "tel", autoComplete: "tel" })}
-        {field("altPhone", "Alternative phone (optional)", { inputMode: "tel" })}
-        {field("pincode", "PIN code", { required: true, inputMode: "numeric", pattern: "\\d{6}", maxLength: 6, autoComplete: "postal-code" })}
+        {field("fullName", "Full Name *", { required: true, autoComplete: "name" })}
+        {field("phone", "Mobile Number *", { required: true, inputMode: "tel", autoComplete: "tel", placeholder: "+91 98765 43210" })}
+        {field("altPhone", "Alternative Phone (optional)", { inputMode: "tel" })}
+        {field("email", "Email Address *", { required: true, type: "email", autoComplete: "email" })}
       </div>
-      {field("line1", "House, building, street, area", { required: true, autoComplete: "street-address" })}
-      {field("landmark", "Landmark (optional)")}
+      {field("line1", "House, Building, Street, Area *", { required: true, autoComplete: "street-address" })}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {field("landmark", "Landmark (optional)")}
+        {field("city", "City *", { required: true, autoComplete: "address-level2" })}
+        {field("state", "State *", { required: true, autoComplete: "address-level1" })}
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {field("city", "City", { required: true, autoComplete: "address-level2" })}
-        {field("state", "State", { required: true, autoComplete: "address-level1" })}
+        {field("pincode", "6-Digit PIN Code *", { required: true, inputMode: "numeric", pattern: "\\d{6}", maxLength: 6, autoComplete: "postal-code" })}
       </div>
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      <button type="submit" disabled={busy} className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">
-        {busy ? "Saving…" : "Save delivery address"}
+      {error ? <p className="text-sm font-medium text-red-600">{error}</p> : null}
+      {savedMsg ? <p className="text-sm font-semibold text-emerald-700">✓ Customer & address information saved</p> : null}
+      <button type="submit" disabled={busy} className="btn-primary px-5 py-2 text-sm font-semibold disabled:opacity-60">
+        {busy ? "Saving…" : "Save Customer & Address Details"}
       </button>
     </form>
   );

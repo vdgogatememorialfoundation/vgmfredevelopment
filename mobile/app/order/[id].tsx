@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Modal, View } from "react-native";
+import { Modal, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { formatDate, listOrders, money, startBalancePayment, str, verifyBalancePayment, type Row } from "../../src/api";
 import { nativeCheckout, razorpayPage } from "../../src/razorpay";
@@ -156,74 +156,72 @@ export default function OrderScreen() {
   const refunds = (Array.isArray(order.refunds) ? order.refunds : []) as Row[];
   const address = (order.deliveryAddress ?? {}) as Row;
   const pickup = str(order.deliveryMode) === "store_pickup";
+  const isPaid = str(order.paymentStatus) === "Paid" && (!preorder || Boolean(preorder.balancePaidAt) || !preorder.balance);
+  const topExpected = (() => {
+    const raw = str(trackers[0]?.expected || order.eta);
+    return raw && !/yet to be dispatched|pending|n\/a/i.test(raw) ? raw : "";
+  })();
 
   return (
     <Screen>
-      <PageHeader kicker={`Order ${str(order.id)}`} title={str(order.status, "Ordered")} subtitle={`Placed ${formatDate(order.date)} · ${str(order.paymentStatus, "Pending")}`} />
-      <Card>
-        <Heading>Items</Heading>
-        {items.map((item, index) => (
-          <Muted key={`${item.bookId ?? ""}-${index}`}>
-            {str(item.title)} × {item.quantity ?? 1} · {money((Number(item.price) || 0) * (Number(item.quantity) || 1))}
-          </Muted>
-        ))}
-        <Divider />
-        <Muted>MRP {money((Number(order.subtotal) || 0) + (Number(order.discount) || 0))}</Muted>
-        <Muted>Discount −{money(Number(order.discount) || 0)}</Muted>
-        {Number(order.gst) > 0 ? <Muted>GST {money(order.gst)}</Muted> : null}
-        {Number(order.platformFee) > 0 ? <Muted>Platform fee {money(order.platformFee)}</Muted> : null}
-        <Muted>
-          Shipping{" "}
-          {pickup
-            ? "Store pickup · no charge"
-            : Number(order.shipping) > 0
-              ? money(order.shipping)
-              : order.shippingDue || preorder?.shippingDue
-                ? "Calculated once packed"
-                : "FREE"}
-        </Muted>
-        <Heading>Order total {money(order.total)}</Heading>
-      </Card>
-
-      <Card>
-        <Heading>{pickup ? "Store pickup" : "Delivery address"}</Heading>
-        {pickup ? (
-          <Muted>Collect from the Foundation store. Show your pickup OTP at the counter.</Muted>
-        ) : (
-          <>
-            <Muted>Deliver to · {[str(address.fullName), str(address.phone)].filter(Boolean).join(" · ")}</Muted>
-            <Muted>Address · {[str(address.line1), str(address.landmark), str(address.city), str(address.state), str(address.pincode)].filter(Boolean).join(", ")}</Muted>
-            {str(order.status) === "Delivered" ? <Muted>Delivered</Muted> : trackers[0]?.expected ? <Muted>Expected delivery · {str(trackers[0].expected)}</Muted> : null}
-          </>
-        )}
-      </Card>
+      {/* Flipkart Order ID Top Band */}
+      <View style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, marginTop: -8, paddingHorizontal: 16, paddingVertical: 12, marginBottom: 8, borderBottomWidth: 1, borderColor: "#E4E7EC" }}>
+        <Text style={{ fontSize: 12, color: "#666E7A", fontWeight: "600" }}>Order ID - {str(order.id)}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: "#212121" }}>{str(order.status, "Ordered")}</Text>
+          {isPaid && str(order.status) !== "Cancelled" ? (
+            <View style={{ backgroundColor: "#EAF7EE", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <Text style={{ fontSize: 12, fontWeight: "800", color: "#26A541" }}>✔ Paid</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={{ fontSize: 12, color: "#666E7A", marginTop: 2 }}>
+          Placed on {formatDate(order.date)} · {str(order.paymentStatus, "Pending")}
+        </Text>
+      </View>
 
       {trackers.length ? (
-        trackers.map((tracker, index) => (
-          <Card key={tracker.shipmentId || index} featured>
-            <Heading>{trackers.length > 1 ? `Shipment ${tracker.part || index + 1} of ${trackers.length}` : "Tracking"}</Heading>
-            <View style={{ height: 10 }} />
-            <InfoTiles
-              tiles={[
-                { label: "Order", value: str(order.id) },
-                { label: "Date", value: formatDate(order.date) },
-                { label: "Status", value: str(order.status, "Ordered") },
-                { label: "Courier", value: str(tracker.courier) },
-              ]}
-            />
-            <Pipeline
-              stages={tracker.stages ?? []}
-              current={Number(tracker.current) || 0}
-              failed={/cancel|fail|rto/i.test(str(order.status))}
-              expected={str(order.status) === "Delivered" ? "" : str(tracker.expected)}
-              shippedWith={tracker.trackingId || tracker.courier ? [`Shipped with ${str(tracker.courier) || "the courier"}`, tracker.trackingId ? `Tracking id ${str(tracker.trackingId)}` : ""].filter(Boolean).join(" · ") : undefined}
-              footer={tracker.trackingId ? `Courier: ${[str(tracker.courier), `Tracking id: ${str(tracker.trackingId)}`].filter(Boolean).join(" · ")}` : undefined}
-            />
-          </Card>
-        ))
+        trackers.map((tracker, index) => {
+          const exp = str(tracker.expected || order.eta);
+          const safeExp = exp && !/yet to be dispatched|pending|n\/a/i.test(exp) ? exp : "";
+          return (
+            <View key={tracker.shipmentId || index} style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "#E4E7EC" }}>
+              {trackers.length > 1 ? (
+                <Text style={{ fontSize: 14.5, fontWeight: "800", color: "#212121", marginBottom: 10 }}>
+                  Shipment {tracker.part || index + 1} of {trackers.length}
+                </Text>
+              ) : null}
+              <InfoTiles
+                tiles={[
+                  { label: "Order", value: str(order.id) },
+                  { label: "Date", value: formatDate(order.date) },
+                  { label: "Status", value: str(order.status, "Ordered") },
+                  { label: "Courier", value: str(tracker.courier) },
+                ]}
+              />
+              {!pickup && str(order.status) !== "Delivered" && str(order.status) !== "Cancelled" && safeExp ? (
+                <Text style={{ fontSize: 13.5, color: "#212121", marginBottom: 10 }}>
+                  <Text style={{ fontWeight: "800" }}>Expected delivery by </Text>
+                  <Text style={{ color: "#26A541", fontWeight: "800" }}>{safeExp}</Text>
+                </Text>
+              ) : null}
+              <Pipeline
+                stages={tracker.stages ?? []}
+                current={Number(tracker.current) || 0}
+                failed={/cancel|fail|rto/i.test(str(order.status))}
+                expected={str(order.status) === "Delivered" ? "" : safeExp}
+                shippedWith={tracker.trackingId || tracker.courier ? [`Shipped with ${str(tracker.courier) || "the courier"}`, tracker.trackingId ? `Tracking id: ${str(tracker.trackingId)}` : ""].filter(Boolean).join(" · ") : undefined}
+                footer={tracker.trackingId ? `Courier: ${[str(tracker.courier), `Tracking id: ${str(tracker.trackingId)}`].filter(Boolean).join(" · ")}` : undefined}
+              />
+            </View>
+          );
+        })
       ) : (
-        <Card>
-          <Heading>Tracking</Heading>
+        <View style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "#E4E7EC" }}>
+          <Heading>Order Updates</Heading>
+          {topExpected && str(order.status) !== "Delivered" && str(order.status) !== "Cancelled" ? (
+            <Text style={{ fontSize: 13.5, color: "#26A541", fontWeight: "700", marginTop: 4 }}>Expected delivery by {topExpected}</Text>
+          ) : null}
           {[...history].reverse().filter((step, index, list) => str(step.status) && list.findIndex((other) => str(other.status) === str(step.status)) === index).map((step, index) => (
             <View key={`${step.at ?? ""}-${index}`} style={{ marginTop: 8 }}>
               <Body>{str(step.status)}</Body>
@@ -231,8 +229,75 @@ export default function OrderScreen() {
             </View>
           ))}
           {!history.length ? <Muted>Recorded {when(order.date)}</Muted> : null}
-        </Card>
+        </View>
       )}
+
+      {/* Flipkart Edge-to-Edge Price Details Band */}
+      <View style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "#E4E7EC" }}>
+        <Text style={{ fontSize: 15, fontWeight: "800", color: "#212121", marginBottom: 8 }}>Price Details</Text>
+        {items.map((item, index) => (
+          <View key={`${item.bookId ?? ""}-${index}`} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10, paddingVertical: 4 }}>
+            <Text style={{ flex: 1, fontSize: 13.5, color: "#212121", fontWeight: "600" }}>{str(item.title)} × {item.quantity ?? 1}</Text>
+            <Text style={{ fontSize: 13.5, color: "#212121", fontWeight: "700" }}>{money((Number(item.price) || 0) * (Number(item.quantity) || 1))}</Text>
+          </View>
+        ))}
+        <View style={{ height: 1, backgroundColor: "#E4E7EC", marginVertical: 8 }} />
+        <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 }}>
+          <Text style={{ fontSize: 13, color: "#666E7A" }}>List Price</Text>
+          <Text style={{ fontSize: 13, color: "#212121" }}>{money((Number(order.subtotal) || 0) + (Number(order.discount) || 0))}</Text>
+        </View>
+        {Number(order.discount) > 0 ? (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 }}>
+            <Text style={{ fontSize: 13, color: "#666E7A" }}>Discount</Text>
+            <Text style={{ fontSize: 13, color: "#26A541", fontWeight: "700" }}>− {money(Number(order.discount) || 0)}</Text>
+          </View>
+        ) : null}
+        {Number(order.gst) > 0 ? (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 }}>
+            <Text style={{ fontSize: 13, color: "#666E7A" }}>GST</Text>
+            <Text style={{ fontSize: 13, color: "#212121" }}>{money(order.gst)}</Text>
+          </View>
+        ) : null}
+        {Number(order.platformFee) > 0 ? (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 }}>
+            <Text style={{ fontSize: 13, color: "#666E7A" }}>Platform fee</Text>
+            <Text style={{ fontSize: 13, color: "#212121" }}>{money(order.platformFee)}</Text>
+          </View>
+        ) : null}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 3 }}>
+          <Text style={{ fontSize: 13, color: "#666E7A" }}>Shipping</Text>
+          <Text style={{ fontSize: 13, color: Number(order.shipping) > 0 ? "#212121" : "#26A541", fontWeight: "700" }}>
+            {pickup
+              ? "Store pickup · FREE"
+              : Number(order.shipping) > 0
+                ? money(order.shipping)
+                : order.shippingDue || preorder?.shippingDue
+                  ? "Calculated once packed"
+                  : "FREE"}
+          </Text>
+        </View>
+        <View style={{ height: 1, backgroundColor: "#E4E7EC", marginVertical: 8 }} />
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <Text style={{ fontSize: 15.5, fontWeight: "800", color: "#212121" }}>Total Amount</Text>
+          <Text style={{ fontSize: 16.5, fontWeight: "900", color: "#212121" }}>{money(order.total)}</Text>
+        </View>
+      </View>
+
+      {/* Flipkart Edge-to-Edge Shipping Details Band */}
+      <View style={{ backgroundColor: "#FFFFFF", marginHorizontal: -20, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "#E4E7EC" }}>
+        <Text style={{ fontSize: 15, fontWeight: "800", color: "#212121", marginBottom: 6 }}>{pickup ? "Store Pickup Details" : "Shipping Details"}</Text>
+        {pickup ? (
+          <Text style={{ fontSize: 13, color: "#666E7A", lineHeight: 19 }}>Collect from the Foundation store, Pune. Show your pickup OTP at the counter.</Text>
+        ) : (
+          <>
+            <Text style={{ fontSize: 14, fontWeight: "700", color: "#212121" }}>{str(address.fullName)}</Text>
+            <Text style={{ fontSize: 13, color: "#4B5563", marginTop: 3, lineHeight: 19 }}>
+              {[str(address.line1), str(address.landmark), str(address.city), str(address.state), str(address.pincode)].filter(Boolean).join(", ")}
+            </Text>
+            {str(address.phone) ? <Text style={{ fontSize: 13, color: "#212121", fontWeight: "600", marginTop: 4 }}>Phone: {str(address.phone)}</Text> : null}
+          </>
+        )}
+      </View>
       <Modal visible={Boolean(payment)} animationType="slide" onRequestClose={() => void onPayment({ nativeEvent: { data: JSON.stringify({ type: "dismiss" }) } } as WebViewMessageEvent)}>
         {payment ? <WebView originWhitelist={["*"]} source={{ html: payment, baseUrl: "https://api.razorpay.com" }} onMessage={(event) => void onPayment(event)} javaScriptEnabled /> : null}
       </Modal>

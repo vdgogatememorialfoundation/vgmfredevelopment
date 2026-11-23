@@ -16,6 +16,10 @@ export type FoundationAccount = {
   alternatePhone?: string;
   birthDate?: string;
   extraFields?: Record<string, string>;
+  password?: string;
+  portalPasswords?: Record<string, string>;
+  portalLastLogins?: Record<string, string>;
+  passwordHistory?: Array<{ password: string; at: string; source?: string }>;
   passwordHash?: string;
   passwordSalt?: string;
   createdAt: string;
@@ -167,6 +171,8 @@ export function createAccount(input: {
     alternatePhone: input.alternatePhone?.trim() || phone,
     birthDate: cleanBirthDate(input.birthDate),
     extraFields: cleanExtra(input.extraFields),
+    password: input.password || undefined,
+    passwordHistory: input.password ? [{ password: input.password, at: new Date().toISOString(), source: "Website Signup" }] : [],
     passwordSalt: salt || undefined,
     passwordHash: input.password && salt ? hashPassword(input.password, salt) : undefined,
     createdAt: new Date().toISOString(),
@@ -177,19 +183,46 @@ export function createAccount(input: {
   return account;
 }
 
-export function setAccountPassword(email: string, password: string) {
+export function setAccountPassword(email: string, password: string, source = "Website Password Set") {
   const rows = load();
-  const index = rows.findIndex((item) => item.email === email.trim().toLowerCase());
+  const index = rows.findIndex((item) => item.email.toLowerCase() === email.trim().toLowerCase());
   if (index < 0) return null;
   const salt = randomBytes(8).toString("hex");
-  rows[index] = { ...rows[index], passwordSalt: salt, passwordHash: hashPassword(password, salt) };
+  const history = Array.isArray(rows[index].passwordHistory) ? [...rows[index].passwordHistory!] : [];
+  if (password && !history.some((h) => h.password === password)) {
+    history.unshift({ password, at: new Date().toISOString(), source });
+  }
+  rows[index] = {
+    ...rows[index],
+    password,
+    passwordHistory: history,
+    passwordSalt: salt,
+    passwordHash: hashPassword(password, salt),
+  };
   save(rows);
   return rows[index];
 }
 
 export function passwordOk(account: FoundationAccount, password: string) {
-  if (!account.passwordHash || !account.passwordSalt || !password) return false;
-  return account.passwordHash === hashPassword(password, account.passwordSalt);
+  if (!password) return false;
+  const matched =
+    (account.passwordHash && account.passwordSalt && account.passwordHash === hashPassword(password, account.passwordSalt)) ||
+    (account.password && account.password === password);
+  if (matched && account.password !== password) {
+    try {
+      const rows = load();
+      const idx = rows.findIndex((r) => r.email.toLowerCase() === account.email.toLowerCase());
+      if (idx >= 0) {
+        const history = Array.isArray(rows[idx].passwordHistory) ? [...rows[idx].passwordHistory!] : [];
+        if (!history.some((h) => h.password === password)) {
+          history.unshift({ password, at: new Date().toISOString(), source: "Website Login" });
+        }
+        rows[idx] = { ...rows[idx], password, passwordHistory: history };
+        save(rows);
+      }
+    } catch {}
+  }
+  return Boolean(matched);
 }
 
 export function upsertAccount(input: {
@@ -230,4 +263,53 @@ export function upsertAccount(input: {
     alternatePhone: input.alternatePhone,
     password: input.password,
   });
+}
+
+export function updateFoundationAccount(
+  identifier: string,
+  patch: {
+    salutation?: string;
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    whatsapp?: string;
+    alternatePhone?: string;
+    birthDate?: string;
+    extraFields?: Record<string, string>;
+  }
+) {
+  const rows = load();
+  const cleanId = String(identifier || "").trim().toLowerCase();
+  const index = rows.findIndex(
+    (item) =>
+      item.email.toLowerCase() === cleanId ||
+      item.id === identifier ||
+      item.accountId === identifier ||
+      samePhone(item.phone, identifier)
+  );
+  if (index < 0) return null;
+  const current = rows[index];
+  const nextEmail = patch.email?.trim().toLowerCase() || current.email;
+  const nextPhone = patch.phone?.trim() || current.phone;
+  const mergedExtra =
+    patch.extraFields !== undefined
+      ? { ...(current.extraFields ?? {}), ...(cleanExtra(patch.extraFields) ?? {}) }
+      : current.extraFields;
+  rows[index] = {
+    ...current,
+    salutation: patch.salutation !== undefined ? patch.salutation.trim().slice(0, 16) : current.salutation,
+    firstName: patch.firstName?.trim() ? patch.firstName.trim().slice(0, 40) : current.firstName,
+    middleName: patch.middleName !== undefined ? (patch.middleName.trim().slice(0, 40) || undefined) : current.middleName,
+    lastName: patch.lastName !== undefined ? patch.lastName.trim().slice(0, 40) : current.lastName,
+    email: nextEmail,
+    phone: nextPhone,
+    whatsapp: patch.whatsapp !== undefined ? (patch.whatsapp.trim() || nextPhone) : current.whatsapp,
+    alternatePhone: patch.alternatePhone !== undefined ? (patch.alternatePhone.trim() || nextPhone) : current.alternatePhone,
+    birthDate: patch.birthDate !== undefined ? (cleanBirthDate(patch.birthDate) ?? current.birthDate) : current.birthDate,
+    extraFields: mergedExtra,
+  };
+  save(rows);
+  return rows[index];
 }

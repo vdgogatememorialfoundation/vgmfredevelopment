@@ -298,7 +298,6 @@ export default function VerticalPipeline({
                         {event.agent?.name || event.agent?.phone ? (
                           <div className="where">
                             Agent: {[event.agent?.name, event.agent?.phone].filter(Boolean).join(" · ")}
-                            {event.otp ? ` · Delivery OTP ${event.otp}` : ""}
                           </div>
                         ) : null}
                       </li>

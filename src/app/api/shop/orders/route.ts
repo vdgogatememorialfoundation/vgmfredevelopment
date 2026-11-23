@@ -1,3 +1,4 @@
+import { updateFoundationAccount } from "@/lib/server/accounts";
 import { NextRequest, NextResponse } from "next/server";
 import { commerceViewer, customerViewer } from "@/lib/server/commerce-viewer";
 import { issueDeliveryInvoice } from "@/lib/server/delivery-invoice";
@@ -78,38 +79,57 @@ export async function POST(request: NextRequest) {
     const orderId = String(body.orderId ?? "");
     const order = findShopOrder(orderId);
     const viewers = [customerViewer(request), commerceViewer(request)].filter((viewer) => viewer && (viewer.email || viewer.phone || viewer.id));
+    const input = (body.address ?? {}) as Partial<DeliveryAddress>;
     const owns = Boolean(
       order &&
-        (viewers.some((viewer) => ordersForAccount(viewer!).some((item) => item.id === orderId)) ||
-          (body.phone && orderPhoneMatches(order, String(body.phone))))
+        (commerceViewer(request).portal ||
+          viewers.some((viewer) => ordersForAccount(viewer!).some((item) => item.id === orderId)) ||
+          (body.phone && orderPhoneMatches(order, String(body.phone))) ||
+          (input.email && order.accountEmail && input.email.trim().toLowerCase() === order.accountEmail.trim().toLowerCase()))
     );
     if (!order || !owns) return NextResponse.json({ ok: false, error: "Order not found." }, { status: 404 });
-    if (!order.addressRequest || order.addressRequest.doneAt || order.deliveryMode !== "delivery") {
-      return NextResponse.json({ ok: false, error: "This order does not need an address now." }, { status: 400 });
-    }
-    const input = (body.address ?? {}) as Partial<DeliveryAddress>;
     const text = (value: unknown, max = 200) => String(value ?? "").trim().slice(0, max);
     const address: DeliveryAddress = {
       ...(order.deliveryAddress ?? { fullName: "", phone: "", line1: "", city: "", state: "", pincode: "", country: "India" }),
       fullName: text(input.fullName, 120) || order.deliveryAddress?.fullName || "",
       phone: text(input.phone, 20) || order.deliveryAddress?.phone || "",
       altPhone: text(input.altPhone, 20) || order.deliveryAddress?.altPhone,
+      email: text(input.email, 120) || order.deliveryAddress?.email || order.accountEmail || "",
       line1: text(input.line1),
       landmark: text(input.landmark) || undefined,
       city: text(input.city, 80),
       state: text(input.state, 80),
       pincode: text(input.pincode, 10),
       country: order.deliveryAddress?.country || "India",
+      countryCode: order.deliveryAddress?.countryCode || "IN",
     };
     if (!address.fullName || !address.phone || !address.line1 || !address.city || !address.state || !/^\d{6}$/.test(address.pincode)) {
-      return NextResponse.json({ ok: false, error: "Enter name, phone, address, city, state and a 6-digit PIN code." }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "Enter full name, mobile number, street address, city, state and a 6-digit PIN code." }, { status: 400 });
     }
     const now = new Date().toISOString();
     patchShopOrder(order.id, {
       deliveryAddress: address,
-      addressRequest: { ...order.addressRequest, doneAt: now },
-      history: [...(order.history ?? []), { at: now, status: order.status, note: "Customer added the delivery address.", by: "Customer" }],
+      accountEmail: address.email || order.accountEmail,
+      ...(order.addressRequest ? { addressRequest: { ...order.addressRequest, doneAt: now } } : {}),
+      history: [...(order.history ?? []), { at: now, status: order.status, note: "Customer updated contact & address information.", by: "Customer" }],
     });
+    const acctEmail = address.email || order.accountEmail || order.createdBy || "";
+    if (acctEmail) {
+      const parts = address.fullName.split(/\s+/).filter(Boolean);
+      updateFoundationAccount(acctEmail, {
+        firstName: parts[0],
+        lastName: parts.slice(1).join(" ") || undefined,
+        phone: address.phone,
+        alternatePhone: address.altPhone || address.phone,
+        extraFields: {
+          line1: address.line1,
+          landmark: address.landmark || "",
+          city: address.city,
+          state: address.state,
+          pincode: address.pincode,
+        },
+      });
+    }
     const latest = findShopOrder(order.id);
     return NextResponse.json({ ok: true, order: latest ? forCustomer(latest) : undefined });
   }

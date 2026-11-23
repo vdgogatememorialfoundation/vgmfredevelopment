@@ -2,7 +2,7 @@ import { createSign } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 import { dataFile } from "@/lib/server/paths";
-import { devicesFor, dropPushTokens } from "@/lib/server/push-devices";
+import { devicesFor, dropPushTokens, listPushDevices } from "@/lib/server/push-devices";
 
 type ServiceAccount = { project_id: string; client_email: string; private_key: string };
 
@@ -53,6 +53,37 @@ export async function pushToCustomer(who: { email?: string; phone?: string; acco
   const account = serviceAccount();
   if (!account) return 0;
   const devices = devicesFor(who);
+  if (!devices.length) return 0;
+  const token = await accessToken(account);
+  const dead: string[] = [];
+  let sent = 0;
+  for (const device of devices) {
+    const response = await fetch(`https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        message: {
+          token: device.token,
+          notification: { title: message.title, body: message.body.slice(0, 240) },
+          data: { url: message.url ?? "/" },
+          android: { priority: "high", notification: { channel_id: "orders" } },
+          apns: { payload: { aps: { sound: "default" } } },
+        },
+      }),
+    }).catch(() => null);
+    if (response?.ok) sent += 1;
+    else if (response && (response.status === 404 || response.status === 400)) dead.push(device.token);
+  }
+  dropPushTokens(dead);
+  return sent;
+}
+
+
+/** Sends a push notification to all registered mobile app devices. */
+export async function pushToAllDevices(message: { title: string; body: string; url?: string }) {
+  const account = serviceAccount();
+  if (!account) return 0;
+  const devices = listPushDevices();
   if (!devices.length) return 0;
   const token = await accessToken(account);
   const dead: string[] = [];

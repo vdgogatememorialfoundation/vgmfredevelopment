@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
-import { addOrder, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, sessionFromToken } from "@/lib/server/mobile-store";
+import { addOrder, attachCheckoutMeta, attachRazorpayOrder, bearerToken, findOrder, markOrderPaid, sessionFromToken } from "@/lib/server/mobile-store";
 import { isValidPhone, isValidPostal } from "@/lib/geo";
 import { countryRejection } from "@/lib/server/platform-countries";
 import { razorpayCreds, razorpayOrder, razorpayVerify } from "@/lib/server/providers";
 import { checkPromo } from "@/lib/server/promotions";
 import { offerActive, promoDiscount } from "@/lib/promotions";
-import { appCourierEstimate, appPickupAllowed, feedPreorderable, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
+import { appCourierEstimate, appPickupAllowed, buildAppOrderDraft, feedPreorderable, markAppOrderPaid, markPreorderBalancePaid, preparePreorderBalance, recordAppOrder } from "@/lib/server/mobile-shop";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,6 +91,24 @@ export async function POST(request: NextRequest) {
       razorpayOrderId,
       method: "Razorpay",
     });
+    // Record the order into shop-orders.json ONLY now that partial or full payment is verified by Razorpay.
+    const meta = order.checkoutMeta;
+    recordAppOrder(paid ?? order, {
+      name: order.name,
+      phone: order.phone ?? "",
+      address: {
+        line1: order.address?.line1 ?? "",
+        landmark: meta?.landmark ?? "",
+        city: order.address?.city ?? "",
+        state: order.address?.state ?? "",
+        pincode: order.address?.pincode ?? "",
+        country: order.address?.country ?? "India",
+        countryCode: order.address?.countryCode ?? "IN",
+      },
+      pickup: Boolean(meta?.pickup),
+      promo: meta?.promo,
+      courierFee: meta?.courierFee,
+    });
     const shopOrder = markAppOrderPaid(order.id, { paymentId, razorpayOrderId });
     return json({ ok: true, order: shopOrder ?? paid, configured: Boolean(creds) });
   }
@@ -110,7 +128,7 @@ export async function POST(request: NextRequest) {
   };
   const countryBlocked = countryRejection(countryCode, address.country);
   if (countryBlocked) return json({ ok: false, error: countryBlocked }, 400);
-  if (!pickup && (!address.line1 || !address.city || !address.state || !isValidPostal(countryCode, address.pincode))) {
+  if (!address.line1 || !address.city || !address.state || !isValidPostal(countryCode, address.pincode)) {
     return json({ ok: false, error: "Enter your full delivery address and a valid postal code." }, 400);
   }
   const phone = String(body?.phone ?? "").trim();
@@ -143,7 +161,9 @@ export async function POST(request: NextRequest) {
   const courierMode = ((feed.orderSettings ?? {}) as { shippingFeeMode?: string }).shippingFeeMode === "courier_rate";
   const units = draft.items.reduce((sum, item) => sum + item.quantity, 0);
   const courierFee = !pickup && !preorderBag && courierMode ? (await appCourierEstimate(draft.subtotal, units, address.pincode, draft.items.map((item) => ({ bookId: String(item.id), quantity: item.quantity }))).catch(() => undefined)) ?? null : undefined;
-  const shopOrder = recordAppOrder(draft, { name: draft.name, phone, address, pickup, promo, courierFee });
+  // Do NOT insert into shop-orders.json yet; keep as unpaid draft until partial/full payment verifies.
+  attachCheckoutMeta(draft.id, { pickup, landmark: address.landmark, promo, courierFee });
+  const shopOrder = buildAppOrderDraft(draft, { name: draft.name, phone, address, pickup, promo, courierFee });
 
   const creds = razorpayCreds({});
   if (!creds) {

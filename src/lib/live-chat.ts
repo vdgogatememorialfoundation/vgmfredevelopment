@@ -41,6 +41,10 @@ export type LiveChatThread = {
   ref?: string;
   participants?: { email: string; name: string; joinedAt: string }[];
   firstJoinedAt?: string;
+  visitorTypingAt?: string;
+  visitorTypingPreview?: string;
+  staffTypingAt?: string;
+  staffTypingName?: string;
 };
 
 export type SupportDepartment = { name: string; agents: string[] };
@@ -429,4 +433,32 @@ export function submitChatTicketForm(
   });
   saveThreads(threads);
   return thread;
+}
+
+let lastTypingSentAt = 0;
+export function notifyChatTyping(threadId: string, from: "visitor" | "staff", name: string, preview = "") {
+  if (typeof window === "undefined" || !threadId) return;
+  const now = Date.now();
+  const isTyping = preview.trim().length > 0;
+  if (isTyping && now - lastTypingSentAt < 1800) return;
+  lastTypingSentAt = now;
+  const threads = getChatThreads();
+  const target = threads.find((t) => t.id === threadId);
+  if (target) {
+    if (from === "visitor") {
+      target.visitorTypingAt = isTyping ? new Date().toISOString() : undefined;
+      target.visitorTypingPreview = isTyping ? preview.slice(0, 180) : undefined;
+    } else {
+      target.staffTypingAt = isTyping ? new Date().toISOString() : undefined;
+      target.staffTypingName = isTyping ? name : undefined;
+    }
+    saveThreads(threads);
+  }
+  syncServer("typing", { threadId, from, name, typing: isTyping, preview: preview.slice(0, 180) });
+}
+
+export function isRecentlyTyping(iso?: string, windowMs = 8000) {
+  if (!iso) return false;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) && Date.now() - t < windowMs;
 }

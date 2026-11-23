@@ -2,9 +2,11 @@
 
 export const GOGATE_COURIER = "Gogate Products";
 
-const OWN_FLEET = new Set(["tookan", "tookan-parcel", "shipday"]);
+const OWN_FLEET = new Set(["vgmf-express", "vgmf-hyperlocal", "tookan", "tookan-parcel", "shipday"]);
 
 const AGGREGATOR_NAMES: Record<string, string> = {
+  "vgmf-express": "VGMF Express",
+  "vgmf-hyperlocal": "VGMF Express",
   shiprocket: "Shiprocket",
   nimbuspost: "Nimbuspost",
   ithink: "iThink Logistics",
@@ -16,9 +18,10 @@ const AGGREGATOR_NAMES: Record<string, string> = {
   daakly: "India Post (Daakly)",
   rapidshyp: "RapidShyp",
   vamaship: "Vamaship",
+  shipway: "Shipway",
 };
 
-const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari|goswift|swift|envia|rapidshyp|vamaship)(\s+(surface|air|express|courier|driver))?$/i;
+const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari|goswift|swift|envia|rapidshyp|vamaship|shipway)(\s+(surface|air|express|courier|driver))?$/i;
 
 /** Express, Air or Surface from an aggregator field or a courier name such as "Delhivery Surface". */
 export function serviceModeOf(...values: unknown[]) {

@@ -259,16 +259,34 @@ export function seedAccounts() {
   if (!findAccountByIdentifier(staff.email)) saveAccount(staff);
 }
 
-export function updateAccount(email: string, update: Partial<User>) {
+export function updateAccount(email: string, update: Partial<User> & Record<string, unknown>) {
   const accounts = getAccounts();
   const index = accounts.findIndex((account) => account.email.toLowerCase() === email.toLowerCase());
-  if (index === -1) return;
-  accounts[index] = { ...accounts[index], ...update };
-  writeJSON("vgmf_accounts", accounts);
-  if (accounts[index].role === "staff" || accounts[index].role === "coadmin") pushPortalAccounts();
+  if (index !== -1) {
+    accounts[index] = { ...accounts[index], ...update };
+    writeJSON("vgmf_accounts", accounts);
+    if (accounts[index].role === "staff" || accounts[index].role === "coadmin") pushPortalAccounts();
+  } else if (typeof window !== "undefined") {
+    const session = getSession();
+    if (session && session.email.toLowerCase() === email.toLowerCase()) {
+      accounts.push({ ...session, ...update });
+      writeJSON("vgmf_accounts", accounts);
+    }
+  }
   if (typeof window !== "undefined") {
     const session = getSession();
     if (session?.email.toLowerCase() === email.toLowerCase()) setSession({ ...session, ...update });
+    void fetch("/api/mobile/account", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        action: "update-profile",
+        currentEmail: email,
+        ...update,
+        ...(update.address ? { extraFields: update.address } : {}),
+      }),
+    }).catch(() => undefined);
   }
 }
 
@@ -367,6 +385,25 @@ export function createCustomerAccount(input: CustomerInput, options: { sendDetai
     foundationPasswordSet: true,
   };
   saveAccount(account);
+  if (typeof window !== "undefined") {
+    void fetch("/api/mobile/account", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        action: "sync",
+        salutation: account.salutation || "Dr.",
+        firstName: account.firstName,
+        middleName: account.middleName || "",
+        lastName: account.lastName,
+        email: account.email,
+        phone: account.phone,
+        whatsapp: account.whatsapp || account.phone,
+        alternatePhone: account.alternatePhone || account.phone,
+        password: account.password,
+      }),
+    }).catch(() => undefined);
+  }
   recordActivity({ email: account.email, kind: "created", by: currentActorEmail(), detail: "Customer account created" });
   notifyCms();
   if (options.sendDetails !== false) sendAccountDetails(account.email, true);
@@ -771,16 +808,39 @@ export function getOrder(orderId: string) {
 }
 
 export function deleteOrder(orderId: string) {
-  const order = getOrder(orderId);
+  const all = getOrders();
+  const order = all.find((o) => o.id === orderId);
   if (order) releaseStockForOrder(order);
-  writeJSON("vgmf_orders", getOrders().filter((item) => item.id !== orderId));
-  removeOrderShipments(orderId);
-  forgetShopOrder(orderId);
+  const toRemove = new Set<string>([orderId]);
+  if (order?.splitInto?.length) {
+    for (const child of order.splitInto) {
+      if (child?.id) toRemove.add(child.id);
+    }
+  }
+  let next = all.filter((item) => !toRemove.has(item.id));
+  if (order?.splitFrom) {
+    const parentIdx = next.findIndex((item) => item.id === order.splitFrom);
+    if (parentIdx !== -1) {
+      const parent = next[parentIdx];
+      const remaining = (parent.splitInto ?? []).filter((child) => !toRemove.has(child.id) && next.some((o) => o.id === child.id));
+      if (remaining.length === 0) {
+        toRemove.add(parent.id);
+        next = next.filter((item) => item.id !== parent.id);
+      } else {
+        next[parentIdx] = { ...parent, splitInto: remaining };
+      }
+    }
+  }
+  writeJSON("vgmf_orders", next);
+  for (const id of toRemove) {
+    removeOrderShipments(id);
+    forgetShopOrder(id);
+  }
 }
 
 export function resaveOrder(
   orderId: string,
-  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"]; shipping?: number; packing?: number }
+  update: { items?: OrderItem[]; deliveryAddress?: DeliveryAddress; deliveryMode?: Order["deliveryMode"]; shipping?: number; packing?: number; clearBalanceLink?: boolean; clearPaymentLink?: boolean }
 ) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
@@ -824,16 +884,23 @@ export function resaveOrder(
   const owesMore = paidSoFar > 0 && total > paidSoFar + 0.005;
   const paymentStatus: Order["paymentStatus"] =
     paidSoFar <= 0 ? order.paymentStatus : owesMore ? "Partially Paid" : order.preorderPayment && !order.preorderPayment.balancePaidAt && order.paymentStatus === "Partially Paid" ? "Partially Paid" : "Paid";
+  const shouldClearBalanceLink = Boolean(update.clearBalanceLink && order.preorderPayment && !order.preorderPayment.balancePaidAt && order.preorderPayment.link);
   const preorderPayment =
     order.preorderPayment && !order.preorderPayment.balancePaidAt
-      ? { ...order.preorderPayment, balance: Math.max(0, Math.round((total - order.preorderPayment.advance) * 100) / 100) }
+      ? {
+          ...order.preorderPayment,
+          ...(shouldClearBalanceLink ? { link: undefined } : {}),
+          balance: Math.max(0, Math.round((total - order.preorderPayment.advance) * 100) / 100),
+        }
       : order.preorderPayment;
+  const shouldClearOrderLink = Boolean(update.clearPaymentLink && paymentStatus !== "Paid" && order.paymentLink);
   const next = withHistory(
     {
       ...order,
       paymentStatus,
       amountPaid: paidSoFar > 0 ? paidSoFar : order.amountPaid,
       preorderPayment,
+      ...(shouldClearOrderLink ? { paymentLink: undefined } : {}),
       items,
       deliveryAddress: update.deliveryAddress ?? order.deliveryAddress,
       deliveryMode: update.deliveryMode ?? order.deliveryMode,
@@ -2836,17 +2903,8 @@ export function listSupportAgents(): User[] {
 export function ticketsVisibleTo(user: User | null | undefined): SupportTicket[] {
   const tickets = getTickets();
   if (!user) return [];
-  if (user.role === "admin" || user.role === "coadmin") return tickets;
+  if (user.role === "admin" || user.role === "coadmin" || user.role === "staff") return tickets;
   const email = user.email.toLowerCase();
-  if (user.role === "staff") {
-    return tickets.filter(
-      (ticket) =>
-        !ticket.assignedTo ||
-        ticket.assignedTo.toLowerCase() === email ||
-        ticket.email.toLowerCase() === email ||
-        ticket.userId === user.id
-    );
-  }
   return tickets.filter((ticket) => ticket.email.toLowerCase() === email || ticket.userId === user.id);
 }
 

@@ -1,4 +1,7 @@
 "use client";
+import { assignTicket, getTickets, listSupportAgents, respondToTicket, updateTicketStatus } from "@/lib/admin-store";
+import { pullTickets } from "@/lib/ticket-sync";
+import type { SupportTicket } from "@/types";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -258,6 +261,155 @@ export function CustomerOrders({ email, phone }: { email?: string; phone?: strin
         })}
       </ul>
       {note ? <p className="mt-2 text-xs font-semibold text-burgundy">{note}</p> : null}
+    </div>
+  );
+}
+
+
+const TICKET_STATUSES: SupportTicket["status"][] = ["Open", "In Progress", "Resolved", "Closed"];
+
+export function CustomerTickets({ email, phone, ticketId }: { email?: string; phone?: string; ticketId?: string }) {
+  const [tickets, setTickets] = useState<SupportTicket[]>(() => getTickets());
+  const [showAllOpen, setShowAllOpen] = useState(false);
+  const [replyMap, setReplyMap] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState("");
+  const agents = listSupportAgents();
+
+  const syncNow = () => {
+    void pullTickets().then(() => setTickets(getTickets()));
+    setTickets(getTickets());
+  };
+
+  useEffect(() => {
+    syncNow();
+    const timer = window.setInterval(syncNow, 8000);
+    return () => window.clearInterval(timer);
+  }, [email, phone, ticketId]);
+
+  const cleanPhone = (phone || "").replace(/\D/g, "").slice(-10);
+  const cleanEmail = (email || "").trim().toLowerCase();
+
+  const matching = tickets.filter((t) => {
+    if (ticketId && t.id === ticketId) return true;
+    const tEmail = (t.email || "").trim().toLowerCase();
+    const tPhone = (t.phone || "").replace(/\D/g, "").slice(-10);
+    if (cleanEmail && tEmail === cleanEmail) return true;
+    if (cleanPhone.length === 10 && tPhone === cleanPhone) return true;
+    return false;
+  });
+
+  const shown = showAllOpen
+    ? tickets.slice(0, 25)
+    : matching;
+
+  return (
+    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold text-slate-900">
+          🎫 Support Tickets ({matching.length} for this customer · {tickets.filter((t) => t.status === "Open" || t.status === "In Progress").length} open total)
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAllOpen((v) => !v)}
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            {showAllOpen ? `Show Customer Tickets (${matching.length})` : `View All Desk Tickets (${tickets.length})`}
+          </button>
+          <button
+            type="button"
+            onClick={syncNow}
+            className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {toast ? <p className="mt-1.5 font-semibold text-emerald-700">{toast}</p> : null}
+
+      {shown.length === 0 ? (
+        <p className="mt-2 text-slate-500">No support tickets linked to this customer yet. Click &quot;View All Desk Tickets&quot; to see all tickets or use &quot;Create ticket&quot; above.</p>
+      ) : (
+        <ul className="mt-2.5 space-y-2.5">
+          {shown.map((t) => (
+            <li key={t.id} className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-mono font-bold text-slate-900">#{t.id}</span>{" "}
+                  <span className="font-semibold text-slate-900">{t.subject}</span>
+                  <span className="ml-2 text-slate-500">({t.name} · {t.email}{t.phone ? ` · ${t.phone}` : ""})</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <select
+                    aria-label="Ticket status"
+                    value={t.status}
+                    onChange={(e) => {
+                      const nextStatus = e.target.value as SupportTicket["status"];
+                      updateTicketStatus(t.id, nextStatus);
+                      setTickets(getTickets());
+                      setToast(`Ticket #${t.id} status updated to ${nextStatus}.`);
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900"
+                  >
+                    {TICKET_STATUSES.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Assign ticket"
+                    value={t.assignedTo ?? ""}
+                    onChange={(e) => {
+                      assignTicket(t.id, e.target.value);
+                      setTickets(getTickets());
+                      setToast(`Ticket #${t.id} assigned.`);
+                    }}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
+                  >
+                    <option value="">Unassigned</option>
+                    {agents.map((a) => (
+                      <option key={a.email} value={a.email}>{a.firstName} {a.lastName}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="mt-1.5 whitespace-pre-line text-slate-700">{t.body}</p>
+              {t.responses?.length ? (
+                <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                  {t.responses.slice(-3).map((r, idx) => (
+                    <p key={idx} className="rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
+                      <b className="text-slate-900">{r.from}:</b> {r.text}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+              <div className="mt-2 flex gap-1.5">
+                <input
+                  type="text"
+                  value={replyMap[t.id] ?? ""}
+                  onChange={(e) => setReplyMap({ ...replyMap, [t.id]: e.target.value })}
+                  placeholder="Write a ticket reply (emailed & synced)…"
+                  className="flex-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const txt = (replyMap[t.id] ?? "").trim();
+                    if (!txt) return;
+                    respondToTicket(t.id, "Customer Care", txt);
+                    setReplyMap({ ...replyMap, [t.id]: "" });
+                    setTickets(getTickets());
+                    setToast(`Reply sent on Ticket #${t.id}.`);
+                  }}
+                  className="rounded-lg bg-slate-900 px-3 py-1 text-xs font-semibold text-white"
+                >
+                  Reply
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

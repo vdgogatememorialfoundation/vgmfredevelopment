@@ -6,7 +6,8 @@ import { classNames } from "@/lib/utils";
 import { chooseReturnMethod, getOrders, getReturnRequest, resendCustomerRequest, submitCustomerRequest, uploadReturnEvidence } from "@/lib/store";
 import { RETURN_EVIDENCE, canCustomerRequestReplacement, canCustomerReturn, customerOrderPolicyCopy, reasonOpen } from "@/lib/integrations";
 import { useOrderSettings } from "@/lib/use-cms";
-import { statusDay } from "@/lib/delivery-expectation";
+import { statusDay, statusStamp } from "@/lib/delivery-expectation";
+import VerticalPipeline, { type PipelineStageShape } from "@/components/tracking/VerticalPipeline";
 import type { DeliveryAddress, Order, ReturnEvidenceKind, ReturnRequest, ReturnResolution } from "@/types";
 
 type Step = "items" | "reason" | "details" | "evidence" | "resolution" | "address" | "review";
@@ -356,7 +357,7 @@ function ReplacementStatus({ request, order }: { request: ReturnRequest; order: 
     <div className="mt-3 space-y-3">
       <div className="rounded-xl bg-warm-cream/60 p-3">
         <p className="font-semibold text-text-primary">
-          {request.kind === "replacement" ? "Replacement" : "Return"} request <span className="font-mono text-burgundy">{request.id}</span>
+          {request.kind === "replacement" ? "Replacement" : "Return"} request <span className="font-mono text-burgundy">#{String(request.id || "").replace(/^RTN/i, "")}</span>
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className={classNames("rounded-full px-2.5 py-0.5 text-[11px] font-bold", tone)}>{request.status}</span>
@@ -399,17 +400,7 @@ function ReplacementStatus({ request, order }: { request: ReturnRequest; order: 
           </div>
         ) : null}
         {request.evidence?.video?.length ? <video src={request.evidence.video[0]} controls className="mt-2 h-28 rounded-lg" /> : null}
-        {request.stages?.length ? (
-          <ol className="mt-3 space-y-1">
-            {request.stages.map((stage) => (
-              <li key={stage.id} className={stage.reached ? "text-text-primary" : ""}>
-                {stage.reached ? "●" : "○"} {stage.title}
-                {stage.reached && stage.at ? ` · ${statusDay(stage.at)}` : ""}
-                {stage.detail ? ` — ${stage.detail}` : ""}
-              </li>
-            ))}
-          </ol>
-        ) : null}
+
       </div>
 
       {back?.awb && !request.replacementOrderId ? (

@@ -82,11 +82,11 @@ export function clientPartnerSnapshot(snapshot: PartnerSnapshot, opts?: { includ
 }
 
 export function sanitizeAccountForClient(account: SanitizedPartnerAccount, opts?: { includePasswords?: boolean }) {
-  void opts;
+  const keepPass = Boolean(opts?.includePasswords);
   return {
     ...account,
-    password: undefined,
-    partnerPasswordSet: false,
+    password: keepPass ? account.password : undefined,
+    partnerPasswordSet: keepPass ? Boolean(account.password || account.partnerPasswordSet) : false,
     foundationPasswordSet: Boolean(account.foundationPasswordSet),
   };
 }
@@ -673,8 +673,11 @@ function mapAccount(portal: PartnerPortalId, row: Record<string, unknown>, extra
     alternatePhone,
     accountId: accountIdFor(portal, sourceId, str(row, ["user_id_string", "user_id"])),
     role: "customer",
-    password: undefined,
-    partnerPasswordSet: false,
+    password: (() => {
+      const p = str(row, ["password", "admin_password"]);
+      return p && !p.startsWith("$2a$") && !p.startsWith("$2b$") ? p : undefined;
+    })(),
+    partnerPasswordSet: Boolean(str(row, ["password", "admin_password"])),
     foundationPasswordSet: false,
     status: disabled ? "disabled" : "active",
     statusReason: disabled ? str(row, ["ban_reason"]) || undefined : undefined,
@@ -763,7 +766,7 @@ async function pullFellowshipDatabase() {
   const events: Event[] = [];
   const users = (await queryRows(
     portal,
-    `SELECT u.id, u.user_id AS user_id_string, u.email, u.phone,
+    `SELECT u.id, u.user_id AS user_id_string, u.email, u.phone, u.admin_password AS password, u.last_login_at,
             u.role::text AS role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
             a.name AS full_name, a.mobile, a.alternate_mobile, a.application_number, a.status::text AS application_status,
             a.id AS application_id, a.submitted_at
@@ -863,7 +866,7 @@ async function pullDatabase(portal: PartnerPortalId) {
   )) ?? [];
   const users = (await queryRows(
     portal,
-    `SELECT u.id, u.user_id_string, u.first_name, u.middle_name, u.last_name, u.email, u.phone, u.whatsapp,
+    `SELECT u.id, u.user_id_string, u.first_name, u.middle_name, u.last_name, u.email, u.phone, u.whatsapp, u.password, u.last_login_at,
             u.role, u.user_role, u.created_at, u.is_disabled, u.is_banned, u.ban_reason,
             CASE WHEN d.user_id IS NULL THEN 0 ELSE 1 END AS has_profile
        FROM users u

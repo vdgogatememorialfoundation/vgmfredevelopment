@@ -737,7 +737,7 @@ export interface Order {
   /** Photos the packer took of the packed items, kept as proof. Desk only; never sent to customers. */
   packPhotos?: { url: string; at: string; by: string }[];
   /** Photos of the AWB label / sealed parcel taken after the AWB is generated. Desk only. */
-  awbPhotos?: { url: string; at: string; by: string; byName?: string; awb?: string }[];
+  awbPhotos?: { url: string; at: string; by: string; byName?: string; awb?: string; courier?: string; shipmentId?: string }[];
   /** Packed parcel for this shipment (single or bulk). Overrides the default box size in Shipping settings. */
   parcel?: { length: number; breadth: number; height: number; boxes: number; kind: "single" | "bulk"; contents?: string };
   createdBy?: string;
@@ -745,6 +745,8 @@ export interface Order {
   refundAmount?: number;
   /** Refund the server sends by itself after a cancellation before shipping. */
   autoRefund?: { status: "due" | "done" | "failed"; amount: number; at: string; error?: string };
+  /** Latest balance due reminder sent via WhatsApp and/or Email for a packed/unpaid order. */
+  balanceReminder?: { lastAt: string; count: number; channels: string[]; due: number };
   /** 12-digit VGMF transaction ID of the order payment. */
   paymentTxnId?: string;
   /** What the customer had already paid when the desk last edited the order; the rest is due by payment link. */
@@ -799,7 +801,7 @@ export interface ReturnShipment {
 }
 
 export interface CourierRate {
-  provider: "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly" | "rapidshyp" | "vamaship" | "tookan" | "tookan-parcel" | "shipday" | "local";
+  provider: "shiprocket" | "nimbuspost" | "ithink" | "shipyaari" | "goswift" | "ekart" | "shadowfax" | "envia" | "daakly" | "rapidshyp" | "vamaship" | "shipway" | "vgmf-express" | "vgmf-hyperlocal" | "tookan" | "tookan-parcel" | "shipday" | "local";
   courierId: string;
   courierName: string;
   rate: number;

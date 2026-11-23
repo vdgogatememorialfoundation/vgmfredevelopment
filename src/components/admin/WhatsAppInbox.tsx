@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { Button, EmptyState, Panel, SelectInput } from "@/components/admin/AdminUI";
 import { displayName, listSupportAgents } from "@/lib/admin-store";
 import { formatDateTime } from "@/lib/utils";
-import { CustomerOrders } from "@/components/admin/CustomerOrders";
+import { CustomerOrders, CustomerTickets } from "@/components/admin/CustomerOrders";
 
 const DEPARTMENTS = ["Support", "Shop", "Clinic", "Events", "Accounts"] as const;
 
@@ -89,6 +89,10 @@ export function WhatsAppInboxDesk() {
   const [line, setLine] = useState<"all" | "meta" | "aisensy">("all");
   const [department, setDepartment] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [internalMode, setInternalMode] = useState(false);
+  const [newPhone, setNewPhone] = useState("");
+  const [newName, setNewName] = useState("");
   const agents = listSupportAgents();
   const visible = threads.filter((thread) => {
     if (line !== "all" && thread.provider !== line) return false;
@@ -97,6 +101,11 @@ export function WhatsAppInboxDesk() {
     if (filter === "mine") return (thread.assignedTo || "").toLowerCase() === (user?.email || "").toLowerCase();
     if (filter === "waiting") return !thread.assignedTo;
     if (filter !== "all") return thread.department === filter;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      const hay = `${thread.name} ${thread.phone} ${thread.ref || ""} ${thread.ticketId || ""} ${thread.preview || ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
   const active = visible.find((thread) => thread.id === activeId) ?? visible[0];
@@ -122,6 +131,61 @@ export function WhatsAppInboxDesk() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+
+  const sendOrderingFlow = async () => {
+    if (!active || moving) return;
+    setMoving(true);
+    setNote("");
+    try {
+      const response = await fetch("/api/whatsapp/inbox", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "send-flow", threadId: active.id, name: deskName(user) }),
+      });
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "Could not send ordering flow.");
+      setNote("Sent Pune Metro-style Interactive Book Ordering Flow to +" + active.phone);
+      await load();
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  const startNewChat = async (sendFlowNow: boolean) => {
+    if (!newPhone.trim() || moving) return;
+    setMoving(true);
+    setNote("");
+    try {
+      const response = await fetch("/api/whatsapp/inbox", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "start-chat",
+          phone: newPhone.trim(),
+          name: newName.trim(),
+          sendFlow: sendFlowNow,
+          text: sendFlowNow ? "" : "Namaste from Vaidya Gogate Memorial Foundation Customer Care. How can we assist you today?",
+          by: deskName(user),
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { ok?: boolean; thread?: WaThread; error?: string } | null;
+      if (!response.ok || !data?.ok) throw new Error(data?.error || "Could not start WhatsApp chat.");
+      setNewPhone("");
+      setNewName("");
+      if (data.thread?.id) setActiveId(data.thread.id);
+      setNote(sendFlowNow ? "Started chat & sent Interactive Book Ordering Flow!" : "WhatsApp chat started.");
+      await load();
+    } catch (error) {
+      setNote((error as Error).message);
+    } finally {
+      setMoving(false);
+    }
+  };
+
   const openThread = (thread: WaThread) => {
     setActiveId(thread.id);
     setDepartment(thread.department || "");
@@ -146,12 +210,12 @@ export function WhatsAppInboxDesk() {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "reply", threadId: active.id, text: reply.trim() }),
+        body: JSON.stringify({ action: internalMode ? "note" : "reply", threadId: active.id, text: reply.trim(), name: deskName(user) }),
       });
       const data = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
       if (!response.ok || !data?.ok) throw new Error(data?.error || "The reply was not sent.");
       setReply("");
-      setNote("Sent on WhatsApp.");
+      setNote(internalMode ? "Internal desk note saved." : "Sent on WhatsApp.");
       await load();
     } catch (error) {
       setNote((error as Error).message);
@@ -340,6 +404,9 @@ export function WhatsAppInboxDesk() {
                     <Button variant="outline" disabled={moving} onClick={() => void raiseTicket()}>
                       {active.ticketId ? "Create another ticket" : "Create ticket"}
                     </Button>
+                    <Button variant="outline" disabled={moving} onClick={() => void sendOrderingFlow()}>
+                      📘 Send Book Ordering Flow
+                    </Button>
                     {active.closedAt ? (
                       <span className="self-center text-xs text-text-muted">Closed {formatDateTime(active.closedAt)}{active.closedBy ? ` by ${active.closedBy}` : ""}</span>
                     ) : (
@@ -348,8 +415,18 @@ export function WhatsAppInboxDesk() {
                       </Button>
                     )}
                   </div>
+                  {active.lastInboundAt && Date.now() - Date.parse(active.lastInboundAt) < 90_000 ? (
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                      <span className="h-2 w-2 animate-ping rounded-full bg-emerald-600" />
+                      Customer is active / typing on WhatsApp right now
+                    </div>
+                  ) : null}
+                  <details className="mt-2 text-xs" open>
+                    <summary className="cursor-pointer font-semibold text-burgundy">🎫 Customer support tickets · view &amp; update status</summary>
+                    <CustomerTickets phone={active.phone} ticketId={active.ticketId} />
+                  </details>
                   <details className="mt-2 text-xs">
-                    <summary className="cursor-pointer font-semibold text-burgundy">Customer orders · cancel, return, refund</summary>
+                    <summary className="cursor-pointer font-semibold text-burgundy">📦 Customer orders · cancel, return, refund</summary>
                     <CustomerOrders phone={active.phone} />
                   </details>
                   <div className="mt-3 flex max-h-[360px] flex-1 flex-col gap-2 overflow-y-auto rounded-lg bg-warm-cream/60 p-3">
@@ -370,7 +447,29 @@ export function WhatsAppInboxDesk() {
                       )
                     )}
                   </div>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    {[
+                      { label: "👋 Greeting", text: "Namaste from Vaidya Gogate Memorial Foundation Customer Care! How can I help you today?" },
+                      { label: "📘 Order Menu Tip", text: "You can order any VGMF book right here on WhatsApp! Type *1* or *menu* to open the interactive book selector and pay via UPI." },
+                      { label: "📦 Tracking Info", text: "You can check your live shipment tracking any time by typing *2* here on WhatsApp or visiting https://vaidyagogate.org/account/orders" },
+                      { label: "💳 Payment Received", text: "Thank you! We have verified your payment. Your order will be packed and dispatched soon." },
+                      { label: "✅ Issue Resolved", text: "Your request has been resolved and your ticket status is updated. Please let us know if you need anything else!" },
+                    ].map((qr) => (
+                      <button
+                        key={qr.label}
+                        type="button"
+                        onClick={() => setReply(qr.text)}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                      >
+                        {qr.label}
+                      </button>
+                    ))}
+                    <label className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+                      <input type="checkbox" checked={internalMode} onChange={(e) => setInternalMode(e.target.checked)} />
+                      Internal Desk Note (staff only)
+                    </label>
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <textarea
                       className="input-field min-h-20 flex-1"
                       rows={2}

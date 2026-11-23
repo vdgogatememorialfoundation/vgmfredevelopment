@@ -14,6 +14,8 @@ import {
   escalateIfUnanswered,
   getLiveChatSettings,
   getThread,
+  isRecentlyTyping,
+  notifyChatTyping,
   postChatMessage,
   submitChatTicketForm,
   subscribeLiveChat,
@@ -302,6 +304,11 @@ export function AIChatbot() {
                     </button>
                   </form>
                 ) : null}
+                {isRecentlyTyping(thread?.staffTypingAt) ? (
+                  <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700">
+                    🟢 {thread?.staffTypingName || "Support Executive"} is typing a reply…
+                  </p>
+                ) : null}
                 {thread?.ticketId ? (
                   <p className="rounded-xl bg-white p-3 text-xs text-emerald-800">Ticket {thread.ticketId} is open. Updates will be emailed.</p>
                 ) : null}
@@ -318,7 +325,10 @@ export function AIChatbot() {
                   <input
                     className="input-field flex-1"
                     value={liveText}
-                    onChange={(event) => setLiveText(event.target.value)}
+                    onChange={(event) => {
+                      setLiveText(event.target.value);
+                      if (threadId) notifyChatTyping(threadId, "visitor", visitorName, event.target.value);
+                    }}
                     placeholder="Type a message"
                   />
                   <button type="submit" className="rounded-lg bg-burgundy px-3 py-2 text-sm font-semibold text-white">

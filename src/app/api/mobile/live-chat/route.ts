@@ -13,6 +13,7 @@ import {
   markThreadTicket,
   nextAgentName,
   postLiveMessage,
+  setChatTyping,
   takeChatThread,
   transferChatThread,
   visitorTranscript,

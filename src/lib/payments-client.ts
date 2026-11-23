@@ -448,6 +448,49 @@ export async function retireBalanceLink(orderId: string) {
   return true;
 }
 
+
+/** Admin explicitly cancels an open pre-order balance link (e.g. customer wants to change book or revise courier). */
+export async function cancelBalancePaymentLink(orderId: string, reason?: string) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan?.link) return "No active balance payment link to cancel.";
+  if (plan.balancePaidAt) throw new Error("The balance is already paid and cannot be cancelled.");
+  if (plan.link.provider === "razorpay" && plan.link.id) {
+    const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: plan.link.id });
+    if (current.ok && current.status === "paid") {
+      recordBalancePayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+      throw new Error("The customer has already paid this balance link. It has been marked Paid and cannot be cancelled.");
+    }
+    await api({ action: "link-cancel", linkId: plan.link.id }).catch(() => undefined);
+  }
+  const { link: _removed, ...restPlan } = plan;
+  patchOrder(order.id, { preorderPayment: restPlan }, reason || "Balance payment link cancelled by admin");
+  return "Balance payment link cancelled on Razorpay. You can now change the book or courier charges and send a fresh link.";
+}
+
+/** Before editing order items/charges, verify & cancel any open unpaid Razorpay payment links so the customer cannot pay the old amount. */
+export async function retireOpenPaymentLinksBeforeEdit(orderId: string) {
+  const order = getOrder(orderId);
+  let cancelledBalanceLink = false;
+  let cancelledOrderLink = false;
+  if (!order) return { cancelledBalanceLink, cancelledOrderLink };
+  if (order.preorderPayment?.link && !order.preorderPayment.balancePaidAt) {
+    cancelledBalanceLink = await retireBalanceLink(order.id);
+  }
+  if (order.paymentLink && order.paymentStatus !== "Paid") {
+    if (order.paymentLink.provider === "razorpay" && order.paymentLink.id) {
+      const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: order.paymentLink.id });
+      if (current.ok && current.status === "paid") {
+        recordPayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+        throw new Error("The customer has already paid the earlier payment link. The order is now marked Paid.");
+      }
+      await api({ action: "link-cancel", linkId: order.paymentLink.id }).catch(() => undefined);
+    }
+    cancelledOrderLink = true;
+  }
+  return { cancelledBalanceLink, cancelledOrderLink };
+}
+
 export async function createBalancePaymentLink(orderId: string) {
   const order = getOrder(orderId);
   if (order?.preorderPayment?.shippingDue && !order.preorderPayment.balancePaidAt) {

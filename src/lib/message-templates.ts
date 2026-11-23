@@ -48,6 +48,11 @@ export const defaultMessageCopy: Record<NotificationEventId, MessageCopy> = {
     emailBody: STAGE_BODY,
     smsBody: `${SIGN}: return for order {orderId}: {status}.`,
   },
+  "refund-processed": {
+    emailSubject: `Refund of {amount} processed for order {orderId}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: refund of {amount} for order {orderId} has been processed.`,
+  },
   "refund-bank-reference": {
     emailSubject: `Bank reference for your refund on order {orderId}`,
     emailBody: STAGE_BODY,

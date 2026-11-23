@@ -103,10 +103,10 @@ export default function LoginScreen() {
         <Muted>The same Create Account and Sign In used on the website — name, email, phone, OTP and a 12-digit Account ID.</Muted>
       </View>
 
-      <View style={{ flexDirection: "row", backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, padding: 5, marginBottom: 16 }}>
+      <View style={{ flexDirection: "row", backgroundColor: theme.colors.paper, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 16, padding: 5, marginBottom: 18, elevation: 2, shadowColor: "#16181D", shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } }}>
         {([
-          ["signup", "Create Account"],
           ["signin", "Sign In"],
+          ["signup", "Create Account"],
         ] as const).map(([id, label]) => (
           <Pressable
             key={id}
@@ -116,12 +116,12 @@ export default function LoginScreen() {
             }}
             style={{
               flex: 1,
-              borderRadius: 10,
-              paddingVertical: 11,
+              borderRadius: 12,
+              paddingVertical: 12,
               backgroundColor: tab === id ? theme.colors.primary : "transparent",
             }}
           >
-            <Text style={{ textAlign: "center", fontWeight: "700", fontSize: 13, color: tab === id ? theme.colors.onPrimary : theme.colors.muted }}>{label}</Text>
+            <Text style={{ textAlign: "center", fontWeight: "800", fontSize: 13.5, color: tab === id ? theme.colors.onPrimary : theme.colors.muted }}>{label}</Text>
           </Pressable>
         ))}
       </View>
