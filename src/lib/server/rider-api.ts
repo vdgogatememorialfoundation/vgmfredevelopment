@@ -62,6 +62,8 @@ export async function handleRiderAction(action: string, body: Body, session: Ses
       return { summary: ops.shiftSummary(email) };
     case "rider-handover":
       return { handover: ops.submitHandover({ email, name, role: session.role, declared: Number(body?.declared || 0), denominations: body?.denominations as Record<string, number> | undefined, note: str(body?.note) }) };
+    case "rider-location":
+      return ops.saveRiderLocation(email, Number(body?.lat), Number(body?.lng));
     case "rider-wallet":
       return ops.riderWallet(email);
     case "rider-hyper-offers":

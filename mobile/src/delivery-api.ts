@@ -5,7 +5,8 @@ export type JobKind = "delivery" | "pickup" | "return" | "obd" | "replacement";
 export type ShiftOption = { id: string; name: string; startTime: string; endTime: string; purpose: string; surge: number; bookable: boolean; live: boolean; date: string };
 export type ShiftBooking = { id: string; date: string; shiftId: string; shiftName: string; start: string; end: string; mode: "courier" | "hyperlocal"; status: "booked" | "on_duty" | "completed" | "cancelled"; checkInAt?: string };
 export type Question = { id: string; text: string; options: string[] };
-export type RiderSettings = { rates: Record<string, number>; surge: Record<string, number>; openBoxThreshold: number; failReasons: string[]; obdQuestions: Question[]; returnQuestions: Question[] };
+export type RiderSettings = {
+  checkInGraceMinutes?: number; rates: Record<string, number>; surge: Record<string, number>; openBoxThreshold: number; failReasons: string[]; obdQuestions: Question[]; returnQuestions: Question[] };
 export type Enrollment = { status: "unassigned" | "pending" | "approved" | "rejected"; hubCode?: string; kycPipeline?: { id: string; title: string; reached: boolean }[] };
 
 export type Job = {
@@ -96,6 +97,7 @@ export const rider = {
   summary: () => callPortal<{ summary: ShiftSummary }>("rider-shift-summary"),
   handover: (declared: number, denominations: Record<string, number>, note: string) => callPortal("rider-handover", { declared, denominations, note }),
   wallet: () => callPortal<Wallet>("rider-wallet"),
+  ping: (lat: number, lng: number) => callPortal("rider-location", { lat, lng }),
   hyperOffers: () => callPortal<{ offers: HyperOffer[]; active: HyperJob[] }>("rider-hyper-offers"),
   hyperAccept: (orderId: string) => callPortal<{ job: HyperJob }>("rider-hyper-accept", { orderId }),
   hyperStep: (jobId: string, step: string, extra: Record<string, unknown> = {}) => callPortal<{ job: HyperJob }>("rider-hyper-step", { jobId, step, ...extra }),

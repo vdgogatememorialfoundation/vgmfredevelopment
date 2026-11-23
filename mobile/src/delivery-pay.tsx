@@ -13,10 +13,10 @@ export function PaymentStep({ orderId, amount, onPaid }: { orderId: string; amou
   if (amount <= 0) {
     return (
       <Card>
-        <StatusPill label="PREPAID" tone="green" />
-        <Text style={d.h2}>Nothing to collect</Text>
-        <Text style={d.muted}>This order is already paid.</Text>
-        <Btn label="Continue" icon="arrow-forward" onPress={() => onPaid("prepaid")} />
+        <StatusPill label="PREPAID ORDER" tone="green" />
+        <Text style={d.h2}>Nothing to collect from the customer</Text>
+        <Text style={d.muted}>The customer has already paid online. Do not collect any money.</Text>
+        <Btn label="Continue to delivery OTP" icon="arrow-forward" onPress={() => onPaid("prepaid")} />
       </Card>
     );
   }
@@ -48,8 +48,8 @@ export function PaymentStep({ orderId, amount, onPaid }: { orderId: string; amou
 
   return (
     <Card>
-      <StatusPill label="CASH ON DELIVERY" tone="amber" />
-      <Text style={d.label}>Amount to collect</Text>
+      <StatusPill label="CASH ON DELIVERY (COD)" tone="amber" />
+      <Text style={d.label}>Amount to collect from the customer</Text>
       <Text style={d.big}>{money(amount)}</Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
         {(["cash", "qr"] as const).map((m) => (
@@ -61,13 +61,13 @@ export function PaymentStep({ orderId, amount, onPaid }: { orderId: string; amou
       {mode === "cash" ? (
         <Btn label={`I have collected ${money(amount)} cash`} icon="cash" tone="green" onPress={() => onPaid("cash")} />
       ) : !qr ? (
-        <Btn label="Show payment QR" icon="qr-code" busy={busy} onPress={makeQr} />
+        <Btn label="Show UPI payment QR to the customer" icon="qr-code" busy={busy} onPress={makeQr} />
       ) : (
         <View style={{ alignItems: "center", gap: 10 }}>
           <Image source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(qr.url)}` }} style={{ width: 240, height: 240 }} />
-          <Text style={d.muted}>Customer scans with any UPI app</Text>
-          <Btn label="Open payment link" tone="outline" onPress={() => void Linking.openURL(qr.url)} />
-          <Btn label="Check payment" icon="checkmark-circle" tone="green" busy={busy} onPress={checkQr} />
+          <Text style={d.muted}>Ask the customer to scan this QR with any UPI app (Google Pay, PhonePe, Paytm).</Text>
+          <Btn label="Open the payment link" tone="outline" onPress={() => void Linking.openURL(qr.url)} />
+          <Btn label="Check if the payment is received" icon="checkmark-circle" tone="green" busy={busy} onPress={checkQr} />
         </View>
       )}
     </Card>

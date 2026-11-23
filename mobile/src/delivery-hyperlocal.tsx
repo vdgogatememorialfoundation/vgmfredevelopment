@@ -36,7 +36,7 @@ export function HyperlocalDuty({ settings }: { settings: RiderSettings }) {
           <Ionicons name={finished.status === "delivered" ? "checkmark-circle" : "close-circle"} size={64} color={finished.status === "delivered" ? P.green : P.red} />
           <Text style={d.h1}>{finished.status === "delivered" ? "Delivered" : "Marked failed"}</Text>
           <Text style={d.body}>Order {finished.orderId}</Text>
-          <Btn label="Find next order" icon="flash" onPress={() => { setFinished(null); void poll(); }} />
+          <Btn label="Look for the next order" icon="flash" onPress={() => { setFinished(null); void poll(); }} />
         </Card>
       </ScrollView>
     );
@@ -50,7 +50,7 @@ export function HyperlocalDuty({ settings }: { settings: RiderSettings }) {
       {offers.map((offer) => (
         <Card key={offer.orderId}>
           <View style={d.between}>
-            <StatusPill label="NEW ORDER" tone="brand" />
+            <StatusPill label="NEW ORDER REQUEST" tone="brand" />
             <Text style={[d.h2, { color: P.green }]}>Earn {money(offer.earning)}</Text>
           </View>
           <Text style={d.h2}>{offer.customerName}</Text>
@@ -59,7 +59,7 @@ export function HyperlocalDuty({ settings }: { settings: RiderSettings }) {
             <Text style={d.muted}>{offer.items} item{offer.items === 1 ? "" : "s"} · Order {offer.orderId}</Text>
             <StatusPill label={offer.payment === "COD" ? `COD ${money(offer.amount)}` : `Prepaid ${money(offer.amount)}`} tone={offer.payment === "COD" ? "amber" : "green"} />
           </View>
-          <SwipeToAccept label="Swipe to accept" onAccept={() => void rider.hyperAccept(offer.orderId).then((r) => setJob(r.job)).catch(errorAlert)} />
+          <SwipeToAccept label="Swipe right to accept this order" onAccept={() => void rider.hyperAccept(offer.orderId).then((r) => setJob(r.job)).catch(errorAlert)} />
         </Card>
       ))}
     </ScrollView>
@@ -81,8 +81,8 @@ function Searching() {
           <Ionicons name="radio" size={36} color={P.white} />
         </View>
       </View>
-      <Text style={d.h2}>Searching for orders…</Text>
-      <Text style={[d.muted, { textAlign: "center" }]}>Stay near your dark store. New orders ping here.</Text>
+      <Text style={d.h2}>Searching for new orders near you…</Text>
+      <Text style={[d.muted, { textAlign: "center" }]}>Stay close to your dark store. A new order will ring here as soon as it is assigned to you.</Text>
     </Card>
   );
 }
@@ -92,7 +92,7 @@ function NavModal({ address, visible, onClose }: { address: string; visible: boo
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: P.white }}>
         <View style={[d.between, { padding: 14, paddingTop: 40, borderBottomWidth: 1, borderBottomColor: P.border }]}>
-          <Text style={d.h2} numberOfLines={1}>Navigate</Text>
+          <Text style={d.h2} numberOfLines={1}>Start navigation</Text>
           <Pressable onPress={onClose}><Ionicons name="close" size={26} color={P.ink} /></Pressable>
         </View>
         <WebView source={{ uri: `https://www.google.com/maps/dir/?api=1&travelmode=two-wheeler&destination=${encodeURIComponent(address)}` }} geolocationEnabled style={{ flex: 1 }} />
@@ -127,12 +127,12 @@ function HyperJobFlow({ job, settings, onUpdate, onFinished }: { job: HyperJob; 
 
   const customer = (
     <Card>
-      <Text style={d.label}>Customer</Text>
+      <Text style={d.label}>Customer details</Text>
       <Text style={d.h2}>{job.customerName}</Text>
       <Text style={d.body}>{job.address}</Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <Btn label="Call" icon="call" tone="green" flex disabled={!job.phone} onPress={() => callNumber(job.phone)} />
-        <Btn label="Navigate" icon="navigate" tone="blue" flex onPress={() => setNav(true)} />
+        <Btn label="Start navigation" icon="navigate" tone="blue" flex onPress={() => setNav(true)} />
         <Pressable onPress={() => openMaps(job.address)} style={{ padding: 12, borderRadius: 12, backgroundColor: P.blueSoft }}>
           <Ionicons name="logo-google" size={20} color={P.blue} />
         </Pressable>
@@ -146,7 +146,7 @@ function HyperJobFlow({ job, settings, onUpdate, onFinished }: { job: HyperJob; 
       <Card>
         <View style={d.between}>
           <Text style={d.h2}>Order {job.orderId}</Text>
-          {job.openBox ? <StatusPill label="Open box · high value" tone="brand" /> : null}
+          {job.openBox ? <StatusPill label="Open-box delivery · high-value order" tone="brand" /> : null}
         </View>
         <Text style={d.muted}>Job {job.id}</Text>
       </Card>
@@ -154,19 +154,19 @@ function HyperJobFlow({ job, settings, onUpdate, onFinished }: { job: HyperJob; 
       {job.status === "accepted" ? (
         <>
           <Card>
-            <Text style={d.label}>Pick up from</Text>
+            <Text style={d.label}>Pick up this order from</Text>
             <Text style={d.h2}>Dark store {job.pickupFrom || ""}</Text>
             <View style={d.between}>
-              <Text style={d.body}>1. Scan order QR</Text>
-              {job.orderScanned ? <StatusPill label="Scanned ✓" tone="green" /> : <Btn label="Scan" icon="qr-code" onPress={() => setScan("scan_order")} />}
+              <Text style={d.body}>Step 1 · Scan the QR code on the order packet</Text>
+              {job.orderScanned ? <StatusPill label="Scanned successfully ✓" tone="green" /> : <Btn label="Scan QR code" icon="qr-code" onPress={() => setScan("scan_order")} />}
             </View>
             <View style={d.between}>
-              <Text style={d.body}>2. Scan shelf QR</Text>
-              {job.shelfScanned ? <StatusPill label={`Shelf ${job.shelfScanned} ✓`} tone="green" /> : <Btn label="Scan" icon="qr-code" disabled={!job.orderScanned} onPress={() => setScan("scan_shelf")} />}
+              <Text style={d.body}>Step 2 · Scan the QR code on the shelf</Text>
+              {job.shelfScanned ? <StatusPill label={`Shelf ${job.shelfScanned} ✓`} tone="green" /> : <Btn label="Scan QR code" icon="qr-code" disabled={!job.orderScanned} onPress={() => setScan("scan_shelf")} />}
             </View>
           </Card>
           <Card>
-            <Text style={d.label}>3. Check all items</Text>
+            <Text style={d.label}>Step 3 · Tick every item after checking it</Text>
             {job.items.map((item, i) => (
               <Pressable key={i} onPress={() => setChecked((c) => (c.includes(i) ? c.filter((x) => x !== i) : [...c, i]))} style={[d.row, { paddingVertical: 6 }]}>
                 <Ionicons name={checked.includes(i) ? "checkbox" : "square-outline"} size={22} color={checked.includes(i) ? P.green : P.muted} />
@@ -174,21 +174,21 @@ function HyperJobFlow({ job, settings, onUpdate, onFinished }: { job: HyperJob; 
               </Pressable>
             ))}
           </Card>
-          <Btn label="Mark as picked" icon="bag-check" tone="green" busy={busy === "picked"} disabled={!job.orderScanned || !job.shelfScanned || checked.length < job.items.length} onPress={() => void step("picked")} />
+          <Btn label="Mark order as picked up" icon="bag-check" tone="green" busy={busy === "picked"} disabled={!job.orderScanned || !job.shelfScanned || checked.length < job.items.length} onPress={() => void step("picked")} />
         </>
       ) : null}
 
       {job.status === "picked" ? (
         <>
           {customer}
-          <Btn label="Mark as out for delivery" icon="bicycle" tone="green" busy={busy === "out_for_delivery"} onPress={() => void step("out_for_delivery")} />
+          <Btn label="Start delivery (out for delivery)" icon="bicycle" tone="green" busy={busy === "out_for_delivery"} onPress={() => void step("out_for_delivery")} />
         </>
       ) : null}
 
       {job.status === "out_for_delivery" ? (
         <>
           {customer}
-          <Btn label="Mark arrived" icon="flag" tone="green" busy={busy === "arrived"} onPress={() => void step("arrived")} />
+          <Btn label="I have arrived at the customer's address" icon="flag" tone="green" busy={busy === "arrived"} onPress={() => void step("arrived")} />
         </>
       ) : null}
 
@@ -197,21 +197,21 @@ function HyperJobFlow({ job, settings, onUpdate, onFinished }: { job: HyperJob; 
           {customer}
           <Card>
             <Text style={d.h2}>{job.openBox ? "Open-box delivery" : "Shipment photos"}</Text>
-            {job.openBox ? <Text style={d.muted}>Open the box in front of the customer and photograph every item.</Text> : null}
+            {job.openBox ? <Text style={d.muted}>Open the box in front of the customer and take a clear photo of every item.</Text> : null}
             <PhotoStrip photos={job.photos} onAdd={(url) => void step("photo", { photo: url })} kind="hyperlocal" min={job.openBox ? job.items.length : 1} />
           </Card>
           {job.openBox ? (
             <Card>
               <Questionnaire questions={settings.obdQuestions} answers={answers} onChange={setAnswers} />
-              <Field label="Customer's mobile · last 4 digits" value={last4} onChangeText={(v) => setLast4(v.replace(/\D/g, "").slice(0, 4))} keyboardType="number-pad" maxLength={4} />
+              <Field label="Last 4 digits of the customer's mobile number" value={last4} onChangeText={(v) => setLast4(v.replace(/\D/g, "").slice(0, 4))} keyboardType="number-pad" maxLength={4} />
             </Card>
           ) : null}
           {!paid ? <PaymentStep orderId={job.orderId} amount={job.amountToCollect} onPaid={setPaid} /> : null}
           {paid ? (
             <Card>
-              <Field label="Delivery OTP (from customer)" value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} style={[d.input, { fontSize: 24, letterSpacing: 8, textAlign: "center" }]} />
+              <Field label="Delivery OTP shared by the customer" value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} style={[d.input, { fontSize: 24, letterSpacing: 8, textAlign: "center" }]} />
               <Btn
-                label="Mark as delivered"
+                label="Mark order as delivered"
                 icon="checkmark-circle"
                 tone="green"
                 busy={busy === "delivered"}
@@ -220,20 +220,20 @@ function HyperJobFlow({ job, settings, onUpdate, onFinished }: { job: HyperJob; 
               />
             </Card>
           ) : null}
-          <Btn label="Mark as failed" icon="close-circle" tone="red" onPress={() => setFailing(true)} />
+          <Btn label="Mark delivery as failed" icon="close-circle" tone="red" onPress={() => setFailing(true)} />
         </>
       ) : null}
 
       <Modal visible={failing} transparent animationType="slide" onRequestClose={() => setFailing(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(17,24,39,0.35)", justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: P.white, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, gap: 10 }}>
-            <Text style={d.h2}>Why did the delivery fail?</Text>
+            <Text style={d.h2}>Why could the order not be delivered?</Text>
             {settings.failReasons.map((r) => (
               <Pressable key={r} onPress={() => { setFailing(false); void step("failed", { reason: r }); }} style={{ padding: 12, borderRadius: 10, borderWidth: 1, borderColor: P.border }}>
                 <Text style={d.body}>{r}</Text>
               </Pressable>
             ))}
-            <Btn label="Cancel" tone="outline" onPress={() => setFailing(false)} />
+            <Btn label="Cancel, go back" tone="outline" onPress={() => setFailing(false)} />
           </View>
         </View>
       </Modal>

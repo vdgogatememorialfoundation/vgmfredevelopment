@@ -4,6 +4,7 @@ import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CourierDuty } from "./delivery-courier";
 import { HyperlocalDuty } from "./delivery-hyperlocal";
+import { LocationGate, useRiderLocation } from "./delivery-location";
 import { rider, type Enrollment, type RiderSettings, type ShiftBooking, type ShiftOption, type ShiftSummary, type Wallet } from "./delivery-api";
 import { Btn, Card, d, errorAlert, Field, money, PhotoStrip } from "./delivery-ui";
 import { callPortal, portalLogin, savePortalSession, type PortalSession } from "./portal-api";
@@ -91,8 +92,9 @@ export function DeliveryAppShell({ session, onSignOut }: { session: PortalSessio
 
   const activated = home?.enrollment.status === "approved";
   const active = home?.active ?? null;
+  const location = useRiderLocation(Boolean(active));
   const tabs = [
-    { id: "duty", label: "Duty", icon: "time" },
+    { id: "duty", label: "Home", icon: "home" },
     { id: "work", label: active?.mode === "hyperlocal" ? "Orders" : "Runsheets", icon: active?.mode === "hyperlocal" ? "flash" : "list" },
     { id: "wallet", label: "Earnings", icon: "wallet" },
     { id: "account", label: "Account", icon: "person-circle" },
@@ -100,9 +102,11 @@ export function DeliveryAppShell({ session, onSignOut }: { session: PortalSessio
 
   return (
     <SafeAreaView style={d.screen} edges={["top"]}>
-      <PortalTopBar title={tab === "work" ? (active?.mode === "hyperlocal" ? "Hyperlocal" : "Runsheets") : tab === "wallet" ? "Earnings & wallet" : tab === "account" ? "Account" : "My duty"} subtitle={session.name} onRefresh={load} refreshing={loading} />
+      <PortalTopBar title={tab === "work" ? (active?.mode === "hyperlocal" ? "Hyperlocal" : "Runsheets") : tab === "wallet" ? "Earnings & wallet" : tab === "account" ? "Account" : "Home · my shifts"} subtitle={session.name} onRefresh={load} refreshing={loading} />
       <View style={{ flex: 1 }}>
-        {!home ? null : !activated && tab !== "account" ? (
+        {!home ? null : activated && tab !== "account" && (location.state === "denied" || location.state === "off") ? (
+          <LocationGate state={location.state} retry={location.retry} />
+        ) : !activated && tab !== "account" ? (
           <Onboarding enrollment={home.enrollment} onDone={load} />
         ) : tab === "duty" ? (
           <DutyScreen home={home} reload={load} openWork={() => setTab("work")} />
@@ -179,7 +183,7 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
           <Ionicons name="hourglass" size={34} color={P.amber} />
           <Text style={d.h2}>Waiting for activation</Text>
           <Text style={d.body}>Your KYC is submitted. Visit hub / dark store {enrollment.hubCode || ""} with your original ID and vehicle papers. Once the hub manager activates you, pull to refresh.</Text>
-          <Btn label="Check again" icon="refresh" tone="outline" onPress={onDone} />
+          <Btn label="Check activation status" icon="refresh" tone="outline" onPress={onDone} />
         </Card>
       </ScrollView>
     );
@@ -227,7 +231,6 @@ function Onboarding({ enrollment, onDone }: { enrollment: Enrollment; onDone: ()
 /* ---------------- Duty: shift booking, check-in, end of shift ---------------- */
 
 function DutyScreen({ home, reload, openWork }: { home: Home; reload: () => void; openWork: () => void }) {
-  const [mode, setMode] = useState<"courier" | "hyperlocal">("courier");
   const [busy, setBusy] = useState("");
   const [handover, setHandover] = useState(false);
   const act = async (key: string, fn: () => Promise<unknown>, done?: string) => {
@@ -244,83 +247,88 @@ function DutyScreen({ home, reload, openWork }: { home: Home; reload: () => void
   };
 
   const onDuty = home.bookings.find((b) => b.status === "on_duty") ?? null;
-  const upcoming = home.bookings.filter((b) => b.status === "booked");
-  const booked = new Set(home.bookings.map((b) => b.shiftId));
-
   if (handover && onDuty) return <HandoverScreen summary={home.summary} onClose={() => setHandover(false)} onDone={() => { setHandover(false); reload(); }} />;
+
+  const section = (mode: "courier" | "hyperlocal") => {
+    const hyper = mode === "hyperlocal";
+    const mine = home.bookings.filter((b) => b.mode === mode);
+    const duty = mine.find((b) => b.status === "on_duty") ?? null;
+    const upcoming = mine.filter((b) => b.status === "booked");
+    const booked = new Set(mine.map((b) => b.shiftId));
+    return (
+      <View key={mode} style={{ gap: 12 }}>
+        <View style={[d.row, { marginTop: 6 }]}>
+          <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: hyper ? P.amberSoft : P.blueSoft, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name={hyper ? "flash" : "cube"} size={20} color={hyper ? P.amber : P.blue} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={d.h2}>{hyper ? "Hyperlocal orders" : "Normal orders (courier delivery)"}</Text>
+            <Text style={d.muted}>{hyper ? "Quick deliveries from your dark store to nearby customers." : "Runsheets of deliveries, pickups, returns and open-box parcels from your hub."}</Text>
+          </View>
+        </View>
+        {duty ? (
+          <Card style={{ borderColor: P.green, backgroundColor: P.greenSoft }}>
+            <StatusPill label="ON DUTY" tone="green" />
+            <Text style={d.h2}>{duty.shiftName} · {duty.start} to {duty.end}</Text>
+            <Text style={d.label}>Shift confirmation ID</Text>
+            <Text style={d.big}>{duty.id}</Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {[["Delivered", home.summary.delivered ?? 0], ["Pickups", home.summary.pickups ?? 0], ["Returns", home.summary.returns ?? 0], ["Failed", home.summary.failed ?? 0]].map(([label, value]) => (
+                <View key={String(label)} style={[d.chip, { backgroundColor: P.white }]}>
+                  <Text style={d.chipValue}>{value}</Text>
+                  <Text style={d.chipLabel}>{label}</Text>
+                </View>
+              ))}
+            </View>
+            <Btn label={hyper ? "Start finding hyperlocal orders" : "Open my runsheets"} icon="play" tone="green" onPress={openWork} />
+            <Btn label="End shift and hand over cash" icon="cash" tone="outline" onPress={() => setHandover(true)} />
+          </Card>
+        ) : null}
+        {upcoming.map((b) => {
+          const live = home.shifts.find((s) => s.id === b.shiftId)?.live;
+          return (
+            <Card key={b.id}>
+              <StatusPill label="BOOKED" tone="blue" />
+              <Text style={d.h2}>{b.shiftName} · {b.start} to {b.end}</Text>
+              <Text style={d.label}>Shift confirmation ID</Text>
+              <Text style={d.big}>{b.id}</Text>
+              {live ? (
+                <Btn label="Check in and start my duty" icon="finger-print" tone="green" busy={busy === b.id} disabled={Boolean(onDuty)} onPress={() => act(b.id, () => rider.checkIn(b.id), `You are checked in. Your duty runs until ${b.end}.`)} />
+              ) : (
+                <Text style={d.muted}>Check-in opens {home.settings.checkInGraceMinutes ?? 15} minutes before your shift starts at {b.start}.</Text>
+              )}
+              <Btn label="Cancel this booking" tone="outline" busy={busy === `x${b.id}`} onPress={() => act(`x${b.id}`, () => rider.cancelShift(b.id))} />
+            </Card>
+          );
+        })}
+        <Card>
+          <Text style={d.label}>Book a {hyper ? "hyperlocal" : "courier delivery"} shift for today</Text>
+          {home.shifts.map((s) => (
+            <View key={s.id} style={[d.between, { paddingVertical: 10, borderTopWidth: 1, borderTopColor: P.border }]}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={d.body}>{s.name} · {s.startTime} to {s.endTime}</Text>
+                <View style={d.row}>
+                  {s.live ? <StatusPill label="Running now" tone="green" /> : null}
+                  {s.surge > 1 ? <StatusPill label={`Surge pay ×${s.surge}`} tone="amber" /> : null}
+                  {!s.bookable ? <Text style={d.muted}>This shift has ended</Text> : null}
+                </View>
+              </View>
+              {booked.has(s.id) ? (
+                <StatusPill label="Booked" tone="blue" />
+              ) : (
+                <Btn label="Book shift" busy={busy === `${mode}${s.id}`} disabled={!s.bookable} onPress={() => act(`${mode}${s.id}`, () => rider.bookShift(s.id, mode), `Shift booked. Check in when it starts.`)} />
+              )}
+            </View>
+          ))}
+        </Card>
+      </View>
+    );
+  };
 
   return (
     <ScrollView contentContainerStyle={d.pad} refreshControl={<RefreshControl refreshing={false} onRefresh={reload} />}>
-      {onDuty ? (
-        <Card style={{ borderColor: P.green, backgroundColor: P.greenSoft }}>
-          <View style={d.between}>
-            <StatusPill label="ON DUTY" tone="green" />
-            <Text style={d.muted}>{onDuty.mode === "hyperlocal" ? "Hyperlocal" : "Courier"}</Text>
-          </View>
-          <Text style={d.h2}>{onDuty.shiftName} · {onDuty.start}–{onDuty.end}</Text>
-          <Text style={d.label}>Confirmation ID</Text>
-          <Text style={d.big}>{onDuty.id}</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {[["Delivered", home.summary.delivered ?? 0], ["Pickups", home.summary.pickups ?? 0], ["Returns", home.summary.returns ?? 0], ["Failed", home.summary.failed ?? 0]].map(([label, value]) => (
-              <View key={String(label)} style={[d.chip, { backgroundColor: P.white }]}>
-                <Text style={d.chipValue}>{value}</Text>
-                <Text style={d.chipLabel}>{label}</Text>
-              </View>
-            ))}
-          </View>
-          <Btn label={onDuty.mode === "hyperlocal" ? "Find orders" : "Open runsheets"} icon="play" tone="green" onPress={openWork} />
-          <Btn label="End shift · cash handover" icon="cash" tone="outline" onPress={() => setHandover(true)} />
-        </Card>
-      ) : null}
-
-      {upcoming.map((b) => {
-        const live = home.shifts.find((s) => s.id === b.shiftId)?.live;
-        return (
-          <Card key={b.id}>
-            <View style={d.between}>
-              <StatusPill label="BOOKED" tone="blue" />
-              <Text style={d.muted}>{b.mode === "hyperlocal" ? "Hyperlocal" : "Courier"}</Text>
-            </View>
-            <Text style={d.h2}>{b.shiftName} · {b.start}–{b.end}</Text>
-            <Text style={d.label}>Confirmation ID</Text>
-            <Text style={d.big}>{b.id}</Text>
-            {live ? (
-              <Btn label="Check in and start duty" icon="finger-print" tone="green" busy={busy === b.id} onPress={() => act(b.id, () => rider.checkIn(b.id), `Checked in. Duty runs until ${b.end}.`)} />
-            ) : (
-              <Text style={d.muted}>Check-in opens 15 minutes before {b.start}.</Text>
-            )}
-            <Btn label="Cancel booking" tone="outline" busy={busy === `x${b.id}`} onPress={() => act(`x${b.id}`, () => rider.cancelShift(b.id))} />
-          </Card>
-        );
-      })}
-
-      <Card>
-        <Text style={d.h2}>Book a shift for today</Text>
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          {(["courier", "hyperlocal"] as const).map((m) => (
-            <Pressable key={m} onPress={() => setMode(m)} style={[d.filter, { flex: 1, alignItems: "center" }, mode === m && d.filterOn]}>
-              <Text style={[d.filterText, mode === m && { color: P.white }]}>{m === "courier" ? "Courier delivery" : "Hyperlocal"}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {home.shifts.map((s) => (
-          <View key={s.id} style={[d.between, { paddingVertical: 10, borderTopWidth: 1, borderTopColor: P.border }]}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={d.body}>{s.name} · {s.startTime}–{s.endTime}</Text>
-              <View style={d.row}>
-                {s.live ? <StatusPill label="Now" tone="green" /> : null}
-                {s.surge > 1 ? <StatusPill label={`Surge ×${s.surge}`} tone="amber" /> : null}
-                {!s.bookable ? <Text style={d.muted}>Ended</Text> : null}
-              </View>
-            </View>
-            {booked.has(s.id) ? (
-              <StatusPill label="Booked" tone="blue" />
-            ) : (
-              <Btn label="Book" busy={busy === s.id} disabled={!s.bookable} onPress={() => act(s.id, () => rider.bookShift(s.id, mode))} />
-            )}
-          </View>
-        ))}
-      </Card>
+      {section("courier")}
+      {section("hyperlocal")}
     </ScrollView>
   );
 }

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Vaidya Gogate Memorial Foundation",
     "slug": "vgmf-foundation",
-    "version": "6.0.0",
+    "version": "6.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "org.vaidyagogate.app",
-      "versionCode": 42,
+      "versionCode": 43,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF",
@@ -40,7 +40,7 @@
       "barStyle": "dark-content",
       "backgroundColor": "#FFFDF8"
     },
-    "plugins": ["expo-router", "expo-secure-store", ["expo-notifications", { "color": "#8F2D2D" }]],
+    "plugins": ["expo-router", "expo-secure-store", ["expo-location", { "locationWhenInUsePermission": "VGMF Delivery uses your location during your shift to confirm arrival at the customer and share your live position for tracking." }], ["expo-notifications", { "color": "#8F2D2D" }]],
     "extra": {
       "apiUrl": "https://vaidyagogate.org",
       "flavor": "customer",

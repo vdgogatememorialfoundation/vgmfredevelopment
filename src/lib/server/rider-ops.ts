@@ -109,6 +109,7 @@ export type RiderSettings = {
 };
 
 type Store = {
+  locations?: Record<string, { lat: number; lng: number; at: string }>;
   bookings: ShiftBooking[];
   attempts: Attempt[];
   handovers: CashHandover[];
@@ -647,6 +648,14 @@ export function verifyHandover(id: string, ok: boolean, by: string) {
 
 export function listHandovers() {
   return read().handovers.slice(0, 200);
+}
+
+export function saveRiderLocation(email: string, lat: number, lng: number) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new Error("Invalid location.");
+  const store = read();
+  store.locations = { ...(store.locations ?? {}), [email]: { lat, lng, at: new Date().toISOString() } };
+  write(store);
+  return { saved: true };
 }
 
 export function riderWallet(email: string) {

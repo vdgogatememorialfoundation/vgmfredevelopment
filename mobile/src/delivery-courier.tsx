@@ -62,7 +62,7 @@ export function CourierDuty({ settings }: { settings: RiderSettings }) {
           <Text style={d.h2}>Runsheet {sheet.id}</Text>
         </Pressable>
         <Card>
-          <Text style={d.label}>Jobsheet</Text>
+          <Text style={d.label}>Jobsheet for this runsheet</Text>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <CountChip icon="arrow-up-circle" label="Pickups" value={sheet.counts.pickup + sheet.counts.return} color={P.blue} />
             <CountChip icon="cube" label="Deliveries" value={sheet.counts.delivery + sheet.counts.obd + sheet.counts.replacement} color={P.green} />
@@ -100,8 +100,8 @@ export function CourierDuty({ settings }: { settings: RiderSettings }) {
       {filters}
       {!visible.length ? (
         <Card>
-          <Text style={d.h2}>No runsheets yet</Text>
-          <Text style={d.muted}>Runsheets for your shift appear here once the hub assigns parcels to you. Pull to refresh.</Text>
+          <Text style={d.h2}>No runsheets assigned yet</Text>
+          <Text style={d.muted}>Runsheets for your current shift appear here as soon as the hub assigns parcels to you. Pull down to refresh.</Text>
         </Card>
       ) : null}
       {visible.map((s) => (
@@ -114,14 +114,14 @@ export function CourierDuty({ settings }: { settings: RiderSettings }) {
           <View style={{ flexDirection: "row", gap: 6 }}>
             <CountChip icon="arrow-up-circle" label="Pickup" value={s.counts.pickup} color={P.blue} />
             <CountChip icon="cube" label="Delivery" value={s.counts.delivery} color={P.green} />
-            <CountChip icon="eye" label="OBD" value={s.counts.obd} color={P.brand} />
+            <CountChip icon="eye" label="Open-box (OBD)" value={s.counts.obd} color={P.brand} />
             <CountChip icon="return-down-back" label="Returns" value={s.counts.return} color={P.amber} />
-            <CountChip icon="swap-horizontal" label="Replace" value={s.counts.replacement} color="#6D28D9" />
+            <CountChip icon="swap-horizontal" label="Replacements" value={s.counts.replacement} color="#6D28D9" />
           </View>
           {s.accepted ? (
-            <Btn label="Open runsheet" icon="list" onPress={() => setSheetId(s.id)} />
+            <Btn label="Open this runsheet" icon="list" onPress={() => setSheetId(s.id)} />
           ) : (
-            <Btn label="Accept runsheet" icon="checkmark" tone="green" onPress={() => void rider.acceptRunsheet(s.id).then(() => { setSheetId(s.id); void load(); }).catch(errorAlert)} />
+            <Btn label="Accept this runsheet" icon="checkmark" tone="green" onPress={() => void rider.acceptRunsheet(s.id).then(() => { setSheetId(s.id); void load(); }).catch(errorAlert)} />
           )}
         </Card>
       ))}
@@ -136,17 +136,17 @@ function RejectModal({ visible, reasons, onClose, onReject }: { visible: boolean
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: "rgba(17,24,39,0.35)", justifyContent: "flex-end" }}>
         <View style={{ backgroundColor: P.white, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 18, gap: 10 }}>
-          <Text style={d.h2}>Reason for rejecting</Text>
+          <Text style={d.h2}>Why are you rejecting this shipment?</Text>
           {reasons.map((r) => (
             <Pressable key={r} onPress={() => setReason(r)} style={[d.between, { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: reason === r ? P.red : P.border, backgroundColor: reason === r ? P.redSoft : P.white }]}>
               <Text style={d.body}>{r}</Text>
               {reason === r ? <Ionicons name="checkmark-circle" size={18} color={P.red} /> : null}
             </Pressable>
           ))}
-          <Field label="Note (optional)" value={note} onChangeText={setNote} />
+          <Field label="Add a note for the hub (optional)" value={note} onChangeText={setNote} />
           <View style={{ flexDirection: "row", gap: 8 }}>
-            <Btn label="Cancel" tone="outline" flex onPress={onClose} />
-            <Btn label="Reject" tone="red" flex disabled={!reason} onPress={() => onReject(reason, note)} />
+            <Btn label="Cancel, go back" tone="outline" flex onPress={onClose} />
+            <Btn label="Reject shipment" tone="red" flex disabled={!reason} onPress={() => onReject(reason, note)} />
           </View>
         </View>
       </View>
@@ -203,16 +203,16 @@ function JobDetail({ job, sheet, settings, onBack, onArrived, onChanged }: { job
         <View style={{ flexDirection: "row", gap: 6 }}>
           <CountChip icon="arrow-up-circle" label="Pickup" value={count(["pickup"])} color={P.blue} />
           <CountChip icon="cube" label="Delivery" value={count(["delivery", "replacement"])} color={P.green} />
-          <CountChip icon="return-down-back" label="RTO/Return" value={count(["return"])} color={P.amber} />
-          <CountChip icon="eye" label="OBD" value={count(["obd"])} color={P.brand} />
+          <CountChip icon="return-down-back" label="Return to origin (RTO)" value={count(["return"])} color={P.amber} />
+          <CountChip icon="eye" label="Open-box (OBD)" value={count(["obd"])} color={P.brand} />
         </View>
         <View style={d.between}>
-          <Text style={d.label}>Amount to collect</Text>
+          <Text style={d.label}>Amount to collect from the customer</Text>
           <Text style={d.h2}>{cod > 0 ? money(cod) : "Prepaid"}</Text>
         </View>
       </Card>
       <Card>
-        <Text style={d.label}>Receiver</Text>
+        <Text style={d.label}>Receiver details</Text>
         <View style={d.between}>
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={d.h2}>{job.customerName}</Text>
@@ -224,17 +224,17 @@ function JobDetail({ job, sheet, settings, onBack, onArrived, onChanged }: { job
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Btn label="Call" icon="call" tone="green" flex disabled={!job.phone} onPress={() => callNumber(job.phone)} />
-          <Btn label="Reject" icon="close-circle" tone="red" flex onPress={() => setReject(true)} />
+          <Btn label="Reject shipment" icon="close-circle" tone="red" flex onPress={() => setReject(true)} />
         </View>
       </Card>
       <Card>
-        <Text style={d.label}>Items</Text>
+        <Text style={d.label}>Items in this shipment</Text>
         {job.items.map((item, i) => (
           <Text key={i} style={d.body}>{item.title} × {item.quantity}</Text>
         ))}
       </Card>
       <Card>
-        <Text style={d.label}>Tracking ID</Text>
+        <Text style={d.label}>Tracking ID (AWB)</Text>
         <View style={d.between}>
           <Text style={d.big}>{job.awb}</Text>
           <Pressable onPress={askArrival} style={{ padding: 12, borderRadius: 12, backgroundColor: P.brand }}>
@@ -333,7 +333,7 @@ function StopFlow({ job, awbs, sheet, settings, onDone, onBack }: { job: Job; aw
 
   const header = (
     <Card>
-      <Text style={d.label}>Scan ID</Text>
+      <Text style={d.label}>Shipment ID to scan</Text>
       <Text style={d.big}>{current?.awb ?? open[0]?.awb ?? job.awb}</Text>
       <Text style={d.muted}>Shipments {Math.min(scanned.length + 1, open.length || 1)}/{open.length || jobs.length} · {job.customerName}</Text>
     </Card>
@@ -356,35 +356,35 @@ function StopFlow({ job, awbs, sheet, settings, onDone, onBack }: { job: Job; aw
                   <KindTag kind={j.kind} />
                   <Text style={d.h2}>{j.awb}</Text>
                 </View>
-                {scanned.includes(j.awb) ? <StatusPill label="Scanned ✓" tone="green" /> : rejected.includes(j.awb) ? <StatusPill label="Rejected" tone="red" /> : <StatusPill label="Pending" tone="neutral" />}
+                {scanned.includes(j.awb) ? <StatusPill label="Scanned successfully ✓" tone="green" /> : rejected.includes(j.awb) ? <StatusPill label="Rejected" tone="red" /> : <StatusPill label="Not scanned yet" tone="neutral" />}
               </View>
             </Card>
           ))}
           {current ? (
             <View style={{ flexDirection: "row", gap: 8 }}>
-              <Btn label="Scan" icon="scan" flex onPress={() => setScanOpen(true)} />
-              <Btn label="Reject" icon="close-circle" tone="red" flex onPress={() => setRejectFor(current.awb)} />
+              <Btn label="Scan barcode" icon="scan" flex onPress={() => setScanOpen(true)} />
+              <Btn label="Reject shipment" icon="close-circle" tone="red" flex onPress={() => setRejectFor(current.awb)} />
             </View>
           ) : (
-            <Btn label="Continue" icon="arrow-forward" tone="green" onPress={afterScan} />
+            <Btn label="Continue to next step" icon="arrow-forward" tone="green" onPress={afterScan} />
           )}
-          {scanned.length && current ? <Text style={[d.muted, { textAlign: "center" }]}>Scanned. Scan next shipment for this customer.</Text> : null}
-          <Btn label="Back" tone="outline" onPress={onBack} />
+          {scanned.length && current ? <Text style={[d.muted, { textAlign: "center" }]}>Scanned successfully. Now scan the next shipment for this customer.</Text> : null}
+          <Btn label="Go back" tone="outline" onPress={onBack} />
         </>
       ) : null}
 
       {step === "consent" ? (
         <Card>
           <Text style={d.h2}>Open-box delivery consent</Text>
-          <Text style={d.muted}>The customer checks each product before accepting.</Text>
+          <Text style={d.muted}>The customer opens the box and checks each product in front of you before accepting it.</Text>
           {obdJobs.map((j) => (
             <View key={j.awb} style={d.between}>
               <Text style={d.body}>{j.awb}</Text>
               <StatusPill label={consent ? "Consent taken" : "Pending"} tone={consent ? "green" : "amber"} />
             </View>
           ))}
-          <Field label="Customer's mobile number · last 4 digits" value={last4} onChangeText={(v) => setLast4(v.replace(/\D/g, "").slice(0, 4))} keyboardType="number-pad" maxLength={4} />
-          <Btn label="Take consent" icon="hand-left" disabled={last4.length !== 4} onPress={() => { setConsent(true); setStep("obd"); }} />
+          <Field label="Last 4 digits of the customer's mobile number" value={last4} onChangeText={(v) => setLast4(v.replace(/\D/g, "").slice(0, 4))} keyboardType="number-pad" maxLength={4} />
+          <Btn label="Take customer's consent" icon="hand-left" disabled={last4.length !== 4} onPress={() => { setConsent(true); setStep("obd"); }} />
         </Card>
       ) : null}
 
@@ -398,20 +398,20 @@ function StopFlow({ job, awbs, sheet, settings, onDone, onBack }: { job: Job; aw
               </View>
               {j.items.map((item, i) => <Text key={i} style={d.muted}>{item.title} × {item.quantity}</Text>)}
               <Questionnaire questions={settings.obdQuestions} answers={answers[j.awb] ?? {}} onChange={(next) => setAnswers((a) => ({ ...a, [j.awb]: next }))} />
-              <Btn label="Verify" icon="checkmark-done" tone="green" disabled={settings.obdQuestions.some((q) => !answers[j.awb]?.[q.id])} onPress={() => setVerified((v) => [...new Set([...v, j.awb])])} />
+              <Btn label="Verify this product" icon="checkmark-done" tone="green" disabled={settings.obdQuestions.some((q) => !answers[j.awb]?.[q.id])} onPress={() => setVerified((v) => [...new Set([...v, j.awb])])} />
             </Card>
           ))}
           <PhotoStrip photos={photos} onAdd={(url) => setPhotos((p) => [...p, url])} kind="obd" />
-          <Btn label="Continue to payment" icon="arrow-forward" disabled={obdJobs.some((j) => !verified.includes(j.awb)) || !photos.length} onPress={() => setStep("pay")} />
+          <Btn label="Continue to payment step" icon="arrow-forward" disabled={obdJobs.some((j) => !verified.includes(j.awb)) || !photos.length} onPress={() => setStep("pay")} />
         </>
       ) : null}
 
       {step === "returnq" ? (
         <Card>
-          <Text style={d.h2}>Return check · {job.awb}</Text>
+          <Text style={d.h2}>Return quality check · {job.awb}</Text>
           <Questionnaire questions={settings.returnQuestions} answers={answers[job.awb] ?? {}} onChange={(next) => setAnswers((a) => ({ ...a, [job.awb]: next }))} />
           <PhotoStrip photos={photos} onAdd={(url) => setPhotos((p) => [...p, url])} kind="return" />
-          <Btn label="Continue" icon="arrow-forward" disabled={settings.returnQuestions.some((q) => !answers[job.awb]?.[q.id]) || !photos.length} onPress={() => setStep("otp")} />
+          <Btn label="Continue to next step" icon="arrow-forward" disabled={settings.returnQuestions.some((q) => !answers[job.awb]?.[q.id]) || !photos.length} onPress={() => setStep("otp")} />
         </Card>
       ) : null}
 
@@ -424,13 +424,13 @@ function StopFlow({ job, awbs, sheet, settings, onDone, onBack }: { job: Job; aw
           {open.map((j) => (
             <View key={j.awb} style={d.between}>
               <Text style={d.body}>{j.awb}</Text>
-              <StatusPill label="Scanned ✓" tone="green" />
+              <StatusPill label="Scanned successfully ✓" tone="green" />
             </View>
           ))}
-          <Field label="Enter OTP" value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} style={[d.input, { fontSize: 24, letterSpacing: 8, textAlign: "center" }]} />
+          <Field label="Delivery OTP from the customer" value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" maxLength={6} style={[d.input, { fontSize: 24, letterSpacing: 8, textAlign: "center" }]} />
           {!isPickup && !isReturn ? <Btn label="Resend OTP" icon="refresh" tone="outline" onPress={() => void sendOtp()} /> : null}
           {isPickup ? <PhotoStrip photos={photos} onAdd={(url) => setPhotos((p) => [...p, url])} kind="pickup" min={0} /> : null}
-          <Btn label="Confirm" icon="checkmark-circle" tone="green" busy={busy} disabled={otp.length < 4} onPress={confirm} />
+          <Btn label="Confirm delivery" icon="checkmark-circle" tone="green" busy={busy} disabled={otp.length < 4} onPress={confirm} />
         </Card>
       ) : null}
 
@@ -440,7 +440,7 @@ function StopFlow({ job, awbs, sheet, settings, onDone, onBack }: { job: Job; aw
           <Text style={d.h1}>{isPickup || isReturn ? "Pickup successful" : "Delivered successfully"}</Text>
           {done.map((awb) => <Text key={awb} style={d.body}>✓ {awb}</Text>)}
           {payMode === "cash" ? <Text style={d.muted}>Cash {money(cod)} added to your shift cash.</Text> : null}
-          <Btn label="Next shipment" icon="arrow-forward" onPress={onDone} />
+          <Btn label="Go to the next shipment" icon="arrow-forward" onPress={onDone} />
         </Card>
       ) : null}
 
