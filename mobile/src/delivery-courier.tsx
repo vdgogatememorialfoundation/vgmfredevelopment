@@ -5,7 +5,7 @@ import { Alert, Modal, Pressable, RefreshControl, ScrollView, Text, View } from 
 import { rider, type Job, type RiderSettings, type Runsheet } from "./delivery-api";
 import { PaymentStep } from "./delivery-pay";
 import { sounds } from "./delivery-sounds";
-import { Btn, callNumber, Card, CountChip, d, errorAlert, Field, KindTag, money, openMaps, PhotoStrip, Questionnaire } from "./delivery-ui";
+import { Btn, callNumber, Card, CountChip, d, errorAlert, FLEX, Field, KindTag, money, openMaps, PhotoStrip, Questionnaire } from "./delivery-ui";
 import { BarcodeScannerModal, P, StatusPill } from "./portal-ui";
 
 type Filter = "all" | "delivery" | "pickup" | "priority";
@@ -60,42 +60,72 @@ export function CourierDuty({ settings }: { settings: RiderSettings }) {
 
   if (sheet) {
     const jobs = sheet.jobs.filter((j) => matches(j, filter));
+    const stops: Job[][] = [];
+    for (const j of jobs) {
+      const key = `${j.phone}|${j.address}`;
+      const same = stops.find((group) => `${group[0].phone}|${group[0].address}` === key);
+      if (same) same.push(j);
+      else stops.push([j]);
+    }
+    const next = stops[0];
     return (
-      <ScrollView contentContainerStyle={d.pad} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
-        <Pressable onPress={() => setSheetId("")} style={d.row}>
-          <Ionicons name="arrow-back" size={20} color={P.ink} />
-          <Text style={d.h2}>Runsheet {sheet.id}</Text>
-        </Pressable>
-        <Card>
-          <Text style={d.label}>Jobsheet for this runsheet</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <CountChip icon="arrow-up-circle" label="Pickups" value={sheet.counts.pickup + sheet.counts.return} color={P.blue} />
-            <CountChip icon="cube" label="Deliveries" value={sheet.counts.delivery + sheet.counts.obd + sheet.counts.replacement} color={P.green} />
-            <CountChip icon="close-circle" label="Failed" value={sheet.failed} color={P.red} />
-          </View>
-          {sheet.cashToCollect > 0 ? <Text style={d.muted}>Cash to collect on this runsheet: {money(sheet.cashToCollect)}</Text> : null}
-        </Card>
-        {filters}
-        {jobs.map((j, i) => (
-          <Pressable key={j.awb} onPress={() => setJob(j)}>
-            <Card>
-              <View style={d.between}>
-                <View style={d.row}>
-                  <KindTag kind={j.kind} />
-                  {j.priority ? <StatusPill label="Priority" tone="red" /> : null}
-                </View>
-                <Text style={d.muted}>{i + 1}/{jobs.length}</Text>
-              </View>
-              <Text style={d.h2}>{j.customerName}</Text>
-              <Text style={d.muted} numberOfLines={2}>{j.address}</Text>
-              <View style={d.between}>
-                <Text style={d.body}>{j.awb}</Text>
-                <StatusPill label={j.payment === "COD" ? `COD ${money(j.amountToCollect)}` : "Prepaid"} tone={j.payment === "COD" ? "amber" : "green"} />
-              </View>
-            </Card>
+      <View style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={d.pad} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
+          <Pressable onPress={() => setSheetId("")} style={d.row}>
+            <Ionicons name="arrow-back" size={22} color={FLEX.ink} />
+            <View>
+              <Text style={d.h1}>Itinerary</Text>
+              <Text style={d.muted}>Runsheet {sheet.id} · {stops.length} stop{stops.length === 1 ? "" : "s"} · {jobs.length} package{jobs.length === 1 ? "" : "s"}</Text>
+            </View>
           </Pressable>
-        ))}
-      </ScrollView>
+          <Card>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <CountChip icon="arrow-up-circle" label="Pickups" value={sheet.counts.pickup + sheet.counts.return} color={P.blue} />
+              <CountChip icon="cube" label="Deliveries" value={sheet.counts.delivery + sheet.counts.obd + sheet.counts.replacement} color={P.green} />
+              <CountChip icon="close-circle" label="Failed" value={sheet.failed} color={P.red} />
+            </View>
+            {sheet.cashToCollect > 0 ? <Text style={d.muted}>Cash to collect on this runsheet: {money(sheet.cashToCollect)}</Text> : null}
+          </Card>
+          {filters}
+          <View>
+            {stops.map((group, i) => {
+              const first = group[0];
+              const cod = group.reduce((sum, j) => sum + (j.payment === "COD" ? j.amountToCollect : 0), 0);
+              return (
+                <Pressable key={first.awb} onPress={() => setJob(first)} style={d.stopRow}>
+                  <View style={d.stopRail}>
+                    <View style={[d.stopNum, group === next && { backgroundColor: FLEX.accent }]}>
+                      <Text style={d.stopNumText}>{i + 1}</Text>
+                    </View>
+                    {i < stops.length - 1 ? <View style={d.stopLine} /> : null}
+                  </View>
+                  <View style={[d.card, { flex: 1, marginBottom: 12 }, group === next && { borderColor: FLEX.accent, borderWidth: 2 }]}>
+                    <View style={d.between}>
+                      <View style={d.row}>
+                        <KindTag kind={first.kind} />
+                        {group.some((j) => j.priority) ? <StatusPill label="Priority" tone="red" /> : null}
+                      </View>
+                      <Text style={[d.muted, { fontWeight: "700" }]}>{group.length} package{group.length === 1 ? "" : "s"}</Text>
+                    </View>
+                    <Text style={d.h2}>{first.customerName}</Text>
+                    <Text style={d.muted} numberOfLines={2}>{first.address}</Text>
+                    <View style={d.between}>
+                      <Text style={[d.muted, { fontFamily: "monospace" }]}>{group.map((j) => j.awb).join(", ")}</Text>
+                      <StatusPill label={cod > 0 ? `Collect ${money(cod)}` : "Prepaid"} tone={cod > 0 ? "amber" : "green"} />
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </ScrollView>
+        {next ? (
+          <View style={d.bottomBar}>
+            <Text style={d.muted}>Next stop: {next[0].customerName} · {next.length} package{next.length === 1 ? "" : "s"}</Text>
+            <Btn label={`Go to stop ${stops.indexOf(next) + 1}`} icon="navigate" onPress={() => setJob(next[0])} />
+          </View>
+        ) : null}
+      </View>
     );
   }
 

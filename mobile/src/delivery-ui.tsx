@@ -6,6 +6,9 @@ import { rider, type Question } from "./delivery-api";
 import { P } from "./portal-ui";
 import { sounds } from "./delivery-sounds";
 
+/** Amazon Flex–style palette: white surfaces, near-black text, one teal action colour. */
+export const FLEX = { accent: "#0A7EA4", accentSoft: "#E6F4F9", ink: "#0F1111", bg: "#F2F4F5", line: "#D5D9D9" };
+
 export const money = (value: number) => `₹${Math.round(Number(value || 0) * 100) / 100}`;
 
 export const KIND_LABEL: Record<string, { label: string; icon: string; color: string; soft: string }> = {
@@ -41,8 +44,8 @@ export function CountChip({ icon, label, value, color = P.ink }: { icon: string;
 }
 
 export function Btn({ label, icon, onPress, tone = "brand", disabled, busy, flex }: { label: string; icon?: string; onPress: () => void; tone?: "brand" | "green" | "red" | "outline" | "blue"; disabled?: boolean; busy?: boolean; flex?: boolean }) {
-  const bg = { brand: P.brand, green: P.green, red: P.red, blue: P.blue, outline: P.white }[tone];
-  const fg = tone === "outline" ? P.brand : P.white;
+  const bg = { brand: FLEX.accent, green: P.green, red: P.red, blue: P.blue, outline: P.white }[tone];
+  const fg = tone === "outline" ? FLEX.accent : P.white;
   return (
     <Pressable onPress={onPress} disabled={disabled || busy} style={[d.btn, { backgroundColor: bg, opacity: disabled ? 0.45 : 1 }, tone === "outline" && d.btnOutline, flex && { flex: 1 }]}>
       {busy ? <ActivityIndicator color={fg} /> : icon ? <Ionicons name={icon as never} size={18} color={fg} /> : null}
@@ -163,12 +166,12 @@ export function SwipeToAccept({ label, onAccept }: { label: string; onAccept: ()
 }
 
 export const d = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: P.bg },
+  screen: { flex: 1, backgroundColor: FLEX.bg },
   pad: { padding: 14, gap: 12, paddingBottom: 40 },
-  card: { backgroundColor: P.white, borderRadius: 14, borderWidth: 1, borderColor: P.border, padding: 14, gap: 10 },
-  h1: { fontSize: 20, fontWeight: "800", color: P.ink },
-  h2: { fontSize: 16, fontWeight: "800", color: P.ink },
-  body: { fontSize: 14, color: P.ink, lineHeight: 20 },
+  card: { backgroundColor: P.white, borderRadius: 10, borderWidth: 1, borderColor: FLEX.line, padding: 16, gap: 10, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  h1: { fontSize: 22, fontWeight: "800", color: FLEX.ink },
+  h2: { fontSize: 17, fontWeight: "700", color: FLEX.ink },
+  body: { fontSize: 15, color: FLEX.ink, lineHeight: 21 },
   muted: { fontSize: 13, color: P.muted, lineHeight: 18 },
   label: { fontSize: 12.5, fontWeight: "700", color: P.muted, textTransform: "uppercase", letterSpacing: 0.4 },
   input: { borderWidth: 1, borderColor: P.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 15, color: P.ink, backgroundColor: P.white },
@@ -179,12 +182,12 @@ export const d = StyleSheet.create({
   chip: { flex: 1, alignItems: "center", gap: 2, paddingVertical: 8, borderRadius: 10, backgroundColor: P.bg },
   chipValue: { fontSize: 16, fontWeight: "800", color: P.ink },
   chipLabel: { fontSize: 10.5, fontWeight: "700", color: P.muted },
-  btn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 13, paddingHorizontal: 16, borderRadius: 12 },
-  btnOutline: { borderWidth: 1.5, borderColor: P.brand },
-  btnText: { fontSize: 15, fontWeight: "800" },
+  btn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, minHeight: 52, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 8 },
+  btnOutline: { borderWidth: 1.5, borderColor: FLEX.accent },
+  btnText: { fontSize: 16, fontWeight: "700" },
   q: { fontSize: 14.5, fontWeight: "700", color: P.ink },
   opt: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: P.border, backgroundColor: P.white },
-  optOn: { backgroundColor: P.brand, borderColor: P.brand },
+  optOn: { backgroundColor: FLEX.accent, borderColor: FLEX.accent },
   optText: { fontSize: 13.5, fontWeight: "700", color: P.ink },
   thumb: { width: 72, height: 72, borderRadius: 10, backgroundColor: P.bg },
   addThumb: { alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderStyle: "dashed", borderColor: P.brand },
@@ -192,7 +195,13 @@ export const d = StyleSheet.create({
   swipeText: { textAlign: "center", fontSize: 15.5, fontWeight: "800", color: P.green },
   knob: { position: "absolute", left: 4, width: 56, height: 56, borderRadius: 28, backgroundColor: P.green, alignItems: "center", justifyContent: "center" },
   filter: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: P.border, backgroundColor: P.white },
-  filterOn: { backgroundColor: P.brand, borderColor: P.brand },
+  filterOn: { backgroundColor: FLEX.ink, borderColor: FLEX.ink },
   filterText: { fontSize: 13, fontWeight: "700", color: P.ink },
-  big: { fontSize: 30, fontWeight: "900", color: P.ink, letterSpacing: 1 },
+  big: { fontSize: 30, fontWeight: "900", color: FLEX.ink, letterSpacing: 1 },
+  stopRow: { flexDirection: "row", gap: 12 },
+  stopRail: { width: 34, alignItems: "center" },
+  stopNum: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: FLEX.ink },
+  stopNumText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  stopLine: { flex: 1, width: 2, backgroundColor: FLEX.line, marginTop: 4 },
+  bottomBar: { padding: 12, paddingBottom: 16, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: FLEX.line, gap: 6 },
 });

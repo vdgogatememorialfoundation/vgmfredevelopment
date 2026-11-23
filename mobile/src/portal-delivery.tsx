@@ -103,6 +103,14 @@ export function DeliveryAppShell({ session, onSignOut }: { session: PortalSessio
   return (
     <SafeAreaView style={d.screen} edges={["top"]}>
       <PortalTopBar title={tab === "work" ? (active?.mode === "hyperlocal" ? "Hyperlocal" : "Runsheets") : tab === "wallet" ? "Earnings & wallet" : tab === "account" ? "Account" : "Home · my shifts"} subtitle={session.name} onRefresh={load} refreshing={loading} />
+      {home && activated ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 9, backgroundColor: active ? "#E7F6EC" : "#F2F4F5", borderBottomWidth: 1, borderBottomColor: "#D5D9D9" }}>
+          <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: active ? P.green : P.muted }} />
+          <Text style={{ flex: 1, fontSize: 13.5, fontWeight: "700", color: "#0F1111" }}>
+            {active ? `On duty · ${active.mode === "hyperlocal" ? "Hyperlocal" : "Normal orders"} · ${active.shiftName} until ${active.end}` : "Off duty · book a shift and check in to get work"}
+          </Text>
+        </View>
+      ) : null}
       <View style={{ flex: 1 }}>
         {!home ? null : activated && tab !== "account" && (location.state === "denied" || location.state === "off") ? (
           <LocationGate state={location.state} retry={location.retry} />
