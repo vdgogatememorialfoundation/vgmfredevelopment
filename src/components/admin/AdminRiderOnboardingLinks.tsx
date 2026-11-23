@@ -13,6 +13,8 @@ export default function AdminRiderOnboardingLinks() {
   const [hubCode, setHubCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState("");
+  const [invite, setInvite] = useState<Record<string, string>>({});
+  const [note, setNote] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/admin/rider-onboarding")
@@ -30,6 +32,7 @@ export default function AdminRiderOnboardingLinks() {
     const r = await fetch("/api/admin/rider-onboarding", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((x) => x.json()).catch(() => null);
     if (r?.ok) setLinks(r.links);
     setBusy(false);
+    return r as { ok?: boolean; message?: string; error?: string } | null;
   };
 
   return (
@@ -56,6 +59,16 @@ export default function AdminRiderOnboardingLinks() {
               </div>
               <Button variant="ghost" onClick={() => void navigator.clipboard.writeText(l.url).then(() => setCopied(l.token))}>{copied === l.token ? "Copied" : "Copy link"}</Button>
               <Button variant="ghost" disabled={busy} onClick={() => void post({ action: "toggle", token: l.token, active: !l.active })}>{l.active ? "Switch off" : "Switch on"}</Button>
+              {l.active ? (
+                <div className="flex w-full flex-wrap items-center gap-2">
+                  <TextInput className="min-w-0 flex-1" placeholder="Invite by email (separate several with commas)" value={invite[l.token] || ""} onChange={(e) => setInvite({ ...invite, [l.token]: e.target.value })} />
+                  <Button disabled={busy || !(invite[l.token] || "").trim()} onClick={() => void post({ action: "invite", token: l.token, emails: invite[l.token] }).then((r) => {
+                    setNote({ ...note, [l.token]: r?.message || r?.error || "Could not send." });
+                    if (r?.ok) setInvite({ ...invite, [l.token]: "" });
+                  })}>Send invite</Button>
+                  {note[l.token] ? <span className="font-semibold text-teal-900">{note[l.token]}</span> : null}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

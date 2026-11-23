@@ -106,3 +106,21 @@ export async function sendRiderLoginAfterActivation(email: string, force = false
   ).catch(() => false);
   return { riderId: login.riderId, emailed: Boolean(sent) };
 }
+
+/** Emails the sign-up link to each address. Returns how many were sent. */
+export async function inviteToRiderLink(token: string, emails: string[]) {
+  const link = load().find((l) => l.token === token);
+  if (!link?.active) throw new Error("Switch the link on first.");
+  const list = Array.from(new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))).slice(0, 50);
+  if (!list.length) throw new Error("Enter at least one valid email address.");
+  let sent = 0;
+  for (const to of list) {
+    const ok = await sendMobileEmail(
+      to,
+      "Join Vaidya Gogate Memorial Foundation as a delivery partner",
+      `Namaste,\n\nYou are invited to join Vaidya Gogate Memorial Foundation as a delivery partner${link.hubCode ? ` at hub ${link.hubCode}` : ""}.\n\nSign up here: ${riderJoinUrl(link.token)}\n\n1. Sign up with your name, email and mobile number${link.hubCode ? "" : ", and choose your hub"}.\n2. Verify your email with the code we send.\n3. Complete ID verification (KYC): keep your original ID ready and take a live selfie.\n4. Once the hub activates you, your 5-digit user ID and password are emailed to you for the VGMF Delivery app.\n\nVaidya Gogate Memorial Foundation`
+    ).catch(() => false);
+    if (ok) sent += 1;
+  }
+  return { sent, total: list.length };
+}
