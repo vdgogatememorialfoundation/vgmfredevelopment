@@ -90,6 +90,8 @@ export const notificationEvents = [
   { id: "preorder-update", label: "Pre-order status changed" },
   { id: "preorder-ready", label: "Pre-order ready (balance link)" },
   { id: "order-call-missed", label: "We tried to reach you (missed call)" },
+  { id: "pickup-ready", label: "Store pickup ready (location, timings, payment)" },
+  { id: "pickup-collected", label: "Store pickup collected" },
 ] as const;
 
 export type NotificationEventId = (typeof notificationEvents)[number]["id"];

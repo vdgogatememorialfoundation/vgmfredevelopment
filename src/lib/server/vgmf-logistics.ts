@@ -386,7 +386,8 @@ function recordSellerUpdate(
   store: LogisticsStore,
   entry: Omit<SellerUpdateRecord, "id" | "at"> & { at?: string },
   notifySeller = false,
-  extraEmailNote = ""
+  extraEmailNote = "",
+  whatsAppOtp = ""
 ) {
   const at = entry.at || new Date().toISOString();
   const rec: SellerUpdateRecord = {
@@ -405,6 +406,12 @@ function recordSellerUpdate(
       `[VGMF Delivery] ${rec.title} · Order #${rec.orderId} (AWB ${rec.awb})`,
       `${rec.title}\n\nOrder ID: #${rec.orderId}\n12-Digit VGMF AWB: ${rec.awb}\nDetails: ${rec.message}${extraEmailNote ? `\n\n${extraEmailNote}` : ""}\nUpdated By: ${rec.by}\nTime: ${new Date(at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`
     ).catch(() => undefined);
+    const sellerPhone = process.env.VGMF_SELLER_PHONE || readLogisticsSettings().current.general?.supportPhone || "";
+    if (whatsAppOtp && sellerPhone) {
+      void import("@/lib/server/whatsapp-inbox")
+        .then(({ sendWhatsAppAlert }) => sendWhatsAppAlert("otp", { phone: sellerPhone, name: "VGMF Store", params: [whatsAppOtp] }))
+        .catch(() => false);
+    }
   }
   return rec;
 }
@@ -502,7 +509,8 @@ export function generateVgmfAwb(orderId: string, hubCode: string, by: string) {
       by,
     },
     true,
-    `Your 6-Digit Seller Pickup OTP for Order #${order.id} (AWB ${awb}) is: ${pickupOtp}\nShare this OTP with the VGMF Pickup Executive after they scan the parcel barcode.`
+    `Your 6-Digit Seller Pickup OTP for Order #${order.id} (AWB ${awb}) is: ${pickupOtp}\nShare this OTP with the VGMF Pickup Executive after they scan the parcel barcode.`,
+    pickupOtp
   );
   writeLogisticsStore(store);
   return { shipment, alreadyExists: false };
@@ -601,7 +609,8 @@ export function resendDeliveryOrPickupOtp(code: string, target: "seller_pickup" 
         by,
       },
       true,
-      `6-Digit Seller Pickup OTP for Order #${shipment.orderId} (AWB ${shipment.awb}): ${otp}`
+      `6-Digit Seller Pickup OTP for Order #${shipment.orderId} (AWB ${shipment.awb}): ${otp}`,
+      otp
     );
     writeLogisticsStore(store);
     return { message: "6-digit Seller Pickup OTP sent to Seller.", otpSent: true };
@@ -814,7 +823,8 @@ export function applyDeliveryScanEvent(input: {
       photoUrl: input.photoUrl,
     },
     notifySeller,
-    extraEmailNote
+    extraEmailNote,
+    input.event === "out_for_pickup" ? pickupOtp : ""
   );
   writeLogisticsStore(store);
 

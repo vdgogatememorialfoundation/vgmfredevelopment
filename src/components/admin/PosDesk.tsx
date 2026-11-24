@@ -30,6 +30,7 @@ import { canOrder, getProductByCode, isPurchasable } from "@/lib/product-data";
 import { accountToDelivery } from "@/lib/account-search";
 import { AddressFields, emptyDeliveryAddress } from "@/components/store/AddressFields";
 import { BarcodeCamera } from "@/components/admin/BarcodeCamera";
+import { PickupCounter } from "@/components/admin/PickupCounter";
 import { matchesBarcode } from "@/lib/barcode";
 
 const METHODS = [
@@ -736,6 +737,7 @@ export function PosDesk() {
           </Panel>
         </div>
       </div>
+      <PickupCounter />
     </div>
   );
 }

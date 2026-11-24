@@ -17,6 +17,7 @@ import { handleRiderAction } from "@/lib/server/rider-api";
 import { storeUploadedFile } from "@/lib/server/media-upload";
 import { corsHeaders, readMobileFeed } from "@/lib/server/mobile-feed";
 import { sendMobileEmail } from "@/lib/server/mobile-mail";
+import { sendWhatsAppAlert } from "@/lib/server/whatsapp-inbox";
 import { feedPreorderable } from "@/lib/server/mobile-shop";
 import { dataFile } from "@/lib/server/paths";
 import {
@@ -2331,6 +2332,7 @@ export async function POST(request: NextRequest) {
           `Namaste ${order.deliveryAddress?.fullName || "Customer"},\n\nYour Vaidya Gogate Memorial Foundation order #${orderId} is ready for store pickup.\n\nYour 6-digit Pickup OTP is: ${code}\n\nPlease share this OTP at the counter when collecting your parcel.`
         ).catch(() => undefined);
       }
+      if (order.deliveryAddress?.phone) void sendWhatsAppAlert("otp", { phone: order.deliveryAddress.phone, name: order.deliveryAddress.fullName || "Customer", params: [code] }).catch(() => false);
       return json({
         ok: true,
         message: "Order marked ready for pickup & OTP sent to customer.",
@@ -2367,6 +2369,7 @@ export async function POST(request: NextRequest) {
           `Namaste ${order.deliveryAddress?.fullName || "Customer"},\n\nYour 6-digit Store Pickup OTP for order #${orderId} is: ${code}\n\nPlease share this OTP at the VGMF counter.`
         ).catch(() => undefined);
       }
+      if (order.deliveryAddress?.phone) await sendWhatsAppAlert("otp", { phone: order.deliveryAddress.phone, name: order.deliveryAddress.fullName || "Customer", params: [code] }).catch(() => false);
       return json({ ok: true, message: "Pickup OTP resent to customer." });
     }
 

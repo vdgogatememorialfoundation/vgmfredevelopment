@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { patchOrder, recordPayment, sendPickupOtp, setOrderStatus, updateOrderInStore } from "@/lib/admin-store";
 import { getOrders, pickupOtp, pickupOtpReady } from "@/lib/store";
+import { createBalancePaymentLink, createPaymentLink } from "@/lib/payments-client";
 import type { Order } from "@/types";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 
@@ -22,6 +23,16 @@ function matches(order: Order, query: string) {
     .toLowerCase();
   return hay.includes(needle) || (digits.length >= 4 && phone.includes(digits));
 }
+
+/** Amount the pickup customer still owes (pre-order balance or unpaid part of the order). */
+function amountDue(order: Order) {
+  const pre = order.preorderPayment;
+  if (pre && !pre.balancePaidAt) return pre.balance;
+  if (order.paymentStatus === "Paid") return 0;
+  return Math.max(0, order.total - (order.amountPaid ?? 0));
+}
+
+const inr = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
 export function PickupCounter() {
   const [query, setQuery] = useState("");
@@ -60,6 +71,26 @@ export function PickupCounter() {
     refresh(selected.id);
     setNote("Payment recorded as paid.");
     setError("");
+  };
+
+  const sendBalanceLink = async () => {
+    if (!selected) return;
+    const due = amountDue(selected);
+    if (!(due > 0)) return;
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      keep(selected);
+      const pre = selected.preorderPayment;
+      const link = pre && !pre.balancePaidAt ? await createBalancePaymentLink(selected.id) : await createPaymentLink(selected.id, due);
+      refresh(selected.id);
+      setNote(`Payment link for ${inr(due)} sent to the customer by email and WhatsApp: ${link.url}`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not create the payment link.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const markReady = () => {
@@ -208,6 +239,9 @@ export function PickupCounter() {
                   <span className="block text-xs text-text-muted">
                     {order.deliveryAddress?.fullName || "Customer"} · {order.deliveryMode === "store_pickup" ? "Pickup" : order.status}
                   </span>
+                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${amountDue(order) > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
+                    {amountDue(order) > 0 ? `${inr(amountDue(order))} due · ${order.paymentStatus}` : `Paid · ${order.paymentMethod || "Online"}`}
+                  </span>
                 </button>
               </li>
             ))}
@@ -228,6 +262,23 @@ export function PickupCounter() {
                 {selected.pickupArrivedAt ? " · Customer arrived" : ""}
                 {selected.deliveryMode === "store_pickup" ? " · Store pickup" : ""}
               </p>
+              <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${amountDue(selected) > 0 ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
+                <p className="font-semibold">
+                  {amountDue(selected) > 0 ? `${inr(amountDue(selected))} still to pay` : "Fully paid"} · Total {inr(selected.total)}
+                  {selected.preorderPayment ? ` · Pre-order advance ${inr(selected.preorderPayment.advance ?? 0)}` : ""}
+                </p>
+                <p className="text-xs">
+                  Payment: {selected.paymentStatus}
+                  {selected.paymentMethod ? ` · ${selected.paymentMethod}` : ""}
+                  {selected.razorpayPaymentId || selected.paymentRef ? ` · ${selected.razorpayPaymentId || selected.paymentRef}` : ""}
+                  {selected.preorderPayment?.link?.url || selected.paymentLink?.url ? " · payment link sent" : ""}
+                </p>
+                {amountDue(selected) > 0 ? (
+                  <Button className="mt-2" variant="outline" onClick={() => void sendBalanceLink()} disabled={busy}>
+                    {busy ? "Sending…" : `Send pending balance link (${inr(amountDue(selected))})`}
+                  </Button>
+                ) : null}
+              </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="outline" onClick={arrived} disabled={Boolean(selected.pickupArrivedAt)}>
                   {selected.pickupArrivedAt ? "Customer arrived" : "Mark customer arrived"}

@@ -173,7 +173,8 @@ const STATUS_GROUPS: Record<string, { label: string; test: (order: Order) => boo
   "group:to-pack": { label: "To pack (Ordered + Accepted)", test: (order) => order.status === "Ordered" || order.status === "Accepted" },
   "group:payment-due": { label: "Packed · payment due", test: (order) => PACKED_STATUSES.includes(order.status) && !orderFullyPaid(order) && order.paymentStatus !== "Paid" },
   "group:to-ship": { label: "To Ship (fully paid · book courier / waiting for pickup)", test: (order) => PACKED_STATUSES.includes(order.status) && orderFullyPaid(order) },
-  "group:in-transit": { label: "In transit (Shipped + Out for Delivery)", test: (order) => (order.status === "Shipped" || order.status === "Out for Delivery") && !orderHasFailedAttempt(order) },
+  "group:in-transit": { label: "In transit (shipped, not yet out for delivery)", test: (order) => order.status === "Shipped" && !orderHasFailedAttempt(order) },
+  "group:out-for-delivery": { label: "Out for delivery", test: (order) => order.status === "Out for Delivery" && !orderHasFailedAttempt(order) },
   "group:undelivered": { label: "⚠️ Undelivered / Delivery attempt unsuccessful (NDR)", test: (order) => orderHasFailedAttempt(order) },
 };
 /** Store pickup has its own steps; the stored status stays canonical. */

@@ -503,7 +503,7 @@ function waCloudTo(raw: string) {
 
 export async function sendMetaTemplate(
   input: Json,
-  message: { to: string; template: string; language?: string; params: string[] }
+  message: { to: string; template: string; language?: string; params: string[]; authCode?: string }
 ) {
   const token = pick(input.metaAccessToken, "META_WA_TOKEN");
   const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
@@ -520,8 +520,12 @@ export async function sendMetaTemplate(
       template: {
         name: message.template,
         language: { code: message.language || "en" },
-        components: message.params.length
-          ? [{ type: "body", parameters: message.params.map((text) => ({ type: "text", text: String(text).slice(0, 1024) })) }]
+        components: message.params.length || message.authCode
+          ? [
+              ...(message.params.length ? [{ type: "body", parameters: message.params.map((text) => ({ type: "text", text: String(text).slice(0, 1024) })) }] : []),
+              // Authentication templates carry the code again on their copy-code button.
+              ...(message.authCode ? [{ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: message.authCode }] }] : []),
+            ]
           : undefined,
       },
     },

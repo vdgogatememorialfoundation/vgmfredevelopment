@@ -596,7 +596,7 @@ export async function sendWhatsAppAlert(event: string, input: { phone?: string; 
           ? await sendAiSensy(creds, { to: phone, campaign: template, name: input.name, params })
           : provider === "zoho"
             ? await sendZohoCpaas(creds, { to: phone, template, language, params })
-            : await sendMetaTemplate(creds, { to: phone, template, language, params });
+            : await sendMetaTemplate(creds, { to: phone, template, language, params, authCode: (saved as { category?: string } | undefined)?.category === "AUTHENTICATION" ? params[0] : undefined });
       if (!sent) continue;
       delivered = true;
       if (provider !== "zoho") {

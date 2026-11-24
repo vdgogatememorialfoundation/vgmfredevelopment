@@ -138,6 +138,16 @@ export const defaultMessageCopy: Record<NotificationEventId, MessageCopy> = {
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\n{body}\n\nWith warm regards,\n${SIGN}`,
     smsBody: `${SIGN} support: {body}`,
   },
+  "pickup-ready": {
+    emailSubject: `Order {orderId} is ready for pickup`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} is ready for pickup. Bring your order ID and pickup OTP.`,
+  },
+  "pickup-collected": {
+    emailSubject: `Order {orderId} collected`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} was collected from the store. Thank you!`,
+  },
   "order-call-missed": {
     emailSubject: `We tried to reach you about order {orderId}`,
     emailBody: STAGE_BODY,

@@ -12,6 +12,7 @@ import { readMobileFeed } from "@/lib/server/mobile-feed";
 import { publicOrderSettings, whatsAppSenders, whatsAppTemplateFor, type OrderSettings } from "@/lib/integrations";
 import { findShopShipment } from "@/lib/server/shop-shipments";
 import { isOwnFleet } from "@/lib/courier-label";
+import { getPickupLocation } from "@/lib/fulfillment";
 import { findShopOrder } from "@/lib/server/shop-orders";
 import { applyTemplateVars, defaultMessageCopy } from "@/lib/message-templates";
 import type { NotificationEventId } from "@/lib/integrations";
@@ -152,6 +153,7 @@ function statusText(order: Order, status: string) {
 }
 
 function statusDetail(order: Order, status: string) {
+  if (status === "Packed" && order.deliveryMode === "store_pickup") return "Ready for pickup at the store. Your pickup OTP is sent separately.";
   if (status === "Packed") {
     return order.preorderPayment && !order.preorderPayment.balancePaidAt
       ? "Please complete the pre-order balance so we can dispatch your parcel."
@@ -166,8 +168,56 @@ function statusDetail(order: Order, status: string) {
   return statusText(order, status);
 }
 
+/** What a store-pickup customer still has to pay, with the payment link when one is open. */
+function pickupPayLine(order: Order) {
+  const pre = order.preorderPayment;
+  const due = pre && !pre.balancePaidAt ? pre.balance : order.paymentStatus === "Paid" ? 0 : Math.max(0, order.total - (order.amountPaid ?? 0));
+  if (!(due > 0)) return "Fully paid ✅ Nothing to pay at pickup.";
+  const link = pre?.link?.url || order.paymentLink?.url;
+  return `${rupees(due)} due. ${link ? `Pay online: ${link}` : "Pay online from My Orders, or at the counter by UPI, card or cash."}`;
+}
+
+function pickupWhere() {
+  const at = getPickupLocation();
+  return { ...at, contact: at.contactPhone || at.phone || "093737 92952" };
+}
+
+async function pickupReadyAlert(order: Order, phone: string, name: string) {
+  const at = pickupWhere();
+  const items = itemsSummary(order);
+  return sendWhatsAppAlert("pickup-ready", {
+    phone,
+    name,
+    params: [name, order.id, items, pickupPayLine(order), `${at.name}, ${at.address}`, at.mapUrl, at.hours, at.contact],
+    fallbackEvent: "order-status",
+    fallbackParams: [name, order.id, items, "Ready for pickup 🎉", `📍 ${at.name}, ${at.address} · 🗺️ ${at.mapUrl} · 🕒 ${at.hours} · 💳 ${pickupPayLine(order)} · 🔐 Your pickup OTP is sent separately.`, trackLink(order)],
+  }).catch(() => false);
+}
+
+async function pickupCollectedAlert(order: Order, phone: string, name: string) {
+  const on = day(new Date().toISOString());
+  const items = itemsSummary(order);
+  const feedback = `${trackLink(order)}#feedback`;
+  return sendWhatsAppAlert("pickup-collected", {
+    phone,
+    name,
+    params: [name, order.id, items, on, feedback],
+    fallbackEvent: "order-status",
+    fallbackParams: [name, order.id, items, "Collected from the store ✅", `Collected on ${on}. Thank you! Share your feedback: ${feedback}`, trackLink(order)],
+  }).catch(() => false);
+}
+
+/** Store pickup has its own WhatsApp messages: ready (location, timings, payment) and collected. Null when none applies. */
+async function pickupAlert(order: Order, phone: string, name: string, status: string) {
+  if (order.deliveryMode !== "store_pickup") return null;
+  if (status === "Packed" || status === "Ready to Ship") return pickupReadyAlert(order, phone, name);
+  if (status === "Delivered") return pickupCollectedAlert(order, phone, name);
+  return null;
+}
+
 /** Sends the courier-detail template when one is mapped for this status; null when the status has none. */
 async function courierAlert(order: Order, phone: string, name: string, status: string) {
+  if (order.deliveryMode === "store_pickup") return null;
   const event = COURIER_STAGES[status];
   if (!event) return null;
   const { params, legacy } = courierParams(order, status, name);
@@ -301,6 +351,8 @@ export async function resendWhatsAppStage(orderId: string, key: string) {
     });
   }
   const status = key.startsWith("status:") ? key.slice(7) : order.status;
+  const pickup = await pickupAlert(order, phone, name, status);
+  if (pickup !== null) return pickup;
   const courier = await courierAlert(order, phone, name, status);
   if (courier !== null) return courier;
   if (await preorderAlert("update", order, phone, name, statusText(order, status))) return true;
@@ -347,6 +399,7 @@ async function whatsAppStage(key: string, order: Order, name: string) {
   }
   if (key.startsWith("status:") && key !== "status:split") {
     const status = key.slice(7);
+    if ((await pickupAlert(order, phone, name, status)) !== null) return;
     if ((await courierAlert(order, phone, name, status)) !== null) return;
     if (await preorderAlert("update", order, phone, name, statusText(order, status))) return;
     if (status === "Packed") {
@@ -515,13 +568,27 @@ function stagesFor(prev: Order | undefined, next: Order): Stage[] {
       },
     };
     if (pickup) {
+      const at = pickupWhere();
       const ready = {
         subject: `Order ${next.id} is ready for pickup`,
-        intro: `Your order ${next.id} is ready to collect.`,
-        next: [windowLine, `Pickup address: ${siteConfig.address}.`, "Bring your order ID and the pickup code shown in My Orders."],
+        intro: `Your order ${next.id} is ready to collect from the store.`,
+        next: [
+          windowLine,
+          `Pickup from: ${at.name}, ${at.address}`,
+          `Map: ${at.mapUrl}`,
+          `Pickup timings: ${at.hours}`,
+          `Contact: ${at.contact}`,
+          `Payment: ${pickupPayLine(next)}`,
+          "Bring your order ID and a photo ID. Share the 6-digit pickup OTP (sent separately, also shown in My Orders) at the counter.",
+        ],
       };
       map.Packed = ready;
       map["Ready to Ship"] = ready;
+      map.Delivered = {
+        subject: `Order ${next.id} collected`,
+        intro: `Your order ${next.id} was collected from the store. Thank you!`,
+        next: [`Please rate the books and our service here: ${siteConfig.url}/account/orders/${encodeURIComponent(next.id)}#feedback`, "Your invoice is available in My Orders."],
+      };
     }
     const stage = map[next.status];
     if (stage) stages.push({ key: `status:${next.status}`, ...stage });
@@ -655,7 +722,7 @@ function details(order: Order) {
       : `Deliver to: ${[address?.fullName, address?.line1, address?.landmark, address?.city, address?.state, address?.pincode].filter(Boolean).join(", ")}`,
     address?.phone ? `Phone: ${[address.phone, address.altPhone].filter(Boolean).join(" / ")}` : "",
     order.trackingId ? `Courier: ${order.courierName || "Courier"} · AWB ${order.trackingId}` : "",
-    order.status === "Delivered" ? "" : !isPreorder(order) ? (order.eta ? `Expected delivery: ${order.eta}` : "") : preorderDateLine(order),
+    order.status === "Delivered" || order.deliveryMode === "store_pickup" ? "" : !isPreorder(order) ? (order.eta ? `Expected delivery: ${order.eta}` : "") : preorderDateLine(order),
   ];
   return lines.filter((line, index, all) => line !== "" || (all[index - 1] !== "" && index > 0)).join("\n");
 }

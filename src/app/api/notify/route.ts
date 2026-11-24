@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/providers";
 import { applyFoundationBrand, wrapFoundationEmail } from "@/lib/email-layout";
 import { saveWhatsAppCredsFile } from "@/lib/server/whatsapp-inbox";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
@@ -130,7 +131,13 @@ export async function POST(request: NextRequest) {
           ? await sendAiSensy(waCreds, { to, campaign: String(body.template ?? ""), name: String(body.name ?? ""), params })
           : provider === "zoho"
             ? await sendZohoCpaas(waCreds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params })
-            : await sendMetaTemplate(waCreds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params });
+            : await sendMetaTemplate(waCreds, {
+                to,
+                template: String(body.template ?? ""),
+                language: String(body.language ?? "en"),
+                params,
+                authCode: ((savedAdminIntegrations() as { whatsapp?: { templates?: { name: string; category?: string }[] } }).whatsapp?.templates ?? []).find((item) => item.name === String(body.template ?? ""))?.category === "AUTHENTICATION" ? params[0] : undefined,
+              });
       if (!sent) return NextResponse.json({ ok: false, configured: false, error: "WhatsApp credentials are not configured." });
       return NextResponse.json({ ok: true, configured: true, ...sent });
     }
