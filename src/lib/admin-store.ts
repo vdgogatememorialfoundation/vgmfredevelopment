@@ -1453,15 +1453,16 @@ export function bypassPickStep(orderId: string, all = false) {
 
 const PACKED_OR_LATER = new Set<OrderStatus>(["Packed", "Ready to Ship", "To Ship", "Shipped", "Out for Delivery", "Delivered"]);
 
-export function setOrderStatus(orderId: string, status: OrderStatus) {
-  logAudit("Order status changed", orderId, status);
+/** `silent`: desk-only change (e.g. back to Awaiting Confirmation); the customer gets no message. */
+export function setOrderStatus(orderId: string, status: OrderStatus, options: { silent?: boolean } = {}) {
+  logAudit("Order status changed", orderId, options.silent ? `${status} (customer not notified)` : status);
   const order = getOrder(orderId);
   if (!order) return;
-  const next: Order = withHistory({ ...order, status }, status);
+  const next: Order = withHistory({ ...order, status }, status, options.silent ? "Customer not notified" : undefined);
   if (status === "Delivered" && order.paymentMethod === "Cash on delivery") {
     next.paymentStatus = "Paid";
   }
-  if (!pickupOtpReady(order) && pickupOtpReady(next)) sendPickupOtp(next);
+  if (!options.silent && !pickupOtpReady(order) && pickupOtpReady(next)) sendPickupOtp(next);
   if (status === "Cancelled" && (order.stockCommitted || order.preorderStockCommitted)) {
     releaseStockForOrder(order);
     next.stockCommitted = false;
@@ -1470,7 +1471,7 @@ export function setOrderStatus(orderId: string, status: OrderStatus) {
   // Picker/packer assignment leaves pre-order stock alone; it is taken once the order is packed.
   if (PACKED_OR_LATER.has(status) && commitPreorderStock(order)) next.preorderStockCommitted = true;
   updateOrderInStore(next);
-  sendOrderStatusEmail(next, status);
+  if (!options.silent) sendOrderStatusEmail(next, status);
   syncReplacementProgress(next);
 }
 

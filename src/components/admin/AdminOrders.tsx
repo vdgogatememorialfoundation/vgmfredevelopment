@@ -498,6 +498,7 @@ export function OrdersDashboard() {
             reassignPickPack(id, pickStaff, "pack");
           })}>Assign packer</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => { if (window.confirm(`Cancel picking on ${selectedIds.length} order(s)? Pickers, packers and scans are cleared.`)) void bulk("Picking cancelled", (id) => { if (getStoredOrder(id)?.pick) cancelPicking(id); }); }}>Cancel picking</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Awaiting Confirmation (customer not notified)", (id) => setOrderStatus(id, "Awaiting Confirmation", { silent: true }))}>Awaiting Confirmation (no message)</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Ordered", (id) => setOrderStatus(id, "Ordered"))}>Confirm</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Accepted", (id) => setOrderStatus(id, "Accepted"))}>Accept</Button>
           <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Packed", async (id) => {
@@ -1356,6 +1357,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const refundCap = maxRefundable(order, { withPlatformFee: refundFee });
   const [refundAmount, setRefundAmount] = useState(String(refundCap));
   const [cancelReason, setCancelReason] = useState("");
+  const [silentStatus, setSilentStatus] = useState(false);
   const [approvalKind, setApprovalKind] = useState<ApprovalRequest["kind"]>("cancellation");
   const [approvalNote, setApprovalNote] = useState("");
   const [rawQuote, setQuote] = useState<RateQuote | null>(null);
@@ -1534,7 +1536,8 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
         cancelOrder(order.id, cancelReason || "Cancelled by admin");
         return "Order cancelled. The shipment was removed from the desk.";
       }
-      setOrderStatus(order.id, status);
+      setOrderStatus(order.id, status, { silent: silentStatus });
+      if (silentStatus) return `Status set to ${status}. The customer was not notified.`;
       if ((status === "Packed" || status === "Ready to Ship") && order.deliveryMode === "delivery" && !shipment && isPreorderOrder(order)) {
         return `Status set to ${status}. This is a pre-order: create the shipment below once it is packed.`;
       }
@@ -1854,6 +1857,25 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
               </SelectInput>
             </div>
             <Button onClick={applyStatus} disabled={busy === "status" || status === order.status}>{busy === "status" ? "Saving…" : "Update status"}</Button>
+            {order.status !== "Awaiting Confirmation" && status !== "Cancelled" ? (
+              <Button
+                variant="outline"
+                disabled={busy === "status"}
+                onClick={() =>
+                  run("status", async () => {
+                    setOrderStatus(order.id, "Awaiting Confirmation", { silent: true });
+                    setStatus("Awaiting Confirmation");
+                    return "Order moved to Awaiting Confirmation. The customer was not notified.";
+                  })
+                }
+              >
+                Awaiting Confirmation (no customer message)
+              </Button>
+            ) : null}
+            <label className="flex w-full items-center gap-2 text-xs text-text-muted">
+              <input type="checkbox" checked={silentStatus} onChange={(event) => setSilentStatus(event.target.checked)} />
+              Don&apos;t notify the customer about this status change
+            </label>
           </div>
           {extraStatuses.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
