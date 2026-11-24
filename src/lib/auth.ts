@@ -21,7 +21,7 @@ export function isPortalRole(role?: string | null) {
 }
 
 export function scopeFromPath(pathname = browser() ? globalThis.window.location.pathname : "") {
-  if (pathname.startsWith("/admin") || pathname.startsWith("/staff") || pathname.startsWith("/doctor")) return "portal" as const;
+  if (["/admin", "/staff", "/doctor", "/picker", "/packer", "/scanner"].some((prefix) => pathname.startsWith(prefix))) return "portal" as const;
   return "public" as const;
 }
 
@@ -317,5 +317,5 @@ export function demoAccountId() {
 export function demoApplicationId() {
   const year = new Date().getFullYear();
   const suffix = Math.floor(100000 + Math.random() * 900000);
-  return `VGMF-${year}-${suffix}`;
+  return `${year}${suffix}`;
 }

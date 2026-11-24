@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { partnerPortalIds } from "@/lib/partner-labels";
 import { commerceViewer } from "@/lib/server/commerce-viewer";
+import { bearerToken, sessionFromToken } from "@/lib/server/mobile-store";
 import { findPortalUser, partnerOrigin } from "@/lib/server/partner-portals";
 import type { PartnerPortalId } from "@/types";
 
@@ -51,7 +52,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const viewer = commerceViewer(request);
+  const cookieViewer = commerceViewer(request);
+  const appSession = cookieViewer.email ? null : sessionFromToken(bearerToken(request.headers.get("authorization")));
+  const viewer = appSession ? { ...cookieViewer, email: appSession.email.toLowerCase() } : cookieViewer;
   if (!viewer.email) return NextResponse.json({ ok: false, error: "Sign in to register." }, { status: 401 });
   const inbound = await request.formData().catch(() => null);
   if (!inbound) return NextResponse.json({ ok: false, error: "The registration could not be read." }, { status: 400 });

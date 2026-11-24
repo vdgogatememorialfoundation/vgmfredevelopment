@@ -479,7 +479,7 @@ export function dnsZoneSnippet(settings: DomainSettings) {
     `$ORIGIN ${settings.apexDomain}.`,
     `$TTL ${settings.defaultTtl}`,
     ...settings.records.map((record) => {
-      const host = record.host.replace(new RegExp(`\\.?${settings.apexDomain}$`), "") || "@";
+      const host = record.host.replace(new RegExp(`\\.?${settings.apexDomain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), "") || "@";
       const pri = record.type === "MX" || record.type === "SRV" ? `${record.priority ?? 10} ` : "";
       return `${host.padEnd(24)} ${String(record.ttl).padEnd(6)} IN ${record.type.padEnd(6)} ${pri}${record.value}`;
     }),

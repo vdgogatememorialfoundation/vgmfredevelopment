@@ -1,5 +1,6 @@
 "use client";
 
+import { countsAsOrder, withoutSplitParents } from "@/lib/split-order";
 import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -20,7 +21,7 @@ export function WorkspaceHome() {
   const [publishNote, setPublishNote] = useState("");
   const [publishing, setPublishing] = useState(false);
   if (!user) return null;
-  const orders = getOrders();
+  const orders = withoutSplitParents(getOrders());
   void version;
   const notifications = getNotifications();
   const settings = getSettings();
@@ -30,7 +31,7 @@ export function WorkspaceHome() {
   const role = isAdmin ? null : getRole(user.staffRoleId);
 
   const stats = [
-    { label: "Orders", value: orders.length, hint: `${orders.filter((order) => order.paymentStatus === "Pending").length} awaiting payment` },
+    { label: "Orders", value: orders.filter(countsAsOrder).length, hint: `${orders.filter((order) => order.paymentStatus === "Pending").length} awaiting payment` },
     { label: "To pack", value: orders.filter((order) => order.status === "Ordered" || order.status === "Accepted").length, hint: "accepted and not packed" },
     { label: "Events", value: getLiveEvents().length, hint: "on the public site" },
     { label: "Open tickets", value: getTickets().filter((ticket) => ticket.status === "Open" || ticket.status === "In Progress").length, hint: "support" },

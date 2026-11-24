@@ -1,5 +1,9 @@
 import { createCipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { serviceModeOf } from "@/lib/courier-label";
 import { formatIndiaClock, tookanDeliveryInstant } from "@/lib/delivery-expectation";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
+import { logEmail } from "@/lib/server/email-log";
+import { shipdayActivity, shipdayLookupIds, shipdayOrderRow, shipdayOrderState } from "@/lib/shipday-status";
 
 /**
  * Provider clients used by the API routes. Each call takes credentials from
@@ -34,10 +38,16 @@ async function call(url: string, init: RequestInit & { json?: unknown } = {}) {
     /* plain-text reply */
   }
   if (!response.ok) {
+    const detail = (data as Json)?.description;
     const message =
+      ((data as Json)?.message && typeof detail === "string" && detail && detail !== (data as Json).message
+        ? `${(data as Json).message}: ${detail}`
+        : undefined) ??
       (data as Json)?.message ??
       ((data as Json)?.error as Json)?.message ??
-      (data as Json)?.error ??
+      ((data as Json)?.error as Json)?.detail ??
+      ((data as Json)?.error as Json)?.description ??
+      (typeof (data as Json)?.error === "string" ? (data as Json).error : undefined) ??
       (typeof data === "string" ? data.slice(0, 200) : `HTTP ${response.status}`);
     throw new ProviderError(String(message), response.status);
   }
@@ -46,9 +56,20 @@ async function call(url: string, init: RequestInit & { json?: unknown } = {}) {
 
 /* ---------------- Razorpay ---------------- */
 
+/** Keys saved from an admin browser, so a device without them (a phone) still uses the configured gateway. */
+function savedRazorpay() {
+  const saved = (savedAdminIntegrations().razorpay ?? {}) as Json;
+  const text = (key: string) => (typeof saved[key] === "string" ? String(saved[key]).trim() : "");
+  if (saved.mode === "live") return { keyId: text("liveKeyId"), keySecret: text("liveKeySecret") };
+  if (saved.mode === "test") return { keyId: text("testKeyId"), keySecret: text("testKeySecret") };
+  return { keyId: "", keySecret: "" };
+}
+
 export function razorpayCreds(input: Json) {
-  const keyId = pick(input.keyId, "RAZORPAY_KEY_ID");
-  const keySecret = pick(input.keySecret, "RAZORPAY_KEY_SECRET");
+  const sent = typeof input.keyId === "string" && input.keyId.trim() && typeof input.keySecret === "string" && input.keySecret.trim();
+  const saved = sent ? { keyId: "", keySecret: "" } : savedRazorpay();
+  const keyId = pick(sent ? input.keyId : saved.keyId, "RAZORPAY_KEY_ID");
+  const keySecret = pick(sent ? input.keySecret : saved.keySecret, "RAZORPAY_KEY_SECRET");
   return keyId && keySecret ? { keyId, keySecret } : null;
 }
 
@@ -81,9 +102,10 @@ export function razorpayVerify(keySecret: string, orderId: string, paymentId: st
 
 export async function razorpayLink(
   creds: { keyId: string; keySecret: string },
-  input: { amount: number; orderId: string; name: string; email?: string; phone?: string; description: string; callbackUrl?: string; expiryHours?: number }
+  input: { amount: number; orderId: string; name: string; email?: string; phone?: string; description: string; callbackUrl?: string; expiryHours?: number; expiryMinutes?: number }
 ) {
-  const expireBy = Math.floor(Date.now() / 1000) + Math.max(1, input.expiryHours ?? 72) * 3600;
+  const minutes = input.expiryMinutes ?? (input.expiryHours ?? 0.5) * 60;
+  const expireBy = Math.floor(Date.now() / 1000) + Math.max(16, Math.round(minutes)) * 60;
   const data = await call("https://api.razorpay.com/v1/payment_links", {
     method: "POST",
     headers: { authorization: razorpayAuth(creds) },
@@ -103,6 +125,26 @@ export async function razorpayLink(
   return { id: String(data.id), url: String(data.short_url), status: String(data.status) };
 }
 
+export async function razorpayLinkCancel(creds: { keyId: string; keySecret: string }, linkId: string) {
+  const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}/cancel`, {
+    method: "POST",
+    headers: { authorization: razorpayAuth(creds) },
+    json: {},
+  });
+  return { status: String(data.status) };
+}
+
+export async function razorpayLinkExpiry(creds: { keyId: string; keySecret: string }, linkId: string, expiresAt: string) {
+  const expireBy = Math.floor(Date.parse(expiresAt) / 1000);
+  if (!Number.isFinite(expireBy) || expireBy < Math.floor(Date.now() / 1000) + 15 * 60) throw new Error("Pick a time at least 15 minutes from now.");
+  const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}`, {
+    method: "PATCH",
+    headers: { authorization: razorpayAuth(creds) },
+    json: { expire_by: expireBy },
+  });
+  return { status: String(data.status), expiresAt: new Date(Number(data.expire_by) * 1000).toISOString() };
+}
+
 export async function razorpayLinkStatus(creds: { keyId: string; keySecret: string }, linkId: string) {
   const data = await call(`https://api.razorpay.com/v1/payment_links/${encodeURIComponent(linkId)}`, {
     headers: { authorization: razorpayAuth(creds) },
@@ -117,7 +159,30 @@ export async function razorpayRefund(creds: { keyId: string; keySecret: string }
     headers: { authorization: razorpayAuth(creds) },
     json: amountRupees ? { amount: Math.round(amountRupees * 100) } : {},
   });
-  return { refundId: String(data.id), status: String(data.status) };
+  return razorpayRefundView(data);
+}
+
+function razorpayRefundView(data: Json) {
+  const acquirer = (data.acquirer_data as Json) ?? {};
+  const text = (value: unknown) => (value === null || value === undefined ? "" : String(value));
+  return {
+    refundId: text(data.id),
+    status: text(data.status),
+    amount: Number(data.amount ?? 0) / 100,
+    rrn: text(acquirer.rrn),
+    arn: text(acquirer.arn),
+    utr: text(acquirer.utr),
+    speed: text(data.speed_processed || data.speed_requested),
+    createdAt: data.created_at ? new Date(Number(data.created_at) * 1000).toISOString() : "",
+  };
+}
+
+/** GET /v1/refunds/:id — status plus the bank's RRN/ARN/UTR once the refund is processed. */
+export async function razorpayRefundStatus(creds: { keyId: string; keySecret: string }, refundId: string) {
+  const data = await call(`https://api.razorpay.com/v1/refunds/${encodeURIComponent(refundId)}`, {
+    headers: { authorization: razorpayAuth(creds) },
+  });
+  return razorpayRefundView(data);
 }
 
 export async function razorpayDeviceActivity(
@@ -185,6 +250,35 @@ export async function razorpayDeviceActivityStatus(
   };
 }
 
+/** One payment by id, with the receipt of its Razorpay order (our order id) when it was paid through checkout. */
+export async function razorpayPayment(creds: { keyId: string; keySecret: string }, paymentId: string) {
+  const headers = { authorization: razorpayAuth(creds) };
+  const data = await call(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, { headers });
+  const orderId = data.order_id ? String(data.order_id) : "";
+  const order = orderId ? await call(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}`, { headers }).catch(() => null) : null;
+  return {
+    paymentId: String(data.id ?? paymentId),
+    status: String(data.status ?? ""),
+    amount: Number(data.amount ?? 0) / 100,
+    method: data.method ? String(data.method) : "",
+    orderId,
+    receipt: order?.receipt ? String(order.receipt) : "",
+  };
+}
+
+/** Every payment or refund Razorpay recorded between two Unix times (seconds), all pages. */
+export async function razorpayList(creds: { keyId: string; keySecret: string }, kind: "payments" | "refunds", from: number, to: number) {
+  const headers = { authorization: razorpayAuth(creds) };
+  const items: Json[] = [];
+  for (let skip = 0; skip < 5000; skip += 100) {
+    const data = await call(`https://api.razorpay.com/v1/${kind}?from=${from}&to=${to}&count=100&skip=${skip}`, { headers });
+    const page = (data.items as Json[] | undefined) ?? [];
+    items.push(...page);
+    if (page.length < 100) break;
+  }
+  return items;
+}
+
 export async function razorpayOrderPayments(
   creds: { keyId: string; keySecret: string },
   orderId: string,
@@ -207,9 +301,10 @@ export async function razorpayOrderPayments(
 /* ---------------- Paytm EDC ---------------- */
 
 export function paytmCreds(input: Json) {
-  const mid = pick(input.mid, "PAYTM_MID");
-  const merchantKey = pick(input.merchantKey, "PAYTM_MERCHANT_KEY");
-  const tid = pick(input.tid, "PAYTM_TID");
+  const saved = (savedAdminIntegrations().paytm ?? {}) as Json;
+  const mid = pick(input.mid, "PAYTM_MID") || pick(saved.mid, "PAYTM_MID");
+  const merchantKey = pick(input.merchantKey, "PAYTM_MERCHANT_KEY") || pick(saved.merchantKey, "PAYTM_MERCHANT_KEY");
+  const tid = pick(input.tid, "PAYTM_TID") || pick(saved.tid, "PAYTM_TID");
   const channelId = pick(input.channelId, "PAYTM_CHANNEL_ID") || "WEB";
   const mode = pick(input.mode, "PAYTM_MODE") || "staging";
   return mid && merchantKey && tid ? { mid, merchantKey, tid, channelId, mode } : null;
@@ -348,6 +443,17 @@ export async function sendZeptoMail(input: Json, mail: { to: string; subject: st
 }
 
 export async function sendTransactionalEmail(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
+  try {
+    const sent = await sendTransactionalEmailOnce(input, mail);
+    logEmail(mail, sent ? { ok: true, provider: sent.provider } : { ok: false, error: "No email provider is set up." });
+    return sent;
+  } catch (error) {
+    logEmail(mail, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+}
+
+async function sendTransactionalEmailOnce(input: Json, mail: { to: string; subject: string; html: string; replyTo?: string }) {
   const provider = String(input.provider || "cpaas");
   if (provider === "zoho") {
     const zoho = await sendZohoMail(input, mail);
@@ -397,7 +503,7 @@ function waCloudTo(raw: string) {
 
 export async function sendMetaTemplate(
   input: Json,
-  message: { to: string; template: string; language?: string; params: string[] }
+  message: { to: string; template: string; language?: string; params: string[]; authCode?: string }
 ) {
   const token = pick(input.metaAccessToken, "META_WA_TOKEN");
   const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
@@ -414,8 +520,12 @@ export async function sendMetaTemplate(
       template: {
         name: message.template,
         language: { code: message.language || "en" },
-        components: message.params.length
-          ? [{ type: "body", parameters: message.params.map((text) => ({ type: "text", text: String(text).slice(0, 1024) })) }]
+        components: message.params.length || message.authCode
+          ? [
+              ...(message.params.length ? [{ type: "body", parameters: message.params.map((text) => ({ type: "text", text: String(text).slice(0, 1024) })) }] : []),
+              // Authentication templates carry the code again on their copy-code button.
+              ...(message.authCode ? [{ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: message.authCode }] }] : []),
+            ]
           : undefined,
       },
     },
@@ -425,6 +535,30 @@ export async function sendMetaTemplate(
 }
 
 /** Free-form reply inside the 24-hour customer-care window. */
+/** Sends Meta Cloud API Interactive messages: Reply Buttons, List Pickers, and WhatsApp Flows (Pune Metro style). */
+export async function sendMetaInteractive(
+  input: Json,
+  message: { to: string; interactive: Record<string, unknown> },
+) {
+  const token = pick(input.metaAccessToken, "META_WA_TOKEN");
+  const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
+  if (!token || !phoneId) return null;
+  const version = typeof input.metaApiVersion === "string" && input.metaApiVersion ? input.metaApiVersion : "v21.0";
+  const data = await call(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    json: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: waCloudTo(message.to),
+      type: "interactive",
+      interactive: message.interactive,
+    },
+  });
+  const messages = (data.messages as Json[] | undefined) ?? [];
+  return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
+}
+
 export async function sendMetaText(input: Json, message: { to: string; body: string }) {
   const token = pick(input.metaAccessToken, "META_WA_TOKEN");
   const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
@@ -445,16 +579,112 @@ export async function sendMetaText(input: Json, message: { to: string; body: str
   return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
 }
 
+type PayLine = { id: string; name: string; amount: number; quantity: number };
+
+/** In-chat "Review and pay" (WhatsApp Payments, Razorpay configuration set up in WhatsApp Manager). Amounts in rupees. */
+export async function sendMetaOrderDetails(
+  input: Json,
+  message: { to: string; body: string; referenceId: string; configurationName: string; items: PayLine[]; tax?: { amount: number; description: string }; shipping?: number; discount?: number; total: number },
+) {
+  const token = pick(input.metaAccessToken, "META_WA_TOKEN");
+  const phoneId = pick(input.metaPhoneNumberId, "META_WA_PHONE_ID");
+  if (!token || !phoneId) return null;
+  const version = typeof input.metaApiVersion === "string" && input.metaApiVersion ? input.metaApiVersion : "v21.0";
+  const paise = (value: number) => ({ value: Math.round(value * 100), offset: 100 });
+  const subtotal = message.items.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+  const data = await call(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    json: {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: waCloudTo(message.to),
+      type: "interactive",
+      interactive: {
+        type: "order_details",
+        body: { text: message.body.slice(0, 1024) },
+        footer: { text: "Vaidya Gogate Memorial Foundation" },
+        action: {
+          name: "review_and_pay",
+          parameters: {
+            reference_id: message.referenceId,
+            type: "physical-goods",
+            payment_settings: [
+              {
+                type: "payment_gateway",
+                payment_gateway: { type: "razorpay", configuration_name: message.configurationName, razorpay: { receipt: message.referenceId, notes: { order_id: message.referenceId } } },
+              },
+            ],
+            currency: "INR",
+            total_amount: paise(message.total),
+            order: {
+              status: "pending",
+              items: message.items.map((item) => ({ retailer_id: item.id, name: item.name.slice(0, 60), amount: paise(item.amount), quantity: item.quantity })),
+              subtotal: paise(subtotal),
+              ...(message.tax?.amount ? { tax: { ...paise(message.tax.amount), description: message.tax.description } } : {}),
+              ...(message.shipping ? { shipping: paise(message.shipping) } : {}),
+              ...(message.discount ? { discount: paise(message.discount) } : {}),
+            },
+          },
+        },
+      },
+    },
+  });
+  const messages = (data.messages as Json[] | undefined) ?? [];
+  return { id: String(messages[0]?.id ?? ""), provider: "meta" as const };
+}
+
+/** WhatsApp Business Account IDs the access token can manage (Meta debug_token granular scopes). */
+async function metaWabaIdsForToken(token: string, version: string) {
+  try {
+    const data = await call(`https://graph.facebook.com/${version}/debug_token?input_token=${encodeURIComponent(token)}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const scopes = (((data.data as Json)?.granular_scopes as Json[]) ?? []).filter((scope) => String(scope.scope).startsWith("whatsapp_business"));
+    return [...new Set(scopes.flatMap((scope) => ((scope.target_ids as unknown[]) ?? []).map(String)))].filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 export async function listMetaTemplates(input: Json) {
   const token = pick(input.metaAccessToken, "META_WA_TOKEN");
-  const wabaId = pick(input.metaWabaId, "META_WA_WABA_ID");
-  if (!token || !wabaId) throw new ProviderError("Add the WhatsApp Business Account ID and access token first.");
+  const given = pick(input.metaWabaId, "META_WA_WABA_ID").replace(/\D/g, "");
+  if (!token) throw new ProviderError("Add the access token first.");
   const version = typeof input.metaApiVersion === "string" && input.metaApiVersion ? input.metaApiVersion : "v21.0";
   const fields = "name,status,category,language,components";
-  const data = await call(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=200&fields=${fields}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  return ((data.data as Json[]) ?? []).map((template) => {
+  const fetchFor = (wabaId: string) =>
+    call(`https://graph.facebook.com/${version}/${wabaId}/message_templates?limit=200&fields=${fields}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+  let wabaId = given;
+  let data: Json | null = null;
+  let firstError: unknown = null;
+  if (wabaId) {
+    try {
+      data = await fetchFor(wabaId);
+    } catch (error) {
+      firstError = error;
+    }
+  }
+  if (!data) {
+    const candidates = (await metaWabaIdsForToken(token, version)).filter((id) => id !== given);
+    for (const id of candidates) {
+      try {
+        data = await fetchFor(id);
+        wabaId = id;
+        break;
+      } catch {
+        /* try the next account */
+      }
+    }
+  }
+  if (!data) {
+    if (!given) throw new ProviderError("Add the WhatsApp Business Account ID first.");
+    const reason = firstError instanceof Error ? firstError.message : "Meta refused the request.";
+    throw new ProviderError(`${reason} Check the WhatsApp Business Account ID (Meta → WhatsApp → API Setup), not the App ID or Phone number ID, and that the token has whatsapp_business_management.`);
+  }
+  const templates = ((data.data as Json[]) ?? []).map((template) => {
     const components = (template.components as Json[]) ?? [];
     const body = String(components.find((component) => component.type === "BODY")?.text ?? "");
     return {
@@ -466,6 +696,7 @@ export async function listMetaTemplates(input: Json) {
       variables: (body.match(/\{\{\d+\}\}/g) ?? []).length,
     };
   });
+  return { templates, wabaId };
 }
 
 export async function sendAiSensy(input: Json, message: { to: string; campaign: string; name: string; params: string[] }) {
@@ -524,7 +755,27 @@ export type RateOut = {
   etaDays: number;
   live: true;
   cod?: boolean;
+  /** The courier's own expected delivery date, when it gives one. */
+  deliverBy?: string;
+  rating?: number;
+  /** Weight the courier bills, as the aggregator reports it (kg). */
+  chargeWeightKg?: number;
+  /** A placeholder price, not a quote from the aggregator; never used to charge customers. */
+  estimate?: boolean;
+  /** Earliest pickup the aggregator offers, when it says. */
+  pickupBy?: string;
+  /** The aggregator's own pickup address this quote is from (Admin only). */
+  pickupFrom?: string;
 };
+
+/** Chargeable weight from an aggregator row; values above 50 are grams. */
+function chargeKg(row: Json, ...keys: string[]) {
+  for (const key of keys) {
+    const value = Number(row[key]);
+    if (Number.isFinite(value) && value > 0) return Math.round((value > 50 ? value / 1000 : value) * 1000) / 1000;
+  }
+  return undefined;
+}
 
 type Parcel = {
   pickupPincode: string;
@@ -551,6 +802,33 @@ async function shiprocketToken(input: Json) {
   return String(data.token);
 }
 
+const NIMBUS_V2 = "https://api-v2.nimbuspost.com/v2";
+
+function nimbusV2Headers(input: Json) {
+  const key = pick(input.apiKey, "NIMBUSPOST_API_KEY");
+  const secret = pick(input.apiSecret, "NIMBUSPOST_API_SECRET");
+  return key && secret ? { "x-api-key": key, "x-api-secret": secret } : null;
+}
+
+async function nimbusV2(path: string, headers: Record<string, string>, init: RequestInit & { json?: unknown } = {}) {
+  const data = await call(`${NIMBUS_V2}${path}`, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) } });
+  if (data.success === false) {
+    const error = (data.error as Json) ?? {};
+    throw new ProviderError(String(error.message ?? data.message ?? "Nimbuspost refused the request."));
+  }
+  return data;
+}
+
+async function nimbusWarehouse(input: Json, headers: Record<string, string>) {
+  const wanted = String(input.warehouseId ?? "").trim();
+  if (wanted) return wanted;
+  const data = await nimbusV2("/warehouses", headers);
+  const rows = ((data.data as Json[]) ?? []).filter((row) => row.status !== "inactive");
+  const row = rows.find((item) => item.is_primary) ?? rows[0];
+  if (!row) throw new ProviderError("No pickup warehouse on Nimbuspost. Add one in Nimbuspost → Warehouses, then book again.");
+  return String(row.warehouse_id);
+}
+
 const nimbusTokens = new Map<string, { token: string; at: number }>();
 
 async function nimbusToken(input: Json) {
@@ -565,11 +843,82 @@ async function nimbusToken(input: Json) {
   return String(data.data);
 }
 
+const shiprocketOrigins = new Map<string, { pins: string[]; at: number }>();
+const shiprocketPickupRows = new Map<string, { rows: { nickname: string; pincode: string; active: boolean; primary: boolean }[]; at: number }>();
+
+/** The Shiprocket pickup location to use: Settings → Shiprocket → Pickup location, else the default pickup nickname. Undefined when neither is on the panel. */
+async function shiprocketPickupLocation(token: string, input: Json, fallbackNickname = "", pincode = "") {
+  let cached = shiprocketPickupRows.get(token);
+  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
+    const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", { headers: { authorization: `Bearer ${token}` } });
+    const rows = (((data.data as Json)?.shipping_address as Json[]) ?? []).map((row) => ({
+      nickname: String(row.pickup_location ?? "").trim(),
+      pincode: String(row.pin_code ?? row.pincode ?? ""),
+      active: Number(row.status ?? 1) === 1,
+      primary: Number(row.is_primary_location ?? 0) === 1,
+    }));
+    cached = { rows, at: Date.now() };
+    shiprocketPickupRows.set(token, cached);
+  }
+  const rows = cached.rows;
+  const find = (name: string) => (name.trim() ? rows.find((row) => row.nickname.toLowerCase() === name.trim().toLowerCase()) : undefined);
+  const named = find(String(input.pickupLocation ?? "")) ?? find(fallbackNickname);
+  if (named) return named;
+  // Name not on the panel: the active location at our pickup PIN (primary first), else the only active one.
+  const active = rows.filter((row) => row.active).sort((a, b) => Number(b.primary) - Number(a.primary));
+  const pin = pincode.trim();
+  return (pin ? active.find((row) => row.pincode === pin) : undefined) ?? (active.length === 1 ? active[0] : undefined);
+}
+
+/** Pickup names saved on the Shiprocket panel, for error messages. */
+const shiprocketPickupNames = (token: string) =>
+  (shiprocketPickupRows.get(token)?.rows ?? []).filter((row) => row.active).map((row) => row.nickname).filter(Boolean).join(", ");
+
+/** Rates must be asked from a pincode Shiprocket has as an active pickup address, or it returns far fewer couriers. */
+async function shiprocketOrigin(token: string, wanted: string) {
+  let cached = shiprocketOrigins.get(token);
+  if (!cached || Date.now() - cached.at > 10 * 60 * 1000) {
+    try {
+      const data = await call("https://apiv2.shiprocket.in/v1/external/settings/company/pickup", { headers: { authorization: `Bearer ${token}` } });
+      const rows = ((data.data as Json)?.shipping_address as Json[]) ?? [];
+      const active = rows.filter((row) => Number(row.status ?? 1) === 1);
+      const primary = active.filter((row) => Number(row.is_primary_location ?? 0) === 1);
+      const pins = [...primary, ...active].map((row) => String(row.pin_code ?? row.pincode ?? "")).filter(Boolean);
+      cached = { pins: [...new Set(pins)], at: Date.now() };
+      shiprocketOrigins.set(token, cached);
+    } catch {
+      return wanted;
+    }
+  }
+  return !cached.pins.length || cached.pins.includes(wanted) ? wanted : cached.pins[0];
+}
+
+const shiprocketActive = new Map<string, { ids: Set<string>; at: number }>();
+
+/** Courier ids active in the Shiprocket panel (documented `type=active` filter); serviceability can still list others. */
+async function shiprocketActiveCouriers(token: string) {
+  const cached = shiprocketActive.get(token);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.ids;
+  try {
+    const data = await call("https://apiv2.shiprocket.in/v1/external/courier/courierListWithCounts?type=active", {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const ids = new Set(
+      ((data.courier_data as Json[]) ?? []).map((row) => String(row.id))
+    );
+    shiprocketActive.set(token, { ids, at: Date.now() });
+    return ids;
+  } catch {
+    return cached?.ids ?? new Set<string>();
+  }
+}
+
 export async function shiprocketRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
+  const chosen = String(input.pickupLocation ?? "").trim() ? await shiprocketPickupLocation(token, input).catch(() => undefined) : undefined;
   const params = new URLSearchParams({
-    pickup_postcode: parcel.pickupPincode,
+    pickup_postcode: chosen?.pincode || (await shiprocketOrigin(token, parcel.pickupPincode)),
     delivery_postcode: parcel.deliveryPincode,
     weight: String(parcel.weightKg),
     cod: parcel.cod ? "1" : "0",
@@ -578,22 +927,68 @@ export async function shiprocketRates(input: Json, parcel: Parcel): Promise<Rate
     breadth: String(parcel.breadth),
     height: String(parcel.height),
   });
-  const data = await call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  const list = ((data.data as Json)?.available_courier_companies as Json[]) ?? [];
+  // Without `mode` Shiprocket returns only its recommended subset, so ask for Surface and Air too and merge.
+  const replies = await Promise.allSettled(
+    ["", "Surface", "Air"].map((mode) =>
+      call(`https://apiv2.shiprocket.in/v1/external/courier/serviceability/?${params}${mode ? `&mode=${mode}` : ""}`, {
+        headers: { authorization: `Bearer ${token}` },
+      })
+    )
+  );
+  const ok = replies.filter((reply): reply is PromiseFulfilledResult<Json> => reply.status === "fulfilled");
+  if (!ok.length) throw (replies[0] as PromiseRejectedResult).reason;
+  const byId = new Map<string, Json>();
+  for (const reply of ok) {
+    for (const courier of ((reply.value.data as Json)?.available_courier_companies as Json[]) ?? []) {
+      const id = String(courier.courier_company_id);
+      if (!byId.has(id)) byId.set(id, courier);
+    }
+  }
+  const active = await shiprocketActiveCouriers(token);
+  const list = [...byId.values()].filter((courier) => !active.size || active.has(String(courier.courier_company_id)));
   return list.map((courier) => ({
     provider: "shiprocket",
     courierId: String(courier.courier_company_id),
     courierName: String(courier.courier_name),
     rate: Number(courier.rate ?? courier.freight_charge ?? 0),
+    chargeWeightKg: chargeKg(courier, "charge_weight", "applicable_weight"),
+    pickupBy: typeof courier.suppress_date === "string" && courier.suppress_date ? String(courier.suppress_date) : undefined,
     etaDays: Number(courier.estimated_delivery_days ?? 5),
     cod: Boolean(courier.cod),
     live: true as const,
+    deliverBy: courier.etd ? String(courier.etd) : undefined,
+    rating: Number.isFinite(Number(courier.rating)) && Number(courier.rating) > 0 ? Math.round(Number(courier.rating) * 10) / 10 : undefined,
+    pickupFrom: `${chosen?.nickname ?? "Shiprocket"} (${params.get("pickup_postcode")})`,
   }));
 }
 
 export async function nimbusRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const data = await nimbusV2("/serviceability", v2, {
+      method: "POST",
+      json: {
+        pickupPincode: parcel.pickupPincode,
+        deliveryPincode: parcel.deliveryPincode,
+        paymentMode: parcel.cod ? "cod" : "prepaid",
+        packages: [{ weight: Math.max(1, Math.round(parcel.weightKg * 1000)), length: parcel.length, width: parcel.breadth, height: parcel.height }],
+        order_value: Math.max(1, Math.round(parcel.declaredValue || 0)),
+      },
+    });
+    return (((data.data as Json)?.available as Json[]) ?? []).map((courier) => {
+      const result = (courier.result as Json) ?? {};
+      return {
+        provider: "nimbuspost",
+        courierId: String(courier.courierId ?? ""),
+        courierName: String(courier.courierDisplayName || courier.courierName || "Nimbuspost courier"),
+        // totalPaise is GST-exclusive; other aggregators quote with GST.
+        rate: Math.round(Number(result.totalPaise ?? 0) * 1.18) / 100,
+        chargeWeightKg: Number(result.chargeableGrams) > 0 ? Number(result.chargeableGrams) / 1000 : undefined,
+        etaDays: Number(courier.tatDays) || 5,
+        live: true as const,
+      };
+    });
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call("https://api.nimbuspost.com/v1/courier/serviceability", {
@@ -616,6 +1011,7 @@ export async function nimbusRates(input: Json, parcel: Parcel): Promise<RateOut[
     courierId: String(courier.id),
     courierName: String(courier.name),
     rate: Number(courier.total_charges ?? courier.freight_charges ?? 0),
+    chargeWeightKg: chargeKg(courier, "chargeable_weight", "charge_weight", "applicable_weight", "billable_weight"),
     etaDays: daysUntil(String(courier.edd ?? "")) ?? 5,
     live: true as const,
   }));
@@ -639,7 +1035,7 @@ type BookInput = {
   length: number;
   breadth: number;
   height: number;
-  customer: { name: string; phone: string; email?: string; line1: string; line2?: string; city: string; state: string; pincode: string };
+  customer: { name: string; phone: string; altPhone?: string; email?: string; line1: string; line2?: string; city: string; state: string; pincode: string };
   pickup: { nickname: string; contactName: string; phone: string; email: string; line1: string; line2: string; city: string; state: string; pincode: string };
   items: { name: string; sku: string; units: number; price: number }[];
 };
@@ -657,12 +1053,23 @@ export type BookOut = {
   pickupReference?: string;
   courierCost?: number;
   trackingUrl?: string;
+  routingCode?: string;
+  serviceMode?: string;
+  /** Tookan parcel: barcode on the pickup (seller → hub) task and on the delivery task. */
+  pickupBarcode?: string;
+  deliveryBarcode?: string;
 };
 
 export async function shiprocketBook(input: Json, order: BookInput): Promise<BookOut | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
   const auth = { authorization: `Bearer ${token}` };
+  const location = await shiprocketPickupLocation(token, input, order.pickup.nickname, order.pickup.pincode);
+  if (!location) {
+    const asked = String(input.pickupLocation ?? "").trim() || order.pickup.nickname;
+    const names = shiprocketPickupNames(token);
+    throw new ProviderError(`Shiprocket has no pickup location named "${asked}"${names ? ` (saved on Shiprocket: ${names})` : ""}. Choose one in Settings → Shipping APIs → Shiprocket → Pickup location. Nothing was booked.`, 400);
+  }
   const [firstName, ...rest] = order.customer.name.split(" ");
   const created = await call("https://apiv2.shiprocket.in/v1/external/orders/create/adhoc", {
     method: "POST",
@@ -670,7 +1077,7 @@ export async function shiprocketBook(input: Json, order: BookInput): Promise<Boo
     json: {
       order_id: order.orderId,
       order_date: order.orderDate.slice(0, 16).replace("T", " "),
-      pickup_location: order.pickup.nickname,
+      pickup_location: location.nickname,
       channel_id: typeof input.channelId === "string" && input.channelId ? input.channelId : undefined,
       billing_customer_name: firstName || order.customer.name,
       billing_last_name: rest.join(" ") || ".",
@@ -708,6 +1115,8 @@ export async function shiprocketBook(input: Json, order: BookInput): Promise<Boo
     courierName: String(awbData.courier_name ?? ""),
     providerOrderId: String(created.order_id ?? ""),
     providerShipmentId: shipmentId,
+    routingCode: labelText(awbData, ["routing_code", "routingCode", "sort_code"]) || undefined,
+    serviceMode: serviceModeOf(awbData.mode, awbData.shipping_mode, awbData.courier_type, awbData.courier_name) || undefined,
     courierCost: Number(awbData.freight_charges ?? awbData.applied_weight_amount ?? 0) || undefined,
   };
 }
@@ -738,6 +1147,10 @@ export type LabelSheet = {
   destination?: string;
   courierName?: string;
   awb?: string;
+  serviceMode?: string;
+  invoiceNo?: string;
+  invoiceDate?: string;
+  ewaybill?: string;
 };
 
 function labelText(source: Json, keys: string[]) {
@@ -761,11 +1174,18 @@ function labelSheetFrom(source: Json | null | undefined): LabelSheet {
     destination: labelText(bag, ["destination", "destination_hub", "destination_code"]),
     courierName: labelText(bag, ["courier_name", "courier", "courierName"]),
     awb: labelText(bag, ["awb", "awb_code", "awb_number", "awbNumber"]),
+    invoiceNo: labelText(bag, ["invoice_no", "invoice_number", "invoiceNumber", "invoice"]),
+    invoiceDate: labelText(bag, ["invoice_date", "invoiceDate"]).slice(0, 10),
+    ewaybill: labelText(bag, ["eway_bill_number", "ewaybill_number", "ewaybill", "ewbn", "eway_bill"]).replace(/^-$/, ""),
+    serviceMode: serviceModeOf(
+      labelText(bag, ["mode", "shipping_mode", "service_type", "serviceType", "service_mode", "transport_mode", "delivery_mode", "courier_type", "product_type"]),
+      labelText(bag, ["courier_name", "courier", "courierName"]),
+    ),
   };
 }
 
 /** Shiprocket label PDF plus the routing code printed on that label. */
-export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb = ""): Promise<LabelSheet | null> {
+export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb = "", providerOrderId = ""): Promise<LabelSheet | null> {
   const token = await shiprocketToken(input);
   if (!token) return null;
   const headers = { authorization: `Bearer ${token}` };
@@ -796,6 +1216,24 @@ export async function shiprocketLabelSheet(input: Json, shipmentId: string, awb 
       sheet = { ...extra, ...Object.fromEntries(Object.entries(sheet).filter(([, value]) => value)) };
     } catch {
       /* routing is optional */
+    }
+  }
+  if (providerOrderId) {
+    try {
+      const shown = await call(`https://apiv2.shiprocket.in/v1/external/orders/show/${encodeURIComponent(providerOrderId)}`, { headers });
+      const data = (shown.data as Json) ?? {};
+      const awbData = (data.awb_data as Json) ?? {};
+      const shipments = (data.shipments as Json) ?? {};
+      const eway = labelText(shipments, ["eway_bill_number"]);
+      sheet = {
+        ...sheet,
+        routingCode: sheet.routingCode || labelText(awbData, ["routing_code"]),
+        invoiceNo: labelText(data, ["invoice_no"]) || sheet.invoiceNo,
+        invoiceDate: labelText(data, ["invoice_date"]).slice(0, 10) || sheet.invoiceDate,
+        ewaybill: eway && eway !== "-" ? eway : sheet.ewaybill,
+      };
+    } catch {
+      /* order details are optional */
     }
   }
   return sheet;
@@ -892,7 +1330,7 @@ function promisedFrom(payload: unknown, ...first: unknown[]) {
 }
 
 /** Agent name, phone, OTP and GPS when the courier portal sends them (Shiprocket hyperlocal, Porter, and the others). */
-function riderFrom(payload: unknown) {
+export function riderFrom(payload: unknown) {
   const found = { name: "", phone: "", otp: "", lat: undefined as number | undefined, lng: undefined as number | undefined };
   const walk = (value: unknown, depth: number) => {
     if (depth > 6 || value == null || typeof value !== "object") return;
@@ -905,9 +1343,9 @@ function riderFrom(payload: unknown) {
       if (typeof child === "string" || typeof child === "number") {
         const text = String(child).trim();
         if (!text || text === "null" || text === "undefined") continue;
-        if (!found.name && /(rider|agent|driver|delivery_boy|fe)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
-        if (!found.phone && /(rider|agent|driver|delivery_boy|fe)_?(phone|mobile|contact)$/.test(k)) found.phone = text;
-        if (!found.otp && /(delivery_otp|^otp$|door_code|verification_code)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
+        if (!found.name && /(rider|agent|driver|delivery_?boy|fe|executive|courier_?boy|associate|dispatcher)_?name$/.test(k) && /[a-z]/i.test(text)) found.name = text;
+        if (!found.phone && /(rider|agent|driver|delivery_?boy|fe|executive|courier_?boy|associate|dispatcher)_?(phone|mobile|contact|number|no)$/.test(k) && /\d{6,}/.test(text.replace(/\D/g, ""))) found.phone = text;
+        if (!found.otp && /(delivery_?otp|delivery_?pin|^otp$|^pin$|door_code|verification_code|secure_?pin)/.test(k) && /^\d{4,8}$/.test(text)) found.otp = text;
         if (found.lat == null && /(rider|agent|driver|fe)_?lat(itude)?$/.test(k)) {
           const n = Number(text);
           if (Math.abs(n) > 0.01) found.lat = n;
@@ -1001,7 +1439,62 @@ export async function shiprocketAddPickup(input: Json, pickup: BookInput["pickup
   return { saved: true };
 }
 
+/** Nimbuspost v2 wants a full ISO date-time ("2026-11-13T14:30:00.000Z"), not a bare date. */
+function isoDateTime(value?: string) {
+  const day = new Date(value ?? "");
+  return (Number.isNaN(day.getTime()) ? new Date() : day).toISOString();
+}
+
 export async function nimbusBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const digits = (value?: string) => Number(String(value ?? "").replace(/\D/g, "").slice(-10)) || undefined;
+    const data = await nimbusV2("/shipments", v2, {
+      method: "POST",
+      json: {
+        order_number: order.orderId,
+        order_type: "b2c",
+        payment_mode: order.cod ? "cod" : "prepaid",
+        ...(order.cod ? { order_collectable_amount: Math.round(order.total) } : {}),
+        order_amount: order.total,
+        warehouse_id: await nimbusWarehouse(input, v2),
+        order_date: isoDateTime(order.orderDate),
+        shipping_address: {
+          name: order.customer.name,
+          email: order.customer.email || undefined,
+          address: order.customer.line1,
+          address_opt: order.customer.line2 ?? "",
+          pincode: Number(order.customer.pincode),
+          city: order.customer.city.replace(/[\s,]+$/, ""),
+          state: order.customer.state,
+          country: "India",
+          phone: digits(order.customer.phone),
+          phone_alt: digits(order.customer.altPhone),
+        },
+        items: order.items.map((item) => ({ name: item.name, qty: item.units, price: item.price, sku: item.sku })),
+        package: { weight: Math.max(0.01, order.weightKg), length: order.length, width: order.breadth, height: order.height },
+        org_charges: { shipping_charges: order.shippingCharge },
+        courier_id: order.courierId || undefined,
+        label_format: "thermal-4x6",
+      },
+    });
+    const booking = ((data.data as Json)?.booking as Json) ?? {};
+    const awb = String(booking.awb ?? "");
+    if (!awb) throw new ProviderError("Nimbuspost created the order but did not book a courier. Pick another courier and try again.");
+    const price = (booking.price as Json) ?? {};
+    return {
+      provider: "nimbuspost",
+      awb,
+      courierName: String(booking.courier_name ?? booking.parent_courier_name ?? "Nimbuspost"),
+      providerOrderId: String(booking.order_id ?? ""),
+      providerShipmentId: String(booking.order_id ?? ""),
+      labelUrl: String(booking.label_url ?? ""),
+      trackingUrl: String(booking.tracking_url ?? "") || undefined,
+      routingCode: String(booking.routing_key ?? "") || undefined,
+      pickupScheduledFor: String(booking.pickup_date ?? "") || "Auto pickup requested",
+      courierCost: Number(price.total) || undefined,
+    };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call("https://api.nimbuspost.com/v1/shipments", {
@@ -1057,6 +1550,23 @@ export async function nimbusBook(input: Json, order: BookInput): Promise<BookOut
 }
 
 export async function nimbusTrack(input: Json, awb: string) {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const data = await nimbusV2(`/tracking/${encodeURIComponent(awb)}`, v2);
+    const info = (data.data as Json) ?? {};
+    const latest = (info.latest as Json) ?? {};
+    const scans = (info.scans as Json[]) ?? [];
+    const status = String(latest.shipStatus ?? info.orderStatus ?? "");
+    return {
+      status,
+      courierName: String(info.courierName ?? info.courier_name ?? ""),
+      awb,
+      events: scans.map((scan) => ({ at: String(scan.timestamp ?? ""), status: String(scan.remark || scan.status || ""), location: String(scan.location ?? "") })),
+      trackingUrl: String(info.tracking_url ?? "") || `https://ship.nimbuspost.com/?awb=${awb}`,
+      expectedBy: promisedFrom(data, info.edd, info.expectedDeliveryDate, info.expected_delivery_date),
+      ...riderHit(data, status),
+    };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call(`https://api.nimbuspost.com/v1/shipments/track/${encodeURIComponent(awb)}`, {
@@ -1076,6 +1586,12 @@ export async function nimbusTrack(input: Json, awb: string) {
 }
 
 export async function nimbusWallet(input: Json) {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const data = await nimbusV2("/wallet/balance", v2);
+    const wallet = (data.data as Json) ?? {};
+    return { provider: "nimbuspost", balance: Number(wallet.usable_balance ?? wallet.total_balance ?? 0), currency: String(wallet.currency ?? "INR") };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const data = await call("https://api.nimbuspost.com/v1/wallet", {
@@ -1087,6 +1603,15 @@ export async function nimbusWallet(input: Json) {
 }
 
 export async function nimbusLabel(input: Json, awb: string): Promise<LabelSheet | null> {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    const tracked = await nimbusV2(`/tracking/${encodeURIComponent(awb)}`, v2);
+    const info = (tracked.data as Json) ?? {};
+    const orderId = String(info.orderId ?? "");
+    if (!orderId) throw new ProviderError("Nimbuspost has no order for this AWB.");
+    const data = await nimbusV2("/shipments/labels", v2, { method: "POST", json: { order_ids: [orderId] } });
+    return { ...labelSheetFrom(info), labelUrl: String((data.data as Json)?.url ?? ""), awb };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   const headers = { authorization: `Bearer ${token}` };
@@ -1108,6 +1633,11 @@ export async function nimbusLabel(input: Json, awb: string): Promise<LabelSheet 
 }
 
 export async function nimbusCancel(input: Json, awb: string) {
+  const v2 = nimbusV2Headers(input);
+  if (v2) {
+    await nimbusV2("/shipments/cancel", v2, { method: "POST", json: { awb } });
+    return { cancelled: true };
+  }
   const token = await nimbusToken(input);
   if (!token) return null;
   await call("https://api.nimbuspost.com/v1/shipments/cancel", {
@@ -1146,7 +1676,7 @@ export async function shipdayBook(input: Json, order: BookInput): Promise<BookOu
   return {
     provider: "shipday",
     awb: String(data.orderId ?? order.orderId),
-    courierName: "Gogate Products",
+    courierName: "Gogate Products-Shipday",
     providerOrderId: String(data.orderId ?? ""),
   };
 }
@@ -1180,24 +1710,34 @@ function shipdayOrders(data: unknown): Json[] {
   return [];
 }
 
-export async function shipdayTrack(input: Json, orderId: string) {
+export async function shipdayTrack(input: Json, orderNumber: string, providerOrderId = "") {
   const apiKey = pick(input.apiKey, "SHIPDAY_API_KEY");
   if (!apiKey) return null;
   let match: Json | null = null;
-  try {
-    const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(orderId)}`, { headers: shipdayAuth(apiKey) });
-    match = Array.isArray(one) ? (one[0] as Json) : (one as Json);
-  } catch {
-    const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
-    match =
-      shipdayOrders(data).find(
-        (order) => String(order.orderId) === orderId || String(order.orderNumber) === orderId || String(order.id) === orderId
-      ) ?? null;
+  for (const id of shipdayLookupIds(orderNumber, providerOrderId)) {
+    try {
+      const one = await call(`https://api.shipday.com/orders/${encodeURIComponent(id)}`, { headers: shipdayAuth(apiKey) });
+      match = shipdayOrderRow(one) as Json | null;
+      if (match) break;
+    } catch {
+      /* the numeric Shipday id is not the lookup key; try the order number */
+    }
+  }
+  if (!match) {
+    try {
+      const data = await call("https://api.shipday.com/orders", { headers: shipdayAuth(apiKey) });
+      const wanted = new Set(shipdayLookupIds(orderNumber, providerOrderId));
+      match =
+        shipdayOrders(data).find((order) => wanted.has(String(order.orderId)) || wanted.has(String(order.orderNumber)) || wanted.has(String(order.id))) ??
+        null;
+    } catch {
+      match = null;
+    }
   }
   if (!match) {
     return { status: "Not found", events: [] as { at: string; status: string; location: string }[] };
   }
-  const status = String(match.orderStatus ?? match.status ?? "");
+  const status = shipdayOrderState(match);
   const carrier = (match.assignedCarrier as Json | undefined) ?? (match.carrier as Json | undefined) ?? {};
   const carrierName = String(carrier.name ?? "");
   const lat = Number(match.carrierLatitude ?? match.latitude ?? carrier.latitude);
@@ -1206,16 +1746,16 @@ export async function shipdayTrack(input: Json, orderId: string) {
   const pickupLng = Number(match.pickupLongitude ?? match.restaurantLongitude ?? (match.restaurant as Json | undefined)?.longitude);
   const dropLat = Number(match.deliveryLatitude ?? match.customerLatitude ?? (match.delivery as Json | undefined)?.latitude);
   const dropLng = Number(match.deliveryLongitude ?? match.customerLongitude ?? (match.delivery as Json | undefined)?.longitude);
-  const feed = ((match.activityLog as Json[]) ?? (match.activityFeed as Json[]) ?? []).map((entry) => ({
-    at: String(entry.time ?? entry.createdAt ?? ""),
-    status: String(entry.description ?? entry.status ?? ""),
-    location: String(entry.location ?? ""),
-  }));
+  const feed = shipdayActivity(match).filter((entry) => entry.status);
+  if (status && !feed.some((entry) => entry.status.toLowerCase() === status.toLowerCase())) {
+    feed.push({ at: new Date().toISOString(), status, location: "" });
+  }
+  const delivered = /\b(already delivered|delivered|successful|completed)\b/.test(status.toLowerCase().replace(/[_-]+/g, " "));
   return {
     status,
-    courierName: "Gogate Products",
-    awb: orderId,
-    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: carrierName }],
+    courierName: "Gogate Products-Shipday",
+    awb: String(match.orderId ?? (providerOrderId || orderNumber)),
+    events: feed.length ? feed : [{ at: new Date().toISOString(), status, location: "" }],
     lat: Number.isFinite(lat) ? lat : undefined,
     lng: Number.isFinite(lng) ? lng : undefined,
     agentName: carrierName,
@@ -1225,7 +1765,7 @@ export async function shipdayTrack(input: Json, orderId: string) {
     dropLat: Number.isFinite(dropLat) ? dropLat : undefined,
     dropLng: Number.isFinite(dropLng) ? dropLng : undefined,
     trackingUrl: String(match.trackingLink ?? match.trackingUrl ?? ""),
-    expectedBy: promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.deliveryTime, match.expected_delivery),
+    expectedBy: delivered ? "" : promisedFrom(match, match.expectedDeliveryDate, match.expectedDeliveryTime, match.etaTime, match.deliveryTime, match.expected_delivery),
   };
 }
 
@@ -1255,6 +1795,14 @@ function tookanDatetime(from = new Date(), extraHours = 4) {
   const ist = new Date(when.getTime() + 330 * 60 * 1000);
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())} ${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}:${pad(ist.getUTCSeconds())}`;
+}
+
+/** Tookan's message, plus what to do when no hub covers the address. */
+function tookanError(data: Json, fallback: string) {
+  const message = String(data.message ?? fallback);
+  return /hub/i.test(message)
+    ? `${message}. No Tookan hub covers this address: in Tookan, open Hubs and add a hub (linked to your team) whose radius covers the pickup and delivery pincodes.`
+    : message;
 }
 
 const tookanStatusLabel: Record<number, string> = {
@@ -1318,16 +1866,41 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
         ],
       },
     });
-    if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the parcel task."));
+    if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the parcel task."));
+    // create_multiple_tasks answers with pickups[] / deliveries[]; read the task ids (and Tookan's own barcodes) back by order id if they are missing.
     const task = (data.data as Json) ?? {};
+    const first = (list: unknown) => (Array.isArray(list) ? ((list as Json[])[0] ?? {}) : {}) as Json;
+    let pickupJob = first(task.pickups);
+    let deliveryJob = first(task.deliveries);
+    let pickupId = String(pickupJob.job_id ?? task.pickup_job_id ?? "");
+    let deliveryId = String(deliveryJob.job_id ?? task.delivery_job_id ?? task.job_id ?? "");
+    const lookup = await call("https://api.tookanapp.com/v2/get_job_details_by_order_id", {
+      method: "POST",
+      json: { api_key: apiKey, order_ids: [order.orderId], include_task_history: 0 },
+    }).catch(() => null);
+    const jobs = ((lookup?.data as Json[]) ?? []).sort((a, b) => Number(b.job_id) - Number(a.job_id));
+    const latestPickup = jobs.find((job) => Number(job.job_type) === 0);
+    const latestDelivery = jobs.find((job) => Number(job.job_type) === 1);
+    if (latestPickup) {
+      pickupJob = { ...latestPickup, ...pickupJob };
+      pickupId = pickupId || String(latestPickup.job_id ?? "");
+    }
+    if (latestDelivery) {
+      deliveryJob = { ...latestDelivery, ...deliveryJob };
+      deliveryId = deliveryId || String(latestDelivery.job_id ?? "");
+    }
+    if (!deliveryId && !pickupId) throw new ProviderError("Tookan created the parcel but returned no task id. Check Tookan for order " + order.orderId + ".");
+    const deliveryBarcode = String(deliveryJob.barcode ?? "");
     return {
       provider: "tookan-parcel",
-      awb: String(task.delivery_job_id ?? task.job_id ?? ""),
-      courierName: "Gogate Products",
-      providerOrderId: String(task.pickup_job_id ?? task.job_id ?? ""),
-      providerShipmentId: String(task.delivery_job_id ?? ""),
-      trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
+      awb: deliveryBarcode || deliveryId || pickupId,
+      courierName: "Gogate Products-Tookan",
+      providerOrderId: pickupId || deliveryId,
+      providerShipmentId: deliveryId,
+      trackingUrl: String(deliveryJob.tracking_link ?? task.delivery_tracing_link ?? task.tracking_link ?? ""),
       pickupScheduledFor: pickupAt,
+      pickupBarcode: String(pickupJob.barcode ?? "") || undefined,
+      deliveryBarcode: deliveryBarcode || undefined,
     };
   }
 
@@ -1355,14 +1928,14 @@ export async function tookanBookMode(input: Json, order: BookInput, mode: "hyper
       timezone: -330,
     },
   });
-  if (Number(data.status) !== 200) throw new ProviderError(String(data.message ?? "Tookan did not create the hyperlocal task."));
+  if (Number(data.status) !== 200) throw new ProviderError(tookanError(data, "Tookan did not create the hyperlocal task."));
   const task = (data.data as Json) ?? {};
   const pickupId = String(task.pickup_job_id ?? task.job_id ?? "");
   const deliveryId = String(task.delivery_job_id ?? task.job_id ?? "");
   return {
     provider: "tookan",
-    awb: deliveryId || pickupId,
-    courierName: "Gogate Products",
+    awb: String(task.barcode ?? "") || deliveryId || pickupId,
+    courierName: "Gogate Products-Tookan",
     providerOrderId: pickupId || deliveryId,
     providerShipmentId: deliveryId,
     trackingUrl: String(task.delivery_tracing_link ?? task.tracking_link ?? ""),
@@ -1378,10 +1951,12 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   for (const id of ids) {
     const data = await call("https://api.tookanapp.com/v2/get_job_details", {
       method: "POST",
-      json: { api_key: apiKey, job_ids: [Number(id) || id], include_task_history: 1 },
+      // job_additional_info carries the Task OTP (job_otp) shown on the Tookan panel.
+      json: { api_key: apiKey, job_ids: [Number(id) || id], include_task_history: 1, job_additional_info: 1 },
     });
     const job = ((data.data as Json[]) ?? [])[0];
-    if (job) jobs.push(job);
+    const extra = (job?.job_additional_info ?? (data as Json).job_additional_info) as Json | undefined;
+    if (job) jobs.push({ ...job, ...(extra?.job_otp != null && job.job_otp == null ? { job_otp: extra.job_otp } : {}), otp_verified: Number(extra?.is_job_otp_verified) === 1 });
   }
   const coord = (value: number) => (Number.isFinite(value) && Math.abs(value) > 0.001 ? value : undefined);
   const details = jobs.map((job) => {
@@ -1408,17 +1983,42 @@ export async function tookanTrack(input: Json, jobId: string, extraId = "") {
   const pickupLng = coord(Number(storeJob.job_pickup_longitude ?? storeJob.pickup_longitude));
   const dropLat = coord(Number(dropSource.job_latitude ?? dropSource.customer_latitude ?? dropSource.delivery_latitude));
   const dropLng = coord(Number(dropSource.job_longitude ?? dropSource.customer_longitude ?? dropSource.delivery_longitude));
-  const lat = coord(Number(job.fleet_latitude ?? fleet.latitude));
-  const lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
+  let lat = coord(Number(job.fleet_latitude ?? fleet.latitude));
+  let lng = coord(Number(job.fleet_longitude ?? fleet.longitude));
+  let riderName = String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "").trim();
+  let riderPhone = String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? "").trim();
+  // get_job_details carries only fleet_id: the rider's live GPS and name come from the agent endpoints.
+  const fleetId = Number(job.fleet_id ?? delivery?.job.fleet_id ?? pickup?.job.fleet_id) || 0;
+  if (accepted && fleetId > 0) {
+    const [where, profile] = await Promise.all([
+      lat == null ? call("https://api.tookanapp.com/v2/get_fleet_location", { method: "POST", json: { api_key: apiKey, fleet_id: fleetId } }).catch(() => null) : null,
+      !riderName || !riderPhone ? call("https://api.tookanapp.com/v2/view_fleet_profile", { method: "POST", json: { api_key: apiKey, fleet_id: fleetId } }).catch(() => null) : null,
+    ]);
+    const spot = ((where?.data as Json[]) ?? [])[0] ?? {};
+    lat = lat ?? coord(Number(spot.latitude));
+    lng = lng ?? coord(Number(spot.longitude));
+    const person = ((((profile?.data as Json) ?? {}).fleet_details as Json[]) ?? [])[0] ?? {};
+    riderName = riderName || String(person.username ?? [person.first_name, person.last_name].filter(Boolean).join(" ")).trim();
+    riderPhone = riderPhone || String(person.phone ?? "").trim();
+  }
   return {
     status: currentLabel,
-    courierName: "Gogate Products",
-    awb: String(delivery?.job.job_id ?? jobId),
+    courierName: "Gogate Products-Tookan",
+    barcode: String(delivery?.job.barcode ?? job.barcode ?? pickup?.job.barcode ?? ""),
+    pickupBarcode: String(pickup?.job.barcode ?? ""),
+    // The parcel barcode is the AWB customers and labels see; task ids stay in providerOrderId / providerShipmentId.
+    awb: String(delivery?.job.barcode ?? pickup?.job.barcode ?? delivery?.job.job_id ?? jobId),
     accepted,
     agentLeg: pickupOpen ? "pickup" : "delivery",
-    agentName: accepted ? String(job.fleet_name ?? fleet.name ?? fleet.fleet_name ?? "") : "",
-    agentPhone: accepted ? String(job.fleet_phone ?? fleet.phone ?? fleet.fleet_phone ?? job.fleet_mobile ?? "") : "",
-    otp: String(job.job_otp ?? job.order_otp ?? delivery?.job.job_otp ?? ""),
+    agentName: accepted ? riderName : "",
+    agentPhone: accepted ? riderPhone : "",
+    otpVerified: details.some((item) => !item.pickupTask && item.job.otp_verified === true),
+    // Delivery OTP: from the last delivery task (a parcel booking can hold several tasks), never the pickup task's.
+    otp: String(
+      [...details].reverse().find((item) => !item.pickupTask && String(item.job.job_otp ?? item.job.order_otp ?? "").trim())?.job.job_otp ??
+        [...details].reverse().find((item) => !item.pickupTask)?.job.order_otp ??
+        ""
+    ),
     lat: accepted ? lat : undefined,
     lng: accepted ? lng : undefined,
     pickupLat,
@@ -1511,10 +2111,12 @@ async function ithinkPost(path: string, payload: Json & { host?: string }) {
   const host = String(payload.host ?? "https://my.ithinklogistics.com/api_v3/").replace(/\/?$/, "/");
   const body = { ...payload };
   delete body.host;
-  const data = await call(`${host}${path.replace(/^\//, "")}`, { method: "POST", json: { data: body } });
+  const reply = await call(`${host}${path.replace(/^\//, "")}`, { method: "POST", json: { data: body } });
+  if (!reply || typeof reply !== "object") throw new ProviderError("iThink Logistics sent back an empty reply. Please try again.");
+  const data = reply;
   const status = String(data.status ?? data.status_code ?? "").toLowerCase();
-  if (status && status !== "success" && status !== "200" && Number(data.status_code) >= 400) {
-    throw new ProviderError(String(data.message ?? data.remark ?? "iThink Logistics rejected the request."));
+  if (status === "error" || (status && status !== "success" && status !== "200" && Number(data.status_code) >= 400)) {
+    throw new ProviderError(String(data.message ?? data.html_message ?? data.remark ?? "iThink Logistics rejected the request."));
   }
   return data;
 }
@@ -1532,13 +2134,15 @@ export async function ithinkRates(input: Json, parcel: Parcel): Promise<RateOut[
     shipping_weight_kg: String(parcel.weightKg),
     order_type: "forward",
     payment_type: parcel.cod ? "cod" : "prepaid",
+    product_mrp: String(Math.max(1, Math.round(parcel.declaredValue || 0))),
   });
   const rates = ((data.data as Json)?.rate as Json[]) ?? (data.data as Json[]) ?? [];
   return rates.map((courier) => ({
     provider: "ithink",
-    courierId: String(courier.logistic_id ?? courier.id ?? courier.logistic_name ?? ""),
-    courierName: String(courier.logistic_name ?? courier.name ?? "iThink courier"),
+    courierId: courier.logistic_name ? `${courier.logistic_name}|${courier.service_type ?? ""}` : String(courier.logistic_id ?? courier.id ?? ""),
+    courierName: `${courier.logistic_name ?? courier.name ?? "iThink courier"}${courier.service_type ? ` ${courier.service_type}` : ""}`,
     rate: Number(courier.total_charges ?? courier.rate ?? courier.freight_charge ?? 0),
+    chargeWeightKg: chargeKg(courier, "chargeable_weight", "charge_weight", "applicable_weight", "billable_weight", "weight_slab"),
     etaDays: daysUntil(String(courier.edd ?? courier.estimated_delivery ?? "")) ?? Number(courier.tat ?? 5),
     live: true as const,
   }));
@@ -1548,56 +2152,78 @@ export async function ithinkBook(input: Json, order: BookInput): Promise<BookOut
   const auth = ithinkAuth(input);
   if (!auth) return null;
   const pickupId = typeof input.pickupAddressId === "string" ? input.pickupAddressId : "";
+  const [logistic, serviceType] = order.courierId.split("|");
+  const logistics = /[a-z]/i.test(logistic ?? "") ? logistic.trim().toLowerCase() : "";
+  const phone = (value: string) => value.replace(/\D/g, "").slice(-10);
   const data = await ithinkPost("order/add.json", {
     ...auth,
     pickup_address_id: pickupId,
+    logistics,
+    s_type: logistics && serviceType ? serviceType.trim().toLowerCase() : "",
+    order_type: "",
     shipments: [
       {
         waybill: "",
         order: order.orderId,
-        sub_order: `${order.orderId}-1`,
-        order_date: order.orderDate.slice(0, 10),
+        sub_order: "",
+        order_date: order.orderDate.slice(0, 10).split("-").reverse().join("-"),
         total_amount: String(order.total),
         name: order.customer.name,
         company_name: "",
         add: order.customer.line1,
         add2: order.customer.line2 ?? "",
+        add3: "",
         pin: order.customer.pincode,
         city: order.customer.city,
         state: order.customer.state,
         country: "India",
-        phone: order.customer.phone.replace(/\D/g, "").slice(-10),
+        phone: phone(order.customer.phone),
+        alt_phone: order.customer.altPhone ? phone(order.customer.altPhone) : "",
         email: order.customer.email ?? order.pickup.email,
-        products: order.items.map((item) => item.name).join(", "),
-        quantity: String(order.items.reduce((sum, item) => sum + item.units, 0)),
-        payment_mode: order.cod ? "COD" : "Prepaid",
+        is_billing_same_as_shipping: "yes",
+        products: order.items.map((item) => ({
+          product_name: item.name,
+          product_sku: item.sku,
+          product_quantity: String(item.units),
+          product_price: String(item.price),
+          product_tax_rate: "0",
+          product_hsn_code: "",
+          product_discount: "0",
+        })),
+        shipment_length: String(order.length),
+        shipment_width: String(order.breadth),
+        shipment_height: String(order.height),
+        weight: String(order.weightKg),
         shipping_charges: String(order.shippingCharge),
+        giftwrap_charges: "0",
+        transaction_charges: "0",
+        total_discount: "0",
+        first_attemp_discount: "0",
         cod_charges: "0",
-        discount: "0",
-        order_type: "forward",
-        return_address: order.pickup.line1,
-        return_pin: order.pickup.pincode,
-        return_city: order.pickup.city,
-        return_state: order.pickup.state,
-        return_country: "India",
-        return_phone: order.pickup.phone.replace(/\D/g, "").slice(-10),
-        shipping_length_cms: String(order.length),
-        shipping_width_cms: String(order.breadth),
-        shipping_height_cms: String(order.height),
-        shipping_weight_kg: String(order.weightKg),
-        logistic: order.courierId || undefined,
+        advance_amount: "0",
+        cod_amount: order.cod ? String(order.total) : "0",
+        payment_mode: order.cod ? "COD" : "Prepaid",
+        reseller_name: "",
+        eway_bill_number: "",
+        gst_number: "",
+        return_address_id: pickupId,
       },
     ],
   });
-  const shipment = (((data.data as Json)?.shipments as Json[]) ?? [data.data as Json])[0] ?? {};
-  const awb = String(shipment.waybill ?? shipment.awb ?? shipment.awb_number ?? "");
-  if (!awb) throw new ProviderError(String(data.message ?? "iThink Logistics did not assign an AWB."));
+  const result = (data.data as Json) ?? {};
+  const shipment = ((result["1"] as Json) ?? Object.values(result).find((value) => value && typeof value === "object") ?? {}) as Json;
+  if (String(shipment.status ?? "").toLowerCase() === "error") {
+    throw new ProviderError(String(shipment.remark || data.html_message || "iThink Logistics refused the booking."));
+  }
+  const awb = String(shipment.waybill ?? shipment.awb ?? "");
+  if (!awb) throw new ProviderError(String(shipment.remark || data.html_message || data.message || "iThink Logistics did not assign an AWB."));
   return {
     provider: "ithink",
     awb,
     courierName: String(shipment.logistic_name ?? shipment.courier ?? "iThink Logistics"),
-    providerOrderId: String(shipment.order_id ?? order.orderId),
-    providerShipmentId: String(shipment.shipment_id ?? ""),
+    providerOrderId: String(shipment.refnum ?? order.orderId),
+    providerShipmentId: String(shipment.refnum ?? ""),
+    serviceMode: logistics && serviceType ? serviceType.trim() : undefined,
     labelUrl: String(shipment.shipping_label ?? shipment.label ?? ""),
     courierCost: Number(shipment.total_charges ?? 0) || undefined,
   };
@@ -1624,12 +2250,42 @@ export async function ithinkTrack(input: Json, awb: string) {
   };
 }
 
+/** First balance-like number in a wallet reply, whether it is an object, an array of rows or nested ("1,000.00" strings too). */
+function walletAmount(value: unknown, depth = 0): number | undefined {
+  if (depth > 4 || value == null) return undefined;
+  if (Array.isArray(value)) {
+    for (const row of value) {
+      const found = walletAmount(row, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object") return undefined;
+  const entries = Object.entries(value as Json);
+  const keys = [/^(wallet_)?balance(_amount)?$/i, /balance/i, /credit/i, /wallet/i, /amount/i];
+  for (const pattern of keys) {
+    for (const [key, raw] of entries) {
+      if (!pattern.test(key) || (raw !== null && typeof raw === "object")) continue;
+      const amount = Number(String(raw ?? "").replace(/[^\d.-]/g, ""));
+      if (String(raw ?? "").trim() && Number.isFinite(amount)) return amount;
+    }
+  }
+  for (const [, raw] of entries) {
+    if (raw && typeof raw === "object") {
+      const found = walletAmount(raw, depth + 1);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
 export async function ithinkWallet(input: Json) {
   const auth = ithinkAuth(input);
   if (!auth) return null;
   const data = await ithinkPost("wallet/balance.json", { ...auth });
-  const nested = (data.data as Json) ?? data;
-  const balance = Number(nested.balance ?? nested.wallet_balance ?? nested.amount ?? nested.credit ?? 0);
+  const balance = walletAmount(data.data ?? data);
+  // iThink's API often gives no balance (empty reply); iThink itself refuses a booking when the wallet is short.
+  if (balance === undefined) return { provider: "ithink", balance: undefined, unavailable: true, currency: "INR" };
   return { provider: "ithink", balance, currency: "INR" };
 }
 
@@ -1727,9 +2383,21 @@ export async function shiprocketReturn(input: Json, order: BookInput): Promise<B
     json: { shipment_id: shipmentId, is_return: 1, courier_id: order.courierId || undefined },
   });
   const awbData = ((assigned.response as Json)?.data as Json) ?? {};
+  let labelUrl = "";
+  try {
+    const label = await call("https://apiv2.shiprocket.in/v1/external/courier/generate/label", {
+      method: "POST",
+      headers: auth,
+      json: { shipment_id: [shipmentId] },
+    });
+    labelUrl = String(label.label_url ?? "");
+  } catch {
+    labelUrl = "";
+  }
   return {
     provider: "shiprocket",
     awb: String(awbData.awb_code ?? created.awb_code ?? ""),
+    labelUrl: labelUrl || undefined,
     courierName: String(awbData.courier_name ?? "Return courier"),
     providerOrderId: String(created.order_id ?? ""),
     providerShipmentId: shipmentId,
@@ -1830,6 +2498,7 @@ export async function shipyaariRates(input: Json, parcel: Parcel): Promise<RateO
         courierId: String(row.courier_id ?? row.id ?? "shipyaari"),
         courierName: String(row.courier_name ?? row.name ?? "Shipyaari"),
         rate: Number(row.total_charges ?? row.rate ?? row.freight ?? 0),
+        chargeWeightKg: chargeKg(row, "chargeable_weight", "applied_weight", "charge_weight", "billable_weight"),
         etaDays: Number(row.edd ?? row.tat ?? 4) || 4,
         live: true as const,
       }));
@@ -1843,6 +2512,7 @@ export async function shipyaariRates(input: Json, parcel: Parcel): Promise<RateO
       courierId: "shipyaari",
       courierName: "Shipyaari",
       rate: 79,
+      estimate: true,
       etaDays: 4,
       live: true as const,
     },
@@ -1999,3 +2669,1640 @@ export async function sendMsg91Sms(
   return { id: String(data.message ?? data.request_id ?? "msg91") };
 }
 
+
+/* ---------------- GoSwift (app.goswift.in/api/docs) ---------------- */
+
+const GOSWIFT = "https://app.goswift.in";
+const EKART = "https://app.elite.ekartlogistics.in";
+const goswiftTokens = new Map<string, { token: string; until: number }>();
+/** Ekart Elite runs the same API as GoSwift on its own host and login. */
+const isEkart = (input: Json) => input.__ekart === true;
+const swiftBase = (input: Json) => (isEkart(input) ? EKART : GOSWIFT);
+const swiftName = (input: Json) => (isEkart(input) ? "Ekart" : "GoSwift");
+
+async function goswiftToken(input: Json) {
+  const prefix = isEkart(input) ? "EKART" : "GOSWIFT";
+  const clientId = pick(input.clientId, `${prefix}_CLIENT_ID`);
+  const username = pick(input.username, `${prefix}_USERNAME`);
+  const password = pick(input.password, `${prefix}_PASSWORD`);
+  if (!clientId || !username || !password) return null;
+  const key = `${swiftBase(input)}\0${clientId}\0${username}`;
+  const cached = goswiftTokens.get(key);
+  if (cached && cached.until > Date.now()) return cached.token;
+  const data = await call(`${swiftBase(input)}/integrations/v2/auth/token/${encodeURIComponent(clientId)}`, {
+    method: "POST",
+    json: { username, password },
+  });
+  const token = String(data.access_token ?? "");
+  if (!token) throw new ProviderError(`${swiftName(input)} rejected the client ID, username or password.`, 401);
+  const seconds = Number(data.expires_in) || 86400;
+  goswiftTokens.set(key, { token, until: Date.now() + Math.max(60, seconds - 300) * 1000 });
+  return token;
+}
+
+const goswiftAuth = (token: string) => ({ authorization: `Bearer ${token}` });
+const goswiftPhone = (phone: string) => Number(phone.replace(/\D/g, "").slice(-10)) || undefined;
+const goswiftTime = (ms: unknown) => (Number(ms) > 0 ? new Date(Number(ms)).toISOString() : "");
+
+const swiftPickups = new Map<string, { alias: string; pincode: string; address: string; at: number }>();
+
+/** The pickup address saved on the aggregator's panel: the alias set in Settings, else the first one listed. */
+async function swiftPickup(input: Json, token: string) {
+  const wanted = String(input.pickupAlias ?? "").trim();
+  const key = `${swiftBase(input)}\0${token.slice(-12)}\0${wanted}`;
+  const cached = swiftPickups.get(key);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached;
+  const rows = await call(`${swiftBase(input)}/api/v2/addresses`, { headers: goswiftAuth(token) })
+    .then((data) => (Array.isArray(data) ? (data as Json[]) : []))
+    .catch(() => [] as Json[]);
+  // The alias, else an address whose PIN is in the saved text (a full address typed instead of the alias), else the first one.
+  const row =
+    rows.find((item) => String(item.alias ?? "").trim().toLowerCase() === wanted.toLowerCase()) ??
+    (wanted ? rows.find((item) => String(item.pincode ?? "").length === 6 && wanted.includes(String(item.pincode))) : rows[0]);
+  if (wanted && !row && rows.length) {
+    throw new Error(`No pickup address named "${wanted}" on ${isEkart(input) ? "Ekart Elite" : "GoSwift"} (saved: ${rows.map((item) => String(item.alias ?? "")).filter(Boolean).join(", ")}). Nothing was sent to the courier.`);
+  }
+  const address = row
+    ? [row.address_line1 ?? row.address, row.address_line2, row.city, row.state, row.pincode].map((part) => String(part ?? "").trim()).filter(Boolean).join(", ")
+    : "";
+  const found = { alias: row ? String(row.alias ?? "") : wanted, pincode: row ? String(row.pincode ?? "") : "", address, at: Date.now() };
+  swiftPickups.set(key, found);
+  return found;
+}
+
+/** Pickup addresses saved on the GoSwift / Ekart Elite panel, for the per-order "Ship from" choice. */
+export async function goswiftAddresses(input: Json) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const rows = await call(`${swiftBase(input)}/api/v2/addresses`, { headers: goswiftAuth(token) }).then((data) => (Array.isArray(data) ? (data as Json[]) : []));
+  return {
+    locations: rows.map((row) => ({
+      nickname: String(row.alias ?? "").trim(),
+      city: String(row.city ?? ""),
+      pincode: String(row.pincode ?? ""),
+      address: [row.address_line1 ?? row.address, row.address_line2].map((part) => String(part ?? "").trim()).filter(Boolean).join(", "),
+    })).filter((row) => row.nickname),
+  };
+}
+
+export const ekartAddresses = (input: Json) => goswiftAddresses(ekartInput(input));
+
+export function goswiftTrackingUrl(id: string) {
+  return `${GOSWIFT}/track/${encodeURIComponent(id)}`;
+}
+
+/** GoSwift has no public rate API: serviceability decides, and the desk sets the charge shown at checkout. */
+export async function goswiftRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${swiftBase(input)}/api/v2/serviceability/${encodeURIComponent(parcel.deliveryPincode)}`, { headers: goswiftAuth(token) });
+  const details = (data.details as Json) ?? {};
+  if (data.status === false || details.forward_drop === false) return [];
+  if (parcel.cod && details.cod === false) return [];
+  const from = await swiftPickup(input, token);
+  const origin = from.pincode || parcel.pickupPincode;
+  const pickupFrom = `${from.alias || "default pickup"} (${origin})`;
+  const shipment = {
+    pickupPincode: origin,
+    dropPincode: parcel.deliveryPincode,
+    length: Math.max(1, Math.round(parcel.length)),
+    width: Math.max(1, Math.round(parcel.breadth)),
+    height: Math.max(1, Math.round(parcel.height)),
+    weight: Math.max(1, Math.round(parcel.weightKg * 1000)),
+    paymentType: parcel.cod ? "COD" : "Prepaid",
+    invoiceAmount: Math.round(parcel.declaredValue),
+    codAmount: parcel.cod ? Math.round(parcel.declaredValue) : 0,
+    serviceType: String(input.service ?? "").trim().toUpperCase() || "SURFACE",
+    shippingDirection: "FORWARD",
+    billingClientType: "EXISTING_CLIENT",
+  };
+  // The billed (chargeable) weight as the aggregator works it out for this parcel; grams in the reply.
+  const estimate = await call(`${swiftBase(input)}/data/pricing/estimate`, { method: "POST", headers: goswiftAuth(token), json: shipment }).catch(() => ({}) as Json);
+  const billedKg = Number(estimate.billingWeight) > 0 ? Number(estimate.billingWeight) / 1000 : undefined;
+  // Serviceability V3 names each courier group with its price once the aggregator has a rate card on the account.
+  const groups = await call(`${swiftBase(input)}/data/v3/serviceability`, {
+    method: "POST",
+    headers: goswiftAuth(token),
+    json: shipment,
+  }).catch(() => null);
+  const rows = Array.isArray(groups) ? (groups as Json[]) : [];
+  const priced = rows
+    .map((row) => {
+      const charges = (row.forwardDeliveredCharges as Json) ?? {};
+      const tat = (row.tat as Json) ?? {};
+      const name = String(row.courierGroup ?? "").trim();
+      return {
+        provider: "goswift",
+        courierId: name || "goswift",
+        courierName: name || "GoSwift",
+        rate: Number(charges.totalForwardDeliveredEstimate) || 0,
+        chargeWeightKg: billedKg,
+        etaDays: Number(tat.max) || Number(tat.min) || 4,
+        live: true as const,
+        cod: details.cod !== false,
+        pickupFrom,
+      };
+    })
+    .filter((row) => row.rate > 0);
+  if (priced.length) return priced;
+  // No rate card for courier groups on the account: the pricing estimate is still the live charge for this parcel.
+  const estimated = Number(estimate.total) || Number(estimate.shippingCharge) || 0;
+  if (estimated > 0) {
+    return [
+      {
+        provider: "goswift",
+        courierId: "goswift",
+        courierName: `${swiftName(input)} ${shipment.serviceType === "EXPRESS" ? "Express" : "Surface"}`,
+        rate: Math.round(estimated * 100) / 100,
+        chargeWeightKg: billedKg,
+        etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
+        live: true as const,
+        cod: details.cod !== false,
+        pickupFrom,
+      },
+    ];
+  }
+  return [
+    {
+      provider: "goswift",
+      courierId: "goswift",
+      courierName: "GoSwift",
+      rate: Number(input.rate) > 0 ? Number(input.rate) : 79,
+      estimate: true,
+      etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
+      live: true as const,
+      cod: details.cod !== false,
+    },
+  ];
+}
+
+export async function goswiftBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const place = (who: { name: string; phone: string; line1: string; line2?: string; city: string; state: string; pincode: string }) => ({
+    name: who.name,
+    phone: goswiftPhone(who.phone),
+    address: [who.line1, who.line2].filter(Boolean).join(", "),
+    city: who.city,
+    state: who.state,
+    country: "India",
+    pin: Number(who.pincode),
+  });
+  const from = await swiftPickup(input, token);
+  const alias = from.alias;
+  const pickup = alias ? { name: alias } : place({ ...order.pickup, name: order.pickup.contactName });
+  // Declared goods value (books only, not courier/fees), matching the item lines.
+  const goods = order.items.reduce((sum, item) => sum + item.price * item.units, 0) || order.subtotal || order.total;
+  const value = Math.max(1, Math.round(goods));
+  const units = order.items.reduce((sum, item) => sum + item.units, 0) || 1;
+  const phone = goswiftPhone(order.customer.phone);
+  if (!phone || phone < 1000000000) {
+    throw new ProviderError(`The customer's phone "${order.customer.phone}" isn't a 10-digit mobile number. Fix it in the order's address, then book again.`);
+  }
+  if (!/^\d{6}$/.test(String(order.customer.pincode).trim())) {
+    throw new ProviderError(`The delivery PIN "${order.customer.pincode}" isn't 6 digits. Fix it in the order's address, then book again.`);
+  }
+  // Ekart Elite needs a second number that differs from the customer's: their alternate number, else our pickup contact.
+  const alternate = [order.customer.altPhone, order.pickup.phone]
+    .map((value) => goswiftPhone(value ?? ""))
+    .find((value) => value && value >= 1000000000 && value !== phone);
+  if (!alternate) {
+    throw new ProviderError("Ekart needs a second phone number that differs from the customer's. Add the customer's alternate number in the order's address, or set the pickup phone in Settings → Shipping APIs → Pickup address.");
+  }
+  // Ekart/GoSwift match the drop PIN to their own city and state; the customer's wording (e.g. "Hiriyur, Chitradurga") can make it refuse the PIN.
+  const area = await call(`${swiftBase(input)}/api/v2/serviceability/${encodeURIComponent(String(order.customer.pincode).trim())}`, { headers: goswiftAuth(token) })
+    .then((data) => (data.details as Json) ?? {})
+    .catch(() => ({}) as Json);
+  const typedCity = order.customer.city.replace(/[\s,]+$/, "").trim();
+  const dropCity = String(area.city ?? "").trim() || typedCity;
+  const dropLocation = {
+    ...place(order.customer),
+    address: [order.customer.line1, order.customer.line2, dropCity.toLowerCase() === typedCity.toLowerCase() ? "" : typedCity].filter(Boolean).join(", "),
+    city: dropCity,
+    state: String(area.state ?? "").trim() || order.customer.state,
+  };
+  const day = new Date(order.orderDate);
+  const invoiceDate = (Number.isNaN(day.getTime()) ? new Date() : day).toISOString().slice(0, 10);
+  const category = String(input.category ?? "").trim() || "Books";
+  const data = await call(`${swiftBase(input)}/api/v1/package/create`, {
+    method: "PUT",
+    headers: goswiftAuth(token),
+    json: {
+      seller_name: order.pickup.contactName,
+      seller_address: (alias && from.address) || [order.pickup.line1, order.pickup.line2, order.pickup.city, order.pickup.state, order.pickup.pincode].filter(Boolean).join(", "),
+      seller_gst_tin: String(input.gstin ?? "").trim(),
+      seller_gst_amount: 0,
+      consignee_gst_amount: 0,
+      integrated_gst_amount: 0,
+      tax_value: 0,
+      order_number: order.orderId,
+      invoice_number: order.orderId,
+      invoice_date: invoiceDate,
+      consignee_name: order.customer.name,
+      consignee_alternate_phone: String(alternate),
+      payment_mode: order.cod ? "COD" : "Prepaid",
+      category_of_goods: category,
+      ...(/book/i.test(category) ? { hsn_code: "4901" } : {}),
+      products_desc: order.items.map((item) => `${item.name} x${item.units}`).join(", ").slice(0, 10000),
+      total_amount: value,
+      taxable_amount: value,
+      commodity_value: String(value),
+      cod_amount: order.cod ? Math.min(49999, Math.max(1, Math.round(order.total))) : 0,
+      return_reason: "",
+      quantity: units,
+      weight: Math.max(1, Math.round(order.weightKg * 1000)),
+      length: Math.max(1, Math.round(order.length)),
+      width: Math.max(1, Math.round(order.breadth)),
+      height: Math.max(1, Math.round(order.height)),
+      drop_location: dropLocation,
+      pickup_location: pickup,
+      return_location: pickup,
+      service: String(input.service ?? "").trim().toUpperCase() === "EXPRESS" ? "EXPRESS" : "SURFACE",
+      items: order.items.map((item) => ({ product_name: item.name, sku: item.sku, quantity: item.units, taxable_value: Math.max(1, Math.round(item.price)) })),
+    },
+  });
+  const id = String(data.tracking_id ?? "");
+  if (data.status === false || !id) throw new ProviderError(String(data.remark ?? data.message ?? `${swiftName(input)} did not create the shipment.`));
+  const barcodes = (data.barcodes as Json) ?? {};
+  return {
+    provider: "goswift",
+    awb: id,
+    courierName: String(data.vendor || "GoSwift"),
+    providerOrderId: id,
+    providerShipmentId: String(barcodes.wbn ?? ""),
+    trackingUrl: goswiftTrackingUrl(id),
+    labelUrl: `/api/shipping/goswift/label?awb=${encodeURIComponent(id)}`,
+  };
+}
+
+/** The label PDF as raw bytes (GoSwift replies with application/octet-stream). */
+export async function goswiftLabelPdf(input: Json, awb: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const response = await fetch(`${swiftBase(input)}/api/v1/package/label`, {
+    method: "POST",
+    headers: { ...goswiftAuth(token), "content-type": "application/json" },
+    body: JSON.stringify({ ids: [awb] }),
+    signal: AbortSignal.timeout(30000),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new ProviderError(`${swiftName(input)} label failed (HTTP ${response.status}).`, response.status);
+  return response.arrayBuffer();
+}
+
+export async function goswiftTrack(input: Json, awb: string) {
+  const data = await call(`${swiftBase(input)}/api/v1/track/${encodeURIComponent(awb)}`);
+  const nested = (data.data as Json) ?? data;
+  const track = (nested.track as Json) ?? {};
+  const line = (row: Json) => {
+    const status = String(row.status ?? "").trim();
+    const extra = String(row.ndrStatus ?? "").trim() || String(row.desc ?? "").trim();
+    return extra && extra.toLowerCase() !== status.toLowerCase() ? `${status} – ${extra}` : status;
+  };
+  const details = (Array.isArray(track.details) ? (track.details as Json[]) : [])
+    .map((row) => ({ at: goswiftTime(row.ctime), status: line(row), location: String(row.location ?? "") }))
+    .filter((row) => row.status)
+    .sort((a, b) => Date.parse(a.at || "0") - Date.parse(b.at || "0"));
+  const status = line(track);
+  return {
+    status,
+    courierName: "",
+    awb,
+    events: details.length ? details : status ? [{ at: goswiftTime(track.ctime), status, location: String(track.location ?? "") }] : [],
+    trackingUrl: goswiftTrackingUrl(awb),
+    expectedBy: goswiftTime(nested.edd),
+  };
+}
+
+export async function goswiftCancel(input: Json, awb: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${swiftBase(input)}/api/v1/package/cancel?tracking_id=${encodeURIComponent(awb)}`, { method: "DELETE", headers: goswiftAuth(token) });
+  if (data.status === false) throw new ProviderError(String(data.remark ?? `${swiftName(input)} did not cancel the shipment.`));
+  return { cancelled: true };
+}
+
+/** Non-delivery action: ask the courier to re-attempt (on a date) or return the parcel to us. */
+export async function goswiftNdr(input: Json, awb: string, action: "Re-Attempt" | "RTO", extra: { date?: string; phone?: string; address?: string; instructions?: string } = {}) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const at = extra.date ? Date.parse(extra.date) : NaN;
+  const data = await call(`${swiftBase(input)}/api/v2/package/ndr`, {
+    method: "POST",
+    headers: goswiftAuth(token),
+    json: {
+      action,
+      wbn: awb,
+      ...(Number.isFinite(at) ? { date: at } : {}),
+      ...(extra.phone ? { phone: extra.phone.replace(/\D/g, "").slice(-10) } : {}),
+      ...(extra.address ? { address: extra.address } : {}),
+      ...(extra.instructions ? { instructions: extra.instructions } : {}),
+    },
+  });
+  if (data.status === false) throw new ProviderError(String(data.remark ?? `${swiftName(input)} did not accept the request.`));
+  return { message: String(data.remark ?? `Sent to ${swiftName(input)}.`) };
+}
+
+/** Subscribes this site to GoSwift track updates so undelivered, RTO and every other scan reaches the order at once. */
+export async function goswiftRegisterWebhook(input: Json, url: string) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const existing = await call(`${swiftBase(input)}/api/v2/webhook`, { headers: goswiftAuth(token) }).catch(() => ({}) as Json);
+  const rows = (Array.isArray(existing) ? existing : []) as Json[];
+  const same = rows.find((row) => row.url === url);
+  const body = { url, secret: randomBytes(12).toString("hex"), topics: ["track_updated", "shipment_created", "shipment_recreated"], active: true };
+  const data = same
+    ? await call(`${swiftBase(input)}/api/v2/webhook/${encodeURIComponent(String(same.id))}`, { method: "PUT", headers: goswiftAuth(token), json: body })
+    : await call(`${swiftBase(input)}/api/v2/webhook`, { method: "POST", headers: goswiftAuth(token), json: body });
+  return { webhookId: String(data.id ?? same?.id ?? ""), message: `Live updates are connected to ${url}.` };
+}
+
+export async function goswiftTest(input: Json) {
+  const token = await goswiftToken(input);
+  if (!token) return null;
+  const data = await call(`${swiftBase(input)}/api/v2/serviceability/110001`, { headers: goswiftAuth(token) });
+  return { message: data.status === false ? "Connected. GoSwift says 110001 is not serviceable." : "Connected. GoSwift serves Delhi 110001." };
+}
+
+/* ---------------- Ekart Elite (app.elite.ekartlogistics.in/api/docs): GoSwift's API on Ekart's host ---------------- */
+
+const ekartInput = (input: Json): Json => ({ ...input, __ekart: true });
+const EKART_NAME = "Ekart Logistics";
+
+export function ekartTrackingUrl(id: string) {
+  return `https://ekartlogistics.com/shipmenttrack/${encodeURIComponent(id)}`;
+}
+
+/** Only real Ekart quotes: no placeholder rate is ever returned for Ekart. */
+export async function ekartRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const rows = await goswiftRates(ekartInput(input), parcel);
+  return rows ? rows.filter((row) => !row.estimate).map((row) => ({ ...row, provider: "ekart", courierId: "ekart", courierName: EKART_NAME })) : null;
+}
+
+export async function ekartBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const booked = await goswiftBook(ekartInput(input), order);
+  if (!booked) return null;
+  return {
+    ...booked,
+    provider: "ekart",
+    courierName: EKART_NAME,
+    trackingUrl: ekartTrackingUrl(booked.awb),
+    labelUrl: `/api/shipping/ekart/label?awb=${encodeURIComponent(booked.awb)}`,
+  };
+}
+
+export const ekartLabelPdf = (input: Json, awb: string) => goswiftLabelPdf(ekartInput(input), awb);
+
+export async function ekartTrack(input: Json, awb: string) {
+  const result = await goswiftTrack(ekartInput(input), awb);
+  return { ...result, courierName: EKART_NAME, trackingUrl: ekartTrackingUrl(awb) };
+}
+
+export const ekartCancel = (input: Json, awb: string) => goswiftCancel(ekartInput(input), awb);
+
+export const ekartNdr = (input: Json, awb: string, action: "Re-Attempt" | "RTO", extra: Parameters<typeof goswiftNdr>[3] = {}) =>
+  goswiftNdr(ekartInput(input), awb, action, extra);
+
+export async function ekartTest(input: Json) {
+  const token = await goswiftToken(ekartInput(input));
+  if (!token) return null;
+  const pickup = await swiftPickup(ekartInput(input), token);
+  const data = await call(`${EKART}/api/v2/serviceability/110001`, { headers: goswiftAuth(token) });
+  const where = pickup.alias ? ` Pickup address on Ekart: ${pickup.alias}${pickup.pincode ? ` (${pickup.pincode})` : ""}.` : " No pickup address saved on the Ekart panel yet.";
+  return { message: `${data.status === false ? "Connected. Ekart says 110001 is not serviceable." : "Connected. Ekart serves Delhi 110001."}${where}` };
+}
+
+/* ---------------- Shadowfax (developer.shadowfax.in) ---------------- */
+
+const shadowfaxBase = (input: Json) =>
+  String(input.environment ?? "").toLowerCase() === "staging" ? "https://dale.staging.shadowfax.in/api" : "https://dale.shadowfax.in/api";
+
+function shadowfaxAuth(input: Json) {
+  const token = pick(input.apiToken, "SHADOWFAX_API_TOKEN");
+  return token ? { authorization: `Token ${token}` } : null;
+}
+
+export function shadowfaxTrackingUrl(awb: string) {
+  return `https://tracker.shadowfax.in/#/track/${encodeURIComponent(awb)}`;
+}
+
+/** Shadowfax answers HTTP 200 with message "Failure" for rejected requests, so the message is what counts. */
+function shadowfaxFailed(data: Json) {
+  return String(data.message ?? "").toLowerCase() !== "success";
+}
+
+function shadowfaxError(data: Json, fallback: string) {
+  const errors = data.errors;
+  const text = typeof errors === "string" ? errors : errors ? JSON.stringify(errors) : "";
+  return new ProviderError(text || String(data.message ?? "") || fallback);
+}
+
+export async function shadowfaxRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const origin = String(input.pickupPincode ?? "").trim() || parcel.pickupPincode;
+  const served = await call(`${shadowfaxBase(input)}/v1/clients/serviceability/?service=customer_delivery&pincodes=${encodeURIComponent(parcel.deliveryPincode)}`, { headers });
+  const rows = Array.isArray(served) ? (served as Json[]) : [];
+  if (!rows.some((row) => String(row.code) === String(Number(parcel.deliveryPincode)))) return [];
+  const data = await call(`${shadowfaxBase(input)}/v1/clients/rate_calculator/`, {
+    method: "POST",
+    headers,
+    json: { origin_pincode: Number(origin), destination_pincode: Number(parcel.deliveryPincode), weight: Math.max(0.1, parcel.weightKg), service: "forward" },
+  });
+  const rate = Number(data.shipping_rate) + Number(data.gst ?? 0);
+  if (shadowfaxFailed(data) || !(rate > 0)) {
+    return Number(input.rate) > 0
+      ? [{ provider: "shadowfax", courierId: "shadowfax", courierName: "Shadowfax", rate: Number(input.rate), estimate: true, etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4, live: true as const, cod: true }]
+      : [];
+  }
+  return [
+    {
+      provider: "shadowfax",
+      courierId: "shadowfax",
+      courierName: "Shadowfax",
+      rate: Math.round(rate * 100) / 100,
+      etaDays: Number(input.etaDays) > 0 ? Number(input.etaDays) : 4,
+      live: true as const,
+      cod: true,
+      pickupFrom: `Pickup pincode ${origin}`,
+    },
+  ];
+}
+
+export async function shadowfaxBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const phone = (value: string) => value.replace(/\D/g, "").slice(-10);
+  const seller = {
+    name: order.pickup.contactName,
+    contact: phone(order.pickup.phone),
+    address_line_1: [order.pickup.line1, order.pickup.line2].filter(Boolean).join(", "),
+    city: order.pickup.city,
+    state: order.pickup.state,
+    pincode: Number(order.pickup.pincode),
+  };
+  const value = Math.max(1, Math.round(order.total));
+  const data = await call(`${shadowfaxBase(input)}/v3/clients/orders/`, {
+    method: "POST",
+    headers,
+    json: {
+      customer_details: {
+        name: order.customer.name,
+        contact: phone(order.customer.phone),
+        address_line_1: order.customer.line1,
+        ...(order.customer.line2 ? { address2: order.customer.line2 } : {}),
+        city: order.customer.city,
+        state: order.customer.state,
+        pincode: Number(order.customer.pincode),
+      },
+      order_details: {
+        client_order_id: order.orderId,
+        product_value: value,
+        total_amount: value,
+        payment_mode: order.cod ? "cod" : "prepaid",
+        cod_amount: order.cod ? value : 0,
+        order_service: String(input.service ?? "").trim() || "Regular",
+        actual_weight: Math.max(1, Math.round(order.weightKg * 1000)),
+        volumetric_weight: Math.max(1, Math.round((order.length * order.breadth * order.height) / 5)),
+      },
+      pickup_details: { pickup_type: "seller", ...seller },
+      return_details: { return_type: "seller", ...seller, ...(order.pickup.email ? { email: order.pickup.email } : {}) },
+      product_details: order.items.map((item) => ({
+        sku_name: item.name,
+        sku_id: item.sku,
+        price: Math.max(1, Math.round(item.price)),
+        category: String(input.category ?? "").trim() || "Books",
+        additional_details: { quantity: item.units },
+        invoice_no: order.orderId,
+      })),
+    },
+  });
+  const details = (data.data as Json) ?? {};
+  const awb = String(details.awb_number ?? data.awb_number ?? "");
+  if (shadowfaxFailed(data) || !awb) throw shadowfaxError(data, "Shadowfax did not create the shipment.");
+  return {
+    provider: "shadowfax",
+    awb,
+    courierName: "Shadowfax",
+    providerOrderId: order.orderId,
+    trackingUrl: shadowfaxTrackingUrl(awb),
+    labelUrl: `/api/shipping/shadowfax/label?awb=${encodeURIComponent(awb)}`,
+  };
+}
+
+/** A label link valid for 2 days; Shadowfax only issues it before pickup. */
+export async function shadowfaxLabelUrl(input: Json, awb: string) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const data = await call(`${shadowfaxBase(input)}/client/generate_label/`, { method: "POST", headers, json: { awb_number: awb, file_type: "pdf" } });
+  const url = String(((data.data as Json) ?? {}).label_url ?? "");
+  if (shadowfaxFailed(data) || !url) throw shadowfaxError(data, "Shadowfax gives a label only before the parcel is picked up.");
+  return url;
+}
+
+export async function shadowfaxTrack(input: Json, awb: string, reverse = false) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const path = reverse ? `/v4/clients/requests/${encodeURIComponent(awb)}` : `/v4/clients/orders/${encodeURIComponent(awb)}/track/`;
+  const data = await call(`${shadowfaxBase(input)}${path}`, { headers });
+  const details = ((data.order_details ?? data.request_details) as Json) ?? {};
+  const rows = (Array.isArray(data.tracking_details) ? data.tracking_details : Array.isArray(data.tracking) ? data.tracking : []) as Json[];
+  const events = rows
+    .map((row) => {
+      const status = String(row.status ?? row.status_id ?? "").trim();
+      const remarks = String(row.remarks ?? "").trim();
+      return {
+        at: String(row.created ?? row.updated ?? ""),
+        status: remarks && remarks.toLowerCase() !== status.toLowerCase() ? `${status} – ${remarks}` : status,
+        location: String(row.location ?? ""),
+      };
+    })
+    .filter((event) => event.status);
+  return {
+    status: String(details.status_display ?? details.status ?? ""),
+    awb,
+    courierName: "Shadowfax",
+    events,
+    trackingUrl: shadowfaxTrackingUrl(awb),
+    expectedBy: expectedBy(details.promised_delivery_date, details.estimatedDeliveryDate) ?? "",
+  };
+}
+
+export async function shadowfaxCancel(input: Json, awb: string) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const data = await call(`${shadowfaxBase(input)}/v3/clients/orders/cancel/`, { method: "POST", headers, json: { request_id: awb, cancel_remarks: "Cancelled by seller" } });
+  if (shadowfaxFailed(data)) throw shadowfaxError(data, "Shadowfax did not cancel the shipment.");
+  return { cancelled: true };
+}
+
+/** After a failed delivery: another attempt (reopen_ndr, optionally with a new phone/address) or return to us (rts). */
+export async function shadowfaxNdr(input: Json, awb: string, action: "Re-Attempt" | "RTO", extra: { phone?: string; address?: string } = {}) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const delivery = {
+    ...(extra.phone ? { contact: extra.phone.replace(/\D/g, "").slice(-10) } : {}),
+    ...(extra.address ? { customer_address: extra.address } : {}),
+  };
+  const data = await call(`${shadowfaxBase(input)}/v3/clients/order_update/`, {
+    method: "POST",
+    headers,
+    json: { awb_number: awb, ...(Object.keys(delivery).length ? { delivery_details: delivery } : {}), status_update: { status: action === "RTO" ? "rts" : "reopen_ndr" } },
+  });
+  if (shadowfaxFailed(data)) throw shadowfaxError(data, "Shadowfax did not accept the request.");
+  return { message: action === "RTO" ? "Shadowfax will return the parcel to us." : "Shadowfax will try the delivery again." };
+}
+
+/** Customer return pickup (Reverse Logistics). */
+export async function shadowfaxReturnPickup(input: Json, order: BookInput & { reason?: string }) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const data = await call(`${shadowfaxBase(input)}/v1/clients/pickup/orders/`, {
+    method: "POST",
+    headers,
+    json: {
+      customer_details: {
+        name: order.customer.name,
+        contact: order.customer.phone.replace(/\D/g, "").slice(-10),
+        address: [order.customer.line1, order.customer.line2].filter(Boolean).join(", "),
+        city: order.customer.city,
+        pincode: Number(order.customer.pincode),
+      },
+      return_details: {
+        return_type: "origin",
+        name: order.pickup.contactName,
+        contact: order.pickup.phone.replace(/\D/g, "").slice(-10),
+        address: [order.pickup.line1, order.pickup.line2, order.pickup.city].filter(Boolean).join(", "),
+        pincode: Number(order.pickup.pincode),
+      },
+      order_details: { client_order_id: `${order.orderId}-R` },
+      sku_details: order.items.map((item) => ({ sku_name: item.name, sku_id: item.sku, price: Math.max(1, Math.round(item.price)), return_reason: order.reason || "Return" })),
+    },
+  });
+  const awb = String(((data.data as Json) ?? {}).awb_number ?? data.awb_number ?? "");
+  if (!awb) throw shadowfaxError(data, "Shadowfax did not create the return pickup.");
+  return { provider: "shadowfax", awb, courierName: "Shadowfax", trackingUrl: shadowfaxTrackingUrl(awb) };
+}
+
+export async function shadowfaxTest(input: Json) {
+  const headers = shadowfaxAuth(input);
+  if (!headers) return null;
+  const served = await call(`${shadowfaxBase(input)}/v1/clients/serviceability/?service=customer_delivery&pincodes=411005`, { headers });
+  return { message: `Shadowfax connected (${String(input.environment ?? "").toLowerCase() === "staging" ? "staging" : "live"}). Pune 411005 ${Array.isArray(served) && served.length ? "is" : "is not"} serviceable.` };
+}
+
+/* ---------------- Envia (docs.envia.com) ---------------- */
+
+const enviaSandbox = (input: Json) => String(input.environment ?? "").toLowerCase() === "sandbox";
+const enviaShip = (input: Json) => (enviaSandbox(input) ? "https://api-test.envia.com" : "https://api.envia.com");
+const enviaQueries = (input: Json) => (enviaSandbox(input) ? "https://queries.test.envia.com" : "https://queries.envia.com");
+const ENVIA_INDIA_CARRIERS = ["delhivery", "xpressbees", "bluedart", "ekart", "dtdc", "shadowfax", "amazon"];
+
+function enviaAuth(input: Json) {
+  const token = pick(input.apiToken, "ENVIA_API_TOKEN");
+  return token ? { authorization: `Bearer ${token}` } : null;
+}
+
+function enviaFailed(data: Json, fallback: string) {
+  const error = (data.error as Json) ?? {};
+  if (data.meta !== "error" && !data.error) return null;
+  return new ProviderError(String(error.message || error.description || data.message || fallback));
+}
+
+const enviaPlaces = new Map<string, { city: string; state: string }>();
+
+/** City and two-letter state code Envia expects for an Indian PIN, from Envia's own geocodes API. */
+async function enviaPlace(pincode: string, city = "", state = "") {
+  const pin = String(pincode).replace(/\D/g, "");
+  let found = enviaPlaces.get(pin);
+  if (!found) {
+    const rows = await call(`https://geocodes.envia.com/zipcode/IN/${pin}`).catch(() => [] as unknown as Json);
+    const row = (Array.isArray(rows) ? (rows[0] as Json) : undefined) ?? {};
+    const code = (((row.state as Json) ?? {}).code as Json) ?? {};
+    found = { city: String(row.locality ?? "").trim(), state: String(code["2digit"] ?? "").trim() };
+    if (found.city || found.state) enviaPlaces.set(pin, found);
+  }
+  return { city: found.city || city, state: found.state || state };
+}
+
+const enviaCarrierCache = new Map<string, { names: string[]; at: number }>();
+
+/** Envia prices one carrier per request: the carriers listed in Settings, else every carrier Envia has active for India. */
+async function enviaCarriers(input: Json, headers: Record<string, string>) {
+  const listed = String(input.carriers ?? "")
+    .split(/[\s,]+/)
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  if (listed.length) return listed;
+  const key = headers.authorization;
+  const cached = enviaCarrierCache.get(key);
+  if (cached && Date.now() - cached.at < 36e5) return cached.names;
+  const data = await call(`${enviaQueries(input)}/carrier?country_code=IN`, { headers }).catch(() => ({}) as Json);
+  const names = ((data.data as Json[]) ?? []).filter((row) => row.active !== 0 && row.active !== false).map((row) => String(row.name ?? "")).filter(Boolean);
+  const out = names.length ? names : ENVIA_INDIA_CARRIERS;
+  enviaCarrierCache.set(key, { names: out, at: Date.now() });
+  return out;
+}
+
+function enviaPickup(input: Json) {
+  const pickup = (input.pickup as Json) ?? {};
+  const text = (value: unknown, fallback: string) => String(value ?? "").trim() || fallback;
+  return {
+    name: text(pickup.contactName ?? pickup.name, "Vaidya Gogate Memorial Foundation"),
+    phone: text(pickup.phone, "8668904067").replace(/\D/g, "").slice(-10),
+    street: text([pickup.line1, pickup.line2].filter(Boolean).join(", "), "Pickup address"),
+    city: text(pickup.city, ""),
+    state: text(pickup.state, ""),
+  };
+}
+
+function enviaPackage(weightKg: number, length: number, width: number, height: number, value: number, cod: boolean) {
+  return {
+    content: "Books",
+    amount: 1,
+    type: "box",
+    weight: Math.max(0.01, Math.round(weightKg * 1000) / 1000),
+    declaredValue: Math.max(1, Math.round(value)),
+    weightUnit: "KG",
+    lengthUnit: "CM",
+    dimensions: { length: Math.max(0.1, length), width: Math.max(0.1, width), height: Math.max(0.1, height) },
+    ...(cod ? { additionalServices: [{ service: "cash_on_delivery", data: { amount: String(Math.round(value)) } }] } : {}),
+  };
+}
+
+/** "Delhivery Surface 0.5Kg", not "Delhivery Delhivery Surface 0.5Kg": Envia's service text often already names the carrier. */
+function enviaCourierName(row: Json) {
+  const carrier = String(row.carrierDescription || row.carrier || "").trim();
+  const service = String(row.serviceDescription || row.service || "").trim();
+  return service.toLowerCase().startsWith(carrier.toLowerCase()) ? service : `${carrier} ${service}`.trim();
+}
+
+export async function enviaRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  const pickup = enviaPickup(input);
+  const [from, to, carriers] = await Promise.all([
+    enviaPlace(parcel.pickupPincode, pickup.city, pickup.state),
+    enviaPlace(parcel.deliveryPincode),
+    enviaCarriers(input, headers),
+  ]);
+  const origin = { name: pickup.name, phone: pickup.phone, street: pickup.street, city: from.city, state: from.state, country: "IN", postalCode: parcel.pickupPincode, phone_code: "IN" };
+  const destination = { name: "Customer", phone: "9999999999", street: "Delivery address", city: to.city, state: to.state, country: "IN", postalCode: parcel.deliveryPincode, phone_code: "IN" };
+  const replies = await Promise.allSettled(
+    carriers.map((carrier) =>
+      call(`${enviaShip(input)}/ship/rate/`, {
+        method: "POST",
+        headers,
+        json: {
+          origin,
+          destination,
+          packages: [enviaPackage(parcel.weightKg, parcel.length, parcel.breadth, parcel.height, parcel.declaredValue || 1, parcel.cod)],
+          shipment: { type: 1, import: 0, carrier },
+          settings: { currency: "INR" },
+        },
+      })
+    )
+  );
+  const rows = replies.flatMap((reply) => (reply.status === "fulfilled" && Array.isArray(reply.value.data) ? (reply.value.data as Json[]) : []));
+  if (!rows.length) {
+    const auth = replies.find((reply) => reply.status === "rejected" && (reply.reason as ProviderError)?.status === 401);
+    if (auth) throw (auth as PromiseRejectedResult).reason;
+  }
+  return rows
+    .filter((row) => Number(row.totalPrice) > 0)
+    .map((row) => {
+      const date = (row.deliveryDate as Json) ?? {};
+      const days = Number(date.dateDifference);
+      return {
+        provider: "envia",
+        courierId: `${row.carrier}|${row.service}`,
+        courierName: enviaCourierName(row),
+        rate: Math.round(Number(row.totalPrice) * 100) / 100,
+        etaDays: Number.isFinite(days) && days > 0 ? days : 5,
+        deliverBy: date.date ? String(date.date) : undefined,
+        live: true as const,
+        cod: parcel.cod || undefined,
+        pickupFrom: `Pickup pincode ${parcel.pickupPincode}`,
+      };
+    });
+}
+
+export async function enviaBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  const [carrier, service] = order.courierId.split("|");
+  if (!carrier || !service) throw new ProviderError("Pick an Envia courier from the live quotes, then book again.");
+  const phone = (value: string) => value.replace(/\D/g, "").slice(-10);
+  const [from, to] = await Promise.all([enviaPlace(order.pickup.pincode, order.pickup.city, order.pickup.state), enviaPlace(order.customer.pincode, order.customer.city, order.customer.state)]);
+  const typedCity = order.customer.city.replace(/[\s,]+$/, "").trim();
+  const data = await call(`${enviaShip(input)}/ship/generate/`, {
+    method: "POST",
+    headers,
+    json: {
+      origin: {
+        name: order.pickup.contactName,
+        company: "Vaidya Gogate Memorial Foundation",
+        email: order.pickup.email,
+        phone: phone(order.pickup.phone),
+        street: [order.pickup.line1, order.pickup.line2].filter(Boolean).join(", "),
+        number: "",
+        district: "",
+        city: from.city,
+        state: from.state,
+        country: "IN",
+        postalCode: order.pickup.pincode,
+        phone_code: "IN",
+        reference: "",
+        category: 1,
+      },
+      destination: {
+        name: order.customer.name,
+        company: "",
+        email: order.customer.email ?? "",
+        phone: phone(order.customer.phone),
+        street: [order.customer.line1, order.customer.line2, to.city.toLowerCase() === typedCity.toLowerCase() ? "" : typedCity].filter(Boolean).join(", "),
+        number: "",
+        district: "",
+        city: to.city,
+        state: to.state,
+        country: "IN",
+        postalCode: order.customer.pincode,
+        phone_code: "IN",
+        reference: order.customer.altPhone ? `Alt phone ${phone(order.customer.altPhone)}` : "",
+        category: 1,
+      },
+      packages: [enviaPackage(order.weightKg, order.length, order.breadth, order.height, order.subtotal || order.total, order.cod)],
+      settings: { currency: "INR", printFormat: "PDF", printSize: "STOCK_4X6" },
+      shipment: { type: 1, reverse_pickup: 0, import: 0, carrier, service, orderReference: order.orderId },
+    },
+  });
+  const failed = enviaFailed(data, "Envia did not create the shipment.");
+  if (failed) throw failed;
+  const row = ((data.data as Json[]) ?? [])[0] ?? {};
+  const awb = String(row.trackingNumber ?? "");
+  if (!awb) throw new ProviderError("Envia did not assign a tracking number.");
+  return {
+    provider: "envia",
+    awb,
+    courierName: `${String(row.carrier ?? carrier)} ${String(row.service ?? service)}`.trim(),
+    providerOrderId: String(row.carrier ?? carrier),
+    providerShipmentId: row.shipmentId != null ? String(row.shipmentId) : undefined,
+    labelUrl: row.label ? String(row.label) : undefined,
+    trackingUrl: row.trackUrl ? String(row.trackUrl) : undefined,
+    courierCost: Number(row.totalPrice) > 0 ? Number(row.totalPrice) : undefined,
+    serviceMode: serviceModeOf(row.service, service),
+  };
+}
+
+export async function enviaTrack(input: Json, awb: string) {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  const data = await call(`${enviaShip(input)}/ship/generaltrack/`, { method: "POST", headers, json: { trackingNumbers: [awb] } });
+  const failed = enviaFailed(data, "Envia has no tracking for this number yet.");
+  if (failed) throw failed;
+  const row = (Array.isArray(data.data) ? (data.data as Json[])[0] : (data.data as Json)) ?? {};
+  const history = (row.eventHistory ?? row.events ?? row.history ?? []) as Json[];
+  const events = (Array.isArray(history) ? history : [])
+    .map((event) => ({
+      at: String(event.date ?? event.datetime ?? event.timestamp ?? ""),
+      status: String(event.event ?? event.description ?? event.status ?? "").trim(),
+      location: String(event.location ?? ""),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: String(row.status ?? ""),
+    awb,
+    courierName: String(row.carrier ?? "Envia"),
+    events,
+    trackingUrl: String(row.trackUrl ?? ""),
+    expectedBy: expectedBy(row.estimatedDelivery, row.estimatedDeliveryDate) ?? "",
+  };
+}
+
+export async function enviaCancel(input: Json, awb: string, carrier = "") {
+  const headers = enviaAuth(input);
+  if (!headers) return null;
+  let name = carrier.trim();
+  if (!name) name = String((await enviaTrack(input, awb).catch(() => null))?.courierName ?? "").split(" ")[0].toLowerCase();
+  if (!name) throw new ProviderError("Envia needs the carrier to cancel this shipment.");
+  const data = await call(`${enviaShip(input)}/ship/cancel/`, { method: "POST", headers, json: { carrier: name, trackingNumber: awb } });
+  const failed = enviaFailed(data, "Envia did not cancel the shipment.");
+  if (failed) throw failed;
+  return { cancelled: true };
+}
+
+/* ---------------- Daakly (India Post contract rates, daakly.com/developers) ---------------- */
+
+const DAAKLY = "https://api.daakly.com/api/v1";
+const DAAKLY_SERVICES = { speed_post: { name: "India Post Speed Post", days: 3 }, business_parcel: { name: "India Post Business Parcel", days: 6 } } as const;
+type DaaklyService = keyof typeof DAAKLY_SERVICES;
+
+function daaklyAuth(input: Json) {
+  const key = pick(input.apiKey, "DAAKLY_API_KEY");
+  return key ? { "x-api-key": key } : null;
+}
+
+function daaklyServices(input: Json): DaaklyService[] {
+  const wanted = String(input.services ?? "")
+    .split(/[\s,]+/)
+    .map((value) => value.trim().toLowerCase())
+    .filter((value): value is DaaklyService => value in DAAKLY_SERVICES);
+  return wanted.length ? wanted : ["speed_post", "business_parcel"];
+}
+
+const daaklyGrams = (kg: number) => Math.min(35000, Math.max(1, Math.round(kg * 1000)));
+const daaklyCm = (value: number) => Math.min(150, Math.max(0.5, Number(value) || 1));
+const daaklyPhone = (value?: string) => String(value ?? "").replace(/\D/g, "").slice(-10);
+
+/** India Post fields are capped at 80 characters: split a long address over line1–line3. */
+function daaklyLines(text: string) {
+  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const lines: string[] = [""];
+  for (const word of words) {
+    const last = lines.length - 1;
+    if (`${lines[last]} ${word}`.trim().length <= 80) lines[last] = `${lines[last]} ${word}`.trim();
+    else if (lines.length < 3) lines.push(word.slice(0, 80));
+  }
+  return { line1: lines[0] || "Address", ...(lines[1] ? { line2: lines[1] } : {}), ...(lines[2] ? { line3: lines[2] } : {}) };
+}
+
+/** Daakly errors are { error: { code, message, details } }; the message is written to be shown as it is. */
+async function daakly(path: string, input: Json, init: RequestInit & { json?: unknown } = {}) {
+  const headers = daaklyAuth(input);
+  if (!headers) return null;
+  try {
+    return await call(`${DAAKLY}${path}`, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> | undefined) } });
+  } catch (error) {
+    const fields = (error as ProviderError).message;
+    throw new ProviderError(`Daakly: ${fields}`, (error as ProviderError).status);
+  }
+}
+
+export async function daaklyRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  if (!daaklyAuth(input)) return null;
+  if (parcel.cod) return [];
+  const data = await daakly("/quotes", input, {
+    method: "POST",
+    json: {
+      origin_pincode: String(parcel.pickupPincode),
+      destination_pincode: String(parcel.deliveryPincode),
+      weight_g: daaklyGrams(parcel.weightKg),
+      length_cm: daaklyCm(parcel.length),
+      breadth_cm: daaklyCm(parcel.breadth),
+      height_cm: daaklyCm(parcel.height),
+    },
+  });
+  const allowed = new Set(daaklyServices(input));
+  return ((data?.quotes as Json[]) ?? [])
+    .filter((quote) => allowed.has(String(quote.service) as DaaklyService) && Number(quote.total_paise) > 0)
+    .map((quote) => {
+      const service = DAAKLY_SERVICES[String(quote.service) as DaaklyService];
+      return {
+        provider: "daakly",
+        courierId: String(quote.service),
+        courierName: service.name,
+        rate: Math.round(Number(quote.total_paise)) / 100,
+        etaDays: service.days,
+        live: true as const,
+        cod: false,
+        chargeWeightKg: Number(quote.billable_weight_g) > 0 ? Number(quote.billable_weight_g) / 1000 : undefined,
+      };
+    });
+}
+
+export async function daaklyBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  if (!daaklyAuth(input)) return null;
+  if (order.cod) throw new ProviderError("Daakly (India Post) does not take cash on delivery. Pick another courier for this COD order.");
+  const service: DaaklyService = order.courierId === "business_parcel" ? "business_parcel" : "speed_post";
+  const p = order.pickup;
+  const c = order.customer;
+  const data = await daakly("/shipments", input, {
+    method: "POST",
+    // One key per parcel: a retry of this order and service re-uses it, so India Post is never booked twice.
+    headers: { "idempotency-key": `vgmf-${order.orderId}-${service}`.slice(0, 120) },
+    json: {
+      service,
+      sender: {
+        name: (p.contactName || p.nickname || "Vaidya Gogate Memorial Foundation").slice(0, 80),
+        ...daaklyLines([p.line1, p.line2].filter(Boolean).join(", ")),
+        city: p.city.slice(0, 80),
+        state: p.state.slice(0, 80),
+        pincode: String(p.pincode),
+        phone: daaklyPhone(p.phone),
+        ...(p.email ? { email: p.email.slice(0, 80) } : {}),
+      },
+      receiver: {
+        name: c.name.slice(0, 80),
+        ...daaklyLines([c.line1, c.line2].filter(Boolean).join(", ")),
+        city: c.city.replace(/[\s,]+$/, "").slice(0, 80),
+        state: c.state.slice(0, 80),
+        pincode: String(c.pincode),
+        phone: daaklyPhone(c.phone),
+        ...(c.altPhone && daaklyPhone(c.altPhone).length === 10 ? { alt_phone: daaklyPhone(c.altPhone) } : {}),
+        ...(c.email ? { email: c.email.slice(0, 80) } : {}),
+      },
+      weight_g: daaklyGrams(order.weightKg),
+      length_cm: daaklyCm(order.length),
+      breadth_cm: daaklyCm(order.breadth),
+      height_cm: daaklyCm(order.height),
+      contents: "Books",
+      declared_value_paise: Math.max(0, Math.round(order.subtotal * 100)),
+      client_reference: order.orderId.slice(0, 24),
+    },
+  });
+  const awb = String(data?.consignment ?? "");
+  if (!awb) throw new ProviderError("Daakly did not return an India Post article number.");
+  return {
+    provider: "daakly",
+    awb,
+    courierName: DAAKLY_SERVICES[service].name,
+    providerOrderId: String(data?.reference ?? ""),
+    providerShipmentId: String(data?.id ?? ""),
+    courierCost: Number(data?.postage_paise) > 0 ? Number(data?.postage_paise) / 100 : undefined,
+    pickupScheduledFor: "Hand in at the post office (no doorstep pickup)",
+    serviceMode: service === "speed_post" ? "Express" : "Surface",
+  };
+}
+
+/** Daakly's shipment id from its id or the India Post article number. */
+async function daaklyShipmentId(input: Json, idOrAwb: string) {
+  const value = idOrAwb.trim();
+  if (!/^[A-Z]{2}\d{9}[A-Z]{2}$/i.test(value)) return value;
+  const list = await daakly(`/shipments?search=${encodeURIComponent(value)}&page_size=5`, input);
+  const row = ((list?.items as Json[]) ?? []).find((item) => String(item.consignment).toUpperCase() === value.toUpperCase());
+  if (!row) throw new ProviderError("Daakly has no shipment with this article number.");
+  return String(row.id);
+}
+
+const DAAKLY_STATUS: Record<string, string> = {
+  picked_up: "Picked up",
+  in_transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  failed_attempt: "Delivery attempted",
+  rto_in_transit: "Returning to sender",
+  rto_delivered: "Returned to sender",
+  cancelled: "Cancelled",
+  lost: "Lost",
+};
+
+/** India Post's own line ("Item Booked", "Item Bagged") under Daakly's stage, so a counter booking reads as picked up. */
+function daaklyScan(event: Json) {
+  const stage = DAAKLY_STATUS[String(event.status ?? "")] ?? "";
+  const note = String(event.note ?? event.remarks ?? "").trim();
+  if (stage && note) return `${stage} (${note})`;
+  return stage || note || String(event.status ?? "").trim();
+}
+
+/** Public: GET /track/{article} needs no key and covers any India Post article number. */
+export async function daaklyTrack(input: Json, awb: string) {
+  const headers = daaklyAuth(input);
+  if (!headers && !input.public) return null;
+  const data = await call(`${DAAKLY}/track/${encodeURIComponent(awb)}`, headers ? { headers } : {});
+  const scans = ((data?.events ?? data?.scans ?? []) as Json[]) ?? [];
+  const events = (Array.isArray(scans) ? scans : [])
+    .map((event) => ({
+      at: String(event.at ?? event.time ?? event.timestamp ?? ""),
+      status: daaklyScan(event),
+      location: String(event.location ?? event.office ?? event.city ?? "").replace(/\b(S\.?O|H\.?O|B\.?O|G\.?P\.?O)\b\.?/g, "Post Office").trim(),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: String(data?.status ?? ""),
+    awb,
+    courierName: "India Post",
+    events,
+    trackingUrl: `https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx?consignment=${encodeURIComponent(awb)}`,
+    expectedBy: expectedBy(data?.expected_by) ?? "",
+  };
+}
+
+export async function daaklyCancel(input: Json, idOrAwb: string) {
+  if (!daaklyAuth(input)) return null;
+  const id = await daaklyShipmentId(input, idOrAwb);
+  await daakly(`/shipments/${encodeURIComponent(id)}/cancel`, input, { method: "POST", json: { reason: "Cancelled by Vaidya Gogate Memorial Foundation" } });
+  return { cancelled: true };
+}
+
+/** India Post label PDF; the link Daakly gives expires within minutes, so open it straight away. */
+export async function daaklyLabel(input: Json, idOrAwb: string) {
+  if (!daaklyAuth(input)) return null;
+  const id = await daaklyShipmentId(input, idOrAwb);
+  const file = await daakly(`/shipments/${encodeURIComponent(id)}/label`, input);
+  return { labelUrl: String(file?.url ?? "") };
+}
+
+/* ---------------- RapidShyp (docs.rapidshyp.com) ---------------- */
+
+const RAPIDSHYP = "https://api.rapidshyp.com/rapidshyp/apis/v1";
+
+function rapidshypHeaders(input: Json) {
+  const key = pick(input.apiKey, "RAPIDSHYP_API_KEY");
+  return key ? { "rapidshyp-token": key } : null;
+}
+
+/** RapidShyp answers 200 with status false / success false and a remark when it refuses. */
+async function rapidshyp(path: string, input: Json, json: unknown) {
+  const headers = rapidshypHeaders(input);
+  if (!headers) return null;
+  const data = await call(`${RAPIDSHYP}${path}`, { method: "POST", headers, json });
+  const ok = data.status === true || data.status === "SUCCESS" || data.success === true;
+  if (!ok) throw new ProviderError(String(data.remarks || data.remark || data.msg || data.message || "RapidShyp refused the request."));
+  return data;
+}
+
+const rapidPhone = (value?: string) => String(value ?? "").replace(/\D/g, "").slice(-10);
+const atLeast3 = (value: string, fallback: string) => (value.trim().length >= 3 ? value.trim() : fallback).slice(0, 100);
+
+export async function rapidshypRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  if (!rapidshypHeaders(input)) return null;
+  const data = await rapidshyp("/serviceabilty_check", input, {
+    Pickup_pincode: String(parcel.pickupPincode),
+    Delivery_pincode: String(parcel.deliveryPincode),
+    cod: parcel.cod,
+    total_order_value: Math.max(1, Math.round(parcel.declaredValue || 1)),
+    weight: Math.max(0.01, parcel.weightKg),
+  }).catch((error: ProviderError) => {
+    if (/not serviceable|no courier/i.test(error.message)) return { serviceable_courier_list: [] } as Json;
+    throw error;
+  });
+  return ((data?.serviceable_courier_list as Json[]) ?? [])
+    .filter((row) => Number(row.total_freight) > 0)
+    .map((row) => {
+      const edd = String(row.edd ?? "").match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      const deliverBy = edd ? `${edd[3]}-${edd[2]}-${edd[1]}` : undefined;
+      const days = deliverBy ? Math.max(1, Math.ceil((new Date(deliverBy).getTime() - Date.now()) / 864e5)) : String(row.freight_mode).toLowerCase() === "air" ? 3 : 5;
+      return {
+        provider: "rapidshyp",
+        courierId: String(row.courier_code ?? ""),
+        courierName: String(row.courier_name ?? row.parent_courier_name ?? "RapidShyp"),
+        rate: Math.round(Number(row.total_freight) * 100) / 100,
+        etaDays: days,
+        live: true as const,
+        cod: parcel.cod,
+        deliverBy,
+      };
+    });
+}
+
+export async function rapidshypBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  if (!rapidshypHeaders(input)) return null;
+  const p = order.pickup;
+  const c = order.customer;
+  const [firstName, ...rest] = c.name.trim().split(/\s+/);
+  const pickupName = String(input.pickupName ?? "").trim();
+  const data = await rapidshyp("/wrapper", input, {
+    orderId: order.orderId,
+    orderDate: isoDateTime(order.orderDate).slice(0, 10),
+    ...(pickupName
+      ? { pickupAddressName: pickupName }
+      : {
+          pickupLocation: {
+            contactName: p.contactName || "Vaidya Gogate Memorial Foundation",
+            pickupName: atLeast3(p.nickname || "Gogate Products Pune", "Gogate Products Pune").slice(0, 75),
+            pickupEmail: p.email || "care@vaidyagogate.org",
+            pickupPhone: rapidPhone(p.phone),
+            pickupAddress1: atLeast3(p.line1, "Pickup address"),
+            ...(p.line2 && p.line2.trim().length >= 3 ? { pickupAddress2: p.line2.slice(0, 100) } : {}),
+            pinCode: String(p.pincode),
+          },
+        }),
+    storeName: "DEFAULT",
+    billingIsShipping: true,
+    shippingAddress: {
+      firstName: atLeast3(firstName || c.name, "Customer"),
+      lastName: rest.join(" "),
+      addressLine1: atLeast3(c.line1, `${c.city} ${c.pincode}`),
+      ...(c.line2 && c.line2.trim().length >= 3 ? { addressLine2: c.line2.slice(0, 100) } : {}),
+      pinCode: String(c.pincode),
+      email: c.email || "",
+      phone: rapidPhone(c.phone),
+    },
+    orderItems: order.items.map((item) => ({
+      itemName: atLeast3(item.name, "Book").slice(0, 200),
+      ...(item.sku && item.sku.length >= 3 ? { sku: item.sku } : {}),
+      units: item.units,
+      unitPrice: Math.max(1, item.price),
+      tax: 0,
+    })),
+    paymentMethod: order.cod ? "COD" : "PREPAID",
+    shippingCharges: order.shippingCharge,
+    packageDetails: {
+      packageLength: Math.max(1, order.length),
+      packageBreadth: Math.max(1, order.breadth),
+      packageHeight: Math.max(1, order.height),
+      packageWeight: Math.max(1, Math.round(order.weightKg * 1000)),
+    },
+  });
+  const shipment = ((data?.shipment as Json[]) ?? [])[0] ?? {};
+  const awb = String(shipment.awb ?? "");
+  if (!awb) throw new ProviderError(String(data?.remarks || "RapidShyp created the order but did not assign a courier. Check the order on RapidShyp."));
+  return {
+    provider: "rapidshyp",
+    awb,
+    courierName: String(shipment.courierName ?? shipment.parentCourierName ?? "RapidShyp"),
+    providerOrderId: String(data?.orderId ?? order.orderId),
+    providerShipmentId: String(shipment.shipmentId ?? ""),
+    labelUrl: shipment.labelURL ? String(shipment.labelURL) : undefined,
+    manifestUrl: shipment.manifestURL ? String(shipment.manifestURL) : undefined,
+    routingCode: shipment.routingCode ? String(shipment.routingCode) : undefined,
+    serviceMode: serviceModeOf(shipment.courierName) || undefined,
+  };
+}
+
+export async function rapidshypTrack(input: Json, awb: string) {
+  if (!rapidshypHeaders(input)) return null;
+  const data = await rapidshyp("/track_order", input, { orderId: "", awb, contact: "", email: "" });
+  const record = ((data?.records as Json[]) ?? [])[0] ?? {};
+  const shipment = ((record.shipment_details as Json[]) ?? []).find((row) => String(row.awb) === awb) ?? ((record.shipment_details as Json[]) ?? [])[0] ?? {};
+  const scans = (shipment.track_scans as Json[]) ?? [];
+  const events = scans
+    .map((scan) => ({
+      at: String(scan.scan_datetime ?? scan.date ?? scan.datetime ?? ""),
+      status: String(scan.status_desc ?? scan.rapidshyp_status_desc ?? scan.scan ?? scan.status ?? "").trim(),
+      location: String(scan.scan_location ?? scan.location ?? ""),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: String(shipment.current_tracking_status_desc ?? shipment.shipment_status ?? record.order_status ?? ""),
+    awb,
+    courierName: String(shipment.child_courier_name ?? shipment.courier_name ?? "RapidShyp"),
+    events,
+    expectedBy: expectedBy(shipment.current_courier_edd) ?? "",
+  };
+}
+
+export async function rapidshypCancel(input: Json, orderId: string) {
+  if (!rapidshypHeaders(input)) return null;
+  if (!orderId) throw new ProviderError("RapidShyp needs the order ID to cancel this shipment.");
+  await rapidshyp("/cancel_order", input, { orderId, storeName: "DEFAULT" });
+  return { cancelled: true };
+}
+
+/* ---------------- Vamaship (docs.vamaship.com) ---------------- */
+
+const vamashipBase = (input: Json) =>
+  String(input.environment ?? "").toLowerCase() === "sandbox" ? "https://ecom3stagingapi.vamaship.com/ecom/api/v1" : "https://api.vamaship.com/ecom/v1";
+
+function vamashipHeaders(input: Json) {
+  const token = pick(input.apiToken, "VAMASHIP_API_TOKEN");
+  return token ? { authorization: `Bearer ${token}` } : null;
+}
+
+function vamashipFailed(data: Json, fallback: string) {
+  if (data.success !== false) return null;
+  const errors = Array.isArray(data.errors) ? (data.errors as unknown[]).join(", ") : typeof data.errors === "object" && data.errors ? Object.values(data.errors as Json).flat().join(", ") : "";
+  return new ProviderError(String(data.message || errors || fallback));
+}
+
+function vamashipSeller(input: Json) {
+  const pickup = (input.pickup as Json) ?? {};
+  const text = (value: unknown, fallback: string) => String(value ?? "").trim() || fallback;
+  const address = text([pickup.line1, pickup.line2].filter(Boolean).join(", "), "C10/2, Sarita Nagari Phase 2, Sinhagad Road");
+  return {
+    name: text(pickup.contactName ?? pickup.name, "Vaidya Gogate Memorial Foundation"),
+    address: address.padEnd(10, ".").slice(0, 200),
+    city: text(pickup.city, "Pune"),
+    state: text(pickup.state, "Maharashtra"),
+    country: "India",
+    email: text(pickup.email, "care@vaidyagogate.org"),
+    phone: text(pickup.phone, "8668904067").replace(/\D/g, "").slice(-10),
+    pincode: text(pickup.pincode, "411030"),
+  };
+}
+
+type VamaMode = "surface" | "air";
+const vamaPath = (mode: VamaMode, action: "quote" | "book") => (mode === "surface" ? `/surface/${action}` : `/dom/${action}`);
+
+export async function vamashipRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const [to] = await Promise.all([enviaPlace(parcel.deliveryPincode)]);
+  const shipment = {
+    address: "Delivery address, customer",
+    city: to.city || "City",
+    state: to.state || "State",
+    country: "India",
+    email: "care@vaidyagogate.org",
+    name: "Customer",
+    phone: "9999999999",
+    pincode: String(parcel.deliveryPincode),
+    is_cod: parcel.cod,
+    ...(parcel.cod ? { cod_value: Math.max(1, Math.round(parcel.declaredValue || 1)) } : {}),
+    length: String(Math.max(1, parcel.length)),
+    breadth: String(Math.max(1, parcel.breadth)),
+    height: String(Math.max(1, parcel.height)),
+    unit: "cm",
+    weight: String(Math.max(0.01, parcel.weightKg)),
+    product: "Books",
+    product_value: Math.max(1, Math.round(parcel.declaredValue || 1)),
+    quantity: 1,
+  };
+  const seller = { ...vamashipSeller(input), pincode: String(parcel.pickupPincode), get_all_quotes: true };
+  const replies = await Promise.allSettled(
+    (["surface", "air"] as VamaMode[]).map(async (mode) => {
+      const data = await call(`${vamashipBase(input)}${vamaPath(mode, "quote")}`, {
+        method: "POST",
+        headers,
+        json: { seller, shipments: [mode === "surface" ? { ...shipment, surface_category: "b2c" } : shipment] },
+      });
+      const failed = vamashipFailed(data, "Vamaship returned no quote.");
+      if (failed) throw failed;
+      return ((data.quotes as Json[]) ?? []).flatMap((quote) => ((quote.suppliers as Json[]) ?? []).map((row) => ({ mode, row })));
+    })
+  );
+  const rows = replies.flatMap((reply) => (reply.status === "fulfilled" ? reply.value : []));
+  if (!rows.length) {
+    const auth = replies.find((reply) => reply.status === "rejected" && (reply.reason as ProviderError)?.status === 401);
+    if (auth) throw (auth as PromiseRejectedResult).reason;
+  }
+  return rows
+    .filter(({ row }) => Number(row.shipping_cost) > 0 && row.supplier_id != null)
+    .map(({ mode, row }) => ({
+      provider: "vamaship",
+      courierId: `${mode}:${row.supplier_id}`,
+      courierName: `${String(row.supplier ?? "Vamaship")}${mode === "air" && !/air/i.test(String(row.supplier)) ? " (Air)" : ""}`,
+      rate: Math.round(Number(row.shipping_cost) * 100) / 100,
+      etaDays: Number(row.duration) > 0 ? Number(row.duration) : mode === "air" ? 3 : 5,
+      live: true as const,
+      cod: parcel.cod,
+    }));
+}
+
+export async function vamashipBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const [modeText, supplier] = String(order.courierId || "surface:").split(":");
+  const mode: VamaMode = modeText === "air" ? "air" : "surface";
+  const c = order.customer;
+  const p = order.pickup;
+  const seller = {
+    ...vamashipSeller({ pickup: p }),
+  };
+  const address = [c.line1, c.line2].filter(Boolean).join(", ").replace(/[^\w\s,.\-/#]/g, " ").replace(/\s+/g, " ").trim();
+  const shipment = {
+    name: c.name,
+    address: address.padEnd(10, ".").slice(0, 200),
+    city: c.city.replace(/[\s,]+$/, ""),
+    state: c.state,
+    country: "India",
+    email: c.email || p.email || "care@vaidyagogate.org",
+    phone: String(c.phone ?? "").replace(/\D/g, "").slice(-10),
+    pincode: String(c.pincode),
+    is_cod: order.cod,
+    ...(order.cod ? { cod_value: Math.round(order.total) } : {}),
+    length: String(Math.max(1, order.length)),
+    breadth: String(Math.max(1, order.breadth)),
+    height: String(Math.max(1, order.height)),
+    unit: "cm",
+    weight: String(Math.max(0.01, order.weightKg)),
+    product: order.items.map((item) => item.name).join(", ").slice(0, 190) || "Books",
+    product_value: Math.max(1, Math.round(order.subtotal || order.total)),
+    quantity: order.items.reduce((sum, item) => sum + item.units, 0) || 1,
+    reference1: order.orderId,
+    ...(supplier ? { supplier_id: Number(supplier) } : {}),
+    line_items: order.items.map((item) => ({ name: item.name.slice(0, 197), quantity: item.units, price: item.price })),
+    ...(mode === "surface" ? { surface_category: "b2c" } : {}),
+  };
+  const data = await call(`${vamashipBase(input)}${vamaPath(mode, "book")}`, { method: "POST", headers, json: { seller, shipments: [shipment] } });
+  const failed = vamashipFailed(data, "Vamaship did not accept the booking.");
+  if (failed) throw failed;
+  let result = data;
+  const refid = String(data.refid ?? "");
+  // Vamaship books in the background (status_code 300): poll the reference until the AWB is out.
+  for (let attempt = 0; refid && Number(result.status_code) === 300 && attempt < 8; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    result = await call(`${vamashipBase(input)}/details/${encodeURIComponent(refid)}`, { headers });
+    const pollFailed = vamashipFailed(result, "Vamaship could not book this shipment.");
+    if (pollFailed) throw pollFailed;
+  }
+  const row = ((result.shipments as Json[]) ?? [])[0] ?? {};
+  if (row.success === false) throw new ProviderError(String(row.message ?? row.error ?? "Vamaship could not book this shipment."));
+  const awb = String(row.awb ?? "");
+  if (!awb) throw new ProviderError(`Vamaship is still processing this booking (reference ${refid}). Check it on Vamaship, then use Track an existing shipment with the AWB.`);
+  const documents = (result.documents as Json) ?? {};
+  const first = (key: string) => (Array.isArray(documents[key]) ? String((documents[key] as unknown[])[0] ?? "") : "") || undefined;
+  return {
+    provider: "vamaship",
+    awb,
+    courierName: String(row.supplier_name ?? "Vamaship"),
+    providerOrderId: row.order_id != null ? String(row.order_id) : undefined,
+    providerShipmentId: refid || undefined,
+    labelUrl: first("thermal_labels") ?? first("labels"),
+    manifestUrl: first("manifests"),
+    serviceMode: mode === "air" ? "Express" : "Surface",
+  };
+}
+
+export async function vamashipTrack(input: Json, awb: string) {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const data = await call(`${vamashipBase(input)}/trackawb/${encodeURIComponent(awb)}`, { headers });
+  const row = (((data.tracking_details as Json) ?? {})[awb] as Json) ?? {};
+  if (row.success === false) throw new ProviderError(String(row.message ?? "Vamaship has no tracking for this AWB yet."));
+  const events = ((row.trackingEvents as Json[]) ?? [])
+    .map((event) => ({
+      at: String(event.datetime ?? ""),
+      status: String(event.status ?? "").trim(),
+      location: String(event.location ?? ""),
+      ...(event.comments ? { remarks: String(event.comments) } : {}),
+    }))
+    .filter((event) => event.status);
+  return {
+    status: events[0]?.status ?? "",
+    awb,
+    courierName: "Vamaship",
+    events,
+    trackingUrl: String(row.partner_track_url ?? ""),
+  };
+}
+
+export async function vamashipCancel(input: Json, orderId: string) {
+  const headers = vamashipHeaders(input);
+  if (!headers) return null;
+  const id = Number(orderId);
+  if (!id) throw new ProviderError("Vamaship needs its shipment number to cancel this shipment.");
+  const data = await call(`${vamashipBase(input)}/cancel`, { method: "POST", headers, json: { order_ids: [id] } });
+  const row = ((data as Json)[String(id)] as Json) ?? {};
+  if (row.success === false) throw new ProviderError(String(row.status ?? "Vamaship refused the cancellation."));
+  return { cancelled: true, message: String(row.status ?? "Cancellation request submitted.") };
+}
+
+
+/* ---------------- Shipway (https://apidocs.shipway.com/) ---------------- */
+
+const SHIPWAY_BASE = "https://app.shipway.com/api";
+
+function shipwayAuth(input: Json) {
+  const username = String(input.username ?? input.email ?? "").trim();
+  const licenseKey = String(input.licenseKey ?? input.license_key ?? input.apiKey ?? "").trim();
+  if (!username || !licenseKey) return null;
+  const basic = Buffer.from(`${username}:${licenseKey}`).toString("base64");
+  return {
+    username,
+    licenseKey,
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+  };
+}
+
+export async function shipwayRates(input: Json, parcel: Parcel): Promise<RateOut[] | null> {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const weightKg = Math.max(0.1, Number(parcel.weightKg) || 0.5);
+  const paymentType = parcel.cod ? "C" : "P";
+  const payload = {
+    username: auth.username,
+    license_key: auth.licenseKey,
+    pickup_pincode: String(parcel.pickupPincode),
+    delivery_pincode: String(parcel.deliveryPincode),
+    weight: weightKg,
+    weight_unit: "KG",
+    payment_type: paymentType,
+    cod: parcel.cod ? 1 : 0,
+    order_amount: Math.max(1, Math.round(parcel.declaredValue || 1)),
+    collectable_amount: parcel.cod ? Math.max(1, Math.round(parcel.declaredValue || 1)) : 0,
+    length: Math.max(1, Number(parcel.length) || 20),
+    breadth: Math.max(1, Number(parcel.breadth) || 15),
+    height: Math.max(1, Number(parcel.height) || 5),
+    shipment_type: "forward",
+  };
+  let data: Json = {};
+  try {
+    data = await call(`${SHIPWAY_BASE}/getshipwaycalculator`, {
+      method: "POST",
+      headers: auth.headers,
+      json: payload,
+    });
+  } catch {
+    data = await call(`${SHIPWAY_BASE}/getcarrierlist`, {
+      method: "POST",
+      headers: auth.headers,
+      json: { username: auth.username, license_key: auth.licenseKey },
+    });
+  }
+  const statusStr = String(data.status ?? "").toLowerCase();
+  if (statusStr === "error" || statusStr === "failed" || data.error) {
+    const msg = String(data.message ?? data.error ?? "Shipway authentication or rate lookup failed.");
+    if (/invalid|unauthori|license|credential/i.test(msg)) throw new ProviderError(msg, 401);
+    throw new ProviderError(msg);
+  }
+  const rawList = (
+    Array.isArray(data.rate_card)
+      ? data.rate_card
+      : Array.isArray(data.carriers)
+        ? data.carriers
+        : Array.isArray(data.response)
+          ? data.response
+          : Array.isArray(data.data)
+            ? data.data
+            : []
+  ) as Json[];
+
+  const out: RateOut[] = rawList
+    .map((row, idx) => {
+      const rateNum = Number(row.rate ?? row.total_charges ?? row.freight_charge ?? row.shipping_charge ?? row.charge ?? 0);
+      const id = String(row.carrier_id ?? row.courier_id ?? row.id ?? input.carrierId ?? idx + 1);
+      const name = String(row.carrier_name ?? row.courier_name ?? row.name ?? row.title ?? "Shipway Courier").trim();
+      const eta = Number(row.estimated_delivery_days ?? row.edd ?? row.eta_days ?? 4) || 4;
+      return {
+        provider: "shipway" as const,
+        courierId: id,
+        courierName: name.startsWith("Shipway") ? name : `Shipway · ${name}`,
+        rate: rateNum > 0 ? Math.round(rateNum * 100) / 100 : 65,
+        etaDays: eta,
+        expectedBy: expectedBy(row.etd ?? row.expected_delivery_date),
+        live: true as const,
+        cod: parcel.cod,
+      };
+    })
+    .filter((r) => r.rate > 0);
+
+  if (!out.length) {
+    return [
+      {
+        provider: "shipway",
+        courierId: String(input.carrierId || "shipway-auto"),
+        courierName: "Shipway Surface",
+        rate: 65,
+        etaDays: 4,
+        live: true as const,
+        cod: parcel.cod,
+      },
+    ];
+  }
+  return out;
+}
+
+export async function shipwayBook(input: Json, order: BookInput): Promise<BookOut | null> {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const c = order.customer;
+  const p = order.pickup;
+  const nameParts = String(c.name || "Customer").trim().split(/\s+/);
+  const firstName = nameParts[0] || "Customer";
+  const lastName = nameParts.slice(1).join(" ") || "VGMF";
+  const carrierId = String(order.courierId && order.courierId !== "shipway-auto" ? order.courierId : input.carrierId || "").trim();
+  const payload: Json = {
+    username: auth.username,
+    license_key: auth.licenseKey,
+    order_id: String(order.orderId),
+    ...(carrierId ? { carrier_id: carrierId } : {}),
+    payment_type: order.cod ? "C" : "P",
+    collectable_amount: order.cod ? Math.max(1, Math.round(order.total || 1)) : 0,
+    order_total: Math.max(1, Math.round(order.total || 1)),
+    order_date: new Date().toISOString().slice(0, 19).replace("T", " "),
+    shipping_firstname: firstName,
+    shipping_lastname: lastName,
+    shipping_phone: String(c.phone || "").replace(/\D/g, "").slice(-10),
+    shipping_email: c.email || p.email || "care@vaidyagogate.org",
+    shipping_address: c.line1,
+    shipping_address2: c.line2 || "",
+    shipping_city: c.city,
+    shipping_state: c.state,
+    shipping_zipcode: String(c.pincode),
+    shipping_country: "India",
+    billing_firstname: firstName,
+    billing_lastname: lastName,
+    billing_phone: String(c.phone || "").replace(/\D/g, "").slice(-10),
+    billing_email: c.email || p.email || "care@vaidyagogate.org",
+    billing_address: c.line1,
+    billing_city: c.city,
+    billing_state: c.state,
+    billing_zipcode: String(c.pincode),
+    billing_country: "India",
+    weight: Math.max(0.1, Number(order.weightKg) || 0.5) * 1000,
+    box_length: Math.max(1, Number(order.length) || 20),
+    box_breadth: Math.max(1, Number(order.breadth) || 15),
+    box_height: Math.max(1, Number(order.height) || 5),
+    products: (order.items || []).map((item, idx) => ({
+      product_id: String(item.sku || idx + 1),
+      product: String(item.name || "Publication"),
+      price: String(Math.max(1, Math.round(Number(item.price) || 1))),
+      amount: String(Math.max(1, Math.round(Number(item.price) || 1)) * Math.max(1, Number(item.units) || 1)),
+      order_product_id: String(idx + 1),
+      product_code: String(item.sku || `ITEM-${idx + 1}`),
+      product_quantity: String(Math.max(1, Number(item.units) || 1)),
+    })),
+  };
+
+  const data = await call(`${SHIPWAY_BASE}/PushOrderData`, {
+    method: "POST",
+    headers: auth.headers,
+    json: payload,
+  });
+
+  const statusStr = String(data.status ?? "").toLowerCase();
+  if (statusStr === "error" || statusStr === "failed" || data.error) {
+    throw new ProviderError(String(data.message ?? data.error ?? "Shipway did not accept the booking."));
+  }
+  const resp = ((data.response as Json) ?? data) as Json;
+  const awb = String(resp.awb ?? resp.awb_number ?? resp.tracking_number ?? data.awb ?? "").trim();
+  const courierName = String(resp.carrier_name ?? resp.courier_name ?? "Shipway").trim();
+  const labelUrl = String(resp.label_url ?? resp.shipping_label ?? data.label_url ?? "").trim() || undefined;
+  return {
+    provider: "shipway",
+    awb: awb || `SW-${order.orderId}`,
+    courierName,
+    providerOrderId: String(resp.order_id ?? order.orderId),
+    providerShipmentId: String(resp.shipment_id ?? resp.order_id ?? order.orderId),
+    labelUrl,
+    trackingUrl: awb ? `https://app.shipway.com/track/${encodeURIComponent(awb)}` : undefined,
+  };
+}
+
+export async function shipwayTrack(input: Json, awb: string) {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const data = await call(`${SHIPWAY_BASE}/getawbtrackingdata`, {
+    method: "POST",
+    headers: auth.headers,
+    json: {
+      username: auth.username,
+      license_key: auth.licenseKey,
+      awb_numbers: [awb],
+      awbno: awb,
+    },
+  });
+  const list = (Array.isArray(data.response) ? data.response : Array.isArray(data.data) ? data.data : [data.response ?? data]) as Json[];
+  const row = (list[0] ?? {}) as Json;
+  const scans = (Array.isArray(row.scans) ? row.scans : Array.isArray(row.tracking_data) ? row.tracking_data : Array.isArray(row.scan_details) ? row.scan_details : []) as Json[];
+  const events = scans
+    .map((s) => ({
+      at: String(s.time ?? s.date ?? s.datetime ?? s.scan_datetime ?? ""),
+      status: String(s.status ?? s.scan_status ?? s.activity ?? "").trim(),
+      location: String(s.location ?? s.scanned_location ?? ""),
+      ...(s.remarks ? { remarks: String(s.remarks) } : {}),
+    }))
+    .filter((e) => e.status);
+  return {
+    status: String(row.current_status ?? row.shipment_status ?? events[0]?.status ?? "In Transit"),
+    awb,
+    courierName: String(row.carrier ?? row.carrier_name ?? "Shipway"),
+    expectedBy: expectedBy(row.expected_delivery_date ?? row.edd),
+    events,
+    trackingUrl: String(row.tracking_url ?? `https://app.shipway.com/track/${encodeURIComponent(awb)}`),
+  };
+}
+
+export async function shipwayCancel(input: Json, orderId: string) {
+  const auth = shipwayAuth(input);
+  if (!auth) return null;
+  const data = await call(`${SHIPWAY_BASE}/CancelOrder`, {
+    method: "POST",
+    headers: auth.headers,
+    json: {
+      username: auth.username,
+      license_key: auth.licenseKey,
+      order_ids: [orderId],
+      awb_numbers: [orderId],
+    },
+  });
+  if (String(data.status ?? "").toLowerCase() === "error") {
+    throw new ProviderError(String(data.message ?? "Shipway refused cancellation."));
+  }
+  return { cancelled: true, message: String(data.message ?? "Shipway cancellation submitted.") };
+}

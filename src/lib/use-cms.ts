@@ -1,5 +1,7 @@
 "use client";
 
+import { withOffer } from "@/lib/promotions";
+import { isPublishedNow } from "@/lib/schedule";
 import { useSyncExternalStore } from "react";
 import { defaultOrderSettings, getOrderSettings, type OrderSettings } from "@/lib/integrations";
 import { articles as seededArticles } from "@/data/articles";
@@ -59,7 +61,7 @@ export function useLiveArticles() {
       articleRaw = raw;
       const hasLocal = Boolean(window.localStorage.getItem("vgmf_article_edits") || window.localStorage.getItem("vgmf_custom_articles"));
       const published = getPublishedFeed()?.articles;
-      articleList = !hasLocal && published?.length ? published : getPublishedArticles();
+      articleList = (!hasLocal && published?.length ? published : getPublishedArticles()).filter((article) => isPublishedNow(article));
       return articleList;
     },
     () => seededArticles
@@ -181,6 +183,15 @@ export function useSiteFlags() {
   );
 }
 
+/** Footer social links: the published URL wins on every device, so phones and desktops show what Admin saved. */
+function liveSocial(local?: SiteSettings["social"], published?: Partial<SiteSettings["social"]> | null): SiteSettings["social"] {
+  const merged = { ...(local ?? {}) } as SiteSettings["social"];
+  for (const [key, value] of Object.entries(published ?? {})) {
+    if (typeof value === "string" && /^https?:\/\//i.test(value.trim())) (merged as Record<string, string>)[key] = value.trim();
+  }
+  return merged;
+}
+
 let settingsRaw = "\0";
 let settingsValue: SiteSettings | null = null;
 
@@ -196,11 +207,24 @@ export function useSiteSettings(): SiteSettings | null {
       const hasLocal = Boolean(window.localStorage.getItem("vgmf_settings"));
       settingsValue = {
         ...local,
+        // Visitors never edit maintenance, so the live copy decides it on every device.
+        maintenanceMode: published?.maintenanceMode ?? local.maintenanceMode,
+        maintenanceUntil: published?.maintenanceUntil ?? local.maintenanceUntil,
+        maintenanceMessage: published?.maintenanceMessage || local.maintenanceMessage,
         siteName: hasLocal ? local.siteName : published?.name || local.siteName,
         tagline: hasLocal ? local.tagline : published?.tagline || local.tagline,
         logoUrl: local.logoUrl || published?.logoUrl || "",
         logoText: local.logoText || published?.logoText || local.logoText,
         faviconUrl: local.faviconUrl || published?.faviconUrl || "",
+        shlokaBar: hasLocal ? local.shlokaBar : published?.shlokaBar ?? local.shlokaBar,
+        shlokas: hasLocal ? local.shlokas : published?.shlokas ?? local.shlokas,
+        queryButton: hasLocal ? local.queryButton : published?.queryButton ?? local.queryButton,
+        queryNumber: hasLocal ? local.queryNumber : published?.queryNumber ?? local.queryNumber,
+        queryMessage: hasLocal ? local.queryMessage : published?.queryMessage ?? local.queryMessage,
+        chrome: hasLocal ? local.chrome : published?.chrome ?? local.chrome,
+        social: liveSocial(local.social, published?.social),
+        supportPhone: published?.phone || local.supportPhone,
+        supportEmail: published?.email || local.supportEmail,
       };
       return settingsValue;
     },
@@ -212,9 +236,18 @@ export function useSiteSettings(): SiteSettings | null {
         ...local,
         siteName: published.name || local.siteName,
         tagline: published.tagline || local.tagline,
+        social: liveSocial(local.social, published.social),
+        shlokaBar: published.shlokaBar,
+        shlokas: published.shlokas,
+        queryButton: published.queryButton,
+        queryNumber: published.queryNumber,
+        queryMessage: published.queryMessage,
+        chrome: published.chrome,
         logoUrl: published.logoUrl || "",
         logoText: published.logoText || local.logoText,
         faviconUrl: published.faviconUrl || "",
+        supportPhone: published.phone || local.supportPhone,
+        supportEmail: published.email || local.supportEmail,
       };
     }
   );
@@ -226,6 +259,27 @@ let productAll: Book[] = seededBooks;
 let productLive: Book[] = seededBooks;
 
 function readProducts() {
+  if (typeof window !== "undefined" && !window.localStorage.getItem("vgmf_kannada_stock_zeroed_v1")) {
+    try {
+      const customRaw = window.localStorage.getItem("vgmf_custom_books");
+      if (customRaw) {
+        const list = JSON.parse(customRaw) as Book[];
+        let fixed = false;
+        for (const b of list) {
+          if (b.id === "bks-1794329394346" || /kannada/i.test(b.title || "")) {
+            if (b.stock !== 0 || b.stockStatus !== "out_of_stock") {
+              b.stock = 0;
+              b.stockStatus = "out_of_stock";
+              b.availability = "Pre-order";
+              fixed = true;
+            }
+          }
+        }
+        if (fixed) window.localStorage.setItem("vgmf_custom_books", JSON.stringify(list));
+      }
+      window.localStorage.setItem("vgmf_kannada_stock_zeroed_v1", "1");
+    } catch {}
+  }
   const local = productKeys.map((key) => window.localStorage.getItem(key) ?? "").join("|");
   const raw = `${local}|${publishedStamp()}`;
   if (raw !== productRaw) {
@@ -234,11 +288,17 @@ function readProducts() {
     const published = getPublishedFeed()?.books;
     if (!hasLocal && published?.length) {
       productAll = published;
-      productLive = published.filter((book) => book.active !== false);
+      productLive = published.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
       return;
     }
-    productAll = getAllProducts();
-    productLive = productAll.filter((book) => book.active !== false);
+    // Shoppers always get the live stock and pre-order state; only desk pages keep their local copy.
+    const desk = /^\/(admin|staff|support|portal|scanner|pos)(\/|$)/.test(window.location.pathname);
+    const fresh = new Map((desk ? [] : published ?? []).map((book) => [book.id, book]));
+    productAll = getAllProducts().map((book) => {
+      const live = fresh.get(book.id);
+      return live ? { ...book, stock: live.stock, stockStatus: live.stockStatus, preorder: live.preorder } : book;
+    });
+    productLive = productAll.filter((book) => book.active !== false && isPublishedNow(book)).map(withOffer);
   }
 }
 

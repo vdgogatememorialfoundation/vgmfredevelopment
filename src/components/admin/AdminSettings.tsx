@@ -67,6 +67,23 @@ export function SettingsSection() {
                   <TextInput value={loc.address} onChange={(e) => setLocation(index, "address", e.target.value)} />
                 </Field>
               </div>
+              <Field label="Store phone">
+                <TextInput value={loc.phone} onChange={(e) => setLocation(index, "phone", e.target.value)} />
+              </Field>
+              <Field label="Pickup point of contact">
+                <TextInput value={loc.contactName ?? ""} placeholder="e.g. Front desk – Mrs. Joshi" onChange={(e) => setLocation(index, "contactName", e.target.value)} />
+              </Field>
+              <Field label="Contact phone">
+                <TextInput value={loc.contactPhone ?? ""} placeholder="Defaults to store phone" onChange={(e) => setLocation(index, "contactPhone", e.target.value)} />
+              </Field>
+              <Field label="Pickup timings">
+                <TextInput value={loc.pickupHours ?? ""} placeholder="Monday to Thursday, 6:00 PM – 10:00 PM" onChange={(e) => setLocation(index, "pickupHours", e.target.value)} />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field label="Google Maps link">
+                  <TextInput value={loc.mapUrl ?? ""} placeholder="https://maps.app.goo.gl/… (blank: built from the address)" onChange={(e) => setLocation(index, "mapUrl", e.target.value)} />
+                </Field>
+              </div>
               <label className="flex items-center gap-2 text-sm font-medium text-text-primary">
                 <input type="checkbox" checked={loc.active} onChange={(e) => setLocation(index, "active", e.target.checked)} className="h-4 w-4 accent-burgundy" />
                 Active

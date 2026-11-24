@@ -220,3 +220,20 @@ export function EmptyState({ text }: { text: string }) {
 export function formatINR(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
+/** Plain text with any https link in it made clickable. */
+export function LinkText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/\S+)/g);
+  return (
+    <>
+      {parts.map((part, index) =>
+        /^https?:\/\//.test(part) ? (
+          <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="break-all font-semibold underline">
+            {part}
+          </a>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+}

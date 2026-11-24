@@ -7,6 +7,8 @@ import { CartProvider } from "../src/cart";
 import { MenuButton } from "../src/chrome";
 import { DrawerProvider } from "../src/drawer";
 import { FeedProvider } from "../src/feed";
+import { currentFlavor } from "../src/flavor";
+import { PortalAppHost } from "../src/portal-host";
 import { ThemeProvider, useTheme } from "../src/theme";
 import { Loading } from "../src/ui";
 import { WishlistProvider } from "../src/wishlist";
@@ -26,16 +28,15 @@ function ThemedStack() {
   }
   return (
     <>
-      <StatusBar style="dark" backgroundColor={theme.colors.background} />
+      <StatusBar style="dark" backgroundColor="#FFFFFF" />
       <Stack
         screenOptions={{
-          headerTintColor: theme.colors.text,
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerTitleStyle: { fontWeight: "700", fontSize: 17, color: theme.colors.text },
+          headerTintColor: "#111827",
+          headerStyle: { backgroundColor: "#FFFFFF" },
+          headerTitleStyle: { fontWeight: "700", fontSize: 17, color: "#111827" },
           headerBackTitle: "Back",
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: theme.colors.background },
-          headerRight: () => <MenuButton />,
+          headerShadowVisible: true,
+          contentStyle: { backgroundColor: "#F8F9FB" },
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -43,8 +44,9 @@ function ThemedStack() {
         <Stack.Screen name="article/[id]" options={{ title: "Article" }} />
         <Stack.Screen name="book/[id]" options={{ title: "Publication" }} />
         <Stack.Screen name="clinic/[id]" options={{ title: "Clinic" }} />
-        <Stack.Screen name="articles" options={{ title: "Articles" }} />
         <Stack.Screen name="videos" options={{ title: "Videos" }} />
+        <Stack.Screen name="seminar-videos" options={{ title: "Seminar Videos" }} />
+        <Stack.Screen name="explore" options={{ title: "Explore Foundation" }} />
         <Stack.Screen name="gallery" options={{ title: "Gallery" }} />
         <Stack.Screen name="notices" options={{ title: "Notices" }} />
         <Stack.Screen name="announcements" options={{ title: "Announcements" }} />
@@ -60,12 +62,25 @@ function ThemedStack() {
         <Stack.Screen name="policy/[id]" options={{ title: "Policy" }} />
         <Stack.Screen name="search" options={{ title: "Search" }} />
         <Stack.Screen name="chat" options={{ title: "Chat" }} />
+        <Stack.Screen name="ticket/[id]" options={{ title: "Ticket" }} />
+        <Stack.Screen name="order/[id]" options={{ title: "Order" }} />
+        <Stack.Screen name="web" options={{ title: "Foundation" }} />
+        <Stack.Screen name="about-page/[id]" options={{ title: "About" }} />
+        <Stack.Screen name="legal" options={{ title: "Legal" }} />
+        <Stack.Screen name="speakers" options={{ title: "Speakers" }} />
+        <Stack.Screen name="schedules" options={{ title: "Schedules" }} />
+        <Stack.Screen name="application-status" options={{ title: "Application status" }} />
+        <Stack.Screen name="page/[slug]" options={{ title: "Page" }} />
       </Stack>
     </>
   );
 }
 
 export default function RootLayout() {
+  const flavor = currentFlavor();
+  if (flavor.id !== "customer") {
+    return <PortalAppHost flavor={flavor} />;
+  }
   return (
     <FeedProvider>
       <ThemeProvider>

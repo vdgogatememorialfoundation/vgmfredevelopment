@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/common/PageHeader";
 import BookCard from "@/components/books/BookCard";
-import { useLiveBooks } from "@/lib/use-cms";
+import { useLiveBooks, useSiteSettings } from "@/lib/use-cms";
+import { GRID_COLUMNS } from "@/lib/product-ribbons";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import type { Book } from "@/types";
+import { pendingProductIds } from "@/lib/product-data";
 
 type SortId = "title" | "price-asc" | "price-desc" | "newest";
 
@@ -15,8 +17,25 @@ export function browserHasProductEdits() {
   return PRODUCT_KEYS.some((key) => window.localStorage.getItem(key));
 }
 
+/** Server list first (always current on every device); a local copy wins only for an edit this device has not published yet. */
+export function freshCatalogue(server: Book[], local: Book[]) {
+  if (!local.length) return server;
+  if (!server.length) return local;
+  const pending = new Set(pendingProductIds());
+  const localById = new Map(local.filter((book) => pending.has(book.id)).map((book) => [book.id, book]));
+  const serverIds = new Set(server.map((book) => book.id));
+  const newestServer = server.reduce((max, book) => ((book.updatedAt ?? "") > max ? book.updatedAt ?? "" : max), "");
+  const merged = server.map((book) => {
+    const mine = localById.get(book.id);
+    return mine && (mine.updatedAt ?? "") > (book.updatedAt ?? "") ? mine : book;
+  });
+  const unpublished = local.filter((book) => !serverIds.has(book.id) && (book.updatedAt ?? "") > newestServer);
+  return [...unpublished, ...merged];
+}
+
 export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }) {
   const live = useLiveBooks();
+  const gridText = useSiteSettings()?.productText;
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
@@ -29,7 +48,7 @@ export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }
     if (browserHasProductEdits()) setUseLocal(true);
   }, [live]);
 
-  const books = useLocal ? live : initialBooks;
+  const books = useMemo(() => (useLocal ? freshCatalogue(initialBooks, live) : initialBooks), [useLocal, initialBooks, live]);
 
   const categories = useMemo(
     () => [...new Set(books.map((book) => book.category).filter(Boolean))].sort(),
@@ -104,7 +123,7 @@ export default function ShopCatalogue({ initialBooks }: { initialBooks: Book[] }
               {books.length === 0 ? t("shop.empty") : "No publications match these filters."}
             </p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className={`grid gap-3 sm:grid-cols-3 ${gridText?.mobileColumns === 1 ? "grid-cols-1" : "grid-cols-2"} ${GRID_COLUMNS[gridText?.gridColumns ?? 5] ?? GRID_COLUMNS[5]}`}>
               {shown.map((book) => (
                 <BookCard key={book.id} book={book} />
               ))}

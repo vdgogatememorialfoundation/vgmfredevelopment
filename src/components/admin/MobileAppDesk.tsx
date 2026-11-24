@@ -12,8 +12,9 @@ import {
   type MobileAppConfig,
   type MobileModuleId,
 } from "@/lib/mobile-config";
-import { collectMobileSnapshot, publishLiveSite } from "@/lib/mobile-publish";
+import { publishLiveSite } from "@/lib/mobile-publish";
 import { ImageField } from "@/components/admin/ImageField";
+import { MobileNotificationsPanel } from "@/components/admin/MobileNotificationsPanel";
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm";
 const primary = "rounded-lg bg-burgundy px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
@@ -53,11 +54,11 @@ export function MobileAppDesk() {
     setBusy(true);
     setNote("Publishing the live website snapshot to the app…");
     try {
-      const snapshot = collectMobileSnapshot();
+      await publishLiveSite();
       const response = await fetch("/api/mobile/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...snapshot, email: getIntegrations().email }),
+        body: JSON.stringify({ partial: true, sections: {}, email: getIntegrations().email }),
       });
       const data = (await response.json()) as {
         ok?: boolean;
@@ -278,6 +279,8 @@ export function MobileAppDesk() {
           </button>
         </div>
       </section>
+
+      <MobileNotificationsPanel />
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Store listing (optional)</h2>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { patchOrder, sendOtpCode, updateOrderInStore } from "@/lib/admin-store";
-import { getOrders, pickupOtp } from "@/lib/store";
+import { useEffect, useState } from "react";
+import { patchOrder, recordPayment, sendPickupOtp, setOrderStatus, updateOrderInStore } from "@/lib/admin-store";
+import { getOrders, pickupOtp, pickupOtpReady } from "@/lib/store";
+import { createBalancePaymentLink, createPaymentLink } from "@/lib/payments-client";
 import type { Order } from "@/types";
 import { Button, Panel, TextInput } from "@/components/admin/AdminUI";
 
@@ -23,6 +24,16 @@ function matches(order: Order, query: string) {
   return hay.includes(needle) || (digits.length >= 4 && phone.includes(digits));
 }
 
+/** Amount the pickup customer still owes (pre-order balance or unpaid part of the order). */
+function amountDue(order: Order) {
+  const pre = order.preorderPayment;
+  if (pre && !pre.balancePaidAt) return pre.balance;
+  if (order.paymentStatus === "Paid") return 0;
+  return Math.max(0, order.total - (order.amountPaid ?? 0));
+}
+
+const inr = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+
 export function PickupCounter() {
   const [query, setQuery] = useState("");
   const [orders, setOrders] = useState<Order[]>([]);
@@ -33,6 +44,63 @@ export function PickupCounter() {
   const [busy, setBusy] = useState(false);
 
   const selected = orders.find((order) => order.id === selectedId) ?? null;
+  const otpReady = selected ? pickupOtpReady(selected) : false;
+  const paid = selected?.paymentStatus === "Paid";
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const open = getOrders()
+        .filter((order) => order.deliveryMode === "store_pickup" && order.status !== "Delivered" && order.status !== "Cancelled")
+        .sort((a, b) => stamp(b) - stamp(a));
+      setOrders(open);
+      setSelectedId(open[0]?.id ?? "");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const refresh = (id: string) => {
+    const next = getOrders().find((item) => item.id === id);
+    if (next) setOrders((current) => current.map((item) => (item.id === id ? next : item)));
+    return next;
+  };
+
+  const markPaid = () => {
+    if (!selected) return;
+    keep(selected);
+    recordPayment(selected.id, { method: selected.paymentMethod === "Cash at Store" || !selected.paymentMethod ? "Cash at Store" : selected.paymentMethod });
+    refresh(selected.id);
+    setNote("Payment recorded as paid.");
+    setError("");
+  };
+
+  const sendBalanceLink = async () => {
+    if (!selected) return;
+    const due = amountDue(selected);
+    if (!(due > 0)) return;
+    setBusy(true);
+    setError("");
+    setNote("");
+    try {
+      keep(selected);
+      const pre = selected.preorderPayment;
+      const link = pre && !pre.balancePaidAt ? await createBalancePaymentLink(selected.id) : await createPaymentLink(selected.id, due);
+      refresh(selected.id);
+      setNote(`Payment link for ${inr(due)} sent to the customer by email and WhatsApp: ${link.url}`);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : "Could not create the payment link.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const markReady = () => {
+    if (!selected) return;
+    keep(selected);
+    setOrderStatus(selected.id, "Packed");
+    refresh(selected.id);
+    setNote("Marked ready for pickup. The pickup OTP was sent to the customer.");
+    setError("");
+  };
 
   const search = async () => {
     const q = query.trim();
@@ -88,15 +156,25 @@ export function PickupCounter() {
 
   const verify = () => {
     if (!selected) return;
+    if (!otpReady) {
+      setError("The pickup OTP unlocks after the order is processed. Mark it ready for pickup first.");
+      setNote("");
+      return;
+    }
+    if (!paid) {
+      setError("Payment is still pending. Mark the order as paid before handing it over.");
+      setNote("");
+      return;
+    }
     if (otp.trim() !== pickupOtp(selected.id)) {
       setError("That OTP does not match this order.");
       setNote("");
       return;
     }
     keep(selected);
-    const next = patchOrder(selected.id, { status: "Delivered" }, "Pickup OTP verified");
-    if (!next) return;
-    setOrders((current) => current.map((item) => (item.id === next.id ? next : item)));
+    setOrderStatus(selected.id, "Delivered");
+    patchOrder(selected.id, {}, "Pickup OTP verified · picked up");
+    refresh(selected.id);
     setNote("OTP verified. The order is marked as picked up.");
     setError("");
     setOtp("");
@@ -104,21 +182,19 @@ export function PickupCounter() {
 
   const resend = () => {
     if (!selected) return;
-    sendOtpCode({
-      email: selected.deliveryAddress?.email,
-      phone: selected.deliveryAddress?.phone,
-      name: selected.deliveryAddress?.fullName,
-      code: pickupOtp(selected.id),
-      purpose: `store pickup for order ${selected.id}`,
-    });
+    if (!sendPickupOtp(selected)) {
+      setError("The pickup OTP unlocks after the order is processed. Mark it ready for pickup first.");
+      setNote("");
+      return;
+    }
     setNote("Pickup OTP sent again to the customer.");
     setError("");
   };
 
   return (
     <Panel
-      title="Store pickup"
-      description="Search the order from any device, mark the customer arrived, then enter the pickup OTP. You can send the same OTP again."
+      title="Store pickup orders"
+      description="Open pickup orders are listed below. Search by order ID, name, phone or email; mark ready, record payment, then verify the pickup OTP. The OTP works only after the order is processed."
     >
       <form
         className="flex flex-wrap gap-2"
@@ -130,7 +206,7 @@ export function PickupCounter() {
         <div className="min-w-56 flex-1">
           <TextInput
             value={query}
-            placeholder="Order number, customer name, or phone"
+            placeholder="Order ID, customer name, phone or email"
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
@@ -163,6 +239,9 @@ export function PickupCounter() {
                   <span className="block text-xs text-text-muted">
                     {order.deliveryAddress?.fullName || "Customer"} · {order.deliveryMode === "store_pickup" ? "Pickup" : order.status}
                   </span>
+                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${amountDue(order) > 0 ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}>
+                    {amountDue(order) > 0 ? `${inr(amountDue(order))} due · ${order.paymentStatus}` : `Paid · ${order.paymentMethod || "Online"}`}
+                  </span>
                 </button>
               </li>
             ))}
@@ -178,15 +257,41 @@ export function PickupCounter() {
                 {selected.items.map((item) => `${item.quantity} × ${item.title}`).join(", ")}
               </p>
               <p className="mt-1 text-xs text-text-muted">
-                Status {selected.status}
+                ₹{selected.total.toLocaleString("en-IN")} · Payment {selected.paymentStatus}
+                {selected.paymentMethod ? ` (${selected.paymentMethod})` : ""} · Status {selected.status}
                 {selected.pickupArrivedAt ? " · Customer arrived" : ""}
                 {selected.deliveryMode === "store_pickup" ? " · Store pickup" : ""}
               </p>
+              <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${amountDue(selected) > 0 ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-800"}`}>
+                <p className="font-semibold">
+                  {amountDue(selected) > 0 ? `${inr(amountDue(selected))} still to pay` : "Fully paid"} · Total {inr(selected.total)}
+                  {selected.preorderPayment ? ` · Pre-order advance ${inr(selected.preorderPayment.advance ?? 0)}` : ""}
+                </p>
+                <p className="text-xs">
+                  Payment: {selected.paymentStatus}
+                  {selected.paymentMethod ? ` · ${selected.paymentMethod}` : ""}
+                  {selected.razorpayPaymentId || selected.paymentRef ? ` · ${selected.razorpayPaymentId || selected.paymentRef}` : ""}
+                  {selected.preorderPayment?.link?.url || selected.paymentLink?.url ? " · payment link sent" : ""}
+                </p>
+                {amountDue(selected) > 0 ? (
+                  <Button className="mt-2" variant="outline" onClick={() => void sendBalanceLink()} disabled={busy}>
+                    {busy ? "Sending…" : `Send pending balance link (${inr(amountDue(selected))})`}
+                  </Button>
+                ) : null}
+              </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="outline" onClick={arrived} disabled={Boolean(selected.pickupArrivedAt)}>
                   {selected.pickupArrivedAt ? "Customer arrived" : "Mark customer arrived"}
                 </Button>
-                <Button variant="outline" onClick={resend}>
+                {!otpReady && selected.status !== "Cancelled" ? (
+                  <Button variant="outline" onClick={markReady}>
+                    Mark ready for pickup
+                  </Button>
+                ) : null}
+                <Button variant="outline" onClick={markPaid} disabled={paid}>
+                  {paid ? "Paid" : "Mark as paid"}
+                </Button>
+                <Button variant="outline" onClick={resend} disabled={!otpReady || selected.status === "Delivered"}>
                   Resend OTP
                 </Button>
               </div>
@@ -197,12 +302,13 @@ export function PickupCounter() {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     value={otp}
-                    placeholder="6-digit code"
+                    placeholder={selected.status === "Delivered" ? "OTP verified" : otpReady ? "6-digit code" : "Unlocks after the order is processed"}
+                    disabled={!otpReady || selected.status === "Delivered"}
                     onChange={(event) => setOtp(event.target.value)}
                   />
                 </label>
-                <Button variant="success" onClick={verify} disabled={selected.status === "Delivered"}>
-                  {selected.status === "Delivered" ? "Picked up" : "Verify OTP"}
+                <Button variant="success" onClick={verify} disabled={selected.status === "Delivered" || !otpReady}>
+                  {selected.status === "Delivered" ? "OTP verified · Picked up" : "Verify OTP"}
                 </Button>
               </div>
             </div>

@@ -10,6 +10,7 @@ import {
 } from "@/lib/server/providers";
 import { applyFoundationBrand, wrapFoundationEmail } from "@/lib/email-layout";
 import { saveWhatsAppCredsFile } from "@/lib/server/whatsapp-inbox";
+import { savedAdminIntegrations } from "@/lib/server/admin-integrations";
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
         whatsapp: mergeCreds(asRecord(stored.whatsapp), asRecord(body.whatsapp)),
         sms: mergeCreds(asRecord(stored.sms), asRecord(body.sms)),
         messages: { ...asRecord(stored.messages), ...asRecord(body.messages) },
+        ...(Array.isArray(body.customTemplates) ? { customTemplates: body.customTemplates.slice(0, 100) } : {}),
       };
       await writeKv("admin", "notify-creds", next);
       await writeKv("admin", "email-creds", next.email);
@@ -75,7 +77,8 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.action === "templates") {
-      return NextResponse.json({ ok: true, templates: await listMetaTemplates(creds) });
+      const found = await listMetaTemplates(creds);
+      return NextResponse.json({ ok: true, templates: found.templates, wabaId: found.wabaId });
     }
 
     if (body.channel === "email") {
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest) {
         {
           ...creds,
           provider: String(body.provider || creds.provider || "cpaas"),
+          ...(typeof body.fromName === "string" && body.fromName.trim() ? { fromName: body.fromName.trim().slice(0, 120) } : {}),
         },
         mail
       );
@@ -127,7 +131,13 @@ export async function POST(request: NextRequest) {
           ? await sendAiSensy(waCreds, { to, campaign: String(body.template ?? ""), name: String(body.name ?? ""), params })
           : provider === "zoho"
             ? await sendZohoCpaas(waCreds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params })
-            : await sendMetaTemplate(waCreds, { to, template: String(body.template ?? ""), language: String(body.language ?? "en"), params });
+            : await sendMetaTemplate(waCreds, {
+                to,
+                template: String(body.template ?? ""),
+                language: String(body.language ?? "en"),
+                params,
+                authCode: ((savedAdminIntegrations() as { whatsapp?: { templates?: { name: string; category?: string }[] } }).whatsapp?.templates ?? []).find((item) => item.name === String(body.template ?? ""))?.category === "AUTHENTICATION" ? params[0] : undefined,
+              });
       if (!sent) return NextResponse.json({ ok: false, configured: false, error: "WhatsApp credentials are not configured." });
       return NextResponse.json({ ok: true, configured: true, ...sent });
     }

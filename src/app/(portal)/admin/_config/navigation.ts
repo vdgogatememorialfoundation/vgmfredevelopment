@@ -27,13 +27,81 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Commerce",
     items: [
       { label: "Orders", href: "/admin/commerce/orders" },
+      { label: "Customer purchases", href: "/admin/commerce/customer-purchases" },
       { label: "In-store POS", href: "/admin/commerce/pos" },
+      { label: "Store pickup orders", href: "/admin/commerce/pickup" },
+      { label: "Approvals", href: "/admin/commerce/approvals" },
+      { label: "Returns", href: "/admin/commerce/returns" },
+      { label: "Replacements", href: "/admin/commerce/replacements" },
+      { label: "Invoices", href: "/admin/commerce/invoices" },
       { label: "Shipment Management", href: "/admin/commerce/shipments" },
+      { label: "Quick shipment", href: "/admin/commerce/quick-shipment" },
       { label: "Inventory Management", href: "/admin/commerce/inventory" },
       { label: "Product Management", href: "/admin/commerce/products" },
+      { label: "Offers, coupons & gift cards", href: "/admin/commerce/promotions" },
       { label: "Serviceability", href: "/admin/commerce/serviceability" },
       { label: "Courier performance", href: "/admin/delivery-partners/performance" },
       { label: "Payments", href: "/admin/commerce/payments" },
+    ],
+  },
+
+  {
+    label: "VGMF Logistics · Pickups",
+    items: [
+      { label: "Pickups: assign to riders", href: "/admin/commerce/pickups" },
+    ],
+  },
+
+  {
+    label: "VGMF Logistics · Hubs",
+    items: [
+      { label: "Hub overview", href: "/admin/commerce/hubs" },
+      { label: "Parcels in and out of the hub", href: "/admin/commerce/hubs?tab=inward" },
+      { label: "Sorting and racks", href: "/admin/commerce/hubs?tab=sorting" },
+      { label: "Bags and seals", href: "/admin/commerce/hubs?tab=bagging" },
+      { label: "Manifests", href: "/admin/commerce/hubs?tab=manifests" },
+      { label: "Transfers between hubs", href: "/admin/commerce/hubs?tab=transfers" },
+      { label: "Returns to seller (RTO)", href: "/admin/commerce/hubs?tab=returns" },
+      { label: "Problems and CCTV", href: "/admin/commerce/hubs?tab=exceptions" },
+      { label: "Hub staff, KYC and gate register", href: "/admin/commerce/hubs?tab=staff_gate" },
+      { label: "Hub reports and audit log", href: "/admin/commerce/hubs?tab=reports" },
+      { label: "Hub staff login page", href: "/hub/login" },
+    ],
+  },
+
+  {
+    label: "VGMF Logistics · Riders",
+    items: [
+      { label: "Delivery runsheets", href: "/admin/commerce/hubs?tab=delivery" },
+      { label: "Locate riders & live map", href: "/admin/accounts/delivery-partners" },
+      { label: "Rider accounts and activation", href: "/admin/accounts/delivery-partners?tab=accounts" },
+      { label: "Rider shifts, cash and wallet", href: "/admin/delivery-partners/riders" },
+      { label: "Shift times and delivery slots", href: "/admin/commerce/logistics-ops?tab=shifts" },
+      { label: "Open-box delivery checks", href: "/admin/commerce/logistics-ops?tab=openbox" },
+    ],
+  },
+
+  {
+    label: "VGMF Logistics · Settings",
+    items: [
+      { label: "Logistics settings", href: "/admin/commerce/logistics-settings" },
+      { label: "Rider KYC (VOVE ID / AccuraScan)", href: "/admin/commerce/logistics-settings?tab=partners" },
+      { label: "Delivery pincodes", href: "/admin/commerce/serviceability" },
+      { label: "Outside courier APIs", href: "/admin/settings/shipping-apis" },
+      { label: "Courier performance", href: "/admin/delivery-partners/performance" },
+    ],
+  },
+
+  {
+    label: "Scanner",
+    items: [
+      { label: "Assign pickers & packing board", href: "/admin/commerce/picking" },
+      { label: "Picker app (admin)", href: "/admin/commerce/picker" },
+      { label: "Packer app (admin)", href: "/admin/commerce/packer" },
+      { label: "Ready to ship · create shipments", href: "/admin/commerce/ready-to-ship" },
+      { label: "Staff scanner app", href: "/scanner" },
+      { label: "Picker app", href: "/picker" },
+      { label: "Packer app", href: "/packer" },
     ],
   },
 
@@ -43,6 +111,7 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Staff & co-admin", href: "/admin/accounts/staff" },
       { label: "Customers", href: "/admin/accounts/customers" },
       { label: "Roles & Permissions", href: "/admin/accounts/roles" },
+      { label: "Activity log", href: "/admin/accounts/activity" },
     ],
   },
 
@@ -53,15 +122,17 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Pages", href: "/admin/website/pages" },
       { label: "Site & portal switches", href: "/admin/website/visibility" },
       { label: "Colours & site text", href: "/admin/website/text" },
+      { label: "Festival themes", href: "/admin/website/festivals" },
+      { label: "Disclaimers, reels, signup & birthdays", href: "/admin/website/extras" },
       { label: "About Us", href: "/admin/website/about" },
       { label: "Reviews", href: "/admin/website/reviews" },
+      { label: "Reviews & forms", href: "/admin/website/forms" },
       { label: "Announcements", href: "/admin/website/announcements" },
       { label: "Slideshow & posters", href: "/admin/website/flyers" },
       { label: "Banners", href: "/admin/website/banners" },
       { label: "Competition awards", href: "/admin/website/awards" },
       { label: "Special thanks", href: "/admin/website/thanks" },
       { label: "Media Library", href: "/admin/website/media" },
-      { label: "Articles", href: "/admin/articles" },
       { label: "Gallery", href: "/admin/website/gallery" },
       { label: "Videos", href: "/admin/website/videos" },
       { label: "Seminar videos", href: "/admin/website/seminar-videos" },
@@ -71,12 +142,42 @@ export const adminNavigation: AdminNavGroup[] = [
   },
 
   {
+    label: "Articles",
+    items: [
+      { label: "All articles", href: "/admin/articles" },
+      { label: "Create article", href: "/admin/articles/new" },
+    ],
+  },
+
+  {
+    label: "Article approvals",
+    items: [
+      { label: "Waiting for approval", href: "/admin/articles/approvals" },
+    ],
+  },
+
+  {
     label: "Events",
     items: [
       { label: "All Events", href: "/admin/events" },
-      { label: "Create Event", href: "/admin/events/create" },
       { label: "Schedule", href: "/admin/events/schedule" },
       { label: "Speakers", href: "/admin/events/speakers" },
+    ],
+  },
+
+  {
+    label: "Certificates",
+    items: [
+      { label: "All certificates", href: "/admin/certificates" },
+      { label: "Verification", href: "/admin/certificates/verification" },
+    ],
+  },
+
+  {
+    label: "Shipping & couriers",
+    items: [
+      { label: "Shipment orders", href: "/admin/shipments/orders" },
+      { label: "Courier wallets", href: "/admin/shipments/wallet" },
     ],
   },
 
@@ -84,7 +185,6 @@ export const adminNavigation: AdminNavGroup[] = [
     label: "Payments",
     items: [
       { label: "Transactions", href: "/admin/payments" },
-      { label: "Gateway", href: "/admin/payments/gateway" },
       { label: "Successful", href: "/admin/payments/successful" },
       { label: "Failed", href: "/admin/payments/failed" },
       { label: "Pending", href: "/admin/payments/pending" },
@@ -96,10 +196,9 @@ export const adminNavigation: AdminNavGroup[] = [
   {
     label: "Support",
     items: [
-      { label: "Support Tickets", href: "/admin/support/tickets" },
+      { label: "Tickets & enquiries", href: "/admin/support" },
       { label: "Live chat", href: "/admin/support/chat" },
       { label: "WhatsApp inbox", href: "/admin/support/whatsapp" },
-      { label: "Contact Enquiries", href: "/admin/support/contact" },
     ],
   },
 
@@ -129,22 +228,32 @@ export const adminNavigation: AdminNavGroup[] = [
       { label: "Email: Zoho CPaaS & ZeptoMail", href: "/admin/settings/email" },
       { label: "WhatsApp: Meta & Zoho CPaaS", href: "/admin/settings/whatsapp" },
       { label: "SMS: MSG91", href: "/admin/settings/sms" },
+      { label: "Firebase: app push", href: "/admin/settings/firebase" },
       { label: "Email, SMS & WhatsApp templates", href: "/admin/settings/templates" },
       { label: "Shipping APIs", href: "/admin/settings/shipping-apis" },
       { label: "Orders, returns & refunds", href: "/admin/settings/orders" },
       { label: "Delivery zones", href: "/admin/settings/shipping" },
       { label: "Processing Timelines", href: "/admin/settings/timelines" },
-      { label: "Notifications", href: "/admin/settings/notifications" },
       { label: "Registration", href: "/admin/settings/registration" },
       { label: "Countries", href: "/admin/settings/countries" },
       { label: "Events", href: "/admin/settings/events" },
-      { label: "Certificate verification", href: "/admin/settings/api-keys" },
       { label: "Sister portals", href: "/admin/settings/portals" },
       { label: "Media storage", href: "/admin/settings/media" },
       { label: "Mobile app", href: "/admin/settings/mobile" },
       { label: "App appearance", href: "/admin/settings/appearance" },
       { label: "Domains & DNS", href: "/admin/settings/domains" },
       { label: "Security", href: "/admin/settings/security" },
+    ],
+  },
+
+  {
+    label: "Portals",
+    items: [
+      { label: "Support portal", href: "/support" },
+      { label: "Hub Staff portal", href: "/hub/login" },
+      { label: "Staff portal", href: "/staff" },
+      { label: "Doctor portal", href: "/doctor" },
+      { label: "Public website", href: "/" },
     ],
   },
 ]

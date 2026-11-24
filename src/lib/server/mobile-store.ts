@@ -2,10 +2,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { dataFile } from "@/lib/server/paths";
+import { saveTicket, ticketsFor } from "@/lib/server/support-tickets";
 
 const OTP_FILE = join("/tmp", "vgmf-mobile-otp.json");
-const TICKETS_FILE = join("/tmp", "vgmf-mobile-tickets.json");
-const ORDERS_FILE = join("/tmp", "vgmf-mobile-orders.json");
+const LEGACY_ORDERS_FILE = join("/tmp", "vgmf-mobile-orders.json");
+function ordersFile() {
+  return dataFile("mobile-orders.json");
+}
 const LEGACY_SESSIONS_FILE = join("/tmp", "vgmf-mobile-sessions.json");
 
 const OTP_RESEND_MS = 60 * 1000;
@@ -60,6 +63,12 @@ export type MobileOrder = {
   razorpayPaymentId?: string;
   address?: MobileAddress;
   createdAt: string;
+  checkoutMeta?: {
+    pickup: boolean;
+    landmark?: string;
+    promo?: { code: string; kind: "coupon" | "gift"; amount: number; label: string };
+    courierFee?: number | null;
+  };
   replacementRequest?: {
     status: "Pending Review" | "Accepted" | "Rejected" | "Replacement Created";
     reason: string;
@@ -114,19 +123,31 @@ function loadSessions(): MobileSession[] {
   return sessions;
 }
 
+function loadOrders(): MobileOrder[] {
+  if (memory.orders) return memory.orders;
+  const primary = readFile<MobileOrder[]>(ordersFile(), []);
+  const orders = primary.length ? primary : readFile<MobileOrder[]>(LEGACY_ORDERS_FILE, []);
+  memory.orders = orders;
+  if (!primary.length && orders.length) writeFile(ordersFile(), orders);
+  return orders;
+}
+
 function load<T>(key: keyof typeof memory, file: string, fallback: T): T {
   if (key === "sessions") return loadSessions() as T;
+  if (key === "orders") return loadOrders() as T;
   if (memory[key] == null) (memory[key] as T) = readFile(file, fallback);
   return memory[key] as T;
 }
 
 function persist<T>(key: "otp" | "tickets" | "orders" | "sessions", file: string, value: T) {
   (memory[key] as T) = value;
-  writeFile(key === "sessions" ? sessionsFile() : file, value);
+  writeFile(key === "sessions" ? sessionsFile() : key === "orders" ? ordersFile() : file, value);
 }
 
+/** Same 12-digit, numbers-only format as website order ids. */
 function newId() {
-  return randomBytes(6).toString("hex");
+  const bytes = randomBytes(12);
+  return Array.from(bytes, (byte, index) => (index === 0 ? 1 + (byte % 9) : byte % 10)).join("");
 }
 
 export function issueMobileOtp(email: string): { code?: string; error?: string } {
@@ -210,7 +231,7 @@ export function publicSession(session: MobileSession) {
 
 export function listTickets(email: string) {
   const normalized = email.trim().toLowerCase();
-  return load<MobileTicket[]>("tickets", TICKETS_FILE, []).filter((ticket) => ticket.email === normalized);
+  return ticketsFor(normalized);
 }
 
 export function ticketRateLimited(email: string) {
@@ -236,15 +257,12 @@ export function addTicket(input: { name: string; email: string; phone?: string; 
     createdAt: now,
     responses: [],
   };
-  const list = load<MobileTicket[]>("tickets", TICKETS_FILE, []);
-  list.unshift(ticket);
-  persist("tickets", TICKETS_FILE, list);
-  return ticket;
+  return saveTicket({ ...ticket, updatedAt: now, portal: "customer" });
 }
 
 export function listOrders(email: string) {
   const normalized = email.trim().toLowerCase();
-  return load<MobileOrder[]>("orders", ORDERS_FILE, []).filter((order) => order.email === normalized);
+  return load<MobileOrder[]>("orders", ordersFile(), []).filter((order) => order.email === normalized);
 }
 
 function orderKey(email: string, items: MobileOrder["items"]) {
@@ -266,7 +284,7 @@ export function addOrder(input: {
   const items = input.items.map((item) => ({
     id: String(item.id),
     title: String(item.title).slice(0, 200),
-    quantity: Math.max(1, Math.min(20, Math.floor(Number(item.quantity) || 1))),
+    quantity: Math.max(1, Math.min(100, Math.floor(Number(item.quantity) || 1))),
     price: Math.max(0, Number(item.price) || 0),
   }));
   const key = orderKey(email, items);
@@ -274,7 +292,7 @@ export function addOrder(input: {
   memory.idem = memory.idem.filter((row) => now - row.at < ORDER_IDEM_MS);
   const replay = memory.idem.find((row) => row.key === key);
   if (replay) {
-    const existing = load<MobileOrder[]>("orders", ORDERS_FILE, []).find((order) => order.id === replay.orderId);
+    const existing = load<MobileOrder[]>("orders", ordersFile(), []).find((order) => order.id === replay.orderId);
     if (existing) return existing;
   }
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -297,15 +315,15 @@ export function addOrder(input: {
     address: input.address,
     createdAt: new Date(now).toISOString(),
   };
-  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const list = load<MobileOrder[]>("orders", ordersFile(), []);
   list.unshift(order);
-  persist("orders", ORDERS_FILE, list);
+  persist("orders", ordersFile(), list);
   memory.idem.push({ key, orderId: order.id, at: now });
   return order;
 }
 
 export function requestMobileReplacement(id: string, email: string, input: { note?: string; images: string[] }) {
-  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const list = load<MobileOrder[]>("orders", ordersFile(), []);
   const index = list.findIndex((order) => order.id === id && order.email === email.trim().toLowerCase());
   if (index < 0) return null;
   if (list[index].replacementRequest) throw new Error("A replacement request is already open on this order.");
@@ -320,26 +338,35 @@ export function requestMobileReplacement(id: string, email: string, input: { not
       requestedAt: new Date().toISOString(),
     },
   };
-  persist("orders", ORDERS_FILE, list);
+  persist("orders", ordersFile(), list);
   return list[index];
 }
 
 export function findOrder(id: string, email?: string) {
-  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const list = load<MobileOrder[]>("orders", ordersFile(), []);
   return list.find((order) => order.id === id && (!email || order.email === email.trim().toLowerCase()));
 }
 
+export function attachCheckoutMeta(id: string, checkoutMeta: NonNullable<MobileOrder["checkoutMeta"]>) {
+  const list = load<MobileOrder[]>("orders", ordersFile(), []);
+  const index = list.findIndex((order) => order.id === id);
+  if (index < 0) return null;
+  list[index] = { ...list[index], checkoutMeta };
+  persist("orders", ordersFile(), list);
+  return list[index];
+}
+
 export function attachRazorpayOrder(id: string, razorpayOrderId: string) {
-  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const list = load<MobileOrder[]>("orders", ordersFile(), []);
   const index = list.findIndex((order) => order.id === id);
   if (index < 0) return null;
   list[index] = { ...list[index], razorpayOrderId };
-  persist("orders", ORDERS_FILE, list);
+  persist("orders", ordersFile(), list);
   return list[index];
 }
 
 export function markOrderPaid(id: string, input: { paymentId?: string; razorpayOrderId?: string; method?: string }) {
-  const list = load<MobileOrder[]>("orders", ORDERS_FILE, []);
+  const list = load<MobileOrder[]>("orders", ordersFile(), []);
   const index = list.findIndex((order) => order.id === id);
   if (index < 0) return null;
   list[index] = {
@@ -350,7 +377,7 @@ export function markOrderPaid(id: string, input: { paymentId?: string; razorpayO
     razorpayPaymentId: input.paymentId || list[index].razorpayPaymentId,
     razorpayOrderId: input.razorpayOrderId || list[index].razorpayOrderId,
   };
-  persist("orders", ORDERS_FILE, list);
+  persist("orders", ordersFile(), list);
   return list[index];
 }
 

@@ -9,7 +9,55 @@ export type MessageCopy = {
 
 const SIGN = FOUNDATION_NAME;
 
+/** Order-stage emails: {intro} {next} {details} are filled with the order's own text, so the default reads like the built-in email. */
+const STAGE_BODY = `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\n{intro}\n\n{next}\n\n{details}\n\nTrack your order: {trackUrl}\nQuestions? Reply to this email or write to care@vaidyagogate.org with your order ID.\n\nWith warm regards,\n${SIGN}`;
+
 export const defaultMessageCopy: Record<NotificationEventId, MessageCopy> = {
+  "order-packed": {
+    emailSubject: `Order {orderId} is packed`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} is packed.`,
+  },
+  "order-shipped": {
+    emailSubject: `Order {orderId} has been shipped`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} has been shipped. {courier} {awb}`,
+  },
+  "order-out-for-delivery": {
+    emailSubject: `Order {orderId} is out for delivery`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} is out for delivery today.`,
+  },
+  "order-delivered": {
+    emailSubject: `Order {orderId} delivered`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} has been delivered.`,
+  },
+  "order-cancelled": {
+    emailSubject: `Order {orderId} cancelled`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} has been cancelled.`,
+  },
+  "order-delivery-failed": {
+    emailSubject: `Delivery attempt failed for order {orderId}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: the courier could not deliver order {orderId}.`,
+  },
+  "order-return-update": {
+    emailSubject: `Return update for order {orderId}: {status}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: return for order {orderId}: {status}.`,
+  },
+  "refund-processed": {
+    emailSubject: `Refund of {amount} processed for order {orderId}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: refund of {amount} for order {orderId} has been processed.`,
+  },
+  "refund-bank-reference": {
+    emailSubject: `Bank reference for your refund on order {orderId}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: refund {amount} for order {orderId}, bank ref {bankRef}.`,
+  },
   otp: {
     emailSubject: `Your ${SIGN} verification code`,
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\nYour one-time {purpose} code is {code}. It is valid for 10 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nWith warm regards,\n${SIGN}`,
@@ -34,6 +82,21 @@ export const defaultMessageCopy: Record<NotificationEventId, MessageCopy> = {
     emailSubject: `Update on order {orderId} — {status}`,
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\nYour order {orderId} is now {status}.\n\nWith warm regards,\n${SIGN}`,
     smsBody: `${SIGN}: order {orderId} is now {status}.`,
+  },
+  "preorder-placed": {
+    emailSubject: `Pre-order {orderId} confirmed: advance received`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: pre-order {orderId} confirmed. Advance received; balance is due when the book is ready.`,
+  },
+  "preorder-update": {
+    emailSubject: `Pre-order {orderId}: {status}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: pre-order {orderId} is now {status}.`,
+  },
+  "preorder-ready": {
+    emailSubject: `Pre-order {orderId} is ready: balance due`,
+    emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\nYour pre-order {orderId} is ready. Please pay the balance using this link:\n{link}\n\nWith warm regards,\n${SIGN}`,
+    smsBody: `${SIGN}: pre-order {orderId} is ready. Pay the balance: {link}`,
   },
   "payment-link": {
     emailSubject: `Payment link for order {orderId}`,
@@ -74,6 +137,21 @@ export const defaultMessageCopy: Record<NotificationEventId, MessageCopy> = {
     emailSubject: "Re: {subject}",
     emailBody: `Dear {name},\n\nNamaste, and greetings from ${SIGN}.\n\n{body}\n\nWith warm regards,\n${SIGN}`,
     smsBody: `${SIGN} support: {body}`,
+  },
+  "pickup-ready": {
+    emailSubject: `Order {orderId} is ready for pickup`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} is ready for pickup. Bring your order ID and pickup OTP.`,
+  },
+  "pickup-collected": {
+    emailSubject: `Order {orderId} collected`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: order {orderId} was collected from the store. Thank you!`,
+  },
+  "order-call-missed": {
+    emailSubject: `We tried to reach you about order {orderId}`,
+    emailBody: STAGE_BODY,
+    smsBody: `${SIGN}: we tried to call you about order {orderId}. Please call us back.`,
   },
   "ticket-update": {
     emailSubject: `Update on your support request`,

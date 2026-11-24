@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import PageHeader from "@/components/common/PageHeader";
-import RequireAuth from "@/components/auth/RequireAuth";
 import CheckoutClient from "./CheckoutClient";
 
 export const metadata: Metadata = {
@@ -12,8 +11,7 @@ export const metadata: Metadata = {
 
 export default function CheckoutPage() {
   return (
-    <RequireAuth message="Sign in to complete your purchase from the Foundation store.">
-      <main>
+    <main>
         <PageHeader
           eyebrow="Store"
           title="Checkout"
@@ -31,7 +29,6 @@ export default function CheckoutPage() {
         >
           <CheckoutClient />
         </Suspense>
-      </main>
-    </RequireAuth>
+    </main>
   );
 }

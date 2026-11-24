@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { PartnerPortalBadges } from "@/components/account/PartnerPortalBadges";
+import BirthdayWish from "@/components/account/BirthdayWish";
 import { getAllApplications } from "@/lib/applications";
 import { useCommerceMirror } from "@/lib/commerce-sync";
 import { getOrdersForAccount } from "@/lib/store";
@@ -58,6 +59,7 @@ export default function AccountDashboardPage() {
 
   return (
     <div className="space-y-8">
+      <BirthdayWish firstName={user.firstName} birthDate={user.birthDate} />
       <div className="rounded-2xl border border-border bg-white p-6 sm:p-8">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-burgundy">
           My Account

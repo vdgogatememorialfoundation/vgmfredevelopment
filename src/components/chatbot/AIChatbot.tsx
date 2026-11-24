@@ -1,17 +1,21 @@
 "use client";
 
+import { publicStaffName, publicStaffText } from "@/lib/public-name";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 import { useAuth } from "@/components/auth/AuthContext";
-import { answerQuestion } from "@/lib/chat-knowledge";
+import { answerQuestion, isChatFallback } from "@/lib/chat-knowledge";
+import TrackLookup from "@/components/store/TrackLookup";
 import SiteLogo from "@/components/common/SiteLogo";
 import {
   CHAT_UNANSWERED_MS,
   escalateIfUnanswered,
   getLiveChatSettings,
   getThread,
+  isRecentlyTyping,
+  notifyChatTyping,
   postChatMessage,
   submitChatTicketForm,
   subscribeLiveChat,
@@ -44,7 +48,8 @@ export function AIChatbot() {
   useSyncExternalStore(subscribeLiveChat, chatSnapshot, () => "");
   const live = getLiveChatSettings();
   const [isOpen, setIsOpen] = useState(false);
-  const [mode, setMode] = useState<"ai" | "live">("ai");
+  const [mode, setMode] = useState<"ai" | "live" | "track">("ai");
+  const menuActive = useRef(false);
   const [showPopup, setShowPopup] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -100,8 +105,32 @@ export function AIChatbot() {
     setInput("");
     setIsTyping(true);
 
-    window.setTimeout(() => {
-      const answer = answerQuestion(question);
+    window.setTimeout(async () => {
+      const menuTurn = /^(menu|\d{1,2})$/i.test(question) || menuActive.current;
+      if (menuTurn) {
+        try {
+          const response = await fetch("/api/chat/menu", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: question }) });
+          const data = (await response.json()) as { reply?: string; signIn?: boolean };
+          if (data.reply) {
+            menuActive.current = !data.signIn && !/^(Order \*#|Thank you\. A member|Our team has this chat)/.test(data.reply);
+            setMessages((current) => [...current, { role: "bot", text: data.reply! }]);
+            setIsTyping(false);
+            return;
+          }
+        } catch {
+          // fall back to the assistant answer
+        }
+      }
+      let answer = answerQuestion(question);
+      if (isChatFallback(answer)) {
+        try {
+          const response = await fetch("/api/mobile/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: question }) });
+          const data = (await response.json()) as { reply?: string; source?: string };
+          if (data.source === "faq" && data.reply) answer = data.reply;
+        } catch {
+          // keep the local answer
+        }
+      }
       setMessages((current) => [
         ...current,
         {
@@ -188,8 +217,8 @@ export function AIChatbot() {
             </button>
           </div>
 
-          {live.enabled && (
-            <div className="flex gap-2 border-b border-border bg-white px-4 py-2">
+          {(
+            <div className="flex flex-wrap gap-2 border-b border-border bg-white px-4 py-2">
               <button
                 type="button"
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${mode === "ai" ? "bg-burgundy text-white" : "text-text-muted"}`}
@@ -199,15 +228,28 @@ export function AIChatbot() {
               </button>
               <button
                 type="button"
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${mode === "track" ? "bg-burgundy text-white" : "text-text-muted"}`}
+                onClick={() => setMode("track")}
+              >
+                Track your order
+              </button>
+              {live.enabled && (
+              <button
+                type="button"
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${mode === "live" ? "bg-burgundy text-white" : "text-text-muted"}`}
                 onClick={() => setMode("live")}
               >
                 {t("chat.talkPerson")}
               </button>
+              )}
             </div>
           )}
 
-          {mode === "live" ? (
+          {mode === "track" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-warm-cream px-3 py-3 text-sm">
+              <TrackLookup compact />
+            </div>
+          ) : mode === "live" ? (
             <>
               <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-warm-cream px-4 py-4 text-sm">
                 {!live.online ? (
@@ -223,13 +265,19 @@ export function AIChatbot() {
                     If nobody replies within {Math.round(CHAT_UNANSWERED_MS / 1000)} seconds, we open a 12-digit ticket and send a short form.
                   </p>
                 )}
+                {thread?.ref ? (
+                  <p className="rounded-lg bg-white px-3 py-1.5 text-[11px] text-text-muted">
+                    Chat reference <b className="font-mono text-burgundy">{thread.ref}</b>
+                    {thread.firstJoinedAt ? " · an agent has joined" : " · an agent will join shortly"}
+                  </p>
+                ) : null}
                 {(thread?.messages ?? []).map((message) => (
                   <div
                     key={message.id}
                     className={`rounded-xl px-3 py-2 ${message.from === "visitor" ? "ml-6 bg-gold/20" : "mr-6 bg-white"}`}
                   >
-                    <p className="text-[11px] font-semibold text-ink/60">{message.name}</p>
-                    <p className="text-ink">{message.text}</p>
+                    <p className="text-[11px] font-semibold text-ink/60">{message.from === "visitor" ? message.name : publicStaffName(message.name)}</p>
+                    <p className="text-ink">{message.from === "visitor" ? message.text : publicStaffText(message.text)}</p>
                   </div>
                 ))}
                 {thread?.formRequested && !thread.ticketId ? (
@@ -256,6 +304,11 @@ export function AIChatbot() {
                     </button>
                   </form>
                 ) : null}
+                {isRecentlyTyping(thread?.staffTypingAt) ? (
+                  <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-emerald-700">
+                    🟢 {thread?.staffTypingName || "Support Executive"} is typing a reply…
+                  </p>
+                ) : null}
                 {thread?.ticketId ? (
                   <p className="rounded-xl bg-white p-3 text-xs text-emerald-800">Ticket {thread.ticketId} is open. Updates will be emailed.</p>
                 ) : null}
@@ -272,7 +325,10 @@ export function AIChatbot() {
                   <input
                     className="input-field flex-1"
                     value={liveText}
-                    onChange={(event) => setLiveText(event.target.value)}
+                    onChange={(event) => {
+                      setLiveText(event.target.value);
+                      if (threadId) notifyChatTyping(threadId, "visitor", visitorName, event.target.value);
+                    }}
                     placeholder="Type a message"
                   />
                   <button type="submit" className="rounded-lg bg-burgundy px-3 py-2 text-sm font-semibold text-white">
@@ -328,7 +384,7 @@ export function AIChatbot() {
               <button
                 key={question.ask}
                 type="button"
-                onClick={() => handleSend(question.ask)}
+                onClick={() => (question.ask === QUICK_QUESTIONS[3] ? setMode("track") : handleSend(question.ask))}
                 className="rounded-full border border-burgundy/20 bg-burgundy/5 px-3 py-1.5 text-xs font-medium text-burgundy transition hover:bg-burgundy hover:text-white"
               >
                 {question.label}

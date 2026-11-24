@@ -10,6 +10,7 @@ type LiveMap = {
   setTilt: (tilt: number) => void;
   setHeading: (heading: number) => void;
   panTo: (point: LatLng) => void;
+  getTilt?: () => number;
 };
 type Bike = { position?: LatLng; map?: object | null; setPosition?: (point: LatLng) => void };
 type Point = { lat?: number; lng?: number; label: string; address?: string };
@@ -20,6 +21,27 @@ const DROP = "#0F7A4A";
 const ROAD = "#8F2D2D";
 /** Ramprasad Chambers, New Nana Peth. Used when the courier does not send a pickup coordinate. */
 const CLINIC_PIN: LatLng = { lat: 18.514204, lng: 73.869083 };
+const TILT = 45;
+/** Curved dotted store → customer line. */
+const DOTTED = {
+  strokeColor: ROAD,
+  strokeOpacity: 0,
+  strokeWeight: 3,
+  icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, strokeColor: ROAD, scale: 3 }, offset: "0", repeat: "14px" }],
+};
+
+/** Tilts the map into 3D with a short camera sweep the first time it is framed. */
+function sweepTo3d(map: LiveMap) {
+  const start = performance.now();
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / 1600);
+    const ease = 1 - (1 - t) ** 3;
+    map.setTilt(TILT * ease);
+    map.setHeading(-18 * ease);
+    if (t < 1) window.requestAnimationFrame(step);
+  };
+  window.requestAnimationFrame(step);
+}
 
 function sameSpot(a?: { lat?: number; lng?: number } | null, b?: { lat?: number; lng?: number } | null) {
   if (!hasCoords(a) || !hasCoords(b)) return false;
@@ -171,6 +193,7 @@ function Schematic({
 
 export default function DeliveryMap({
   mapsKey,
+  mapId = "",
   partner,
   status,
   accepted,
@@ -186,6 +209,8 @@ export default function DeliveryMap({
   onArrival,
 }: {
   mapsKey: string;
+  /** Vector Map ID; tilt and 3D need one. */
+  mapId?: string;
   partner: string;
   status: string;
   accepted: boolean;
@@ -210,6 +235,11 @@ export default function DeliveryMap({
     img?: HTMLImageElement;
     path: LatLng[];
     progress: number;
+    last?: LatLng;
+    swept?: boolean;
+    route?: { setDirections: (result: unknown) => void; setMap: (map: object | null) => void };
+    routeFrom?: LatLng;
+    routeLeg?: Leg;
   } | null>(null);
   const [resolved, setResolved] = useState<{ store?: LatLng; drop?: LatLng }>({});
   const [mapReady, setMapReady] = useState(false);
@@ -286,8 +316,14 @@ export default function DeliveryMap({
           const box = new maps.LatLngBounds();
           framePoints(path).forEach((point) => box.extend(point));
           target.fitBounds(box, { top: 48, right: 36, bottom: 56, left: 36 });
-          target.setTilt(0);
-          target.setHeading(0);
+          const session = sessionRef.current;
+          if (session && !session.swept) {
+            session.swept = true;
+            sweepTo3d(target);
+          } else {
+            target.setTilt(TILT);
+            target.setHeading(-18);
+          }
         };
         if (sessionRef.current) {
           if (resolved.store && resolved.drop) {
@@ -298,9 +334,7 @@ export default function DeliveryMap({
               sessionRef.current.line = new maps.Polyline({
                 map: sessionRef.current.map,
                 path,
-                strokeColor: ROAD,
-                strokeOpacity: 1,
-                strokeWeight: 4,
+                ...DOTTED,
                 geodesic: false,
                 zIndex: 8,
               });
@@ -319,6 +353,8 @@ export default function DeliveryMap({
           zoom: 13,
           tilt: 0,
           heading: 0,
+          mapId: mapId || "DEMO_MAP_ID",
+          renderingType: "VECTOR",
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
@@ -356,6 +392,8 @@ export default function DeliveryMap({
           path: LatLng[];
           progress: number;
           line?: { setMap: (map: object | null) => void; setPath?: (path: LatLng[]) => void };
+          last?: LatLng;
+          swept?: boolean;
         } = { map, path: [], progress: 0 };
         if (resolved.store && resolved.drop) {
           const path = flyingRoute([resolved.store, resolved.drop]);
@@ -363,9 +401,7 @@ export default function DeliveryMap({
           session.line = new maps.Polyline({
             map,
             path,
-            strokeColor: ROAD,
-            strokeOpacity: 1,
-            strokeWeight: 4,
+            ...DOTTED,
             geodesic: false,
             zIndex: 8,
           });
@@ -391,7 +427,7 @@ export default function DeliveryMap({
       observer?.disconnect();
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [mapsKey, resolved.store, resolved.drop, store.label, drop.label]);
+  }, [mapsKey, mapId, resolved.store, resolved.drop, store.label, drop.label]);
 
   useEffect(() => {
     const view = sessionRef.current;
@@ -411,6 +447,8 @@ export default function DeliveryMap({
             };
           };
           marker?: { AdvancedMarkerElement: new (opts: object) => { position?: LatLng; map?: object | null } };
+          DirectionsService?: new () => { route: (request: object) => Promise<unknown> };
+          DirectionsRenderer?: new (opts: object) => { setDirections: (result: unknown) => void; setMap: (map: object | null) => void };
         };
       };
     };
@@ -429,9 +467,7 @@ export default function DeliveryMap({
       live.line = new maps.Polyline({
         map: live.map,
         path,
-        strokeColor: ROAD,
-        strokeOpacity: 1,
-        strokeWeight: 4,
+        ...DOTTED,
         geodesic: false,
         zIndex: 8,
       });
@@ -439,20 +475,54 @@ export default function DeliveryMap({
     live.path = path;
     const bounds = new maps.LatLngBounds();
     framePoints(path).forEach((point) => bounds.extend(point));
+    if (accepted && agent) bounds.extend(agent);
     if ((hostRef.current?.clientHeight ?? 0) >= 80) {
       live.map.fitBounds(bounds, { top: 48, right: 36, bottom: 56, left: 36 });
     }
-    live.map.setTilt(0);
-    live.map.setHeading(0);
+    live.map.setTilt(TILT);
+    live.map.setHeading(-18);
     if (!accepted || !agent) {
       if (live.bike) live.bike.map = null;
+      live.route?.setMap(null);
+      live.route = undefined;
+      live.routeFrom = undefined;
+      live.line?.setMap(live.map);
     } else {
       moveBike(path);
+      roadRoute(agent);
+    }
+
+    /** Live road route: rider → store → customer while picking up, rider → customer after. Replaces the dotted line. */
+    function roadRoute(rider: LatLng) {
+      const Service = maps?.DirectionsService;
+      const Renderer = maps?.DirectionsRenderer;
+      if (!Service || !Renderer || !resolved.drop) return;
+      const moved = !live.routeFrom || Math.abs(live.routeFrom.lat - rider.lat) + Math.abs(live.routeFrom.lng - rider.lng) > 0.0006;
+      if (!moved && live.routeLeg === leg && live.route) return;
+      live.routeFrom = rider;
+      live.routeLeg = leg;
+      const waypoints = leg === "pickup" && resolved.store ? [{ location: resolved.store, stopover: true }] : [];
+      new Service()
+        .route({ origin: rider, destination: resolved.drop, waypoints, travelMode: "DRIVING" })
+        .then((result) => {
+          if (!live.route) {
+            live.route = new Renderer({
+              map: live.map,
+              suppressMarkers: true,
+              preserveViewport: true,
+              polylineOptions: { strokeColor: ROAD, strokeOpacity: 0.9, strokeWeight: 5 },
+            });
+          }
+          live.route.setDirections(result);
+          live.line?.setMap(null);
+        })
+        .catch(() => live.line?.setMap(live.map));
     }
 
     function moveBike(path: LatLng[]) {
       if (!agent) return;
-      const snapped = project(agent, path);
+      // The rider shows where the GPS puts them (not snapped to the line), gliding from the last fix.
+      const snapped = { at: live.last ?? agent };
       const headingOf = (from: LatLng, to: LatLng) =>
         maps?.geometry?.spherical?.computeHeading(from, to) ?? (Math.atan2(to.lng - from.lng, to.lat - from.lat) * 180) / Math.PI;
       if (!live.img) {
@@ -478,19 +548,19 @@ export default function DeliveryMap({
           });
         }
       }
-      const from = live.progress;
-      const to = snapped.index;
+      const from = live.last ?? agent;
+      const to = agent;
+      const moved = Math.abs(from.lat - to.lat) + Math.abs(from.lng - to.lng) > 1e-6;
+      const heading = moved ? headingOf(from, to) : headingOf(to, project(to, path).index + 0.35 < path.length ? along(path, project(to, path).index + 0.35) : to);
+      if (live.img) live.img.style.transform = `rotate(${heading}deg)`;
       const started = performance.now();
       const step = (now: number) => {
-        const t = Math.min(1, (now - started) / 1400);
-        const index = from + (to - from) * t;
-        const point = along(path, index);
-        const heading = headingOf(point, along(path, index + 0.35));
-        if (live.img) live.img.style.transform = `rotate(${heading}deg)`;
+        const t = Math.min(1, (now - started) / 1800);
+        const point = { lat: from.lat + (to.lat - from.lat) * t, lng: from.lng + (to.lng - from.lng) * t };
         if (live.bike?.setPosition) live.bike.setPosition(point);
         else if (live.bike) live.bike.position = point;
-        live.progress = index;
         if (t < 1) frame = window.requestAnimationFrame(step);
+        else live.last = to;
       };
       frame = window.requestAnimationFrame(step);
     }

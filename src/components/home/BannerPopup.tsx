@@ -31,8 +31,9 @@ export default function BannerPopup() {
   }, []);
 
   const banner = useMemo(
-    () => banners.find((item) => isImage(item.image) && !hidden.includes(item.id)),
-    [banners, hidden]
+    () =>
+      banners.find((item) => isImage(item.image) && !hidden.includes(item.id)),
+    [banners, hidden],
   );
 
   if (!ready || !banner || typeof document === "undefined") return null;
@@ -53,29 +54,47 @@ export default function BannerPopup() {
   );
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4" role="dialog" aria-modal="true" aria-label={banner.title || "Site banner"}>
-      <button type="button" className="absolute inset-0 bg-ink/70" aria-label="Close banner" onClick={dismiss} />
-      <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={banner.title || "Site banner"}
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-ink/70"
+        aria-label="Close banner"
+        onClick={dismiss}
+      />
+      <div className="relative z-10 flex w-full max-w-3xl flex-col items-end gap-2">
         <button
           type="button"
           onClick={dismiss}
-          className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white text-lg text-ink shadow"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-white text-xl text-ink shadow-lg"
           aria-label="Dismiss banner"
         >
           ×
         </button>
-        {banner.href ? (
-          <a href={banner.href} onClick={dismiss} className="block min-h-[180px] bg-paper">
-            {image}
-          </a>
-        ) : (
-          <div className="min-h-[180px] bg-paper">{image}</div>
-        )}
-        {banner.title ? (
-          <p className="border-t border-border px-4 py-3 text-center text-sm font-medium text-text-primary">{banner.title}</p>
-        ) : null}
+        <div className="w-full overflow-hidden rounded-2xl bg-white shadow-2xl">
+          {banner.href ? (
+            <a
+              href={banner.href}
+              onClick={dismiss}
+              className="block min-h-[180px] bg-paper"
+            >
+              {image}
+            </a>
+          ) : (
+            <div className="min-h-[180px] bg-paper">{image}</div>
+          )}
+          {banner.title ? (
+            <p className="border-t border-border px-4 py-3 text-center text-sm font-medium text-text-primary">
+              {banner.title}
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

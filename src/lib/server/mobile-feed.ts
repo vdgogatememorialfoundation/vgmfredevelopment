@@ -155,8 +155,12 @@ export function readMobileFeed(): MobileFeed {
       apps: {
         customer: { ...customerApp, name: publicBrandName(customerApp.name) },
         admin: { ...base.mobile.apps.admin, ...snapshot.mobile?.apps?.admin },
+        scanner: { ...base.mobile.apps.scanner, ...snapshot.mobile?.apps?.scanner },
+        pos: { ...base.mobile.apps.pos, ...snapshot.mobile?.apps?.pos },
         staff: { ...base.mobile.apps.staff, ...snapshot.mobile?.apps?.staff },
+        eventscanner: { ...base.mobile.apps.eventscanner, ...snapshot.mobile?.apps?.eventscanner },
         support: { ...base.mobile.apps.support, ...snapshot.mobile?.apps?.support },
+        delivery: { ...base.mobile.apps.delivery, ...snapshot.mobile?.apps?.delivery },
       },
       showPublicDownload: snapshot.mobile?.showPublicDownload === true,
       showDeveloperCredit: snapshot.mobile?.showDeveloperCredit !== false,
@@ -226,8 +230,12 @@ function persistFeedAssets(feed: MobileFeed): MobileFeed {
       apps: {
         customer: { ...apps.customer, logoUrl: persistDataUrl(apps.customer?.logoUrl, "app-customer") },
         admin: { ...apps.admin, logoUrl: persistDataUrl(apps.admin?.logoUrl, "app-admin") },
+        scanner: { ...apps.scanner, logoUrl: persistDataUrl(apps.scanner?.logoUrl, "app-scanner") },
+        pos: { ...apps.pos, logoUrl: persistDataUrl(apps.pos?.logoUrl, "app-pos") },
         staff: { ...apps.staff, logoUrl: persistDataUrl(apps.staff?.logoUrl, "app-staff") },
+        eventscanner: { ...apps.eventscanner, logoUrl: persistDataUrl(apps.eventscanner?.logoUrl, "app-eventscanner") },
         support: { ...apps.support, logoUrl: persistDataUrl(apps.support?.logoUrl, "app-support") },
+        delivery: { ...apps.delivery, logoUrl: persistDataUrl(apps.delivery?.logoUrl, "app-delivery") },
       },
     },
   };
@@ -259,6 +267,20 @@ export function mergePublishedBrand(partial: { site?: Partial<MobileFeed["site"]
     site: { ...current.site, ...patch },
     flyers: partial.flyers ?? current.flyers,
   });
+}
+
+/** The feed as visitors may see it: no staff emails, assignees or review notes on articles. */
+export function publicFeed(feed: MobileFeed): MobileFeed {
+  return {
+    ...feed,
+    articles: feed.articles?.map((article) => {
+      const copy = { ...article };
+      delete copy.publishedByEmail;
+      delete copy.assignedTo;
+      delete copy.reviewNote;
+      return copy;
+    }),
+  };
 }
 
 export const corsHeaders = {

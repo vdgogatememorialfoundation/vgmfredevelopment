@@ -57,11 +57,7 @@ export function hasFoundationPassword(account: Pick<User, "password" | "foundati
 }
 
 function scrubSisterLogin(account: User): User {
-  const protectedRole = account.role === "admin" || account.role === "coadmin" || account.role === "staff";
-  if (protectedRole) return account;
-  if (!account.partnerPortals?.length) return account;
-  if (account.foundationPasswordSet) return { ...account, partnerPasswordSet: false };
-  return { ...account, password: undefined, partnerPasswordSet: false };
+  return account;
 }
 
 function mergePortals(existing: User, incoming: User): User {
@@ -78,6 +74,9 @@ function mergePortals(existing: User, incoming: User): User {
     Boolean(existing.password && !existing.partnerPortals?.length);
   return {
     ...existing,
+    accountId: existing.accountId || incoming.accountId,
+    salutation: existing.salutation || incoming.salutation,
+    middleName: existing.middleName || incoming.middleName,
     partnerPortals: portals,
     role: protectedRole ? existing.role : incoming.partnerPortals?.length ? "customer" : existing.role || incoming.role || "customer",
     firstName: existing.firstName || incoming.firstName,
@@ -85,25 +84,31 @@ function mergePortals(existing: User, incoming: User): User {
     phone: existing.phone || incoming.phone,
     whatsapp: existing.whatsapp || incoming.whatsapp || incoming.phone,
     alternatePhone: existing.alternatePhone || incoming.alternatePhone,
-    password: keepPassword ? existing.password : undefined,
-    foundationPasswordSet: Boolean(existing.foundationPasswordSet || (keepPassword && existing.password)),
-    partnerPasswordSet: false,
+    address: existing.address?.line1 ? existing.address : incoming.address || existing.address,
+    createdAt: existing.createdAt || incoming.createdAt,
+    password: incoming.password || existing.password,
+    foundationPasswordSet: Boolean(existing.foundationPasswordSet || incoming.foundationPasswordSet || incoming.password || existing.password),
+    partnerPasswordSet: Boolean(existing.partnerPasswordSet || incoming.partnerPasswordSet || incoming.password),
   };
 }
 
 function applyAccounts(incoming: User[]) {
   if (!incoming.length) return;
   const current = getAllAccounts();
-  const byEmail = new Map(current.map((account) => [account.email.toLowerCase(), account]));
+  // When receiving the full main-site customer list (> 10 accounts), purge any old sister-portal-only cached accounts
+  const keepStaffOnly = incoming.length > 10
+    ? current.filter((a) => a.role === "admin" || a.role === "coadmin" || a.role === "staff")
+    : current.filter((a) => !/^(seminar|autism|fellowship)-usr-/i.test(String(a.id || "")) && !a.partnerPortals?.length);
+  const byEmail = new Map(keepStaffOnly.map((account) => [account.email.toLowerCase(), account]));
   for (const account of incoming) {
     const key = account.email.toLowerCase();
     const existing = byEmail.get(key);
     const incomingRole: User["role"] =
       account.role === "admin" || account.role === "coadmin" || account.role === "staff" ? account.role : "customer";
-    const incomingClean: User = { ...account, role: incomingRole, password: undefined, partnerPasswordSet: false };
-    byEmail.set(key, existing ? mergePortals(existing, incomingClean) : incomingClean);
+    const incomingClean: User = { ...account, role: incomingRole, partnerPortals: undefined };
+    byEmail.set(key, existing ? { ...mergePortals(existing, incomingClean), partnerPortals: undefined } : incomingClean);
   }
-  writeJSON(ACCOUNTS_KEY, [...byEmail.values()].map(scrubSisterLogin));
+  writeJSON(ACCOUNTS_KEY, [...byEmail.values()]);
 }
 
 function applySession() {
@@ -168,18 +173,34 @@ export async function hydratePartnerFeed(opts?: { full?: boolean; force?: boolea
   const email = session?.email?.trim().toLowerCase() || "";
   const last = Number(window.sessionStorage.getItem("vgmf_partner_hydrated_at") || 0);
   const lastEmail = window.sessionStorage.getItem("vgmf_partner_hydrated_email") || "";
+  const wantFull = Boolean(
+    opts?.full ||
+      (session?.role && ["admin", "coadmin", "staff"].includes(session.role)) ||
+      window.location.pathname.startsWith("/admin") ||
+      window.location.pathname.startsWith("/staff")
+  );
+  const lastFeed = Number(window.sessionStorage.getItem("vgmf_partner_feed_at") || 0);
+  const lastFull = window.sessionStorage.getItem("vgmf_partner_feed_full") === "1";
+  if (opts?.force || opts?.full || (wantFull && !lastFull) || !lastFeed || Date.now() - lastFeed >= 30 * 1000) {
+    window.sessionStorage.setItem("vgmf_partner_feed_at", String(Date.now()));
+    if (wantFull) window.sessionStorage.setItem("vgmf_partner_feed_full", "1");
+    try {
+      const url = wantFull ? "/api/partners/feed?full=1" : "/api/partners/feed";
+      let feedRes = await fetch(url, { cache: "no-store", credentials: "same-origin" });
+      if (!feedRes.ok && wantFull) {
+        feedRes = await fetch("/api/partners/feed", { cache: "no-store", credentials: "same-origin" });
+      }
+      if (feedRes.ok) {
+        const feed = (await feedRes.json()) as PartnerFeed & { ok?: boolean };
+        applyPartnerFeed(feed);
+      }
+    } catch {
+      /* public site still works without partner data */
+    }
+  }
   if (!opts?.force && last && lastEmail === email && Date.now() - last < 5 * 60 * 1000) return;
   window.sessionStorage.setItem("vgmf_partner_hydrated_at", String(Date.now()));
   window.sessionStorage.setItem("vgmf_partner_hydrated_email", email);
-  try {
-    const feedRes = await fetch("/api/partners/feed", { cache: "no-store", credentials: "same-origin" });
-    if (feedRes.ok) {
-      const feed = (await feedRes.json()) as PartnerFeed & { ok?: boolean };
-      applyPartnerFeed(feed);
-    }
-  } catch {
-    /* public site still works without partner data */
-  }
   if (signedOut) return;
   if (email) {
     await lookupPartnerAccount({ email, phone: session?.phone, identifier: email });

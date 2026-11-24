@@ -1,4 +1,4 @@
-import { saveIssuedCertificate, revokeCertificate, type IssuedCertificate } from "@/lib/cms";
+import { getIssuedCertificates, saveIssuedCertificate, revokeCertificate, type IssuedCertificate } from "@/lib/cms";
 
 import {
   AUTISM_ORIGIN,
@@ -187,4 +187,50 @@ export async function publishCertificate(record: IssuedCertificate) {
 export async function deleteCertificate(id: string) {
   await fetch(`/api/certificates/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => undefined);
   revokeCertificate(id);
+}
+
+/** Two-way sync: server copies land in the admin list, and certificates saved only in this browser are sent to the server. */
+export async function syncCertificatesWithServer() {
+  const response = await fetch("/api/certificates", { cache: "no-store" });
+  const data = (await response.json()) as { ok?: boolean; certificates?: PublicCertificate[] };
+  if (!response.ok || !data.ok || !Array.isArray(data.certificates)) return { pulled: 0, pushed: 0 };
+  const server = new Map(data.certificates.map((item) => [item.certificateNumber.toUpperCase(), item]));
+  const local = getIssuedCertificates();
+  let pulled = 0;
+  for (const item of data.certificates) {
+    const mine = local.find((record) => record.certificateNumber.toUpperCase() === item.certificateNumber.toUpperCase());
+    const same =
+      mine &&
+      mine.name === item.name &&
+      mine.event === item.event &&
+      mine.issueDate === item.issueDate &&
+      mine.certificateType === item.certificateType &&
+      (mine.status ?? "Valid") === (item.status ?? "Valid");
+    if (same) continue;
+    saveIssuedCertificate({
+      ...(mine ?? {}),
+      id: mine?.id || item.certificateNumber,
+      certificateNumber: item.certificateNumber,
+      name: item.name,
+      event: item.event,
+      certificateType: item.certificateType,
+      eventDate: item.eventDate,
+      issueDate: item.issueDate,
+      signature: item.signature,
+      status: item.status ?? "Valid",
+      reissuedAt: item.reissuedAt,
+    });
+    pulled += 1;
+  }
+  let pushed = 0;
+  for (const record of local) {
+    if (record.status === "Revoked" || server.has(record.certificateNumber.toUpperCase())) continue;
+    try {
+      await publishCertificate(record);
+      pushed += 1;
+    } catch {
+      /* try again on the next visit */
+    }
+  }
+  return { pulled, pushed };
 }

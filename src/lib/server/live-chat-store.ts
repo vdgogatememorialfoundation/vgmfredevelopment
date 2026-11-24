@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { publicStaffName } from "@/lib/public-name";
 import { dirname } from "node:path";
 import { dataFile } from "@/lib/server/paths";
 
@@ -32,7 +33,43 @@ export type StoredChatThread = {
   status: "open" | "closed";
   ticketId?: string;
   closedAt?: string;
+  /** Customer-facing reference, unique per chat. */
+  ref?: string;
+  participants?: { email: string; name: string; joinedAt: string }[];
+  firstJoinedAt?: string;
+  visitorTypingAt?: string;
+  visitorTypingPreview?: string;
+  staffTypingAt?: string;
+  staffTypingName?: string;
 };
+
+export type SupportDepartment = { name: string; agents: string[] };
+
+export function chatRef(thread: Pick<StoredChatThread, "id" | "createdAt">) {
+  const day = (thread.createdAt || "").slice(2, 10).replace(/-/g, "");
+  return `${day}-${thread.id.replace(/^chat/, "").toUpperCase()}`;
+}
+
+const DEPT_FILE = dataFile("support-departments.json");
+
+export function listDepartments(): SupportDepartment[] {
+  try {
+    const rows = JSON.parse(readFileSync(DEPT_FILE, "utf8")) as SupportDepartment[];
+    if (Array.isArray(rows) && rows.length) return rows.filter((row) => row?.name);
+  } catch {
+    /* defaults */
+  }
+  return CHAT_DEPARTMENTS.map((name) => ({ name, agents: [] }));
+}
+
+export function saveDepartments(rows: SupportDepartment[]) {
+  const clean = rows
+    .map((row) => ({ name: String(row?.name ?? "").trim(), agents: Array.isArray(row?.agents) ? row.agents.map((item) => String(item).trim().toLowerCase()).filter(Boolean) : [] }))
+    .filter((row) => row.name);
+  mkdirSync(dirname(DEPT_FILE), { recursive: true });
+  writeFileSync(DEPT_FILE, JSON.stringify(clean));
+  return clean;
+}
 
 type Store = { threads: StoredChatThread[]; lastAgent: number };
 
@@ -45,7 +82,10 @@ function empty(): Store {
 function read(): Store {
   try {
     const parsed = JSON.parse(readFileSync(FILE, "utf8")) as Store;
-    if (parsed && Array.isArray(parsed.threads)) return { threads: parsed.threads, lastAgent: parsed.lastAgent || 0 };
+    if (parsed && Array.isArray(parsed.threads)) {
+      for (const thread of parsed.threads) thread.ref ||= chatRef(thread);
+      return { threads: parsed.threads, lastAgent: parsed.lastAgent || 0 };
+    }
   } catch {
     /* missing */
   }
@@ -110,6 +150,7 @@ export function postLiveMessage(input: {
       messages: [message],
       status: "open",
     };
+    thread.ref = chatRef(thread);
     store.threads.unshift(thread);
   } else {
     if (thread.status === "closed" && input.from === "visitor") thread.status = "open";
@@ -118,12 +159,19 @@ export function postLiveMessage(input: {
     if (input.email) thread.email = input.email;
     if (input.phone) thread.phone = input.phone;
     if (input.page) thread.page = input.page;
+    if (input.from === "visitor") {
+      thread.visitorTypingAt = undefined;
+      thread.visitorTypingPreview = undefined;
+    } else {
+      thread.staffTypingAt = undefined;
+    }
   }
   write(store);
   return thread;
 }
 
-export function takeChatThread(threadId: string, agentEmail: string, agentName: string) {
+export function takeChatThread(threadId: string, agentEmail: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const store = read();
   const thread = store.threads.find((item) => item.id === threadId);
   if (!thread) return null;
@@ -132,6 +180,8 @@ export function takeChatThread(threadId: string, agentEmail: string, agentName: 
   thread.assignedName = agentName;
   thread.status = "open";
   thread.updatedAt = now;
+  thread.firstJoinedAt ||= now;
+  thread.participants = [...(thread.participants ?? []).filter((item) => item.email !== agentEmail), { email: agentEmail, name: agentName, joinedAt: now }];
   thread.messages.push({
     id: nid("m"),
     threadId,
@@ -145,7 +195,8 @@ export function takeChatThread(threadId: string, agentEmail: string, agentName: 
   return thread;
 }
 
-export function closeChatThread(threadId: string, agentName: string) {
+export function closeChatThread(threadId: string, rawAgentName: string) {
+  const agentName = publicStaffName(rawAgentName);
   const store = read();
   const thread = store.threads.find((item) => item.id === threadId);
   if (!thread) return null;
@@ -190,6 +241,20 @@ export function transferChatThread(threadId: string, assignedTo: string, assigne
   return thread;
 }
 
+/** Bring another agent into the same chat without handing it over. */
+export function inviteChatAgent(threadId: string, agentEmail: string, agentName: string, byName: string) {
+  const store = read();
+  const thread = store.threads.find((item) => item.id === threadId);
+  if (!thread || !agentEmail) return null;
+  const now = new Date().toISOString();
+  thread.participants = [...(thread.participants ?? []).filter((item) => item.email !== agentEmail), { email: agentEmail, name: agentName, joinedAt: now }];
+  thread.firstJoinedAt ||= now;
+  thread.updatedAt = now;
+  thread.messages.push({ id: nid("m"), threadId, from: "staff", name: byName, text: `${byName} added ${agentName} to this chat.`, at: now, kind: "text" });
+  write(store);
+  return thread;
+}
+
 export function nextAgentName(agents: { email: string; name: string }[]) {
   if (!agents.length) return { email: "", name: "next available agent" };
   const store = read();
@@ -208,6 +273,44 @@ export function markThreadTicket(threadId: string, ticketId: string) {
   if (!thread) return null;
   thread.ticketId = ticketId;
   thread.updatedAt = new Date().toISOString();
+  write(store);
+  return thread;
+}
+
+export function setChatTyping(input: {
+  threadId: string;
+  from: "visitor" | "staff";
+  name?: string;
+  typing: boolean;
+  preview?: string;
+}) {
+  const store = read();
+  let thread = store.threads.find((item) => item.id === input.threadId);
+  const now = new Date().toISOString();
+  if (!thread && input.from === "visitor" && input.typing) {
+    thread = {
+      id: input.threadId,
+      name: input.name || "Visitor",
+      createdAt: now,
+      updatedAt: now,
+      messages: [],
+      status: "open",
+      visitorTypingAt: now,
+      visitorTypingPreview: (input.preview || "").slice(0, 180),
+    };
+    thread.ref = chatRef(thread);
+    store.threads.unshift(thread);
+    write(store);
+    return thread;
+  }
+  if (!thread) return null;
+  if (input.from === "visitor") {
+    thread.visitorTypingAt = input.typing ? now : undefined;
+    thread.visitorTypingPreview = input.typing ? (input.preview || "").slice(0, 180) : undefined;
+  } else {
+    thread.staffTypingAt = input.typing ? now : undefined;
+    thread.staffTypingName = input.typing ? (input.name || "Support Executive") : undefined;
+  }
   write(store);
   return thread;
 }

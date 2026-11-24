@@ -5,10 +5,13 @@ import {
   razorpayDeviceActivity,
   razorpayDeviceActivityStatus,
   razorpayLink,
-  razorpayLinkStatus,
+  razorpayLinkStatus, razorpayLinkExpiry,
+  razorpayLinkCancel,
   razorpayOrder,
   razorpayOrderPayments,
+  razorpayPayment,
   razorpayRefund,
+  razorpayRefundStatus,
   razorpayVerify,
 } from "@/lib/server/providers";
 
@@ -58,9 +61,18 @@ export async function POST(request: NextRequest) {
             phone: body.phone ? String(body.phone) : undefined,
             description: String(body.description ?? `Order ${body.orderId}`),
             callbackUrl: body.callbackUrl ? String(body.callbackUrl) : undefined,
-            expiryHours: Number(body.expiryHours ?? 72),
+            expiryMinutes: Number(body.expiryMinutes ?? 30),
           })),
         });
+      case "payment": {
+        const paymentId = String(body.paymentId || "").trim();
+        if (!/^pay_[A-Za-z0-9]{6,}$/.test(paymentId)) return NextResponse.json({ ok: false, configured: true, error: "Enter a Razorpay payment ID like pay_ABC123." });
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayPayment(creds, paymentId)) });
+      }
+      case "link-cancel":
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkCancel(creds, String(body.linkId))) });
+      case "link-expiry":
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkExpiry(creds, String(body.linkId), String(body.expiresAt))) });
       case "link-status":
         return NextResponse.json({ ok: true, configured: true, ...(await razorpayLinkStatus(creds, String(body.linkId))) });
       case "refund":
@@ -69,6 +81,8 @@ export async function POST(request: NextRequest) {
           configured: true,
           ...(await razorpayRefund(creds, String(body.paymentId), body.amount ? Number(body.amount) : undefined)),
         });
+      case "refund-status":
+        return NextResponse.json({ ok: true, configured: true, ...(await razorpayRefundStatus(creds, String(body.refundId))) });
       case "edc-start": {
         const deviceMode = body.deviceMode === "wired" ? "wired" : "wireless";
         const order = await razorpayOrder(creds, Number(body.amount), String(body.receipt ?? ""), deviceMode);

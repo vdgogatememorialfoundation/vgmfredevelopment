@@ -32,7 +32,7 @@ export default function Page() {
       }}
       onHide={(id) => {
         hideBanner(id);
-        void publishLiveSite();
+        void publishLiveSite({ removed: { banners: [id] } });
       }}
     />
   );

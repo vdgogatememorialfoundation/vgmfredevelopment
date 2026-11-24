@@ -47,7 +47,7 @@ export default function ProductReviews({
           <div>
             <h2 className="heading-3">Ratings & reviews</h2>
             <p className="mt-1 text-sm text-text-muted">
-              Reviews here are from people who purchased {productTitle}. Seminar feedback lives on the homepage.
+              Reviews of {productTitle} from our readers. Seminar feedback lives on the homepage.
             </p>
             {reviews.length > 0 ? (
               <div className="mt-3 flex items-center gap-2">
@@ -58,15 +58,9 @@ export default function ProductReviews({
             ) : null}
           </div>
           {user ? (
-            purchased ? (
-              <button type="button" className="btn-primary" onClick={() => setOpen((value) => !value)}>
-                {existing ? "Edit your review" : "Write a review"}
-              </button>
-            ) : (
-              <p className="max-w-xs text-right text-xs text-text-muted">
-                Buy this product to write a review. Reviews are only from confirmed purchases.
-              </p>
-            )
+            <button type="button" className="btn-primary" onClick={() => setOpen((value) => !value)}>
+              {existing ? "Edit your review" : "Write a review"}
+            </button>
           ) : (
             <Link href={`/login?next=/shop/${productSlug}`} className="btn-primary">
               Sign in to write a review
@@ -74,12 +68,13 @@ export default function ProductReviews({
           )}
         </div>
 
-        {open && user && purchased ? (
+        {open && user ? (
           <ReviewForm
             productId={productId}
             name={`${user.firstName} ${user.lastName}`.trim()}
             email={user.email}
             existing={existing}
+            verified={purchased}
             onDone={() => setOpen(false)}
           />
         ) : null}
@@ -99,6 +94,20 @@ export default function ProductReviews({
                   <time className="text-xs text-text-muted">{formatDate(review.date)}</time>
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-text-primary">{review.text}</p>
+                {review.media?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {review.media.map((item) =>
+                      item.kind === "video" ? (
+                        <video key={item.url} src={item.url} controls preload="metadata" className="h-28 w-40 rounded-lg bg-slate-100 object-cover" />
+                      ) : (
+                        <a key={item.url} href={item.url} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={item.url} alt="Customer photo" loading="lazy" className="h-28 w-28 rounded-lg object-cover" />
+                        </a>
+                      )
+                    )}
+                  </div>
+                ) : null}
                 {review.reply?.text ? (
                   <div className="mt-4 rounded-xl border border-ink/10 bg-ink/[0.04] px-4 py-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink">
@@ -112,7 +121,7 @@ export default function ProductReviews({
           </div>
         ) : (
           <p className="rounded-2xl border border-dashed border-border bg-white p-8 text-center text-sm text-text-muted">
-            No purchase reviews yet for this product.
+            No reviews yet for this product. Be the first to write one.
           </p>
         )}
       </div>
@@ -125,18 +134,23 @@ function ReviewForm({
   name,
   email,
   existing,
+  verified,
   onDone,
 }: {
   productId: string;
   name: string;
   email: string;
   existing?: ReturnType<typeof findProductReview>;
+  verified: boolean;
   onDone: () => void;
 }) {
   const [rating, setRating] = useState(existing?.rating ?? 5);
   const [text, setText] = useState(existing?.text ?? "");
   const [note, setNote] = useState("");
   const stars = useMemo(() => [1, 2, 3, 4, 5], []);
+
+  const [media, setMedia] = useState<{ url: string; kind: "image" | "video" }[]>(existing?.media ?? []);
+  const [uploading, setUploading] = useState(false);
 
   return (
     <form
@@ -154,7 +168,8 @@ function ReviewForm({
           email,
           rating,
           text,
-          verified: true,
+          verified,
+          media: media.length ? media : undefined,
         });
         setNote("Thank you. Your review is on the product page.");
         onDone();
@@ -180,6 +195,56 @@ function ReviewForm({
         onChange={(event) => setText(event.target.value)}
         placeholder="How was the book or product after you received it?"
       />
+      <div>
+        <label className="btn-outline inline-flex cursor-pointer items-center gap-2 text-sm">
+          {uploading ? "Uploading…" : "Add photos or videos"}
+          <input
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            className="hidden"
+            disabled={uploading}
+            onChange={async (event) => {
+              const files = [...(event.target.files ?? [])].slice(0, Math.max(0, 6 - media.length));
+              event.target.value = "";
+              if (!files.length) return;
+              setUploading(true);
+              try {
+                const added: { url: string; kind: "image" | "video" }[] = [];
+                for (const file of files) {
+                  const body = new FormData();
+                  body.set("file", file, file.name);
+                  const response = await fetch("/api/shop/review-media", { method: "POST", body, credentials: "same-origin" });
+                  const data = (await response.json().catch(() => ({}))) as { ok?: boolean; url?: string; error?: string };
+                  if (!response.ok || !data.url) throw new Error(data.error || "Upload failed.");
+                  added.push({ url: data.url, kind: file.type.startsWith("video/") ? "video" : "image" });
+                }
+                setMedia((current) => [...current, ...added]);
+              } catch (problem) {
+                setNote(problem instanceof Error ? problem.message : "Upload failed.");
+              } finally {
+                setUploading(false);
+              }
+            }}
+          />
+        </label>
+        {media.length ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {media.map((item, index) => (
+              <span key={item.url} className="relative">
+                {item.kind === "video" ? (
+                  <video src={item.url} className="h-16 w-16 rounded-lg object-cover" muted />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.url} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                )}
+                <button type="button" aria-label="Remove" className="absolute -right-1 -top-1 rounded-full bg-white px-1 text-xs shadow" onClick={() => setMedia(media.filter((_, at) => at !== index))}>×</button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <p className="mt-1 text-xs text-text-muted">Up to 6 photos or videos, 25 MB each.</p>
+      </div>
       {note ? <p className="text-sm text-burgundy">{note}</p> : null}
       <div className="flex gap-3">
         <button type="submit" className="btn-primary">

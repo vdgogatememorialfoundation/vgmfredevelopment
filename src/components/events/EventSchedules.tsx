@@ -133,6 +133,7 @@ function speakersFor(event: Row): SpeakerCard[] {
     }
     if (speaker.topic && !current.topics.includes(speaker.topic)) current.topics.push(speaker.topic);
     if (!current.bio && speaker.bio) current.bio = speaker.bio;
+    if (!current.photo && speaker.photo) current.photo = speaker.photo;
   }
   return [...map.values()];
 }
@@ -167,14 +168,32 @@ export function SpeakerBoard({ variant = "page" }: { variant?: "page" | "home" }
         <EventSelect events={events} value={selected?.id ?? ""} onChange={setEventId} label="Event name" />
         <ul className="mt-6 grid gap-3 sm:grid-cols-2">
           {shown.map((speaker) => (
-            <li key={speaker.id} className="rounded-2xl border border-border bg-white p-4">
-              <p className="font-semibold text-text-primary">{speaker.name}</p>
-              {speaker.topics.length > 0 && <p className="mt-1 text-sm text-text-muted">{speaker.topics.join(" · ")}</p>}
-              {speaker.bio && <p className="mt-2 text-sm text-text-primary">{speaker.bio}</p>}
+            <li key={speaker.id} className="flex gap-4 rounded-2xl border border-border bg-white p-4">
+              <SpeakerPhoto speaker={speaker} />
+              <div className="min-w-0">
+                <p className="font-semibold text-text-primary">{speaker.name}</p>
+                {speaker.designation && <p className="mt-1 text-sm text-text-muted">{speaker.designation}</p>}
+                {speaker.bio && <p className="mt-2 text-sm text-text-primary">{speaker.bio}</p>}
+              </div>
             </li>
           ))}
         </ul>
       </div>
     </section>
+  );
+}
+
+export function SpeakerPhoto({ speaker }: { speaker: Pick<Speaker, "name" | "photo"> }) {
+  if (speaker.photo && /^(https?:|\/)/i.test(speaker.photo)) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={speaker.photo} alt={speaker.name} loading="lazy" className="h-16 w-16 shrink-0 rounded-full border border-border object-cover" />
+    );
+  }
+  const initials = speaker.name.replace(/^(dr|prof|vd|vaidya)\.?\s+/i, "").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <span aria-hidden className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-warm-cream text-lg font-semibold text-burgundy">
+      {initials}
+    </span>
   );
 }

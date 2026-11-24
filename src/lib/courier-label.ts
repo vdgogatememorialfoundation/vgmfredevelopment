@@ -2,16 +2,38 @@
 
 export const GOGATE_COURIER = "Gogate Products";
 
-const OWN_FLEET = new Set(["tookan", "tookan-parcel", "shipday"]);
+const OWN_FLEET = new Set(["vgmf-express", "vgmf-hyperlocal", "tookan", "tookan-parcel", "shipday"]);
 
 const AGGREGATOR_NAMES: Record<string, string> = {
+  "vgmf-express": "Vaidya Gogate Memorial Foundation",
+  "vgmf-hyperlocal": "Vaidya Gogate Memorial Foundation",
   shiprocket: "Shiprocket",
   nimbuspost: "Nimbuspost",
   ithink: "iThink Logistics",
   shipyaari: "Shipyaari",
+  goswift: "GoSwift",
+  ekart: "Ekart Elite",
+  shadowfax: "Shadowfax",
+  envia: "Envia",
+  daakly: "India Post (Daakly)",
+  rapidshyp: "RapidShyp",
+  vamaship: "Vamaship",
+  shipway: "Shipway",
 };
 
-const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari)(\s+(surface|air|express|courier|driver))?$/i;
+const AGGREGATOR_ONLY = /^(shiprocket|nimbuspost|ithink logistics|ithink|shipyaari|goswift|swift|envia|rapidshyp|vamaship|shipway)(\s+(surface|air|express|courier|driver))?$/i;
+
+/** Express, Air or Surface from an aggregator field or a courier name such as "Delhivery Surface". */
+export function serviceModeOf(...values: unknown[]) {
+  for (const value of values) {
+    const text = String(value ?? "").toLowerCase();
+    if (!text || text === "null" || text === "undefined") continue;
+    if (/express|priority|premium|next.?day/.test(text)) return "Express";
+    if (/\bair\b|aerial|^a$/.test(text)) return "Air";
+    if (/surface|ground|road|standard|^s$/.test(text)) return "Surface";
+  }
+  return "";
+}
 
 export function isOwnFleet(provider?: string) {
   return OWN_FLEET.has((provider ?? "").toLowerCase());
@@ -21,11 +43,33 @@ export function aggregatorName(provider?: string) {
   return AGGREGATOR_NAMES[(provider ?? "").toLowerCase()] ?? "";
 }
 
-/** Gogate Products for our fleet. Ekart (or whoever the aggregator assigned) otherwise. */
+/** Admin only: the aggregator or desk a courier is booked through. */
+export function bookedViaLabel(provider?: string) {
+  const id = (provider ?? "").toLowerCase();
+  if (!id) return "";
+  if (id === "local") return "Own estimate";
+  if (id === "tookan" || id === "tookan-parcel") return "via Tookan";
+  if (id === "shipday") return "via Shipday";
+  return `via ${aggregatorName(id) || provider}`;
+}
+
+/** The in-house name plus the desk that is carrying the order. */
+export function fleetCourierLabel(provider?: string) {
+  const id = (provider ?? "").toLowerCase();
+  if (id === "tookan" || id === "tookan-parcel") return "Gogate Products-Tookan";
+  if (id === "shipday") return "Gogate Products-Shipday";
+  return "";
+}
+
+/** Gogate Products-Tookan or Gogate Products-Shipday for our fleet. Ekart (or whoever the aggregator assigned) otherwise. */
 export function customerCourierLabel(input: { provider?: string; courier?: string }) {
   const provider = (input.provider ?? "").toLowerCase();
   const raw = (input.courier ?? "").trim();
-  if (isOwnFleet(provider) || /tookan|shipday/i.test(raw)) return GOGATE_COURIER;
+  const fleet = fleetCourierLabel(provider);
+  if (fleet) return fleet;
+  if (/tookan/i.test(raw)) return "Gogate Products-Tookan";
+  if (/shipday/i.test(raw)) return "Gogate Products-Shipday";
+  if (/^ekart$/i.test(raw)) return "Ekart Logistics";
   if (raw && !AGGREGATOR_ONLY.test(raw)) return raw;
   return aggregatorName(provider) || raw || "Courier";
 }

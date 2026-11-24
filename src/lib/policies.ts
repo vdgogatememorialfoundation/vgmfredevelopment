@@ -2,6 +2,11 @@ import { subscribeCms } from "@/lib/cms";
 
 const KEY = "vgmf_policies";
 
+const WRONG_ADDRESS = {
+  title: "Wrong delivery address",
+  body: "Please check your delivery address and phone number before placing the order. If a wrong or incomplete address is entered and the shipment has been picked up by the courier, the Foundation is not responsible for delay, loss, non-delivery or return of the parcel, and any re-shipping charge is payable by the customer.",
+};
+
 export type PolicyId = "privacy" | "terms" | "shipping" | "returns" | "refund" | "cancellation";
 
 export interface PolicySection {
@@ -14,6 +19,8 @@ export interface PolicyDoc {
   title: string;
   description: string;
   lastUpdated: string;
+  /** ISO time of the last admin save; lets the server keep the newest copy of each policy. */
+  updatedAt?: string;
   sections: PolicySection[];
 }
 
@@ -40,6 +47,14 @@ export const defaultPolicies: Record<PolicyId, PolicyDoc> = {
       {
         title: "Your Rights",
         body: "You may request a copy of the personal data we hold about you, ask for corrections, or request deletion of your account by contacting us at care@vaidyagogate.org.",
+      },
+      {
+        title: "Cookies",
+        body: "We use essential cookies and browser storage to keep you signed in, remember your cart, language and checkout, and keep the site secure. These are always on. With your consent we also use analytics cookies (Google Analytics) to understand which pages are read, and advertising cookies (Google AdSense) on articles. You choose in the cookie notice shown on your first visit, and can change your choice any time from \"Cookie settings\" in the footer.",
+      },
+      {
+        title: "Signup Acknowledgement",
+        body: "When you create an account we keep an electronic acknowledgement record with a Form ID and Acknowledgement ID: your account details, the date and time, IP address and browser, and your acceptance of our Terms, Privacy Policy and store policies under the Information Technology Act 2000, the Digital Personal Data Protection Act 2023 and the Consumer Protection (E-Commerce) Rules 2020. It is kept by the Foundation as proof of consent.",
       },
     ],
   },
@@ -85,6 +100,7 @@ export const defaultPolicies: Record<PolicyId, PolicyDoc> = {
         title: "Shipping Charges",
         body: "Shipping is calculated at checkout based on weight and the delivery address. Orders above a stated threshold may qualify for free shipping.",
       },
+      WRONG_ADDRESS,
     ],
   },
   returns: {
@@ -157,7 +173,12 @@ function readSaved(): Partial<Record<PolicyId, PolicyDoc>> {
 
 export function getPolicy(id: PolicyId): PolicyDoc {
   const saved = readSaved()[id];
-  return saved ? { ...defaultPolicies[id], ...saved, id } : defaultPolicies[id];
+  const doc = saved ? { ...defaultPolicies[id], ...saved, id } : defaultPolicies[id];
+  // Only very old unsaved copies get the wrong-address clause; an admin-edited policy shows exactly what was saved.
+  if (id === "shipping" && !saved?.updatedAt && !doc.sections.some((section) => /wrong (delivery )?address/i.test(`${section.title} ${section.body}`))) {
+    return { ...doc, sections: [...doc.sections, WRONG_ADDRESS] };
+  }
+  return doc;
 }
 
 export function getPolicies(): Record<PolicyId, PolicyDoc> {
@@ -173,7 +194,7 @@ export function getPolicies(): Record<PolicyId, PolicyDoc> {
 
 export function savePolicy(doc: PolicyDoc) {
   if (typeof window === "undefined") return;
-  const next = { ...readSaved(), [doc.id]: { ...doc, lastUpdated: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }) } };
+  const next = { ...readSaved(), [doc.id]: { ...doc, updatedAt: new Date().toISOString(), lastUpdated: new Date().toLocaleString("en-IN", { month: "short", year: "numeric" }) } };
   window.localStorage.setItem(KEY, JSON.stringify(next));
   window.dispatchEvent(new Event("vgmf-cms"));
 }
@@ -183,3 +204,12 @@ export function subscribePolicies(onChange: () => void) {
 }
 
 export const policyIds: PolicyId[] = ["privacy", "terms", "shipping", "returns", "refund", "cancellation"];
+
+export const policyHref: Record<PolicyId, string> = {
+  privacy: "/privacy",
+  terms: "/terms",
+  shipping: "/shipping-policy",
+  returns: "/return-policy",
+  refund: "/refund-policy",
+  cancellation: "/cancellation-policy",
+};

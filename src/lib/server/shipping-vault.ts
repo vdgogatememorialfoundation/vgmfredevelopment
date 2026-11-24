@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dataFile } from "@/lib/server/paths";
+import { normalizePickup } from "@/lib/pickup-address";
 
 type Json = Record<string, unknown>;
 
@@ -40,6 +41,7 @@ function mergeNonEmpty(base: unknown, extra: unknown): unknown {
 export function mergeShippingCreds(incoming: unknown) {
   if (!incoming || typeof incoming !== "object") return;
   const next = mergeNonEmpty(readJson(credsFile()), incoming) as Json;
+  if (next.pickup && typeof next.pickup === "object") next.pickup = normalizePickup(next.pickup as Json);
   writeFileSync(credsFile(), JSON.stringify(next));
 }
 

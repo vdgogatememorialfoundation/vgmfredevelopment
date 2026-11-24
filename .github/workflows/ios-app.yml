@@ -1,0 +1,34 @@
+name: iOS app (Capacitor)
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: Site the app opens
+        default: https://staging.vaidyagogate.org
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: capacitor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci || npm install
+      - name: Firebase config
+        env:
+          GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          if [ -n "$GOOGLE_SERVICE_INFO_PLIST" ]; then echo "$GOOGLE_SERVICE_INFO_PLIST" > ios/App/App/GoogleService-Info.plist; fi
+      - run: CAP_SERVER_URL="${{ inputs.site_url }}" npx cap sync ios
+      - name: Build (unsigned simulator build; signed IPA needs Apple certificates)
+        working-directory: capacitor/ios/App
+        run: xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -sdk iphonesimulator -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vgmf-ios-simulator
+          path: capacitor/ios/App/build/Build/Products/Release-iphonesimulator/App.app

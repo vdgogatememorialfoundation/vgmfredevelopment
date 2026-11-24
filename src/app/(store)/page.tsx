@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import HeroSection from "@/components/home/HeroSection";
 import NoticeBoard from "@/components/home/NoticeBoard";
 import FoundationDirectory from "@/components/home/FoundationDirectory";
@@ -12,8 +13,16 @@ import SupportUs from "@/components/home/SupportUs";
 import AwardsSection from "@/components/home/AwardsSection";
 import { SpeakerBoard } from "@/components/events/EventSchedules";
 import HomeSections from "@/components/home/HomeSections";
+import InstagramReels from "@/components/home/InstagramReels";
+import { readMobileFeed } from "@/lib/server/mobile-feed";
+import { isPublishedNow } from "@/lib/schedule";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
+export const dynamic = "force-dynamic";
 
 export default function HomePage() {
+  const books = (readMobileFeed().books ?? []).filter((book) => book.active !== false && isPublishedNow(book));
   return (
     <HomeSections
       sections={{
@@ -26,9 +35,10 @@ export default function HomePage() {
         speakers: <SpeakerBoard variant="home" />,
         awards: <AwardsSection variant="home" />,
         legacy: <LegacySection />,
-        books: <FeaturedBooks />,
+        books: <FeaturedBooks initialBooks={books} />,
         articles: <FeaturedArticles />,
         notices: <NoticeBoard />,
+        reels: <InstagramReels />,
         clinics: <ClinicsSection />,
       }}
     />

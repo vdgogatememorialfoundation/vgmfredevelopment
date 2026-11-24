@@ -31,7 +31,7 @@ function noticeItems(notices: Notice[]): TickerItem[] {
 
 function articleItems(articles: Article[]): TickerItem[] {
   return articles
-    .filter((article) => isArticlePublished(article))
+    .filter((article) => isArticlePublished(article) && isPublishedNow(article))
     .map((article) => ({
       id: `article-${article.id}`,
       title: article.title,

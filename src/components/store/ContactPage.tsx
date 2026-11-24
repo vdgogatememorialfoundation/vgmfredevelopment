@@ -3,12 +3,16 @@
 import Link from "next/link";
 import PageHeader from "@/components/common/PageHeader";
 import { siteConfig } from "@/lib/constants";
+import { useSiteSettings } from "@/lib/use-cms";
 import ContactForm from "@/components/store/ContactForm";
 import SocialLinks from "@/components/layout/SocialLinks";
 import { useI18n } from "@/components/i18n/LanguageProvider";
 
 export default function ContactPage() {
   const { t } = useI18n();
+  const settings = useSiteSettings();
+  const phone = settings?.supportPhone || siteConfig.phone;
+  const email = settings?.supportEmail || siteConfig.email;
   return (
     <main>
       <PageHeader eyebrow={t("contact.eyebrow")} title={t("contact.title")} description={t("contact.desc")} />
@@ -21,14 +25,14 @@ export default function ContactPage() {
             </div>
             <div className="card p-6">
               <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-text-muted">{t("contact.email")}</h2>
-              <a href={`mailto:${siteConfig.email}`} className="mt-3 inline-block text-sm font-medium text-burgundy hover:underline">
-                {siteConfig.email}
+              <a href={`mailto:${email}`} className="mt-3 inline-block text-sm font-medium text-burgundy hover:underline">
+                {email}
               </a>
             </div>
             <div className="card p-6">
               <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-text-muted">{t("contact.phone")}</h2>
-              <a href={`tel:${siteConfig.phone}`} className="mt-3 inline-block text-sm font-medium text-burgundy hover:underline">
-                {siteConfig.phone}
+              <a href={`tel:${phone}`} className="mt-3 inline-block text-sm font-medium text-burgundy hover:underline">
+                {phone}
               </a>
             </div>
             <div className="card p-6">

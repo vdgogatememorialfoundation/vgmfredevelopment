@@ -5,6 +5,12 @@ import { englishMessages, type MessageKey } from "@/lib/i18n/messages";
 import { publishLiveSite } from "@/lib/mobile-publish";
 import {
   applySiteTheme,
+  applySiteTypography,
+  bodyFontChoices,
+  defaultTypography,
+  headingFontChoices,
+  normalizeTypography,
+  type SiteTypography,
   defaultReviewsControls,
   defaultSiteTheme,
   getSiteText,
@@ -228,6 +234,7 @@ function ThemePanel({ draft, setDraft }: PanelProps) {
           </div>
         </div>
       ))}
+      <TypographyControls draft={draft} setDraft={setDraft} />
     </section>
   );
 }
@@ -463,6 +470,77 @@ function TextRow({ messageKey, draft, setDraft, showGroup }: PanelProps & { mess
       ) : (
         <input className={field} placeholder={fallback} value={value} onChange={(event) => update(event.target.value)} />
       )}
+    </div>
+  );
+}
+
+function TypographyControls({ draft, setDraft }: PanelProps) {
+  const typography = normalizeTypography(draft.typography);
+  const update = (patch: Partial<SiteTypography>) => {
+    const next = normalizeTypography({ ...typography, ...patch });
+    applySiteTypography(next);
+    setDraft((current) => ({ ...current, typography: next }));
+  };
+  const select = "mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900";
+  return (
+    <div className="space-y-3 border-t border-slate-100 pt-4">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-800">Fonts and text size</h3>
+        <p className="text-xs text-slate-500">
+          Fonts and sizes for every public page. Admin and staff screens keep their own size. Save & publish keeps it for every visitor.
+        </p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-semibold text-slate-500">
+          Body font
+          <select className={select} value={typography.bodyFont} onChange={(event) => update({ bodyFont: event.target.value })}>
+            {bodyFontChoices.map((name) => (
+              <option key={name || "default"} value={name}>
+                {name || "Default (Outfit)"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-slate-500">
+          Heading font
+          <select className={select} value={typography.headingFont} onChange={(event) => update({ headingFont: event.target.value })}>
+            {headingFontChoices.map((name) => (
+              <option key={name || "default"} value={name}>
+                {name || "Default (Fraunces)"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold text-slate-500">
+          Text size: {typography.baseSize}px
+          <input
+            type="range"
+            min={13}
+            max={22}
+            value={typography.baseSize}
+            onChange={(event) => update({ baseSize: Number(event.target.value) })}
+            className="mt-2 w-full"
+          />
+        </label>
+        <label className="block text-xs font-semibold text-slate-500">
+          Heading size: {typography.headingScale}%
+          <input
+            type="range"
+            min={70}
+            max={150}
+            step={5}
+            value={typography.headingScale}
+            onChange={(event) => update({ headingScale: Number(event.target.value) })}
+            className="mt-2 w-full"
+          />
+        </label>
+      </div>
+      <p className="text-sm text-slate-600">
+        <span style={{ fontFamily: "var(--font-serif)" }} className="text-lg font-semibold">Heading preview</span> · Body text preview
+      </p>
+      <button type="button" className={ghost} onClick={() => update({ ...defaultTypography })}>
+        Reset fonts and size
+      </button>
     </div>
   );
 }

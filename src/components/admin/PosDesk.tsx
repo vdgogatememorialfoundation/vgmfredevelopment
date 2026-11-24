@@ -1,22 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { siteConfig } from "@/lib/constants";
+import { useEffect, useMemo, useState } from "react";
 import {
   adjustStoreCredit,
   createAdminOrder,
   displayName,
+  fetchCustomerWallet,
   getAccounts,
   getStoreCredit,
+  getStoreCreditExpiry,
+  type WalletExpiry,
+  verifyStoreCreditId,
   patchOrder,
   printPosReceipt,
   updateCustomer,
 } from "@/lib/admin-store";
-import { storeConfig } from "@/lib/constants";
+import { commerceCharges, getOrderSettings, preorderAdvance } from "@/lib/integrations";
+import { formatDate } from "@/lib/utils";
 import { getPickupLocation } from "@/lib/fulfillment";
 import { payOnPaytmEdc, payOnRazorpayEdc, payWithRazorpay, waitForRazorpay } from "@/lib/payments-client";
 import { generateOrderId } from "@/lib/store";
 import { useLiveBooks } from "@/lib/use-cms";
-import type { Book, DeliveryAddress, Order } from "@/types";
+import type { Book, CourierRate, DeliveryAddress, Order } from "@/types";
+import { fetchCourierRates, orderDims, orderWeightKg } from "@/lib/shipping-client";
 import { Button, EmptyState, Field, Panel, SelectInput, TextInput } from "@/components/admin/AdminUI";
 import { AccountSearch } from "@/components/admin/AccountSearch";
 import { canOrder, getProductByCode, isPurchasable } from "@/lib/product-data";
@@ -37,7 +44,14 @@ type MethodId = (typeof METHODS)[number]["id"];
 
 const rupees = (value: number) => `₹${Math.round(value).toLocaleString("en-IN")}`;
 
-type Line = { bookId: string; quantity: number };
+/** `price`: the desk's price per copy for this sale; left out = the catalogue price. */
+type Line = { bookId: string; quantity: number; price?: number };
+
+async function resendCreditId(email?: string) {
+  const response = await fetch("/api/shop/wallet", { method: "POST", headers: { "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ resendId: true, email }) });
+  const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; sentTo?: string };
+  return data.ok ? `Store Credit ID sent to ${data.sentTo}.` : data.error || "Could not send the ID.";
+}
 
 export function PosDesk() {
   const books = useLiveBooks().filter((book) => book.active !== false);
@@ -48,13 +62,25 @@ export function PosDesk() {
   const [walkIn, setWalkIn] = useState({ name: "", phone: "", email: "" });
   const [method, setMethod] = useState<MethodId>("cash");
   const [reference, setReference] = useState("");
+  const [partNow, setPartNow] = useState("");
+  const [asPreorder, setAsPreorder] = useState(false);
   const [useCredit, setUseCredit] = useState(false);
+  const [creditId, setCreditId] = useState("");
+  const [creditIdFor, setCreditIdFor] = useState("");
+  const [creditIdNote, setCreditIdNote] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [address, setAddress] = useState<DeliveryAddress>(emptyDeliveryAddress());
   const [scanOpen, setScanOpen] = useState(false);
+  const [fulfil, setFulfil] = useState<"counter" | "delivery">("counter");
+  const [deliveryCharge, setDeliveryCharge] = useState("0");
+  const [deliveryRates, setDeliveryRates] = useState<CourierRate[]>([]);
+  const [deliveryChoice, setDeliveryChoice] = useState<CourierRate | undefined>();
+  const [ratesNote, setRatesNote] = useState("");
+  const [preorderPay, setPreorderPay] = useState<"advance" | "full">("advance");
+  const [wallet, setWallet] = useState<{ email: string; balance: number; expiring: WalletExpiry | null; error?: string } | null>(null);
 
   const catalog = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -69,17 +95,49 @@ export function PosDesk() {
   }, [books, query]);
 
   const account = customers.find((item) => item.email === accountEmail);
-  const credit = account ? getStoreCredit(account.email) : 0;
+
+  useEffect(() => {
+    if (!accountEmail) return;
+    let cancelled = false;
+    fetchCustomerWallet(accountEmail)
+      .then((live) => !cancelled && setWallet({ email: accountEmail, balance: live.balance, expiring: live.expiring }))
+      .catch(() => !cancelled && setWallet({ email: accountEmail, balance: getStoreCredit(accountEmail), expiring: getStoreCreditExpiry(accountEmail), error: "Live wallet not reachable; showing this device's copy." }));
+    return () => {
+      cancelled = true;
+    };
+  }, [accountEmail]);
+
+  const walletReady = Boolean(account && wallet?.email === account.email);
+  const credit = account && walletReady ? wallet?.balance ?? 0 : 0;
   const rows = cart
     .map((line) => {
       const book = books.find((item) => item.id === line.bookId);
       return book ? { line, book } : null;
     })
     .filter(Boolean) as { line: Line; book: Book }[];
-  const subtotal = rows.reduce((sum, row) => sum + row.book.price * row.line.quantity, 0);
-  const gst = Math.round(subtotal * storeConfig.gstRate);
-  const creditApplied = useCredit ? Math.min(credit, subtotal + gst) : 0;
-  const total = Math.max(0, subtotal + gst - creditApplied);
+  const settings = getOrderSettings();
+  const isPreorderBook = (book: Book) => Boolean(book.preorder?.enabled && book.stock <= 0);
+  const hasPreorder = asPreorder || rows.some((row) => isPreorderBook(row.book));
+  const mixed = !asPreorder && rows.some((row) => isPreorderBook(row.book)) && rows.some((row) => !isPreorderBook(row.book));
+  const unit = (row: { line: Line; book: Book }) => row.line.price ?? row.book.price;
+  const subtotal = rows.reduce((sum, row) => sum + unit(row) * row.line.quantity, 0);
+  const { gst, platformFee } = rows.length ? commerceCharges(subtotal, settings) : { gst: 0, platformFee: 0 };
+  const charge = fulfil === "delivery" ? Math.max(0, Math.round(Number(deliveryCharge) || 0)) : 0;
+  // A pre-order sent by courier with no charge typed gets its courier charge added to the balance later, as on the website.
+  const shippingLater = hasPreorder && fulfil === "delivery" && charge === 0;
+  const grand = subtotal + gst + platformFee + charge;
+  const creditApplied = useCredit && account && creditIdFor === account.email ? Math.min(credit, grand) : 0;
+  const orderTotal = Math.max(0, Math.round((grand - creditApplied) * 100) / 100);
+  const copies = rows.reduce((sum, row) => sum + row.line.quantity, 0);
+  const advance = hasPreorder && orderTotal > 0 ? preorderAdvance(orderTotal, settings, { copies, platformFee: Math.max(0, platformFee - creditApplied) }) : orderTotal;
+  const payAdvance = hasPreorder && preorderPay === "advance";
+  const total = payAdvance ? advance : orderTotal;
+  const partAmount = Math.round((Number(partNow) || 0) * 100) / 100;
+  // "Total amount received": below the full amount it is a part payment; for a pre-order it may be anything up to the order total.
+  const receivedCap = hasPreorder ? orderTotal : total;
+  const partial = partAmount > 0 && partAmount < receivedCap;
+  const payNow = partAmount > 0 && partAmount <= receivedCap ? partAmount : total;
+  const balanceLater = Math.max(0, Math.round((orderTotal - payNow) * 100) / 100);
 
   const addByCode = (code: string) => {
     const book = getProductByCode(code) || books.find((item) => matchesBarcode(item, code));
@@ -98,12 +156,14 @@ export function PosDesk() {
     setCart((list) => {
       const existing = list.find((row) => row.bookId === book.id);
       const nextQty = (existing?.quantity ?? 0) + 1;
-      if (isPurchasable(book) && nextQty > book.stock) return list;
+      if (!asPreorder && isPurchasable(book) && nextQty > book.stock) return list;
       if (existing) return list.map((row) => (row.bookId === book.id ? { ...row, quantity: nextQty } : row));
       return [...list, { bookId: book.id, quantity: 1 }];
     });
   };
 
+  const setPrice = (bookId: string, value: string) =>
+    setCart((list) => list.map((row) => (row.bookId === bookId ? { ...row, price: value === "" ? undefined : Math.max(0, Number(value) || 0) } : row)));
   const setQty = (bookId: string, quantity: number) => {
     if (quantity < 1) {
       setCart((list) => list.filter((row) => row.bookId !== bookId));
@@ -123,26 +183,35 @@ export function PosDesk() {
       setError("Add at least one product.");
       return;
     }
+    if (mixed) {
+      setError("Pre-order books go on their own sale. Remove either the pre-order or the in-stock items, then make a second sale.");
+      return;
+    }
+    if (fulfil === "delivery" && (!address.line1.trim() || !address.city.trim() || !address.state.trim() || !/^\d{6}$/.test(address.pincode))) {
+      setError("For home delivery, fill the customer's address, city, state and 6-digit pincode.");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
     try {
       const saleId = generateOrderId();
-      let paymentMethod: string = METHODS.find((item) => item.id === method)?.label ?? "Cash";
+      const methodLabel = METHODS.find((item) => item.id === method)?.label ?? "Cash";
+      let paymentMethod: string = payNow > 0 ? methodLabel : creditApplied > 0 ? "Store credit" : methodLabel;
       let paymentRef = reference.trim() || undefined;
       let razorpayOrderId: string | undefined;
       let razorpayPaymentId: string | undefined;
 
-      if (total > 0 && method !== "cash") {
+      if (payNow > 0 && method !== "cash") {
         if (method === "upi") {
           setMessage("Opening Razorpay UPI…");
           const outcome = await payWithRazorpay({
-            amount: total,
+            amount: payNow,
             receipt: saleId,
             name,
             email: account?.email || walkIn.email,
             phone,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
             method: "upi",
             skipDemo: true,
           });
@@ -167,12 +236,12 @@ export function PosDesk() {
         } else if (method === "razorpay-edc") {
           setMessage("Sending the amount to the Razorpay EDC. Complete the payment on the machine.");
           const outcome = await payOnRazorpayEdc({
-            amount: total,
+            amount: payNow,
             receipt: saleId,
             name,
             email: account?.email || walkIn.email,
             phone,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
           });
           paymentMethod = outcome.method;
           paymentRef = outcome.reference ?? outcome.paymentId;
@@ -181,9 +250,9 @@ export function PosDesk() {
         } else {
           setMessage("Sending the amount to the Paytm EDC. Complete the payment on the machine.");
           const outcome = await payOnPaytmEdc({
-            amount: total,
+            amount: payNow,
             receipt: saleId,
-            description: `VGMF POS ${saleId}`,
+            description: `Vaidya Gogate Memorial Foundation POS ${saleId}`,
           });
           paymentMethod = outcome.method;
           paymentRef = outcome.reference ?? outcome.paymentId;
@@ -219,7 +288,7 @@ export function PosDesk() {
         line1: pickup.address,
         city: "Pune",
         state: "Maharashtra",
-        pincode: "411005",
+        pincode: "411002",
         country: "India",
         countryCode: "IN",
       };
@@ -229,33 +298,62 @@ export function PosDesk() {
         userId: account?.id,
         deliverTo,
         items: cart,
-        deliveryMode: "store_pickup",
+        deliveryMode: fulfil === "delivery" ? "delivery" : "store_pickup",
         payment: "paid",
         paymentMethod,
         paymentRef,
         razorpayOrderId,
         razorpayPaymentId,
         channel: "pos",
-        shippingOverride: 0,
+        shippingOverride: charge,
+        courierChoice: fulfil === "delivery" ? deliveryChoice : undefined,
+        preorder: asPreorder,
       });
-      const updates: Partial<Order> = { status: "Delivered" };
-      if (creditApplied > 0 && account) {
-        const balance = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
-        updates.storeCreditUsed = creditApplied;
-        updates.total = total;
-        updates.subtotal = subtotal;
-        updates.gst = gst;
-        updates.shipping = 0;
-        patchOrder(order.id, updates, `Store credit ₹${creditApplied} · balance ₹${balance}`);
-      } else {
-        patchOrder(order.id, updates, "Collected at counter");
+      if (creditApplied > 0 && payNow > 0) paymentMethod = `Store credit ${rupees(creditApplied)} + ${paymentMethod}`;
+      // Pre-orders are not handed over at the counter: they wait in Orders until the book arrives.
+      const updates: Partial<Order> = fulfil === "delivery" || hasPreorder ? {} : { status: "Delivered" };
+      if (hasPreorder && (balanceLater > 0 || shippingLater)) {
+        updates.paymentStatus = balanceLater > 0 ? "Partially Paid" : "Paid";
+        updates.preorderPayment = {
+          advance: payNow + creditApplied,
+          balance: balanceLater,
+          balanceWhen: settings.preorderPayment.balanceWhen,
+          advancePaidAt: new Date().toISOString(),
+          shippingDue: shippingLater || undefined,
+        };
       }
+      if (partial) {
+        updates.paymentStatus = "Partially Paid";
+        updates.amountPaid = payNow;
+      }
+      updates.paymentMethod = paymentMethod;
+      const notes = [
+        hasPreorder ? `Pre-order at counter · paid ${rupees(payNow + creditApplied)}${balanceLater > 0 ? ` · balance ${rupees(balanceLater)} by payment link when ready` : ""}${shippingLater ? " · courier charge added later" : ""}` : fulfil === "delivery" ? "Paid at counter · home delivery" : "Collected at counter",
+      ];
+      if (creditApplied > 0 && account) {
+        const left = adjustStoreCredit(account.email, -creditApplied, `POS order ${order.id}`, order.id);
+        updates.storeCreditUsed = creditApplied;
+        updates.total = orderTotal;
+        notes.push(`Store credit ₹${creditApplied} used · wallet ₹${left}`);
+        setWallet({ email: account.email, balance: left, expiring: wallet?.expiring ?? null });
+      }
+      patchOrder(order.id, updates, notes.join(" · "));
       const paid = { ...order, ...updates, paymentMethod, paymentRef, razorpayOrderId, razorpayPaymentId };
       setLastOrder(paid);
       setCart([]);
       setReference("");
+      setPartNow("");
       setUseCredit(false);
-      setMessage(`Sale ${paid.id} recorded · ${rupees(total)} · ${paymentMethod}.`);
+      setCreditId("");
+      setCreditIdFor("");
+      setCreditIdNote("");
+      setMessage(
+        hasPreorder
+          ? `Pre-order ${paid.id} recorded · ${rupees(payNow + creditApplied)} paid · ${paymentMethod}.${balanceLater > 0 ? ` Balance ${rupees(balanceLater)} is sent as a payment link when the book is ready.` : ""} It waits in Orders until the book arrives; stock is taken then.`
+          : fulfil === "delivery"
+            ? `Sale ${paid.id} recorded · ${rupees(payNow + creditApplied)} · ${paymentMethod}. Home delivery: it is in Orders for picking, packing and courier booking.`
+            : `Sale ${paid.id} recorded · ${rupees(payNow + creditApplied)} · ${paymentMethod}.`
+      );
       printPosReceipt(paid);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Could not complete the sale.");
@@ -279,10 +377,8 @@ export function PosDesk() {
       )}
       <div>
         <h1 className="text-2xl font-bold text-text-primary">In-store POS</h1>
-        <p className="text-sm text-text-muted">Sell from the counter. Stock is deducted immediately and a receipt is printed.</p>
+        <p className="text-sm text-text-muted">Sell from the counter and print a receipt. Normal sales take stock off immediately; pre-orders never touch stock (it stays as it is, e.g. 0) until the book arrives and the order is packed.</p>
       </div>
-
-      <PickupCounter />
 
       {message && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -314,14 +410,25 @@ export function PosDesk() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-text-primary">{book.title}</p>
                       <p className="text-xs text-text-muted">
-                        {book.sku} · {isPurchasable(book) ? `${book.stock} in stock` : book.preorder?.enabled ? "Pre-order" : "Out of stock"}
+                        {book.sku} · {isPurchasable(book) ? `${book.stock} in stock` : book.preorder?.enabled ? `Pre-order · ${Math.max(0, book.stock)} in stock` : "Out of stock"}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <span className="text-sm font-bold">{rupees(book.price)}</span>
-                      <Button variant="outline" disabled={!canOrder(book)} onClick={() => add(book)}>
-                        Add
-                      </Button>
+                      {(() => {
+                        const inCart = cart.find((row) => row.bookId === book.id)?.quantity ?? 0;
+                        return inCart ? (
+                          <div className="flex items-center gap-1" aria-label={`${inCart} in cart`}>
+                            <Button variant="outline" onClick={() => setQty(book.id, inCart - 1)} aria-label="One less">−</Button>
+                            <span className="min-w-[2.5rem] text-center text-sm font-bold text-burgundy">{inCart}</span>
+                            <Button variant="outline" onClick={() => add(book)} aria-label="One more">+</Button>
+                          </div>
+                        ) : (
+                          <Button variant="outline" disabled={!canOrder(book)} onClick={() => add(book)}>
+                            Add
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </li>
                 ))}
@@ -339,6 +446,10 @@ export function PosDesk() {
                 onSelect={(item) => {
                   setAccountEmail(item?.email ?? "");
                   setUseCredit(false);
+      setCreditId("");
+      setCreditIdFor("");
+      setCreditIdNote("");
+                  setWallet(null);
                   if (item) {
                     setWalkIn({
                       name: displayName(item, true),
@@ -359,16 +470,29 @@ export function PosDesk() {
                 <TextInput placeholder="Name" value={walkIn.name} onChange={(event) => setWalkIn({ ...walkIn, name: event.target.value })} />
                 <TextInput placeholder="Phone" value={walkIn.phone} onChange={(event) => setWalkIn({ ...walkIn, phone: event.target.value })} />
                 <TextInput placeholder="Email (optional)" value={walkIn.email} onChange={(event) => setWalkIn({ ...walkIn, email: event.target.value })} />
+                {!walkIn.email ? (
+                  <button type="button" className="text-left text-xs font-semibold text-primary underline" onClick={() => setWalkIn({ ...walkIn, email: siteConfig.email })}>
+                    No email? Use {siteConfig.email} with the customer&apos;s phone
+                  </button>
+                ) : null}
               </div>
             )}
             {account && (
-              <p className="mt-2 text-xs text-text-muted">
-                {account.phone} · {account.email}
-                {credit > 0 ? ` · store credit ${rupees(credit)}` : ""}
-              </p>
+              <div className="mt-2 space-y-1 text-xs text-text-muted">
+                <p>
+                  {account.phone} · {account.email}
+                </p>
+                <p className="font-semibold text-text-primary">
+                  Store credit: {walletReady ? rupees(credit) : "checking…"}
+                  {walletReady && wallet?.expiring ? (
+                    <span className="font-normal text-amber-700"> · {rupees(wallet.expiring.amount)} expires {formatDate(wallet.expiring.at)}</span>
+                  ) : null}
+                </p>
+                {wallet?.error && walletReady && <p className="text-amber-700">{wallet.error}</p>}
+              </div>
             )}
             <div className="mt-4">
-              <p className="mb-2 text-sm font-semibold text-text-primary">Registered address</p>
+              <p className="mb-2 text-sm font-semibold text-text-primary">{fulfil === "delivery" ? "Delivery address" : "Registered address"}</p>
               <p className="mb-3 text-xs text-text-muted">
                 The customer&apos;s saved address is shown when you pick an account. The counter can add or correct it.
               </p>
@@ -376,36 +500,182 @@ export function PosDesk() {
             </div>
           </Panel>
 
-          <Panel title="Cart" description={`${rows.length} line${rows.length === 1 ? "" : "s"}`}>
+          <Panel title="Cart" description={`${rows.length} line${rows.length === 1 ? "" : "s"} · ${copies} item${copies === 1 ? "" : "s"}`}>
             {rows.length === 0 ? (
               <EmptyState text="Scan or add products." />
-            ) : (
+            ) : mixed ? (
+              <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">This cart mixes pre-order and in-stock items. Sell them as two separate sales.</p>
+            ) : null}
+            {rows.length > 0 && (
               <ul className="space-y-2">
                 {rows.map(({ line, book }) => (
                   <li key={book.id} className="flex items-center gap-2 text-sm">
-                    <span className="min-w-0 flex-1 truncate">{book.title}</span>
-                    <div className="w-16">
-                      <TextInput type="number" min={1} value={line.quantity} onChange={(event) => setQty(book.id, Number(event.target.value))} />
+                    <span className="min-w-0 flex-1 truncate">
+                      {book.title}
+                      {isPreorderBook(book) && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">Pre-order</span>}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" onClick={() => setQty(book.id, line.quantity - 1)} aria-label="One less">−</Button>
+                      <div className="w-14">
+                        <TextInput type="number" min={1} value={line.quantity} onChange={(event) => setQty(book.id, Number(event.target.value))} />
+                      </div>
+                      <Button variant="outline" onClick={() => add(book)} aria-label="One more">+</Button>
                     </div>
-                    <span className="w-16 text-right font-medium">{rupees(book.price * line.quantity)}</span>
+                    <div className="w-20" title="Price per copy for this sale. Leave as is to keep the normal price.">
+                      <TextInput type="number" min={0} aria-label="Price per copy (₹)" value={line.price ?? book.price} onChange={(event) => setPrice(book.id, event.target.value)} />
+                    </div>
+                    <span className="w-24 text-right text-xs text-text-muted">
+                      {line.quantity} × {rupees(line.price ?? book.price)}
+                      {line.price !== undefined && line.price !== book.price && <span className="block text-[10px] line-through">{rupees(book.price)}</span>}
+                      <span className="block text-sm font-medium text-text-primary">{rupees((line.price ?? book.price) * line.quantity)}</span>
+                    </span>
                   </li>
                 ))}
               </ul>
             )}
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-text-primary">Order type</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant={!asPreorder ? "primary" : "outline"} onClick={() => setAsPreorder(false)}>Normal</Button>
+                <Button variant={asPreorder ? "primary" : "outline"} onClick={() => setAsPreorder(true)}>Pre-order</Button>
+              </div>
+              <p className="mt-1 text-xs text-text-muted">
+                {hasPreorder
+                  ? "Pre-order: the amount received is the advance. The balance (and courier charge) is sent as a link when the book is ready."
+                  : "Normal: collect the full amount, or enter the total received below if the customer pays part now."}
+              </p>
+              {hasPreorder && orderTotal > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button variant={preorderPay === "advance" ? "primary" : "outline"} onClick={() => setPreorderPay("advance")}>
+                    Advance {rupees(advance)}
+                  </Button>
+                  <Button variant={preorderPay === "full" ? "primary" : "outline"} onClick={() => setPreorderPay("full")}>
+                    Full amount {rupees(orderTotal)}
+                  </Button>
+                </div>
+              )}
+              {hasPreorder && preorderPay === "full" && shippingLater && (
+                <p className="mt-1 text-xs text-text-muted">The courier charge is still added later and sent as a link, as it isn&apos;t known yet.</p>
+              )}
+            </div>
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-semibold text-text-primary">Handover</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant={fulfil === "counter" ? "primary" : "outline"} onClick={() => setFulfil("counter")}>Take away now</Button>
+                <Button variant={fulfil === "delivery" ? "primary" : "outline"} onClick={() => setFulfil("delivery")}>Home delivery</Button>
+              </div>
+              {fulfil === "delivery" && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <Field label="Delivery charge (₹)">
+                    <TextInput type="number" min={0} value={deliveryCharge} onChange={(event) => setDeliveryCharge(event.target.value)} />
+                  </Field>
+                  <p className="self-end text-xs text-text-muted">Ships to the address above. The order goes to Orders for picking, packing and courier booking.</p>
+                  <div className="sm:col-span-2">
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!/^\d{6}$/.test(address.pincode)) {
+                          setRatesNote("Enter the 6-digit pincode in the address first.");
+                          return;
+                        }
+                        setRatesNote("Checking delivery options…");
+                        const items = cart.map((line) => ({ ...line, title: "", currency: "INR" })) as unknown as Order["items"];
+                        const quote = await fetchCourierRates({
+                          admin: true,
+                          deliveryPincode: address.pincode,
+                          weightKg: orderWeightKg({ items }),
+                          dims: orderDims({ items }),
+                          declaredValue: subtotal,
+                          bookIds: cart.map((line) => line.bookId),
+                        }).catch(() => null);
+                        setDeliveryRates(quote?.rates ?? []);
+                        setDeliveryChoice(undefined);
+                        setRatesNote(quote?.rates.length ? "" : quote?.notes?.[0] || "No delivery option for this pincode.");
+                      }}
+                    >
+                      Delivery options (hyperlocal and couriers)
+                    </Button>
+                    {ratesNote ? <p className="mt-1 text-xs text-text-muted">{ratesNote}</p> : null}
+                    {deliveryRates.length ? (
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {deliveryRates.map((rate) => {
+                          const on = deliveryChoice?.provider === rate.provider && deliveryChoice?.courierId === rate.courierId;
+                          return (
+                            <li key={`${rate.provider}:${rate.courierId}`}>
+                              <label className="flex cursor-pointer items-center gap-2">
+                                <input
+                                  type="radio"
+                                  className="accent-burgundy"
+                                  checked={on}
+                                  onChange={() => {
+                                    setDeliveryChoice(rate);
+                                    setDeliveryCharge(String(Math.round(rate.rate)));
+                                  }}
+                                />
+                                <span className="flex-1">{rate.courierName}</span>
+                                <span className="text-text-muted">{rate.etaDays === 0 ? "Today" : `${rate.etaDays} day${rate.etaDays === 1 ? "" : "s"}`}</span>
+                                <span className="w-16 text-right">{rupees(rate.rate)}</span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
             <dl className="mt-4 space-y-1 border-t border-border pt-3 text-sm">
               <div className="flex justify-between"><dt className="text-text-muted">Subtotal</dt><dd>{rupees(subtotal)}</dd></div>
               <div className="flex justify-between"><dt className="text-text-muted">GST</dt><dd>{rupees(gst)}</dd></div>
+              {fulfil === "delivery" && (
+                <div className="flex justify-between"><dt className="text-text-muted">Delivery</dt><dd>{rupees(charge)}</dd></div>
+              )}
               {creditApplied > 0 && (
                 <div className="flex justify-between text-emerald-700"><dt>Store credit</dt><dd>−{rupees(creditApplied)}</dd></div>
               )}
               <div className="flex justify-between font-bold"><dt>To collect</dt><dd className="text-burgundy">{rupees(total)}</dd></div>
             </dl>
-            {credit > 0 && (
+            {credit > 0 && account && creditIdFor !== account.email && (
+              <div className="mt-3 space-y-1">
+                <div className="flex gap-2">
+                  <TextInput
+                    className="w-36"
+                    inputMode="numeric"
+                    maxLength={5}
+                    placeholder="Store Credit ID"
+                    aria-label="Store Credit ID"
+                    value={creditId}
+                    onChange={(event) => setCreditId(event.target.value.replace(/\D/g, "").slice(0, 5))}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={creditId.length !== 5}
+                    onClick={async () => {
+                      setCreditIdNote("");
+                      const ok = await verifyStoreCreditId(account.email, creditId).catch(() => false);
+                      if (ok) setCreditIdFor(account.email);
+                      else setCreditIdNote("That Store Credit ID does not match this customer.");
+                    }}
+                  >
+                    Verify ID
+                  </Button>
+                  <Button variant="outline" onClick={async () => setCreditIdNote(await resendCreditId(account.email))}>
+                    Resend ID
+                  </Button>
+                </div>
+                <p className="text-xs text-text-muted">{creditIdNote || "Ask the customer for the 5-digit Store Credit ID shown in their wallet."}</p>
+              </div>
+            )}
+            {credit > 0 && account && creditIdFor === account.email && (
               <label className="mt-3 flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={useCredit} onChange={(event) => setUseCredit(event.target.checked)} />
                 Apply store credit ({rupees(credit)})
               </label>
             )}
+            {total === 0 && creditApplied > 0 ? (
+              <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Paid in full by store credit · {rupees(creditApplied)}</p>
+            ) : (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <SelectInput
                 value={method}
@@ -429,14 +699,29 @@ export function PosDesk() {
                       : "Pushes the amount to the Paytm EDC machine."}
                 </p>
               )}
+              <TextInput
+                inputMode="decimal"
+                placeholder={`Total amount received (₹, up to ${rupees(receivedCap)})`}
+                value={partNow}
+                onChange={(event) => setPartNow(event.target.value.replace(/[^\d.]/g, ""))}
+                disabled={busy}
+              />
+              <p className="self-center text-xs text-text-muted">
+                {partial
+                  ? `Collect ${rupees(payNow)} now · ${rupees(balanceLater)} stays due (Partially Paid; send a link from Orders → Payment).`
+                  : `Leave blank to collect ${rupees(total)}.`}
+              </p>
             </div>
+            )}
             <div className="mt-4 flex gap-2">
               <Button onClick={() => void checkout()} disabled={busy || rows.length === 0}>
                 {busy
                   ? method === "cash"
                     ? "Saving…"
                     : "Waiting for payment…"
-                  : method === "cash"
+                  : total === 0 && creditApplied > 0
+                    ? "Complete with store credit"
+                    : method === "cash"
                     ? `Collect ${rupees(total)}`
                     : `Charge ${rupees(total)}`}
               </Button>
@@ -452,6 +737,7 @@ export function PosDesk() {
           </Panel>
         </div>
       </div>
+      <PickupCounter />
     </div>
   );
 }

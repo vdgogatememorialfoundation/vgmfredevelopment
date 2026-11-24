@@ -67,7 +67,7 @@ export function ImageCropper({
       const dy = event.clientY - session.startY;
       const maxW = display.w;
       const maxH = display.h;
-      let next = { ...session.box };
+      const next = { ...session.box };
       if (session.handle === "move") {
         next.x = clamp(session.box.x + dx, 0, maxW - session.box.w);
         next.y = clamp(session.box.y + dy, 0, maxH - session.box.h);

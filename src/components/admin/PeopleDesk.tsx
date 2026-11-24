@@ -220,7 +220,7 @@ export function PeopleDesk({ role }: { role: PeopleRole }) {
             onEmail={() => {
               setPicked({ [account.email]: true });
               setMail((current) => ({
-                subject: current.subject || `Message from VGMF`,
+                subject: current.subject || `Message from Vaidya Gogate Memorial Foundation`,
                 body: current.body,
               }));
               setMailNote(`Selected ${displayName(account)} for a single email. Add a subject and message above.`);

@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
+import { UnderDevelopment } from "@/components/layout/UnderDevelopment";
 import { getCmsPageBySlug } from "@/lib/cms-pages";
+import { accountNavigation } from "@/lib/constants";
+import { developingKey } from "@/lib/site-text";
+import { useSiteText } from "@/lib/use-site-text";
 import {
   getSiteVisibility,
   isAccountPageEnabled,
@@ -16,8 +20,15 @@ function snapshot() {
   return JSON.stringify(getSiteVisibility());
 }
 
+function accountPath(pathname: string) {
+  return accountNavigation
+    .filter((item) => pathname === item.href || (item.href !== "/account" && pathname.startsWith(`${item.href}/`)))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+}
+
 export function SiteVisibilityGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const developing = useSiteText().developing ?? {};
   useSyncExternalStore(subscribeSiteVisibility, snapshot, () => "ssr");
 
   if (pathname.startsWith("/p/")) {
@@ -40,8 +51,11 @@ export function SiteVisibilityGate({ children }: { children: React.ReactNode }) 
       <Unavailable
         title="This page is currently off"
         text="An administrator has switched this page off on the public website."
-      />
+        />
     );
+  }
+  if (publicId && developing[developingKey("page", publicId)]) {
+    return <UnderDevelopment />;
   }
 
   if (pathname.startsWith("/account/") && !isAccountPageEnabled(pathname)) {
@@ -53,6 +67,10 @@ export function SiteVisibilityGate({ children }: { children: React.ReactNode }) 
         label="Back to My Account"
       />
     );
+  }
+  const accountHref = pathname.startsWith("/account") ? accountPath(pathname) : "";
+  if (accountHref && developing[developingKey("account", accountHref)]) {
+    return <UnderDevelopment />;
   }
 
   return <>{children}</>;

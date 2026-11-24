@@ -1,0 +1,254 @@
+import { revokeAllPortalSessionsForEmail } from "@/lib/server/portal-auth";
+import { randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { dataFile } from "@/lib/server/paths";
+
+/** Staff and co-admin logins Admin creates, kept on the server so /staff works on any device. */
+export type PortalAccountRecord = Record<string, unknown> & {
+  email: string;
+  role: "staff" | "coadmin" | "admin";
+  passwordSalt?: string;
+  passwordHash?: string;
+  updatedAt?: string;
+};
+
+const FILE = dataFile("portal-accounts.json");
+const ROLES = new Set(["staff", "coadmin", "admin"]);
+const ACCESS_FILE = dataFile("portal-access.json");
+const OTP_FILE = dataFile("portal-otp.json");
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_RESEND_MS = 30 * 1000;
+const OTP_ATTEMPTS = 5;
+
+type OtpRow = { salt: string; hash: string; expires: number; issued: number; attempts: number };
+
+function readJson<T>(file: string, fallback: T): T {
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(file: string, value: unknown) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(value, null, 2));
+}
+
+function load(): PortalAccountRecord[] {
+  try {
+    const rows = JSON.parse(readFileSync(FILE, "utf8")) as PortalAccountRecord[];
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function save(rows: PortalAccountRecord[]) {
+  mkdirSync(dirname(FILE), { recursive: true });
+  writeFileSync(FILE, JSON.stringify(rows, null, 2));
+}
+
+function hash(password: string, salt: string) {
+  return scryptSync(password, salt, 32).toString("hex");
+}
+
+function strip(row: PortalAccountRecord) {
+  const { passwordHash: _hash, passwordSalt: _salt, password: _password, ...rest } = row;
+  void _hash;
+  void _salt;
+  void _password;
+  return rest;
+}
+
+export function savePortalAccounts(incoming: unknown[]) {
+  const rows = load();
+  const at = new Date().toISOString();
+  let saved = 0;
+  for (const raw of incoming) {
+    const input = (raw ?? {}) as Record<string, unknown>;
+    const email = String(input.email ?? "").trim().toLowerCase();
+    const role = String(input.role ?? "");
+    if (!email || !ROLES.has(role)) continue;
+    const index = rows.findIndex((row) => row.email === email);
+    const current = index >= 0 ? rows[index] : undefined;
+    const password = typeof input.password === "string" ? input.password : "";
+    const { password: _password, ...profile } = input;
+    void _password;
+    const next: PortalAccountRecord = { ...current, ...profile, email, role: role as PortalAccountRecord["role"], updatedAt: at };
+    if (password && !(current?.passwordHash && current.passwordSalt && hash(password, current.passwordSalt) === current.passwordHash)) {
+      next.passwordSalt = randomBytes(16).toString("hex");
+      next.passwordHash = hash(password, next.passwordSalt);
+    }
+    if (index >= 0) rows[index] = next;
+    else rows.push(next);
+    saved += 1;
+  }
+  if (saved) save(rows);
+  return saved;
+}
+
+export function removePortalAccount(email: string) {
+  const key = email.trim().toLowerCase();
+  const rows = load();
+  const kept = rows.filter((row) => row.email !== key);
+  if (kept.length !== rows.length) save(kept);
+}
+
+export function checkPortalLogin(email: string, password: string) {
+  const row = load().find((item) => item.email === email.trim().toLowerCase());
+  if (!row?.passwordHash || !row.passwordSalt || !password) return null;
+  const expected = Buffer.from(row.passwordHash, "hex");
+  const actual = Buffer.from(hash(password, row.passwordSalt), "hex");
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+  return strip(row);
+}
+
+/** Staff role definitions and custom modules, so a new device knows what each staff role can open. */
+export function savePortalAccess(input: { roles?: unknown; customModules?: unknown }) {
+  const current = readJson<{ roles?: unknown[]; customModules?: unknown[] }>(ACCESS_FILE, {});
+  writeJson(ACCESS_FILE, {
+    roles: Array.isArray(input.roles) ? input.roles : current.roles ?? [],
+    customModules: Array.isArray(input.customModules) ? input.customModules : current.customModules ?? [],
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export function readPortalAccess() {
+  const access = readJson<{ roles?: unknown[]; customModules?: unknown[] }>(ACCESS_FILE, {});
+  return { roles: access.roles ?? [], customModules: access.customModules ?? [] };
+}
+
+export function findPortalAccount(email: string) {
+  const row = load().find((item) => item.email === email.trim().toLowerCase());
+  return row ? strip(row) : null;
+}
+
+export function portalAccountBlocked(row: Record<string, unknown>) {
+  return row.status === "banned" || row.status === "disabled";
+}
+
+/** Returns a fresh code, or "" when one was sent in the last 30 seconds. */
+export function issuePortalOtp(email: string) {
+  const key = email.trim().toLowerCase();
+  const all = readJson<Record<string, OtpRow>>(OTP_FILE, {});
+  const now = Date.now();
+  for (const [id, row] of Object.entries(all)) if (row.expires < now) delete all[id];
+  if (all[key] && now - all[key].issued < OTP_RESEND_MS) return "";
+  const code = String(randomInt(100000, 1000000));
+  const salt = randomBytes(8).toString("hex");
+  all[key] = { salt, hash: hash(code, salt), expires: now + OTP_TTL_MS, issued: now, attempts: 0 };
+  writeJson(OTP_FILE, all);
+  return code;
+}
+
+export function verifyPortalOtp(email: string, code: string) {
+  const key = email.trim().toLowerCase();
+  const all = readJson<Record<string, OtpRow>>(OTP_FILE, {});
+  const row = all[key];
+  if (!row || row.expires < Date.now()) return "The code has expired. Send a new code.";
+  if (row.attempts >= OTP_ATTEMPTS) return "Too many wrong codes. Send a new code.";
+  if (hash(String(code).trim(), row.salt) !== row.hash) {
+    row.attempts += 1;
+    writeJson(OTP_FILE, all);
+    return "Incorrect code. Please try again.";
+  }
+  delete all[key];
+  writeJson(OTP_FILE, all);
+  return null;
+}
+
+export function registerDeliveryPartnerAccount(input: { name: string; email: string; phone?: string; password: string }) {
+  const email = input.email.trim().toLowerCase();
+  const password = input.password;
+  if (!email || !email.includes("@")) throw new Error("Enter a valid email address.");
+  if (!password || password.length < 6) throw new Error("Password must be at least 6 characters.");
+  const rows = load();
+  if (rows.some((r) => String(r.email || "").toLowerCase() === email)) {
+    throw new Error("An account with this email already exists. Please sign in instead.");
+  }
+  const parts = (input.name || email.split("@")[0]).trim().split(/\s+/);
+  const firstName = parts[0] || "Delivery";
+  const lastName = parts.slice(1).join(" ");
+  const salt = randomBytes(16).toString("hex");
+  const passwordHash = hash(password, salt);
+  const record: PortalAccountRecord = {
+    id: `dp-${Date.now()}`,
+    email,
+    firstName,
+    lastName,
+    phone: (input.phone || "").trim(),
+    role: "staff",
+    staffRoleId: "delivery_partner",
+    active: true,
+    status: "active",
+    passwordSalt: salt,
+    passwordHash,
+    updatedAt: new Date().toISOString(),
+  };
+  rows.push(record);
+  save(rows);
+  return record;
+}
+
+
+export function deleteDeliveryPartnerAccount(email: string): { deleted: boolean } {
+  const clean = email.trim().toLowerCase();
+  if (!clean) return { deleted: false };
+  const rows = load();
+  const idx = rows.findIndex((r) => String(r.email || "").toLowerCase() === clean);
+  if (idx === -1) return { deleted: false };
+  const role = String(rows[idx].role || "").toLowerCase();
+  if (role === "admin" || role === "superadmin") {
+    throw new Error("Cannot delete an Admin portal account from Delivery Logistics.");
+  }
+  rows.splice(idx, 1);
+  save(rows);
+  try { revokeAllPortalSessionsForEmail(clean); } catch(e){}
+  return { deleted: true };
+}
+
+/** Finds the account email for a 5-digit rider user ID. */
+export function emailForRiderId(riderId: string) {
+  const id = riderId.trim();
+  if (!/^\d{5}$/.test(id)) return "";
+  const row = load().find((r) => String(r.riderId || "") === id);
+  return row ? String(row.email) : "";
+}
+
+/** Gives a delivery partner a 5-digit user ID (kept if already set) and a new generated password. */
+export function issueRiderLogin(email: string) {
+  const clean = email.trim().toLowerCase();
+  const rows = load();
+  const row = rows.find((r) => String(r.email || "").toLowerCase() === clean);
+  if (!row) throw new Error("Account not found.");
+  const used = new Set(rows.map((r) => String(r.riderId || "")).filter(Boolean));
+  let riderId = String(row.riderId || "");
+  if (!riderId) {
+    let next = 10001;
+    for (const id of used) next = Math.max(next, Number(id) + 1);
+    if (next > 99999) do next = randomInt(10000, 100000); while (used.has(String(next)));
+    riderId = String(next);
+  }
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const password = Array.from({ length: 10 }, () => alphabet[randomInt(0, alphabet.length)]).join("");
+  row.riderId = riderId;
+  row.passwordSalt = randomBytes(16).toString("hex");
+  row.passwordHash = hash(password, row.passwordSalt);
+  row.updatedAt = new Date().toISOString();
+  save(rows);
+  return { riderId, password, email: String(row.email) };
+}
+
+/** Active Admin and Co-admin logins (email, phone, name), e.g. to authorize sensitive desk actions. */
+export function listPortalApprovers() {
+  return load()
+    .filter((r) => (r.role === "admin" || r.role === "coadmin") && !portalAccountBlocked(r))
+    .map((r) => ({
+      email: String(r.email || "").trim().toLowerCase(),
+      phone: String(r.phone || r.mobile || "").trim(),
+      name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || String(r.email || ""),
+    }))
+    .filter((r) => r.email.includes("@"));
+}

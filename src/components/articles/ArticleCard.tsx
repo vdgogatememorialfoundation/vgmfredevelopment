@@ -45,7 +45,7 @@ export default function ArticleCard({ article }: { article: Article }) {
 
         <div className="mt-auto pt-4 flex items-center justify-between text-sm">
           {article.author && (
-            <span className="text-text-muted">{t("article.publishedBy")} {article.author}</span>
+            <span className="text-text-muted">{t("article.publishedBy")} {/\badmin\b|^vgmf$/i.test(article.author.trim()) ? "Vaidya Gogate Memorial Foundation" : article.author}</span>
           )}
           <Link
             href={`/articles/${article.slug}`}

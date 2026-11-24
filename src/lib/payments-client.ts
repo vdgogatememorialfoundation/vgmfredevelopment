@@ -1,7 +1,8 @@
-import type { Order } from "@/types";
-import { getIntegrations, paytmKeys, razorpayKeys } from "@/lib/integrations";
+import type { CourierRate, Order } from "@/types";
+import { getIntegrations, paytmKeys, razorpayKeys, whatsAppSenders, whatsAppTemplateFor } from "@/lib/integrations";
 import { requiresLiveCommerce } from "@/lib/platform";
-import { getOrder, maxRefundable, patchOrder, recordPayment, refundOrder, sendEmail } from "@/lib/admin-store";
+import { getOrders } from "@/lib/store";
+import { getOrder, maxRefundable, patchOrder, recordBalancePayment, recordCourierPayment, recordPayment, refundOrder, sendEmail, updateRefund } from "@/lib/admin-store";
 
 type RazorpayResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 
@@ -95,6 +96,8 @@ export async function payWithRazorpay(input: {
   method?: "upi" | "card";
   /** POS always tries to create a Razorpay order, even if this browser is in demo mode. */
   skipDemo?: boolean;
+  /** Called with the Razorpay order id before the payment window opens. */
+  onCreated?: (razorpayOrderId: string) => void;
 }): Promise<CheckoutOutcome> {
   const simulate = async (): Promise<CheckoutOutcome> => {
     await sleep(900);
@@ -112,6 +115,7 @@ export async function payWithRazorpay(input: {
     }
     throw new Error(order.error ?? "Razorpay could not create the payment.");
   }
+  input.onCreated?.(order.orderId);
   await loadCheckoutScript();
   const methodBlock =
     input.method === "upi"
@@ -132,7 +136,9 @@ export async function payWithRazorpay(input: {
             },
           }
         : undefined;
-  const response = await new Promise<RazorpayResponse>((resolve, reject) => {
+  let response: RazorpayResponse;
+  try {
+    response = await new Promise<RazorpayResponse>((resolve, reject) => {
     const checkout = new window.Razorpay!({
       key: order.keyId,
       order_id: order.orderId,
@@ -151,7 +157,13 @@ export async function payWithRazorpay(input: {
       reject(new Error(error?.description ?? "Payment failed."));
     });
     checkout.open();
-  });
+    });
+  } catch (problem) {
+    // UPI apps sometimes finish after the window closes: ask Razorpay before calling it unpaid.
+    const late = await waitForRazorpay(order.orderId, 2).catch(() => "");
+    if (late) return { kind: "paid", paymentId: late, razorpayOrderId: order.orderId, live: true };
+    throw problem;
+  }
   const verified = await api<{ verified: boolean }>({
     action: "verify",
     orderId: response.razorpay_order_id,
@@ -176,14 +188,14 @@ export async function payWithRazorpay(input: {
   };
 }
 
-function encodeSummary(order: Order) {
+function encodeSummary(order: Order, amount = order.total, items = order.items.map((item) => `${item.quantity} × ${item.title}`)) {
   const summary = {
     id: order.id,
-    amount: order.total,
+    amount,
     name: order.deliveryAddress?.fullName ?? "",
     email: order.deliveryAddress?.email ?? "",
     phone: order.deliveryAddress?.phone ?? "",
-    items: order.items.map((item) => `${item.quantity} × ${item.title}`),
+    items,
   };
   const bytes = new TextEncoder().encode(JSON.stringify(summary));
   let binary = "";
@@ -201,44 +213,408 @@ export function decodeSummary(value: string) {
   }
 }
 
-/** Razorpay Payment Link in test/live mode, otherwise a /pay link on this site. */
-export async function createPaymentLink(orderId: string) {
+const linkMinutes = () => Math.max(15, Number(getIntegrations().razorpay.linkExpiryMinutes) || 30);
+/** Pre-order balance links stay open for the days set in Settings → Payments (2 by default). */
+const balanceLinkMinutes = () => Math.round(Math.min(30, Math.max(0.5, Number(getIntegrations().razorpay.balanceLinkDays) || 2)) * 24 * 60);
+const linkExpiry = () => new Date(Date.now() + linkMinutes() * 60_000).toISOString();
+
+/** Amount still to collect on an order: the total less any advance already paid. */
+export function remainingDue(order: Order) {
+  if (order.paymentStatus === "Paid") return 0;
+  const advance = order.preorderPayment?.advancePaidAt ? order.preorderPayment.advance : 0;
+  const paid = order.paymentStatus === "Partially Paid" && order.amountPaid !== undefined ? order.amountPaid : advance;
+  return Math.max(0, Math.round((order.total - paid) * 100) / 100);
+}
+
+/** Desk records money received by hand (UPI, bank, cash) that covers only part of what is due. */
+export function recordPartialPayment(orderId: string, input: { amount: number; method: string; reference?: string }) {
+  const order = getOrder(orderId);
+  if (!order) return "Order not found.";
+  const amount = Math.round(Number(input.amount) * 100) / 100;
+  if (!(amount > 0)) return "Enter the amount received.";
+  const due = remainingDue(order);
+  if (due <= 0) return "Nothing is due on this order.";
+  if (amount + 0.01 >= due) {
+    recordPayment(order.id, { method: input.method, reference: input.reference });
+    return `₹${amount} covers everything due, so the order is marked Paid.`;
+  }
+  const paid = Math.round((order.total - due + amount) * 100) / 100;
+  const plan = order.preorderPayment;
+  const now = new Date().toISOString();
+  patchOrder(
+    order.id,
+    {
+      paymentStatus: "Partially Paid",
+      amountPaid: paid,
+      paymentMethod: input.method,
+      paymentRef: input.reference?.trim() || order.paymentRef,
+      paidAt: order.paidAt ?? now,
+      status: order.status === "Pending" ? "Ordered" : order.status,
+      preorderPayment: plan && !plan.advancePaidAt && paid + 0.01 >= plan.advance ? { ...plan, advancePaidAt: now } : plan,
+    },
+    `Part payment ₹${amount} recorded by the desk (${input.method}${input.reference?.trim() ? ` · ${input.reference.trim()}` : ""}); ₹${paid} received so far`
+  );
+  return `Marked Partially Paid: ₹${paid} received, ₹${Math.round((order.total - paid) * 100) / 100} still due.`;
+}
+
+/** Cancels every open Razorpay link on an order (used when the order is deleted). */
+export async function cancelOrderPaymentLinks(orderId: string) {
+  const order = getOrder(orderId);
+  if (!order) return;
+  const links = [order.paymentLink, order.courierUpgrade?.link, order.preorderPayment?.link];
+  for (const link of links) {
+    if (link?.provider !== "razorpay" || !link.id) continue;
+    try {
+      await api({ action: "link-cancel", linkId: link.id });
+    } catch {
+      /* already paid or expired */
+    }
+  }
+}
+
+/** Razorpay Payment Link in test/live mode, otherwise a /pay link on this site. `amount` defaults to the order total. */
+export async function createPaymentLink(orderId: string, amountOverride?: number, validUntil?: string) {
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
+  if (order.splitInto?.length) throw new Error(`Order ${order.id} was split. Send payment links from ${order.splitInto.map((row) => row.id).join(" and ")}.`);
   const settings = getIntegrations();
+  const amount = Math.round((amountOverride && amountOverride > 0 ? amountOverride : order.total) * 100) / 100;
+  if (!(amount > 0)) throw new Error("Enter an amount above ₹0.");
+  const until = validUntil ? new Date(validUntil).getTime() : NaN;
+  if (validUntil && !(until > Date.now() + 15 * 60_000)) throw new Error("Pick a link expiry at least 15 minutes from now.");
+  const minutes = Number.isFinite(until) ? Math.ceil((until - Date.now()) / 60_000) : linkMinutes();
+  const expiresAt = Number.isFinite(until) ? new Date(until).toISOString() : linkExpiry();
   let link: NonNullable<Order["paymentLink"]>;
   if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
     link = {
-      url: `${window.location.origin}/pay/${order.id}?d=${encodeSummary(order)}`,
+      url: `${window.location.origin}/pay/${order.id}?d=${amount === order.total ? encodeSummary(order) : encodeSummary(order, amount, ["Payment"])}&x=${Date.parse(expiresAt)}`,
       provider: "demo",
       createdAt: new Date().toISOString(),
+      amount,
+      expiresAt,
     };
   } else {
     const result = await api<{ id: string; url: string }>({
       action: "link",
-      amount: order.total,
+      amount,
       orderId: order.id,
       name: order.deliveryAddress?.fullName ?? "Customer",
       email: order.deliveryAddress?.email,
       phone: order.deliveryAddress?.phone,
-      description: `VGMF order ${order.id}`,
+      description: `Vaidya Gogate Memorial Foundation order ${order.id}`,
       callbackUrl: `${window.location.origin}/pay/${order.id}?done=1`,
-      expiryHours: settings.razorpay.linkExpiryHours,
+      expiryMinutes: minutes,
     });
     if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
-    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), amount, expiresAt };
   }
-  patchOrder(order.id, { paymentLink: link, paymentStatus: order.paymentStatus === "Paid" ? "Paid" : "Pending" }, "Payment link created");
+  const keep = order.paymentStatus === "Paid" || order.paymentStatus === "Partially Paid";
+  patchOrder(order.id, { paymentLink: link, paymentStatus: keep ? order.paymentStatus : "Pending" }, "Payment link created");
   sendEmail({
     to: order.deliveryAddress?.email ?? "",
     phone: order.deliveryAddress?.phone,
     name: order.deliveryAddress?.fullName,
-    params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${order.total}`, link.url],
-    subject: `Pay for your VGMF order ${order.id}`,
+    params: [order.deliveryAddress?.fullName ?? "Customer", order.id, `₹${amount}`, link.url],
+    subject: `Pay for your Vaidya Gogate Memorial Foundation order ${order.id}`,
     template: "payment-link",
-    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${order.total.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+    body: `Dear ${order.deliveryAddress?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease complete the payment of ₹${amount.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid until ${new Date(expiresAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
   });
   return link;
+}
+
+/** Link for a store-pickup customer to pay only the courier charge; paying switches the order to courier delivery. */
+export async function createCourierPaymentLink(orderId: string, rate: CourierRate) {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  if (order.deliveryMode !== "store_pickup") throw new Error("Only store-pickup orders can be switched to courier delivery.");
+  const address = order.deliveryAddress;
+  if (!address?.line1 || !/^\d{6}$/.test(address.pincode ?? "")) throw new Error("Add the customer's full delivery address and pincode with Edit first.");
+  const amount = Math.round(rate.rate * 100) / 100;
+  if (!(amount > 0)) throw new Error("Pick a courier with a charge to collect.");
+  const settings = getIntegrations();
+  const label = `Courier delivery · ${rate.courierName}`;
+  let link: NonNullable<NonNullable<Order["courierUpgrade"]>["link"]>;
+  if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
+    link = { url: `${window.location.origin}/pay/${order.id}?part=courier&d=${encodeSummary(order, amount, [label])}`, provider: "demo", createdAt: new Date().toISOString() };
+  } else {
+    const result = await api<{ id: string; url: string }>({
+      action: "link",
+      amount,
+      orderId: `${order.id}-C`,
+      name: address.fullName || "Customer",
+      email: address.email,
+      phone: address.phone,
+      description: `Courier charge for Vaidya Gogate Memorial Foundation order ${order.id}`,
+      callbackUrl: `${window.location.origin}/pay/${order.id}?part=courier&done=1`,
+      expiryMinutes: linkMinutes(),
+    });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString() };
+  }
+  patchOrder(order.id, { courierUpgrade: { amount, rate, link } }, `Courier payment link created · ${rate.courierName} ₹${amount}`);
+  sendEmail({
+    to: address.email ?? "",
+    phone: address.phone,
+    name: address.fullName,
+    params: [address.fullName || "Customer", order.id, `₹${amount}`, link.url],
+    subject: `Courier delivery for your Vaidya Gogate Memorial Foundation order ${order.id}`,
+    template: "payment-link",
+    body: `Dear ${address.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nAs requested, we can send order ${order.id} by courier (${rate.courierName}) instead of store pickup. Please pay only the courier charge of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nThe courier is booked once the payment is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  return link;
+}
+
+/** Link for the customer to pay the courier charge of a return pickup. */
+export async function createReturnChargeLink(orderId: string, amount: number) {
+  const order = getOrder(orderId);
+  const back = order?.returnShipment;
+  if (!order || !back) throw new Error("Create the return shipment first.");
+  const value = Math.round(amount * 100) / 100;
+  if (!(value > 0)) throw new Error("Enter the return courier charge above ₹0.");
+  const address = order.deliveryAddress;
+  const settings = getIntegrations();
+  const expiresAt = linkExpiry();
+  let link: NonNullable<NonNullable<Order["returnShipment"]>["chargeLink"]>;
+  if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
+    link = { url: `${window.location.origin}/pay/${order.id}?part=return&d=${encodeSummary(order, value, ["Return courier charge"])}&x=${Date.parse(expiresAt)}`, provider: "demo", createdAt: new Date().toISOString(), amount: value, expiresAt };
+  } else {
+    const result = await api<{ id: string; url: string }>({
+      action: "link",
+      amount: value,
+      orderId: `${order.id}-R`,
+      name: address?.fullName || "Customer",
+      email: address?.email,
+      phone: address?.phone,
+      description: `Return courier charge for Vaidya Gogate Memorial Foundation order ${order.id}`,
+      callbackUrl: `${window.location.origin}/pay/${order.id}?part=return&done=1`,
+      expiryMinutes: linkMinutes(),
+    });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), amount: value, expiresAt };
+  }
+  patchOrder(order.id, { returnShipment: { ...back, charge: value, chargePaidBy: "customer", chargeLink: link } }, `Return courier charge link · ₹${value}`);
+  sendEmail({
+    to: address?.email ?? "",
+    phone: address?.phone,
+    name: address?.fullName,
+    params: [address?.fullName || "Customer", order.id, `₹${value}`, link.url],
+    subject: `Return courier charge for order ${order.id}`,
+    template: "payment-link",
+    body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nPlease pay the return courier charge of ₹${value.toLocaleString("en-IN")} for order ${order.id}:\n${link.url}\n\nThis link is valid for ${linkMinutes()} minutes.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  return link;
+}
+
+/** Emails the customer the return AWB and label to paste on the parcel. */
+export function emailReturnLabel(orderId: string) {
+  const order = getOrder(orderId);
+  const back = order?.returnShipment;
+  if (!order || !back?.awb) throw new Error("Create the return shipment first.");
+  const address = order.deliveryAddress;
+  const page = `${window.location.origin}/account/orders/${encodeURIComponent(order.id)}`;
+  const pay = back.chargePaidBy === "customer" && !back.chargePaidAt && back.chargeLink ? `\n\nReturn courier charge ₹${back.charge}: ${back.chargeLink.url}` : "";
+  sendEmail({
+    to: address?.email ?? "",
+    phone: address?.phone,
+    name: address?.fullName,
+    params: [address?.fullName || "Customer", order.id, back.awb, back.labelUrl || page],
+    subject: `Return label for order ${order.id} · AWB ${back.awb}`,
+    template: "return-label",
+    body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour return pickup is booked with ${back.courierName || "the courier"}. AWB ${back.awb}.\n\nDownload the label, paste it on the parcel and hand it to the courier:\n${back.labelUrl || page}${pay}\n\nYou can also download it any time from My Orders: ${page}\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  patchOrder(order.id, { returnShipment: { ...back, labelEmailedAt: new Date().toISOString() } }, "Return label emailed to the customer");
+}
+
+/** Pre-orders sent by courier: works out the courier charge and adds it to the balance before the customer pays. */
+export async function addPreorderShipping(orderId: string) {
+  // The courier charge is added only when the desk selects the courier (selectPreorderCourier), never guessed.
+  return getOrder(orderId);
+}
+
+/** Sends the pre-order customer a link for the remaining balance. */
+/** Revised quote: cancels the balance link already sent, so only the new link can be paid. Stops if the customer already paid it. */
+export async function retireBalanceLink(orderId: string) {
+  const order = getOrder(orderId);
+  const previous = order?.preorderPayment?.link;
+  if (!order || !previous) return false;
+  if (previous.provider === "razorpay" && previous.id) {
+    const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: previous.id });
+    if (current.ok && current.status === "paid") {
+      recordBalancePayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+      throw new Error("The customer has already paid the earlier link. The balance is now marked paid, so the quote can't be revised.");
+    }
+    await api({ action: "link-cancel", linkId: previous.id }).catch(() => undefined);
+  }
+  return true;
+}
+
+
+/** Admin explicitly cancels an open pre-order balance link (e.g. customer wants to change book or revise courier). */
+export async function cancelBalancePaymentLink(orderId: string, reason?: string) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  if (!order || !plan?.link) return "No active balance payment link to cancel.";
+  if (plan.balancePaidAt) throw new Error("The balance is already paid and cannot be cancelled.");
+  if (plan.link.provider === "razorpay" && plan.link.id) {
+    const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: plan.link.id });
+    if (current.ok && current.status === "paid") {
+      recordBalancePayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+      throw new Error("The customer has already paid this balance link. It has been marked Paid and cannot be cancelled.");
+    }
+    await api({ action: "link-cancel", linkId: plan.link.id }).catch(() => undefined);
+  }
+  const { link: _removed, ...restPlan } = plan;
+  patchOrder(order.id, { preorderPayment: restPlan }, reason || "Balance payment link cancelled by admin");
+  return "Balance payment link cancelled on Razorpay. You can now change the book or courier charges and send a fresh link.";
+}
+
+/** Before editing order items/charges, verify & cancel any open unpaid Razorpay payment links so the customer cannot pay the old amount. */
+export async function retireOpenPaymentLinksBeforeEdit(orderId: string) {
+  const order = getOrder(orderId);
+  let cancelledBalanceLink = false;
+  let cancelledOrderLink = false;
+  if (!order) return { cancelledBalanceLink, cancelledOrderLink };
+  if (order.preorderPayment?.link && !order.preorderPayment.balancePaidAt) {
+    cancelledBalanceLink = await retireBalanceLink(order.id);
+  }
+  if (order.paymentLink && order.paymentStatus !== "Paid") {
+    if (order.paymentLink.provider === "razorpay" && order.paymentLink.id) {
+      const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: order.paymentLink.id });
+      if (current.ok && current.status === "paid") {
+        recordPayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+        throw new Error("The customer has already paid the earlier payment link. The order is now marked Paid.");
+      }
+      await api({ action: "link-cancel", linkId: order.paymentLink.id }).catch(() => undefined);
+    }
+    cancelledOrderLink = true;
+  }
+  return { cancelledBalanceLink, cancelledOrderLink };
+}
+
+export async function createBalancePaymentLink(orderId: string) {
+  const order = getOrder(orderId);
+  if (order?.preorderPayment?.shippingDue && !order.preorderPayment.balancePaidAt) {
+    throw new Error("Select the courier first (Courier → Show couriers & rates). Its charge is added to the balance, then the link is sent.");
+  }
+  const plan = order?.preorderPayment;
+  if (!order || !plan) throw new Error("This order has no pre-order balance.");
+  if (order.splitInto?.length) throw new Error(`Order ${order.id} was split. Send payment links from ${order.splitInto.map((row) => row.id).join(" and ")}.`);
+  if (plan.balancePaidAt) throw new Error("The balance is already paid.");
+  const address = order.deliveryAddress;
+  const amount = Math.round(plan.balance * 100) / 100;
+  const settings = getIntegrations();
+  const previous = plan.link;
+  if (previous?.provider === "razorpay" && previous.id) {
+    // A resend replaces the old link; cancel it so only one balance link can be paid.
+    const current = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: previous.id });
+    if (current.ok && current.status === "paid") {
+      recordBalancePayment(order.id, { method: "Razorpay payment link", reference: current.paymentId });
+      throw new Error("The customer has already paid the earlier link. The balance is now marked paid.");
+    }
+    await api({ action: "link-cancel", linkId: previous.id }).catch(() => undefined);
+  }
+  let link: NonNullable<NonNullable<Order["preorderPayment"]>["link"]>;
+  if (settings.razorpay.mode === "demo" && !requiresLiveCommerce()) {
+    link = { url: `${window.location.origin}/pay/${order.id}?part=balance&d=${encodeSummary(order, amount, ["Pre-order balance"])}`, provider: "demo", createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + balanceLinkMinutes() * 60_000).toISOString() };
+  } else {
+    const result = await api<{ id: string; url: string }>({
+      action: "link",
+      amount,
+      orderId: previous ? `${order.id}-B${Date.now().toString(36).slice(-5)}` : `${order.id}-B`,
+      name: address?.fullName || "Customer",
+      email: address?.email,
+      phone: address?.phone,
+      description: `Balance for Vaidya Gogate Memorial Foundation pre-order ${order.id}`,
+      callbackUrl: `${window.location.origin}/pay/${order.id}?part=balance&done=1`,
+      expiryMinutes: balanceLinkMinutes(),
+    });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not create the payment link.");
+    link = { url: result.url, id: result.id, provider: "razorpay", createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + balanceLinkMinutes() * 60_000).toISOString() };
+  }
+  patchOrder(order.id, { preorderPayment: { ...plan, link } }, `Balance payment link created · ₹${amount}`);
+  sendEmail({
+    to: address?.email ?? "",
+    phone: address?.phone,
+    name: address?.fullName,
+    params: [address?.fullName || "Customer", order.id, `₹${amount}`, link.url],
+    subject: `Your Vaidya Gogate Memorial Foundation pre-order ${order.id} is ready — balance due`,
+    template: preorderReadyTemplate(),
+    body: `Dear ${address?.fullName || "Guest"},\n\nNamaste, and greetings from Vaidya Gogate Memorial Foundation.\n\nYour pre-order ${order.id} is ready. Please pay the remaining balance of ₹${amount.toLocaleString("en-IN")}:\n${link.url}\n\nWe dispatch the order once the balance is received.\n\nWith warm regards,\nVaidya Gogate Memorial Foundation`,
+  });
+  return link;
+}
+
+/** Moves the expiry of the order's open balance link (the same link keeps working; nothing is resent). */
+export async function changeOrderLinkExpiry(orderId: string, expiresAt: string) {
+  const order = getOrder(orderId);
+  const link = order?.paymentLink;
+  if (!order || !link) throw new Error("This order has no payment link.");
+  if (order.paymentStatus === "Paid") throw new Error("The order is already paid.");
+  const at = new Date(expiresAt);
+  if (!Number.isFinite(at.getTime()) || at.getTime() < Date.now() + 15 * 60_000) throw new Error("Pick a time at least 15 minutes from now.");
+  let next = at.toISOString();
+  // Razorpay can't reopen an expired link, so an expired one is replaced by a new link with the chosen validity.
+  if (link.expiresAt && Date.parse(link.expiresAt) <= Date.now()) {
+    const fresh = await createPaymentLink(order.id, link.amount, next);
+    return `The old link had expired, so a new link for ₹${(fresh.amount ?? link.amount ?? order.total).toLocaleString("en-IN")} was sent, valid till ${new Date(fresh.expiresAt ?? next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}: ${fresh.url}`;
+  }
+  if (link.provider === "razorpay" && link.id) {
+    const result = await api<{ status: string; expiresAt: string }>({ action: "link-expiry", linkId: link.id, expiresAt: next });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not change the link expiry.");
+    if (result.status !== "created" && result.status !== "partially_paid") throw new Error(`The link is ${result.status}; send a new link instead.`);
+    next = result.expiresAt || next;
+  }
+  patchOrder(order.id, { paymentLink: { ...link, expiresAt: next } }, `Payment link expiry changed to ${new Date(next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
+  return `Link now valid till ${new Date(next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.`;
+}
+
+export async function changeBalanceLinkExpiry(orderId: string, expiresAt: string) {
+  const order = getOrder(orderId);
+  const plan = order?.preorderPayment;
+  const link = plan?.link;
+  if (!order || !plan || !link) throw new Error("This order has no balance payment link.");
+  if (plan.balancePaidAt) throw new Error("The balance is already paid.");
+  const at = new Date(expiresAt);
+  if (!Number.isFinite(at.getTime()) || at.getTime() < Date.now() + 15 * 60_000) throw new Error("Pick a time at least 15 minutes from now.");
+  let next = at.toISOString();
+  if (link.provider === "razorpay" && link.id) {
+    const result = await api<{ status: string; expiresAt: string }>({ action: "link-expiry", linkId: link.id, expiresAt: next });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay could not change the link expiry.");
+    if (result.status !== "created" && result.status !== "partially_paid") throw new Error(`The link is ${result.status}; send a new link instead.`);
+    next = result.expiresAt || next;
+  }
+  patchOrder(order.id, { preorderPayment: { ...plan, link: { ...link, expiresAt: next } } }, `Balance link expiry changed to ${new Date(next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);
+  return `Link now valid till ${new Date(next).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.`;
+}
+
+export async function refreshBalancePaymentLink(orderId: string) {
+  const order = getOrder(orderId);
+  const link = order?.preorderPayment?.link;
+  if (!order || !link) throw new Error("This order has no balance payment link.");
+  if (order.preorderPayment?.balancePaidAt) return "Balance already paid.";
+  if (link.provider !== "razorpay" || !link.id) return "Demo links are marked paid when the customer pays, or record the balance manually.";
+  const result = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: link.id });
+  if (!result.ok) throw new Error(result.error ?? "Could not read the link status.");
+  if (result.status === "paid") {
+    recordBalancePayment(order.id, { method: "Razorpay payment link", reference: result.paymentId });
+    return "Balance paid. The order is fully paid.";
+  }
+  return `Razorpay link status: ${result.status}.`;
+}
+
+export async function refreshCourierPaymentLink(orderId: string) {
+  const order = getOrder(orderId);
+  const link = order?.courierUpgrade?.link;
+  if (!order || !link) throw new Error("This order has no courier payment link.");
+  if (order.courierUpgrade?.paidAt) return "Courier charge already paid.";
+  if (link.provider !== "razorpay" || !link.id) return "Demo links are marked paid when the customer pays, or record the courier payment manually.";
+  const result = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: link.id });
+  if (!result.ok) throw new Error(result.error ?? "Could not read the link status.");
+  if (result.status === "paid") {
+    recordCourierPayment(order.id, { method: "Razorpay payment link", reference: result.paymentId });
+    return "Courier charge paid. The order is now a courier delivery; book the courier below.";
+  }
+  return `Razorpay link status: ${result.status}.`;
 }
 
 export async function refreshPaymentLink(orderId: string) {
@@ -250,26 +626,138 @@ export async function refreshPaymentLink(orderId: string) {
   const result = await api<{ status: string; paymentId?: string }>({ action: "link-status", linkId: order.paymentLink.id });
   if (!result.ok) throw new Error(result.error ?? "Could not read the link status.");
   if (result.status === "paid") {
+    const plan = order.preorderPayment;
+    if (order.paymentLink.purpose === "advance" && plan) {
+      const recorded = (order.history ?? []).some((entry) => entry.status === "Advance paid" && (!result.paymentId || entry.note?.includes(result.paymentId)));
+      if ((plan.advancePaidAt && order.paymentStatus !== "Pending") || recorded) return `Advance ₹${plan.advance} paid. Balance ₹${plan.balance} is due later.`;
+      const at = new Date().toISOString();
+      patchOrder(order.id, {
+        paymentStatus: "Partially Paid",
+        status: order.status === "Pending" ? "Paid" : order.status,
+        paidAt: order.paidAt ?? at,
+        paymentMethod: "Razorpay payment link",
+        paymentRef: result.paymentId,
+        razorpayPaymentId: result.paymentId,
+        preorderPayment: { ...plan, advancePaidAt: plan.advancePaidAt ?? at },
+        history: [...(order.history ?? []), { at, status: "Advance paid", note: `₹${plan.advance} · Razorpay payment link${result.paymentId ? ` · ${result.paymentId}` : ""}` }],
+      });
+      return `Advance ₹${plan.advance} paid on Razorpay. Balance ₹${plan.balance} and courier are due later.`;
+    }
     recordPayment(order.id, { method: "Razorpay payment link", reference: result.paymentId, razorpayPaymentId: result.paymentId });
     return "Paid on Razorpay. The order is confirmed.";
   }
   return `Razorpay link status: ${result.status}.`;
 }
 
-export async function refundThroughGateway(orderId: string, amount?: number) {
+/** Desk pastes a Razorpay payment id for an order whose payment never reached the site; Razorpay confirms it before anything is recorded. */
+export async function fetchRazorpayPayment(orderId: string, paymentId: string) {
+  const id = paymentId.trim();
+  if (!/^pay_[A-Za-z0-9]{6,}$/.test(id)) throw new Error("Enter the Razorpay payment ID, e.g. pay_ABC123.");
   const order = getOrder(orderId);
   if (!order) throw new Error("Order not found.");
-  const cap = maxRefundable(order);
-  const value = Math.min(amount ?? cap, cap);
-  if (value <= 0) throw new Error("Nothing left to refund. The platform fee stays with the Foundation unless that refund is switched on.");
-  if (order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") && paymentMode() !== "demo") {
-    const result = await api<{ refundId: string; status: string }>({ action: "refund", paymentId: order.razorpayPaymentId, amount: value });
-    if (!result.ok) throw new Error(result.error ?? "Razorpay refused the refund.");
-    refundOrder(order.id, value, `Razorpay refund ${result.refundId} (${result.status})`);
-    return `Refund ${result.refundId} created on Razorpay.`;
+  const usedOn = (row: Order) => row.razorpayPaymentId === id || row.paymentRef === id || row.preorderPayment?.balanceRef === id;
+  if (usedOn(order)) return "This payment is already recorded on this order.";
+  const other = getOrders().find((row) => row.id !== order.id && usedOn(row));
+  if (other) throw new Error(`This payment is already recorded on order ${other.id}.`);
+  const payment = await api<{ status: string; amount: number; method: string; orderId: string; receipt: string }>({ action: "payment", paymentId: id });
+  if (!payment.ok) throw new Error(payment.error ?? "Razorpay could not find this payment.");
+  if (payment.receipt && payment.receipt !== order.id && order.razorpayOrderId !== payment.orderId) {
+    throw new Error(`Razorpay shows this payment for order ${payment.receipt}, not ${order.id}.`);
   }
-  refundOrder(order.id, value, order.razorpayPaymentId ? "Demo refund" : "Refund recorded");
+  if (payment.status !== "captured") {
+    return `Razorpay shows this payment as "${payment.status}", so nothing was recorded.${payment.status === "authorized" ? " Capture it in the Razorpay dashboard first." : ""}`;
+  }
+  const amount = Math.round(payment.amount * 100) / 100;
+  const method = `Razorpay${payment.method ? ` (${payment.method})` : ""}`;
+  const now = new Date().toISOString();
+  const plan = order.preorderPayment;
+  const due = remainingDue(order);
+  if (plan && !plan.advancePaidAt && amount + 0.01 >= plan.advance && amount + 0.01 < due) {
+    patchOrder(
+      order.id,
+      {
+        paymentStatus: "Partially Paid",
+        amountPaid: amount,
+        paymentMethod: method,
+        paymentRef: id,
+        razorpayPaymentId: id,
+        razorpayOrderId: order.razorpayOrderId ?? (payment.orderId || undefined),
+        paidAt: order.paidAt ?? now,
+        status: order.status === "Pending" ? "Ordered" : order.status,
+        preorderPayment: { ...plan, advancePaidAt: now },
+      },
+      `Pre-order advance ₹${amount} fetched from Razorpay · ${id}`
+    );
+    return `Advance of ₹${amount} recorded from Razorpay. Balance ₹${plan.balance} is still due.`;
+  }
+  if (plan && plan.advancePaidAt && !plan.balancePaidAt && amount + 0.01 >= plan.balance) {
+    recordBalancePayment(order.id, { method, reference: id });
+    return `Balance of ₹${amount} recorded from Razorpay. The order is fully paid.`;
+  }
+  if (amount + 0.01 >= due) {
+    recordPayment(order.id, { method, reference: id, razorpayPaymentId: id });
+    return `Payment of ₹${amount} recorded from Razorpay. The order is confirmed.`;
+  }
+  const paidSoFar = Math.round((order.total - due + amount) * 100) / 100;
+  patchOrder(
+    order.id,
+    { paymentStatus: "Partially Paid", amountPaid: paidSoFar, paymentRef: id, razorpayPaymentId: order.razorpayPaymentId ?? id, paymentMethod: order.paymentMethod ?? method },
+    `Part payment ₹${amount} fetched from Razorpay · ${id}`
+  );
+  return `Part payment of ₹${amount} recorded. ₹${Math.round((order.total - paidSoFar) * 100) / 100} is still due.`;
+}
+
+export async function refundThroughGateway(orderId: string, amount?: number, options: { withPlatformFee?: boolean } = {}) {
+  const order = getOrder(orderId);
+  if (!order) throw new Error("Order not found.");
+  const cap = maxRefundable(order, options);
+  if (amount != null && !(Number.isFinite(amount) && amount > 0)) throw new Error("Enter a refund amount above ₹0.");
+  if (amount != null && amount > cap + 0.001) throw new Error(`At most ₹${cap.toLocaleString("en-IN")} can still be refunded on this order.`);
+  const value = Math.round(Math.min(amount ?? cap, cap) * 100) / 100;
+  if (value <= 0) throw new Error("Nothing left to refund. The platform fee is kept unless you tick \"Also refund the platform fee\".");
+  if (order.razorpayPaymentId && !order.razorpayPaymentId.startsWith("pay_demo") && paymentMode() !== "demo") {
+    const result = await api<RefundView>({ action: "refund", paymentId: order.razorpayPaymentId, amount: value });
+    if (!result.ok) throw new Error(result.error ?? "Razorpay refused the refund.");
+    refundOrder(order.id, value, `Razorpay refund ${result.refundId} (${result.status})`, {
+      gateway: "razorpay",
+      gatewayRefundId: result.refundId,
+      reference: result.refundId,
+      status: refundState(result.status),
+      rrn: result.rrn || undefined,
+      arn: result.arn || undefined,
+      utr: result.utr || undefined,
+      speed: result.speed || undefined,
+      checkedAt: new Date().toISOString(),
+    }, options);
+    return `Refund ${result.refundId} created on Razorpay (${result.status}).`;
+  }
+  refundOrder(order.id, value, order.razorpayPaymentId ? "Demo refund" : "Refund recorded", undefined, options);
   return order.razorpayPaymentId ? "Demo refund recorded." : "Refund recorded. Pay it back through the original method.";
+}
+
+type RefundView = { refundId: string; status: string; amount: number; rrn: string; arn: string; utr: string; speed: string; createdAt: string };
+
+function refundState(status: string) {
+  return status === "processed" || status === "failed" ? status : "pending";
+}
+
+/** Reads the refund back from Razorpay and stores its status and bank RRN/ARN on the order. */
+export async function refreshRefundStatus(orderId: string, refundId: string) {
+  const refund = getOrder(orderId)?.refunds?.find((item) => item.id === refundId);
+  if (!refund?.gatewayRefundId) throw new Error("This refund was recorded by hand, so there is no gateway status to check.");
+  const result = await api<RefundView>({ action: "refund-status", refundId: refund.gatewayRefundId });
+  if (!result.ok) throw new Error(result.error ?? "Could not read the refund from Razorpay.");
+  const status = refundState(result.status);
+  updateRefund(orderId, refundId, {
+    status,
+    rrn: result.rrn || refund.rrn,
+    arn: result.arn || refund.arn,
+    utr: result.utr || refund.utr,
+    speed: result.speed || refund.speed,
+    processedAt: status === "processed" ? refund.processedAt || new Date().toISOString() : refund.processedAt,
+    checkedAt: new Date().toISOString(),
+  });
+  return `Razorpay refund ${refund.gatewayRefundId}: ${status}${result.rrn ? ` · RRN ${result.rrn}` : ""}${result.arn ? ` · ARN ${result.arn}` : ""}.`;
 }
 
 export async function testRazorpay() {
@@ -457,7 +945,7 @@ export async function openHostedCheckout(input: { gateway: ReadyGateway["id"]; a
   const response = await fetch("/api/payments/hosted", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "start", ...input, product: `VGMF order ${input.orderId}` }),
+    body: JSON.stringify({ action: "start", ...input, product: `Vaidya Gogate Memorial Foundation order ${input.orderId}` }),
   });
   const data = (await response.json().catch(() => ({}))) as {
     ok?: boolean;
@@ -503,4 +991,10 @@ export async function openHostedCheckout(input: { gateway: ReadyGateway["id"]; a
     return;
   }
   throw new Error("The payment gateway did not return a checkout page.");
+}
+
+/** Pre-order balance links use the pre-order WhatsApp template once one is mapped; until then the normal payment-link one. */
+function preorderReadyTemplate() {
+  const whatsapp = getIntegrations().whatsapp;
+  return whatsAppSenders(whatsapp).some((provider) => whatsAppTemplateFor(whatsapp, provider, "preorder-ready")) ? "preorder-ready" : "payment-link";
 }
