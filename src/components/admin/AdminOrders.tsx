@@ -1,5 +1,6 @@
 "use client";
 
+import { authorizeCancellation } from "@/lib/cancel-authorization";
 import { hideShipping, shippingSplit } from "@/lib/order-charges";
 import { siteConfig } from "@/lib/constants";
 import { uploadMediaFile } from "@/lib/media-client";
@@ -547,10 +548,18 @@ export function OrdersDashboard() {
           }}>Labels</Button>
           <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "individual")}>Print slips: individual</Button>
           <Button variant="outline" onClick={() => printPackagingSlips(filtered.filter((order) => picked[order.id]), "bulk")}>Print slips: bulk list</Button>
-          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={() => bulk("Cancelled", async (id) => {
-            await dropOrderShipments(id);
-            cancelOrder(id, "Bulk cancel");
-          })}>Cancel</Button>
+          <Button variant="outline" disabled={Boolean(bulkBusy)} onClick={async () => {
+            try {
+              if (!(await authorizeCancellation(selectedIds))) return;
+            } catch (problem) {
+              window.alert(problem instanceof Error ? problem.message : "Cancellation was not authorized.");
+              return;
+            }
+            await bulk("Cancelled", async (id) => {
+              await dropOrderShipments(id);
+              cancelOrder(id, "Bulk cancel");
+            });
+          }}>Cancel</Button>
           <Button variant="danger" disabled={Boolean(bulkBusy)} onClick={() => {
             if (!window.confirm(`Delete ${selectedIds.length} order(s)? This cannot be undone.`)) return;
             bulk("Deleted", async (id) => {
@@ -1532,6 +1541,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
   const applyStatus = () =>
     run("status", async () => {
       if (status === "Cancelled") {
+        if (!(await authorizeCancellation([order.id]))) return "Cancellation stopped: the OTP was not entered.";
         await dropOrderShipments(order.id);
         cancelOrder(order.id, cancelReason || "Cancelled by admin");
         return "Order cancelled. The shipment was removed from the desk.";
@@ -1922,6 +1932,7 @@ function OrderDetail({ order, onChanged }: { order: Order; onChanged: () => void
                   onClick={() => {
                     if (!window.confirm("Cancel this order? The customer is notified.")) return;
                     run("cancel", async () => {
+                      if (!(await authorizeCancellation([order.id]))) return "Cancellation stopped: the OTP was not entered.";
                       await dropOrderShipments(order.id);
                       cancelOrder(order.id, cancelReason || "Cancelled by admin");
                       setStatus("Cancelled");

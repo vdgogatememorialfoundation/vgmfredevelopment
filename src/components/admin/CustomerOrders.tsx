@@ -1,4 +1,5 @@
 "use client";
+import { authorizeCancellation } from "@/lib/cancel-authorization";
 import { assignTicket, getTickets, listSupportAgents, respondToTicket, updateTicketStatus } from "@/lib/admin-store";
 import { pullTickets } from "@/lib/ticket-sync";
 import type { SupportTicket } from "@/types";
@@ -58,6 +59,7 @@ async function postApproval(body: Record<string, unknown>) {
 /** Runs an approved action in the Admin's session (same calls as the order screen). */
 async function runAction(order: Order, kind: Approval["kind"], reason: string, amount: number | undefined, by: string) {
   if (kind === "cancel") {
+    if (!(await authorizeCancellation([order.id]))) throw new Error("Cancellation stopped: the OTP was not entered.");
     await dropOrderShipments(order.id);
     cancelOrder(order.id, reason || `Cancelled by ${by}`);
     return `Order ${order.id} cancelled.`;

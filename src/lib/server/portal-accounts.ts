@@ -240,3 +240,15 @@ export function issueRiderLogin(email: string) {
   save(rows);
   return { riderId, password, email: String(row.email) };
 }
+
+/** Active Admin and Co-admin logins (email, phone, name), e.g. to authorize sensitive desk actions. */
+export function listPortalApprovers() {
+  return load()
+    .filter((r) => (r.role === "admin" || r.role === "coadmin") && !portalAccountBlocked(r))
+    .map((r) => ({
+      email: String(r.email || "").trim().toLowerCase(),
+      phone: String(r.phone || r.mobile || "").trim(),
+      name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim() || String(r.email || ""),
+    }))
+    .filter((r) => r.email.includes("@"));
+}
